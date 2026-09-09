@@ -1,10 +1,11 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=356";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=357";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
+  applyCobraFoliageOpacity,
   createCobraSoftFalloffTexture,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=356";
+} from "./cobra_canyon_foliage.js?v=357";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -1592,7 +1593,7 @@ function geometryForRole(THREE, role) {
   const colors = [];
   const uvs = role === "jungle" ? [] : null;
   if (role === "jungle") {
-    // ONE INSTANCE = two CC0 palm cards (crossed quads) + understory fern cards.
+    // ONE INSTANCE = two broad-leaf cards (crossed quads) + understory fern cards.
     // Textured alpha cutouts beat Lambert lobes for BF:V legibility and cost ~12 tris.
     const leafTint = [0.92, 0.98, 0.88];
     const underTint = [0.78, 0.92, 0.72];
@@ -1690,12 +1691,12 @@ function materialForRole(THREE, role, foliageAtlas = null, softFalloff = null) {
     return material;
   }
   if (role === "jungle") {
-    // Unlit alpha cards — Lambert was crushing the CC0 atlas to black silhouettes under gorge light.
+    // Unlit cutout cards retain leaf separation under gorge light.
     const material = new THREE.MeshBasicMaterial({
       map: foliageAtlas,
-      // The source atlas is deliberately dense and dark. A modest linear-space lift restores
-      // leaf separation under humid haze without making the unlit cards fluorescent.
-      color: new THREE.Color(1.16, 1.22, 1.10),
+      // Only the dark CC0 source needs this lift; it makes the generated midtones fluorescent.
+      color: foliageAtlas?.userData?.cobraFoliageEncoding === "black-matte-v1"
+        ? new THREE.Color(1, 1, 1) : new THREE.Color(1.16, 1.22, 1.10),
       vertexColors: true,
       alphaTest: 0.48,
       transparent: false,
@@ -1703,6 +1704,7 @@ function materialForRole(THREE, role, foliageAtlas = null, softFalloff = null) {
       side: THREE.DoubleSide,
     });
     material.name = "COBRA_CANYON_ASSET_JUNGLE_MATERIAL";
+    applyCobraFoliageOpacity(THREE, material);
     return material;
   }
   const material = new THREE.MeshLambertMaterial({
@@ -1830,7 +1832,7 @@ function authoredMeshMaterial(THREE, role) {
  */
 function createRoleMesh(
   THREE, group, role, capacity, resources, foliageAtlas = null, softFalloff = null,
-  authoredGeometry = null, nameSuffix = "", cardGeometry = null,
+  authoredGeometry = null, nameSuffix = "", cardGeometry = null, sampleVisualTerrain = null,
 ) {
   if (capacity <= 0) return null;
   // An authored CC0 mesh wins over the procedural cards when one is supplied for this batch.
@@ -1845,6 +1847,21 @@ function createRoleMesh(
     ? authoredMeshMaterial(THREE, role)
     : materialForRole(THREE, role, foliageAtlas, softFalloff);
   const mesh = tagObject(new THREE.InstancedMesh(geometry, material, capacity), role, capacity);
+  if (role === "jungle" && !authoredGeometry
+      && foliageAtlas?.userData?.cobraFoliageEncoding === "black-matte-v1") {
+    // The RGB matte must also clip the shadow passes, or the leaves cast card-shaped rectangles.
+    mesh.customDepthMaterial = new THREE.MeshDepthMaterial({
+      map: foliageAtlas, alphaTest: material.alphaTest, side: material.side,
+      depthPacking: THREE.RGBADepthPacking,
+    });
+    mesh.customDistanceMaterial = new THREE.MeshDistanceMaterial({
+      map: foliageAtlas, alphaTest: material.alphaTest, side: material.side,
+    });
+    for (const shadowMaterial of [mesh.customDepthMaterial, mesh.customDistanceMaterial]) {
+      applyCobraFoliageOpacity(THREE, shadowMaterial);
+      resources.materials.add(shadowMaterial);
+    }
+  }
   mesh.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}${nameSuffix}`;
   // DynamicDrawUsage: the resident set is rewritten as the aircraft moves, not once at boot.
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -1900,11 +1917,13 @@ function createRoleMesh(
         const fade = placement.distanceM === undefined
           ? 1
           : edgeFade(placement.distanceM, radiusM);
-        // Card placements size a whole CLUMP — several notional trees on crossed quads. One
-        // authored palm standing at that size is a sixty-metre plant, which is what filled a
-        // third of the frame in the owner's Build 321 capture. Bring a real mesh back to
-        // single-tree scale; the field cards keep the clump size they were authored for.
-        const unit = unitScale * fade;
+        // A leaf cutout depicts one plant even when a canopy descriptor supplied the placement.
+        // Keep those blades at scrub height and shrink their footprint proportionally. Authored
+        // palms retain their existing tree scale; the separate crown field carries forest mass.
+        // World placement/exclusion bounds stay conservative and are never shrunk with the art.
+        const cardScale = role === "jungle" && !authoredGeometry
+          ? Math.min(1, 4 / Math.max(0.1, placement.heightM)) : 1;
+        const unit = unitScale * cardScale * fade;
         const scaleX = Math.max(1e-4, placement.widthM * unit);
         const scaleY = Math.max(1e-4, placement.heightM * unit);
         const scaleZ = Math.max(1e-4, placement.depthM * unit);
@@ -1929,7 +1948,21 @@ function createRoleMesh(
         matrices[at + 10] = cos * scaleZ;
         matrices[at + 11] = 0;
         matrices[at + 12] = placement.x;
-        matrices[at + 13] = placement.y;
+        if (role === "jungle" && !authoredGeometry && sampleVisualTerrain) {
+          if (placement.cardRootY === undefined) {
+            const radius = Math.max(placement.widthM, placement.depthM) * cardScale * 0.6;
+            let root = sampleVisualTerrain(placement.x, -placement.z);
+            for (let point = 0; point < 4; point++) {
+              const angle = point * Math.PI / 2;
+              root = Math.min(root, sampleVisualTerrain(placement.x + Math.cos(angle) * radius,
+                -placement.z + Math.sin(angle) * radius));
+            }
+            // The cards are bottom-rooted (local y=0), not centre-rooted. Seat their small
+            // footprint in the actual drawn mesh without changing world/exclusion records.
+            placement.cardRootY = root - 0.08;
+          }
+          matrices[at + 13] = placement.cardRootY;
+        } else matrices[at + 13] = placement.y;
         matrices[at + 14] = placement.z;
         matrices[at + 15] = 1;
         // Memoised on the placement: tints are a property of the prop, and a placement object
@@ -2034,7 +2067,7 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
     ...PRESENTATION_ONLY_TAG,
   });
   const resources = { geometries: new Set(), materials: new Set(), meshes: [], textures: [] };
-  // CC0 atlas when the shell preloads it; synthetic fallback keeps the alpha-card path in tests.
+  // Reviewed atlas when the shell preloads it; synthetic fallback keeps the alpha-card path in tests.
   let foliageAtlas = options.foliageTextures?.atlas ?? null;
   if (!foliageAtlas) {
     foliageAtlas = createSyntheticFoliageAtlasTexture(THREE);
@@ -2123,7 +2156,7 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
       }
       const fieldController = createRoleMesh(
         THREE, group, role, capacity - heroPlan.heroCapacity, resources, atlas, softFalloff,
-        null, "", cardGeometries[role],
+        null, "", cardGeometries[role], options.sampleVisualTerrain,
       );
       if (fieldController) {
         fieldControllers.set(role, fieldController);
@@ -2133,6 +2166,7 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
     }
     const controller = createRoleMesh(
       THREE, group, role, capacity, resources, atlas, softFalloff, null, "", cardGeometries[role],
+      options.sampleVisualTerrain,
     );
     if (controller) {
       fieldControllers.set(role, controller);

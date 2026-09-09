@@ -1,0 +1,91 @@
+{
+  "$schema": "../../../../schemas/asset-manifest.schema.json",
+  "schemaVersion": "1.0.0",
+  "manifestId": "manifest.cobra-vietnam.surfaces.v1",
+  "manifestVersion": "0.2.0",
+  "packId": "cobra-vietnam",
+  "coordinateSystem": {
+    "units": "metres",
+    "upAxis": "+y",
+    "forwardAxis": "-z",
+    "handedness": "right"
+  },
+  "defaultLicenseSet": {
+    "id": "licenses.guns-only.cobra-vietnam.surfaces.v1",
+    "uri": "licenses.json"
+  },
+  "assets": [
+    {
+      "id": "environment.surface.limestone-generated.v1",
+      "kind": "texture",
+      "role": "environment.terrain.rock",
+      "status": "production",
+      "licenseRef": "license.project-generated-limestone.v1",
+      "sources": [
+        {
+          "uri": "limestone-generated-v1.webp",
+          "format": "webp",
+          "mediaType": "image/webp",
+          "sha256": "568a68ecd66d0730a59f43e58f706f62cac705e9f7308eeebf996e703f0eec04",
+          "sizeBytes": 344424
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "generated_shader",
+          "uri": "procedural://cobra-canyon/terrain-paint/current",
+          "notes": "On failed texture load the existing painted terrain material remains available without the generated detail layer."
+        }
+      ],
+      "budgets": {
+        "textureMemoryMiB": 5.334,
+        "maxTextureDimension": 1024
+      },
+      "notes": "1024x1024 RGB limestone color artwork. Reviewed in the local Cobra gameplay renderer; not yet deployed. Requires mirrored repetition because opposite source edges are not seamless. It is not a height map or measured material.",
+      "extensions": {
+        "epistemic": "fiction",
+        "encoding": "rgb-albedo-v1",
+        "sourceColorSpace": "sRGB",
+        "wrapping": "MirroredRepeatWrapping",
+        "sourceSeamless": false,
+        "provenance": "tools/assets/generators/cobra-surfaces/sources/limestone-generated-v1.provenance.json"
+      }
+    },
+    {
+      "id": "environment.surface.canopy-generated.v1",
+      "kind": "texture",
+      "role": "environment.vegetation.canopy",
+      "status": "production",
+      "licenseRef": "license.project-generated-canopy.v1",
+      "sources": [
+        {
+          "uri": "canopy-generated-v1.webp",
+          "format": "webp",
+          "mediaType": "image/webp",
+          "sha256": "31804fe8aa3b1d0f0c01e68af3cefa6f29dea0b5783a655155eafe3d30fa0e21",
+          "sizeBytes": 362538
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "generated_shader",
+          "uri": "procedural://cobra-canyon/canopy-crowns/current",
+          "notes": "On failed canopy texture load, bounded crown meshes retain their existing untextured material."
+        }
+      ],
+      "budgets": {
+        "textureMemoryMiB": 5.334,
+        "maxTextureDimension": 1024
+      },
+      "notes": "1024x1024 opaque RGB treetop color artwork. Reviewed in the local Cobra gameplay renderer; not yet deployed. Requires mirrored repetition because source edges do not match. Not a leaf opacity atlas, botanical reference, height map or measured material.",
+      "extensions": {
+        "epistemic": "fiction",
+        "encoding": "rgb-albedo-v1",
+        "sourceColorSpace": "sRGB",
+        "wrapping": "MirroredRepeatWrapping",
+        "sourceSeamless": false,
+        "provenance": "tools/assets/generators/cobra-surfaces/sources/canopy-generated-v1.provenance.json"
+      }
+    }
+  ]
+}

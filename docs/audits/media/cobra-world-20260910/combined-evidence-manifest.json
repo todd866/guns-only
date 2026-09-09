@@ -1,0 +1,543 @@
+{
+  "schema": "guns-only.cobra-world-qa.v1",
+  "baselineHead": "1b6cf324e60f4ce5db898a8a5ce838233e14c3b8",
+  "artifactRoot": "/tmp/guns-cobra-world-20260910",
+  "renderer": "Chromium SwiftShader at1440x900 DPR1. Observed timings are not hardware FPS.",
+  "silentUrlParameters": "audioQa=silent&server=off&battleQa=1",
+  "compiledIdentity": "baseline-source-identity.json verifies8 framework hashes and no C#/build input changes;461 original static files audited. Later runtime edits copied explicitly with hashes.",
+  "snapshots": {
+    "preAllocation": {
+      "identity": "final-source-identity.json",
+      "canopySha256": "850d83aff85dcb9ab8ed6b3a19c4de77784e76a2f743d48915fb41e65581630a",
+      "retainedRuntime": "preallocation-runtime/",
+      "coverage": "12 static frames (balanced/desktop/mobile \u00d7player-eye/Iron Bell/Camp Ember/mid-gorge);128 m continuous pan per tier; both-surface503 fallback with balanced\u2192mobile quality change."
+    },
+    "finalAllocation": {
+      "identity": "allocation-source-identity.json",
+      "canopySha256": "170a2436e2e95cf08d01afc16b1092e6ba921ca0e57fe9b9a07e46234e7ea9c1",
+      "changedRuntimeSinceFullPass": [
+        "render/cobra/cobra_canyon_canopy.js",
+        "render/cobra/cobra_canyon_presentation.js"
+      ],
+      "coverage": "4 static frames:balanced/desktop \u00d7player-eye/Iron Bell; exact final allocation. Mobile settings unchanged. Full motion and fallback evidence comes from the preceding allocation, not this final allocation.",
+      "sourceIdentity": [
+        {
+          "path": "cobra-lab/main.js",
+          "bytes": 122547,
+          "sha256": "d7dcfba6f0a3d9f67508549ec28624ecc9377194e4e9466f79bb60620f7da9fe",
+          "sourceMatchesPublished": true
+        },
+        {
+          "path": "render/cobra/cobra_canyon_terrain_material.js",
+          "bytes": 32507,
+          "sha256": "d4a42315edc58305fe011a15ae8300cca51d0ae89bb03fcb2364f734e8bbd397",
+          "sourceMatchesPublished": true
+        },
+        {
+          "path": "render/cobra/cobra_canyon_surface_textures.js",
+          "bytes": 2703,
+          "sha256": "4521a1ff22ba81188469854c731b248ffed85edacc47679a5cdadd46a5b70141",
+          "sourceMatchesPublished": true
+        },
+        {
+          "path": "render/cobra/cobra_canyon_canopy.js",
+          "bytes": 20749,
+          "sha256": "170a2436e2e95cf08d01afc16b1092e6ba921ca0e57fe9b9a07e46234e7ea9c1",
+          "sourceMatchesPublished": true
+        },
+        {
+          "path": "render/cobra/cobra_canyon_presentation.js",
+          "bytes": 111864,
+          "sha256": "8b1f74d3ee82390dd04ec0bac5d26ec05f99227491849dadb9888dc2a9865386",
+          "sourceMatchesPublished": true
+        },
+        {
+          "path": "render/cobra/cobra_canyon_asset_kit.js",
+          "bytes": 102570,
+          "sha256": "ba89f416a7d39b64f95d14831a4bb885c8be3df689392ddf60f316af515f03f4",
+          "sourceMatchesPublished": true
+        },
+        {
+          "path": "content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp",
+          "bytes": 344424,
+          "sha256": "568a68ecd66d0730a59f43e58f706f62cac705e9f7308eeebf996e703f0eec04",
+          "sourceMatchesPublished": true
+        },
+        {
+          "path": "content/packs/cobra-vietnam/environment/surfaces/canopy-generated-v1.webp",
+          "bytes": 362538,
+          "sha256": "31804fe8aa3b1d0f0c01e68af3cefa6f29dea0b5783a655155eafe3d30fa0e21",
+          "sourceMatchesPublished": true
+        }
+      ]
+    }
+  },
+  "assetResponses": [
+    {
+      "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/cobra-canyon.world.json",
+      "status": 200,
+      "bytes": 65323,
+      "sha256": "1c25e62bad68c92fbc3a923072c0c56a27676ab2bbb9ea6daea5a1d9808c6f4f"
+    },
+    {
+      "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/foliage/foliage-atlas-generated-v2.png",
+      "status": 200,
+      "bytes": 546554,
+      "sha256": "e16bb50cb7a63083f0ab6a4af537631a31a86ce745ff82d00eaacd1bf44896c8"
+    },
+    {
+      "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp",
+      "status": 200,
+      "bytes": 344424,
+      "sha256": "568a68ecd66d0730a59f43e58f706f62cac705e9f7308eeebf996e703f0eec04"
+    },
+    {
+      "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/surfaces/canopy-generated-v1.webp",
+      "status": 200,
+      "bytes": 362538,
+      "sha256": "31804fe8aa3b1d0f0c01e68af3cefa6f29dea0b5783a655155eafe3d30fa0e21"
+    }
+  ],
+  "checks": {
+    "finalPageErrors": [],
+    "finalConsoleErrors": [],
+    "fullPassPageErrors": [],
+    "fullPassConsoleErrors": [],
+    "everyFinalShaderLinked": true,
+    "finalStationaryPixelFractions": [
+      0,
+      0
+    ],
+    "fullPassStationaryPixelFractions": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "qualitySwitchTextureCounts": [
+      5
+    ],
+    "preAllocationMotion": {
+      "sourceIdentity": "../final-source-identity.json",
+      "errors": [],
+      "consoleErrors": [],
+      "method": "One metre east per rendered animation frame over 128 metres, fixed yaw/pitch/FOV/AGL; authority held at elapsed 0. Software-GPU timings are not hardware FPS.",
+      "visualSamples": "Original-resolution video frames extracted near 0,32,64,96,128 m; video wall-clock alignment is approximate. Stationary exact-pixel evidence is in final/evidence.json.",
+      "rows": [
+        {
+          "tier": "balanced",
+          "panMetres": 128,
+          "renderedFrames": 129,
+          "maxCommonInstanceMatrixDelta": 0,
+          "occupancyRefreshMetres": [
+            48,
+            96
+          ],
+          "authorityTimeHeld": true,
+          "instanceCounts": [
+            576
+          ],
+          "rendererCalls": [
+            109,
+            110,
+            112,
+            114,
+            115,
+            117,
+            119,
+            120,
+            122
+          ],
+          "rendererTrianglesMin": 302010,
+          "rendererTrianglesMax": 303300,
+          "observedSoftwareRafMeanMs": 235.27734375,
+          "observedSoftwareRafP95Ms": 251.29999999999563,
+          "video": "/tmp/guns-cobra-world-20260910/final-motion/video-balanced/page@f7e4ea0c70dc3a5640f931d875a131e5.webm"
+        },
+        {
+          "tier": "desktop",
+          "panMetres": 128,
+          "renderedFrames": 129,
+          "maxCommonInstanceMatrixDelta": 0,
+          "occupancyRefreshMetres": [
+            48,
+            96
+          ],
+          "authorityTimeHeld": true,
+          "instanceCounts": [
+            1080
+          ],
+          "rendererCalls": [
+            109,
+            110,
+            112,
+            114,
+            115,
+            117,
+            119,
+            120,
+            122
+          ],
+          "rendererTrianglesMin": 715357,
+          "rendererTrianglesMax": 722841,
+          "observedSoftwareRafMeanMs": 400.50468750000005,
+          "observedSoftwareRafP95Ms": 434.6000000000058,
+          "video": "/tmp/guns-cobra-world-20260910/final-motion/video-desktop/page@11557a4804657264957fd512cdd72d20.webm"
+        },
+        {
+          "tier": "mobile",
+          "panMetres": 128,
+          "renderedFrames": 129,
+          "maxCommonInstanceMatrixDelta": 0,
+          "occupancyRefreshMetres": [
+            48,
+            96
+          ],
+          "authorityTimeHeld": true,
+          "instanceCounts": [
+            144
+          ],
+          "rendererCalls": [
+            108,
+            109,
+            111,
+            113,
+            114,
+            116,
+            118,
+            119,
+            121
+          ],
+          "rendererTrianglesMin": 56266,
+          "rendererTrianglesMax": 57134,
+          "observedSoftwareRafMeanMs": 136.45156249999997,
+          "observedSoftwareRafP95Ms": 150.09999999999854,
+          "video": "/tmp/guns-cobra-world-20260910/final-motion/video-mobile/page@735822209b7e65520f564f8938261505.webm"
+        }
+      ]
+    },
+    "preAllocationFallback": {
+      "pageErrors": [],
+      "expectedConsole503Count": 2,
+      "bothNewTextureResponses503": true,
+      "allBasinsProcedural": true,
+      "authorityActive": true,
+      "allShadersLinked": true
+    }
+  },
+  "finalWorldCounts": [
+    {
+      "tier": "balanced",
+      "view": "player-eye",
+      "sameBaselinePoseAndTime": true,
+      "baselineCalls": 79,
+      "finalCalls": 80,
+      "baselineTriangles": 155256,
+      "previousAllocationTriangles": 179608,
+      "finalTriangles": 187470,
+      "previousCanopyInstances": 345,
+      "finalCanopyInstances": 780,
+      "canopyCapacity": 1300,
+      "builtPresentationTriangles": 335776,
+      "presentationTriangleCeiling": 380000,
+      "presentationWithinBudget": true,
+      "governorLevel": 2,
+      "finalSoftwareRafMeanMs": 395.8166666666669,
+      "finalCpuPhaseMeanMs": 2.115384652064397,
+      "allShadersLinked": true,
+      "stationaryHardPixelFraction": null,
+      "image": "allocation/balanced-player-eye.png"
+    },
+    {
+      "tier": "balanced",
+      "view": "iron-bell",
+      "sameBaselinePoseAndTime": true,
+      "baselineCalls": 121,
+      "finalCalls": 122,
+      "baselineTriangles": 265356,
+      "previousAllocationTriangles": 303300,
+      "finalTriangles": 272820,
+      "previousCanopyInstances": 576,
+      "finalCanopyInstances": 981,
+      "canopyCapacity": 1300,
+      "builtPresentationTriangles": 335776,
+      "presentationTriangleCeiling": 380000,
+      "presentationWithinBudget": true,
+      "governorLevel": 0,
+      "finalSoftwareRafMeanMs": 254.15000000000023,
+      "finalCpuPhaseMeanMs": 1.3692307839026818,
+      "allShadersLinked": true,
+      "stationaryHardPixelFraction": 0,
+      "image": "allocation/balanced-iron-bell.png"
+    },
+    {
+      "tier": "desktop",
+      "view": "player-eye",
+      "sameBaselinePoseAndTime": true,
+      "baselineCalls": 79,
+      "finalCalls": 80,
+      "baselineTriangles": 354941,
+      "previousAllocationTriangles": 396749,
+      "finalTriangles": 399673,
+      "previousCanopyInstances": 648,
+      "finalCanopyInstances": 960,
+      "canopyCapacity": 1600,
+      "builtPresentationTriangles": 794731,
+      "presentationTriangleCeiling": 900000,
+      "presentationWithinBudget": true,
+      "governorLevel": 2,
+      "finalSoftwareRafMeanMs": 624.9749999999985,
+      "finalCpuPhaseMeanMs": 1.9538461245023286,
+      "allShadersLinked": true,
+      "stationaryHardPixelFraction": null,
+      "image": "allocation/desktop-player-eye.png"
+    },
+    {
+      "tier": "desktop",
+      "view": "iron-bell",
+      "sameBaselinePoseAndTime": true,
+      "baselineCalls": 121,
+      "finalCalls": 122,
+      "baselineTriangles": 644453,
+      "previousAllocationTriangles": 715581,
+      "finalTriangles": 688231,
+      "previousCanopyInstances": 1080,
+      "finalCanopyInstances": 1347,
+      "canopyCapacity": 1600,
+      "builtPresentationTriangles": 794731,
+      "presentationTriangleCeiling": 900000,
+      "presentationWithinBudget": true,
+      "governorLevel": 0,
+      "finalSoftwareRafMeanMs": 811.0833333333334,
+      "finalCpuPhaseMeanMs": 1.799999970656175,
+      "allShadersLinked": true,
+      "stationaryHardPixelFraction": 0,
+      "image": "allocation/desktop-iron-bell.png"
+    }
+  ],
+  "visualAssessment": "Accepted by root as a bounded improvement. Rounded textured stands replace oversized leaves, fill more skyline and slope at balanced/desktop, and stay grounded. Large bare slopes, repeated terrain appearance, stylized river banks and tan Camp Ember apron remain well short of the accepted generated concept.",
+  "artifacts": [
+    {
+      "path": "baseline-source-identity.json",
+      "bytes": 114434,
+      "sha256": "4483acee78802301e25f309effc5cad17f429446577c31c7ba6d74f2e035c4b0"
+    },
+    {
+      "path": "final-source-identity.json",
+      "bytes": 1673,
+      "sha256": "5b583ce44ff5873cb1a4aca547a6a683808cd772afce68b9ea392c7b5ba4cca4"
+    },
+    {
+      "path": "allocation-source-identity.json",
+      "bytes": 1673,
+      "sha256": "ac90cd26afe60c9b473c15816a3556f2c25b709f115b18aa567e229372159da5"
+    },
+    {
+      "path": "baseline/evidence.json",
+      "bytes": 195288,
+      "sha256": "ffa4b6ec72648450070e1b3d1e84041296fcb47be98ec42f63bf8d81ceb93b13"
+    },
+    {
+      "path": "final/evidence.json",
+      "bytes": 521742,
+      "sha256": "50f41246b9445786ad524768a308c8d0f906aa3d8bcfd4b45a629aebbedecd73"
+    },
+    {
+      "path": "allocation/evidence.json",
+      "bytes": 159842,
+      "sha256": "0b8cc08216100315baeef6119350a59674258ae2c0b2c2705ed81adb29a6b28f"
+    },
+    {
+      "path": "final-motion/evidence.json",
+      "bytes": 134809671,
+      "sha256": "68546f0c5f5749ed904a291b0f5263203c927b42f92f0cdb10385dfbef4af1d9"
+    },
+    {
+      "path": "final-motion/summary.json",
+      "bytes": 2659,
+      "sha256": "acb4fe85e6c57a20418c1a51ccfbff746207a704387c6ff13e76d0fcdab62f32"
+    },
+    {
+      "path": "surface-fallback/evidence.json",
+      "bytes": 66496,
+      "sha256": "ac7e2129510a4f0120518c9c7e0e6fec800580c058df822b779d9881cfc190c0"
+    },
+    {
+      "path": "final-comparison.json",
+      "bytes": 68559,
+      "sha256": "7749b83ef78ce0a41ba1ed7f71eea6efee8cece716f69603ee6b41ab4abf83ac"
+    },
+    {
+      "path": "allocation-comparison.json",
+      "bytes": 22966,
+      "sha256": "1a347e8d03b8db6378b4fd3faf30f2a6984bd6d9ceeb8ef8761804c05c51adea"
+    },
+    {
+      "path": "baseline/balanced-player-eye.png",
+      "bytes": 1129274,
+      "sha256": "39c4cf24af7b171fd03cea2efff2d0c3efafb217a53c9513094e9f8f05b14fea"
+    },
+    {
+      "path": "baseline/balanced-iron-bell.png",
+      "bytes": 1185633,
+      "sha256": "50e836b7394df61c1ff10216e1188b4ae6dac79a36096aa45eaa2010f9b38439"
+    },
+    {
+      "path": "baseline/balanced-camp-ember.png",
+      "bytes": 770482,
+      "sha256": "652696a71c7cb05c68d949321cbdfa5aa74c49c365da067834c3fb3eeede73e9"
+    },
+    {
+      "path": "baseline/balanced-mid-gorge.png",
+      "bytes": 1260053,
+      "sha256": "d390d02726d50153c223fafe8c7b3e60061b2819a2b3819046ac45dddbf68ea7"
+    },
+    {
+      "path": "baseline/desktop-player-eye.png",
+      "bytes": 1209558,
+      "sha256": "c56cfeeb08408707a63b75a8892773133876b73c95c65996c8b36e1b2932bedc"
+    },
+    {
+      "path": "baseline/desktop-iron-bell.png",
+      "bytes": 1199140,
+      "sha256": "d70dfadae4486d90e463e253da1319291fa5397328063df305fcb4eed345b20d"
+    },
+    {
+      "path": "baseline/desktop-camp-ember.png",
+      "bytes": 769839,
+      "sha256": "6fe55c6058126af0f87726ad7241c1d240a99bc145c9045a2c3e0f0fa88fe0d0"
+    },
+    {
+      "path": "baseline/desktop-mid-gorge.png",
+      "bytes": 1391244,
+      "sha256": "62a86ed1693bc889408818772252a362135600f5b5c01ba2aa2c8fdcba05e001"
+    },
+    {
+      "path": "baseline/mobile-player-eye.png",
+      "bytes": 963295,
+      "sha256": "f9d1f1b27169d58c7bfb920a712efb620deff3c52964b9ea814af02f82cc2c7f"
+    },
+    {
+      "path": "baseline/mobile-iron-bell.png",
+      "bytes": 912383,
+      "sha256": "86980f3b813f315933afbabc743286f643c6690101d753b21e1e7ecb57fc93e3"
+    },
+    {
+      "path": "baseline/mobile-camp-ember.png",
+      "bytes": 508271,
+      "sha256": "40c7c0ac98a10ee7aaa2a0ce397e8d1ff29f9b2dce121929c0d3fa42c62afb1a"
+    },
+    {
+      "path": "baseline/mobile-mid-gorge.png",
+      "bytes": 869042,
+      "sha256": "e41e1afcc6401aeeb254a3c17ad27fa68f1a3892999fe79eb686afe922535c33"
+    },
+    {
+      "path": "final/balanced-player-eye.png",
+      "bytes": 1106494,
+      "sha256": "0952a05c356c06c6d8fb4f5f4ceef70ab578145bb35d4fbfd9ef6d2b856a6439"
+    },
+    {
+      "path": "final/balanced-iron-bell.png",
+      "bytes": 1083973,
+      "sha256": "4b31e42c44021e106c44643d2115ce49d9ed0f1db9bf422e6a6f102935bd18fe"
+    },
+    {
+      "path": "final/balanced-camp-ember.png",
+      "bytes": 677249,
+      "sha256": "a45be46dbb2bef5260a932e95974dca2458b6f6c5a3914ba57a41b469f5eb506"
+    },
+    {
+      "path": "final/balanced-mid-gorge.png",
+      "bytes": 1004815,
+      "sha256": "b25c97bd525ea7a7dd15d3dfbddbf0fa40d3bf1516e8a859f726ebb1346c9a97"
+    },
+    {
+      "path": "final/desktop-player-eye.png",
+      "bytes": 1133367,
+      "sha256": "04fb7fabdf1e9b0c422bde3e7c48fcfe5e6fae981a369330d703d9b567b062fa"
+    },
+    {
+      "path": "final/desktop-iron-bell.png",
+      "bytes": 1128000,
+      "sha256": "b345761a4bd05650174f7044fe0c8440d0e8a9d464d42d7153a0367ef67f32ae"
+    },
+    {
+      "path": "final/desktop-camp-ember.png",
+      "bytes": 664358,
+      "sha256": "1197da4fdf83790047f14a11d81c8cc9341cf6e97ffaf0c70b5429b9b7aa0ca7"
+    },
+    {
+      "path": "final/desktop-mid-gorge.png",
+      "bytes": 1028840,
+      "sha256": "f9e79859c2c5212322e1a39091089e62ae8b783cc209a269bbc7bf3f68612542"
+    },
+    {
+      "path": "final/mobile-player-eye.png",
+      "bytes": 996630,
+      "sha256": "f7ae506c9b8d16733a1e9dad52f041bd646ecb72218317201f3dfd1b16fc43f8"
+    },
+    {
+      "path": "final/mobile-iron-bell.png",
+      "bytes": 951904,
+      "sha256": "c1c07bc18d6e16228bee8ef20927e42cccd25d73b2cf83c44bae6bb03fa5540c"
+    },
+    {
+      "path": "final/mobile-camp-ember.png",
+      "bytes": 514201,
+      "sha256": "e06507dfdeb2c802b8e9d4db7e17689c9f1c3295e0c3e3dcc401644ce69f0238"
+    },
+    {
+      "path": "final/mobile-mid-gorge.png",
+      "bytes": 901620,
+      "sha256": "1bd41f6b2aa431952718beba459cd5a10e473be0d325eb9603e681913d1159a7"
+    },
+    {
+      "path": "allocation/balanced-player-eye.png",
+      "bytes": 1114568,
+      "sha256": "05a23344efe70eea76470ae13b06c5ce0927fa4d6ce57afb05036a6495e907b5"
+    },
+    {
+      "path": "allocation/balanced-iron-bell.png",
+      "bytes": 1081155,
+      "sha256": "c4144ca94ee6b2b1251bb85834821ea92895cdfdbfc3bfec8290242345844dc5"
+    },
+    {
+      "path": "allocation/desktop-player-eye.png",
+      "bytes": 1135181,
+      "sha256": "6cc324b83f82fd7b6221e819d43b7fa7d3fdc9820eccae9f44cbe78129dd7317"
+    },
+    {
+      "path": "allocation/desktop-iron-bell.png",
+      "bytes": 1129745,
+      "sha256": "9c4713815616b426747136c5b3a845482daf9a783fa66ef5e1e14c0a2e252bbc"
+    },
+    {
+      "path": "surface-fallback/balanced-player-eye.png",
+      "bytes": 1043598,
+      "sha256": "de4cec2e7dc7f6ced5fc0e20ed7238dc9ea2c400c57f7e060eff2ea5447e69db"
+    },
+    {
+      "path": "surface-fallback/mobile-player-eye.png",
+      "bytes": 963103,
+      "sha256": "d1eadd5d2ab7653b14fbfd4970c66e62beef9f376d9bf9e09c0d5b2f1081211c"
+    }
+  ],
+  "cleanup": {
+    "status": "complete",
+    "verifiedUtc": "2026-09-09T16:37:40.012582+00:00",
+    "serverPid": 78573,
+    "port": 63015,
+    "serverResult": "Verified owned serve.py process, sentSIGTERM, owning tool session exited143. Scoped lsof returned no listener.",
+    "browserResult": "All owned static, motion, fallback, comparison and standalone material-preview scripts exited0; contexts and browsers closed in finally.",
+    "audio": "Every game URL used audioQa=silent&server=off and Chromium mute-audio. No audible owner registration was acquired."
+  },
+  "compactMotionSummary": "motion-summary.json",
+  "rawMotionNotForCommit": {
+    "path": "/tmp/guns-cobra-world-20260910/final-motion/evidence.json",
+    "bytes": 134809671,
+    "sha256": "68546f0c5f5749ed904a291b0f5263203c927b42f92f0cdb10385dfbef4af1d9"
+  }
+}

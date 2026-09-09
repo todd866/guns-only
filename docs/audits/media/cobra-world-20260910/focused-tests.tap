@@ -1,0 +1,535 @@
+TAP version 13
+# Subtest: builds one bounded authored batch per visual role across every tier
+ok 1 - builds one bounded authored batch per visual role across every tier
+  ---
+  duration_ms: 167.715209
+  ...
+# Subtest: consumes descriptor scale and authored palette instead of generic legacy values
+ok 2 - consumes descriptor scale and authored palette instead of generic legacy values
+  ---
+  duration_ms: 10.7875
+  ...
+# Subtest: honours hard instance caps even below the authored reveal reserve
+ok 3 - honours hard instance caps even below the authored reveal reserve
+  ---
+  duration_ms: 8.771084
+  ...
+# Subtest: uses deterministic matrices, colours, and cached allocation-free update snapshots
+ok 4 - uses deterministic matrices, colours, and cached allocation-free update snapshots
+  ---
+  duration_ms: 40.111
+  ...
+# Subtest: disposes every owned geometry and material exactly once
+ok 5 - disposes every owned geometry and material exactly once
+  ---
+  duration_ms: 5.9185
+  ...
+# Subtest: understory is grass height, not canopy height
+ok 6 - understory is grass height, not canopy height
+  ---
+  duration_ms: 0.08125
+  ...
+# Subtest: post-clump jungle variation cannot turn canopy or ferns into flight-path walls
+ok 7 - post-clump jungle variation cannot turn canopy or ferns into flight-path walls
+  ---
+  duration_ms: 0.064625
+  ...
+# Subtest: rendered leaf blades stay plant-sized even at canopy placements while authored palms keep tree scale
+ok 8 - rendered leaf blades stay plant-sized even at canopy placements while authored palms keep tree scale
+  ---
+  duration_ms: 15.574875
+  ...
+# Subtest: an authored scaleM still wins over both bands
+ok 9 - an authored scaleM still wins over both bands
+  ---
+  duration_ms: 0.164542
+  ...
+# Subtest: every role band suits every cell kind that reaches it
+ok 10 - every role band suits every cell kind that reaches it
+  ---
+  duration_ms: 0.119792
+  ...
+# Subtest: mist and water accents are soft-edged, not translucent slabs
+ok 11 - mist and water accents are soft-edged, not translucent slabs
+  ---
+  duration_ms: 16.429916
+  ...
+# Subtest: the crown layer has tree proportions and terrain seating with full-footprint mission exclusions
+ok 12 - the crown layer has tree proportions and terrain seating with full-footprint mission exclusions
+  ---
+  duration_ms: 644.8525
+  ...
+# Subtest: resident crowns remain deterministic through travel, budget shedding and repeated disposal
+ok 13 - resident crowns remain deterministic through travel, budget shedding and repeated disposal
+  ---
+  duration_ms: 714.08925
+  ...
+# Subtest: canopy obeys declared allocations and remains visible above the close foliage AGL cutoff
+ok 14 - canopy obeys declared allocations and remains visible above the close foliage AGL cutoff
+  ---
+  duration_ms: 1479.457417
+  ...
+# Subtest: a continuous 96 m camera move never resizes surviving crown instance transforms
+ok 15 - a continuous 96 m camera move never resizes surviving crown instance transforms
+  ---
+  duration_ms: 45.338208
+  ...
+# Subtest: the real Iron Bell and player-eye views contain exposed crowns and ground-rooted leaf cards
+ok 16 - the real Iron Bell and player-eye views contain exposed crowns and ground-rooted leaf cards
+  ---
+  duration_ms: 1297.600416
+  ...
+# Subtest: canopy shader normals match inverse transpose for flat and steep sheared instances
+ok 17 - canopy shader normals match inverse transpose for flat and steep sheared instances
+  ---
+  duration_ms: 189.466167
+  ...
+# Subtest: optional canopy albedo is sampled in world metres and retains page-owned texture lifetime
+ok 18 - optional canopy albedo is sampled in world metres and retains page-owned texture lifetime
+  ---
+  duration_ms: 0.490584
+  ...
+# Subtest: stationary quality recovery and a parked teleport settle to the same radius as a fresh field
+ok 19 - stationary quality recovery and a parked teleport settle to the same radius as a fresh field
+  ---
+  duration_ms: 669.615917
+  ...
+# Subtest: balanced and desktop retain their full canopy reach in all four reviewed flight windows
+ok 20 - balanced and desktop retain their full canopy reach in all four reviewed flight windows
+  ---
+  duration_ms: 642.601833
+  ...
+# Subtest: the live generated atlas has reviewed RGB encoding, rights and identical staged bytes
+ok 21 - the live generated atlas has reviewed RGB encoding, rights and identical staged bytes
+  ---
+  duration_ms: 21.741667
+  ...
+# Subtest: only generated jungle cards interpret black as coverage, including shadows and disposal
+ok 22 - only generated jungle cards interpret black as coverage, including shadows and disposal
+  ---
+  duration_ms: 55.606667
+  ...
+# Subtest: Cobra Canyon lab consumes the authored planner and bounded presentation
+ok 23 - Cobra Canyon lab consumes the authored planner and bounded presentation
+  ---
+  duration_ms: 3.6925
+  ...
+# Subtest: visual-review park owns the camera over the vehicle eye
+ok 24 - visual-review park owns the camera over the vehicle eye
+  ---
+  duration_ms: 1.405541
+  ...
+# Subtest: battle review stages production authority at Iron Bell instead of faking effects
+ok 25 - battle review stages production authority at Iron Bell instead of faking effects
+  ---
+  duration_ms: 2.915584
+  ...
+# Subtest: Cobra Canyon loads Blazor from the site-root framework path
+ok 26 - Cobra Canyon loads Blazor from the site-root framework path
+  ---
+  duration_ms: 0.948208
+  ...
+# Subtest: Hold the Bridge play shell is default; lab chrome is opt-in
+ok 27 - Hold the Bridge play shell is default; lab chrome is opt-in
+  ---
+  duration_ms: 0.43275
+  ...
+# Subtest: Cobra Canyon lab is silent and keeps hazards visible
+ok 28 - Cobra Canyon lab is silent and keeps hazards visible
+  ---
+  duration_ms: 1.150458
+  ...
+# Subtest: presentation shares the Build 238 planner module
+ok 29 - presentation shares the Build 238 planner module
+  ---
+  duration_ms: 0.900791
+  ...
+# Subtest: the drawn basin never stands proud of the terrain the simulation flies
+ok 30 - the drawn basin never stands proud of the terrain the simulation flies
+  ---
+  duration_ms: 184.697334
+  ...
+# Subtest: every rendered tier keeps the complete Camp Ember PSP apron flat at contact height
+ok 31 - every rendered tier keeps the complete Camp Ember PSP apron flat at contact height
+  ---
+  duration_ms: 39.249833
+  ...
+# Subtest: every rendered triangle plane is level under the full Camp Ember spawn safety volume
+ok 32 - every rendered triangle plane is level under the full Camp Ember spawn safety volume
+  ---
+  duration_ms: 10.843667
+  ...
+# Subtest: Camp Ember's full medium-FOB level apron has no coarse-grid pits in any tier
+ok 33 - Camp Ember's full medium-FOB level apron has no coarse-grid pits in any tier
+  ---
+  duration_ms: 27.837958
+  ...
+# Subtest: authored jungle geometry splits into a hero batch and stays inside every tier ceiling
+ok 34 - authored jungle geometry splits into a hero batch and stays inside every tier ceiling
+  ---
+  duration_ms: 1365.988833
+  ...
+# Subtest: builds the real analytical basin and stays inside every tier ceiling
+ok 35 - builds the real analytical basin and stays inside every tier ceiling
+  ---
+  duration_ms: 1331.864709
+  ...
+# Subtest: terrain and river shaders preserve foreground contrast and separate depth planes
+ok 36 - terrain and river shaders preserve foreground contrast and separate depth planes
+  ---
+  duration_ms: 424.451583
+  ...
+# Subtest: authored battle cells render deterministic crater rims with soot centres
+ok 37 - authored battle cells render deterministic crater rims with soot centres
+  ---
+  duration_ms: 843.5715
+  ...
+# Subtest: soft-shades landmarks, the water tower and Iron Bell at nap AGL
+ok 38 - soft-shades landmarks, the water tower and Iron Bell at nap AGL
+  ---
+  duration_ms: 427.475959
+  ...
+# Subtest: represents all eighteen authored hazards and never sheds them
+ok 39 - represents all eighteen authored hazards and never sheds them
+  ---
+  duration_ms: 426.644375
+  ...
+# Subtest: plantation water tower is an open dedicated silhouette inside its collision AABB
+ok 40 - plantation water tower is an open dedicated silhouette inside its collision AABB
+  ---
+  duration_ms: 477.483667
+  ...
+# Subtest: Iron Bell keeps collision-backed placement while using credible visible crossing widths
+ok 41 - Iron Bell keeps collision-backed placement while using credible visible crossing widths
+  ---
+  duration_ms: 409.211292
+  ...
+# Subtest: Iron Bell side faces retain substantial open truss area
+ok 42 - Iron Bell side faces retain substantial open truss area
+  ---
+  duration_ms: 422.522625
+  ...
+# Subtest: Iron Bell separates roadway, truss, approaches and piers inside the world budget
+ok 43 - Iron Bell separates roadway, truss, approaches and piers inside the world budget
+  ---
+  duration_ms: 403.826625
+  ...
+# Subtest: grounds landmark silhouettes on terrain while sizing toward authored top anchors
+ok 44 - grounds landmark silhouettes on terrain while sizing toward authored top anchors
+  ---
+  duration_ms: 407.008459
+  ...
+# Subtest: keeps Long Fang authoritative without drawing another freestanding landmark slab
+ok 45 - keeps Long Fang authoritative without drawing another freestanding landmark slab
+  ---
+  duration_ms: 400.800667
+  ...
+# Subtest: keeps Plantation worked rows low and terrain-seated inside the tall-scatter battle eye
+ok 46 - keeps Plantation worked rows low and terrain-seated inside the tall-scatter battle eye
+  ---
+  duration_ms: 407.101208
+  ...
+# Subtest: keeps non-authority solid landmarks outside the Cobra route envelope
+ok 47 - keeps non-authority solid landmarks outside the Cobra route envelope
+  ---
+  duration_ms: 405.695458
+  ...
+# Subtest: ambient rungs and AGL shed only deterministic asset prefixes
+ok 48 - ambient rungs and AGL shed only deterministic asset prefixes
+  ---
+  duration_ms: 459.016916
+  ...
+# Subtest: uses deterministic static matrices and cached frozen diagnostics
+ok 49 - uses deterministic static matrices and cached frozen diagnostics
+  ---
+  duration_ms: 1501.891583
+  ...
+# Subtest: disposes every owned resource exactly once and is idempotent
+ok 50 - disposes every owned resource exactly once and is idempotent
+  ---
+  duration_ms: 202.884417
+  ...
+# Subtest: basin carries the enclosure term the fragment shader cannot re-derive
+ok 51 - basin carries the enclosure term the fragment shader cannot re-derive
+  ---
+  duration_ms: 399.70325
+  ...
+# Subtest: river carries its centreline frame, so the shoreline can exist per fragment
+ok 52 - river carries its centreline frame, so the shoreline can exist per fragment
+  ---
+  duration_ms: 400.55725
+  ...
+# Subtest: a terrain bench is never drawn as a road
+ok 53 - a terrain bench is never drawn as a road
+  ---
+  duration_ms: 397.760917
+  ...
+# Subtest: visual profile keeps the painted-tactical invariants
+ok 54 - visual profile keeps the painted-tactical invariants
+  ---
+  duration_ms: 1.112208
+  ...
+# Subtest: the canyon reads as the same product as the F-22: one sun, one air, one light rig
+ok 55 - the canyon reads as the same product as the F-22: one sun, one air, one light rig
+  ---
+  duration_ms: 6.699167
+  ...
+# Subtest: the canyon sky is the decision-support sky's cool branch
+ok 56 - the canyon sky is the decision-support sky's cool branch
+  ---
+  duration_ms: 1.102584
+  ...
+# Subtest: the canyon sky has no azimuth branch cut across the upper field of view
+ok 57 - the canyon sky has no azimuth branch cut across the upper field of view
+  ---
+  duration_ms: 0.574417
+  ...
+# Subtest: cobra lab scene constants consume the shared visual profile
+ok 58 - cobra lab scene constants consume the shared visual profile
+  ---
+  duration_ms: 1.001875
+  ...
+# Subtest: mobile quality bypasses procedural cloud noise in the fragment hot path
+ok 59 - mobile quality bypasses procedural cloud noise in the fragment hot path
+  ---
+  duration_ms: 3.059916
+  ...
+# Subtest: the basin and river surfaces run the shared painted recipe, per fragment
+ok 60 - the basin and river surfaces run the shared painted recipe, per fragment
+  ---
+  duration_ms: 1.1365
+  ...
+# Subtest: the river's gravel bars are lit like the ground they sit in
+ok 61 - the river's gravel bars are lit like the ground they sit in
+  ---
+  duration_ms: 0.123667
+  ...
+# Subtest: both surface textures agree with retained RGB source provenance, rights and schemas
+ok 62 - both surface textures agree with retained RGB source provenance, rights and schemas
+  ---
+  duration_ms: 70.677208
+  ...
+# Subtest: surface loader uploads both sRGB textures with mirrored mipmapped sampling
+ok 63 - surface loader uploads both sRGB textures with mirrored mipmapped sampling
+  ---
+  duration_ms: 0.845834
+  ...
+# Subtest: surface load failures fall back without preventing a sortie
+ok 64 - surface load failures fall back without preventing a sortie
+  ---
+  duration_ms: 0.634625
+  ...
+# Subtest: one failed surface never discards or disposes the other successful image
+ok 65 - one failed surface never discards or disposes the other successful image
+  ---
+  duration_ms: 0.4865
+  ...
+# Subtest: surface owner disposes aliased resources once and tolerates an absent texture set
+ok 66 - surface owner disposes aliased resources once and tolerates an absent texture set
+  ---
+  duration_ms: 0.353375
+  ...
+# Subtest: basin material borrows the shared texture and leaves fallback material independent
+ok 67 - basin material borrows the shared texture and leaves fallback material independent
+  ---
+  duration_ms: 0.584875
+  ...
+# Subtest: river-bank lighting retains open-sky bounce in full sun and cast shadow
+ok 68 - river-bank lighting retains open-sky bounce in full sun and cast shadow
+  ---
+  duration_ms: 0.2105
+  ...
+# Subtest: an armed sortie advances by real elapsed time; the only cap is the bridge's 0.1 s spiral brake
+ok 69 - an armed sortie advances by real elapsed time; the only cap is the bridge's 0.1 s spiral brake
+  ---
+  duration_ms: 3.734167
+  ...
+# Subtest: authority JSON is sampled at HUD rate while the camera reads the per-frame hot pose
+ok 70 - authority JSON is sampled at HUD rate while the camera reads the per-frame hot pose
+  ---
+  duration_ms: 1.078042
+  ...
+# Subtest: a cold spare rebases the gunner onto the continuing mission tick line
+ok 71 - a cold spare rebases the gunner onto the continuing mission tick line
+  ---
+  duration_ms: 1.836
+  ...
+# Subtest: authentic pilot input never feeds aircraft attitude back as a hidden hold
+ok 72 - authentic pilot input never feeds aircraft attitude back as a hidden hold
+  ---
+  duration_ms: 1.035541
+  ...
+# Subtest: telemetry rides the bounded channel and keepalive exists only behind the pagehide path
+ok 73 - telemetry rides the bounded channel and keepalive exists only behind the pagehide path
+  ---
+  duration_ms: 1.045542
+  ...
+# Subtest: Tab selects and V padlocks like the F-22 gun-target / view contract
+ok 74 - Tab selects and V padlocks like the F-22 gun-target / view contract
+  ---
+  duration_ms: 0.743042
+  ...
+# Subtest: the tip strip teaches the collective lever: W raises, S lowers
+ok 75 - the tip strip teaches the collective lever: W raises, S lowers
+  ---
+  duration_ms: 1.263333
+  ...
+# Subtest: cobra telemetry records the live power margin, not the dead hover constant
+ok 76 - cobra telemetry records the live power margin, not the dead hover constant
+  ---
+  duration_ms: 1.116167
+  ...
+# Subtest: cobra telemetry records yaw residual and local wind for SCAS vs wind audits
+ok 77 - cobra telemetry records yaw residual and local wind for SCAS vs wind audits
+  ---
+  duration_ms: 2.689666
+  ...
+# Subtest: the tactical model preserves the real authority clock beside the conquest score
+ok 78 - the tactical model preserves the real authority clock beside the conquest score
+  ---
+  duration_ms: 1.507083
+  ...
+# Subtest: the clock clamps malformed values and becomes FINAL after the strategic verdict
+ok 79 - the clock clamps malformed values and becomes FINAL after the strategic verdict
+  ---
+  duration_ms: 0.270667
+  ...
+# Subtest: runtime, bridge and route wire one authority-owned mission clock end to end
+ok 80 - runtime, bridge and route wire one authority-owned mission clock end to end
+  ---
+  duration_ms: 3.607792
+  ...
+# Subtest: Escape toggles a resumable pause instead of leaving the sortie
+ok 81 - Escape toggles a resumable pause instead of leaving the sortie
+  ---
+  duration_ms: 0.907125
+  ...
+# Subtest: Escape peels onboarding and the tactical map before pause
+ok 82 - Escape peels onboarding and the tactical map before pause
+  ---
+  duration_ms: 1.175292
+  ...
+# Subtest: a terminal debrief remains the top layer instead of opening a fake live pause
+ok 83 - a terminal debrief remains the top layer instead of opening a fake live pause
+  ---
+  duration_ms: 0.061333
+  ...
+# Subtest: play opens on a deliberate mission brief before authority time can move
+ok 84 - play opens on a deliberate mission brief before authority time can move
+  ---
+  duration_ms: 7.330125
+  ...
+# Subtest: the terminal debrief retains explicit restart and exit actions
+ok 85 - the terminal debrief retains explicit restart and exit actions
+  ---
+  duration_ms: 5.425375
+  ...
+# Subtest: the Cobra shell owns a real pause dialog and freezes authority advance
+ok 86 - the Cobra shell owns a real pause dialog and freezes authority advance
+  ---
+  duration_ms: 6.0185
+  ...
+# Subtest: Return to aircraft remains explicit and performs the existing complete teardown
+ok 87 - Return to aircraft remains explicit and performs the existing complete teardown
+  ---
+  duration_ms: 2.741458
+  ...
+# Subtest: the controls card teaches pause
+ok 88 - the controls card teaches pause
+  ---
+  duration_ms: 2.704959
+  ...
+# Subtest: compact touch presentation is explicit about its input and orientation limits
+ok 89 - compact touch presentation is explicit about its input and orientation limits
+  ---
+  duration_ms: 2.120333
+  ...
+# Subtest: the shared controls lesson freezes simulation, formation, and propulsion audio
+ok 90 - the shared controls lesson freezes simulation, formation, and propulsion audio
+  ---
+  duration_ms: 1.509625
+  ...
+# Subtest: every production shell painting has a hash-pinned fiction provenance card
+ok 91 - every production shell painting has a hash-pinned fiction provenance card
+  ---
+  duration_ms: 24.466209
+  ...
+# Subtest: every current shell poster is reproducible from a committed source
+ok 92 - every current shell poster is reproducible from a committed source
+  ---
+  duration_ms: 16.955417
+  ...
+# Subtest: Cobra Canyon is a public standalone production experience
+ok 93 - Cobra Canyon is a public standalone production experience
+  ---
+  duration_ms: 1.349541
+  ...
+# Subtest: Cobra Lab gates before loading its Build-versioned runtime
+ok 94 - Cobra Lab gates before loading its Build-versioned runtime
+  ---
+  duration_ms: 0.393708
+  ...
+# Subtest: Cobra Lab stamps route modules while sharing one canonical Three.js instance
+ok 95 - Cobra Lab stamps route modules while sharing one canonical Three.js instance
+  ---
+  duration_ms: 0.285917
+  ...
+# Subtest: every standalone production route owns brief, pause, and result dialogs
+ok 96 - every standalone production route owns brief, pause, and result dialogs
+  ---
+  duration_ms: 10.520916
+  ...
+# Subtest: standalone modal ownership pauses authority and restores the flight surface
+ok 97 - standalone modal ownership pauses authority and restores the flight surface
+  ---
+  duration_ms: 6.233791
+  ...
+# Subtest: the root shell uses the same explicit lifecycle and action vocabulary
+ok 98 - the root shell uses the same explicit lifecycle and action vocabulary
+  ---
+  duration_ms: 3.705
+  ...
+# Subtest: the first taught control cannot dismiss onboarding and operate a vehicle
+ok 99 - the first taught control cannot dismiss onboarding and operate a vehicle
+  ---
+  duration_ms: 1.12025
+  ...
+# Subtest: README describes the current production door, controls and telemetry boundary
+ok 100 - README describes the current production door, controls and telemetry boundary
+  ---
+  duration_ms: 3.147042
+  ...
+# Subtest: the browser and installed-app descriptions match the six production experiences
+ok 101 - the browser and installed-app descriptions match the six production experiences
+  ---
+  duration_ms: 1.895167
+  ...
+# Subtest: every production flight route uses the shared HUD/input/audio language instead of permanent prose cards
+ok 102 - every production flight route uses the shared HUD/input/audio language instead of permanent prose cards
+  ---
+  duration_ms: 2.78325
+  ...
+# Subtest: production Rapier copy describes the deterministic finite-ammo balloon sortie
+ok 103 - production Rapier copy describes the deterministic finite-ammo balloon sortie
+  ---
+  duration_ms: 3.165792
+  ...
+# Subtest: legacy Rapier v1 documents cannot claim production authority over v2
+ok 104 - legacy Rapier v1 documents cannot claim production authority over v2
+  ---
+  duration_ms: 0.899167
+  ...
+# Subtest: the evergreen status matrix covers the executable experience catalog
+ok 105 - the evergreen status matrix covers the executable experience catalog
+  ---
+  duration_ms: 1.519917
+  ...
+1..105
+# tests 105
+# suites 0
+# pass 105
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11856.276209

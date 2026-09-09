@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "asset": "cobra-foliage-atlas-rgb-coverage-v2",
+  "status": "generated-source-pending-runtime-qa",
+  "encoding": "Opaque RGB with near-black background intended as zero-coverage shader input. Not an RGBA cutout.",
+  "generatedOn": "2026-09-09",
+  "tool": "image_gen.imagegen",
+  "mode": "built-in",
+  "model": null,
+  "modelNote": "Tool API and returned output_hint did not report a model identity; no model name is asserted.",
+  "source": "tools/assets/generators/cobra-foliage/sources/foliage-atlas-rgb-coverage-v2.png",
+  "sourceSha256": "6751f5dcf9ddf42a93887cb183a7fe36972b09eae1bdf2f9cfb25df68ba3ac8c",
+  "sourceWidth": 1774,
+  "sourceHeight": 887,
+  "sourceColorMode": "RGB",
+  "hasAlpha": false,
+  "steps": [
+    {
+      "intent": "stylized-concept",
+      "prompt": "Use case: stylized-concept\nAsset type: production game foliage sprite texture atlas for the Guns Only Cobra Vietnam level.\nPrimary request: Create a polished new two-cell foliage atlas using the attached existing atlas ONLY as layout and silhouette reference. Deliver a 2:1 landscape raster, preferably 1024 by 512 pixels, with genuinely transparent RGBA background.\nInput image 1: reference image for the exact atlas UV layout, subject placement and overall silhouette.\nComposition/framing: Two equal square cells horizontally, no divider. Left half is one dense tropical broad-leaf palm/cordyline undergrowth clump, rooted at its own bottom center. It has erect and arching long pointed lance-shaped leaves; it is NOT a palm tree and has no trunk. Right half is exactly one upright fern frond, rooted at its own bottom center, with a clear central stem and a tapered triangular feather silhouette. No subjects overlap the center seam. Both subjects fill their own cells generously but remain entirely inside them. At 1024x512 leave 16–20 pixels of truly transparent margin at every outer edge and either side of the center seam, including below roots. Roots should end near y=490 and x=256 / x=768, respectively.\nStyle/medium: restrained art-directed game texture, hand-painted botanical realism with readable connected leaf masses and subtle painterly planar shading. Convincing leaves, composed to read clearly at small game size; simpler and more intentionally painted than a photograph. Muted military olive and deep fern greens with modest warm lighter green separation on overlapping leaves, no fluorescent greens. Soft diffuse daylight with enough midtone lift to preserve leaf detail in a shadowed jungle.\nConstraints: preserve the two reference silhouettes and their orientation; crisp but natural alpha-cutout leaf edges and mostly solid opaque leaf interiors. A few natural variations and small notches are fine, but do not fragment the silhouettes into hairlike details. Transparent pixels must have actual zero alpha, not a painted checkerboard, not black background and not white background. No ground, cast shadows, pot, rock, scenery, extra plants, text, labels, grid, frame, watermark or decorative elements.",
+      "referencedImagePaths": [
+        "content/packs/cobra-vietnam/environment/foliage/foliage-atlas.png"
+      ],
+      "referenceRole": "Existing atlas was passed as image input for UV layout and silhouette reference.",
+      "referenceSha256": "7cb1e1f3e1e0f523c3b7af4d332fc311dd571aa6b4fc0e75cd6b620b931955d7",
+      "outputPath": "/Users/iantodd/.codex/generated_images/01a08655-1572-7093-b524-54682685d06e/exec-4fdc5469-06bd-412a-ac25-1c0beeb9d3b6.png",
+      "sha256": "08275983607a7353057aab9de2b761324315217598e936c7c5dff0710b9bfdfe",
+      "outputHint": "Generated images are saved to /Users/iantodd/.codex/generated_images/01a08655-1572-7093-b524-54682685d06e as /Users/iantodd/.codex/generated_images/01a08655-1572-7093-b524-54682685d06e/exec-4fdc5469-06bd-412a-ac25-1c0beeb9d3b6.png by default.\nIf you need to use a generated image at another path, copy it and leave the original in place unless the user explicitly asks you to delete it.\nThe generated image is already displayed to the user. There is no need to render it in the final response as a Markdown image or file link."
+    },
+    {
+      "intent": "precise-object-edit",
+      "prompt": "Use case: precise-object-edit.\nAsset type: game foliage texture atlas with BLACK-keyed coverage for a shader.\nEdit target: attached plant atlas. Replace ALL of the opaque gray-and-white checkerboard, including the gaps between the plants' leaves, with an absolutely uniform pure black RGB #000000 background. The output must be an ordinary opaque RGB PNG on pure black. The game's shader will interpret black as zero coverage. Do not attempt a transparent PNG and do not draw any checkerboard.\nPreserve the existing restrained botanical leaf artwork: one broad-leaf tropical undergrowth clump on the left, one upright triangular fern frond on the right. Preserve the muted olive and fern-green family, with brighter, modestly desaturated midtones. Lift dark leaf interiors so all actual leaf interiors have maximum RGB channel above 0.15; no near-black leaf interiors, deep shadows or black holes painted inside leaves. Keep coherent readable solid leaves and crisp natural edges.\nKeep 2:1 landscape aspect ratio with two equal square UV cells. At 1024x512 target size, clump fully inside left cell with root at (256,490), fern fully inside right cell with root at (768,490). Every silhouette must have at least 18px of pure-black space to its cell's four edges. The leftmost and rightmost leaves and top tips must be fully visible. The central boundary must have an uninterrupted pure-black gap. Slightly shrink the left clump if needed to prevent it crossing that central boundary. No plant touches any image edge.\nNo scenery, no ground, no cast or contact shadows, no labels, no additional objects, no gradient or texture in the black background. A perfectly flat black RGB #000000 background is essential.",
+      "referencedImagePaths": [
+        "tools/assets/generators/cobra-foliage/sources/foliage-atlas-generated-v2-rejected.png"
+      ],
+      "referenceRole": "The first generated image was the edit target, replacing its painted checkerboard with a flat black RGB background and lifting leaf values.",
+      "referenceSha256": "08275983607a7353057aab9de2b761324315217598e936c7c5dff0710b9bfdfe",
+      "outputPath": "/Users/iantodd/.codex/generated_images/01a08655-1572-7093-b524-54682685d06e/exec-931e2687-9885-450c-b89d-8655475ff2f3.png",
+      "sha256": "6751f5dcf9ddf42a93887cb183a7fe36972b09eae1bdf2f9cfb25df68ba3ac8c",
+      "outputHint": "Generated images are saved to /Users/iantodd/.codex/generated_images/01a08655-1572-7093-b524-54682685d06e as /Users/iantodd/.codex/generated_images/01a08655-1572-7093-b524-54682685d06e/exec-931e2687-9885-450c-b89d-8655475ff2f3.png by default.\nIf you need to use a generated image at another path, copy it and leave the original in place unless the user explicitly asks you to delete it.\nThe generated image is already displayed to the user. There is no need to render it in the final response as a Markdown image or file link."
+    }
+  ],
+  "relatedRejectedAttempt": "foliage-atlas-generated-v2-rejected.provenance.json",
+  "validation": {
+    "method": "Read-only PIL pixel inspection and visual inspection; source saved byte-for-byte without post-processing.",
+    "borderMaxChannel": 1,
+    "nominalSeamX": 887,
+    "seamPixelsWithMaxRgbAbove38": 6,
+    "clumpBoundsWithMaxRgbAbove38": [
+      44,
+      14,
+      894,
+      873
+    ],
+    "fernBoundsWithMaxRgbAbove38": [
+      1047,
+      22,
+      1618,
+      866
+    ],
+    "note": "The left clump tip extends 7 pixels beyond the nominal half-width boundary. Runtime UV regions/padding must prevent these tip pixels leaking into the fern cell. Source has near-black RGB background, not alpha. Runtime requires an explicit black-coverage material; the existing alpha-only material cannot use it unchanged."
+  }
+}

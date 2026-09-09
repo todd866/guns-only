@@ -1,0 +1,297 @@
+{
+  "baseline": null,
+  "origin": "http://127.0.0.1:56616",
+  "repo": "/Users/iantodd/Projects/guns-only/.worktrees/generated-art-20260909",
+  "capturedAt": "2026-09-09T13:49:20.531Z",
+  "pages": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 501 (Unsupported method ('POST'))"
+      ],
+      "pageErrors": [],
+      "failedRequests": [],
+      "artResponses": [
+        {
+          "url": "http://127.0.0.1:56616/art/jet-cobra-generated-v4.webp",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:56616/art/jet-f22-generated-v4.webp",
+          "status": 200
+        }
+      ],
+      "captures": [
+        {
+          "name": "picker-1440x900-f22",
+          "file": "/tmp/guns-generated-art-qa/menu-final/picker-1440x900-f22.png",
+          "aircraft": "f22",
+          "touchMode": false,
+          "readyAction": {
+            "x": 565,
+            "y": 534.953125,
+            "width": 310,
+            "height": 52,
+            "inViewport": true
+          },
+          "card": {
+            "x": 210,
+            "y": 201.359375,
+            "width": 240,
+            "height": 300
+          },
+          "background": {
+            "image": "image-set(url(\"http://127.0.0.1:56616/art/jet-f22-generated-v4.webp\") 1dppx type(\"image/webp\"))",
+            "size": "cover",
+            "position": "50% 50%",
+            "filter": "none"
+          },
+          "image": {
+            "url": "http://127.0.0.1:56616/art/jet-f22-generated-v4.webp",
+            "width": 1000,
+            "height": 1000
+          },
+          "dialog": {
+            "scrollLeft": 0,
+            "clientWidth": 1180,
+            "scrollWidth": 1180
+          },
+          "fatal": false
+        },
+        {
+          "name": "picker-1440x900-cobra",
+          "file": "/tmp/guns-generated-art-qa/menu-final/picker-1440x900-cobra.png",
+          "aircraft": "cobra",
+          "touchMode": false,
+          "readyAction": {
+            "x": 565,
+            "y": 534.953125,
+            "width": 310,
+            "height": 52,
+            "inViewport": true
+          },
+          "card": {
+            "x": 730,
+            "y": 201.359375,
+            "width": 240,
+            "height": 300
+          },
+          "background": {
+            "image": "image-set(url(\"http://127.0.0.1:56616/art/jet-cobra-generated-v4.webp\") 1dppx type(\"image/webp\"))",
+            "size": "cover",
+            "position": "50% 50%",
+            "filter": "none"
+          },
+          "image": {
+            "url": "http://127.0.0.1:56616/art/jet-cobra-generated-v4.webp",
+            "width": 1000,
+            "height": 1000
+          },
+          "dialog": {
+            "scrollLeft": 0,
+            "clientWidth": 1180,
+            "scrollWidth": 1180
+          },
+          "fatal": false
+        }
+      ],
+      "route": "http://127.0.0.1:56616/?menu=1&audioQa=silent&server=off"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 501 (Unsupported method ('POST'))"
+      ],
+      "pageErrors": [],
+      "failedRequests": [],
+      "artResponses": [
+        {
+          "url": "http://127.0.0.1:56616/art/jet-f22-generated-v4.webp",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:56616/art/jet-cobra-generated-v4.webp",
+          "status": 200
+        }
+      ],
+      "captures": [
+        {
+          "name": "picker-390x844-f22",
+          "file": "/tmp/guns-generated-art-qa/menu-final/picker-390x844-f22.png",
+          "aircraft": "f22",
+          "touchMode": true,
+          "readyAction": {
+            "x": 20,
+            "y": 398.4375,
+            "width": 296.390625,
+            "height": 52,
+            "inViewport": true
+          },
+          "card": {
+            "x": 20,
+            "y": 163.703125,
+            "width": 163.796875,
+            "height": 204.734375
+          },
+          "background": {
+            "image": "image-set(url(\"http://127.0.0.1:56616/art/jet-f22-generated-v4.webp\") 1dppx type(\"image/webp\"))",
+            "size": "cover",
+            "position": "50% 50%",
+            "filter": "none"
+          },
+          "image": {
+            "url": "http://127.0.0.1:56616/art/jet-f22-generated-v4.webp",
+            "width": 1000,
+            "height": 1000
+          },
+          "dialog": {
+            "scrollLeft": 0,
+            "clientWidth": 374,
+            "scrollWidth": 374
+          },
+          "fatal": false
+        },
+        {
+          "name": "picker-390x844-cobra",
+          "file": "/tmp/guns-generated-art-qa/menu-final/picker-390x844-cobra.png",
+          "aircraft": "cobra",
+          "touchMode": true,
+          "readyAction": {
+            "x": 20,
+            "y": 420.4375,
+            "width": 296.390625,
+            "height": 52,
+            "inViewport": true
+          },
+          "card": {
+            "x": 193.59375,
+            "y": 185.703125,
+            "width": 163.796875,
+            "height": 204.734375
+          },
+          "background": {
+            "image": "image-set(url(\"http://127.0.0.1:56616/art/jet-cobra-generated-v4.webp\") 1dppx type(\"image/webp\"))",
+            "size": "cover",
+            "position": "50% 50%",
+            "filter": "none"
+          },
+          "image": {
+            "url": "http://127.0.0.1:56616/art/jet-cobra-generated-v4.webp",
+            "width": 1000,
+            "height": 1000
+          },
+          "dialog": {
+            "scrollLeft": 0,
+            "clientWidth": 374,
+            "scrollWidth": 374
+          },
+          "fatal": false
+        }
+      ],
+      "route": "http://127.0.0.1:56616/?menu=1&audioQa=silent&server=off"
+    },
+    {
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 501 (Unsupported method ('POST'))"
+      ],
+      "pageErrors": [],
+      "failedRequests": [],
+      "artResponses": [
+        {
+          "url": "http://127.0.0.1:56616/art/jet-f22-generated-v4.webp",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:56616/art/jet-cobra-generated-v4.webp",
+          "status": 200
+        }
+      ],
+      "captures": [
+        {
+          "name": "picker-844x390-f22",
+          "file": "/tmp/guns-generated-art-qa/menu-final/picker-844x390-f22.png",
+          "aircraft": "f22",
+          "touchMode": true,
+          "readyAction": {
+            "x": 600,
+            "y": 41.390625,
+            "width": 222,
+            "height": 52,
+            "inViewport": true
+          },
+          "card": {
+            "x": 19,
+            "y": 169.59375,
+            "width": 127.75,
+            "height": 95.8125
+          },
+          "background": {
+            "image": "image-set(url(\"http://127.0.0.1:56616/art/jet-f22-generated-v4.webp\") 1dppx type(\"image/webp\"))",
+            "size": "cover",
+            "position": "50% 50%",
+            "filter": "none"
+          },
+          "image": {
+            "url": "http://127.0.0.1:56616/art/jet-f22-generated-v4.webp",
+            "width": 1000,
+            "height": 1000
+          },
+          "dialog": {
+            "scrollLeft": 0,
+            "clientWidth": 828,
+            "scrollWidth": 828
+          },
+          "fatal": false
+        },
+        {
+          "name": "picker-844x390-cobra",
+          "file": "/tmp/guns-generated-art-qa/menu-final/picker-844x390-cobra.png",
+          "aircraft": "cobra",
+          "touchMode": true,
+          "readyAction": {
+            "x": 600,
+            "y": 41.390625,
+            "width": 222,
+            "height": 52,
+            "inViewport": true
+          },
+          "card": {
+            "x": 294.5,
+            "y": 174.59375,
+            "width": 127.75,
+            "height": 95.8125
+          },
+          "background": {
+            "image": "image-set(url(\"http://127.0.0.1:56616/art/jet-cobra-generated-v4.webp\") 1dppx type(\"image/webp\"))",
+            "size": "cover",
+            "position": "50% 50%",
+            "filter": "none"
+          },
+          "image": {
+            "url": "http://127.0.0.1:56616/art/jet-cobra-generated-v4.webp",
+            "width": 1000,
+            "height": 1000
+          },
+          "dialog": {
+            "scrollLeft": 0,
+            "clientWidth": 828,
+            "scrollWidth": 828
+          },
+          "fatal": false
+        }
+      ],
+      "route": "http://127.0.0.1:56616/?menu=1&audioQa=silent&server=off"
+    }
+  ],
+  "failure": null
+}

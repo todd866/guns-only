@@ -1,0 +1,4849 @@
+{
+  "label": "allocation",
+  "origin": "http://127.0.0.1:63015",
+  "renderer": "Chromium SwiftShader software GPU; timing is not hardware FPS",
+  "readOnlyInspector": true,
+  "pageErrors": [],
+  "consoleErrors": [],
+  "assets": [
+    {
+      "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/cobra-canyon.world.json",
+      "status": 200,
+      "bytes": 65323,
+      "sha256": "1c25e62bad68c92fbc3a923072c0c56a27676ab2bbb9ea6daea5a1d9808c6f4f"
+    },
+    {
+      "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/foliage/foliage-atlas-generated-v2.png",
+      "status": 200,
+      "bytes": 546554,
+      "sha256": "e16bb50cb7a63083f0ab6a4af537631a31a86ce745ff82d00eaacd1bf44896c8"
+    },
+    {
+      "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp",
+      "status": 200,
+      "bytes": 344424,
+      "sha256": "568a68ecd66d0730a59f43e58f706f62cac705e9f7308eeebf996e703f0eec04"
+    },
+    {
+      "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/surfaces/canopy-generated-v1.webp",
+      "status": 200,
+      "bytes": 362538,
+      "sha256": "31804fe8aa3b1d0f0c01e68af3cefa6f29dea0b5783a655155eafe3d30fa0e21"
+    }
+  ],
+  "captures": [
+    {
+      "tier": "balanced",
+      "name": "player-eye",
+      "view": "actual production player eye",
+      "file": "/tmp/guns-cobra-world-20260910/allocation/balanced-player-eye.png",
+      "metrics": {
+        "scene": {
+          "camera": {
+            "eastM": -2710.014581926965,
+            "northM": -861.0498987415012,
+            "upM": 213.4691738258399,
+            "aglM": 70.9922848571967,
+            "yawRad": -0.013887995930967794,
+            "pitchRad": 0,
+            "fovDeg": 58
+          },
+          "quality": "balanced",
+          "authority": {
+            "tick": -1,
+            "elapsedS": 0,
+            "status": "active"
+          },
+          "presentation": {
+            "schema": "guns-only.cobra-canyon-presentation.v1",
+            "worldId": "world.cobra-canyon.v1",
+            "qualityTier": "balanced",
+            "ambientBudgetLevel": 2,
+            "nearRingVisible": true,
+            "drawCalls": 20,
+            "instances": 1669,
+            "triangles": 189908,
+            "builtDrawCalls": 20,
+            "builtInstances": 3943,
+            "builtTriangles": 335776,
+            "presentationDrawCallHeadroom": 0,
+            "presentationInstanceHeadroom": 257,
+            "presentationTriangleHeadroom": 44224,
+            "authoredWorldDrawCallCeiling": 36,
+            "availableSceneDrawCallHeadroom": 16,
+            "visibleAmbientInstances": 1626,
+            "visibleAssetInstances": 1626,
+            "visibleAssetDrawCalls": 9,
+            "hazards": 18,
+            "hazardInstances": 30,
+            "hazardsVisible": true,
+            "presentationOnly": true,
+            "authoritative": false,
+            "collisionSource": false,
+            "targetSource": false,
+            "roleCounts": {
+              "basinTriangles": 63724,
+              "riverTriangles": 2794,
+              "roadTriangles": 0,
+              "heroCells": 3,
+              "landmarks": 11,
+              "landmarkInstances": 13,
+              "wireSpans": 9,
+              "suppressedPresentationPoles": 2,
+              "hazards": 18,
+              "hazardInstances": 30,
+              "waterTowers": 1,
+              "bridges": 7,
+              "bridgeDecks": 1,
+              "bridgeApproaches": 2,
+              "bridgePiers": 4,
+              "campEmberFirebaseParts": 437,
+              "campEmberFirebaseTriangles": 5742,
+              "plantationGroundTriangles": 920,
+              "routeEnvelopeAdjustedInstances": 7,
+              "routeEnvelopeMinimumClearanceM": 9.755999999999911,
+              "coreRenderBatches": 11,
+              "assetRenderBatches": 8,
+              "worldRenderBatches": 20,
+              "authoredAmbientBatches": 10,
+              "authoredSetPieceCells": 10,
+              "authoredAmbientArchetypes": 11,
+              "authoredLandmarkArchetypes": 11,
+              "authoredSetPieceArchetypeReferences": 58,
+              "authoredSetPieceAssetReferences": 50,
+              "renderedSetPieceAssetInstances": 50,
+              "generatedWaterAccentInstances": 24,
+              "renderedWaterAccentInstances": 24,
+              "ambientBatchInstances": 1917,
+              "renderBatches": 8,
+              "assetInstances": 1991,
+              "scatterRadiusM": 900,
+              "scatterTileM": 160,
+              "scatterInstancesPerTile": 25,
+              "scatterCapacity": 2526,
+              "jungleAuthoredBatches": 5,
+              "jungleBatches": 5,
+              "jungleRenderBatches": 2,
+              "jungleSetPieceInstances": 30,
+              "jungleInstances": 1759,
+              "jungleScatterCapacity": 1730,
+              "jungleScatterRadiusM": 1293,
+              "plantationAuthoredBatches": 1,
+              "plantationBatches": 1,
+              "plantationRenderBatches": 1,
+              "plantationSetPieceInstances": 1,
+              "plantationInstances": 25,
+              "plantationScatterCapacity": 231,
+              "plantationScatterRadiusM": 1757,
+              "villageAuthoredBatches": 1,
+              "villageBatches": 1,
+              "villageRenderBatches": 1,
+              "villageSetPieceInstances": 3,
+              "villageInstances": 126,
+              "villageScatterCapacity": 123,
+              "villageScatterRadiusM": 1055,
+              "paddyAuthoredBatches": 1,
+              "paddyBatches": 1,
+              "paddyRenderBatches": 1,
+              "paddySetPieceInstances": 2,
+              "paddyInstances": 18,
+              "paddyScatterCapacity": 196,
+              "paddyScatterRadiusM": 1560,
+              "rockAuthoredBatches": 1,
+              "rockBatches": 1,
+              "rockRenderBatches": 1,
+              "rockSetPieceInstances": 6,
+              "rockInstances": 6,
+              "rockScatterCapacity": 205,
+              "rockScatterRadiusM": 900,
+              "mistAuthoredBatches": 1,
+              "mistBatches": 1,
+              "mistRenderBatches": 1,
+              "mistSetPieceInstances": 6,
+              "mistInstances": 31,
+              "mistScatterCapacity": 41,
+              "mistScatterRadiusM": 1661,
+              "waterAccentAuthoredBatches": 0,
+              "waterAccentBatches": 0,
+              "waterAccentRenderBatches": 1,
+              "waterAccentSetPieceInstances": 2,
+              "waterAccentInstances": 26,
+              "waterAccentScatterCapacity": 0,
+              "waterAccentScatterRadiusM": 900,
+              "canopyCapacity": 1300,
+              "canopyAllocatedTriangles": 104000,
+              "canopyInstances": 780,
+              "canopyTriangles": 62400,
+              "canopyPendingCells": 0
+            },
+            "budget": {
+              "maxDrawCalls": 20,
+              "maxInstances": 4200,
+              "maxTriangles": 380000,
+              "maxAssetInstances": 3900,
+              "maxAuthoredTriangles": 92000,
+              "nearRingMaximumAglM": 260
+            },
+            "withinBudget": true,
+            "disposed": false
+          },
+          "exposure": 1.16,
+          "sun": {
+            "position": [
+              -1905.1670921846398,
+              539.6572881767177,
+              -786.2222153713132
+            ],
+            "color": [
+              1,
+              0.76052450467022,
+              0.45641102317066595
+            ],
+            "intensity": 2.65
+          },
+          "fog": {
+            "density": 0.000302,
+            "color": [
+              0.2541520943200296,
+              0.34670405634441115,
+              0.37626212298046485
+            ]
+          },
+          "render": {
+            "frame": 161,
+            "calls": 80,
+            "triangles": 187470,
+            "points": 0,
+            "lines": 0
+          },
+          "surfaceMaterials": [
+            {
+              "mesh": "COBRA_CANYON_BASIN",
+              "enabled": 1,
+              "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp"
+            }
+          ],
+          "memory": {
+            "geometries": 48,
+            "textures": 5
+          },
+          "programs": [
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_BASIN_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_RIVER_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_LANDMARKS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_JUNGLE_AUTHORED_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_JUNGLE_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_PLANTATION_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_HAZARDS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_WATER_TOWER_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_HEROCELLS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            }
+          ]
+        },
+        "visibleVegetation": [
+          {
+            "name": "COBRA_MIDFIELD_CANOPY",
+            "count": 780,
+            "visibleCenters": 144,
+            "instances": [
+              {
+                "id": "canopy.-26.1.0",
+                "instanceId": 668,
+                "eastM": -3597.146728515625,
+                "northM": 215.3596649169922,
+                "matrix": [
+                  -43.211509704589844,
+                  -5.000170707702637,
+                  -2.398190975189209,
+                  0,
+                  0,
+                  18.088401794433594,
+                  0,
+                  0,
+                  1.7271676063537598,
+                  6.089025497436523,
+                  -31.120758056640625,
+                  0,
+                  -3597.146728515625,
+                  415.3922119140625,
+                  -215.3596649169922,
+                  1
+                ],
+                "minimumVertexY": 411.70639279709485,
+                "maximumVertexY": 433.1372633436001,
+                "drawnGroundY": 416.46473256819627,
+                "rootClearanceM": -4.758339771101419,
+                "projected": {
+                  "x": 31.777235796904748,
+                  "y": 289.0319121539305,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-24.0.3",
+                "instanceId": 384,
+                "eastM": -3253.63134765625,
+                "northM": 89.3474349975586,
+                "matrix": [
+                  -33.82073211669922,
+                  -0.8964136838912964,
+                  -20.36431884765625,
+                  0,
+                  0,
+                  19.53816795349121,
+                  0,
+                  0,
+                  17.89122200012207,
+                  6.678684234619141,
+                  -29.713455200195312,
+                  0,
+                  -3253.63134765625,
+                  428.9464416503906,
+                  -89.3474349975586,
+                  1
+                ],
+                "minimumVertexY": 425.1757969434392,
+                "maximumVertexY": 448.8420847551655,
+                "drawnGroundY": 430.03662221224266,
+                "rootClearanceM": -4.860825268803467,
+                "projected": {
+                  "x": 240.5629991813902,
+                  "y": 256.0369864536005,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-23.3.2",
+                "instanceId": 706,
+                "eastM": -3157.828125,
+                "northM": 496.66326904296875,
+                "matrix": [
+                  -10.823920249938965,
+                  3.77020001411438,
+                  -42.49667739868164,
+                  0,
+                  0,
+                  19.70182228088379,
+                  0,
+                  0,
+                  32.71598434448242,
+                  -7.968810558319092,
+                  -8.332773208618164,
+                  0,
+                  -3157.828125,
+                  465.1326904296875,
+                  -496.66326904296875,
+                  1
+                ],
+                "minimumVertexY": 461.37578731168355,
+                "maximumVertexY": 484.8400838837235,
+                "drawnGroundY": 466.2439244304132,
+                "rootClearanceM": -4.868137118729635,
+                "projected": {
+                  "x": 439.67806796891483,
+                  "y": 292.89713373467026,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-23.0.2",
+                "instanceId": 375,
+                "eastM": -3171.279541015625,
+                "northM": 120.90388488769531,
+                "matrix": [
+                  -38.23944854736328,
+                  -0.5340767502784729,
+                  -28.461896896362305,
+                  0,
+                  0,
+                  17.69032859802246,
+                  0,
+                  0,
+                  18.426982879638672,
+                  5.35075044631958,
+                  -24.757226943969727,
+                  0,
+                  -3171.279541015625,
+                  442.6637878417969,
+                  -120.90388488769531,
+                  1
+                ],
+                "minimumVertexY": 439.3689743839221,
+                "maximumVertexY": 460.6699704611052,
+                "drawnGroundY": 444.4007242247368,
+                "rootClearanceM": -5.031749840814712,
+                "projected": {
+                  "x": 324.7996667242267,
+                  "y": 251.89126643552595,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-23.2.1",
+                "instanceId": 533,
+                "eastM": -3165.947509765625,
+                "northM": 311.2252197265625,
+                "matrix": [
+                  -14.619927406311035,
+                  2.5068893432617188,
+                  -37.78887939453125,
+                  0,
+                  0,
+                  20.241287231445312,
+                  0,
+                  0,
+                  35.11579513549805,
+                  -6.808765888214111,
+                  -13.585752487182617,
+                  0,
+                  -3165.947509765625,
+                  463.8756408691406,
+                  -311.2252197265625,
+                  1
+                ],
+                "minimumVertexY": 460.17729693897417,
+                "maximumVertexY": 484.0073729246347,
+                "drawnGroundY": 465.286298204409,
+                "rootClearanceM": -5.109001265434813,
+                "projected": {
+                  "x": 391.20691683942357,
+                  "y": 268.5829350222552,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-24.1.0",
+                "instanceId": 482,
+                "eastM": -3331.420654296875,
+                "northM": 167.5130157470703,
+                "matrix": [
+                  -42.659393310546875,
+                  -6.665167808532715,
+                  11.312664985656738,
+                  0,
+                  0,
+                  16.066194534301758,
+                  0,
+                  0,
+                  -10.767378807067871,
+                  7.599116325378418,
+                  -40.603153228759766,
+                  0,
+                  -3331.420654296875,
+                  434.4872741699219,
+                  -167.5130157470703,
+                  1
+                ],
+                "minimumVertexY": 430.55817702803387,
+                "maximumVertexY": 450.1665012685615,
+                "drawnGroundY": 435.6795996599119,
+                "rootClearanceM": -5.121422631878033,
+                "projected": {
+                  "x": 214.01723016503198,
+                  "y": 267.667679379742,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-24.1.2",
+                "instanceId": 523,
+                "eastM": -3335.38134765625,
+                "northM": 219.6343536376953,
+                "matrix": [
+                  -45.37046813964844,
+                  -3.6502559185028076,
+                  -3.1412439346313477,
+                  0,
+                  0,
+                  17.097307205200195,
+                  0,
+                  0,
+                  3.446979284286499,
+                  10.978253364562988,
+                  -49.78635025024414,
+                  0,
+                  -3335.38134765625,
+                  445.2892150878906,
+                  -219.6343536376953,
+                  1
+                ],
+                "minimumVertexY": 441.2416896689025,
+                "maximumVertexY": 463.066510282229,
+                "drawnGroundY": 446.43398162928537,
+                "rootClearanceM": -5.1922919603828745,
+                "projected": {
+                  "x": 235.04487451371259,
+                  "y": 267.9519156186604,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-24.0.2",
+                "instanceId": 395,
+                "eastM": -3289.36376953125,
+                "northM": 85.35008239746094,
+                "matrix": [
+                  -13.661604881286621,
+                  -7.023940086364746,
+                  34.80795669555664,
+                  0,
+                  0,
+                  16.13197135925293,
+                  0,
+                  0,
+                  -27.986621856689453,
+                  -1.5158082246780396,
+                  -10.984333038330078,
+                  0,
+                  -3289.36376953125,
+                  424.1822509765625,
+                  -85.35008239746094,
+                  1
+                ],
+                "minimumVertexY": 419.8646513417299,
+                "maximumVertexY": 440.2611809063736,
+                "drawnGroundY": 425.18226244096167,
+                "rootClearanceM": -5.317611099231783,
+                "projected": {
+                  "x": 207.40098372296944,
+                  "y": 260.7038752915494,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-21.2.2",
+                "instanceId": 509,
+                "eastM": -2902.831298828125,
+                "northM": 357.7507629394531,
+                "matrix": [
+                  6.746894359588623,
+                  -0.5527129173278809,
+                  -37.90085983276367,
+                  0,
+                  0,
+                  17.25596046447754,
+                  0,
+                  0,
+                  30.19382095336914,
+                  -9.518844604492188,
+                  5.374931335449219,
+                  0,
+                  -2902.831298828125,
+                  399.91217041015625,
+                  -357.7507629394531,
+                  1
+                ],
+                "minimumVertexY": 395.6156668723603,
+                "maximumVertexY": 416.6995502920623,
+                "drawnGroundY": 400.9395149199853,
+                "rootClearanceM": -5.323848047625006,
+                "projected": {
+                  "x": 579.9852610408981,
+                  "y": 319.768000571441,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-21.3.2",
+                "instanceId": 640,
+                "eastM": -2894.306640625,
+                "northM": 497.9600830078125,
+                "matrix": [
+                  15.197468757629395,
+                  -3.59207820892334,
+                  52.56748580932617,
+                  0,
+                  0,
+                  22.544017791748047,
+                  0,
+                  0,
+                  -40.70350646972656,
+                  9.119025230407715,
+                  11.767545700073242,
+                  0,
+                  -2894.306640625,
+                  400.6260681152344,
+                  -497.9600830078125,
+                  1
+                ],
+                "minimumVertexY": 396.3525476175634,
+                "maximumVertexY": 423.27928032585834,
+                "drawnGroundY": 401.68834507319656,
+                "rootClearanceM": -5.3357974556331556,
+                "projected": {
+                  "x": 598.406537753452,
+                  "y": 331.23090400411274,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-13.1.3",
+                "instanceId": 727,
+                "eastM": -1736.0128173828125,
+                "northM": 208.79632568359375,
+                "matrix": [
+                  -57.224365234375,
+                  -5.38509464263916,
+                  16.253889083862305,
+                  0,
+                  0,
+                  18.90105438232422,
+                  0,
+                  0,
+                  -10.329452514648438,
+                  -3.3496503829956055,
+                  -36.366455078125,
+                  0,
+                  -1736.0128173828125,
+                  148.36990356445312,
+                  -208.79632568359375,
+                  1
+                ],
+                "minimumVertexY": 144.0048987834411,
+                "maximumVertexY": 166.87171282390784,
+                "drawnGroundY": 149.36990680104122,
+                "rootClearanceM": -5.3650080176001325,
+                "projected": {
+                  "x": 1438.7293667144334,
+                  "y": 491.7041589694495,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-26.2.1",
+                "instanceId": 760,
+                "eastM": -3577.427490234375,
+                "northM": 333.2958679199219,
+                "matrix": [
+                  -25.852142333984375,
+                  1.6758496761322021,
+                  -25.44663429260254,
+                  0,
+                  0,
+                  16.330142974853516,
+                  0,
+                  0,
+                  25.65094566345215,
+                  9.060746192932129,
+                  -26.059709548950195,
+                  0,
+                  -3577.427490234375,
+                  441.685791015625,
+                  -333.2958679199219,
+                  1
+                ],
+                "minimumVertexY": 437.32876261031714,
+                "maximumVertexY": 458.9636259241394,
+                "drawnGroundY": 442.70697062445095,
+                "rootClearanceM": -5.378208014133804,
+                "projected": {
+                  "x": 113.003436609608,
+                  "y": 287.6735955223331,
+                  "inFrame": true
+                }
+              }
+            ]
+          },
+          {
+            "name": "COBRA_CANYON_ASSET_JUNGLE",
+            "count": 627,
+            "visibleCenters": 97,
+            "instances": [
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-17.-2.3",
+                "instanceId": 399,
+                "eastM": -2690.853515625,
+                "northM": -275.2387390136719,
+                "matrix": [
+                  2.2046406269073486,
+                  0,
+                  -4.855549335479736,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  4.316043853759766,
+                  0,
+                  1.9596805572509766,
+                  0,
+                  -2690.853515625,
+                  92.91244506835938,
+                  275.2387390136719,
+                  1
+                ],
+                "minimumVertexY": 92.91244506835938,
+                "maximumVertexY": 93.55244505405426,
+                "drawnGroundY": 93.00449138122356,
+                "rootClearanceM": -0.09204631286418419,
+                "projected": {
+                  "x": 735.2713130822735,
+                  "y": 616.5653606402975,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "set-piece.cobra-canyon.radio-mast-spur.v1.archetype.cobra-canyon.jungle-canopy.v1.2",
+                "instanceId": 12,
+                "eastM": -1723.675048828125,
+                "northM": 5057.77783203125,
+                "matrix": [
+                  -2.9158623218536377,
+                  0,
+                  2.612741470336914,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -2.2107813358306885,
+                  0,
+                  -2.4672679901123047,
+                  0,
+                  -1723.675048828125,
+                  524.8035888671875,
+                  -5057.77783203125,
+                  1
+                ],
+                "minimumVertexY": 524.8035888671875,
+                "maximumVertexY": 528.8035888671875,
+                "drawnGroundY": 524.9023979091644,
+                "rootClearanceM": -0.09880904197689233,
+                "projected": {
+                  "x": 843.7238521648495,
+                  "y": 407.1184169176101,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-19.-4.4",
+                "instanceId": 189,
+                "eastM": -2951.612548828125,
+                "northM": -574.63037109375,
+                "matrix": [
+                  -2.614825487136841,
+                  0,
+                  5.2579827308654785,
+                  0,
+                  0,
+                  1.1854530572891235,
+                  0,
+                  0,
+                  -4.673762321472168,
+                  0,
+                  -2.324289321899414,
+                  0,
+                  -2951.612548828125,
+                  92.79552459716797,
+                  574.63037109375,
+                  1
+                ],
+                "minimumVertexY": 92.79552459716797,
+                "maximumVertexY": 93.98097765445709,
+                "drawnGroundY": 92.89918636239389,
+                "rootClearanceM": -0.10366176522592241,
+                "projected": {
+                  "x": 15.69324651111665,
+                  "y": 794.4227292166406,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-19.-4.0",
+                "instanceId": 185,
+                "eastM": -2930.528076171875,
+                "northM": -564.5982666015625,
+                "matrix": [
+                  1.981391429901123,
+                  0,
+                  5.529455661773682,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  -4.915071487426758,
+                  0,
+                  1.7612367868423462,
+                  0,
+                  -2930.528076171875,
+                  92.5952377319336,
+                  564.5982666015625,
+                  1
+                ],
+                "minimumVertexY": 92.5952377319336,
+                "maximumVertexY": 93.23523771762848,
+                "drawnGroundY": 92.70017242863072,
+                "rootClearanceM": -0.10493469669712852,
+                "projected": {
+                  "x": 98.43542726750587,
+                  "y": 783.6107811063713,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-19.-4.2",
+                "instanceId": 187,
+                "eastM": -2921.790771484375,
+                "northM": -575.526123046875,
+                "matrix": [
+                  -3.55157208442688,
+                  0,
+                  5.551980018615723,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  -4.935093402862549,
+                  0,
+                  -3.1569530963897705,
+                  0,
+                  -2921.790771484375,
+                  92.62763214111328,
+                  575.526123046875,
+                  1
+                ],
+                "minimumVertexY": 92.62763214111328,
+                "maximumVertexY": 93.26763212680817,
+                "drawnGroundY": 92.73561502557381,
+                "rootClearanceM": -0.10798288446052595,
+                "projected": {
+                  "x": 100.20272000782865,
+                  "y": 796.2756358677499,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.gorge-riparian.v1.-16.-3.1",
+                "instanceId": 281,
+                "eastM": -2435.50048828125,
+                "northM": -398.95751953125,
+                "matrix": [
+                  -1.9491435289382935,
+                  0,
+                  -2.8277640342712402,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  2.392723560333252,
+                  0,
+                  -1.649275302886963,
+                  0,
+                  -2435.50048828125,
+                  94.35218048095703,
+                  398.95751953125,
+                  1
+                ],
+                "minimumVertexY": 94.35218048095703,
+                "maximumVertexY": 98.35218048095703,
+                "drawnGroundY": 94.4628096274566,
+                "rootClearanceM": -0.11062914649956213,
+                "projected": {
+                  "x": 1187.1471136448065,
+                  "y": 654.0914921009849,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "set-piece.cobra-canyon.white-pagoda-saddle.v1.archetype.cobra-canyon.jungle-canopy.v1.2",
+                "instanceId": 6,
+                "eastM": -3425.025146484375,
+                "northM": 3048.062255859375,
+                "matrix": [
+                  -2.6442573070526123,
+                  0,
+                  -2.491713285446167,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  2.108372926712036,
+                  0,
+                  -2.2374484539031982,
+                  0,
+                  -3425.025146484375,
+                  500.0863952636719,
+                  -3048.062255859375,
+                  1
+                ],
+                "minimumVertexY": 500.0863952636719,
+                "maximumVertexY": 504.0863952636719,
+                "drawnGroundY": 500.1977106308912,
+                "rootClearanceM": -0.11131536721933344,
+                "projected": {
+                  "x": 559.8286010208527,
+                  "y": 389.90321727465664,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "set-piece.cobra-canyon.radio-mast-spur.v1.archetype.cobra-canyon.jungle-canopy.v1.1",
+                "instanceId": 11,
+                "eastM": -1748.8399658203125,
+                "northM": 5042.6787109375,
+                "matrix": [
+                  -3.9756906032562256,
+                  0,
+                  -3.840536594390869,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  3.2496848106384277,
+                  0,
+                  -3.3640458583831787,
+                  0,
+                  -1748.8399658203125,
+                  524.8058471679688,
+                  -5042.6787109375,
+                  1
+                ],
+                "minimumVertexY": 524.8058471679688,
+                "maximumVertexY": 528.8058471679688,
+                "drawnGroundY": 524.9176951231808,
+                "rootClearanceM": -0.11184795521205615,
+                "projected": {
+                  "x": 840.6230297618436,
+                  "y": 407.00614945043526,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.gorge-riparian.v1.-15.-3.0",
+                "instanceId": 346,
+                "eastM": -2403.5048828125,
+                "northM": -362.8002014160156,
+                "matrix": [
+                  2.8765132427215576,
+                  0,
+                  -2.3371670246124268,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  1.9776028394699097,
+                  0,
+                  2.4339728355407715,
+                  0,
+                  -2403.5048828125,
+                  94.54533386230469,
+                  362.8002014160156,
+                  1
+                ],
+                "minimumVertexY": 94.54533386230469,
+                "maximumVertexY": 98.54533386230469,
+                "drawnGroundY": 94.65838695551444,
+                "rootClearanceM": -0.1130530932097571,
+                "projected": {
+                  "x": 1203.9999337898735,
+                  "y": 638.9137523695236,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.west-canopy-mass.v1.-16.-3.3",
+                "instanceId": 285,
+                "eastM": -2431.750244140625,
+                "northM": -395.2858581542969,
+                "matrix": [
+                  2.070732593536377,
+                  0,
+                  4.311139106750488,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -3.6478869915008545,
+                  0,
+                  1.752158284187317,
+                  0,
+                  -2431.750244140625,
+                  94.36746215820312,
+                  395.2858581542969,
+                  1
+                ],
+                "minimumVertexY": 94.36746215820312,
+                "maximumVertexY": 98.36746215820312,
+                "drawnGroundY": 94.490119964169,
+                "rootClearanceM": -0.12265780596587206,
+                "projected": {
+                  "x": 1189.8377311459062,
+                  "y": 652.4468049379647,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.west-canopy-mass.v1.-16.-3.4",
+                "instanceId": 286,
+                "eastM": -2440.490234375,
+                "northM": -402.8958435058594,
+                "matrix": [
+                  -2.8287384510040283,
+                  0,
+                  -3.9132750034332275,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  3.311232566833496,
+                  0,
+                  -2.393548011779785,
+                  0,
+                  -2440.490234375,
+                  94.26274108886719,
+                  402.8958435058594,
+                  1
+                ],
+                "minimumVertexY": 94.26274108886719,
+                "maximumVertexY": 98.26274108886719,
+                "drawnGroundY": 94.38581117759458,
+                "rootClearanceM": -0.12307008872738834,
+                "projected": {
+                  "x": 1182.5265503265252,
+                  "y": 656.0194919119048,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "set-piece.cobra-canyon.radio-mast-spur.v1.archetype.cobra-canyon.jungle-understory.v1.0",
+                "instanceId": 13,
+                "eastM": -1736.6402587890625,
+                "northM": 4930.20703125,
+                "matrix": [
+                  5.820196151733398,
+                  0,
+                  9.236084938049316,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -8.209853172302246,
+                  0,
+                  5.1735076904296875,
+                  0,
+                  -1736.6402587890625,
+                  525.5053100585938,
+                  -4930.20703125,
+                  1
+                ],
+                "minimumVertexY": 525.5053100585938,
+                "maximumVertexY": 529.5053100585938,
+                "drawnGroundY": 525.6482064840943,
+                "rootClearanceM": -0.1428964255005667,
+                "projected": {
+                  "x": 844.8813116275128,
+                  "y": 406.0765357239858,
+                  "inFrame": true
+                }
+              }
+            ]
+          }
+        ],
+        "frameProfile": {
+          "frames": 13,
+          "meanMs": {
+            "sim": 0,
+            "state": 0,
+            "presentation": 0.05384610249445988,
+            "render": 1.1538462272057166,
+            "hud": 0.8769230108994704,
+            "total": 2.115384652064397
+          },
+          "p95Ms": 484.3999938964844,
+          "p99Ms": 683.2000122070312
+        },
+        "observedRafIntervalsMs": [
+          481.6000000000058,
+          435.09999999999854,
+          499.1999999999971,
+          500.70000000000437,
+          450,
+          449.8999999999942,
+          400.1000000000058,
+          316.6999999999971,
+          316.5,
+          300.09999999999854,
+          299.90000000000146,
+          300
+        ],
+        "observedRafMeanMs": 395.8166666666669,
+        "observedRafP95Ms": 499.1999999999971
+      }
+    },
+    {
+      "tier": "balanced",
+      "name": "iron-bell",
+      "view": {
+        "name": "iron-bell",
+        "eastM": -3050,
+        "northM": -700,
+        "aglM": 50,
+        "yawRad": -1.075,
+        "pitchRad": -0.05,
+        "fovDeg": 56,
+        "battleSiteId": "site.iron-bell-bridge.v1"
+      },
+      "file": "/tmp/guns-cobra-world-20260910/allocation/balanced-iron-bell.png",
+      "metrics": {
+        "scene": {
+          "camera": {
+            "eastM": -3050,
+            "northM": -700,
+            "upM": 165.1539645628533,
+            "aglM": 50,
+            "yawRad": -1.075,
+            "pitchRad": -0.05,
+            "fovDeg": 56
+          },
+          "quality": "balanced",
+          "authority": {
+            "tick": -1,
+            "elapsedS": 0,
+            "status": "active"
+          },
+          "presentation": {
+            "schema": "guns-only.cobra-canyon-presentation.v1",
+            "worldId": "world.cobra-canyon.v1",
+            "qualityTier": "balanced",
+            "ambientBudgetLevel": 0,
+            "nearRingVisible": true,
+            "drawCalls": 20,
+            "instances": 2986,
+            "triangles": 272734,
+            "builtDrawCalls": 20,
+            "builtInstances": 3943,
+            "builtTriangles": 335776,
+            "presentationDrawCallHeadroom": 0,
+            "presentationInstanceHeadroom": 257,
+            "presentationTriangleHeadroom": 44224,
+            "authoredWorldDrawCallCeiling": 36,
+            "availableSceneDrawCallHeadroom": 16,
+            "visibleAmbientInstances": 2943,
+            "visibleAssetInstances": 2943,
+            "visibleAssetDrawCalls": 9,
+            "hazards": 18,
+            "hazardInstances": 30,
+            "hazardsVisible": true,
+            "presentationOnly": true,
+            "authoritative": false,
+            "collisionSource": false,
+            "targetSource": false,
+            "roleCounts": {
+              "basinTriangles": 63724,
+              "riverTriangles": 2794,
+              "roadTriangles": 0,
+              "heroCells": 3,
+              "landmarks": 11,
+              "landmarkInstances": 13,
+              "wireSpans": 9,
+              "suppressedPresentationPoles": 2,
+              "hazards": 18,
+              "hazardInstances": 30,
+              "waterTowers": 1,
+              "bridges": 7,
+              "bridgeDecks": 1,
+              "bridgeApproaches": 2,
+              "bridgePiers": 4,
+              "campEmberFirebaseParts": 437,
+              "campEmberFirebaseTriangles": 5742,
+              "plantationGroundTriangles": 920,
+              "routeEnvelopeAdjustedInstances": 7,
+              "routeEnvelopeMinimumClearanceM": 9.755999999999911,
+              "coreRenderBatches": 11,
+              "assetRenderBatches": 8,
+              "worldRenderBatches": 20,
+              "authoredAmbientBatches": 10,
+              "authoredSetPieceCells": 10,
+              "authoredAmbientArchetypes": 11,
+              "authoredLandmarkArchetypes": 11,
+              "authoredSetPieceArchetypeReferences": 58,
+              "authoredSetPieceAssetReferences": 50,
+              "renderedSetPieceAssetInstances": 50,
+              "generatedWaterAccentInstances": 24,
+              "renderedWaterAccentInstances": 24,
+              "ambientBatchInstances": 1888,
+              "renderBatches": 8,
+              "assetInstances": 1962,
+              "scatterRadiusM": 900,
+              "scatterTileM": 160,
+              "scatterInstancesPerTile": 25,
+              "scatterCapacity": 2526,
+              "jungleAuthoredBatches": 5,
+              "jungleBatches": 5,
+              "jungleRenderBatches": 2,
+              "jungleSetPieceInstances": 30,
+              "jungleInstances": 1760,
+              "jungleScatterCapacity": 1730,
+              "jungleScatterRadiusM": 1301,
+              "plantationAuthoredBatches": 1,
+              "plantationBatches": 1,
+              "plantationRenderBatches": 1,
+              "plantationSetPieceInstances": 1,
+              "plantationInstances": 1,
+              "plantationScatterCapacity": 231,
+              "plantationScatterRadiusM": 900,
+              "villageAuthoredBatches": 1,
+              "villageBatches": 1,
+              "villageRenderBatches": 1,
+              "villageSetPieceInstances": 3,
+              "villageInstances": 126,
+              "villageScatterCapacity": 123,
+              "villageScatterRadiusM": 949,
+              "paddyAuthoredBatches": 1,
+              "paddyBatches": 1,
+              "paddyRenderBatches": 1,
+              "paddySetPieceInstances": 2,
+              "paddyInstances": 9,
+              "paddyScatterCapacity": 196,
+              "paddyScatterRadiusM": 450,
+              "rockAuthoredBatches": 1,
+              "rockBatches": 1,
+              "rockRenderBatches": 1,
+              "rockSetPieceInstances": 6,
+              "rockInstances": 6,
+              "rockScatterCapacity": 205,
+              "rockScatterRadiusM": 900,
+              "mistAuthoredBatches": 1,
+              "mistBatches": 1,
+              "mistRenderBatches": 1,
+              "mistSetPieceInstances": 6,
+              "mistInstances": 34,
+              "mistScatterCapacity": 41,
+              "mistScatterRadiusM": 1728,
+              "waterAccentAuthoredBatches": 0,
+              "waterAccentBatches": 0,
+              "waterAccentRenderBatches": 1,
+              "waterAccentSetPieceInstances": 2,
+              "waterAccentInstances": 26,
+              "waterAccentScatterCapacity": 0,
+              "waterAccentScatterRadiusM": 900,
+              "canopyCapacity": 1300,
+              "canopyAllocatedTriangles": 104000,
+              "canopyInstances": 981,
+              "canopyTriangles": 78480,
+              "canopyPendingCells": 0
+            },
+            "budget": {
+              "maxDrawCalls": 20,
+              "maxInstances": 4200,
+              "maxTriangles": 380000,
+              "maxAssetInstances": 3900,
+              "maxAuthoredTriangles": 92000,
+              "nearRingMaximumAglM": 260
+            },
+            "withinBudget": true,
+            "disposed": false
+          },
+          "exposure": 1.16,
+          "sun": {
+            "position": [
+              -1954.5809744893277,
+              539.8139322801804,
+              -771.212088011111
+            ],
+            "color": [
+              1,
+              0.76052450467022,
+              0.45641102317066595
+            ],
+            "intensity": 2.65
+          },
+          "fog": {
+            "density": 0.000302,
+            "color": [
+              0.2541520943200296,
+              0.34670405634441115,
+              0.37626212298046485
+            ]
+          },
+          "render": {
+            "frame": 210,
+            "calls": 122,
+            "triangles": 272820,
+            "points": 0,
+            "lines": 0
+          },
+          "surfaceMaterials": [
+            {
+              "mesh": "COBRA_CANYON_BASIN",
+              "enabled": 1,
+              "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp"
+            }
+          ],
+          "memory": {
+            "geometries": 68,
+            "textures": 5
+          },
+          "programs": [
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_BASIN_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_RIVER_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_LANDMARKS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_JUNGLE_AUTHORED_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_JUNGLE_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_PLANTATION_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_HAZARDS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_WATER_TOWER_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_HEROCELLS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            }
+          ]
+        },
+        "visibleVegetation": [
+          {
+            "name": "COBRA_MIDFIELD_CANOPY",
+            "count": 981,
+            "visibleCenters": 181,
+            "instances": [
+              {
+                "id": "canopy.-11.-3.1",
+                "instanceId": 947,
+                "eastM": -1450.6270751953125,
+                "northM": -402.03314208984375,
+                "matrix": [
+                  -35.95918273925781,
+                  1.238128423690796,
+                  13.950566291809082,
+                  0,
+                  0,
+                  19.25558090209961,
+                  0,
+                  0,
+                  -11.016140937805176,
+                  -1.4933841228485107,
+                  -28.395366668701172,
+                  0,
+                  -1450.6270751953125,
+                  198.8225860595703,
+                  402.03314208984375,
+                  1
+                ],
+                "minimumVertexY": 196.11678428673594,
+                "maximumVertexY": 218.1642636913683,
+                "drawnGroundY": 199.82259257004137,
+                "rootClearanceM": -3.70580828330543,
+                "projected": {
+                  "x": 993.3244247620567,
+                  "y": 383.8930595955378,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-11.-5.0",
+                "instanceId": 847,
+                "eastM": -1488.6400146484375,
+                "northM": -672.0304565429688,
+                "matrix": [
+                  -35.444976806640625,
+                  2.5777993202209473,
+                  11.652273178100586,
+                  0,
+                  0,
+                  17.06401252746582,
+                  0,
+                  0,
+                  -9.583343505859375,
+                  -2.8351287841796875,
+                  -29.151512145996094,
+                  0,
+                  -1488.6400146484375,
+                  223.798583984375,
+                  672.0304565429688,
+                  1
+                ],
+                "minimumVertexY": 220.93868636572756,
+                "maximumVertexY": 241.0624097265944,
+                "drawnGroundY": 224.8524338951428,
+                "rootClearanceM": -3.9137475294152466,
+                "projected": {
+                  "x": 1159.9490159702634,
+                  "y": 366.44564802876715,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-12.-4.1",
+                "instanceId": 704,
+                "eastM": -1597.5618896484375,
+                "northM": -500.54547119140625,
+                "matrix": [
+                  -39.17365646362305,
+                  0.553473711013794,
+                  -14.528852462768555,
+                  0,
+                  0,
+                  20.312389373779297,
+                  0,
+                  0,
+                  12.735910415649414,
+                  -3.4170174598693848,
+                  -34.33940505981445,
+                  0,
+                  -1597.5618896484375,
+                  210.45779418945312,
+                  500.54547119140625,
+                  1
+                ],
+                "minimumVertexY": 207.30490980517806,
+                "maximumVertexY": 230.60246303534154,
+                "drawnGroundY": 211.45779066530056,
+                "rootClearanceM": -4.152880860122508,
+                "projected": {
+                  "x": 1038.9515228381497,
+                  "y": 373.2932710634236,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-11.-3.0",
+                "instanceId": 874,
+                "eastM": -1495.2811279296875,
+                "northM": -401.57379150390625,
+                "matrix": [
+                  -25.03141212463379,
+                  -1.9198286533355713,
+                  -49.203678131103516,
+                  0,
+                  0,
+                  19.241436004638672,
+                  0,
+                  0,
+                  35.812957763671875,
+                  -2.1740007400512695,
+                  -18.219144821166992,
+                  0,
+                  -1495.2811279296875,
+                  199.90187072753906,
+                  401.57379150390625,
+                  1
+                ],
+                "minimumVertexY": 196.6728169007383,
+                "maximumVertexY": 218.673084092527,
+                "drawnGroundY": 200.9018772955612,
+                "rootClearanceM": -4.229060394822909,
+                "projected": {
+                  "x": 988.2467939330762,
+                  "y": 382.67307533959934,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-12.-4.2",
+                "instanceId": 651,
+                "eastM": -1639.8817138671875,
+                "northM": -463.9404296875,
+                "matrix": [
+                  26.682462692260742,
+                  -3.7294058799743652,
+                  -29.037961959838867,
+                  0,
+                  0,
+                  17.360414505004883,
+                  0,
+                  0,
+                  24.094144821166992,
+                  0.0765286237001419,
+                  22.139677047729492,
+                  0,
+                  -1639.8817138671875,
+                  210.18231201171875,
+                  463.9404296875,
+                  1
+                ],
+                "minimumVertexY": 206.94357019674004,
+                "maximumVertexY": 226.95176123627073,
+                "drawnGroundY": 211.1823183234812,
+                "rootClearanceM": -4.2387481267411715,
+                "projected": {
+                  "x": 1010.7624483410209,
+                  "y": 373.89216308874563,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-12.-6.2",
+                "instanceId": 678,
+                "eastM": -1599.837646484375,
+                "northM": -735.4862670898438,
+                "matrix": [
+                  39.059234619140625,
+                  -1.9961968660354614,
+                  -1.4747164249420166,
+                  0,
+                  0,
+                  20.90406036376953,
+                  0,
+                  0,
+                  1.303040623664856,
+                  4.144349575042725,
+                  34.51224136352539,
+                  0,
+                  -1599.837646484375,
+                  235.45989990234375,
+                  735.4862670898438,
+                  1
+                ],
+                "minimumVertexY": 232.21392579799542,
+                "maximumVertexY": 256.3553950051659,
+                "drawnGroundY": 236.4598961028503,
+                "rootClearanceM": -4.245970304854893,
+                "projected": {
+                  "x": 1207.0394297002933,
+                  "y": 353.03540149080146,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-11.-4.3",
+                "instanceId": 964,
+                "eastM": -1431.783447265625,
+                "northM": -453.5560607910156,
+                "matrix": [
+                  33.587642669677734,
+                  2.0491580963134766,
+                  31.933570861816406,
+                  0,
+                  0,
+                  17.623414993286133,
+                  0,
+                  0,
+                  -31.60390281677246,
+                  2.733818769454956,
+                  33.24089813232422,
+                  0,
+                  -1431.783447265625,
+                  202.24392700195312,
+                  453.5560607910156,
+                  1
+                ],
+                "minimumVertexY": 199.0550834732021,
+                "maximumVertexY": 220.4002436991776,
+                "drawnGroundY": 203.32813997292737,
+                "rootClearanceM": -4.273056499725271,
+                "projected": {
+                  "x": 1024.6600730254247,
+                  "y": 382.33157434405115,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-12.-6.3",
+                "instanceId": 752,
+                "eastM": -1552.2042236328125,
+                "northM": -722.0590209960938,
+                "matrix": [
+                  -34.1662712097168,
+                  0.48193269968032837,
+                  -7.6340436935424805,
+                  0,
+                  0,
+                  19.059595108032227,
+                  0,
+                  0,
+                  8.0032958984375,
+                  -4.560224533081055,
+                  -35.81886672973633,
+                  0,
+                  -1552.2042236328125,
+                  231.9484405517578,
+                  722.0590209960938,
+                  1
+                ],
+                "minimumVertexY": 228.67800193455324,
+                "maximumVertexY": 250.74312803644375,
+                "drawnGroundY": 232.96763474840205,
+                "rootClearanceM": -4.289632813848812,
+                "projected": {
+                  "x": 1195.965573718802,
+                  "y": 357.9549990224424,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-11.-5.2",
+                "instanceId": 852,
+                "eastM": -1487.7076416015625,
+                "northM": -610.21630859375,
+                "matrix": [
+                  42.69480514526367,
+                  -0.2223978042602539,
+                  10.978424072265625,
+                  0,
+                  0,
+                  20.49455451965332,
+                  0,
+                  0,
+                  -8.68187141418457,
+                  3.684690237045288,
+                  33.76356887817383,
+                  0,
+                  -1487.7076416015625,
+                  217.30162048339844,
+                  610.21630859375,
+                  1
+                ],
+                "minimumVertexY": 214.0119554403876,
+                "maximumVertexY": 238.0369431339251,
+                "drawnGroundY": 218.30162844916808,
+                "rootClearanceM": -4.289673008780483,
+                "projected": {
+                  "x": 1118.145043530978,
+                  "y": 370.20320062875317,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-12.-5.3",
+                "instanceId": 764,
+                "eastM": -1548.1485595703125,
+                "northM": -616.7166137695312,
+                "matrix": [
+                  -23.888940811157227,
+                  -2.8651602268218994,
+                  -34.77225875854492,
+                  0,
+                  0,
+                  17.345684051513672,
+                  0,
+                  0,
+                  24.973970413208008,
+                  -2.6110951900482178,
+                  -17.15740203857422,
+                  0,
+                  -1548.1485595703125,
+                  219.98681640625,
+                  616.7166137695312,
+                  1
+                ],
+                "minimumVertexY": 216.66981023811397,
+                "maximumVertexY": 236.67824268468348,
+                "drawnGroundY": 220.98681535030715,
+                "rootClearanceM": -4.317005112193186,
+                "projected": {
+                  "x": 1120.281080959968,
+                  "y": 367.95561218162294,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-12.-3.0",
+                "instanceId": 661,
+                "eastM": -1646.9757080078125,
+                "northM": -372.3096618652344,
+                "matrix": [
+                  25.68878746032715,
+                  -2.9088494777679443,
+                  -29.8167781829834,
+                  0,
+                  0,
+                  19.925006866455078,
+                  0,
+                  0,
+                  27.664323806762695,
+                  -0.557820200920105,
+                  23.83432960510254,
+                  0,
+                  -1646.9757080078125,
+                  204.98550415039062,
+                  372.3096618652344,
+                  1
+                ],
+                "minimumVertexY": 201.616792891342,
+                "maximumVertexY": 224.40325859407426,
+                "drawnGroundY": 205.98550013004922,
+                "rootClearanceM": -4.3687072387072305,
+                "projected": {
+                  "x": 951.6091298139552,
+                  "y": 377.1993810100409,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-13.-4.2",
+                "instanceId": 499,
+                "eastM": -1752.3739013671875,
+                "northM": -464.56201171875,
+                "matrix": [
+                  -19.524961471557617,
+                  -1.1850379705429077,
+                  -31.670133590698242,
+                  0,
+                  0,
+                  20.06173324584961,
+                  0,
+                  0,
+                  25.690309524536133,
+                  -2.9093616008758545,
+                  -15.838339805603027,
+                  0,
+                  -1752.3739013671875,
+                  217.2155303955078,
+                  464.56201171875,
+                  1
+                ],
+                "minimumVertexY": 213.89965391588152,
+                "maximumVertexY": 236.8694554415723,
+                "drawnGroundY": 218.27848225192167,
+                "rootClearanceM": -4.378828336040158,
+                "projected": {
+                  "x": 998.0392732738736,
+                  "y": 365.51203178746215,
+                  "inFrame": true
+                }
+              }
+            ]
+          },
+          {
+            "name": "COBRA_CANYON_ASSET_JUNGLE",
+            "count": 1566,
+            "visibleCenters": 245,
+            "instances": [
+              {
+                "id": "set-piece.cobra-canyon.mill-village.v1.archetype.cobra-canyon.jungle-canopy.v1.2",
+                "instanceId": 23,
+                "eastM": 4058.81103515625,
+                "northM": -44.641422271728516,
+                "matrix": [
+                  -0.8013872504234314,
+                  0,
+                  -3.4182181358337402,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  2.892338275909424,
+                  0,
+                  -0.6780968904495239,
+                  0,
+                  4058.81103515625,
+                  253.4388885498047,
+                  44.641422271728516,
+                  1
+                ],
+                "minimumVertexY": 253.4388885498047,
+                "maximumVertexY": 257.4388885498047,
+                "drawnGroundY": 253.52792493348795,
+                "rootClearanceM": -0.08903638368326483,
+                "projected": {
+                  "x": 1082.38691862825,
+                  "y": 395.97140911215786,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "set-piece.cobra-canyon.mill-village.v1.archetype.cobra-canyon.jungle-canopy.v1.0",
+                "instanceId": 21,
+                "eastM": 4063.858642578125,
+                "northM": -38.02352523803711,
+                "matrix": [
+                  -4.161943435668945,
+                  0,
+                  1.9526206254959106,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -1.6522173881530762,
+                  0,
+                  -3.521644353866577,
+                  0,
+                  4063.858642578125,
+                  253.47064208984375,
+                  38.02352523803711,
+                  1
+                ],
+                "minimumVertexY": 253.47064208984375,
+                "maximumVertexY": 257.47064208984375,
+                "drawnGroundY": 253.5624620930935,
+                "rootClearanceM": -0.09182000324975093,
+                "projected": {
+                  "x": 1081.5270862042416,
+                  "y": 395.98079552007204,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "set-piece.cobra-canyon.red-earth-quarry.v1.archetype.cobra-canyon.jungle-understory.v1.0",
+                "instanceId": 18,
+                "eastM": 2750.223388671875,
+                "northM": -1694.0484619140625,
+                "matrix": [
+                  2.7544407844543457,
+                  0,
+                  3.6916608810424805,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  -3.2814762592315674,
+                  0,
+                  2.4483916759490967,
+                  0,
+                  2750.223388671875,
+                  242.20870971679688,
+                  1694.0484619140625,
+                  1
+                ],
+                "minimumVertexY": 242.20870971679688,
+                "maximumVertexY": 242.84870970249176,
+                "drawnGroundY": 242.30055821521674,
+                "rootClearanceM": -0.0918484984198642,
+                "projected": {
+                  "x": 1385.7562136119545,
+                  "y": 393.4542684634834,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-17.-2.3",
+                "instanceId": 536,
+                "eastM": -2690.853515625,
+                "northM": -275.2387390136719,
+                "matrix": [
+                  2.2046406269073486,
+                  0,
+                  -4.855549335479736,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  4.316043853759766,
+                  0,
+                  1.9596805572509766,
+                  0,
+                  -2690.853515625,
+                  92.91244506835938,
+                  275.2387390136719,
+                  1
+                ],
+                "minimumVertexY": 92.91244506835938,
+                "maximumVertexY": 93.55244505405426,
+                "drawnGroundY": 93.00449138122356,
+                "rootClearanceM": -0.09204631286418419,
+                "projected": {
+                  "x": 390.58425629137855,
+                  "y": 524.6434756052735,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-17.-5.0",
+                "instanceId": 234,
+                "eastM": -2679.22607421875,
+                "northM": -700.1679077148438,
+                "matrix": [
+                  4.65208101272583,
+                  0,
+                  -2.346764326095581,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  2.086012601852417,
+                  0,
+                  4.135182857513428,
+                  0,
+                  -2679.22607421875,
+                  92.22494506835938,
+                  700.1679077148438,
+                  1
+                ],
+                "minimumVertexY": 92.22494506835938,
+                "maximumVertexY": 92.86494505405426,
+                "drawnGroundY": 92.32706540759223,
+                "rootClearanceM": -0.10212033923285446,
+                "projected": {
+                  "x": 1173.7538762992228,
+                  "y": 594.5093954085382,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-19.-4.4",
+                "instanceId": 94,
+                "eastM": -2951.612548828125,
+                "northM": -574.63037109375,
+                "matrix": [
+                  -2.614825487136841,
+                  0,
+                  5.2579827308654785,
+                  0,
+                  0,
+                  1.1854530572891235,
+                  0,
+                  0,
+                  -4.673762321472168,
+                  0,
+                  -2.324289321899414,
+                  0,
+                  -2951.612548828125,
+                  92.79552459716797,
+                  574.63037109375,
+                  1
+                ],
+                "minimumVertexY": 92.79552459716797,
+                "maximumVertexY": 93.98097765445709,
+                "drawnGroundY": 92.89918636239389,
+                "rootClearanceM": -0.10366176522592241,
+                "projected": {
+                  "x": 360.9148188767829,
+                  "y": 814.189106852649,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-19.-4.0",
+                "instanceId": 90,
+                "eastM": -2930.528076171875,
+                "northM": -564.5982666015625,
+                "matrix": [
+                  1.981391429901123,
+                  0,
+                  5.529455661773682,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  -4.915071487426758,
+                  0,
+                  1.7612367868423462,
+                  0,
+                  -2930.528076171875,
+                  92.5952377319336,
+                  564.5982666015625,
+                  1
+                ],
+                "minimumVertexY": 92.5952377319336,
+                "maximumVertexY": 93.23523771762848,
+                "drawnGroundY": 92.70017242863072,
+                "rootClearanceM": -0.10493469669712852,
+                "projected": {
+                  "x": 415.2370345274043,
+                  "y": 761.6918292299974,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-19.-4.2",
+                "instanceId": 92,
+                "eastM": -2921.790771484375,
+                "northM": -575.526123046875,
+                "matrix": [
+                  -3.55157208442688,
+                  0,
+                  5.551980018615723,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  -4.935093402862549,
+                  0,
+                  -3.1569530963897705,
+                  0,
+                  -2921.790771484375,
+                  92.62763214111328,
+                  575.526123046875,
+                  1
+                ],
+                "minimumVertexY": 92.62763214111328,
+                "maximumVertexY": 93.26763212680817,
+                "drawnGroundY": 92.73561502557381,
+                "rootClearanceM": -0.10798288446052595,
+                "projected": {
+                  "x": 485.9920732230561,
+                  "y": 756.5253202945322,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.gorge-riparian.v1.-16.-3.1",
+                "instanceId": 610,
+                "eastM": -2435.50048828125,
+                "northM": -398.95751953125,
+                "matrix": [
+                  -1.9491435289382935,
+                  0,
+                  -2.8277640342712402,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  2.392723560333252,
+                  0,
+                  -1.649275302886963,
+                  0,
+                  -2435.50048828125,
+                  94.35218048095703,
+                  398.95751953125,
+                  1
+                ],
+                "minimumVertexY": 94.35218048095703,
+                "maximumVertexY": 98.35218048095703,
+                "drawnGroundY": 94.4628096274566,
+                "rootClearanceM": -0.11062914649956213,
+                "projected": {
+                  "x": 753.965207610592,
+                  "y": 492.598122483534,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.gorge-riparian.v1.-15.-3.0",
+                "instanceId": 907,
+                "eastM": -2403.5048828125,
+                "northM": -362.8002014160156,
+                "matrix": [
+                  2.8765132427215576,
+                  0,
+                  -2.3371670246124268,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  1.9776028394699097,
+                  0,
+                  2.4339728355407715,
+                  0,
+                  -2403.5048828125,
+                  94.54533386230469,
+                  362.8002014160156,
+                  1
+                ],
+                "minimumVertexY": 94.54533386230469,
+                "maximumVertexY": 98.54533386230469,
+                "drawnGroundY": 94.65838695551444,
+                "rootClearanceM": -0.1130530932097571,
+                "projected": {
+                  "x": 732.6800609337381,
+                  "y": 487.11684526351405,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "set-piece.cobra-canyon.mill-village.v1.archetype.cobra-canyon.jungle-understory.v1.1",
+                "instanceId": 25,
+                "eastM": 4074.6455078125,
+                "northM": -21.28471565246582,
+                "matrix": [
+                  -2.9289512634277344,
+                  0,
+                  13.338050842285156,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -11.85604476928711,
+                  0,
+                  -2.6035122871398926,
+                  0,
+                  4074.6455078125,
+                  253.5322723388672,
+                  21.28471565246582,
+                  1
+                ],
+                "minimumVertexY": 253.5322723388672,
+                "maximumVertexY": 257.5322723388672,
+                "drawnGroundY": 253.64739687575303,
+                "rootClearanceM": -0.11512453688584401,
+                "projected": {
+                  "x": 1079.334907683874,
+                  "y": 396.00376956573626,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.west-canopy-mass.v1.-16.-1.0",
+                "instanceId": 955,
+                "eastM": -2528.370849609375,
+                "northM": -53.56895446777344,
+                "matrix": [
+                  0.9926273226737976,
+                  0,
+                  -2.9100840091705322,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  2.462378740310669,
+                  0,
+                  0.8399154543876648,
+                  0,
+                  -2528.370849609375,
+                  95.55084228515625,
+                  53.56895446777344,
+                  1
+                ],
+                "minimumVertexY": 95.55084228515625,
+                "maximumVertexY": 99.55084228515625,
+                "drawnGroundY": 95.67070488536321,
+                "rootClearanceM": -0.11986260020695738,
+                "projected": {
+                  "x": 367.23369395488635,
+                  "y": 482.164805311485,
+                  "inFrame": true
+                }
+              }
+            ]
+          }
+        ],
+        "frameProfile": {
+          "frames": 13,
+          "meanMs": {
+            "sim": 0,
+            "state": 0,
+            "presentation": 0.030769201425405648,
+            "render": 1.0692307765667255,
+            "hud": 0.21538470341609076,
+            "total": 1.3692307839026818
+          },
+          "p95Ms": 500.29998779296875,
+          "p99Ms": 633.2999877929688
+        },
+        "observedRafIntervalsMs": [
+          266.59999999999854,
+          333.40000000000146,
+          249.90000000000146,
+          233.40000000000146,
+          249.89999999999418,
+          282.40000000000146,
+          234,
+          233.70000000000437,
+          216.59999999999854,
+          233.29999999999563,
+          283.3000000000029,
+          233.3000000000029
+        ],
+        "observedRafMeanMs": 254.15000000000023,
+        "observedRafP95Ms": 283.3000000000029
+      },
+      "stationaryDelta": {
+        "hardDeltaThreshold": 14,
+        "hardDeltaFraction": 0,
+        "meanMaximumChannelDelta": 0,
+        "roi": {
+          "x": 60,
+          "y": 120,
+          "width": 1320,
+          "height": 720
+        }
+      }
+    },
+    {
+      "tier": "desktop",
+      "name": "player-eye",
+      "view": "actual production player eye",
+      "file": "/tmp/guns-cobra-world-20260910/allocation/desktop-player-eye.png",
+      "metrics": {
+        "scene": {
+          "camera": {
+            "eastM": -2710.014581926965,
+            "northM": -861.0498987415012,
+            "upM": 213.4691738258399,
+            "aglM": 70.9922848571967,
+            "yawRad": -0.013887995930967794,
+            "pitchRad": 0,
+            "fovDeg": 58
+          },
+          "quality": "desktop",
+          "authority": {
+            "tick": -1,
+            "elapsedS": 0,
+            "status": "active"
+          },
+          "presentation": {
+            "schema": "guns-only.cobra-canyon-presentation.v1",
+            "worldId": "world.cobra-canyon.v1",
+            "qualityTier": "desktop",
+            "ambientBudgetLevel": 2,
+            "nearRingVisible": true,
+            "drawCalls": 20,
+            "instances": 3674,
+            "triangles": 402105,
+            "builtDrawCalls": 20,
+            "builtInstances": 9043,
+            "builtTriangles": 794731,
+            "presentationDrawCallHeadroom": 0,
+            "presentationInstanceHeadroom": 557,
+            "presentationTriangleHeadroom": 105269,
+            "authoredWorldDrawCallCeiling": 52,
+            "availableSceneDrawCallHeadroom": 32,
+            "visibleAmbientInstances": 3631,
+            "visibleAssetInstances": 3631,
+            "visibleAssetDrawCalls": 9,
+            "hazards": 18,
+            "hazardInstances": 30,
+            "hazardsVisible": true,
+            "presentationOnly": true,
+            "authoritative": false,
+            "collisionSource": false,
+            "targetSource": false,
+            "roleCounts": {
+              "basinTriangles": 94170,
+              "riverTriangles": 3405,
+              "roadTriangles": 0,
+              "heroCells": 3,
+              "landmarks": 11,
+              "landmarkInstances": 13,
+              "wireSpans": 9,
+              "suppressedPresentationPoles": 2,
+              "hazards": 18,
+              "hazardInstances": 30,
+              "waterTowers": 1,
+              "bridges": 7,
+              "bridgeDecks": 1,
+              "bridgeApproaches": 2,
+              "bridgePiers": 4,
+              "campEmberFirebaseParts": 437,
+              "campEmberFirebaseTriangles": 5742,
+              "plantationGroundTriangles": 920,
+              "routeEnvelopeAdjustedInstances": 7,
+              "routeEnvelopeMinimumClearanceM": 9.755999999999911,
+              "coreRenderBatches": 11,
+              "assetRenderBatches": 8,
+              "worldRenderBatches": 20,
+              "authoredAmbientBatches": 12,
+              "authoredSetPieceCells": 10,
+              "authoredAmbientArchetypes": 11,
+              "authoredLandmarkArchetypes": 11,
+              "authoredSetPieceArchetypeReferences": 58,
+              "authoredSetPieceAssetReferences": 50,
+              "renderedSetPieceAssetInstances": 50,
+              "generatedWaterAccentInstances": 30,
+              "renderedWaterAccentInstances": 30,
+              "ambientBatchInstances": 6069,
+              "renderBatches": 8,
+              "assetInstances": 6149,
+              "scatterRadiusM": 1400,
+              "scatterTileM": 160,
+              "scatterInstancesPerTile": 30,
+              "scatterCapacity": 7320,
+              "jungleAuthoredBatches": 6,
+              "jungleBatches": 6,
+              "jungleRenderBatches": 2,
+              "jungleSetPieceInstances": 30,
+              "jungleInstances": 5062,
+              "jungleScatterCapacity": 5032,
+              "jungleScatterRadiusM": 1762,
+              "plantationAuthoredBatches": 1,
+              "plantationBatches": 1,
+              "plantationRenderBatches": 1,
+              "plantationSetPieceInstances": 1,
+              "plantationInstances": 568,
+              "plantationScatterCapacity": 687,
+              "plantationScatterRadiusM": 2553,
+              "villageAuthoredBatches": 2,
+              "villageBatches": 2,
+              "villageRenderBatches": 1,
+              "villageSetPieceInstances": 3,
+              "villageInstances": 434,
+              "villageScatterCapacity": 431,
+              "villageScatterRadiusM": 1588,
+              "paddyAuthoredBatches": 1,
+              "paddyBatches": 1,
+              "paddyRenderBatches": 1,
+              "paddySetPieceInstances": 2,
+              "paddyInstances": 18,
+              "paddyScatterCapacity": 479,
+              "paddyScatterRadiusM": 1631,
+              "rockAuthoredBatches": 1,
+              "rockBatches": 1,
+              "rockRenderBatches": 1,
+              "rockSetPieceInstances": 6,
+              "rockInstances": 6,
+              "rockScatterCapacity": 572,
+              "rockScatterRadiusM": 1400,
+              "mistAuthoredBatches": 1,
+              "mistBatches": 1,
+              "mistRenderBatches": 1,
+              "mistSetPieceInstances": 6,
+              "mistInstances": 29,
+              "mistScatterCapacity": 119,
+              "mistScatterRadiusM": 2428,
+              "waterAccentAuthoredBatches": 0,
+              "waterAccentBatches": 0,
+              "waterAccentRenderBatches": 1,
+              "waterAccentSetPieceInstances": 2,
+              "waterAccentInstances": 32,
+              "waterAccentScatterCapacity": 0,
+              "waterAccentScatterRadiusM": 1400,
+              "canopyCapacity": 1600,
+              "canopyAllocatedTriangles": 128000,
+              "canopyInstances": 960,
+              "canopyTriangles": 76800,
+              "canopyPendingCells": 0
+            },
+            "budget": {
+              "maxDrawCalls": 20,
+              "maxInstances": 9600,
+              "maxTriangles": 900000,
+              "maxAssetInstances": 9000,
+              "maxAuthoredTriangles": 378000,
+              "nearRingMaximumAglM": 360
+            },
+            "withinBudget": true,
+            "disposed": false
+          },
+          "exposure": 1.16,
+          "sun": {
+            "position": [
+              -1603.5945038170485,
+              708.0876960736491,
+              -1404.0422154930336
+            ],
+            "color": [
+              1,
+              0.76052450467022,
+              0.45641102317066595
+            ],
+            "intensity": 2.65
+          },
+          "fog": {
+            "density": 0.000302,
+            "color": [
+              0.2541520943200296,
+              0.34670405634441115,
+              0.37626212298046485
+            ]
+          },
+          "render": {
+            "frame": 200,
+            "calls": 80,
+            "triangles": 399673,
+            "points": 0,
+            "lines": 0
+          },
+          "surfaceMaterials": [
+            {
+              "mesh": "COBRA_CANYON_BASIN",
+              "enabled": 1,
+              "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp"
+            }
+          ],
+          "memory": {
+            "geometries": 68,
+            "textures": 5
+          },
+          "programs": [
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_BASIN_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_RIVER_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_LANDMARKS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_JUNGLE_AUTHORED_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_JUNGLE_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_PLANTATION_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_HAZARDS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_WATER_TOWER_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_HEROCELLS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            }
+          ]
+        },
+        "visibleVegetation": [
+          {
+            "name": "COBRA_MIDFIELD_CANOPY",
+            "count": 960,
+            "visibleCenters": 200,
+            "instances": [
+              {
+                "id": "canopy.-15.-1.1",
+                "instanceId": 314,
+                "eastM": -2029.0977783203125,
+                "northM": -114.26827239990234,
+                "matrix": [
+                  25.233959197998047,
+                  -0.41794630885124207,
+                  -27.268957138061523,
+                  0,
+                  0,
+                  21.780742645263672,
+                  0,
+                  0,
+                  24.68313980102539,
+                  4.958329677581787,
+                  22.841114044189453,
+                  0,
+                  -2029.0977783203125,
+                  148.47705078125,
+                  114.26827239990234,
+                  1
+                ],
+                "minimumVertexY": 144.76502565888404,
+                "maximumVertexY": 170.56279675918776,
+                "drawnGroundY": 149.47705145350866,
+                "rootClearanceM": -4.712025794624623,
+                "projected": {
+                  "x": 1439.8291138359673,
+                  "y": 508.0837698955904,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-26.1.0",
+                "instanceId": 664,
+                "eastM": -3597.146728515625,
+                "northM": 215.3596649169922,
+                "matrix": [
+                  -43.211509704589844,
+                  -5.017997741699219,
+                  -2.398190975189209,
+                  0,
+                  0,
+                  18.088401794433594,
+                  0,
+                  0,
+                  1.7271676063537598,
+                  6.256446838378906,
+                  -31.120758056640625,
+                  0,
+                  -3597.146728515625,
+                  417.4029541015625,
+                  -215.3596649169922,
+                  1
+                ],
+                "minimumVertexY": 413.7004585793073,
+                "maximumVertexY": 435.15770980679406,
+                "drawnGroundY": 418.4275082803069,
+                "rootClearanceM": -4.727049700999601,
+                "projected": {
+                  "x": 31.777235796904748,
+                  "y": 287.49771505949144,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-23.3.2",
+                "instanceId": 702,
+                "eastM": -3157.828125,
+                "northM": 496.66326904296875,
+                "matrix": [
+                  -10.823920249938965,
+                  3.843404531478882,
+                  -42.49667739868164,
+                  0,
+                  0,
+                  19.70182228088379,
+                  0,
+                  0,
+                  32.71598434448242,
+                  -7.942986011505127,
+                  -8.332773208618164,
+                  0,
+                  -3157.828125,
+                  467.9977111816406,
+                  -496.66326904296875,
+                  1
+                ],
+                "minimumVertexY": 464.2548195335012,
+                "maximumVertexY": 487.71875419928114,
+                "drawnGroundY": 469.09154137959973,
+                "rootClearanceM": -4.8367218460985555,
+                "projected": {
+                  "x": 439.67806796891483,
+                  "y": 291.1759936204368,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-20.5.2",
+                "instanceId": 953,
+                "eastM": -2763.16064453125,
+                "northM": 772.7747802734375,
+                "matrix": [
+                  -8.331872940063477,
+                  -1.0272308588027954,
+                  44.92311096191406,
+                  0,
+                  0,
+                  19.53382682800293,
+                  0,
+                  0,
+                  -31.560121536254883,
+                  7.407885551452637,
+                  -5.853444576263428,
+                  0,
+                  -2763.16064453125,
+                  384.33953857421875,
+                  -772.7747802734375,
+                  1
+                ],
+                "minimumVertexY": 380.4189832408111,
+                "maximumVertexY": 404.2645999069231,
+                "drawnGroundY": 385.3472219555824,
+                "rootClearanceM": -4.928238714771339,
+                "projected": {
+                  "x": 682.3002363018971,
+                  "y": 360.1949810379506,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-24.0.3",
+                "instanceId": 380,
+                "eastM": -3253.63134765625,
+                "northM": 89.3474349975586,
+                "matrix": [
+                  -33.82073211669922,
+                  -0.7114191055297852,
+                  -20.36431884765625,
+                  0,
+                  0,
+                  19.53816795349121,
+                  0,
+                  0,
+                  17.89122200012207,
+                  6.816197872161865,
+                  -29.713455200195312,
+                  0,
+                  -3253.63134765625,
+                  430.408447265625,
+                  -89.3474349975586,
+                  1
+                ],
+                "minimumVertexY": 426.5758877220568,
+                "maximumVertexY": 450.34400302550165,
+                "drawnGroundY": 431.5095230552085,
+                "rootClearanceM": -4.933635333151699,
+                "projected": {
+                  "x": 240.5629991813902,
+                  "y": 254.7780314797025,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-24.1.0",
+                "instanceId": 478,
+                "eastM": -3331.420654296875,
+                "northM": 167.5130157470703,
+                "matrix": [
+                  -42.659393310546875,
+                  -6.4208221435546875,
+                  11.312664985656738,
+                  0,
+                  0,
+                  16.066194534301758,
+                  0,
+                  0,
+                  -10.767378807067871,
+                  7.179762840270996,
+                  -40.603153228759766,
+                  0,
+                  -3331.420654296875,
+                  436.80108642578125,
+                  -167.5130157470703,
+                  1
+                ],
+                "minimumVertexY": 432.94510271881944,
+                "maximumVertexY": 452.3784316744946,
+                "drawnGroundY": 437.9673610224864,
+                "rootClearanceM": -5.022258303666945,
+                "projected": {
+                  "x": 214.01723016503198,
+                  "y": 265.82580838107344,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-20.5.1",
+                "instanceId": 894,
+                "eastM": -2715.61181640625,
+                "northM": 730.0042114257812,
+                "matrix": [
+                  -5.620406150817871,
+                  3.2886855602264404,
+                  -42.0296745300293,
+                  0,
+                  0,
+                  22.132930755615234,
+                  0,
+                  0,
+                  40.494667053222656,
+                  -7.845139503479004,
+                  -5.41513729095459,
+                  0,
+                  -2715.61181640625,
+                  371.4913330078125,
+                  -730.0042114257812,
+                  1
+                ],
+                "minimumVertexY": 367.4172764954115,
+                "maximumVertexY": 393.56206795516147,
+                "drawnGroundY": 372.49133968736646,
+                "rootClearanceM": -5.074063191954963,
+                "projected": {
+                  "x": 705.8680709396043,
+                  "y": 363.7114662752264,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-21.4.1",
+                "instanceId": 780,
+                "eastM": -2815.401611328125,
+                "northM": 638.8230590820312,
+                "matrix": [
+                  12.970885276794434,
+                  -1.4566693305969238,
+                  -34.71092224121094,
+                  0,
+                  0,
+                  17.12983512878418,
+                  0,
+                  0,
+                  34.38071060180664,
+                  -8.006181716918945,
+                  12.847491264343262,
+                  0,
+                  -2815.401611328125,
+                  388.8549499511719,
+                  -638.8230590820312,
+                  1
+                ],
+                "minimumVertexY": 384.72022505633527,
+                "maximumVertexY": 405.44792929585356,
+                "drawnGroundY": 389.85492738296364,
+                "rootClearanceM": -5.134702326628371,
+                "projected": {
+                  "x": 651.6161652421407,
+                  "y": 350.3279450682245,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-21.5.3",
+                "instanceId": 939,
+                "eastM": -2873.099365234375,
+                "northM": 755.3197021484375,
+                "matrix": [
+                  14.03956413269043,
+                  -6.381766319274902,
+                  47.15804672241211,
+                  0,
+                  0,
+                  16.780481338500977,
+                  0,
+                  0,
+                  -46.323299407958984,
+                  10.240805625915527,
+                  13.791048049926758,
+                  0,
+                  -2873.099365234375,
+                  408.3536682128906,
+                  -755.3197021484375,
+                  1
+                ],
+                "minimumVertexY": 404.21507220768507,
+                "maximumVertexY": 425.39823168924687,
+                "drawnGroundY": 409.3901545844557,
+                "rootClearanceM": -5.175082376770604,
+                "projected": {
+                  "x": 626.6846178586974,
+                  "y": 347.75215264745117,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-24.1.2",
+                "instanceId": 519,
+                "eastM": -3335.38134765625,
+                "northM": 219.6343536376953,
+                "matrix": [
+                  -45.37046813964844,
+                  -3.5439343452453613,
+                  -3.1412439346313477,
+                  0,
+                  0,
+                  17.097307205200195,
+                  0,
+                  0,
+                  3.446979284286499,
+                  11.472555160522461,
+                  -49.78635025024414,
+                  0,
+                  -3335.38134765625,
+                  447.46856689453125,
+                  -219.6343536376953,
+                  1
+                ],
+                "minimumVertexY": 443.28786910244634,
+                "maximumVertexY": 465.4073311111053,
+                "drawnGroundY": 448.46855696622777,
+                "rootClearanceM": -5.180687863781429,
+                "projected": {
+                  "x": 235.04487451371259,
+                  "y": 266.3013395242345,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-23.0.2",
+                "instanceId": 371,
+                "eastM": -3171.279541015625,
+                "northM": 120.90388488769531,
+                "matrix": [
+                  -38.23944854736328,
+                  1.035200595855713,
+                  -28.461896896362305,
+                  0,
+                  0,
+                  17.69032859802246,
+                  0,
+                  0,
+                  18.426982879638672,
+                  6.015705108642578,
+                  -24.757226943969727,
+                  0,
+                  -3171.279541015625,
+                  444.795654296875,
+                  -120.90388488769531,
+                  1
+                ],
+                "minimumVertexY": 441.0934921239814,
+                "maximumVertexY": 463.1027928876086,
+                "drawnGroundY": 446.29503675649437,
+                "rootClearanceM": -5.2015446325129915,
+                "projected": {
+                  "x": 324.7996667242267,
+                  "y": 250.11701943137493,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-21.3.2",
+                "instanceId": 636,
+                "eastM": -2894.306640625,
+                "northM": 497.9600830078125,
+                "matrix": [
+                  15.197468757629395,
+                  -3.950863838195801,
+                  52.56748580932617,
+                  0,
+                  0,
+                  22.544017791748047,
+                  0,
+                  0,
+                  -40.70350646972656,
+                  9.266345977783203,
+                  11.767545700073242,
+                  0,
+                  -2894.306640625,
+                  403.1091003417969,
+                  -497.9600830078125,
+                  1
+                ],
+                "minimumVertexY": 398.8456239502343,
+                "maximumVertexY": 425.71595590951256,
+                "drawnGroundY": 404.13047446843495,
+                "rootClearanceM": -5.284850518200642,
+                "projected": {
+                  "x": 598.406537753452,
+                  "y": 329.7446916220278,
+                  "inFrame": true
+                }
+              }
+            ]
+          },
+          {
+            "name": "COBRA_CANYON_ASSET_JUNGLE",
+            "count": 1705,
+            "visibleCenters": 337,
+            "instances": [
+              {
+                "id": "ambient.cobra-canyon.west-canopy-mass.v1.-15.0.0",
+                "instanceId": 1360,
+                "eastM": -2402.10693359375,
+                "northM": 113.54534912109375,
+                "matrix": [
+                  1.5693219900131226,
+                  0,
+                  4.15945291519165,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -3.5195369720458984,
+                  0,
+                  1.327887773513794,
+                  0,
+                  -2402.10693359375,
+                  95.57428741455078,
+                  -113.54534912109375,
+                  1
+                ],
+                "minimumVertexY": 95.57428741455078,
+                "maximumVertexY": 99.57428741455078,
+                "drawnGroundY": 95.66433082961618,
+                "rootClearanceM": -0.09004341506539504,
+                "projected": {
+                  "x": 964.1353478835248,
+                  "y": 546.1260085820353,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-18.-3.5",
+                "instanceId": 304,
+                "eastM": -2762.677978515625,
+                "northM": -339.27935791015625,
+                "matrix": [
+                  -2.680849313735962,
+                  0,
+                  -3.80531907081604,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  3.3825058937072754,
+                  0,
+                  -2.382977247238159,
+                  0,
+                  -2762.677978515625,
+                  92.60372161865234,
+                  339.27935791015625,
+                  1
+                ],
+                "minimumVertexY": 92.60372161865234,
+                "maximumVertexY": 93.24372160434723,
+                "drawnGroundY": 92.69423793220841,
+                "rootClearanceM": -0.0905163135560656,
+                "projected": {
+                  "x": 626.6549991809434,
+                  "y": 637.8377765787902,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-18.-3.0",
+                "instanceId": 299,
+                "eastM": -2798.977783203125,
+                "northM": -373.2181091308594,
+                "matrix": [
+                  1.5586411952972412,
+                  0,
+                  4.914800643920898,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  -4.368711471557617,
+                  0,
+                  1.3854588270187378,
+                  0,
+                  -2798.977783203125,
+                  92.512939453125,
+                  373.2181091308594,
+                  1
+                ],
+                "minimumVertexY": 92.512939453125,
+                "maximumVertexY": 93.15293943881989,
+                "drawnGroundY": 92.60458868856327,
+                "rootClearanceM": -0.0916492354382683,
+                "projected": {
+                  "x": 560.2727162741204,
+                  "y": 651.2850389414817,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.west-canopy-mass.v1.-16.0.2",
+                "instanceId": 1263,
+                "eastM": -2414.62646484375,
+                "northM": 99.95014190673828,
+                "matrix": [
+                  -4.523695945739746,
+                  0,
+                  -0.36722591519355774,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  0.31072962284088135,
+                  0,
+                  -3.8277428150177,
+                  0,
+                  -2414.62646484375,
+                  95.49855041503906,
+                  -99.95014190673828,
+                  1
+                ],
+                "minimumVertexY": 95.49855041503906,
+                "maximumVertexY": 99.49855041503906,
+                "drawnGroundY": 95.59727625198327,
+                "rootClearanceM": -0.09872583694421166,
+                "projected": {
+                  "x": 957.2461190624675,
+                  "y": 547.5611496763669,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-14.-1.1",
+                "instanceId": 1100,
+                "eastM": -2130.697998046875,
+                "northM": 6.662406921386719,
+                "matrix": [
+                  10.2183256149292,
+                  0,
+                  1.8950254917144775,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -1.684467077255249,
+                  0,
+                  9.082955360412598,
+                  0,
+                  -2130.697998046875,
+                  95.7436294555664,
+                  -6.662406921386719,
+                  1
+                ],
+                "minimumVertexY": 95.7436294555664,
+                "maximumVertexY": 99.7436294555664,
+                "drawnGroundY": 95.8452591239556,
+                "rootClearanceM": -0.10162966838919374,
+                "projected": {
+                  "x": 1245.850455021942,
+                  "y": 557.2870646630103,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-14.-1.6",
+                "instanceId": 1104,
+                "eastM": -2128.25,
+                "northM": -18.740076065063477,
+                "matrix": [
+                  -10.49085521697998,
+                  0,
+                  6.403196334838867,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -5.69173002243042,
+                  0,
+                  -9.325204849243164,
+                  0,
+                  -2128.25,
+                  95.66062927246094,
+                  18.740076065063477,
+                  1
+                ],
+                "minimumVertexY": 95.66062927246094,
+                "maximumVertexY": 99.66062927246094,
+                "drawnGroundY": 95.76537048329376,
+                "rootClearanceM": -0.10474121083282739,
+                "projected": {
+                  "x": 1264.2111935330254,
+                  "y": 560.5668519151076,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-19.-4.0",
+                "instanceId": 210,
+                "eastM": -2930.528076171875,
+                "northM": -564.5982666015625,
+                "matrix": [
+                  1.981391429901123,
+                  0,
+                  5.529455661773682,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  -4.915071487426758,
+                  0,
+                  1.7612367868423462,
+                  0,
+                  -2930.528076171875,
+                  92.65174865722656,
+                  564.5982666015625,
+                  1
+                ],
+                "minimumVertexY": 92.65174865722656,
+                "maximumVertexY": 93.29174864292145,
+                "drawnGroundY": 92.75668303874396,
+                "rootClearanceM": -0.10493438151739554,
+                "projected": {
+                  "x": 98.43542726750587,
+                  "y": 783.4543975444755,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-15.0.2",
+                "instanceId": 1359,
+                "eastM": -2381.4443359375,
+                "northM": 126.49993896484375,
+                "matrix": [
+                  8.474853515625,
+                  0,
+                  -7.564115047454834,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  6.723657608032227,
+                  0,
+                  7.533203125,
+                  0,
+                  -2381.4443359375,
+                  95.60635375976562,
+                  -126.49993896484375,
+                  1
+                ],
+                "minimumVertexY": 95.60635375976562,
+                "maximumVertexY": 99.60635375976562,
+                "drawnGroundY": 95.71201393102434,
+                "rootClearanceM": -0.10566017125871952,
+                "projected": {
+                  "x": 977.6373726811739,
+                  "y": 544.8167892135567,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-19.-4.2",
+                "instanceId": 212,
+                "eastM": -2921.790771484375,
+                "northM": -575.526123046875,
+                "matrix": [
+                  -3.55157208442688,
+                  0,
+                  5.551980018615723,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  -4.935093402862549,
+                  0,
+                  -3.1569530963897705,
+                  0,
+                  -2921.790771484375,
+                  92.68414306640625,
+                  575.526123046875,
+                  1
+                ],
+                "minimumVertexY": 92.68414306640625,
+                "maximumVertexY": 93.32414305210114,
+                "drawnGroundY": 92.79212623623422,
+                "rootClearanceM": -0.10798316982797473,
+                "projected": {
+                  "x": 100.20272000782865,
+                  "y": 796.1132718926913,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.gorge-riparian.v1.-16.-3.1",
+                "instanceId": 322,
+                "eastM": -2435.50048828125,
+                "northM": -398.95751953125,
+                "matrix": [
+                  -1.9491435289382935,
+                  0,
+                  -2.8277640342712402,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  2.392723560333252,
+                  0,
+                  -1.649275302886963,
+                  0,
+                  -2435.50048828125,
+                  94.2535171508789,
+                  398.95751953125,
+                  1
+                ],
+                "minimumVertexY": 94.2535171508789,
+                "maximumVertexY": 98.2535171508789,
+                "drawnGroundY": 94.36603244527086,
+                "rootClearanceM": -0.11251529439195451,
+                "projected": {
+                  "x": 1187.1471136448065,
+                  "y": 654.2634257006804,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.west-canopy-mass.v1.-16.-3.3",
+                "instanceId": 327,
+                "eastM": -2431.750244140625,
+                "northM": -395.2858581542969,
+                "matrix": [
+                  2.070732593536377,
+                  0,
+                  4.311139106750488,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -3.6478869915008545,
+                  0,
+                  1.752158284187317,
+                  0,
+                  -2431.750244140625,
+                  94.26278686523438,
+                  395.2858581542969,
+                  1
+                ],
+                "minimumVertexY": 94.26278686523438,
+                "maximumVertexY": 98.26278686523438,
+                "drawnGroundY": 94.38806331302555,
+                "rootClearanceM": -0.12527644779117963,
+                "projected": {
+                  "x": 1189.8377311459062,
+                  "y": 652.6277688053215,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-16.0.4",
+                "instanceId": 1259,
+                "eastM": -2422.2109375,
+                "northM": 103.3171615600586,
+                "matrix": [
+                  8.488506317138672,
+                  0,
+                  10.107024192810059,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -8.984021186828613,
+                  0,
+                  7.5453386306762695,
+                  0,
+                  -2422.2109375,
+                  95.52223205566406,
+                  -103.3171615600586,
+                  1
+                ],
+                "minimumVertexY": 95.52223205566406,
+                "maximumVertexY": 99.52223205566406,
+                "drawnGroundY": 95.6566917700581,
+                "rootClearanceM": -0.13445971439404047,
+                "projected": {
+                  "x": 950.0494239051723,
+                  "y": 547.2126854318357,
+                  "inFrame": true
+                }
+              }
+            ]
+          }
+        ],
+        "frameProfile": {
+          "frames": 13,
+          "meanMs": {
+            "sim": 0,
+            "state": 0,
+            "presentation": 0.061538439530592695,
+            "render": 1.0384615384615385,
+            "hud": 0.8153846080486591,
+            "total": 1.9538461245023286
+          },
+          "p95Ms": 632.0999755859375,
+          "p99Ms": 801.7999877929688
+        },
+        "observedRafIntervalsMs": [
+          499.8999999999942,
+          500,
+          566.6999999999825,
+          714.9000000000233,
+          968.3999999999942,
+          731.3999999999942,
+          801.7999999999884,
+          850,
+          400,
+          350,
+          566.6000000000058,
+          550
+        ],
+        "observedRafMeanMs": 624.9749999999985,
+        "observedRafP95Ms": 850
+      }
+    },
+    {
+      "tier": "desktop",
+      "name": "iron-bell",
+      "view": {
+        "name": "iron-bell",
+        "eastM": -3050,
+        "northM": -700,
+        "aglM": 50,
+        "yawRad": -1.075,
+        "pitchRad": -0.05,
+        "fovDeg": 56,
+        "battleSiteId": "site.iron-bell-bridge.v1"
+      },
+      "file": "/tmp/guns-cobra-world-20260910/allocation/desktop-iron-bell.png",
+      "metrics": {
+        "scene": {
+          "camera": {
+            "eastM": -3050,
+            "northM": -700,
+            "upM": 165.1539645628533,
+            "aglM": 50,
+            "yawRad": -1.075,
+            "pitchRad": -0.05,
+            "fovDeg": 56
+          },
+          "quality": "desktop",
+          "authority": {
+            "tick": -1,
+            "elapsedS": 0,
+            "status": "active"
+          },
+          "presentation": {
+            "schema": "guns-only.cobra-canyon-presentation.v1",
+            "worldId": "world.cobra-canyon.v1",
+            "qualityTier": "desktop",
+            "ambientBudgetLevel": 0,
+            "nearRingVisible": true,
+            "drawCalls": 20,
+            "instances": 7171,
+            "triangles": 688141,
+            "builtDrawCalls": 20,
+            "builtInstances": 9043,
+            "builtTriangles": 794731,
+            "presentationDrawCallHeadroom": 0,
+            "presentationInstanceHeadroom": 557,
+            "presentationTriangleHeadroom": 105269,
+            "authoredWorldDrawCallCeiling": 52,
+            "availableSceneDrawCallHeadroom": 32,
+            "visibleAmbientInstances": 7128,
+            "visibleAssetInstances": 7128,
+            "visibleAssetDrawCalls": 9,
+            "hazards": 18,
+            "hazardInstances": 30,
+            "hazardsVisible": true,
+            "presentationOnly": true,
+            "authoritative": false,
+            "collisionSource": false,
+            "targetSource": false,
+            "roleCounts": {
+              "basinTriangles": 94170,
+              "riverTriangles": 3405,
+              "roadTriangles": 0,
+              "heroCells": 3,
+              "landmarks": 11,
+              "landmarkInstances": 13,
+              "wireSpans": 9,
+              "suppressedPresentationPoles": 2,
+              "hazards": 18,
+              "hazardInstances": 30,
+              "waterTowers": 1,
+              "bridges": 7,
+              "bridgeDecks": 1,
+              "bridgeApproaches": 2,
+              "bridgePiers": 4,
+              "campEmberFirebaseParts": 437,
+              "campEmberFirebaseTriangles": 5742,
+              "plantationGroundTriangles": 920,
+              "routeEnvelopeAdjustedInstances": 7,
+              "routeEnvelopeMinimumClearanceM": 9.755999999999911,
+              "coreRenderBatches": 11,
+              "assetRenderBatches": 8,
+              "worldRenderBatches": 20,
+              "authoredAmbientBatches": 12,
+              "authoredSetPieceCells": 10,
+              "authoredAmbientArchetypes": 11,
+              "authoredLandmarkArchetypes": 11,
+              "authoredSetPieceArchetypeReferences": 58,
+              "authoredSetPieceAssetReferences": 50,
+              "renderedSetPieceAssetInstances": 50,
+              "generatedWaterAccentInstances": 30,
+              "renderedWaterAccentInstances": 30,
+              "ambientBatchInstances": 5701,
+              "renderBatches": 8,
+              "assetInstances": 5781,
+              "scatterRadiusM": 1400,
+              "scatterTileM": 160,
+              "scatterInstancesPerTile": 30,
+              "scatterCapacity": 7320,
+              "jungleAuthoredBatches": 6,
+              "jungleBatches": 6,
+              "jungleRenderBatches": 2,
+              "jungleSetPieceInstances": 30,
+              "jungleInstances": 5062,
+              "jungleScatterCapacity": 5032,
+              "jungleScatterRadiusM": 1977,
+              "plantationAuthoredBatches": 1,
+              "plantationBatches": 1,
+              "plantationRenderBatches": 1,
+              "plantationSetPieceInstances": 1,
+              "plantationInstances": 197,
+              "plantationScatterCapacity": 687,
+              "plantationScatterRadiusM": 2452,
+              "villageAuthoredBatches": 2,
+              "villageBatches": 2,
+              "villageRenderBatches": 1,
+              "villageSetPieceInstances": 3,
+              "villageInstances": 434,
+              "villageScatterCapacity": 431,
+              "villageScatterRadiusM": 1343,
+              "paddyAuthoredBatches": 1,
+              "paddyBatches": 1,
+              "paddyRenderBatches": 1,
+              "paddySetPieceInstances": 2,
+              "paddyInstances": 18,
+              "paddyScatterCapacity": 479,
+              "paddyScatterRadiusM": 1882,
+              "rockAuthoredBatches": 1,
+              "rockBatches": 1,
+              "rockRenderBatches": 1,
+              "rockSetPieceInstances": 6,
+              "rockInstances": 6,
+              "rockScatterCapacity": 572,
+              "rockScatterRadiusM": 1400,
+              "mistAuthoredBatches": 1,
+              "mistBatches": 1,
+              "mistRenderBatches": 1,
+              "mistSetPieceInstances": 6,
+              "mistInstances": 32,
+              "mistScatterCapacity": 119,
+              "mistScatterRadiusM": 2454,
+              "waterAccentAuthoredBatches": 0,
+              "waterAccentBatches": 0,
+              "waterAccentRenderBatches": 1,
+              "waterAccentSetPieceInstances": 2,
+              "waterAccentInstances": 32,
+              "waterAccentScatterCapacity": 0,
+              "waterAccentScatterRadiusM": 1400,
+              "canopyCapacity": 1600,
+              "canopyAllocatedTriangles": 128000,
+              "canopyInstances": 1347,
+              "canopyTriangles": 107760,
+              "canopyPendingCells": 0
+            },
+            "budget": {
+              "maxDrawCalls": 20,
+              "maxInstances": 9600,
+              "maxTriangles": 900000,
+              "maxAssetInstances": 9000,
+              "maxAuthoredTriangles": 378000,
+              "nearRingMaximumAglM": 360
+            },
+            "withinBudget": true,
+            "disposed": false
+          },
+          "exposure": 1.16,
+          "sun": {
+            "position": [
+              -1543.6347466039706,
+              708.1703350251792,
+              -1322.8608533570034
+            ],
+            "color": [
+              1,
+              0.76052450467022,
+              0.45641102317066595
+            ],
+            "intensity": 2.65
+          },
+          "fog": {
+            "density": 0.000302,
+            "color": [
+              0.2541520943200296,
+              0.34670405634441115,
+              0.37626212298046485
+            ]
+          },
+          "render": {
+            "frame": 245,
+            "calls": 122,
+            "triangles": 688231,
+            "points": 0,
+            "lines": 0
+          },
+          "surfaceMaterials": [
+            {
+              "mesh": "COBRA_CANYON_BASIN",
+              "enabled": 1,
+              "url": "http://127.0.0.1:63015/content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp"
+            }
+          ],
+          "memory": {
+            "geometries": 68,
+            "textures": 5
+          },
+          "programs": [
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_BASIN_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_RIVER_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_LANDMARKS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_JUNGLE_AUTHORED_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_JUNGLE_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_PLANTATION_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_HAZARDS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_WATER_TOWER_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_HEROCELLS_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            },
+            {
+              "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+              "linked": true,
+              "runnable": null,
+              "log": null
+            }
+          ]
+        },
+        "visibleVegetation": [
+          {
+            "name": "COBRA_MIDFIELD_CANOPY",
+            "count": 1347,
+            "visibleCenters": 235,
+            "instances": [
+              {
+                "id": "canopy.-10.-4.3",
+                "instanceId": 1141,
+                "eastM": -1320.55859375,
+                "northM": -491.031494140625,
+                "matrix": [
+                  -55.74758529663086,
+                  1.1588540077209473,
+                  12.081345558166504,
+                  0,
+                  0,
+                  18.553014755249023,
+                  0,
+                  0,
+                  -7.208583831787109,
+                  -2.426553964614868,
+                  -33.26294708251953,
+                  0,
+                  -1320.55859375,
+                  204.87918090820312,
+                  491.031494140625,
+                  1
+                ],
+                "minimumVertexY": 202.22993911139915,
+                "maximumVertexY": 223.4356207459653,
+                "drawnGroundY": 205.9419822205007,
+                "rootClearanceM": -3.7120431091015575,
+                "projected": {
+                  "x": 1054.5975084097195,
+                  "y": 381.95539883856554,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-11.-3.1",
+                "instanceId": 947,
+                "eastM": -1450.6270751953125,
+                "northM": -402.03314208984375,
+                "matrix": [
+                  -35.95918273925781,
+                  1.2747681140899658,
+                  13.950566291809082,
+                  0,
+                  0,
+                  19.25558090209961,
+                  0,
+                  0,
+                  -11.016140937805176,
+                  -1.5955979824066162,
+                  -28.395366668701172,
+                  0,
+                  -1450.6270751953125,
+                  199.66937255859375,
+                  402.03314208984375,
+                  1
+                ],
+                "minimumVertexY": 196.949664988525,
+                "maximumVertexY": 219.00924650095308,
+                "drawnGroundY": 200.66937456614687,
+                "rootClearanceM": -3.7197095776218703,
+                "projected": {
+                  "x": 993.3319147410089,
+                  "y": 383.42779240493456,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-11.-5.0",
+                "instanceId": 848,
+                "eastM": -1488.6400146484375,
+                "northM": -672.0304565429688,
+                "matrix": [
+                  -35.444976806640625,
+                  2.543030261993408,
+                  11.652273178100586,
+                  0,
+                  0,
+                  17.06401252746582,
+                  0,
+                  0,
+                  -9.583343505859375,
+                  -2.8613343238830566,
+                  -29.151512145996094,
+                  0,
+                  -1488.6400146484375,
+                  225.0535888671875,
+                  672.0304565429688,
+                  1
+                ],
+                "minimumVertexY": 222.20218856510203,
+                "maximumVertexY": 242.309886144659,
+                "drawnGroundY": 226.0821459827923,
+                "rootClearanceM": -3.879957417690264,
+                "projected": {
+                  "x": 1159.9689907888499,
+                  "y": 365.673986541742,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-9.-7.2",
+                "instanceId": 1271,
+                "eastM": -1252.3470458984375,
+                "northM": -879.3423461914062,
+                "matrix": [
+                  52.79517364501953,
+                  -2.971686601638794,
+                  -12.853148460388184,
+                  0,
+                  0,
+                  16.363224029541016,
+                  0,
+                  0,
+                  9.646103858947754,
+                  3.926842451095581,
+                  39.62202072143555,
+                  0,
+                  -1252.3470458984375,
+                  239.697265625,
+                  879.3423461914062,
+                  1
+                ],
+                "minimumVertexY": 236.8093297251188,
+                "maximumVertexY": 255.87953300444147,
+                "drawnGroundY": 240.69726149528546,
+                "rootClearanceM": -3.8879317701666594,
+                "projected": {
+                  "x": 1295.408167627863,
+                  "y": 360.59747502508424,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-12.-3.2",
+                "instanceId": 687,
+                "eastM": -1642.1612548828125,
+                "northM": -321.6542663574219,
+                "matrix": [
+                  -7.022775650024414,
+                  -1.4808396100997925,
+                  -36.88254928588867,
+                  0,
+                  0,
+                  18.627309799194336,
+                  0,
+                  0,
+                  30.34232521057129,
+                  -1.767038345336914,
+                  -5.777456760406494,
+                  0,
+                  -1642.1612548828125,
+                  202.4427490234375,
+                  321.6542663574219,
+                  1
+                ],
+                "minimumVertexY": 199.47819181632082,
+                "maximumVertexY": 220.70059660914532,
+                "drawnGroundY": 203.44275148009302,
+                "rootClearanceM": -3.9645596637722065,
+                "projected": {
+                  "x": 921.6549850250155,
+                  "y": 379.72447453538643,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-10.-4.0",
+                "instanceId": 1044,
+                "eastM": -1367.8121337890625,
+                "northM": -545.3403930664062,
+                "matrix": [
+                  -58.1993408203125,
+                  -0.2118152678012848,
+                  -11.848856925964355,
+                  0,
+                  0,
+                  18.74793243408203,
+                  0,
+                  0,
+                  7.314511775970459,
+                  -3.1956100463867188,
+                  -35.92749786376953,
+                  0,
+                  -1367.8121337890625,
+                  209.60885620117188,
+                  545.3403930664062,
+                  1
+                ],
+                "minimumVertexY": 206.60895584284503,
+                "maximumVertexY": 228.08322743016055,
+                "drawnGroundY": 210.60884868124313,
+                "rootClearanceM": -3.9998928383980967,
+                "projected": {
+                  "x": 1083.0155962659262,
+                  "y": 378.1931213772751,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-9.-4.0",
+                "instanceId": 1339,
+                "eastM": -1213.931884765625,
+                "northM": -527.4417724609375,
+                "matrix": [
+                  4.940885543823242,
+                  -3.360290050506592,
+                  -47.45215606689453,
+                  0,
+                  0,
+                  17.77887725830078,
+                  0,
+                  0,
+                  40.13789367675781,
+                  0.545648992061615,
+                  4.179298400878906,
+                  0,
+                  -1213.931884765625,
+                  207.59129333496094,
+                  527.4417724609375,
+                  1
+                ],
+                "minimumVertexY": 204.443119976516,
+                "maximumVertexY": 224.87344787322877,
+                "drawnGroundY": 208.5923634678258,
+                "rootClearanceM": -4.149243491309818,
+                "projected": {
+                  "x": 1080.9038039453458,
+                  "y": 381.9488956861269,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-12.-4.2",
+                "instanceId": 652,
+                "eastM": -1639.8817138671875,
+                "northM": -463.9404296875,
+                "matrix": [
+                  26.682462692260742,
+                  -3.593046188354492,
+                  -29.037961959838867,
+                  0,
+                  0,
+                  17.360414505004883,
+                  0,
+                  0,
+                  24.094144821166992,
+                  0.3573627769947052,
+                  22.139677047729492,
+                  0,
+                  -1639.8817138671875,
+                  210.91302490234375,
+                  463.9404296875,
+                  1
+                ],
+                "minimumVertexY": 207.74438162520417,
+                "maximumVertexY": 227.72535423940127,
+                "drawnGroundY": 211.91302465981792,
+                "rootClearanceM": -4.168643034613751,
+                "projected": {
+                  "x": 1010.7703245028074,
+                  "y": 373.4319782322105,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-12.-4.1",
+                "instanceId": 705,
+                "eastM": -1597.5618896484375,
+                "northM": -500.54547119140625,
+                "matrix": [
+                  -39.17365646362305,
+                  0.6586593985557556,
+                  -14.528852462768555,
+                  0,
+                  0,
+                  20.312389373779297,
+                  0,
+                  0,
+                  12.735910415649414,
+                  -3.5599968433380127,
+                  -34.33940505981445,
+                  0,
+                  -1597.5618896484375,
+                  211.59608459472656,
+                  500.54547119140625,
+                  1
+                ],
+                "minimumVertexY": 208.42238616677022,
+                "maximumVertexY": 231.74685969605926,
+                "drawnGroundY": 212.5960864735832,
+                "rootClearanceM": -4.173700306812975,
+                "projected": {
+                  "x": 1038.9647880616687,
+                  "y": 372.58669126956846,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-9.-6.0",
+                "instanceId": 1320,
+                "eastM": -1218.400634765625,
+                "northM": -764.8412475585938,
+                "matrix": [
+                  38.773101806640625,
+                  2.2540225982666016,
+                  29.710208892822266,
+                  0,
+                  0,
+                  16.624038696289062,
+                  0,
+                  0,
+                  -20.907609939575195,
+                  2.945589303970337,
+                  27.28533172607422,
+                  0,
+                  -1218.400634765625,
+                  227.52491760253906,
+                  764.8412475585938,
+                  1
+                ],
+                "minimumVertexY": 224.36020124141584,
+                "maximumVertexY": 244.7305191130661,
+                "drawnGroundY": 228.53732930330185,
+                "rootClearanceM": -4.177128061886009,
+                "projected": {
+                  "x": 1218.962207561858,
+                  "y": 369.61211160979326,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-12.-6.2",
+                "instanceId": 679,
+                "eastM": -1599.837646484375,
+                "northM": -735.4862670898438,
+                "matrix": [
+                  39.059234619140625,
+                  -2.0302999019622803,
+                  -1.4747164249420166,
+                  0,
+                  0,
+                  20.90406036376953,
+                  0,
+                  0,
+                  1.303040623664856,
+                  4.180301189422607,
+                  34.51224136352539,
+                  0,
+                  -1599.837646484375,
+                  236.939208984375,
+                  735.4862670898438,
+                  1
+                ],
+                "minimumVertexY": 233.68333214880266,
+                "maximumVertexY": 257.83194397275645,
+                "drawnGroundY": 237.95365557183558,
+                "rootClearanceM": -4.27032342303292,
+                "projected": {
+                  "x": 1207.0681683765388,
+                  "y": 352.03173019471006,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "canopy.-11.-4.3",
+                "instanceId": 964,
+                "eastM": -1431.783447265625,
+                "northM": -453.5560607910156,
+                "matrix": [
+                  33.587642669677734,
+                  2.059086799621582,
+                  31.933570861816406,
+                  0,
+                  0,
+                  17.623414993286133,
+                  0,
+                  0,
+                  -31.60390281677246,
+                  2.9674408435821533,
+                  33.24089813232422,
+                  0,
+                  -1431.783447265625,
+                  203.08474731445312,
+                  453.5560607910156,
+                  1
+                ],
+                "minimumVertexY": 199.8492389127056,
+                "maximumVertexY": 221.26017426042716,
+                "drawnGroundY": 204.1405361649495,
+                "rootClearanceM": -4.291297252243908,
+                "projected": {
+                  "x": 1024.6684063521263,
+                  "y": 381.86711994595527,
+                  "inFrame": true
+                }
+              }
+            ]
+          },
+          {
+            "name": "COBRA_CANYON_ASSET_JUNGLE",
+            "count": 4262,
+            "visibleCenters": 739,
+            "instances": [
+              {
+                "id": "ambient.cobra-canyon.west-canopy-mass.v1.-14.-6.1",
+                "instanceId": 1330,
+                "eastM": -2221.466796875,
+                "northM": -847.2848510742188,
+                "matrix": [
+                  2.0022974014282227,
+                  0,
+                  3.7180793285369873,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -3.1460671424865723,
+                  0,
+                  1.6942516565322876,
+                  0,
+                  -2221.466796875,
+                  305.88897705078125,
+                  847.2848510742188,
+                  1
+                ],
+                "minimumVertexY": 305.88897705078125,
+                "maximumVertexY": 309.88897705078125,
+                "drawnGroundY": 305.9689608171711,
+                "rootClearanceM": -0.07998376638983018,
+                "projected": {
+                  "x": 1401.112298891265,
+                  "y": 221.7818008022063,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.west-canopy-mass.v1.-14.-6.3",
+                "instanceId": 1332,
+                "eastM": -2243.10205078125,
+                "northM": -856.13134765625,
+                "matrix": [
+                  -4.497293472290039,
+                  0,
+                  1.1518317461013794,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -0.974626898765564,
+                  0,
+                  -3.8054022789001465,
+                  0,
+                  -2243.10205078125,
+                  305.8914794921875,
+                  856.13134765625,
+                  1
+                ],
+                "minimumVertexY": 305.8914794921875,
+                "maximumVertexY": 309.8914794921875,
+                "drawnGroundY": 305.9714833148861,
+                "rootClearanceM": -0.08000382269858619,
+                "projected": {
+                  "x": 1422.9168365040343,
+                  "y": 214.90401932218182,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "set-piece.cobra-canyon.mill-village.v1.archetype.cobra-canyon.jungle-canopy.v1.2",
+                "instanceId": 22,
+                "eastM": 4058.81103515625,
+                "northM": -44.641422271728516,
+                "matrix": [
+                  -0.8013872504234314,
+                  0,
+                  -3.4182181358337402,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  2.892338275909424,
+                  0,
+                  -0.6780968904495239,
+                  0,
+                  4058.81103515625,
+                  253.50401306152344,
+                  44.641422271728516,
+                  1
+                ],
+                "minimumVertexY": 253.50401306152344,
+                "maximumVertexY": 257.50401306152344,
+                "drawnGroundY": 253.59267028566467,
+                "rootClearanceM": -0.08865722414122956,
+                "projected": {
+                  "x": 1082.387098655833,
+                  "y": 395.96298046740174,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.west-canopy-mass.v1.-15.0.0",
+                "instanceId": 1826,
+                "eastM": -2402.10693359375,
+                "northM": 113.54534912109375,
+                "matrix": [
+                  1.5693219900131226,
+                  0,
+                  4.15945291519165,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -3.5195369720458984,
+                  0,
+                  1.327887773513794,
+                  0,
+                  -2402.10693359375,
+                  95.57428741455078,
+                  -113.54534912109375,
+                  1
+                ],
+                "minimumVertexY": 95.57428741455078,
+                "maximumVertexY": 99.57428741455078,
+                "drawnGroundY": 95.66433082961618,
+                "rootClearanceM": -0.09004341506539504,
+                "projected": {
+                  "x": 360.53269469003396,
+                  "y": 467.3569954836753,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-18.-3.5",
+                "instanceId": 235,
+                "eastM": -2762.677978515625,
+                "northM": -339.27935791015625,
+                "matrix": [
+                  -2.680849313735962,
+                  0,
+                  -3.80531907081604,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  3.3825058937072754,
+                  0,
+                  -2.382977247238159,
+                  0,
+                  -2762.677978515625,
+                  92.60372161865234,
+                  339.27935791015625,
+                  1
+                ],
+                "minimumVertexY": 92.60372161865234,
+                "maximumVertexY": 93.24372160434723,
+                "drawnGroundY": 92.69423793220841,
+                "rootClearanceM": -0.0905163135560656,
+                "projected": {
+                  "x": 362.3942008006709,
+                  "y": 550.8519269975543,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.gorge-riparian.v1.-16.1.1",
+                "instanceId": 1919,
+                "eastM": -2407.60791015625,
+                "northM": 118.40280151367188,
+                "matrix": [
+                  3.628922939300537,
+                  0,
+                  -2.948499917984009,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  2.494884490966797,
+                  0,
+                  3.070626974105835,
+                  0,
+                  -2407.60791015625,
+                  95.59234619140625,
+                  -118.40280151367188,
+                  1
+                ],
+                "minimumVertexY": 95.59234619140625,
+                "maximumVertexY": 99.59234619140625,
+                "drawnGroundY": 95.682907224735,
+                "rootClearanceM": -0.09056103332875409,
+                "projected": {
+                  "x": 353.48806578859916,
+                  "y": 467.4986391025774,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-18.-3.0",
+                "instanceId": 230,
+                "eastM": -2798.977783203125,
+                "northM": -373.2181091308594,
+                "matrix": [
+                  1.5586411952972412,
+                  0,
+                  4.914800643920898,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  -4.368711471557617,
+                  0,
+                  1.3854588270187378,
+                  0,
+                  -2798.977783203125,
+                  92.512939453125,
+                  373.2181091308594,
+                  1
+                ],
+                "minimumVertexY": 92.512939453125,
+                "maximumVertexY": 93.15293943881989,
+                "drawnGroundY": 92.60458868856327,
+                "rootClearanceM": -0.0916492354382683,
+                "projected": {
+                  "x": 345.2114011181946,
+                  "y": 569.1758947162299,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "set-piece.cobra-canyon.red-earth-quarry.v1.archetype.cobra-canyon.jungle-understory.v1.0",
+                "instanceId": 17,
+                "eastM": 2750.223388671875,
+                "northM": -1694.0484619140625,
+                "matrix": [
+                  2.7544407844543457,
+                  0,
+                  3.6916608810424805,
+                  0,
+                  0,
+                  0.6399999856948853,
+                  0,
+                  0,
+                  -3.2814762592315674,
+                  0,
+                  2.4483916759490967,
+                  0,
+                  2750.223388671875,
+                  242.25924682617188,
+                  1694.0484619140625,
+                  1
+                ],
+                "minimumVertexY": 242.25924682617188,
+                "maximumVertexY": 242.89924681186676,
+                "drawnGroundY": 242.3510933477488,
+                "rootClearanceM": -0.09184652157691175,
+                "projected": {
+                  "x": 1385.7565776459048,
+                  "y": 393.4449898667841,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "set-piece.cobra-canyon.mill-village.v1.archetype.cobra-canyon.jungle-canopy.v1.0",
+                "instanceId": 20,
+                "eastM": 4063.858642578125,
+                "northM": -38.02352523803711,
+                "matrix": [
+                  -4.161943435668945,
+                  0,
+                  1.9526206254959106,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -1.6522173881530762,
+                  0,
+                  -3.521644353866577,
+                  0,
+                  4063.858642578125,
+                  253.53648376464844,
+                  38.02352523803711,
+                  1
+                ],
+                "minimumVertexY": 253.53648376464844,
+                "maximumVertexY": 257.53648376464844,
+                "drawnGroundY": 253.62855763188313,
+                "rootClearanceM": -0.09207386723468858,
+                "projected": {
+                  "x": 1081.5272675727206,
+                  "y": 395.97228390566727,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.west-canopy-mass.v1.-16.0.2",
+                "instanceId": 1529,
+                "eastM": -2414.62646484375,
+                "northM": 99.95014190673828,
+                "matrix": [
+                  -4.523695945739746,
+                  0,
+                  -0.36722591519355774,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  0.31072962284088135,
+                  0,
+                  -3.8277428150177,
+                  0,
+                  -2414.62646484375,
+                  95.49855041503906,
+                  -99.95014190673828,
+                  1
+                ],
+                "minimumVertexY": 95.49855041503906,
+                "maximumVertexY": 99.49855041503906,
+                "drawnGroundY": 95.59727625198327,
+                "rootClearanceM": -0.09872583694421166,
+                "projected": {
+                  "x": 359.26437150479745,
+                  "y": 468.5319052237885,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-14.-1.1",
+                "instanceId": 1947,
+                "eastM": -2130.697998046875,
+                "northM": 6.662406921386719,
+                "matrix": [
+                  10.2183256149292,
+                  0,
+                  1.8950254917144775,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -1.684467077255249,
+                  0,
+                  9.082955360412598,
+                  0,
+                  -2130.697998046875,
+                  95.7436294555664,
+                  -6.662406921386719,
+                  1
+                ],
+                "minimumVertexY": 95.7436294555664,
+                "maximumVertexY": 99.7436294555664,
+                "drawnGroundY": 95.8452591239556,
+                "rootClearanceM": -0.10162966838919374,
+                "projected": {
+                  "x": 584.0305005392753,
+                  "y": 457.46181981980664,
+                  "inFrame": true
+                }
+              },
+              {
+                "id": "ambient.cobra-canyon.ridge-bamboo.v1.-14.-1.6",
+                "instanceId": 1951,
+                "eastM": -2128.25,
+                "northM": -18.740076065063477,
+                "matrix": [
+                  -10.49085521697998,
+                  0,
+                  6.403196334838867,
+                  0,
+                  0,
+                  4,
+                  0,
+                  0,
+                  -5.69173002243042,
+                  0,
+                  -9.325204849243164,
+                  0,
+                  -2128.25,
+                  95.66062927246094,
+                  18.740076065063477,
+                  1
+                ],
+                "minimumVertexY": 95.66062927246094,
+                "maximumVertexY": 99.66062927246094,
+                "drawnGroundY": 95.76537048329376,
+                "rootClearanceM": -0.10474121083282739,
+                "projected": {
+                  "x": 600.345938506772,
+                  "y": 457.9581478800011,
+                  "inFrame": true
+                }
+              }
+            ]
+          }
+        ],
+        "frameProfile": {
+          "frames": 13,
+          "meanMs": {
+            "sim": 0,
+            "state": 0,
+            "presentation": 0.05384613917424129,
+            "render": 1.4384615604694073,
+            "hud": 0.27692306958712065,
+            "total": 1.799999970656175
+          },
+          "p95Ms": 801.7999877929688,
+          "p99Ms": 1135.0999755859375
+        },
+        "observedRafIntervalsMs": [
+          781.8000000000175,
+          717.5999999999767,
+          733.9000000000233,
+          783.2999999999884,
+          800,
+          681.2999999999884,
+          633.5,
+          768.5,
+          1066.6000000000058,
+          798.3999999999942,
+          984.8000000000175,
+          983.2999999999884
+        ],
+        "observedRafMeanMs": 811.0833333333334,
+        "observedRafP95Ms": 984.8000000000175
+      },
+      "stationaryDelta": {
+        "hardDeltaThreshold": 14,
+        "hardDeltaFraction": 0,
+        "meanMaximumChannelDelta": 0,
+        "roi": {
+          "x": 60,
+          "y": 120,
+          "width": 1320,
+          "height": 720
+        }
+      }
+    }
+  ],
+  "failure": null
+}

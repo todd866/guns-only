@@ -6,7 +6,33 @@ constant. They may not be reused as a source reference for a content pack.
 
 ## Generation and review record
 
-### Front-door poster set v3 — CURRENT (six generated outputs)
+### F-22A and Cobra ImageGen v4 — CURRENT for these two picker cards
+
+- Created: 2026-09-09 using the built-in OpenAI `image_gen.imagegen` tool. No CLI/API fallback
+  was used. A model identifier was not returned as a structured tool field; the original PNGs
+  retain their generation metadata. Do not infer a model from the user's mention of a new release.
+- Exact prompts and selection record:
+  `tools/assets/generators/menu-posters/sources/generated-v4-prompts.json`.
+  Both calls generated new art without reference images. The user reviewed the displayed
+  outputs and said, "these images are great".
+- Exact selected sources: `sources/jet-f22-generated-v4.png`, 1,992,919 bytes,
+  SHA-256 `a6d18c79a740a0540626ac0a4578c939c03bfacebc998438bf1f3b50e3d0102c`;
+  and `sources/jet-cobra-generated-v4.png`, 2,205,001 bytes,
+  SHA-256 `12e8a0f14b77548a674da32e02b1526d3248ebe6a1efb9b3380d87d50a7e34fc`,
+  under the menu-posters generator directory.
+- Runtime encoding: `cwebp -q 82 -resize 1000 1000 -m 6 -sharp_yuv`.
+  Recreate with `node tools/assets/generators/menu-posters/render.mjs jet-f22-generated-v4 jet-cobra-generated-v4`.
+  Re-encoding is reproducible from the retained source; a fresh generation is not claimed to
+  reproduce the same image.
+- Epistemic label: `fiction`. These are idealized selection illustrations, not screenshots,
+  airframe engineering references or evidence of achieved runtime scenery quality.
+- Rights review: project-generated; no third-party image input, copied insignia, watermark or
+  recognizable person is present. Use is approved within this task's requested game-asset work.
+- Visual review: both aircraft remain readable, with distinct cold-altitude and warm-gorge
+  compositions. The Cobra illustration's scenery is aspirational. The previous SVG-derived
+  WebPs and sources remain available under their original names; only picker references changed.
+
+### Front-door poster set v3 — RETAINED (four current, two superseded picker outputs)
 
 - Created: 2026-08-06.
 - Generation session: `https://claude.ai/code/session_01C5SeyugjJniHgibAgCbuNN`.
@@ -170,6 +196,8 @@ table further down stays the single place a filename is bound to a hash.
 
 | File | Dimensions | Bytes | SHA-256 | Use |
 | --- | ---: | ---: | --- | --- |
+| `jet-f22-generated-v4.webp` | 1000×1000 | 82730 | `523cb0cd8a722c189ac93e011b24fd31c622aa29d4f0ae23382d646e48557a8a` | Current F-22A picker; ImageGen source retained |
+| `jet-cobra-generated-v4.webp` | 1000×1000 | 120302 | `6ab96879304ea055ca0f80bead04510f32c4bd63afb936b2a56c319d0401238e` | Current Cobra picker; ImageGen source retained |
 | `jet-f22.webp` | 900×1600 | 19334 | `203d4b601bbe39e6d2c03d3c28ccc953c9867bb08935aef045f487fe79d32297` | F-22A picker poster |
 | `jet-rapier.webp` | 900×1600 | 21572 | `29699bb08e1878465d1cb21adc07da83f3e7b4479dbe8d57a375a74c05d3ec5b` | Rapier picker poster |
 | `jet-cobra.webp` | 900×1600 | 23000 | `2789e1aa005cb61482b032cee38913f93704abc047d2f630f0d98cafca616e1b` | AH-1G Cobra picker poster |

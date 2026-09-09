@@ -23,6 +23,8 @@ const POSTER_SOURCES = {
 };
 const RASTER_POSTER_SOURCES = {
   "aircraft-fireboss.webp": "sources/aircraft-fireboss.png",
+  "jet-f22-generated-v4.webp": "sources/jet-f22-generated-v4.png",
+  "jet-cobra-generated-v4.webp": "sources/jet-cobra-generated-v4.png",
 };
 
 test("every production shell painting has a hash-pinned fiction provenance card", async () => {
@@ -37,8 +39,10 @@ test("every production shell painting has a hash-pinned fiction provenance card"
   assert.deepEqual(files, [
     "aircraft-fireboss.webp",
     "bike-yzf-r1.webp",
+    "jet-cobra-generated-v4.webp",
     "jet-cobra.webp",
     "jet-f14.webp",
+    "jet-f22-generated-v4.webp",
     "jet-f22.webp",
     "jet-mig-28.webp",
     "jet-rapier.webp",

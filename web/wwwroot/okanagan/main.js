@@ -4,51 +4,51 @@ const pilotLogbook = createBrowserPilotLogbook();
 installDisposedPageRestore();
 window.addEventListener("pagehide", () => pilotLogbook.finish({ outcome: "Left before completion" }));
 import * as THREE from "../vendor/three.module.js";
-import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=356";
+import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=357";
 import { createOkanaganSiteMarkers } from "../render/okanagan/okanagan_site_markers.js";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=356";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=356";
-import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=356";
-import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=356";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=357";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=357";
+import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=357";
+import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=357";
 import {
   createOkanaganTrafficCraft,
   poseOkanaganTrafficCraft,
-} from "../render/okanagan/okanagan_traffic.js?v=356";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=356";
-import { createHud } from "../hud.js?v=356";
+} from "../render/okanagan/okanagan_traffic.js?v=357";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=357";
+import { createHud } from "../hud.js?v=357";
 import {
   armFlightAudio,
   flightAudioDiagnostics,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=356";
+} from "../render/audio/flight_audio.js?v=357";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=356";
-import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=356";
-import { standardGamepadState } from "../render/input/dual_stick_input.js?v=356";
-import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=356";
+} from "../render/settings/player_settings.js?v=357";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=357";
+import { standardGamepadState } from "../render/input/dual_stick_input.js?v=357";
+import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=357";
 import {
   compactOkanaganCue,
   okanaganFlightState,
   okanaganRadioCaption,
   okanaganRadioHoldMs,
-} from "../render/okanagan/okanagan_hud_adapter.js?v=356";
+} from "../render/okanagan/okanagan_hud_adapter.js?v=357";
 import {
   cycleOkanaganTarget,
   okanaganTargets,
   retainOkanaganTarget,
-} from "../render/okanagan/okanagan_targets.js?v=356";
+} from "../render/okanagan/okanagan_targets.js?v=357";
 import {
   okanaganDebriefModel,
   okanaganMissionTerminal,
-} from "../render/okanagan/okanagan_debrief.js?v=356";
+} from "../render/okanagan/okanagan_debrief.js?v=357";
 import {
   okanaganDialogFocusables,
   okanaganDialogTabTarget,
-} from "../render/okanagan/okanagan_dialog_focus.js?v=356";
+} from "../render/okanagan/okanagan_dialog_focus.js?v=357";
 
 const SORTIES = Object.freeze({
   "water-circuits": {

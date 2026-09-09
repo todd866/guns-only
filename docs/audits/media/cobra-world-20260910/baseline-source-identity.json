@@ -1,0 +1,3152 @@
+{
+  "head": "1b6cf324e60f4ce5db898a8a5ce838233e14c3b8",
+  "wasmBuildHead": "163216160ed53a407b49ad1f4f521eb13445e8bb",
+  "csChanges": [],
+  "framework": [
+    {
+      "path": "_framework/GunsOnly.Sim.pdb.gz",
+      "sha256": "374d977a64c366d77a0efaf1221b8261f722ccac8990cd1aaa1e72ec16056c8c",
+      "unchanged": true
+    },
+    {
+      "path": "_framework/GunsOnly.Sim.wasm",
+      "sha256": "16c85137ea4111a2124be8c5cc6dbd45343381ff1a8aa075ed071f9dd4703485",
+      "unchanged": true
+    },
+    {
+      "path": "_framework/GunsOnly.Sim.wasm.br",
+      "sha256": "fff206a63d616b9b358d278c402a50c68a351f6329aa6620e9f3a2f2fdc7db0a",
+      "unchanged": true
+    },
+    {
+      "path": "_framework/GunsOnly.Sim.wasm.gz",
+      "sha256": "5c4d7aefd2dc6d856bb0c193a9e21d73cadba1a1af3e3a3c20bf5e4b5355372d",
+      "unchanged": true
+    },
+    {
+      "path": "_framework/GunsOnly.Web.pdb.gz",
+      "sha256": "2c24c7fba2a9f24228d18c5d91c643bc29eb0bd6bf6ed12ad44e541940524613",
+      "unchanged": true
+    },
+    {
+      "path": "_framework/GunsOnly.Web.wasm",
+      "sha256": "d2df9605354b99a86ecdbcb2f91df36c8f4cf22c9a1ab1b564ba9c851cbd8e67",
+      "unchanged": true
+    },
+    {
+      "path": "_framework/GunsOnly.Web.wasm.br",
+      "sha256": "310ff436da177730f834e79798ab84386ebbe24c12d952acb5b9d66c28cb04c1",
+      "unchanged": true
+    },
+    {
+      "path": "_framework/GunsOnly.Web.wasm.gz",
+      "sha256": "da4656fde7a088fb1721e7ddcec088ce82d7ba65bfb18593bf061db022ff9232",
+      "unchanged": true
+    }
+  ],
+  "staticFiles": [
+    {
+      "path": "SETUP.md",
+      "bytes": 9083,
+      "sha256": "d96e347fcf73bbcb864cd03d8ce24bc2137a0ae29dab9bab98b3699b94237c78",
+      "alreadyMatched": true
+    },
+    {
+      "path": "airframes/rapier-gun-drone.v1.json",
+      "bytes": 2752,
+      "sha256": "a905c3fe4fa52fe6aa4e1326a809c0dd48d0448c9bbc7080e91ca9b5c902f7be",
+      "alreadyMatched": true
+    },
+    {
+      "path": "airframes/rapier.v1.json",
+      "bytes": 9202,
+      "sha256": "907ba088cd18294736a89418474d763b6d77739f90f9ba26d1649af8cbe8bf1e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "airframes/rapier.v2.json",
+      "bytes": 13353,
+      "sha256": "a697516a2621a5f3c8c3acf809f38cc85ca0107361de13c3202f0dfa247b04a3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "airframes/rapier_gun_drone_v1.embedded.js",
+      "bytes": 2821,
+      "sha256": "4ec7e85cd7d51db6fd0d523e207e9f0b96ad495628c63377cf22b3e62eaf184d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "airframes/rapier_v1.embedded.js",
+      "bytes": 9450,
+      "sha256": "c5cf275066946811f982f6ab2c185ff67483ced6ac29d39758e3f2df4ae1b427",
+      "alreadyMatched": true
+    },
+    {
+      "path": "airframes/rapier_v2.embedded.js",
+      "bytes": 13495,
+      "sha256": "5453274a350496dffa42da40cdb6dfaf91ac9370d80d4280639b445d6f82dbdc",
+      "alreadyMatched": true
+    },
+    {
+      "path": "api/arena-logic.js",
+      "bytes": 18692,
+      "sha256": "1700add483c66de71b83b492cd3165ae10f72fc361367a0b1ff92bcacd8b5feb",
+      "alreadyMatched": true
+    },
+    {
+      "path": "api/arena.js",
+      "bytes": 12618,
+      "sha256": "cd8c0b20dfc94f0dabeb8945f321b78f4ac0dc8a69461bd159afb0c271655b56",
+      "alreadyMatched": true
+    },
+    {
+      "path": "api/build-info.js",
+      "bytes": 2234,
+      "sha256": "7ef78c2292da52cf681a04274c19a26e124a766fc64099f4b4dfe81c23ccc313",
+      "alreadyMatched": true
+    },
+    {
+      "path": "api/telemetry-admin.js",
+      "bytes": 35250,
+      "sha256": "e1c0c00de4905ba591d37c33af09e829acadf51423ebe46147197544fce1b6c2",
+      "alreadyMatched": true
+    },
+    {
+      "path": "api/telemetry.js",
+      "bytes": 14950,
+      "sha256": "411ad28afb7d6ecd3b59fd184d8823f80d4b845c174ffe9dbfd09aa63cd657f5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "app.js",
+      "bytes": 529467,
+      "sha256": "c0ae21f22335a9840c5e93638e085107cbb56bdc92264e4066d7fc4e7fe63385",
+      "alreadyMatched": true
+    },
+    {
+      "path": "arena-config.js",
+      "bytes": 252,
+      "sha256": "2b251736f416b120414d788e02b11fee17d0352bb4dcdce522ef5006577a75dd",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/SOURCES.md",
+      "bytes": 15300,
+      "sha256": "584e8f8ce4161de5304ff0756b4f0511457e22044af5987f5204061f4171fa22",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/aircraft-fireboss.webp",
+      "bytes": 208924,
+      "sha256": "9737e2ceb208145c86e142d3e12975549565d4acc672a7000380c26e9beef149",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/bike-yzf-r1.webp",
+      "bytes": 31680,
+      "sha256": "a42fe42d802e3f3b1ae61fe5b70567226aab2ad28b84349d57c38d6fa4618869",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/jet-cobra-generated-v4.webp",
+      "bytes": 120302,
+      "sha256": "6ab96879304ea055ca0f80bead04510f32c4bd63afb936b2a56c319d0401238e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/jet-cobra.webp",
+      "bytes": 23000,
+      "sha256": "2789e1aa005cb61482b032cee38913f93704abc047d2f630f0d98cafca616e1b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/jet-f14.webp",
+      "bytes": 14886,
+      "sha256": "e67c8ed4413eabf7bca198847e1be0bb64f61270c6c0e90b158852f00251d85e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/jet-f22-generated-v4.webp",
+      "bytes": 82730,
+      "sha256": "523cb0cd8a722c189ac93e011b24fd31c622aa29d4f0ae23382d646e48557a8a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/jet-f22.webp",
+      "bytes": 19334,
+      "sha256": "203d4b601bbe39e6d2c03d3c28ccc953c9867bb08935aef045f487fe79d32297",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/jet-mig-28.webp",
+      "bytes": 13344,
+      "sha256": "bc768c8e5aaee8437dd425879cc0d9d4b0f6a7dcfcc1fdc3a23c76db279d3212",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/jet-rapier.webp",
+      "bytes": 21572,
+      "sha256": "29699bb08e1878465d1cb21adc07da83f3e7b4479dbe8d57a375a74c05d3ec5b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/menu-hangar-small.webp",
+      "bytes": 8518,
+      "sha256": "a17a868a3905c6fc9d8217ae156c7123228baaf1009dce7ef781e9e613ebde45",
+      "alreadyMatched": true
+    },
+    {
+      "path": "art/menu-hangar.webp",
+      "bytes": 18382,
+      "sha256": "2b0bd29b275e6993c0ad9f355dfc5c048b1e05abaf2cd60323784f881ff9f070",
+      "alreadyMatched": true
+    },
+    {
+      "path": "cobra-lab/index.html",
+      "bytes": 13734,
+      "sha256": "b055e03c190765c9705c7786afdbf1a0e67f8b7dfdb0520d282d0837e70296e5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "cobra-lab/main.js",
+      "bytes": 121597,
+      "sha256": "ff076501132a3a1e0b3132839b06addce620bbf0abda40d3d5ea9b0b0e26aafe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "cobra-lab/styles.css",
+      "bytes": 22050,
+      "sha256": "4501b3f072f776e49e4b4e478811a4f60628428f9421805da9616d185d94afe9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/asset-manifest.json",
+      "bytes": 4000,
+      "sha256": "4f84c5bfc08f44b348587dc38096ddcdd82bcf6574392b4008d8cc9ca7af95e4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/assets/vegetation/flower-clumps.glb",
+      "bytes": 372664,
+      "sha256": "e221f4204af6c1e76d8bd95f4fb4abd60ea55d401ab5f9d31726ae1feb1b21a1",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/assets/vegetation/palm-cluster.glb",
+      "bytes": 1120784,
+      "sha256": "70275b7159f1790e2997113ce1373a6abc93dd609a2fa778e6edd5c0d4ba2904",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/assets/vegetation/plant-clumps.glb",
+      "bytes": 342312,
+      "sha256": "71d438bf6693a76c6dc5e8d85417d9b738a7d85eb643358a8937c9ee872953b5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/environment/cobra-canyon.world.json",
+      "bytes": 65323,
+      "sha256": "1c25e62bad68c92fbc3a923072c0c56a27676ab2bbb9ea6daea5a1d9808c6f4f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/environment/foliage/SOURCES.md",
+      "bytes": 6060,
+      "sha256": "c6050c1356df207c0b8e5bf6fc35badb649f44b1123b891768f4dfdf34ef369a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/environment/foliage/asset-manifest.json",
+      "bytes": 1850,
+      "sha256": "ad9af6bdf96e71cbddd267800fc4c02d9c437506282ec3e02a43c83550c43d9c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/environment/foliage/foliage-atlas-generated-v2.png",
+      "bytes": 546554,
+      "sha256": "e16bb50cb7a63083f0ab6a4af537631a31a86ce745ff82d00eaacd1bf44896c8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/environment/foliage/foliage-atlas.png",
+      "bytes": 316487,
+      "sha256": "7cb1e1f3e1e0f523c3b7af4d332fc311dd571aa6b4fc0e75cd6b620b931955d7",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/environment/foliage/licenses.json",
+      "bytes": 4035,
+      "sha256": "7b36d122cc490d78a3110eaad0937c7736a5c014669965c6eb3890c0bf93dc05",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/environment/foliage/palm-card.png",
+      "bytes": 159244,
+      "sha256": "78ff697d446d0fa0ca5db01bc1d40b00dc99f5b44245c6d291f43aca96d972c9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/environment/foliage/understory-card.png",
+      "bytes": 141939,
+      "sha256": "53c6561212cb91a425f70657961c0339882700785596f846cd056abd6364b564",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/licenses.json",
+      "bytes": 1717,
+      "sha256": "6ca8f8c5ac2172b1a55fcfe55a94dd812793e7cc64f2c196066c8de60172878a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/asset-manifest.json",
+      "bytes": 18250,
+      "sha256": "eeb53107beea4d33f93041fb405797b0b7c2445a34164dcf3916d4b7824d25a0",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/effects/guns.effects.json",
+      "bytes": 2106,
+      "sha256": "dfcb067f7ba40d4090a0b69ce16027c3b4cfa6f58d0f4abe029784ff4495a391",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/environment/atmosphere.material.json",
+      "bytes": 1340,
+      "sha256": "39e665c08c712863c4860abbcf1424cc5d0ea84298782895d58d1a4cde8aeef4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/environment/ocean.material.json",
+      "bytes": 1263,
+      "sha256": "2553a1909fa1b459cb58841d03c1aac2f2a9327c08a6ee39aa882ba29ef3e0fd",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/environment/terrain/central-front-preview.png",
+      "bytes": 2109891,
+      "sha256": "68957273973eba63cb862f07e0be32ef41d084ee06ce8d3f5539c9602ef902d7",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/environment/terrain/central-front.manifest.json",
+      "bytes": 113286,
+      "sha256": "6017b706c24b9bdf9465fa0e04ec8798c030936a6a8ba2254e0361ac0c850ce5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/environment/terrain/central-front.terrain",
+      "bytes": 11268082,
+      "sha256": "d98ada3ab1f1c06c491e2321772cfa7e938d294369bcf1423cedfee3b8c8a3c1",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/environment/terrain/central-front.truth",
+      "bytes": 2101314,
+      "sha256": "115600ebb844013b3f86dc8fc57b0701b860025877f682fbdd96760b2aa8b594",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/environment/textures/cloud-shape.png",
+      "bytes": 238993,
+      "sha256": "929dac4ee90d88d917973634149d9659cca286a17ece94142124f8328686edfe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/environment/textures/foam-noise.png",
+      "bytes": 29713,
+      "sha256": "3623e916031a9f18922b1b5ec20c1b44dae10ebf8dc3f40276f4dfb15c2a72d3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/environment/textures/ocean-normal.png",
+      "bytes": 191223,
+      "sha256": "3cf7c02a980095c806846e3906a51cfe65106e68f9cde797ae17bb2aee707974",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/licenses.json",
+      "bytes": 3791,
+      "sha256": "848069201d2afea88483d9decbefa41a3f89a2ca25c39d777bde9334e94eee37",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/models/bandit-swept-jet/lod0.glb",
+      "bytes": 415708,
+      "sha256": "90922a4745b5f524a8d8acf0e5014d6bb2923b6b1a0b13092b27bdc88c54c905",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/models/bandit-swept-jet/lod1.glb",
+      "bytes": 168452,
+      "sha256": "ea2a59b62f68f2d0191f1e44e7e644cf8811076520dbe10cff89d3e61029b625",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/models/bandit-swept-jet/lod2.glb",
+      "bytes": 47540,
+      "sha256": "0d41729bd928a4e1760100fab1c4a889d8a9adeadec0f6c8bc1ef878fb73e129",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/models/naval/gun-destroyer-escort.glb",
+      "bytes": 460908,
+      "sha256": "c16e13082f9567daf50fef077f8de5eadb672b1f9f8c0aa3e03101e8eab0de3f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/models/naval/straight-deck-carrier.glb",
+      "bytes": 466324,
+      "sha256": "606fe2eeafbb284859ef0deb6a8585c1d1e1dc3e7c7b996584ea5162aa4a3980",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/models/player-cockpit/lod0.glb",
+      "bytes": 456628,
+      "sha256": "28838bc496f80e5ecd28bbcc64e476ef2e6d7d31a136b4f09f407c58a27d115d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/models/player-swept-jet/lod0.glb",
+      "bytes": 506504,
+      "sha256": "e7bd8250d259ecb4af8f1c0097d28bf3e6fd8f80ae401d8f75c6a293afa7a1a2",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/models/player-swept-jet/lod1.glb",
+      "bytes": 204396,
+      "sha256": "4d0b697cf268ab9ff76ef17521f9707d7fd86cc6cc3202d0eec8cac008f51204",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/models/player-swept-jet/lod2.glb",
+      "bytes": 50180,
+      "sha256": "b6ebf77ed210ac26944cbf136b8e6fe7ded1f924ffe002166bc8fac2a93a5c08",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/pack.json",
+      "bytes": 3153,
+      "sha256": "4d55d7c23d33985209775321599b08d3dcfa8467df5c7ef60a847748cc91fc1e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/korea-1950s/visual-profile.json",
+      "bytes": 5239,
+      "sha256": "87b977a7cc775b9b8d549f6db93745072efde256e39948fd1ead1ef3f9d3e24a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/okanagan-fire/environment/SOURCES.md",
+      "bytes": 10281,
+      "sha256": "1259cc55c553cc2dd47e7915da024e1b24bb1b17ae8e1e1dd02567572d1ddb1b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/okanagan-fire/environment/okanagan-central.cdem.json",
+      "bytes": 4691821,
+      "sha256": "1761332f521f506476d01fa31c9b669a5d5ee56bf5af56d17c6b44a19de1b7cd",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/okanagan-fire/environment/okanagan-central.world.json",
+      "bytes": 1980025,
+      "sha256": "23175fcfc405f0e6c6bf0ca0c7f638ad0b892fecb76a3640552bc34865c01963",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/okanagan-fire/environment/okanagan-resorts.osm.json",
+      "bytes": 1286411,
+      "sha256": "16cae455f25b343c85deb3bba4ad75e20031f769e5dc18a0a76fccde0284cf29",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/okanagan-fire/environment/peachland-2018.jpg",
+      "bytes": 5656505,
+      "sha256": "12cd62356d6e815d6e58209c0210dcd8896c64316f95ef0759430a6b615882b2",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/okanagan-fire/environment/peachland-2024.jpg",
+      "bytes": 2197659,
+      "sha256": "5947a0e2a1b925a47bd09cf9565d50426fa990a0ffc6c9950c4297d31e319fb3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/atmosphere.material.json",
+      "bytes": 1368,
+      "sha256": "8c78fad666d6ce4df4e41db86af2aa0828b2ed64b28fe8a23f347ee5c9d36d13",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/hero-cells/rapier-eastern-strip.feature-pack.json",
+      "bytes": 6174,
+      "sha256": "f2613c28064cd3b9a7b835449bf9cfbbc5add64b9c7f4d753a1058e505189752",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/hero-cells/soniachne-clinic-a.feature-pack.json",
+      "bytes": 26772,
+      "sha256": "1c2bf3cae753df11b93551a9caaee534b634e1d536a9423f5947b368a98c363d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/mesh/free-fly-places.v1.json",
+      "bytes": 864,
+      "sha256": "578441b5c4aa79b0506ed0db941c56b4b5157a1b71f6d16912a3d4043430cd84",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json",
+      "bytes": 8145,
+      "sha256": "3940358e00c16fe772fc79c94cac6ba75db0e70428ae7404528995399257cef4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.kernel.provenance.json",
+      "bytes": 6971,
+      "sha256": "97dc08b24fb1b796bab53fdc160927ad9fd476fef99b4f5cc8817e21b8d75115",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.kernel.truth",
+      "bytes": 5228930,
+      "sha256": "88c3ceb178400c7a59c8960ff55a5f888e180651dd79b28119870aed5419715f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/terrain-atlas/rapier-site.kernel.truth",
+      "bytes": 526402,
+      "sha256": "ae3f377f360a81e3fc4482d6bc8410190968da69749c5333f038e1d99aa07908",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/terrain/soniachne-region.truth",
+      "bytes": 2101314,
+      "sha256": "9db5cc26c3cefb55783978c2cec87d249fbac9fa005fa7d172a1dd5e1afda35a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/terrain/soniachne-steppe-preview.png",
+      "bytes": 115336,
+      "sha256": "9590755623e617e38d0210c6a8b9eb634ee5fbdec95307f00d97ddf5924488d0",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json",
+      "bytes": 49230,
+      "sha256": "4ec78dd7f6c0a297e05b0ae2fa7786769cb8338166d4c7bbcd09c01d51e29e03",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/terrain/soniachne-steppe.terrain",
+      "bytes": 4928224,
+      "sha256": "ccf03215f5619cd901b163010e6b49acf0f8655a147667d046235a2631efb049",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/terrain/soniachne-steppe.truth",
+      "bytes": 526402,
+      "sha256": "705e782609d4e1bac280ee0631ced57c5cda0556d8f0ad419e97f5221fa64a8b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/terrain/soniachne-theatre-preview.png",
+      "bytes": 368534,
+      "sha256": "2bf53fd8d68f1a125992089731d34976f50bcd7811e4fffb59e1cfd27030bc93",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/textures/rapier-art-manifest.v1.json",
+      "bytes": 1644,
+      "sha256": "e22abca99673757f0ecdd204961ad6cc4d1f12234d815473961abba62eed45e8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/textures/rapier-cloud-billows-v1.webp",
+      "bytes": 54198,
+      "sha256": "db89e22afca8aa3f0d96c5f18fe0d3979637609a0cb1b4ec9f44e42438431853",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/packs/ukraine-modern/environment/textures/rapier-painted-ground-v1.webp",
+      "bytes": 247660,
+      "sha256": "d4afdf838d0428bbbaa6ed92ec6d5e5530edc0496daeae78a5c1dc3576f083cd",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/schemas/asset-license-set.schema.json",
+      "bytes": 4041,
+      "sha256": "eaef1c83b977084c429ea3027cd9ada708ceebff63001f3e596a6475882d5078",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/schemas/asset-manifest.schema.json",
+      "bytes": 9753,
+      "sha256": "10889a4d3fdf84f1f9d5ff1160b7d88d296457bcd7ba8a2acbe1e72e688bc698",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/schemas/content-pack.schema.json",
+      "bytes": 8504,
+      "sha256": "a9fed9e4c6b6c6d0de12cc1c7c3d512401786eda4fe9d0532a080124f1ef9a8e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/schemas/mission-feature-pack.schema.json",
+      "bytes": 24678,
+      "sha256": "d80ae82ee343a753a77dd43b676dbca3488e8b28005b284c501ae577f470e102",
+      "alreadyMatched": true
+    },
+    {
+      "path": "content/schemas/visual-profile.schema.json",
+      "bytes": 11967,
+      "sha256": "d8dc8382d6c0edb691291f99cd9aab81b0f4f98671337ed18bd2659e574e0f7b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "favicon.png",
+      "bytes": 1148,
+      "sha256": "e265ac0f2dda1e5dfa65b1adf330722bb3ef7789115283604d8cd19f098f1f08",
+      "alreadyMatched": true
+    },
+    {
+      "path": "hud.js",
+      "bytes": 259673,
+      "sha256": "3d35f173bfcd116510bdc233150cf2b22e2e0261ee350b01851685dc52fffc9c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "icon-192.png",
+      "bytes": 2626,
+      "sha256": "0dba506aaebc6526f92283e8b0112b33541605fb1b4f1a49aa15344448bac0fe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "icons/icon-192.png",
+      "bytes": 1555,
+      "sha256": "5ddda20afc05b622690c0576c66a9519d01f5a4576c074c3b6d9f1fa49447bfc",
+      "alreadyMatched": true
+    },
+    {
+      "path": "icons/icon-512.png",
+      "bytes": 4551,
+      "sha256": "01d08e3c8ed24ca9e91e0946bf8ca3751a0293d7efaca9fdb00ace9c9aa55ba8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "index.html",
+      "bytes": 171431,
+      "sha256": "d08cbf7304babfb9c113a560393097ece0a65213c7a02185dede1684e42a19e5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "indoor/audio.js",
+      "bytes": 7989,
+      "sha256": "6bf2a42cfc82d50dcf4c3ab381765c371f49a0428a40e8fadf75ca069f305853",
+      "alreadyMatched": true
+    },
+    {
+      "path": "indoor/game.js",
+      "bytes": 55004,
+      "sha256": "abd8eae8180dc749a621ff09a8bcce88c542b2010b0b71c073d446a910486419",
+      "alreadyMatched": true
+    },
+    {
+      "path": "indoor/index.html",
+      "bytes": 14985,
+      "sha256": "190ce9fdd51f67d955dcbf9f70c8c73122f616eb0ef76fdff0d7c29db1648ad1",
+      "alreadyMatched": true
+    },
+    {
+      "path": "indoor/presentation.js",
+      "bytes": 35932,
+      "sha256": "5d557022f6d6b9bc9c55b880f4cb3b5db29e22a6703554de72b1644bd46d5669",
+      "alreadyMatched": true
+    },
+    {
+      "path": "indoor/sim.js",
+      "bytes": 61683,
+      "sha256": "39f659fbc43ce759d2c14e7676276431e460b127f7494a805c02b805165e77db",
+      "alreadyMatched": true
+    },
+    {
+      "path": "indoor/style.css",
+      "bytes": 32664,
+      "sha256": "272e2b57e37e9d1e2a6e92dd740b13a8eea97201ee26ea2c5b351138c3363bdf",
+      "alreadyMatched": true
+    },
+    {
+      "path": "manifest.webmanifest",
+      "bytes": 606,
+      "sha256": "491f3c111de8695395b4224d328d283ba0c7af416a98a9a14bfe13f6b3e23b8c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "medevac/app.js",
+      "bytes": 41304,
+      "sha256": "83946fd4376e083aff43e7786e698b28b652dcf296f27bf749b86a17442bf70e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "medevac/index.html",
+      "bytes": 23720,
+      "sha256": "719064a0e6947bf4bb6ac1454d8de147c3a251b8017d04b326746ca35c1367ae",
+      "alreadyMatched": true
+    },
+    {
+      "path": "medevac/styles.css",
+      "bytes": 32096,
+      "sha256": "4b29efd986878aba65cda039d1a207f5815aa54b7a20fc8f056d37ea3852894a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "multiplayer-config.js",
+      "bytes": 311,
+      "sha256": "36a06006ce3980d20d892e5fa960533c05b7103eadfbbfbb09f57b41b92dc27b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "okanagan/index.html",
+      "bytes": 11134,
+      "sha256": "ccfdd9aebf8a8ba8ba0c46ede9b22ad6eb386cd1294be81a54355c21e81688c2",
+      "alreadyMatched": true
+    },
+    {
+      "path": "okanagan/main.js",
+      "bytes": 42566,
+      "sha256": "51e91680e0cdb445611fb4055c87517982e46cce289762f461f883a85625d7e0",
+      "alreadyMatched": true
+    },
+    {
+      "path": "okanagan/styles.css",
+      "bytes": 14786,
+      "sha256": "7c5861feb0f583bda79aef459f7b08f9c4ac4a34055f8fd351511821ba71eb6c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/anca/anca_panel.js",
+      "bytes": 8781,
+      "sha256": "86e496635ed36b5f71a729bfac39894c70dca3dbc02760f009e67fb473f1e020",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/anca/anca_view_model.js",
+      "bytes": 13601,
+      "sha256": "c3adde920f32b0998dee19267ac495c26acb460fc8a4bc0e34acadedc939be56",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/anca/package.json",
+      "bytes": 23,
+      "sha256": "3ca9d4afd21425087cf31893b8f9f63c81b0b8408db5e343ca76e5f8aa26ab9a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/arena/arena_client.js",
+      "bytes": 6815,
+      "sha256": "2afe7c048904d89a4953f6d2e102ca629aa64e04a61a6147b920ae23b92bcf6c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/assets/README.md",
+      "bytes": 4544,
+      "sha256": "37dbee5e44525220436e56bf2501b05c9e2983467fb00cb1a2ba5134848645c8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/assets/asset_registry.js",
+      "bytes": 40273,
+      "sha256": "f0f1fa2111e5875a6eb1d89cfae8db4360902d4d02e681b860ec7cd95217e61e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/assets/errors.js",
+      "bytes": 730,
+      "sha256": "a9db4019aff1658a0ae3a4aceddcc36b47c15d27d7adf8c637b7ca87f24f4b04",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/assets/index.js",
+      "bytes": 806,
+      "sha256": "866e21eba7b177f9d65cf44b3ad5f5104254a7963ee4b27f93cfa9b434fe6e85",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/assets/lod.js",
+      "bytes": 8620,
+      "sha256": "88ea5e9fa410aed2c06eb11b3fa67c70d704c3c76c36ad1dfe639ba6898f202c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/assets/package.json",
+      "bytes": 105,
+      "sha256": "0311ae014f042b563f417cb56ca442b5b6cc873efa1a8393230187b58d775cbe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/assets/resource_utils.js",
+      "bytes": 6339,
+      "sha256": "f9cce7f87a4634e7f4a80cdaeb9fc8b3cd65c9435806968a5737a35407386de9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/assets/three_r160_loader.js",
+      "bytes": 3029,
+      "sha256": "324b9ff6a58fde63679722739156cfc3ebd00643b3baba2c46806e0ec085d1ca",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/atmosphere_audio.js",
+      "bytes": 2584,
+      "sha256": "89793fdbb1b0568ab719f114a87fdc4efca3470eefb71780f9c7260b71511715",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/audio_character.js",
+      "bytes": 1251,
+      "sha256": "d0ac021d7f754f38cc6f131d9121dbb816bb58147f0d045b18f15c49fdde09e6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/casevac_audio.js",
+      "bytes": 6748,
+      "sha256": "ee1c4a9a221e06578b736639b2406285bddf3f32620dfe98f0ed646cb5a80efa",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/cobra_audio.js",
+      "bytes": 46537,
+      "sha256": "413194282720ee09a2e3b6cd6960b05a66c4f8446204852681c7ea6e87ebe17b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/engine_audio.js",
+      "bytes": 61405,
+      "sha256": "e5c3df43f5da6ed43abe33a3e28d0396a03d68a5715e2c8fcef63f7415dcbc0a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/event_audio.js",
+      "bytes": 85583,
+      "sha256": "5665aafac2684dbce0a445efcdb4a03e32be677737ef0bc79b15c763ed5c2d70",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/f14_audio.js",
+      "bytes": 22084,
+      "sha256": "c3f21890345a32451d38b4f68354035e88344b0d26bde5864f686253b96f6251",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/flight_audio.js",
+      "bytes": 41324,
+      "sha256": "9ba398f3e5c6c134d1c9f47b49981b11e8b7bee64b62d7e97f88e5990f154b0e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/flight_audio_singleton.js",
+      "bytes": 1440,
+      "sha256": "9980b4fec74e8267a4ca88cd4ca16b59e23c84faca5006409fc44cd6cdc339a1",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/motorcycle_audio.js",
+      "bytes": 16770,
+      "sha256": "be87384d7b4cd42f08625b7fdef71b62c6b036aeb7f8b82d339f61c59752060c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/radio_audio.js",
+      "bytes": 14642,
+      "sha256": "a70ba036147a05e9d913eb57724afbe554c5773ad179c298e6308d8c5fbc6162",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/radio_equipment_profiles.js",
+      "bytes": 6584,
+      "sha256": "750007bbf8c094003c5df4d4a3cda92607b69dc4341f553d5291d5dda78f94e3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/sample_bed.js",
+      "bytes": 7710,
+      "sha256": "a8b0a9db47451e3213fbfa0d830f19d0c3ee5f373a5583479498462acaa28954",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/SOURCES.md",
+      "bytes": 6679,
+      "sha256": "3f503615b50939d217eef40b7db57c1846f9c69ca31d8487a76634565f8077fd",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/f22_grit_alt_loop.wav",
+      "bytes": 529244,
+      "sha256": "739b53b88fa1b6ac421e4f8c3ef5ca5953b8ea57f371425132c6cb80b8b7b97b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/f22_grit_loop.wav",
+      "bytes": 345788,
+      "sha256": "ebfbdef16d56c1ef09cfb5f2b9cc08419e59c715bad84f6161bad2bc3ac7b2b6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/f22_idle_alt_loop.wav",
+      "bytes": 529244,
+      "sha256": "819c32130e74e3f200abbfc1f112c92f6f2d54915b07aa285e9d9b3973a29c72",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/f22_idle_loop.wav",
+      "bytes": 345788,
+      "sha256": "6fa2165c9e3bf7a231b72ba0ed1c0456bdc0caf9dc29065c402707d938a529b2",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/f22_mil_alt_loop.wav",
+      "bytes": 529244,
+      "sha256": "83e3ec73d1bc1c754b3f73741e544f40c29d5062081fadac15d32a6907096cde",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/f22_mil_loop.wav",
+      "bytes": 345788,
+      "sha256": "73da2f024816817d8248d8a9e54fcec046d02e5d57f4bbb531612237ec868781",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/f22_palette_profile.json",
+      "bytes": 2296,
+      "sha256": "a2ff6a75e454971a3477a0cce8cd494c8eb2a71a1408a60b54f4e32f03e1628f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/fa18_cockpit_f14_surrogate_loop.wav",
+      "bytes": 1048364,
+      "sha256": "4f6312519c9f78ef2896efe19b52fc1d68ec0bbb3caef14d9f22ea4bf939e659",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/grit_loop.wav",
+      "bytes": 998444,
+      "sha256": "aaa32379bc41a5debf1dd7df7260c8a95fce6937e374e617136d970ba93e8298",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/idle_loop.wav",
+      "bytes": 986924,
+      "sha256": "a30bda4421e3df9508e81ddd13d7aac918b969ebd12fc856bbdf368dc6ef5cec",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/mil_loop.wav",
+      "bytes": 986924,
+      "sha256": "b8b3b63dabeab0b37a753fdb43733099bb1a297f9d6288862b0ccc5503fb0b0f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/rapier_cockpit_profile.json",
+      "bytes": 2312,
+      "sha256": "269bc890d27b2e9de41819e6bb01f2a1ae31a8fbc6432ae0ab128005ad7a8c0e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/rapier_grit_cockpit_loop.wav",
+      "bytes": 1587644,
+      "sha256": "d06d235db1dccad5b915769986ec16c0c61c1afde8494f743661f85c56e0807a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/rapier_idle_cockpit_loop.wav",
+      "bytes": 1587644,
+      "sha256": "585e3fb2caa9b2ff199b93082b5755813ea0814e264354b4af304adddeb06705",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/jet/rapier_mil_cockpit_loop.wav",
+      "bytes": 1587644,
+      "sha256": "a05ad2ff894eab6b06b76b2ccf1fbf377445cd42cf2319b4b3aae23d1fef1143",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/approach-recovery-continue.wav",
+      "bytes": 113210,
+      "sha256": "539c3bf1a9557e092dabf677cecdeec7b074d9b4bba76ee73407995d87179919",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/control-bingo-rtb.wav",
+      "bytes": 128846,
+      "sha256": "703f1e96a1faf0ad34972f56e15696ade167ac0eb41e496e407f9dc76802f9ea",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/control-commit-short.wav",
+      "bytes": 83756,
+      "sha256": "b5c4b800d7a65e0246cce6e12072c80797ad9a53db692bca3a2f3edc1a55a77e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/control-radar-contact.wav",
+      "bytes": 136308,
+      "sha256": "587a567b1f3f4b86f8da3fbbd60af31efa3bb698938bb6047cf7449a00ee4b61",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-add-power--t2.wav",
+      "bytes": 83600,
+      "sha256": "bf07d7ac51feddc5ea92aa7967eb1eacf103af4f7fff876c9db1ff1303328833",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-add-power.wav",
+      "bytes": 91152,
+      "sha256": "59f9aa3998647acf8234468c2f36930728bac46985f7b694181b0b5f48b942be",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-bolter--t2.wav",
+      "bytes": 56200,
+      "sha256": "9b298253ff2c1b77bade419e24a8a5d4645e4203c2fd874e75ddf3b3398603ee",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-bolter.wav",
+      "bytes": 54670,
+      "sha256": "ca28d041965dac12c4b6e339ff3b84c23bb47ff3907b42b7f187be95e2831589",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-come-left--t2.wav",
+      "bytes": 85288,
+      "sha256": "1ad6ea0f4ce2ecb05372d3cd4cece62f6eaa262d811aa151e1396aa04276cab9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-come-left.wav",
+      "bytes": 76484,
+      "sha256": "3985b828a14d538eb9be72ba658b9b48557c8984af2d186ebde00496cbc20ff2",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-come-right--t2.wav",
+      "bytes": 75324,
+      "sha256": "4812dbaf195ddf30634765fd00480eb768aa0d0bfd6ed5aa8d7ea0de8f97701a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-come-right.wav",
+      "bytes": 90316,
+      "sha256": "9d00353dee58fb2c267edba33b20f62ca7285d4d2e437c1eb2ae5a1db13749e6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-fast--t2.wav",
+      "bytes": 65804,
+      "sha256": "9a5674c68688bd04406be6b631161410f54d7538015f8c27f11cf86411588238",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-fast.wav",
+      "bytes": 69586,
+      "sha256": "772245da8081e85c302441a2d71444a799b05698df106e1334601a13f0205715",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-high--t2.wav",
+      "bytes": 81080,
+      "sha256": "ea64e9efa0ca06e8914d13137464750b97bf0eca9a9ff4a29840081e04f87ce6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-high.wav",
+      "bytes": 65446,
+      "sha256": "bec7500068d67c5e12592b6c95323187d7be2009badb71885d570ebd7b897d6e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-low--t2.wav",
+      "bytes": 64056,
+      "sha256": "1c80ec9f69b685955a141798d3566279c7791f385bf3fca14aa7785dbee7ab47",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-low.wav",
+      "bytes": 71916,
+      "sha256": "29ea955e20c1051b03c97a61c86e08d98851b4eba6587b7f47ca7b91fc0c85f6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-power--t2.wav",
+      "bytes": 52716,
+      "sha256": "af010036563eaa2c7a604b6b639cb9c922ba1b937e442f367a58c7b6a4d4e990",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-power.wav",
+      "bytes": 51800,
+      "sha256": "55fb29c1c626fc4b5c9464100a8e7431056bcf6ae7c274e806343434e5c6f0c1",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-waveoff--t2.wav",
+      "bytes": 71966,
+      "sha256": "268438b7c2725713804e0966b4eb00cc4929f7805eb6af49e4251dbf42bdf028",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/lso-waveoff.wav",
+      "bytes": 71364,
+      "sha256": "00f160300e464a7d9ba5b8cc5331df70e1e80752bbce9235f49131dd94b98d29",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/manifest.json",
+      "bytes": 76285,
+      "sha256": "07ffba9e3fad21f4bd6df045ca7a9d4cc2421ed08fb764d6583fd23db6e99c2e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-base-touch-and-go.wav",
+      "bytes": 187684,
+      "sha256": "0511343526ac5e7e3ded24800959031a150246e43eb1478cae80f5ef24486872",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-base.wav",
+      "bytes": 143496,
+      "sha256": "a008fb5490239e5c0ccd861a530a51fccf088af810708c52f42f5cac018ff12b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-bingo.wav",
+      "bytes": 89512,
+      "sha256": "928e73b0aecdf075c058697d6e3254a0786e96ee6d4f4bd66a772368c6a29258",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-check-in.wav",
+      "bytes": 187888,
+      "sha256": "b21b39e736c1152dba5ed53f0971871272e904dd09fd42e7a529b1b3ae0f5422",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-commit-ack.wav",
+      "bytes": 86486,
+      "sha256": "e2728f6191d72f0d853f811c79781358678a98537bfee4594e1014e6062c69b6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-crosswind.wav",
+      "bytes": 108994,
+      "sha256": "2b18ad48575d1c2819be9355369942f278dc737dd149d9e8e52ca658de2e983e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-drone-away.wav",
+      "bytes": 72158,
+      "sha256": "592c5d6f208ce665dd32b4fb5d8c77088c13b8125a65744793fee5711ca0f2fe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-fox-two--t2.wav",
+      "bytes": 83256,
+      "sha256": "ed0b24e62288483bc15d351662b45e1b45490c15b4e99ea6867134ae18af1905",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-fox-two.wav",
+      "bytes": 67926,
+      "sha256": "94e45e1d47bb77bdc437ea5fe6097818dc2c9b6f7920b2c842a1f2546699a93e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-going-around.wav",
+      "bytes": 119152,
+      "sha256": "1e199284d1b67f8a3128f3117a1905d14dd611204f0b5727d4972a7cbf3e706c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-initial.wav",
+      "bytes": 109260,
+      "sha256": "087fdf1cf0b3431ab03aa610ea084b3b01186496120e0059ae73570de77ca8fb",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-joker.wav",
+      "bytes": 90462,
+      "sha256": "9dba2d10aeb93efaf067cc4b1e3459c72dd600a4c787a14e95e96d98101fc358",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-landing-ack.wav",
+      "bytes": 106908,
+      "sha256": "4526fb011c39782d1de6741363c64562b628bd22c8a536e10425691dc63f7c02",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-recovery-request.wav",
+      "bytes": 207082,
+      "sha256": "8f24387b9a46a0985f60eef3cf3f4d7332de2d3489cf72b847ebe90d83dbfb1c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-remington.wav",
+      "bytes": 70918,
+      "sha256": "03a6be88af06e6fd1b59d52bfbde7c65b4ac3abce70f397a8008916d42f3bc9e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-rtb.wav",
+      "bytes": 141718,
+      "sha256": "07d7ed74079f81ea6a15be5e8276edac02557bd26030fc505131b6efd265e519",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-separating.wav",
+      "bytes": 106330,
+      "sha256": "0010454e0e5d376773708c6d9e4b1f285bcd02ee0b74ab3205e92e84769bc171",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-splash--t2.wav",
+      "bytes": 72172,
+      "sha256": "f25a1548188c39c55d72b50b1b01558d728f7d7c18b501d89ec181c27995922e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-splash.wav",
+      "bytes": 105500,
+      "sha256": "17a6fa30e968c2e962f1dd8778f8f1185201d25cb902c3086389e68cd36a98a0",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-touch-and-go-ack.wav",
+      "bytes": 209660,
+      "sha256": "1e26ed233a35b02743a91b8fec48b44d4d0a5b607ee9fd66746a345e11d61d53",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/pilot-winchester.wav",
+      "bytes": 72208,
+      "sha256": "4a877675420901d38e73ca0b00f391a31a7576d168c97da3004ae5b0d59a6993",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-bolter.wav",
+      "bytes": 113184,
+      "sha256": "eaff97e2b01b871297aa43a7192ea0289257f9d54052650cb2886d5e26c167b6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-break-approved.wav",
+      "bytes": 143332,
+      "sha256": "b3e7864082bd29728db29b8a17e90a7283c4fe092c9e956c18436a5fd56e538a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-check-gear-downwind.wav",
+      "bytes": 142224,
+      "sha256": "4c90d84fb1cf59028e65a622f7150744a52f610d35f031a37b5f642c292d161f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-cleared-arrested-landing.wav",
+      "bytes": 159040,
+      "sha256": "7ce75b29a709e2de3dc9ac95308edecc16581aff078ef7bf36601ed54a8755e9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-cleared-touch-and-go.wav",
+      "bytes": 173600,
+      "sha256": "d9d89ae6b89f962cc05b3fd6f9da58502b0b0adf5710436a68bf3d7ad0aeee6d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-continue-check-gear.wav",
+      "bytes": 155634,
+      "sha256": "edb0d8339b30e37847fbd5677de07f72af9118b871e4ba750472ebcd3b49b2d9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-going-around-ack.wav",
+      "bytes": 81168,
+      "sha256": "66db3e79ef8fce8b39a3199999a07819b908dd93a830d4215524bc232a17e5c4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-hold-position.wav",
+      "bytes": 123310,
+      "sha256": "4a64ca0ea8686f4413be504c0bbe8dac73143f7ae50ee4a59ba1a017015daeb8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-rapier-2-cleared-landing.wav",
+      "bytes": 195974,
+      "sha256": "bcb6a22dadcaeed655012d3215b428589d6af575ca5d462b79c90433b581e8c8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-rapier-3-cleared-landing.wav",
+      "bytes": 203550,
+      "sha256": "9754c9e2dd7c2c3e82f1684eb02062094e3eb3018d016275574b663c8935b35f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-rapier-4-cleared-landing.wav",
+      "bytes": 202308,
+      "sha256": "c5326ae2c5f320375f57e1065a5ac4750f5a2ea15bb3990a468a5e694266fd57",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/tower-waveoff-gear.wav",
+      "bytes": 192532,
+      "sha256": "550323a27e9fe9a753b2685ed0ac737359c7d35627403af9a1b2d5e4b30a1175",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/traffic-rapier-2-base--t2.wav",
+      "bytes": 212668,
+      "sha256": "8b6c0b5c9c28a1be8b88ef943a51417c55510b332ca20cea4786b063e406f858",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/traffic-rapier-2-base.wav",
+      "bytes": 200034,
+      "sha256": "fb8c1ea8593f1780f2180f987bb58c69b15d2b93dad2626f22db2354f231ca53",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/traffic-rapier-2-landing-ack.wav",
+      "bytes": 220232,
+      "sha256": "ded2563d038eabc720a9d114da69b3c5d8d249a4d4c22f1e71d5de4e63079f37",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/traffic-rapier-3-base--t2.wav",
+      "bytes": 217782,
+      "sha256": "fad84b08951e931f2832335d65f6e277e59cddb56f73e862e6863887b2464117",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/traffic-rapier-3-base.wav",
+      "bytes": 214900,
+      "sha256": "b54107c56c63451e83224490ff69292f573cf72d6e4ed180279c5bfbd5a70433",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/traffic-rapier-3-landing-ack.wav",
+      "bytes": 217434,
+      "sha256": "e22141fb31ddd340bac3d623a847539377b42f34fce22f3bb7c0d6fbd1bc192b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/traffic-rapier-4-base--t2.wav",
+      "bytes": 196886,
+      "sha256": "67efa1bfc8a0b91ae5a436ef2b5fe90e3bc952f4cbb06e26d6385b19f798af92",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/traffic-rapier-4-base.wav",
+      "bytes": 217822,
+      "sha256": "b23925c4f7f1e6f100d2467dd64146dc491e593dfad68f2396b58d09242a1e4d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/radio/traffic-rapier-4-landing-ack.wav",
+      "bytes": 209172,
+      "sha256": "0bb9dda0bdb06116225b01ee3fc8a1a36a161ce92fdad599fb5b9cbf13f7f1e4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/rotorcraft/SOURCES.md",
+      "bytes": 2022,
+      "sha256": "617b8ad60d3a89aa326e63cefd142b1549a8f54b69c6ae73f5aebdad7c5440a7",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/rotorcraft/uh1h_t53_ah1g_surrogate_loop.wav",
+      "bytes": 485178,
+      "sha256": "8f6f109ba68a0727c202f82de82852ee2c71d91bcbe1a9350e30c41a3017aed4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/turboprop/SOURCES.md",
+      "bytes": 2119,
+      "sha256": "605f0df993073ac41099beb0a97bd122e47ebc59dbd006cbd7e32b0e2fb154e3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/samples/turboprop/pt6_single_engine_public_domain_loop.wav",
+      "bytes": 403278,
+      "sha256": "1e1685e2b3c09fde200c4ada58741ae27be1676ec48b82da373d5a5995860507",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/turboprop_audio.js",
+      "bytes": 19008,
+      "sha256": "9c5a4f4dc3d32db8d243d4a02a1a1a5c23e63c2132eaa9d9f02e76fa51f32486",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/audio/warning_audio.js",
+      "bytes": 6966,
+      "sha256": "3ad605d7a3c3545710aa650436d51fe91456535b9019ac3b21faeef5c09d9bdb",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/camera/low_speed_lens.js",
+      "bytes": 3536,
+      "sha256": "ed60aeb960a27f495358d6d6a15f1ea293b45353cc63e70155c552ba118c6aef",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/camera/padlock_controller.js",
+      "bytes": 11985,
+      "sha256": "4644dc7eac0f43a8b0a38b149a280a85e263323983f21c0cda5be0f8abf2c3b6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/carrier/carrier_motion.js",
+      "bytes": 1388,
+      "sha256": "fba4d40e789623b488df10fb197c2d9a848fd937bf334a241a082cdc73ec109c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/casevac/README.md",
+      "bytes": 6951,
+      "sha256": "15f33cc90cba86aa74fb7c2262b9afbf10a6ff9f4b658f1da4e8ecda75a9b0ca",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/casevac/casevac_collision_scenery.js",
+      "bytes": 26333,
+      "sha256": "8f7eede0f0d4ffd32b68124d74403e48507d7f7a03ca96c973a2eff81dfc2b93",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/casevac/casevac_course_plan.js",
+      "bytes": 9099,
+      "sha256": "8298eebde9ee9823f12c48a8077d2ff20ed59c622bc216d42997e0efa66a99f4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/casevac/casevac_course_scenery.js",
+      "bytes": 35598,
+      "sha256": "c164f278e4835a76376e2e7fd7e33cb20edf45d34450ad42e2b9984e5d862d32",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/casevac/casevac_mission_presentation.js",
+      "bytes": 44743,
+      "sha256": "a560dcbd4b7da127e404d54131b7598aad38a1885f3f09d6c03988dfa0e1a618",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/casevac/casevac_route_briefing.js",
+      "bytes": 12765,
+      "sha256": "dbdef04e991ef7182c41158842656b52284e731796ce501ed0cc566d813c4981",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/casevac/casevac_route_landmarks.js",
+      "bytes": 15301,
+      "sha256": "d4af3c37b4d6fe9d1d0b701187640a80a303f87601b65ea8e47de9f980319753",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/casevac/package.json",
+      "bytes": 105,
+      "sha256": "0311ae014f042b563f417cb56ca442b5b6cc873efa1a8393230187b58d775cbe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/ah1g_presence.js",
+      "bytes": 10955,
+      "sha256": "468ae15d85822f4fd514184c384503e77a0aa37397653641dc3c08c12e9faee5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_camera_bias.js",
+      "bytes": 6031,
+      "sha256": "7dd6619fcf6c22a8b9443ba7d290cc5e89f981da8be8a75f1c43f2c60e3178c6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_camp_ember_firebase.js",
+      "bytes": 30853,
+      "sha256": "14f3ec8094bd27815c04781bbafe3f10490b1379ffa1e3143ca5a5497879f3af",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_asset_kit.js",
+      "bytes": 101452,
+      "sha256": "9a840fcb2833336d5142b831fd078e6cd4c599c67ed1302e5c2cc407f587cd53",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_foliage.js",
+      "bytes": 7313,
+      "sha256": "71cbde72167a3e66ed4c425c35a45a48123bfdae26d2bdb9171980a3879a34db",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_foliage_models.js",
+      "bytes": 5936,
+      "sha256": "80c3aece0805e27e285b80ac3baf7ad1e7f08d94ac2b8cd24e446eff24c5bee8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_plan.js",
+      "bytes": 44056,
+      "sha256": "91302f622cc4b833ea44d31d78eb4da4c9e2dc7fca6480e0d9935ad9156dbf85",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_presentation.js",
+      "bytes": 108561,
+      "sha256": "05a25ac27bf67f4e81a58b9c00bdcf554d0243d17095409d028519d8ff1077db",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_terrain_material.js",
+      "bytes": 30443,
+      "sha256": "1b20df5fe28a27af73678e8f6e5863342518da6861e5db192ec30951e4871263",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_tour.js",
+      "bytes": 7768,
+      "sha256": "e2546b878ea830957f1170c923bd4c534d2047bed299636974a925a6b8ee7b5a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_visual_profile.js",
+      "bytes": 11668,
+      "sha256": "79b9c3562bebdf88e5da9966db942875ddee1f686ec9ecc45c267ba0c72037b6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_control_profile.js",
+      "bytes": 4500,
+      "sha256": "470d74fe50e85a0eb9ff517a44d3fce86a05cd30da99461683e5095265a910e3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_crew_input.js",
+      "bytes": 2511,
+      "sha256": "c2b80727ed51778b68048e87d41de492ad3f53dcddf5ceb5991695cf8befab71",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_debrief.js",
+      "bytes": 7979,
+      "sha256": "f33e9ba8fc852302ba7c32ea08f0729c88243241cd93615641c9347ec3db056e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_ember_path.js",
+      "bytes": 11338,
+      "sha256": "b4152f58677b4a3c22809b6dc088f732c4284e5a38eab66bdb4ffad9e61ea0b8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_formation_lead.js",
+      "bytes": 6958,
+      "sha256": "d3f52816d002c3463d1666bd98f87280a787e7d5e0c3504ae9bee17338da0ccd",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_golden_path.js",
+      "bytes": 24093,
+      "sha256": "12a9504cff9b9887263bea382a23cc6fc3d56692d5b2322d92c96f6e3349a58b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_ground_war.js",
+      "bytes": 76702,
+      "sha256": "f379f9cf2f894a491a776e7c8dbbcfa2d58d54327d7b235c5893ad27f730f9e1",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_gunner_status.js",
+      "bytes": 2050,
+      "sha256": "dc54502f661716536f89cc6c2304575af39f5f864b055e333a7cb7b686e8a7ec",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_helicopter_fpv.js",
+      "bytes": 4047,
+      "sha256": "ca7db7fa2df71c5eb0cbb5397701437ef4f239e9765cc57136770223112e79eb",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_hud_adapter.js",
+      "bytes": 13238,
+      "sha256": "0b0144bc91f6ff1d775211c7b798d9e33d00690de58fd1f3e6d9bdd799e08a7f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_mission_exit.js",
+      "bytes": 696,
+      "sha256": "7df9f0e2ace3e222c0f84bccb15203780c7735a8dd758804ae9ab1e72432bb30",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_objective_copy.js",
+      "bytes": 20887,
+      "sha256": "5373e0927f2d37ad027a29ba17609f8d5256adff3e6f6136c9fc135833182d28",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_objective_site.js",
+      "bytes": 2793,
+      "sha256": "87f226c14ca8807ad34a113711f62c34900b9aa505b0d7c502a8edbbbd819202",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_parked_airframe.js",
+      "bytes": 2732,
+      "sha256": "d0bb284357298b0988b6952bc6f576a403e9dc368b6f32ec26aa5aa7b19f663b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_pilot_input.js",
+      "bytes": 9646,
+      "sha256": "77518260717dad190f279efa6946e9d77b61aa69fe355eae46ec8ea2243f1166",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_rotorcraft_hud.js",
+      "bytes": 27276,
+      "sha256": "e25a051a28e9ccf8cb738b341d4a15baa9c0cbe955a97062b43d8efd1c56e76c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_sortie_ready.js",
+      "bytes": 2271,
+      "sha256": "149334939ab5587b1690b5e407f342a9e8e45f5ac1af8d0f751f918ae11d654f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_structure_material.js",
+      "bytes": 7098,
+      "sha256": "66d121f63a115a052a32860b19332ece37103305a8725ad43c8d2f0ec2ec49a4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_tactical_map.js",
+      "bytes": 10561,
+      "sha256": "419d9ef214e53a133f8d2e78eb1f92d6a37f2e718c1b8902c1f7c8730ce19a0d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_tactical_map_draw.js",
+      "bytes": 22982,
+      "sha256": "c49d5e7435470c9aa4a115f1bef4b9e0cb40088aa9e702cce78112597ad99455",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_tactical_map_relief.js",
+      "bytes": 5503,
+      "sha256": "3abbbfb5543b1d9053c15429b2fd7bc81f3a3b4496cc5cf74b47fd1f1592698f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_telemetry.js",
+      "bytes": 7818,
+      "sha256": "a2ff2df831c20b3139cb60158b84f222870a693b3fa7582bdac0106d431f96cd",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_terminal_causes.js",
+      "bytes": 1566,
+      "sha256": "9a5a8666801b654f7580837a74bac920fa010cf14455ac84d133f435ca08077a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/cobra/cobra_turnaround.js",
+      "bytes": 1644,
+      "sha256": "83b151c3ed4c9664fc9c6a891fc226adcdeba6b6967e31da11e323f09529dbc7",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/debrief/points_ledger.js",
+      "bytes": 2143,
+      "sha256": "e43f02eeb47954d667772f746733e074a67313924af9f6d32c78738199f7a4bf",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/debrief/sortie_result.js",
+      "bytes": 23009,
+      "sha256": "0652f83224f628d7d2858237f36440b84232e79a524283a0b985181286ca0833",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/effects/README.md",
+      "bytes": 923,
+      "sha256": "5921889dd701e2aed0a9fab3c09b65a3bb411d8dd5e95eea41610641c962c3cd",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/effects/damage_smoke_trail.js",
+      "bytes": 5569,
+      "sha256": "bed1db0a89734954d08ec7bbfba562c5c6f27550999f1b34866dc5d3a1f0e72f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/effects/korea_gun_effects.js",
+      "bytes": 18341,
+      "sha256": "c0e2eadf51e70b72c11d6eff68d2851c684c3fde90bd5fae08c88558519196ee",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/effects/package.json",
+      "bytes": 105,
+      "sha256": "0311ae014f042b563f417cb56ca442b5b6cc873efa1a8393230187b58d775cbe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/effects/rapier_launch_fx.js",
+      "bytes": 9274,
+      "sha256": "480bb2dc8f11268885acda201a4b54da1c0cb1a311efd522a51c4e4d3e70336e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/README.md",
+      "bytes": 1081,
+      "sha256": "cc341e67fd396f5d89574fe7f63d5b025ee4fdea5a4fff7935e8120ee80688bf",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/first_run_valley.js",
+      "bytes": 42906,
+      "sha256": "e768acfb0c24fbf9cfa42bd6e76ab014f024c68f2b82b551cd51db30b30603c4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/korea_environment.js",
+      "bytes": 16632,
+      "sha256": "139cbf3f8388d88f850a1f1233ef800ea0f042cd23ff54bebd253d530171f632",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/korea_scenery.js",
+      "bytes": 51563,
+      "sha256": "18af6a7c060cd795c1577e6a9cf455867adfc8586a16c9124c17912492acbf8b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/korea_scenery_planner.js",
+      "bytes": 37041,
+      "sha256": "e09189fee6e99376e6eb493e657df23f911d7bc385260a49d637aded49597f97",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/korea_terrain.js",
+      "bytes": 142197,
+      "sha256": "0a65d7dc8dde0837a720e0c11411074c737bbeda0e5b94b24e23d39ef46e1f46",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/mission_features.js",
+      "bytes": 47441,
+      "sha256": "3a2d6f52c88dffdd7e43fba3e2dcb9ea8b5c0687161d596644554f92801274d2",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/package.json",
+      "bytes": 105,
+      "sha256": "0311ae014f042b563f417cb56ca442b5b6cc873efa1a8393230187b58d775cbe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/soft_world_atmosphere.js",
+      "bytes": 5680,
+      "sha256": "8f2400990049a10feb37122ed7cd115dd8e4996135772f966e4280ef55a0eb6a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/tactical_clouds.js",
+      "bytes": 52613,
+      "sha256": "aa124ca1bcf8bb3596c929d551b49e81971c040911d16e9c474b32b1f979fdbf",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/terrain_launch_owner.js",
+      "bytes": 2296,
+      "sha256": "9909b9a4433a4b573738143db681d61097078c71aea70e55f62f9bfb9917074b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/terrain_mesh_builder.js",
+      "bytes": 23508,
+      "sha256": "51a3e980db82cd2fbddf9ad9f0260ba1b41620fe437df1c3731075e51d273cf3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/terrain_mesh_worker.js",
+      "bytes": 2247,
+      "sha256": "bd476342ff1f251d9542eb15f615fda4f5e19b0d4e52205f2d943a2ca5c2d7b4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/terrain_presentation_route.js",
+      "bytes": 1173,
+      "sha256": "000b9b175a7df6a4854b89ea5494064e73e8b642ceb06a38ad026e631f9dc6be",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/terrain_shadow_receive.js",
+      "bytes": 4555,
+      "sha256": "27c489bed2f04baa49bf35679c777c7f5e03dfd2788b8f4605bb252941cd0b63",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/environment/winter_precipitation.js",
+      "bytes": 22338,
+      "sha256": "375ed374082b6a52e86333f81e46e64eefd2a859fb0763b3fb32348a48fde250",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/events/presentation_event_stream.js",
+      "bytes": 2843,
+      "sha256": "81f20caa23d7bba47f23544e53857817572e33b1f4d3d5ee2baea68d0fc279e9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/events/session_event_cursor.js",
+      "bytes": 844,
+      "sha256": "9146da34710e43d4819406509331d9460320442b731e969ad265084f6fd58c9f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/approach_energy.js",
+      "bytes": 3573,
+      "sha256": "8ff8179eb9bdd3d21b6d7e430fc9fb291a9e949459ad977793b2901f2fcf485c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/carrier_sa.js",
+      "bytes": 18535,
+      "sha256": "00490ac9362fcda85527e9e159d91285c71fcc1d28b8ad2631fa85d4af67f378",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/contact_range_tracker.js",
+      "bytes": 3346,
+      "sha256": "6b8883ed73243bd0f4200bde840f575af71d1898dfb3a62967c861542247c943",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/contact_visibility.js",
+      "bytes": 705,
+      "sha256": "c5a188a86461909c1f9f7214d778e4aef5d620bad7157553ca08ae9fd0926a7e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/fighter_layout.js",
+      "bytes": 3894,
+      "sha256": "5af0d45ce6446c0709193d8148fbd0045ab1245e5306cff351327a5553ed0c26",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/gun_funnel.js",
+      "bytes": 5426,
+      "sha256": "e9b66438cd734437fcbca29759f52352cefd59aba21b295896db55fefd8dde35",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/hud_legibility.js",
+      "bytes": 1674,
+      "sha256": "22d239e881ab845ceb8da331a68e69e06b146f1f0704c7bef1014c0a2f92ecc7",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/hud_phase.js",
+      "bytes": 4954,
+      "sha256": "acb9bc877177f7f60cd7cffae0e435f781a047b8f20f123ce9ec2599335d7e5f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/hud_readouts.js",
+      "bytes": 31428,
+      "sha256": "0084b8ead0877b263a81efa27a69dc2a12f269ff236dfd2da39ea49f6647ad8f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/hud_stabilizer.js",
+      "bytes": 11401,
+      "sha256": "60fc5bd9dde9e6f4e337e1f3ebded1746c74a647c889813ab0497025bec11f62",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/limits_panel.js",
+      "bytes": 11057,
+      "sha256": "9c9c8727f85f45ab8a26ebe02696d244548d022f93daac4799684ac6e14f7cf9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/mission_guidance.js",
+      "bytes": 15480,
+      "sha256": "02400c77eac17d82f2a9cf77644313e7e43d10205db4ca62af5e3b1b026097d2",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/sortie_power.js",
+      "bytes": 580,
+      "sha256": "3c00f9d5ceda63c97735967d88a6634cb1b15cb731c599cb8a82f96bd509969d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/stable_cues.js",
+      "bytes": 3671,
+      "sha256": "8f595a26216f13c1e7dc8bb38f05275646de9db12e8d2542f3647f53574cca0a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/hud/target_data_line.js",
+      "bytes": 753,
+      "sha256": "e85589274b6bcb6a815a472074e074b79965ad451290a72328a74843f409a7ad",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/indoor/control_policy.js",
+      "bytes": 1393,
+      "sha256": "13717d2ea2e50b879e95ffd7e93a36396e7f137038aae56795862417a4272e26",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/input/README.md",
+      "bytes": 1208,
+      "sha256": "32f7a4fe4a8c297a442071eb487a2347db0235fa04a62d120f189622bacd72a4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/input/dual_stick_input.js",
+      "bytes": 2860,
+      "sha256": "0d1c14070ac86411a3a66f6697b9a3469a9a42ce4aa38de4965ff5c340860ab1",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/input/look_gesture.js",
+      "bytes": 1766,
+      "sha256": "2f0f0e4d86e81d97cb3e20a8193ff906ee566ce911855631ef241ce26d025503",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/input/mobile_control_profile.js",
+      "bytes": 1855,
+      "sha256": "a3a8ef9c1dc5e11af7f128ca2aac54c806416de3fbc4cf2ddb8f7b5f3c59d841",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/input/mobile_throttle_rocker.js",
+      "bytes": 1788,
+      "sha256": "8f9e9007b78ff436a81d2142b84870da635f2fa94cf16ce2bfcf34e36cc47e3a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/input/mobile_tilt_input.js",
+      "bytes": 8347,
+      "sha256": "1a07a8e6d36d00573896298ecc0d3a8d829b5346cd1175aa7204cb0ec2bb9de5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/input/mobile_virtual_stick.js",
+      "bytes": 3022,
+      "sha256": "2e97a0a348944742984ff82bbd158e43b5fe7bc1964a9e1d05d16eacf5d90b72",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/input/player_gun_target.js",
+      "bytes": 4092,
+      "sha256": "455093e387de7ee56fffbb02fb2d53830654d4d2546ef0341bf06100dea266e5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/input/throttle_rate_schedule.js",
+      "bytes": 3651,
+      "sha256": "1507dec869c776b311e0b1547875f4e954468e0e5368f2a27f22685c3eb8d580",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/medevac/commander_view_model.js",
+      "bytes": 4000,
+      "sha256": "fa43d8433d945d2d8fb302df2705b5d71077e2106749d383d67049044b6bb223",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/mission/rapier_guidance.js",
+      "bytes": 28355,
+      "sha256": "5d43d4c6b57490e3c9c92d5c2c1e90e82aa524adcafec5a37b2322bd46013a24",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/mission/rapier_high_mach_instruments.js",
+      "bytes": 19925,
+      "sha256": "772a2e0f9033c8ffa714c1a63d7c9645dba99ece5699b207c7fb3f0d57b2656b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/motorcycle/helmet_hud.js",
+      "bytes": 24850,
+      "sha256": "d55e0c41f97b6666fd5acfb5640918f723ff3f2b90455d8ce041bbf9b3ac5377",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/motorcycle/rider_input.js",
+      "bytes": 1191,
+      "sha256": "0faa0b9f553270f9e00a37c4fbb249e9e388cfac83bd13178b8c01dc14eda38c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/motorcycle/track_day_presentation.js",
+      "bytes": 44207,
+      "sha256": "66114131c970d2f8d8ceb08e88e9c28a798f1b2dbf98dd13e05ba8708794e276",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/motorcycle/view_attitude.js",
+      "bytes": 390,
+      "sha256": "8dc033826255b1d707889db460e26cbaa632fedf9c17a48bf1c9ce40fb479d0d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/nav/carrier_sortie_route_presentation.js",
+      "bytes": 9256,
+      "sha256": "2c5c8ad40f85c6529972465e95ed60089c39f78e0481f24ed6b5584624ec55d8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/nav/carrier_sortie_touch_control.js",
+      "bytes": 982,
+      "sha256": "0706b1ff52ec96b2010221070acc8a62c620722d49fb197a97f401c5d91317d3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/nav/mesh_nav_map.js",
+      "bytes": 11749,
+      "sha256": "561797c8a192ab6114d97e7652055aaeb6bdc34dfd0c6ffed896e9e558f4619e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/nav/mesh_nav_presentation.js",
+      "bytes": 7829,
+      "sha256": "5cbee3b5f720a3a21cca52956d56dfb9414a272d4726046a90cdbae912ddd121",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/nav/mesh_nd_chrome.js",
+      "bytes": 7776,
+      "sha256": "cd97795706af0c240bc90d8dd293f41145056cee30608156d67af6e0b5130c24",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/nav/package.json",
+      "bytes": 18,
+      "sha256": "1239d4d885dcad42201a27ed9324f8f0f760b78700d8db9ced39a511cffe7eae",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/fireboss_cockpit.js",
+      "bytes": 352,
+      "sha256": "d75eda5fb4a398b4b1c83480d4f4503da34054c61ee9634c49bc1f99f84dcae8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_debrief.js",
+      "bytes": 6573,
+      "sha256": "7b26b1f3cf437f78012d6aadd05bf0813fe5eda3bb9771754a7dfa4c989b62d3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_dialog_focus.js",
+      "bytes": 972,
+      "sha256": "6ac01c8a5f9cd5d62bbf0f233b5c87002011980d98104e93e2a607b4cff8c7a7",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_drop_curtain.js",
+      "bytes": 3036,
+      "sha256": "ee07cecd6194c2152fb7ee492b374acf78b8ec9875ff379cdf51dde42e3e6ce0",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_fire_effects.js",
+      "bytes": 15574,
+      "sha256": "7e69ce1cb2d521eacf05ab7bc53859d6f0fbfc3d19ee49f9039d0c5599ad6893",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_highway.js",
+      "bytes": 6014,
+      "sha256": "d03ba52cc29584f2b06e027d70369cf870f227a2438c291958bb971841c7f3f6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_hud_adapter.js",
+      "bytes": 7977,
+      "sha256": "5bccaab3fcb10b2a469b61ae219bad1b68c7d17f262e8a42aef24d7152fa49d8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_practice_target.js",
+      "bytes": 1628,
+      "sha256": "9d703d0425493d6f0a97f5e110f0b8fc1d25525862e81603f9470bc98b374420",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_site_markers.js",
+      "bytes": 1406,
+      "sha256": "026a76ccc2b8efd66234bbd0df960c2ba9fb1fdda30caed1e599200b48dbebe1",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_targets.js",
+      "bytes": 2946,
+      "sha256": "9c86791d4d7712f20e096ac8b384e2b4259a17c4007707e7ca46f10ff3a2f0c9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_traffic.js",
+      "bytes": 3029,
+      "sha256": "3c0e30151574b93d046344c243804950fb1791b326e33600d0a87a3264284811",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/okanagan_world.js",
+      "bytes": 34506,
+      "sha256": "ec352e0e481bedd565049e2c9c6efa75b08e6d1827ec54b1ba4dcf7d9fbffce6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/peachland.js",
+      "bytes": 6527,
+      "sha256": "d3c5ef7d74c6ba8c4fe3098815109dd1144920869ceb7bba74d9136920b087d3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/okanagan/resorts.js",
+      "bytes": 6503,
+      "sha256": "a99b4fdcd8d5e006d0b34599fae205e454a4e967f2cbdcd152bd80b777e93cf6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/onboarding/controls_content.js",
+      "bytes": 4110,
+      "sha256": "f89d16913cee8ff761dc4db1e9ecf1331e67c7b4ce22f99a2bc0d3af5d886afd",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/onboarding/disposed_page_restore.js",
+      "bytes": 475,
+      "sha256": "5ee8b2c3a79966f927d1a4ca83fb82fc9fedeccbc8be64c87e2965a3762743f1",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/onboarding/first_run_controls.js",
+      "bytes": 16255,
+      "sha256": "b6ff7e100ba2c26e07447dc0c0b0c6dc3bd2600b48e784658ed413a7d46c4a92",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/onboarding/first_run_valley.js",
+      "bytes": 2242,
+      "sha256": "e536ecc385f7310b3104c37a08736d8bd7ef5f25319a0d8924f6d9fb4205906f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/onboarding/modal_focus.js",
+      "bytes": 1312,
+      "sha256": "33f21b76cad61cdfeed2c85298851712841794be59e45638d0c954bfe1b03117",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/onboarding/pilot_notebook.css",
+      "bytes": 1787,
+      "sha256": "bc976dc81ce62e74f96c86fd7e408a9df4f346985573f285d37361717a9415b0",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/onboarding/pilot_notebook.js",
+      "bytes": 5368,
+      "sha256": "9e10e73f8b7543aac202a3c6a01770362afec4408c9701ddf5c5b0847ad26d54",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/onboarding/practice.js",
+      "bytes": 2126,
+      "sha256": "c480a67dac2370b2794a22166022b4da33ff4601b5c7a2c03499d79bdd5620ba",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/physiology/g_tolerance_presentation.js",
+      "bytes": 2830,
+      "sha256": "2917d4bc7e790ac3f94c5e343926f60ee8bf628971c0003111314a91a303adf6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presence/global_room_client.js",
+      "bytes": 22713,
+      "sha256": "654a0bfa8f11461241698d9ff9d1f5b70a31f33dc5bc923687bb6a8a74f2559a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presence/package.json",
+      "bytes": 42,
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presence/presence_presentation.js",
+      "bytes": 6531,
+      "sha256": "cb8ccbb42f4afd6bed6b949ca31ea7d82e3fc6a34ada279ef9bed96ffe1fd9d9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presence/remote_asset_policy.js",
+      "bytes": 2643,
+      "sha256": "ecfff70b23d15fc3374e6fb34613dd93d539140a91dd8c1778c44ebde0c27a68",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presence/world_origin_authority.js",
+      "bytes": 1154,
+      "sha256": "11767e46365e3eb659b929362622c3d743bca86986b5913b0d15a92e9ccda2b3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presentation/README.md",
+      "bytes": 5096,
+      "sha256": "d280e5378e976622f88ec52cf900c588caeedeead3c9ad3563167eb2ccff1de5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presentation/cockpit_head_motion.js",
+      "bytes": 11749,
+      "sha256": "36fa31c3a0e4c70c0839b28ff3c0aa81ebb88b6ecb2c677b6ac0dbed2ae68342",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presentation/distant_aircraft_impostor.js",
+      "bytes": 13280,
+      "sha256": "ef82bb57d08d10cbe26240d8a34fb389c9168405fa4cb4bd13f0118c9f2fc374",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presentation/escort_formation.js",
+      "bytes": 1961,
+      "sha256": "d1c7a3f94748e15ef36186b8341e072461ef47aaa7ea05fa2af157f76f66c1f3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presentation/f22_canopy_glass.js",
+      "bytes": 3211,
+      "sha256": "c0efa22bc0aeb65a9b2e8d96d1baf1ccd764cdb04d268fe00c81c967d3fa4ec3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presentation/index.js",
+      "bytes": 993,
+      "sha256": "8588304a1b46a9f646c9260c605f58729a45ed3c33287a85dd3b7213b04e433d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presentation/package.json",
+      "bytes": 105,
+      "sha256": "0311ae014f042b563f417cb56ca442b5b6cc873efa1a8393230187b58d775cbe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presentation/period_gunsight.js",
+      "bytes": 10828,
+      "sha256": "dbaad65bfd5fffa1c8bc1c6c581775fa73f75f6c7c927e16a0a0ed1c0372dfa8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/presentation/presentation_math.js",
+      "bytes": 2520,
+      "sha256": "6b4396e6e3410ab689410870b4ae604aae24adf8d842cfe6753cfd5735e070a7",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/progression/campaign_progression.js",
+      "bytes": 13197,
+      "sha256": "89a4ad7678f59af735bcccd6ae72d6f604b209ef4968b6489b0a55a0281d57ca",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/progression/package.json",
+      "bytes": 86,
+      "sha256": "c2642b789bcd28728f52b08d8dc018319e528711e1018e3f9627546bf2cda50f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/progression/pilot_logbook.js",
+      "bytes": 6467,
+      "sha256": "5f110637421c84d6f9913127fe62ca6162f4d4f18ce2be7ed39ee4f20b9c53ff",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/release/package.json",
+      "bytes": 42,
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/release/quarantine_gate.js",
+      "bytes": 4710,
+      "sha256": "91684e3203f4ab530171290546f4145b49e13540d38cea0eada7081263d71e32",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/release/release_identity.js",
+      "bytes": 6624,
+      "sha256": "c81d90db4b4a6561187f3a81807b9222131e8420de4a2d7f79d21e6e74cd7bb0",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/replay/incident_replay.js",
+      "bytes": 40357,
+      "sha256": "a37cae927d89fa4f4822bbc16cd9b4e379aef295104f31087268aaed45d552b9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/ride/ride_best_lap_store.js",
+      "bytes": 3501,
+      "sha256": "090ddfe80f21b9539bb76efeebcf64e6917bbe19eea044aad2eef809491c0879",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/ride/ride_timing_readout.js",
+      "bytes": 2524,
+      "sha256": "6759f193f1a7c875b7942af3c1f9302a1d49e6a32370baedb772642e4024c2a3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/ride/weekend_ride_lifecycle.js",
+      "bytes": 396,
+      "sha256": "c4ff1001bfc595322f5996a52f71f0e4153d9764f4aef4e4d3df5a424c017f11",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/ride/weekend_ride_result.js",
+      "bytes": 3641,
+      "sha256": "1431a62a9037d3fe888c956d44c013bf615c9026f5065cf093d612c39ea29fb1",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/scene/airframe_from_definition.js",
+      "bytes": 7442,
+      "sha256": "8782ed6b6e999ca2f8432f627907ec27e1f5ffac0709b316a0fd727501e37e46",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/scene/airframe_primitives.js",
+      "bytes": 6570,
+      "sha256": "d590b770210cddab363eb5ae3dade6bfe950d05948936c241d958d1249ef5a9a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/scene/guidance_path.js",
+      "bytes": 35199,
+      "sha256": "e6e0c8b2362bd0617d67271f5cf2f51ba6e78f3d7ec23daf76a407b16eb4ad00",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/scene/high_altitude_balloon.js",
+      "bytes": 6199,
+      "sha256": "5a8d7d2adda5434e2aadd69baa29aec6f2014a2a93edcfd3cdedde1d90946f6b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/scene/scene_builders.js",
+      "bytes": 127247,
+      "sha256": "7269a2589fd80d831f3ae68a26948e258ea24100c2aedb177a0f018dfedd5127",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/scene/shape_first_airframe_adapter.js",
+      "bytes": 13061,
+      "sha256": "fcba05bca242c62b3c27a5101028e7383bc2ba46b6cb070fdc5ad5a99d733f0e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/settings/player_settings.js",
+      "bytes": 7870,
+      "sha256": "239513da431c4df8805d35cbfbffd721d1ba2447a21c08a99b825e10657f557d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/shell/boot_fallback.js",
+      "bytes": 5500,
+      "sha256": "f038842f9867b29fdb3a9bb288d5012b6534d750e023d0dcce86c4be30c0133e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/shell/boot_watchdog.js",
+      "bytes": 5798,
+      "sha256": "949fb4ae43c8ad4719eff6451928d77a8fa09c1332f058401622fcd39068cbe5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/shell/inapp_browser.js",
+      "bytes": 8269,
+      "sha256": "c56cc38bcdb5d2a6ec32eed3053da308128e42446fc080e050e148c759a84583",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/shell/package.json",
+      "bytes": 23,
+      "sha256": "3ca9d4afd21425087cf31893b8f9f63c81b0b8408db5e343ca76e5f8aa26ab9a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/shell/standalone_navigation.js",
+      "bytes": 2224,
+      "sha256": "9aea3cd4db1202c316cad0464b0f7091e9329bc72a55129d8d4cd19b7014eeef",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/state/hot_snapshot.js",
+      "bytes": 7389,
+      "sha256": "cea1b19d5c76f6eb161751ef65fae5ede5a629267d166dc11c9ad4eb4584d062",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/systems/package.json",
+      "bytes": 105,
+      "sha256": "0311ae014f042b563f417cb56ca442b5b6cc873efa1a8393230187b58d775cbe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/systems/test_flight_console.js",
+      "bytes": 14537,
+      "sha256": "862de2aef7a990e9dbd94e6c2ab52abd2016f4726803cc7703ff0dfe48017b2c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/telemetry/ai_frame_pressure.js",
+      "bytes": 9211,
+      "sha256": "399514c1fff03578f048844dfb562fd27774cf8a5015270512b02b7ec4498f04",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/telemetry/frame_contract.js",
+      "bytes": 940,
+      "sha256": "0ea856a792e014e89f9e93569166796ed4cb9f3fde9b8b38bf8d19ae10b4e096",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/telemetry/frame_governor.js",
+      "bytes": 15743,
+      "sha256": "1aaf7c582eb9e8d20df2e1602951750b29f0f4edb63d5b686ad71b0a76aca9f5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/telemetry/frame_perf.js",
+      "bytes": 11292,
+      "sha256": "bee4cc0d47832bba69e1e05ec1e7da2e21aebaffa8cb646881a9afe9f9222ab8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/telemetry/package.json",
+      "bytes": 23,
+      "sha256": "3ca9d4afd21425087cf31893b8f9f63c81b0b8408db5e343ca76e5f8aa26ab9a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/telemetry/sample_scheduler.js",
+      "bytes": 6123,
+      "sha256": "47aebf46d88ca92010cec1b39e34825e452af588f50896d9ef42e5009b67fede",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/telemetry/shell_health.js",
+      "bytes": 11370,
+      "sha256": "a48133e542b99d4090df1fa752b3db3314e37c78f24b95c3f6bfd5a17d17a411",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/telemetry/state_delta.js",
+      "bytes": 7996,
+      "sha256": "da39af019852408a1397474e4b9a1377dc321c3b60308fbbbffedf4770d8664e",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/telemetry/telemetry_batch.js",
+      "bytes": 6736,
+      "sha256": "ca2c3775116c04f761d62b5d9e44866b8c774a70ce923989b85fc39829edaf3f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/telemetry/time_compression.js",
+      "bytes": 4148,
+      "sha256": "9c93a2d163cbcba85b30e08e3ce162069cf3d29226ebe5605bb9be15a9c57d0c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/top-gun/aim9_presentation.js",
+      "bytes": 2976,
+      "sha256": "2c1dcb56d4ba854ddad2f1d5c165008622fc18a8e155d8ce7ed62f222b7d2a39",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/top-gun/mission_authority.js",
+      "bytes": 3448,
+      "sha256": "e0115b8477bda81b9ddd9fb795825a7c9e73cca865f2dce72d7b12c74a4894cc",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/top-gun/theme.js",
+      "bytes": 1066,
+      "sha256": "d8a4600c2a9db4c9d9285bbd38235b75fdc7ec357bbe90aa0fc9c8103175df21",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/visual/README.md",
+      "bytes": 6687,
+      "sha256": "db363ffa5998bcb37fa691acb5f73a9f4cbc020faf54f04162381c2f1142de40",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/visual/adaptive_resolution.js",
+      "bytes": 8319,
+      "sha256": "6e62f245564269ec8e6732356443e7512c65d57cb65b23f1f44a99b1686b4b53",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/visual/async_transition_queue.js",
+      "bytes": 667,
+      "sha256": "f2a3b764814be416f67740eced75f9cbe7c37b69f6878329f7a0f25b4bfa19b8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/visual/index.js",
+      "bytes": 631,
+      "sha256": "d9db0f7fa4fe43606d466c329c8de04dde9fadc34af9b466156dd455a5754ad7",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/visual/korea_pack_adapters.js",
+      "bytes": 4415,
+      "sha256": "b85e5629bd97a77db093bc58a66f3f3e0bfa8de56d15cdee5566bc78ae96c3a9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/visual/package.json",
+      "bytes": 105,
+      "sha256": "0311ae014f042b563f417cb56ca442b5b6cc873efa1a8393230187b58d775cbe",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/visual/post_stack.js",
+      "bytes": 8209,
+      "sha256": "dc97ae3ca3a02a726fdb0e9f88e89631eb6c038d2de79b1054bd96d1aa18f160",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/visual/profile.js",
+      "bytes": 11282,
+      "sha256": "b51aaa709a13ed1de235efe7f2bb8fc37aa95431de809b94a46169e5771601f3",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/visual/shadow_stabilizer.js",
+      "bytes": 4712,
+      "sha256": "b0e7893156c66c8806204dc7c59d9fbeb26473f5aba673e2da3435b00506254a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "render/visual/visual_runtime.js",
+      "bytes": 14173,
+      "sha256": "853e1889613ced970c57395716eef8888356633daa048cd08204af5c2772956b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "service-worker.js",
+      "bytes": 15952,
+      "sha256": "7c3598ce1a39895cd70dbd262a5354bf7eed4d117d6fac3682463dd1932b6e27",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/README.md",
+      "bytes": 3390,
+      "sha256": "ec433c94b01e55fb775e652550734ccbe92fbf401b5a8fa7b303e8a1044150a5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/package.json",
+      "bytes": 42,
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three.module.js",
+      "bytes": 1272972,
+      "sha256": "76dea8151bc9352aef3528b4262e249b2604f62543828328db978d060d61a495",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/LICENSE",
+      "bytes": 1081,
+      "sha256": "852e0e8699169bf9f6fdc6bda3e682d078dcbc738b5d33e74df594721bff271d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/POSTPROCESSING.md",
+      "bytes": 3292,
+      "sha256": "a826e7537085f3259246919ce5ec6489720fb3b1aef11135bfaa33470b635cf4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/README.md",
+      "bytes": 2060,
+      "sha256": "ae2c229934c39b2ac6b0b3a1552963e559dd903b76a8340a3a2ff610721d6c30",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/controls/OrbitControls.js",
+      "bytes": 29887,
+      "sha256": "c9733e698c7deb5718fd365dad26e40c811181e8bcb04b499f8261fee8802b6b",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/exporters/GLTFExporter.js",
+      "bytes": 77733,
+      "sha256": "904a8a89c6fdbe6c37a0340b644e16ef586b014bc44c63f616652f6d812d2179",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/libs/basis/README.md",
+      "bytes": 1448,
+      "sha256": "930b11bbbb742b2525491b0964f0462d63d8b21383c0623ec4c98c43d53723c6",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/libs/basis/basis_transcoder.js",
+      "bytes": 62337,
+      "sha256": "48a0ef319a28bf0224ee88ded34f74eaf97c175bba9eb18b47fb9720510ad6c4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/libs/basis/basis_transcoder.wasm",
+      "bytes": 499935,
+      "sha256": "79ae97d781e10a566659c689b7bb1de91726453f55f9f5e3bcc07a4e3904070f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/libs/ktx-parse.module.js",
+      "bytes": 18676,
+      "sha256": "f73948e7bbf8db386076fda0458160bdb50ce2e11e88fa7da0f339e1ec547493",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/libs/meshopt_decoder.module.js",
+      "bytes": 24850,
+      "sha256": "01f48524f4bac6141eaba07e94cc36e7ee56f311796fa6117c159842941b0468",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/libs/zstddec.module.js",
+      "bytes": 39754,
+      "sha256": "5cbf818e842628a4464e748594a6deae18ceddda3c2f541e7b3a0ff5fc7611e2",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/loaders/GLTFLoader.js",
+      "bytes": 108541,
+      "sha256": "1a812eb5fd196efb139dbd89067129b8cd38e98f86cbdc5faaa854b32c49bbac",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/loaders/KTX2Loader.js",
+      "bytes": 22608,
+      "sha256": "9519983933029aac5f3e7784d04b4dd6c0aad73dc39da3cc9d43671d2f857a7f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/postprocessing/EffectComposer.js",
+      "bytes": 4670,
+      "sha256": "66942c78ecfb2129bd81e01698f0bd25a29552fbb37be619107a21c3284422e9",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/postprocessing/MaskPass.js",
+      "bytes": 2231,
+      "sha256": "328cf7db0da5d9be83ffe39d54b01d5ac1fddf108cc98182ddbb056f5c8b537f",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/postprocessing/OutputPass.js",
+      "bytes": 2417,
+      "sha256": "1ae50319ebb75055eb8c33043808b4ef3350a5dc270ed272800b90242183b3d5",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/postprocessing/Pass.js",
+      "bytes": 1725,
+      "sha256": "8849b45aa211656589a7fe8fe23b5d2efe12ef0782e998d8747fd2bc3d829e35",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/postprocessing/RenderPass.js",
+      "bytes": 1934,
+      "sha256": "b598595dc954db43bfcad6a271d3e1c346496b416943f6ac0d78be7504eb3986",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/postprocessing/SMAAPass.js",
+      "bytes": 49486,
+      "sha256": "64c002a33c83b1f7f57ae29cd890d27fddbe0c92e3518e01112ae5d11987cf61",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/postprocessing/ShaderPass.js",
+      "bytes": 1595,
+      "sha256": "f4fd1b5179ed02ec7087d6616a37a862afe8b2c1e34a236b392bd0bc00004edb",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/postprocessing/UnrealBloomPass.js",
+      "bytes": 12425,
+      "sha256": "c55fa6f4b2cda2cad4906916e981963a4708656d377fb47a6c3537b106437140",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/shaders/CopyShader.js",
+      "bytes": 571,
+      "sha256": "4e3346db194db56a596cd074e9bdb39fb5eb52040c333e0d29dc4eb1324d3b1d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/shaders/FXAAShader.js",
+      "bytes": 8496,
+      "sha256": "c93c361fece80066b73fe2afbca3cbb559dcb864934376afe0790aba145d4f22",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/shaders/LuminosityHighPassShader.js",
+      "bytes": 1211,
+      "sha256": "979bb8227b966ee03bd7f9785280b55ed367a40dd02a82c5e59134378ef8d174",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/shaders/OutputShader.js",
+      "bytes": 1392,
+      "sha256": "3196359f5ebf420a93c56085f74521918e58c10eaab93b51d50167678540bd6a",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/shaders/SMAAShader.js",
+      "bytes": 14647,
+      "sha256": "e9ad996d4b30dd2c1502ece411fae089cb0bf0d3b5ce11932548ddff9aa71c83",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/utils/BufferGeometryUtils.js",
+      "bytes": 31925,
+      "sha256": "9ea34174671e7974c840a88476e6a7f77a9ab72ddadab73f201117351684e519",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/utils/TextureUtils.js",
+      "bytes": 2380,
+      "sha256": "63af449a54f3422b78a9168e43668b33646f6b27579c7c5914743403f9e073c4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/addons/utils/WorkerPool.js",
+      "bytes": 1712,
+      "sha256": "94ff7b608caf3b827ffa95bd6092b9d174732b856915b38ed006b4f049f95675",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/licenses/BASIS_UNIVERSAL_APACHE-2.0.txt",
+      "bytes": 11347,
+      "sha256": "065fcf48d6af21c0b75e23be5ed5753aee75c892e1c2cf178fa6736305614a5c",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/licenses/KTX_PARSE_MIT.txt",
+      "bytes": 1078,
+      "sha256": "79847431f9ecef9cf399085cb863452e71a6dab99738f4f0c1ea06c6484b5692",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/licenses/MESHOPTIMIZER_MIT.txt",
+      "bytes": 1079,
+      "sha256": "af0399f6fe106205872fd58c25f5a33fdefd34754b6d96d3f6b4307eb17d05ed",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vendor/three/licenses/ZSTDDEC_MIT_AND_BSD-3-CLAUSE.txt",
+      "bytes": 2617,
+      "sha256": "8d078b49fc02bd63c1beaf4ddc629a8b48e4ba6a435415408c8209e2a5c3aacf",
+      "alreadyMatched": true
+    },
+    {
+      "path": "vercel.json",
+      "bytes": 2640,
+      "sha256": "ebd3d39dca8ec33eb26f1e88d7ce506aa79d26213ff569581ec4c038be8676b4",
+      "alreadyMatched": true
+    },
+    {
+      "path": "weekend-ride/index.html",
+      "bytes": 8699,
+      "sha256": "fd0a3a94fca48d2d3b942bbdf5ea0a3a33772cd4ff4be6baca72f6ab2725717d",
+      "alreadyMatched": true
+    },
+    {
+      "path": "weekend-ride/main.js",
+      "bytes": 39226,
+      "sha256": "6048a811ba07508356d84b5dc2d43f0202d21f5df2e61556c38e2d8fb59aa8d2",
+      "alreadyMatched": true
+    },
+    {
+      "path": "weekend-ride/styles.css",
+      "bytes": 11825,
+      "sha256": "ae260c613d3da306820eef64880846f9634e7ed884a05230b20bc448f279f994",
+      "alreadyMatched": true
+    }
+  ],
+  "syncedPaths": [],
+  "excludedSourceFiles": [
+    "analytics.test.js",
+    "api/arena.test.js",
+    "api/build-info.test.js",
+    "api/telemetry-admin.test.js",
+    "api/telemetry.test.js",
+    "asset-lab/README.md",
+    "asset-lab/index.html",
+    "asset-lab/main.js",
+    "asset-lab/styles.css",
+    "effects-lab/index.html",
+    "effects-lab/main.js",
+    "effects-lab/styles.css",
+    "environment-lab/index.html",
+    "environment-lab/main.js",
+    "environment-lab/styles.css",
+    "lib/bootstrap/dist/css/bootstrap-grid.css",
+    "lib/bootstrap/dist/css/bootstrap-grid.css.map",
+    "lib/bootstrap/dist/css/bootstrap-grid.min.css",
+    "lib/bootstrap/dist/css/bootstrap-grid.min.css.map",
+    "lib/bootstrap/dist/css/bootstrap-grid.rtl.css",
+    "lib/bootstrap/dist/css/bootstrap-grid.rtl.css.map",
+    "lib/bootstrap/dist/css/bootstrap-grid.rtl.min.css",
+    "lib/bootstrap/dist/css/bootstrap-grid.rtl.min.css.map",
+    "lib/bootstrap/dist/css/bootstrap-reboot.css",
+    "lib/bootstrap/dist/css/bootstrap-reboot.css.map",
+    "lib/bootstrap/dist/css/bootstrap-reboot.min.css",
+    "lib/bootstrap/dist/css/bootstrap-reboot.min.css.map",
+    "lib/bootstrap/dist/css/bootstrap-reboot.rtl.css",
+    "lib/bootstrap/dist/css/bootstrap-reboot.rtl.css.map",
+    "lib/bootstrap/dist/css/bootstrap-reboot.rtl.min.css",
+    "lib/bootstrap/dist/css/bootstrap-reboot.rtl.min.css.map",
+    "lib/bootstrap/dist/css/bootstrap-utilities.css",
+    "lib/bootstrap/dist/css/bootstrap-utilities.css.map",
+    "lib/bootstrap/dist/css/bootstrap-utilities.min.css",
+    "lib/bootstrap/dist/css/bootstrap-utilities.min.css.map",
+    "lib/bootstrap/dist/css/bootstrap-utilities.rtl.css",
+    "lib/bootstrap/dist/css/bootstrap-utilities.rtl.css.map",
+    "lib/bootstrap/dist/css/bootstrap-utilities.rtl.min.css",
+    "lib/bootstrap/dist/css/bootstrap-utilities.rtl.min.css.map",
+    "lib/bootstrap/dist/css/bootstrap.css",
+    "lib/bootstrap/dist/css/bootstrap.css.map",
+    "lib/bootstrap/dist/css/bootstrap.min.css",
+    "lib/bootstrap/dist/css/bootstrap.min.css.map",
+    "lib/bootstrap/dist/css/bootstrap.rtl.css",
+    "lib/bootstrap/dist/css/bootstrap.rtl.css.map",
+    "lib/bootstrap/dist/css/bootstrap.rtl.min.css",
+    "lib/bootstrap/dist/css/bootstrap.rtl.min.css.map",
+    "lib/bootstrap/dist/js/bootstrap.bundle.js",
+    "lib/bootstrap/dist/js/bootstrap.bundle.js.map",
+    "lib/bootstrap/dist/js/bootstrap.bundle.min.js",
+    "lib/bootstrap/dist/js/bootstrap.bundle.min.js.map",
+    "lib/bootstrap/dist/js/bootstrap.esm.js",
+    "lib/bootstrap/dist/js/bootstrap.esm.js.map",
+    "lib/bootstrap/dist/js/bootstrap.esm.min.js",
+    "lib/bootstrap/dist/js/bootstrap.esm.min.js.map",
+    "lib/bootstrap/dist/js/bootstrap.js",
+    "lib/bootstrap/dist/js/bootstrap.js.map",
+    "lib/bootstrap/dist/js/bootstrap.min.js",
+    "lib/bootstrap/dist/js/bootstrap.min.js.map",
+    "present/rapier-design/deck.json",
+    "present/rapier-design/index.html",
+    "present/rapier-design/plates/plate-00-master-bom.md",
+    "present/rapier-design/plates/plate-01-three-view.svg",
+    "present/rapier-design/plates/plate-02-wing-planform.svg",
+    "present/rapier-design/plates/plate-03-loft-stations.md",
+    "present/rapier-design/plates/plate-04-inlet-duct-nozzle.svg",
+    "present/rapier-design/plates/plate-05-escape-spine.svg",
+    "present/rapier-design/plates/plate-06-drone-bay.svg",
+    "present/rapier-design/plates/plate-07-systems-arrangement.svg",
+    "present/rapier-design/plates/plate-08-thermal-zones.svg",
+    "present/rapier-design/plates/plate-09-performance-envelope.svg",
+    "present/rapier-design/plates/plate-10-basing-interface.svg",
+    "present/rapier-design/plates/plate-11-primary-structure.svg",
+    "present/rapier-design/plates/plate-12-wing-structure.svg",
+    "present/rapier-design/plates/plate-13-fuel-system.svg",
+    "present/rapier-design/plates/plate-14-landing-gear-hook.svg",
+    "present/rapier-design/plates/plate-15-flight-controls.svg",
+    "present/rapier-design/plates/plate-16-electrical-fbw.svg",
+    "present/rapier-design/plates/plate-17-propulsion-install.svg",
+    "present/rapier-design/plates/plate-18-station-cross-sections.md",
+    "present/rapier-design/plates/plate-19-assembly-sequence.svg",
+    "present/rapier-design/plates/plate-20-materials-gauges.md",
+    "present/rapier-design/rapier-ghibli-strip.png",
+    "render/anca/tests/anca_app_wiring.test.mjs",
+    "render/anca/tests/anca_view_model.test.mjs",
+    "render/arena/tests/arena_client.test.mjs",
+    "render/assets/tests/asset_registry.test.mjs",
+    "render/audio/preview/README.md",
+    "render/audio/preview/cue_matrix.js",
+    "render/audio/preview/jet_preview.html",
+    "render/audio/preview/jet_wav_export.html",
+    "render/audio/preview/wav_dump_server.mjs",
+    "render/audio/tests/audio_enable_contract.test.mjs",
+    "render/audio/tests/casevac_audio.test.mjs",
+    "render/audio/tests/cobra_audio.test.mjs",
+    "render/audio/tests/engine_audio.test.mjs",
+    "render/audio/tests/event_audio_acoustics.test.mjs",
+    "render/audio/tests/f14_audio.test.mjs",
+    "render/audio/tests/flight_audio_singleton.test.mjs",
+    "render/audio/tests/motorcycle_audio.test.mjs",
+    "render/audio/tests/preview_audio.test.mjs",
+    "render/audio/tests/radio_audio.test.mjs",
+    "render/audio/tests/sample_bed.test.mjs",
+    "render/audio/tests/turboprop_audio.test.mjs",
+    "render/audio/tests/warning_audio.test.mjs",
+    "render/camera/tests/low_speed_lens.test.mjs",
+    "render/camera/tests/padlock_controller.test.mjs",
+    "render/carrier/tests/carrier_motion.test.mjs",
+    "render/casevac/tests/casevac_app_wiring.test.mjs",
+    "render/casevac/tests/casevac_collision_scenery.test.mjs",
+    "render/casevac/tests/casevac_course_plan.test.mjs",
+    "render/casevac/tests/casevac_course_scenery.test.mjs",
+    "render/casevac/tests/casevac_mission_presentation.test.mjs",
+    "render/casevac/tests/casevac_route_briefing.test.mjs",
+    "render/casevac/tests/casevac_route_landmarks.test.mjs",
+    "render/cobra/tests/ah1g_presence.test.mjs",
+    "render/cobra/tests/ah1g_presence_occlusion.test.mjs",
+    "render/cobra/tests/cobra_battle_damage_wiring.test.mjs",
+    "render/cobra/tests/cobra_camera_bias.test.mjs",
+    "render/cobra/tests/cobra_camp_ember_firebase.test.mjs",
+    "render/cobra/tests/cobra_canyon_asset_kit.test.mjs",
+    "render/cobra/tests/cobra_canyon_authority_contract.test.mjs",
+    "render/cobra/tests/cobra_canyon_foliage.test.mjs",
+    "render/cobra/tests/cobra_canyon_lab_wiring.test.mjs",
+    "render/cobra/tests/cobra_canyon_near_field_scatter.test.mjs",
+    "render/cobra/tests/cobra_canyon_plan.test.mjs",
+    "render/cobra/tests/cobra_canyon_presentation.test.mjs",
+    "render/cobra/tests/cobra_canyon_scene_profile_wiring.test.mjs",
+    "render/cobra/tests/cobra_canyon_tour.test.mjs",
+    "render/cobra/tests/cobra_cold_start_collective.test.mjs",
+    "render/cobra/tests/cobra_control_profile.test.mjs",
+    "render/cobra/tests/cobra_crew_input.test.mjs",
+    "render/cobra/tests/cobra_debrief.test.mjs",
+    "render/cobra/tests/cobra_ember_path.test.mjs",
+    "render/cobra/tests/cobra_formation_lead.test.mjs",
+    "render/cobra/tests/cobra_golden_path.test.mjs",
+    "render/cobra/tests/cobra_ground_war.test.mjs",
+    "render/cobra/tests/cobra_ground_war_battlefield.test.mjs",
+    "render/cobra/tests/cobra_gunner_status.test.mjs",
+    "render/cobra/tests/cobra_helicopter_fpv.test.mjs",
+    "render/cobra/tests/cobra_hold_bridge_runtime_wiring.test.mjs",
+    "render/cobra/tests/cobra_hud_adapter.test.mjs",
+    "render/cobra/tests/cobra_ladder_reference.test.mjs",
+    "render/cobra/tests/cobra_low_speed_lens_wiring.test.mjs",
+    "render/cobra/tests/cobra_minimap_draw.test.mjs",
+    "render/cobra/tests/cobra_mission_clock.test.mjs",
+    "render/cobra/tests/cobra_mission_exit.test.mjs",
+    "render/cobra/tests/cobra_objective_consistency.test.mjs",
+    "render/cobra/tests/cobra_objective_copy.test.mjs",
+    "render/cobra/tests/cobra_objective_site.test.mjs",
+    "render/cobra/tests/cobra_parked_airframe.test.mjs",
+    "render/cobra/tests/cobra_pilot_input.test.mjs",
+    "render/cobra/tests/cobra_play_hud_wiring.test.mjs",
+    "render/cobra/tests/cobra_rotorcraft_hud.test.mjs",
+    "render/cobra/tests/cobra_sortie_ready.test.mjs",
+    "render/cobra/tests/cobra_structure_material.test.mjs",
+    "render/cobra/tests/cobra_tactical_map.test.mjs",
+    "render/cobra/tests/cobra_tactical_map_relief.test.mjs",
+    "render/cobra/tests/cobra_telemetry.test.mjs",
+    "render/cobra/tests/cobra_terminal_causes.test.mjs",
+    "render/cobra/tests/cobra_turnaround_browser.test.mjs",
+    "render/cobra/tests/cobra_turnaround_wiring.test.mjs",
+    "render/debrief/tests/points_ledger.test.mjs",
+    "render/debrief/tests/sortie_result.test.mjs",
+    "render/effects/tests/damage_smoke_trail.test.mjs",
+    "render/effects/tests/korea_gun_effects.test.mjs",
+    "render/effects/tests/rapier_launch_fx.test.mjs",
+    "render/environment/tests/first_run_valley.test.mjs",
+    "render/environment/tests/korea_environment.test.mjs",
+    "render/environment/tests/korea_scenery.test.mjs",
+    "render/environment/tests/korea_terrain.test.mjs",
+    "render/environment/tests/mission_features.test.mjs",
+    "render/environment/tests/tactical_clouds.test.mjs",
+    "render/environment/tests/terrain_launch_owner.test.mjs",
+    "render/environment/tests/terrain_mesh_worker_imports.test.mjs",
+    "render/environment/tests/terrain_presentation_route.test.mjs",
+    "render/environment/tests/winter_precipitation.test.mjs",
+    "render/events/tests/presentation_event_stream.test.mjs",
+    "render/events/tests/session_event_cursor.test.mjs",
+    "render/hud/tests/approach_energy.test.mjs",
+    "render/hud/tests/carrier_sa.test.mjs",
+    "render/hud/tests/contact_range_tracker.test.mjs",
+    "render/hud/tests/fighter_layout.test.mjs",
+    "render/hud/tests/gun_funnel.test.mjs",
+    "render/hud/tests/harness/assertions.mjs",
+    "render/hud/tests/harness/harness.html",
+    "render/hud/tests/harness/harness.js",
+    "render/hud/tests/harness/scenarios.js",
+    "render/hud/tests/harness/screenshot.mjs",
+    "render/hud/tests/harness/shots/gcas-bottom-out-release-portrait.png",
+    "render/hud/tests/harness/shots/gcas-bottom-out-release.png",
+    "render/hud/tests/harness/static_server.mjs",
+    "render/hud/tests/harness/static_server.test.mjs",
+    "render/hud/tests/hud_legibility.test.mjs",
+    "render/hud/tests/hud_phase.test.mjs",
+    "render/hud/tests/hud_readouts.test.mjs",
+    "render/hud/tests/hud_stabilizer.test.mjs",
+    "render/hud/tests/limits_panel.test.mjs",
+    "render/hud/tests/mission_guidance.test.mjs",
+    "render/hud/tests/navigation_console.test.mjs",
+    "render/hud/tests/sortie_power.test.mjs",
+    "render/hud/tests/stable_cues.test.mjs",
+    "render/hud/tests/target_data_line.test.mjs",
+    "render/hud/tests/time_compression_hud.test.mjs",
+    "render/hud/tests/visible_target_box_wiring.test.mjs",
+    "render/indoor/tests/control_policy.test.mjs",
+    "render/indoor/tests/indoor_audio.test.mjs",
+    "render/indoor/tests/indoor_catalogue.test.mjs",
+    "render/indoor/tests/indoor_presentation.test.mjs",
+    "render/indoor/tests/indoor_sim.test.mjs",
+    "render/input/tests/dual_stick_input.test.mjs",
+    "render/input/tests/look_gesture.test.mjs",
+    "render/input/tests/mobile_control_profile.test.mjs",
+    "render/input/tests/mobile_throttle_rocker.test.mjs",
+    "render/input/tests/mobile_tilt_input.test.mjs",
+    "render/input/tests/mobile_virtual_stick.test.mjs",
+    "render/input/tests/padlock_interaction_contract.test.mjs",
+    "render/input/tests/player_action_contract.test.mjs",
+    "render/input/tests/player_gun_target.test.mjs",
+    "render/input/tests/throttle_rate_schedule.test.mjs",
+    "render/medevac/tests/commander_view_model.test.mjs",
+    "render/medevac/tests/medevac_audio_contract.test.mjs",
+    "render/mission/tests/rapier_guidance.test.mjs",
+    "render/mission/tests/rapier_high_mach_instruments.test.mjs",
+    "render/motorcycle/tests/helmet_hud_status.test.mjs",
+    "render/motorcycle/tests/rider_input.test.mjs",
+    "render/motorcycle/tests/track_day_presentation.test.mjs",
+    "render/motorcycle/tests/view_attitude.test.mjs",
+    "render/motorcycle/tests/weekend_ride_mission_flow.test.mjs",
+    "render/nav/tests/carrier_sortie_route_presentation.test.mjs",
+    "render/nav/tests/carrier_sortie_runtime_wiring.test.mjs",
+    "render/nav/tests/carrier_sortie_touch_control.test.mjs",
+    "render/nav/tests/mesh_nav_map.test.mjs",
+    "render/nav/tests/mesh_nav_presentation.test.mjs",
+    "render/nav/tests/mesh_nd_chrome.test.mjs",
+    "render/okanagan/tests/okanagan_cockpit.test.mjs",
+    "render/okanagan/tests/okanagan_debrief.test.mjs",
+    "render/okanagan/tests/okanagan_drop_curtain.test.mjs",
+    "render/okanagan/tests/okanagan_fire_effects.test.mjs",
+    "render/okanagan/tests/okanagan_highway.test.mjs",
+    "render/okanagan/tests/okanagan_hud_adapter.test.mjs",
+    "render/okanagan/tests/okanagan_practice_target.test.mjs",
+    "render/okanagan/tests/okanagan_resorts.test.mjs",
+    "render/okanagan/tests/okanagan_targets.test.mjs",
+    "render/okanagan/tests/okanagan_traffic.test.mjs",
+    "render/okanagan/tests/okanagan_world.test.mjs",
+    "render/onboarding/tests/disposed_page_restore.test.mjs",
+    "render/onboarding/tests/first_run_controls.test.mjs",
+    "render/onboarding/tests/first_run_valley.test.mjs",
+    "render/onboarding/tests/first_run_valley_wiring.test.mjs",
+    "render/onboarding/tests/modal_focus.test.mjs",
+    "render/onboarding/tests/onboarding_wiring.test.mjs",
+    "render/physiology/tests/auto_gcas_bridge_contract.test.mjs",
+    "render/physiology/tests/g_tolerance_bridge_contract.test.mjs",
+    "render/physiology/tests/g_tolerance_presentation.test.mjs",
+    "render/presence/tests/global_room_client.test.mjs",
+    "render/presence/tests/presence_presentation.test.mjs",
+    "render/presence/tests/presence_ui_contract.test.mjs",
+    "render/presence/tests/remote_asset_policy.test.mjs",
+    "render/presence/tests/world_origin_authority.test.mjs",
+    "render/presentation/tests/airframe_binding.test.mjs",
+    "render/presentation/tests/airframe_definition.test.mjs",
+    "render/presentation/tests/cockpit_head_motion.test.mjs",
+    "render/presentation/tests/distant_aircraft_impostor.test.mjs",
+    "render/presentation/tests/escort_formation.test.mjs",
+    "render/presentation/tests/f22_canopy_glass.test.mjs",
+    "render/presentation/tests/one_way_attack_drone.test.mjs",
+    "render/presentation/tests/period_gunsight.test.mjs",
+    "render/presentation/tests/rapier_presentation.test.mjs",
+    "render/progression/tests/campaign_progression.test.mjs",
+    "render/progression/tests/pilot_logbook.test.mjs",
+    "render/progression/tests/rapier_economy_app_wiring.test.mjs",
+    "render/progression/tests/rapier_guidance.test.mjs",
+    "render/release/tests/art_provenance.test.mjs",
+    "render/release/tests/cobra_lab_quarantine.test.mjs",
+    "render/release/tests/deploy_break_glass.test.mjs",
+    "render/release/tests/mission_flow_contract.test.mjs",
+    "render/release/tests/player_copy_density.test.mjs",
+    "render/release/tests/product_truth.test.mjs",
+    "render/release/tests/quarantine_gate.test.mjs",
+    "render/release/tests/release_identity.test.mjs",
+    "render/release/tests/security_headers.test.mjs",
+    "render/release/tests/service_worker_contract.test.mjs",
+    "render/release/tests/shared_shell_ux.test.mjs",
+    "render/replay/tests/incident_replay.test.mjs",
+    "render/ride/tests/ride_best_lap_store.test.mjs",
+    "render/ride/tests/ride_timing_readout.test.mjs",
+    "render/ride/tests/weekend_ride_lifecycle.test.mjs",
+    "render/ride/tests/weekend_ride_result.test.mjs",
+    "render/scene/tests/airframe_primitives.test.mjs",
+    "render/scene/tests/conventional_runway.test.mjs",
+    "render/scene/tests/guidance_path.test.mjs",
+    "render/scene/tests/high_altitude_balloon.test.mjs",
+    "render/scene/tests/rapier_production_visual_wiring.test.mjs",
+    "render/scene/tests/shape_first_airframe_adapter.test.mjs",
+    "render/settings/tests/player_settings.test.mjs",
+    "render/shell/tests/boot_fallback.test.mjs",
+    "render/shell/tests/boot_watchdog.test.mjs",
+    "render/shell/tests/inapp_browser.test.mjs",
+    "render/shell/tests/laptop_recommendation_wiring.test.mjs",
+    "render/shell/tests/mobile_boot_wiring.test.mjs",
+    "render/shell/tests/standalone_audio_preferences.test.mjs",
+    "render/shell/tests/standalone_navigation.test.mjs",
+    "render/state/tests/hot_snapshot.test.mjs",
+    "render/systems/tests/test_flight_console.test.mjs",
+    "render/telemetry/tests/ai_frame_pressure.test.mjs",
+    "render/telemetry/tests/ai_frame_pressure_app_wiring.test.mjs",
+    "render/telemetry/tests/continuous_combat_contract.test.mjs",
+    "render/telemetry/tests/control_truth_wiring.test.mjs",
+    "render/telemetry/tests/drone_raid_contract.test.mjs",
+    "render/telemetry/tests/flight_test_sync_marker.test.mjs",
+    "render/telemetry/tests/frame_contract.test.mjs",
+    "render/telemetry/tests/frame_governor.test.mjs",
+    "render/telemetry/tests/frame_perf.test.mjs",
+    "render/telemetry/tests/sample_scheduler.test.mjs",
+    "render/telemetry/tests/sample_scheduler_app_wiring.test.mjs",
+    "render/telemetry/tests/shell_health.test.mjs",
+    "render/telemetry/tests/sortie_segmentation.test.mjs",
+    "render/telemetry/tests/state_delta.test.mjs",
+    "render/telemetry/tests/telemetry_batch.test.mjs",
+    "render/telemetry/tests/telemetry_consent_wiring.test.mjs",
+    "render/telemetry/tests/time_compression_budget.test.mjs",
+    "render/top-gun/tests/aim9_presentation.test.mjs",
+    "render/top-gun/tests/fox_two_bridge_contract.test.mjs",
+    "render/top-gun/tests/mission_authority.test.mjs",
+    "render/top-gun/tests/wing_sweep_presentation.test.mjs",
+    "render/visual/tests/adaptive_resolution.test.mjs",
+    "render/visual/tests/async_transition_queue.test.mjs",
+    "render/visual/tests/korea_pack_adapters.test.mjs",
+    "render/visual/tests/post_stack_plan.test.mjs",
+    "render/visual/tests/production_graphics_wiring.test.mjs",
+    "render/visual/tests/profile.test.mjs",
+    "render/visual/tests/shadow_stabilizer.test.mjs",
+    "render/visual/tests/visual_runtime.test.mjs"
+  ]
+}

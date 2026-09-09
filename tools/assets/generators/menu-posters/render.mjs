@@ -3,8 +3,8 @@
 // The aircraft picker and loading cover are the first thing a visitor sees, so they must read as
 // an idealised version of the game's OWN look: flat-shaded planes, no texture, no outlines, a
 // single smooth sky gradient behind hard-edged geometry. These posters are therefore authored as
-// deterministic SVG in this directory and rasterised here -- there is no image-generation model in
-// the loop, and no third-party asset is embedded.
+// SVGs or retained project-generated source rasters. Each source's exact creation workflow is
+// recorded in art/SOURCES.md; encoding is reproducible without calling an image generator.
 //
 // Usage:
 //   PATH="$HOME/.nvm/versions/node/v24.18.1/bin:/opt/homebrew/bin:$PATH" \
@@ -39,6 +39,10 @@ const POSTERS = {
   "jet-f22": { w: 900, h: 1600, q: 82 },
   "jet-rapier": { w: 900, h: 1600, q: 82 },
   "jet-cobra": { w: 900, h: 1600, q: 82 },
+  "jet-f22-generated-v4": { w: 1000, h: 1000, q: 82,
+    rasterizer: "committed-raster", src: "sources/jet-f22-generated-v4" },
+  "jet-cobra-generated-v4": { w: 1000, h: 1000, q: 82,
+    rasterizer: "committed-raster", src: "sources/jet-cobra-generated-v4" },
   "bike-yzf-r1": { w: 900, h: 1600, q: 82 },
   "menu-hangar": { w: 1600, h: 1067, q: 82 },
   "menu-hangar-small": { w: 900, h: 600, q: 80, src: "menu-hangar" },

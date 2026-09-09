@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "asset": "canopy-generated-v1",
+  "status": "accepted-local-runtime-reviewed",
+  "epistemic": "fiction",
+  "generatedOn": "2026-09-10",
+  "dateTimezone": "Australia/Sydney",
+  "outputFileCreatedAtLocal": "2026-09-10T01:16:41+10:00",
+  "tool": "image_gen.imagegen",
+  "mode": "built-in",
+  "model": null,
+  "modelNote": "The built-in tool did not report a backend model identity; no model name is asserted.",
+  "prompt": "Create one production game material image: an opaque RGB broadleaf treetop ALBEDO tile for tropical crown meshes in a cinematic helicopter game. One square image, edge-to-edge continuous dense SMALL overlapping tropical broadleaf leaf clusters, viewed perfectly top-down orthographically as a flat surface representing 12 metres of dense tree crown. Dappled muted olive, forest green and sage green leaf faces, sparse tiny woody twigs, fine convincing botanical texture with broad readable clusters and many small natural leaves. Painterly-realistic fine foliage matching a humid tropical gorge at warm dusk; natural restrained game-material detail, not cartoon outlined giant leaves. Flat diffuse overcast lighting, no directional sun, no cast shadows, no strong baked lighting. Keep the entire image filled with foliage: no sky, no background, no scenic landscape, no horizon, no aircraft, no people, no labels, no text, no border, no watermark. No alpha, no checkerboard, no black holes or near-black cavities: dark gaps stay mid-dark muted green with visible leaf texture. Avoid conspicuous isolated hero leaves or large repeating shapes. Texture content should continue naturally to all four edges for reusable material sampling; do not add a frame or vignette. Output an ordinary opaque RGB PNG, 1024 by 1024 or nearest supported square size.",
+  "imageInputs": [],
+  "imageInputsNote": "Brand-new text-only generation; referenced_image_paths and num_last_images_to_include were omitted.",
+  "originalToolOutputPath": "/Users/iantodd/.codex/generated_images/01a08655-1572-7093-b524-54682685d06e/exec-4f4ca403-ae4d-4781-9883-6dceec7d8b71.png",
+  "outputHint": "Generated images are saved to /Users/iantodd/.codex/generated_images/01a08655-1572-7093-b524-54682685d06e as /Users/iantodd/.codex/generated_images/01a08655-1572-7093-b524-54682685d06e/exec-4f4ca403-ae4d-4781-9883-6dceec7d8b71.png by default.\nIf you need to use a generated image at another path, copy it and leave the original in place unless the user explicitly asks you to delete it.\nThe generated image is already displayed to the user. There is no need to render it in the final response as a Markdown image or file link.",
+  "source": {
+    "path": "tools/assets/generators/cobra-surfaces/sources/canopy-generated-v1.png",
+    "width": 1254,
+    "height": 1254,
+    "colorMode": "RGB",
+    "hasAlpha": false,
+    "sizeBytes": 3482348,
+    "sha256": "6d753ec9d9237a572ccf11baac61360f6f510c47865c71ccd36a9f64aa92ebe1"
+  },
+  "runtime": {
+    "path": "content/packs/cobra-vietnam/environment/surfaces/canopy-generated-v1.webp",
+    "mirror": "web/wwwroot/content/packs/cobra-vietnam/environment/surfaces/canopy-generated-v1.webp",
+    "width": 1024,
+    "height": 1024,
+    "colorMode": "RGB",
+    "hasAlpha": false,
+    "sizeBytes": 362538,
+    "sha256": "31804fe8aa3b1d0f0c01e68af3cefa6f29dea0b5783a655155eafe3d30fa0e21",
+    "conservativeTextureMemoryMiB": 5.334
+  },
+  "encoding": {
+    "tool": "cwebp",
+    "version": "1.6.0",
+    "libsharpyuvVersion": "0.4.2",
+    "arguments": [
+      "-q",
+      "84",
+      "-resize",
+      "1024",
+      "1024",
+      "-m",
+      "6",
+      "-sharp_yuv",
+      "<source>",
+      "-o",
+      "<runtime>"
+    ],
+    "rebuild": "node tools/assets/generators/cobra-surfaces/encode.mjs",
+    "verify": "node tools/assets/generators/cobra-surfaces/encode.mjs --check",
+    "operations": "Resizing and WebP encoding only. The generated master is retained byte-for-byte; no creative pixel edits, edge repair or alpha/height generation were performed."
+  },
+  "runtimeContract": {
+    "wrapping": "MirroredRepeatWrapping",
+    "anisotropy": 4,
+    "generateMipmaps": true,
+    "magFilter": "LinearFilter",
+    "minFilter": "LinearMipmapLinearFilter",
+    "sourceColorSpace": "sRGB color artwork",
+    "sourceSeamless": false,
+    "physicalAuthority": "Fictional treetop color artwork only; not botanical evidence or an authority for plant dimensions, placement, collision, targets or gameplay visibility."
+  },
+  "visualReview": {
+    "nativeSourceInspected": true,
+    "notes": "Dense small broadleaf clusters in muted olive/forest/sage greens, sparse fine twigs and no sky, text, checkerboard or border. Opaque RGB color texture; not leaf cutout alpha. Opposite edges are not seamless, so mirrored sampling is required. Illustrated leaf shading is part of the source and does not constitute calibrated albedo or a measured height map.",
+    "oppositeEdgeMeanAbsoluteRgbDifference": {
+      "units": "channel values out of 255",
+      "source": {
+        "leftRight": 27.549,
+        "topBottom": 35.234
+      },
+      "runtime": {
+        "leftRight": 27.4,
+        "topBottom": 34.677
+      }
+    },
+    "runtimeRecord": "docs/audits/2026-09-10-cobra-world-surfaces.md",
+    "runtimeNote": "Inspected in actual player-eye and fixed flight-route views with linked shaders and source-matched response bytes. This accepts the texture for this local pass, not parity with the illustrative menu image or a deployed release."
+  },
+  "validation": [
+    "Generated source copy preserves original SHA-256.",
+    "Runtime WebP is 1024x1024 RGB with no alpha.",
+    "Canonical and wwwroot WebP files match byte-for-byte."
+  ]
+}

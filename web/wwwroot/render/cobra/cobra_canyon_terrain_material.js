@@ -34,7 +34,7 @@ import {
   TERRAIN_SHADOW_VERTEX_BODY,
   TERRAIN_SHADOW_VERTEX_PARS,
   withTerrainShadowUniforms,
-} from "../environment/terrain_shadow_receive.js?v=356";
+} from "../environment/terrain_shadow_receive.js?v=357";
 
 const BASIN_VERTEX_SHADER = /* glsl */ `
 #include <common>
@@ -151,6 +151,8 @@ uniform vec3 uLateriteSlope;
 uniform vec3 uRidgeSage;
 uniform vec3 uRimRock;
 uniform vec4 uElevationBands;
+uniform sampler2D uRockSurface;
+uniform float uRockSurfaceEnabled;
 varying vec3 vWorldPosition;
 varying vec3 vTerrainNormal;
 varying float vConcavity;
@@ -162,6 +164,7 @@ ${HAZE_CHUNK}
 
 void main() {
   vec3 normal = normalize(vTerrainNormal);
+  vec3 terrainNormal = normal;
   vec3 sunDirection = normalize(uSunDirection);
   float elevationM = vWorldPosition.y;
   float steepness = 1.0 - clamp(normal.y, 0.0, 1.0);
@@ -274,6 +277,36 @@ void main() {
   surfaceValue = mix(surfaceValue, 1.0, battleZone * 0.32);
   albedo *= clamp(surfaceValue, 0.76, 1.20);
 
+  // Opaque generated limestone on exposed faces. All projections use the geometric normal;
+  // perturbing those coordinates with the detail normal would feed the texture back into itself.
+  // Three uploads this sRGB texture with hardware decoding, so these samples are linear RGB.
+  if (uRockSurfaceEnabled > 0.5) {
+    vec3 weights = pow(abs(normal), vec3(4.0));
+    weights /= max(dot(weights, vec3(1.0)), 0.0001);
+    vec3 rockSample = texture2D(uRockSurface, vWorldPosition.zy / 18.0).rgb * weights.x
+      + texture2D(uRockSurface, vWorldPosition.xz / 18.0 + vec2(0.37, 0.61)).rgb * weights.y
+      + texture2D(uRockSurface, vWorldPosition.xy / 18.0).rgb * weights.z;
+    float rockValue = dot(rockSample, vec3(0.2126, 0.7152, 0.0722));
+    float detailFade = 1.0 - smoothstep(700.0, 2200.0, length(cameraPosition - vWorldPosition));
+    float exposedRock = smoothstep(0.060, 0.220, steepness)
+      * mix(0.45, 1.0, meso) * (1.0 - canopy * 0.68) * (1.0 - battleZone * 0.8);
+    vec3 rockColor = uRimRock * clamp(rockSample / 0.28, vec3(0.48), vec3(1.65));
+    albedo = mix(albedo, rockColor, exposedRock * detailFade * 0.68);
+
+    // Luminance is a decorative height proxy, not measured relief. Screen derivatives recover
+    // a world-space surface gradient without three more texture fetches. Clamp its length so
+    // fissures cannot overwhelm the terrain normal, and fade before subpixel relief shimmers.
+    vec3 dpdx = dFdx(vWorldPosition);
+    vec3 dpdy = dFdy(vWorldPosition);
+    vec3 r1 = cross(dpdy, normal);
+    vec3 r2 = cross(normal, dpdx);
+    float determinant = dot(dpdx, r1);
+    vec3 gradient = (dFdx(rockValue) * r1 + dFdy(rockValue) * r2)
+      * sign(determinant) / max(abs(determinant), 0.00001);
+    gradient *= min(0.65, 0.14 / max(length(gradient), 0.00001));
+    normal = normalize(normal - gradient * exposedRock * detailFade);
+  }
+
   // PAINTED LIGHT IS COLOURED LIGHT, NOT DIMMED LIGHT (korea_terrain). A scalar tone cannot
   // shift hue, so every shadow comes out as a darker copy of the lit colour — the clearest tell
   // of a renderer. Warm key, cool sky fill, and the hue separation carries the modelling.
@@ -296,7 +329,7 @@ void main() {
   // albedo by the 0.20 tone floor a second time made both near gorge walls read as black corridor
   // cut-outs. A bounded normal/enclosure-aware bounce lifts only surfaces that can see the sky;
   // the direct ramp and cast-shadow mask still carry the sun-facing composition.
-  float skyVisibility = smoothstep(-0.05, 0.82, normal.y)
+  float skyVisibility = smoothstep(-0.05, 0.82, terrainNormal.y)
     * mix(0.72, 1.0, clamp(vConcavity, 0.0, 1.0));
   vec3 skyBounce = albedo * uSkyFill * (0.075 + 0.105 * skyVisibility);
   vec3 lit = directLight + skyBounce;
@@ -305,7 +338,7 @@ void main() {
   // 0.1 gradient, where a pure Lambert term separates almost nothing. A bounded planform cue
   // (korea's reliefGain, same clamp) makes sun-facing and lee ground read apart at low relief.
   vec2 sunPlanform = normalize(sunDirection.xz + vec2(0.0001));
-  lit *= clamp(0.96 + dot(normal.xz, sunPlanform) * uReliefGain, 0.70, 1.14);
+  lit *= clamp(0.96 + dot(terrainNormal.xz, sunPlanform) * uReliefGain, 0.70, 1.14);
 
   // Baked enclosure: valley floors sink, crests catch light. This is the term the Build 264
   // scene was missing relative to a hillshade.
@@ -452,9 +485,8 @@ function smoothstep01(edge0, edge1, value) {
 
 /**
  * The RGB multiplier that level, unshadowed basin ground receives from the tone ramp under this
- * profile's sun — the same expression the basin fragment shader evaluates, resolved on the CPU
- * for surfaces that are flat by construction (the river's gravel bars). Keeping it derived rather
- * than hand-tuned is what stops the banks drifting out of agreement with the ground they sit in.
+ * profile's sun, including open-sky bounce, before terrain enclosure/cloud factors. River gravel
+ * bars have no baked concavity attribute, so this is the open, flat surface approximation.
  */
 export function flatGroundLight(profile) {
   const paint = profile.terrainPaint;
@@ -464,18 +496,20 @@ export function flatGroundLight(profile) {
     0,
   );
   const tone = paint.shadowFloor + (1 - paint.shadowFloor) * ramp;
-  return paint.skyFill.map((fill, channel) => (fill + (paint.sunKey[channel] - fill) * tone) * tone);
+  return paint.skyFill.map((fill, channel) =>
+    (fill + (paint.sunKey[channel] - fill) * tone) * tone + fill * 0.18);
 }
 
 /**
  * The same expression at the bottom of the ramp — what flat ground looks like when something
  * stands between it and the sun. `toneRamp` is clamped below at `shadowFloor` by construction, so
- * this is the darkest value the basin can print, and cast shadow on land interpolates to it.
+ * this is the direct-light floor plus open-sky bounce, before enclosure/cloud factors.
  */
 export function flatGroundShadowLight(profile) {
   const paint = profile.terrainPaint;
   const tone = paint.shadowFloor;
-  return paint.skyFill.map((fill, channel) => (fill + (paint.sunKey[channel] - fill) * tone) * tone);
+  return paint.skyFill.map((fill, channel) =>
+    (fill + (paint.sunKey[channel] - fill) * tone) * tone + fill * 0.18);
 }
 
 function vector3(THREE, triple) {
@@ -492,7 +526,7 @@ function vector2(THREE, pair) {
  * scene lights deliberately do not touch it — the light model IS the tone ramp, exactly as the
  * F-22 terrain shader does it.
  */
-export function createCobraCanyonBasinMaterial(THREE, profile) {
+export function createCobraCanyonBasinMaterial(THREE, profile, surfaceTextures = null) {
   const paint = profile.terrainPaint;
   const material = new THREE.ShaderMaterial({
     name: "COBRA_CANYON_BASIN_MATERIAL",
@@ -508,6 +542,8 @@ export function createCobraCanyonBasinMaterial(THREE, profile) {
     // and upload the shadow map — see terrain_shadow_receive.js.
     lights: true,
     uniforms: withTerrainShadowUniforms(THREE, {
+      uRockSurface: { value: surfaceTextures?.rock ?? null },
+      uRockSurfaceEnabled: { value: surfaceTextures?.rock ? 1 : 0 },
       uSunDirection: { value: vector3(THREE, profile.sunDirectionWorld) },
       uFogColor: { value: new THREE.Color(profile.fog.color) },
       uFogDensity: { value: profile.fog.density },

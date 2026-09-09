@@ -1,0 +1,50 @@
+[
+  {
+    "path": "cobra-lab/main.js",
+    "bytes": 122547,
+    "sha256": "d7dcfba6f0a3d9f67508549ec28624ecc9377194e4e9466f79bb60620f7da9fe",
+    "sourceMatchesPublished": true
+  },
+  {
+    "path": "render/cobra/cobra_canyon_terrain_material.js",
+    "bytes": 32507,
+    "sha256": "d4a42315edc58305fe011a15ae8300cca51d0ae89bb03fcb2364f734e8bbd397",
+    "sourceMatchesPublished": true
+  },
+  {
+    "path": "render/cobra/cobra_canyon_surface_textures.js",
+    "bytes": 2703,
+    "sha256": "4521a1ff22ba81188469854c731b248ffed85edacc47679a5cdadd46a5b70141",
+    "sourceMatchesPublished": true
+  },
+  {
+    "path": "render/cobra/cobra_canyon_canopy.js",
+    "bytes": 20749,
+    "sha256": "170a2436e2e95cf08d01afc16b1092e6ba921ca0e57fe9b9a07e46234e7ea9c1",
+    "sourceMatchesPublished": true
+  },
+  {
+    "path": "render/cobra/cobra_canyon_presentation.js",
+    "bytes": 111864,
+    "sha256": "8b1f74d3ee82390dd04ec0bac5d26ec05f99227491849dadb9888dc2a9865386",
+    "sourceMatchesPublished": true
+  },
+  {
+    "path": "render/cobra/cobra_canyon_asset_kit.js",
+    "bytes": 102570,
+    "sha256": "ba89f416a7d39b64f95d14831a4bb885c8be3df689392ddf60f316af515f03f4",
+    "sourceMatchesPublished": true
+  },
+  {
+    "path": "content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp",
+    "bytes": 344424,
+    "sha256": "568a68ecd66d0730a59f43e58f706f62cac705e9f7308eeebf996e703f0eec04",
+    "sourceMatchesPublished": true
+  },
+  {
+    "path": "content/packs/cobra-vietnam/environment/surfaces/canopy-generated-v1.webp",
+    "bytes": 362538,
+    "sha256": "31804fe8aa3b1d0f0c01e68af3cefa6f29dea0b5783a655155eafe3d30fa0e21",
+    "sourceMatchesPublished": true
+  }
+]

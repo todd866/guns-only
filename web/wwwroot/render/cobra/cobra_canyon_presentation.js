@@ -1,27 +1,28 @@
 import {
   COBRA_STRUCTURE_SURFACES,
   createCobraStructureMaterial,
-} from "./cobra_structure_material.js?v=356";
+} from "./cobra_structure_material.js?v=357";
 import {
   applyCobraCanyonCampEmberApron,
   COBRA_CANYON_CAMP_EMBER_APRON,
   smoothstep,
   sampleCobraCanyonTerrain,
   sampleCobraCanyonTerrainBeforeCampEmberApron,
-} from "./cobra_canyon_plan.js?v=356";
+} from "./cobra_canyon_plan.js?v=357";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=356";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=356";
+} from "./cobra_canyon_asset_kit.js?v=357";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=357";
+import { createCobraCanopyField } from "./cobra_canyon_canopy.js?v=357";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=356";
+} from "./cobra_canyon_terrain_material.js?v=357";
 import {
   CAMP_EMBER_DRAWN_RECESS_M,
   createCampEmberFirebase,
-} from "./cobra_camp_ember_firebase.js?v=356";
+} from "./cobra_camp_ember_firebase.js?v=357";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -31,7 +32,7 @@ export const COBRA_CANYON_PRESENTATION_SCHEMA =
 // Basin grid resolution. Trimmed from 96/128/160 to fund canopy INSTANCES, which is the better
 // buy now the heightfield carries real relief: a 133 m quad on a 300 m gorge wall still reads as
 // that wall, whereas one more canopy stand is the difference between a bare hillside and jungle.
-// Every tier keeps its authored triangle ceiling; see COBRA_CANYON_RENDER_BUDGETS below.
+// Balanced/desktop keep their triangle ceilings; mobile's explicit crown allowance is below.
 export const COBRA_CANYON_TERRAIN_SEGMENTS = Object.freeze({
   mobile: 92,
   balanced: 120,
@@ -48,21 +49,26 @@ export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
   // maxAuthoredTriangles is the slice of maxTriangles that authored glTF meshes may spend.
   // An authored palm costs ~470 triangles against a crossed card's dozen, so without a
   // ceiling the jungle role alone runs to millions and the budget check throws at boot. Mobile
-  // gets none: its whole scene fits in 46,200 triangles, which one hero batch would eat.
+  // gets none: its analytical terrain and authored cues already spend 45,656 triangles.
   mobile: Object.freeze({
-    maxDrawCalls: 19,
+    maxDrawCalls: 20,
     maxInstances: 640,
-    maxTriangles: 46_200,
+    // The old 46,200 ceiling left only 544 triangles after static content. The independent
+    // 144 × 80-triangle unshadowed crown field requires 11,520; 58,000 is a bounded addition,
+    // not an unbounded scatter increase. Balanced and desktop reserve from their old ceilings.
+    maxTriangles: 58_000,
     maxAssetInstances: 580,
     maxAuthoredTriangles: 0,
     nearRingMaximumAglM: 180,
   }),
   balanced: Object.freeze({
-    maxDrawCalls: 19,
+    maxDrawCalls: 20,
     maxInstances: 4_200,
     maxTriangles: 380_000,
     maxAssetInstances: 3_900,
-    maxAuthoredTriangles: 150_000,
+    // Transfer 58k from near palms to the 1,300 × 80-triangle crown field. This allows
+    // all eligible stands in the reviewed flight windows without enlarging the tier ceiling.
+    maxAuthoredTriangles: 92_000,
     nearRingMaximumAglM: 260,
   }),
   // DENSITY IS THE PICTURE. 1,330 ambient instances across a 6.9 km valley — jungle, village,
@@ -72,11 +78,13 @@ export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
   // Build 312 production telemetry measured a locked 60 fps with view_ms ~1.2 and sim_ms ~3.4,
   // i.e. a whole frame of headroom on desktop. Spend it on canopy.
   desktop: Object.freeze({
-    maxDrawCalls: 19,
+    maxDrawCalls: 20,
     maxInstances: 9_600,
     maxTriangles: 900_000,
     maxAssetInstances: 9_000,
-    maxAuthoredTriangles: 420_000,
+    // The 1,600-crown allocation needs 41,600 more triangles than the initial 1,080 cap.
+    // A 42k palm transfer funds it while retaining the same total scene ceiling.
+    maxAuthoredTriangles: 378_000,
     nearRingMaximumAglM: 360,
   }),
 });
@@ -1116,13 +1124,13 @@ function tagObject(object, role, extra = {}) {
   return object;
 }
 
-function materialFor(THREE, role) {
+function materialFor(THREE, role, surfaceTextures = null) {
   // The basin and the river run the painted-tactical surface shaders: hillshade, hue-separated
   // key/fill, enclosure occlusion and banded aerial haze are computed per FRAGMENT, because the
   // 100 m basin vertex spacing cannot carry a field edge, a canopy line or a 77 m shoreline —
   // baking those into vertex colours interpolates them away, which is the Build 264 monotone and
   // the sand-coloured river of the parked WIP. Scene lights deliberately do not touch either.
-  if (role === "basin") return createCobraCanyonBasinMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE);
+  if (role === "basin") return createCobraCanyonBasinMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE, surfaceTextures);
   if (role === "river") return createCobraCanyonRiverMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE);
   const parameters = {
     // Laterite dirt, not warning tape: the road must read as ground the FOB's laterite
@@ -1222,9 +1230,9 @@ function materialFor(THREE, role) {
   return material;
 }
 
-function addStaticMesh(THREE, group, role, geometry, resources, metrics) {
+function addStaticMesh(THREE, group, role, geometry, resources, metrics, materialOverride = null) {
   if (!geometry) return null;
-  const material = materialFor(THREE, role);
+  const material = materialOverride ?? materialFor(THREE, role);
   const mesh = tagObject(
     new THREE.Mesh(geometry, material),
     role,
@@ -1419,6 +1427,7 @@ const BATTLE_OBJECTIVE_LANDMARK_IDS = new Set([
 ]);
 const BATTLE_OBJECTIVE_TERRAIN_RADIUS_M = 260;
 const BASIN_GRID_CACHE = new WeakMap();
+const BASIN_HEIGHT_CACHE = new WeakMap();
 
 function battleTerrainFoci(plan) {
   const cellFoci = sortedRecords(plan.cells ?? plan.heroCells ?? [], "hero-cell")
@@ -1584,6 +1593,25 @@ function basinVertexHeight(
   return apronHeightM - campEmberDrawnRecessM(eastM, northM);
 }
 
+function basinGridHeights(grid) {
+  let heights = BASIN_HEIGHT_CACHE.get(grid);
+  if (!heights) {
+    heights = new Float32Array(grid.eastAxis.length * grid.northAxis.length).fill(NaN);
+    BASIN_HEIGHT_CACHE.set(grid, heights);
+  }
+  return heights;
+}
+
+function cachedBasinVertexHeight(plan, grid, eastIndex, northIndex) {
+  const heights = basinGridHeights(grid);
+  const index = northIndex * grid.eastAxis.length + eastIndex;
+  if (Number.isNaN(heights[index])) {
+    heights[index] = basinVertexHeight(plan, grid.eastAxis[eastIndex], grid.northAxis[northIndex],
+      grid.eastStepM, grid.northStepM);
+  }
+  return heights[index];
+}
+
 function basinGeometry(THREE, plan, qualityTier) {
   const positions = [];
   const concavity = [];
@@ -1592,17 +1620,13 @@ function basinGeometry(THREE, plan, qualityTier) {
   const grid = basinGrid(plan, qualityTier);
   const columnCount = grid.eastAxis.length;
   const rowCount = grid.northAxis.length;
-  const heights = new Float32Array(columnCount * rowCount);
+  // The sampler and emitted mesh share these exact Float32 values. Five root samples for each
+  // resident plant must not reevaluate twenty five-sample analytical corner heights at refill.
+  // Finite plan/tier grids are weak-keyed and leave memory with their owning plan.
+  const heights = basinGridHeights(grid);
   for (let northIndex = 0; northIndex < rowCount; northIndex++) {
-    const northM = grid.northAxis[northIndex];
     for (let eastIndex = 0; eastIndex < columnCount; eastIndex++) {
-      heights[northIndex * columnCount + eastIndex] = basinVertexHeight(
-        plan,
-        grid.eastAxis[eastIndex],
-        northM,
-        grid.eastStepM,
-        grid.northStepM,
-      );
+      cachedBasinVertexHeight(plan, grid, eastIndex, northIndex);
     }
   }
   const heightAt = (eastIndex, northIndex) => heights[
@@ -1793,18 +1817,10 @@ export function sampleCobraCanyonRenderedBasinHeight(
   const north1 = grid.northAxis[northCell + 1];
   const eastBlend = clamp((east - east0) / (east1 - east0), 0, 1);
   const northBlend = clamp((north - north0) / (north1 - north0), 0, 1);
-  const corner = (eastM, northM) =>
-    Math.fround(basinVertexHeight(
-      plan,
-      eastM,
-      northM,
-      grid.eastStepM,
-      grid.northStepM,
-    ));
-  const northWest = corner(east0, north0);
-  const northEast = corner(east1, north0);
-  const southWest = corner(east0, north1);
-  const southEast = corner(east1, north1);
+  const northWest = cachedBasinVertexHeight(plan, grid, eastCell, northCell);
+  const northEast = cachedBasinVertexHeight(plan, grid, eastCell + 1, northCell);
+  const southWest = cachedBasinVertexHeight(plan, grid, eastCell, northCell + 1);
+  const southEast = cachedBasinVertexHeight(plan, grid, eastCell + 1, northCell + 1);
   if (eastBlend >= northBlend) {
     return northWest
       + eastBlend * (northEast - northWest)
@@ -2571,6 +2587,7 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     basinGeometry(THREE, plan, qualityTier),
     resources,
     metrics,
+    materialFor(THREE, "basin", options.surfaceTextures),
   );
   addStaticMesh(
     THREE,
@@ -2766,27 +2783,40 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
   // it here means `metrics.triangles` is the complete static cost of the world — basin, river,
   // firebase, landmarks, hazards and bridges — so the kit is told the truth about its ceiling
   // rather than a figure that three later submissions will quietly spend.
+  // One unshadowed crown batch supplies the missing mid-distance layer. It borrows allocation
+  // from the close kit. Instance ceilings and balanced/desktop triangle ceilings stay fixed;
+  // mobile's explicit 11,520-triangle addition is documented in its 58,000 ceiling above.
+  // These small plants and shallow crowns need the emitted triangle surface, whose height may
+  // differ from collision terrain by more than their full height between coarse grid vertices.
+  const sampleVisualTerrain = (eastM, northM) =>
+    sampleCobraCanyonRenderedBasinHeight(plan, qualityTier, eastM, northM);
+  const canopy = createCobraCanopyField(THREE, plan, { qualityTier,
+    sampleTerrain: sampleVisualTerrain, surfaceTextures: options.surfaceTextures });
+  group.add(canopy.mesh);
   const assetKit = createCobraCanyonAssetKit(THREE, plan, {
     qualityTier,
-    maxInstances: budget.maxAssetInstances,
+    maxInstances: budget.maxAssetInstances - canopy.builtMetrics.instances,
     // Minus a reserve: a tier that lands EXACTLY on its ceiling has nothing left for the next
     // authored hazard or landmark, and the ceiling contract is a working margin, not a target.
-    maxTriangles: budget.maxTriangles - metrics.triangles - PRESENTATION_TRIANGLE_RESERVE,
+    maxTriangles: budget.maxTriangles - metrics.triangles - canopy.builtMetrics.triangles
+      - PRESENTATION_TRIANGLE_RESERVE,
     foliageTextures: options.foliageTextures ?? null,
+    sampleVisualTerrain,
     roleGeometries: options.roleGeometries ?? null,
     authoredTriangleBudget: budget.maxAuthoredTriangles,
   });
   group.add(assetKit.group);
 
   const builtMetrics = Object.freeze({
-    drawCalls: metrics.drawCalls + assetKit.builtMetrics.drawCalls,
-    instances: metrics.instances + assetKit.builtMetrics.instances,
-    triangles: metrics.triangles + assetKit.builtMetrics.triangles,
+    drawCalls: metrics.drawCalls + assetKit.builtMetrics.drawCalls + canopy.builtMetrics.drawCalls,
+    instances: metrics.instances + assetKit.builtMetrics.instances + canopy.builtMetrics.instances,
+    triangles: metrics.triangles + assetKit.builtMetrics.triangles + canopy.builtMetrics.triangles,
   });
   if (builtMetrics.drawCalls > budget.maxDrawCalls
       || builtMetrics.instances > budget.maxInstances
       || builtMetrics.triangles > budget.maxTriangles) {
     assetKit.dispose();
+    canopy.dispose();
     disposeResources(resources);
     throw new RangeError(
       `Cobra Canyon ${qualityTier} presentation needs ${builtMetrics.drawCalls} draw calls, `
@@ -2829,6 +2859,8 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     assetRenderBatches: assetKit.roleCounts.renderBatches,
     worldRenderBatches: builtMetrics.drawCalls,
     ...assetKit.roleCounts,
+    canopyCapacity: canopy.builtMetrics.instances,
+    canopyAllocatedTriangles: canopy.builtMetrics.triangles,
   });
 
   const snapshots = Array.from({ length: 3 }, () => [null, null]);
@@ -2891,6 +2923,7 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
   let currentDiagnostics = snapshots[ambientBudgetLevel][1];
   let currentAssetSnapshot = null;
   let currentBaseSnapshot = null;
+  let currentCanopySnapshot = null;
   let assetKitCamera = null;
 
   function applyVisibility() {
@@ -2915,24 +2948,30 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
       bridgePierMesh.count = hazards.bridgePiers.length;
     }
     assetKit.update({ ambientBudgetLevel, nearRingVisible, cameraPosition: assetKitCamera });
+    canopy.update({ ambientBudgetLevel, cameraPosition: assetKitCamera });
     const base = snapshots[ambientBudgetLevel][nearRingVisible ? 1 : 0];
     // The asset kit's occupancy follows the aircraft (near-field scatter), so the asset-derived
     // fields cannot be baked at build time the way the static world's can. Rebuild them only when
     // they actually move: `diagnostics()` must keep returning the SAME frozen object for repeated
     // identical frames, which is what makes the update path allocation-free while parked.
     const assetSnapshot = assetKit.diagnosticsFor(ambientBudgetLevel, nearRingVisible);
-    if (currentAssetSnapshot === assetSnapshot && currentBaseSnapshot === base) return;
+    const canopySnapshot = canopy.diagnostics();
+    if (currentAssetSnapshot === assetSnapshot && currentBaseSnapshot === base
+      && currentCanopySnapshot === canopySnapshot) return;
     currentAssetSnapshot = assetSnapshot;
     currentBaseSnapshot = base;
+    currentCanopySnapshot = canopySnapshot;
     currentDiagnostics = Object.freeze({
       ...base,
-      drawCalls: metrics.drawCalls + assetSnapshot.drawCalls,
-      instances: metrics.instances + assetSnapshot.instances,
-      triangles: metrics.triangles + assetSnapshot.triangles,
-      visibleAmbientInstances: assetSnapshot.instances,
-      visibleAssetInstances: assetSnapshot.instances,
-      visibleAssetDrawCalls: assetSnapshot.drawCalls,
-      roleCounts: Object.freeze({ ...base.roleCounts, ...assetSnapshot.roleCounts }),
+      drawCalls: metrics.drawCalls + assetSnapshot.drawCalls + canopySnapshot.drawCalls,
+      instances: metrics.instances + assetSnapshot.instances + canopySnapshot.instances,
+      triangles: metrics.triangles + assetSnapshot.triangles + canopySnapshot.triangles,
+      visibleAmbientInstances: assetSnapshot.instances + canopySnapshot.instances,
+      visibleAssetInstances: assetSnapshot.instances + canopySnapshot.instances,
+      visibleAssetDrawCalls: assetSnapshot.drawCalls + canopySnapshot.drawCalls,
+      roleCounts: Object.freeze({ ...base.roleCounts, ...assetSnapshot.roleCounts,
+        canopyInstances: canopySnapshot.instances, canopyTriangles: canopySnapshot.triangles,
+        canopyPendingCells: canopySnapshot.pendingCells }),
     });
   }
 
@@ -2977,6 +3016,7 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
       disposed = true;
       group.removeFromParent();
       assetKit.dispose();
+      canopy.dispose();
       disposeResources(resources);
       group.clear();
       group.userData.cobraCanyonDisposed = true;

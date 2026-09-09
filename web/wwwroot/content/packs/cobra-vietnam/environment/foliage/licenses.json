@@ -23,17 +23,17 @@
         "modificationAllowed": true,
         "shareAlikeRequired": false,
         "notices": [
-          "CC0 — attribution not required; provenance retained in SOURCES.md."
+          "CC0 \u2014 attribution not required; provenance retained in SOURCES.md."
         ]
       },
-      "attributionText": "Palm plant sprite (OpenGameArt), CC0 — qubodup / Yughues.",
+      "attributionText": "Palm plant sprite (OpenGameArt), CC0 \u2014 qubodup / Yughues.",
       "evidence": [
         {
           "type": "license_file",
           "uri": "repo://content/packs/cobra-vietnam/environment/foliage/SOURCES.md"
         }
       ],
-      "notes": "Resized to 512² and packed into the left half of foliage-atlas.png."
+      "notes": "Resized to 512\u00b2 and packed into the left half of foliage-atlas.png."
     },
     {
       "licenseId": "license.oga-vegetation-fern-01.v1",
@@ -53,10 +53,10 @@
         "modificationAllowed": true,
         "shareAlikeRequired": false,
         "notices": [
-          "CC0 — attribution not required; provenance retained in SOURCES.md."
+          "CC0 \u2014 attribution not required; provenance retained in SOURCES.md."
         ]
       },
-      "attributionText": "Vegetation fern cutout (OpenGameArt), CC0 — paramecij.",
+      "attributionText": "Vegetation fern cutout (OpenGameArt), CC0 \u2014 paramecij.",
       "evidence": [
         {
           "type": "license_file",
@@ -64,6 +64,44 @@
         }
       ],
       "notes": "Height-normalized and packed into the right half of foliage-atlas.png."
+    },
+    {
+      "licenseId": "license.project-generated-foliage.v2",
+      "appliesTo": [
+        "environment.foliage.generated-atlas.v2"
+      ],
+      "spdxExpression": "MIT",
+      "copyright": "Project asset under the repository MIT notice; no assertion of exclusive copyright in AI-generated output.",
+      "authors": [
+        "Ian Todd (project direction)",
+        "OpenAI image generation (tool)"
+      ],
+      "sourceUri": "repo://tools/assets/generators/cobra-foliage/sources/foliage-atlas-rgb-coverage-v2.png",
+      "redistribution": {
+        "allowed": true,
+        "commercialUseAllowed": true,
+        "modificationAllowed": true,
+        "shareAlikeRequired": false,
+        "notices": [
+          "Retain the repository MIT notice. The CC0 layout references and generated provenance are recorded in SOURCES.md."
+        ]
+      },
+      "attributionText": "Guns Only generated botanical presentation texture; CC0 qubodup/Yughues and paramecij atlas used as layout input.",
+      "evidence": [
+        {
+          "type": "license_file",
+          "uri": "repo://LICENSE"
+        },
+        {
+          "type": "author_statement",
+          "uri": "repo://content/packs/cobra-vietnam/environment/foliage/SOURCES.md"
+        },
+        {
+          "type": "author_statement",
+          "uri": "repo://tools/assets/generators/cobra-foliage/sources/foliage-atlas-rgb-coverage-v2.provenance.json"
+        }
+      ],
+      "notes": "Original CC0 source licenses remain above. This entry covers only the separately versioned generated output. Fictional foliage presentation; not botanical, geographical or collision evidence."
     }
   ]
 }

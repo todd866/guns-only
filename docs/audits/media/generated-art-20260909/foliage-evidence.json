@@ -1,0 +1,537 @@
+{
+  "poses": {
+    "mobile": {
+      "residentCount": 24,
+      "initialCamera": {
+        "x": -2710.0238864034095,
+        "y": 213.47230415747995,
+        "z": 861.0496059740724
+      },
+      "views": [
+        {
+          "kind": "canopy",
+          "target": {
+            "instanceId": 0,
+            "id": "set-piece.cobra-canyon.split-tooth-gate.v1.archetype.cobra-canyon.jungle-canopy.v1.0",
+            "batchId": "set-piece.cobra-canyon.split-tooth-gate.v1",
+            "setPieceId": "set-piece.cobra-canyon.split-tooth-gate.v1",
+            "archetypeId": "archetype.cobra-canyon.jungle-canopy.v1",
+            "role": "jungle",
+            "eastM": -4379.396726093899,
+            "northM": 1573.3212380414711,
+            "yaw": 5.5327177537079635,
+            "widthM": 28.06264430062845,
+            "heightM": 29.503983658254146,
+            "depthM": 23.745314408224075,
+            "y": 474.77789306640625,
+            "actualHeight": 29.503984451293945,
+            "actualWidth": 28.06264445339472
+          },
+          "eastM": -4413.6026821138,
+          "northM": 1536.6380742270467,
+          "aglM": 14.679569527414003,
+          "yawRad": 5.5327177537079635,
+          "pitchRad": 0,
+          "fovDeg": 56,
+          "distance": 50.15677356719971,
+          "ground": 475.4403954536651,
+          "targetY": 490.1199649810791
+        },
+        {
+          "kind": "understory",
+          "target": {
+            "instanceId": 11,
+            "id": "set-piece.cobra-canyon.white-pagoda-saddle.v1.archetype.cobra-canyon.jungle-understory.v1.2",
+            "batchId": "set-piece.cobra-canyon.white-pagoda-saddle.v1",
+            "setPieceId": "set-piece.cobra-canyon.white-pagoda-saddle.v1",
+            "archetypeId": "archetype.cobra-canyon.jungle-understory.v1",
+            "role": "jungle",
+            "eastM": -3588.9810804823196,
+            "northM": 3073.3745014107026,
+            "yaw": 4.14712270398678,
+            "widthM": 11.274703284151036,
+            "heightM": 4,
+            "depthM": 10.02195847480092,
+            "y": 509.2638244628906,
+            "actualHeight": 4,
+            "actualWidth": 11.274703030970759
+          },
+          "eastM": -3576.127895321397,
+          "northM": 3065.221595284989,
+          "aglM": 3.8177562328958743,
+          "yawRad": 7.2887153575765735,
+          "pitchRad": 0,
+          "fovDeg": 56,
+          "distance": 15.220849091810525,
+          "ground": 507.52606822999473,
+          "targetY": 511.3438244628906
+        }
+      ]
+    },
+    "balanced": {
+      "residentCount": 2270,
+      "initialCamera": {
+        "x": -3576.127895321397,
+        "y": 511.3438244628906,
+        "z": -3065.221595284989
+      },
+      "views": [
+        {
+          "kind": "canopy",
+          "target": {
+            "instanceId": 5,
+            "id": "set-piece.cobra-canyon.white-pagoda-saddle.v1.archetype.cobra-canyon.jungle-canopy.v1.1",
+            "batchId": "set-piece.cobra-canyon.white-pagoda-saddle.v1",
+            "setPieceId": "set-piece.cobra-canyon.white-pagoda-saddle.v1",
+            "archetypeId": "archetype.cobra-canyon.jungle-canopy.v1",
+            "role": "jungle",
+            "eastM": -3559.2221558581405,
+            "northM": 3064.619721458157,
+            "yaw": 4.854548517260016,
+            "widthM": 31.303267586959986,
+            "heightM": 33.23509623259306,
+            "depthM": 26.48738026588922,
+            "y": 501.3225402832031,
+            "actualHeight": 33.2350959777832,
+            "actualWidth": 31.303268347958653
+          },
+          "eastM": -3615.1518695695495,
+          "northM": 3056.6147816329335,
+          "aglM": 4.090766721453747,
+          "yawRad": 4.854548517260016,
+          "pitchRad": 0,
+          "fovDeg": 56,
+          "distance": 56.49966316223144,
+          "ground": 514.5140234701967,
+          "targetY": 518.6047901916504
+        },
+        {
+          "kind": "understory",
+          "target": {
+            "instanceId": 35,
+            "id": "ambient.cobra-canyon.ridge-bamboo.v1.-23.19.2",
+            "batchId": "ambient.cobra-canyon.ridge-bamboo.v1",
+            "setPieceId": null,
+            "archetypeId": "archetype.cobra-canyon.jungle-understory.v1",
+            "role": "jungle",
+            "eastM": -3585.071516400731,
+            "northM": 3075.2469338070505,
+            "yaw": 0.5214344397717438,
+            "widthM": 12.820786415730254,
+            "heightM": 4,
+            "depthM": 11.396254591760226,
+            "y": 508.46142578125,
+            "actualHeight": 4,
+            "actualWidth": 12.820786291897905
+          },
+          "eastM": -3576.449947605518,
+          "northM": 3060.239017756124,
+          "aglM": 3.545084800223947,
+          "yawRad": 0.5214344397717438,
+          "pitchRad": 0,
+          "fovDeg": 56,
+          "distance": 17.308061494062173,
+          "ground": 506.99634098102604,
+          "targetY": 510.54142578125
+        }
+      ]
+    }
+  },
+  "evidence": [
+    {
+      "version": "current",
+      "readOnlyInspector": true,
+      "pageErrors": [],
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 501 (Unsupported method ('POST'))",
+        "Failed to load resource: the server responded with a status of 501 (Unsupported method ('POST'))"
+      ],
+      "assets": [
+        {
+          "url": "http://127.0.0.1:56616/content/packs/cobra-vietnam/environment/foliage/foliage-atlas-generated-v2.png",
+          "status": 200,
+          "bytes": 546554,
+          "sha256": "e16bb50cb7a63083f0ab6a4af537631a31a86ce745ff82d00eaacd1bf44896c8"
+        }
+      ],
+      "captures": [
+        {
+          "file": "/tmp/guns-generated-art-qa/foliage-final/current-mobile-canopy.png",
+          "tier": "mobile",
+          "view": {
+            "kind": "canopy",
+            "target": {
+              "instanceId": 0,
+              "id": "set-piece.cobra-canyon.split-tooth-gate.v1.archetype.cobra-canyon.jungle-canopy.v1.0",
+              "batchId": "set-piece.cobra-canyon.split-tooth-gate.v1",
+              "setPieceId": "set-piece.cobra-canyon.split-tooth-gate.v1",
+              "archetypeId": "archetype.cobra-canyon.jungle-canopy.v1",
+              "role": "jungle",
+              "eastM": -4379.396726093899,
+              "northM": 1573.3212380414711,
+              "yaw": 5.5327177537079635,
+              "widthM": 28.06264430062845,
+              "heightM": 29.503983658254146,
+              "depthM": 23.745314408224075,
+              "y": 474.77789306640625,
+              "actualHeight": 29.503984451293945,
+              "actualWidth": 28.06264445339472
+            },
+            "eastM": -4413.6026821138,
+            "northM": 1536.6380742270467,
+            "aglM": 14.679569527414003,
+            "yawRad": 5.5327177537079635,
+            "pitchRad": 0,
+            "fovDeg": 56,
+            "distance": 50.15677356719971,
+            "ground": 475.4403954536651,
+            "targetY": 490.1199649810791
+          },
+          "proof": {
+            "camera": {
+              "x": -4413.6026821138,
+              "y": 490.1199649810791,
+              "z": -1536.6380742270467
+            },
+            "quality": "mobile",
+            "render": {
+              "frame": 10,
+              "calls": 24,
+              "triangles": 40134,
+              "points": 0,
+              "lines": 0
+            },
+            "programs": [
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_BASIN_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_RIVER_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_LANDMARKS_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_ASSET_JUNGLE_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_ASSET_PLANTATION_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_HAZARDS_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_WATER_TOWER_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_HEROCELLS_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+                "diagnostics": null
+              }
+            ],
+            "mesh": [
+              {
+                "name": "COBRA_CANYON_ASSET_JUNGLE",
+                "count": 30,
+                "visible": true,
+                "map": "http://127.0.0.1:56616/content/packs/cobra-vietnam/environment/foliage/foliage-atlas-generated-v2.png",
+                "mapUserData": {
+                  "cobraFoliageEncoding": "black-matte-v1"
+                },
+                "depth": true,
+                "distance": true
+              }
+            ],
+            "targetStillResident": true,
+            "target": {
+              "instanceId": 0,
+              "id": "set-piece.cobra-canyon.split-tooth-gate.v1.archetype.cobra-canyon.jungle-canopy.v1.0",
+              "batchId": "set-piece.cobra-canyon.split-tooth-gate.v1",
+              "setPieceId": "set-piece.cobra-canyon.split-tooth-gate.v1",
+              "archetypeId": "archetype.cobra-canyon.jungle-canopy.v1",
+              "role": "jungle",
+              "eastM": -4379.396726093899,
+              "northM": 1573.3212380414711,
+              "yaw": 5.5327177537079635,
+              "widthM": 28.06264430062845,
+              "heightM": 29.503983658254146,
+              "depthM": 23.745314408224075,
+              "y": 474.77789306640625,
+              "actualHeight": 29.503984451293945,
+              "actualWidth": 28.06264445339472
+            },
+            "projected": {
+              "x": 720,
+              "y": 449.99999999999903,
+              "inFrame": true
+            }
+          }
+        },
+        {
+          "file": "/tmp/guns-generated-art-qa/foliage-final/current-balanced-understory.png",
+          "tier": "balanced",
+          "view": {
+            "kind": "understory",
+            "target": {
+              "instanceId": 35,
+              "id": "ambient.cobra-canyon.ridge-bamboo.v1.-23.19.2",
+              "batchId": "ambient.cobra-canyon.ridge-bamboo.v1",
+              "setPieceId": null,
+              "archetypeId": "archetype.cobra-canyon.jungle-understory.v1",
+              "role": "jungle",
+              "eastM": -3585.071516400731,
+              "northM": 3075.2469338070505,
+              "yaw": 0.5214344397717438,
+              "widthM": 12.820786415730254,
+              "heightM": 4,
+              "depthM": 11.396254591760226,
+              "y": 508.46142578125,
+              "actualHeight": 4,
+              "actualWidth": 12.820786291897905
+            },
+            "eastM": -3576.449947605518,
+            "northM": 3060.239017756124,
+            "aglM": 3.545084800223947,
+            "yawRad": 0.5214344397717438,
+            "pitchRad": 0,
+            "fovDeg": 56,
+            "distance": 17.308061494062173,
+            "ground": 506.99634098102604,
+            "targetY": 510.54142578125
+          },
+          "proof": {
+            "camera": {
+              "x": -3576.449947605518,
+              "y": 510.54142578125,
+              "z": -3060.239017756124
+            },
+            "quality": "balanced",
+            "render": {
+              "frame": 10,
+              "calls": 19,
+              "triangles": 250692,
+              "points": 0,
+              "lines": 0
+            },
+            "programs": [
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_BASIN_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_RIVER_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_LANDMARKS_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_ASSET_JUNGLE_AUTHORED_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_ASSET_JUNGLE_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_ASSET_PLANTATION_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_HAZARDS_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_WATER_TOWER_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_HEROCELLS_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+                "diagnostics": null
+              },
+              {
+                "name": "COBRA_CANYON_ASSET_MIST_MATERIAL",
+                "diagnostics": null
+              }
+            ],
+            "mesh": [
+              {
+                "name": "COBRA_CANYON_ASSET_JUNGLE",
+                "count": 2334,
+                "visible": true,
+                "map": "http://127.0.0.1:56616/content/packs/cobra-vietnam/environment/foliage/foliage-atlas-generated-v2.png",
+                "mapUserData": {
+                  "cobraFoliageEncoding": "black-matte-v1"
+                },
+                "depth": true,
+                "distance": true
+              }
+            ],
+            "targetStillResident": true,
+            "target": {
+              "instanceId": 35,
+              "id": "ambient.cobra-canyon.ridge-bamboo.v1.-23.19.2",
+              "batchId": "ambient.cobra-canyon.ridge-bamboo.v1",
+              "setPieceId": null,
+              "archetypeId": "archetype.cobra-canyon.jungle-understory.v1",
+              "role": "jungle",
+              "eastM": -3585.071516400731,
+              "northM": 3075.2469338070505,
+              "yaw": 0.5214344397717438,
+              "widthM": 12.820786415730254,
+              "heightM": 4,
+              "depthM": 11.396254591760226,
+              "y": 508.46142578125,
+              "actualHeight": 4,
+              "actualWidth": 12.820786291897905
+            },
+            "projected": {
+              "x": 720,
+              "y": 449.9999999999972,
+              "inFrame": true
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

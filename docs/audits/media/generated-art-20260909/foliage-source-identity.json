@@ -1,0 +1,20 @@
+[
+  {
+    "path": "render/cobra/cobra_canyon_foliage.js",
+    "bytes": 7313,
+    "sha256": "71cbde72167a3e66ed4c425c35a45a48123bfdae26d2bdb9171980a3879a34db",
+    "sourceMatchesPublished": true
+  },
+  {
+    "path": "render/cobra/cobra_canyon_asset_kit.js",
+    "bytes": 101452,
+    "sha256": "9a840fcb2833336d5142b831fd078e6cd4c599c67ed1302e5c2cc407f587cd53",
+    "sourceMatchesPublished": true
+  },
+  {
+    "path": "content/packs/cobra-vietnam/environment/foliage/SOURCES.md",
+    "bytes": 6060,
+    "sha256": "c6050c1356df207c0b8e5bf6fc35badb649f44b1123b891768f4dfdf34ef369a",
+    "sourceMatchesPublished": true
+  }
+]
