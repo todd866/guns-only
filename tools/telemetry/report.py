@@ -525,6 +525,8 @@ def shell_health_summary(sessions, shell_names, refresh):
     order = ["script_load", "bridge_ready", "webgl_ok", "ready", "active"]
     for name in shell_names:
         reached = set()
+        counted_milestones = set()
+        counted_fatals = set()
         platform_name = "unknown"
         arrival_name = "unknown"
         for blob in sessions[name]:
@@ -542,10 +544,16 @@ def shell_health_summary(sessions, shell_names, refresh):
                     arrival_name = row.get("arrival") or arrival_name
                 elif row.get("k") == "in" and row.get("type") == "shell_health":
                     if row.get("code") == "milestone" and row.get("milestone"):
-                        reached.add(row["milestone"])
-                        milestones[row["milestone"]] += 1
+                        milestone = row["milestone"]
+                        reached.add(milestone)
+                        if milestone not in counted_milestones:
+                            counted_milestones.add(milestone)
+                            milestones[milestone] += 1
                     elif row.get("code") == "fatal":
-                        fatals[row.get("reason") or "unknown"] += 1
+                        reason = row.get("reason") or "unknown"
+                        if reason not in counted_fatals:
+                            counted_fatals.add(reason)
+                            fatals[reason] += 1
         platforms[platform_name] += 1
         arrivals[arrival_name] += 1
         last = "none"

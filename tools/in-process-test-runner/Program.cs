@@ -3,10 +3,12 @@ using Xunit.Abstractions;
 using Xunit.Sdk;
 
 bool server = args.Contains("--server");
-var assembly = server
+var assembly = args.Contains("--arena")
+    ? typeof(GunsOnly.ArenaServer.Tests.ArenaEloTests).Assembly
+    : server
     ? typeof(GunsOnly.Server.Tests.PresenceProtocolTests).Assembly
     : typeof(GunsOnly.Sim.Tests.ReactiveBanditTests).Assembly;
-var filters = args.Where(argument => argument != "--server").ToArray();
+var filters = args.Where(argument => argument != "--server" && argument != "--arena").ToArray();
 using var framework = new XunitTestFramework(new NullMessageSink());
 using var discoverer = framework.GetDiscoverer(new ReflectionAssemblyInfo(assembly));
 var discovery = new DiscoverySink();

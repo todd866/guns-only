@@ -146,7 +146,7 @@ const MODES = {
     },
   },
   f22: {
-    url: `${BASE}?program=first-merge&audioQa=silent`,
+    url: `${BASE}?program=first-merge&menu=1&server=off&audioQa=silent`,
     async boot(page) {
       await page.waitForFunction(
         () => document.querySelector("#boot")?.classList.contains("ready") === true,
@@ -195,7 +195,7 @@ const MODES = {
   // stutter complaints come from. "parked" here means high-altitude cruise, "motion" means
   // low-level over terrain: the two legs isolate what altitude costs.
   f22low: {
-    url: `${BASE}?program=first-merge&audioQa=silent`,
+    url: `${BASE}?program=first-merge&menu=1&server=off&audioQa=silent`,
     async boot(page) { await MODES.f22.boot(page); },
     async park(page) { await page.waitForTimeout(500); },
     async move(page) {

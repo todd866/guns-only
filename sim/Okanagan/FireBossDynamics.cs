@@ -258,6 +258,12 @@ public sealed class FireBossDynamics
         Vec3D forward = Forward(headingRad);
         Vec3D velocity = forward * speedMps;
         Vec3D position = state.Position + velocity * FixedDeltaSeconds;
+        // Contact is bounded by the same geometry as airborne collision. Previously a float
+        // run could continue through a shoreline, and a late landing could coast a kilometre
+        // beyond the runway at fixed runway height while the mission reported success.
+        bool stillOnSurface = _surfaceMode == FireBossSurfaceMode.Water
+            ? OkanaganGeo.IsOverCentralLake(position) : OkanaganGeo.IsOverKelownaRunway(position);
+        if (!stillOnSurface) { Destroy(); return; }
         double surfaceHeight = _surfaceMode == FireBossSurfaceMode.Water
             ? LakeHeightM : 433.0;
         position = position with { Y = surfaceHeight };

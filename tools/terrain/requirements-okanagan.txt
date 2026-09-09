@@ -1,0 +1,6 @@
+numpy>=2.2,<3
+scipy>=1.15,<2
+Pillow>=11,<13
+shapely==2.1.2
+pyproj==3.7.2
+tifffile==2026.8.23

@@ -57,6 +57,20 @@ public static partial class WebBridge {
             TerrainForEnvironment(Ukraine2030sTheatre.FirstRunMountainValley));
     }
 
+    [JSExport]
+    public static bool StartPractice(int exercise) {
+        if (exercise < 1 || exercise > 3) return false;
+        var kind = (GunsOnly.Sim.Training.PracticeExercise)exercise;
+        bool valley = kind == GunsOnly.Sim.Training.PracticeExercise.Valley;
+        var environment = valley ? Ukraine2030sTheatre.FirstRunMountainValley
+            : Beats.ModernVisualMerge().EnvironmentIdentity;
+        Session.StartBeatWithEnvironment(
+            () => GunsOnly.Sim.Training.PracticeBeats.Create(kind),
+            valley ? KoreaWeatherPresets.ForBeat(13) : null,
+            TerrainForEnvironment(environment));
+        return true;
+    }
+
     /// <summary>
     /// Fly again after dying WITHOUT throwing away the gauntlet's pacing memory. StartBeat resets
     /// the FightDirector — correct when the pilot picks a mission, wrong when they are respawning

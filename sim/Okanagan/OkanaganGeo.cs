@@ -13,7 +13,9 @@ public static class OkanaganGeo
     const double MetresPerLatitudeDegree = 111_320.0;
     static readonly double MetresPerLongitudeDegree =
         MetresPerLatitudeDegree * Math.Cos(AnchorLatitudeDeg * Math.PI / 180.0);
-    static readonly (double Longitude, double Latitude)[] LakeShoreline = LoadLakeShoreline();
+    static readonly LakeGeometry Lake = LoadLake();
+    sealed record LakeGeometry((double Longitude, double Latitude)[] Shoreline,
+        (double Longitude, double Latitude)[][] Islands);
 
     public static Vec3D ToWorld(double latitudeDeg, double longitudeDeg, double altitudeM) => new(
         (longitudeDeg - AnchorLongitudeDeg) * MetresPerLongitudeDegree,
@@ -27,15 +29,22 @@ public static class OkanaganGeo
     public static bool IsOverCentralLake(in Vec3D position)
     {
         (double latitude, double longitude) = ToGeographic(position);
+        return Contains(Lake.Shoreline, longitude, latitude)
+            && !Lake.Islands.Any(ring => Contains(ring, longitude, latitude));
+    }
+
+    static bool Contains((double Longitude, double Latitude)[] ring, double longitude, double latitude)
+    {
         bool inside = false;
-        for (int i = 0, j = LakeShoreline.Length - 1; i < LakeShoreline.Length; j = i++) {
-            (double xi, double yi) = LakeShoreline[i];
-            (double xj, double yj) = LakeShoreline[j];
+        for (int i = 0, j = ring.Length - 1; i < ring.Length; j = i++) {
+            (double xi, double yi) = ring[i];
+            (double xj, double yj) = ring[j];
             double dx = xj - xi;
             double dy = yj - yi;
+            if (dx == 0.0 && dy == 0.0) continue;
             double cross = (longitude - xi) * dy - (latitude - yi) * dx;
             double dot = (longitude - xi) * dx + (latitude - yi) * dy;
-            if (Math.Abs(cross) < 1e-10 && dot >= 0.0 && dot <= dx * dx + dy * dy)
+            if (Math.Abs(cross) < 1e-12 && dot >= 0.0 && dot <= dx * dx + dy * dy)
                 return true;
             bool crosses = (yi > latitude) != (yj > latitude)
                 && longitude < (xj - xi) * (latitude - yi) / (yj - yi) + xi;
@@ -88,17 +97,17 @@ public static class OkanaganGeo
         return t * t * (3.0 - 2.0 * t);
     }
 
-    static (double Longitude, double Latitude)[] LoadLakeShoreline()
+    static LakeGeometry LoadLake()
     {
         const string resourceName = "GunsOnly.Sim.Data.OkanaganCentral.world.json";
         using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"Missing embedded Okanagan world {resourceName}.");
         using JsonDocument document = JsonDocument.Parse(stream);
-        return document.RootElement.GetProperty("lake").GetProperty("shoreline")
-            .EnumerateArray()
-            .Select(point => (
-                point[0].GetDouble(),
-                point[1].GetDouble()))
-            .ToArray();
+        JsonElement lake = document.RootElement.GetProperty("lake");
+        static (double Longitude, double Latitude)[] ReadRing(JsonElement ring) => ring.EnumerateArray()
+            .Select(point => (point[0].GetDouble(), point[1].GetDouble())).ToArray();
+        return new LakeGeometry(ReadRing(lake.GetProperty("shoreline")),
+            lake.TryGetProperty("islands", out JsonElement islands)
+                ? islands.EnumerateArray().Select(ReadRing).ToArray() : []);
     }
 }

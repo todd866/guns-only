@@ -7,6 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="../web/wwwroot/content/packs/okanagan-fire/environment/okanagan-resorts.osm.json"
+                      LogicalName="GunsOnly.Sim.Data.OkanaganResorts.osm.json" />
     <!-- Rapier v2 has one geometry authority. The canonical authored shape and its deterministic
          derived engineering artifact are embedded so runtime physics cannot drift onto a second
          hand-maintained set of dimensions, masses, inertias, inlet area, or thermal limits. -->

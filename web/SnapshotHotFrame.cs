@@ -77,6 +77,7 @@ internal static class SnapshotHotFrame {
     public static readonly int SlotCount;
 
     static long _coldVersion = 1;
+    static (SimulationSession Session, int Exercise, int Status)? _lastPractice;
     static ColdFingerprint? _lastFingerprint;
     static CasevacColdFingerprint? _lastCasevacFingerprint;
     static string? _layoutJson;
@@ -879,6 +880,10 @@ internal static class SnapshotHotFrame {
         if (_lastFingerprint is not { } last || !fingerprint.Equals(last))
             _coldVersion++;
         _lastFingerprint = fingerprint;
+        var practiceIdentity = (session, session.Practice is { } p ? (int)p.Exercise : 0,
+            session.Practice is { } active ? (int)active.Status : 0);
+        if (_lastPractice != practiceIdentity) _coldVersion++;
+        _lastPractice = practiceIdentity;
 
         // ---- Derivation prologue: duplicated from SnapshotProjection.BuildState on purpose ----
         AircraftSim player = session.Player;

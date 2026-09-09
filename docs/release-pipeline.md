@@ -155,3 +155,41 @@ caching and was not measured here.
 | second CI Verify on the merge commit | ~12 min | **0** (fast-forward-equivalent) |
 | local re-gate inside `bin/deploy-web` | 25-30 min | **0** (CI is the provenance) |
 | build, upload, verify, promote, live smokes | ~8 min | ~8 min + ~20 s edge warm |
+
+## Acceptance evidence (Build 353)
+
+CI uploads `acceptance.json` with its browser diagnostics. The inventory binds the build and full
+source revision to SHA-256 digests of the published artifact, content tree and atlas manifest.
+The content digest uses exactly the deploy tool's relative-path/byte ordering. The manifest is
+written outside `wwwroot`, so generating it cannot change the artifact being identified.
+
+Boot, meaningful action, outcome, physical recovery, retry, visual review, performance sampling
+and a human sortie are separate columns for each production experience. The initial inventory
+marks every column `not_run`. Browser-suite success alone does not populate mission acceptance.
+The suite's log and screenshots remain separate evidence; the new practice regression exercises
+real input and restart, but does not claim completion of the six full production sorties.
+
+Generate an inventory from an already published candidate:
+
+```sh
+node tools/release/acceptance-evidence.mjs \
+  --wwwroot /path/to/publish/wwwroot \
+  --sha FULL_SOURCE_COMMIT_SHA \
+  --output /path/to/evidence/acceptance.json
+```
+
+To attach assessed evidence, pass `--evidence /path/to/evidence/input.json`. The input has
+`schemaVersion: 1`, an `identity` copied from the candidate inventory, and a partial `matrix`
+keyed by production experience ID, then column. A `passed` or `failed` cell requires `route`,
+`device`, `seed` (an explicit authored-default description is acceptable), `summary`, and a proof
+with `kind`, `path`, and `sha256`. Paths resolve relative to the input file and their bytes must
+match the supplied hash. Proof kinds are `browser-boot`, `browser-action`, `browser-outcome`,
+`browser-recovery`, `browser-retry`, `visual-review`, `performance-sample`, and `human-sortie`,
+respectively. Human proof also names its `witness`. Wrong artifact identity, wrong proof type,
+missing context and altered proof files are rejected.
+
+An unexecuted check stays `not_run`. `not_applicable` is reserved for Weekend Ride's aircraft
+recovery column and requires a reason. This inventory makes gaps explicit; it does not replace
+existing deterministic, browser, visual or deployment gates, and it does not qualify the currently
+unqualified autonomous F-22 player. Production push and deployment still require the owner's
+confirmation after the candidate and verification results are ready to inspect.

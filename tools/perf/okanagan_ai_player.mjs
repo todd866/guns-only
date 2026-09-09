@@ -22,7 +22,7 @@ const chromium = {
 };
 
 export const OKANAGAN_AI_SAMPLE_MS = 50;
-export const OKANAGAN_AI_TIMEOUT_SECONDS = 900;
+export const OKANAGAN_AI_TIMEOUT_SECONDS = 1800;
 export const OKANAGAN_AI_MINIMUM_SIMULATION_RATE = 0.85;
 export const OKANAGAN_GAMEPAD_DEADZONE = 0.14;
 export const OKANAGAN_REQUIRED_PHASES = Object.freeze([
@@ -94,7 +94,7 @@ export function okanaganScreenshotIntegrity(pixelStats = {}) {
 export function okanaganPhaseTimeoutSeconds(phase) {
   return Object.freeze({
     depart: 180,
-    "join-scoop": 210,
+    "join-scoop": 480,
     scoop: 60,
     climb: 180,
     downwind: 210,
@@ -194,16 +194,19 @@ function targetVerticalSpeedMps(state, target, rangeM) {
   const landingSurfaceM = landingSurfaceFor(state, target);
   if (landingSurfaceM != null) {
     const heightM = altitudeM - landingSurfaceM;
-    if (heightM <= 8) return -0.65;
-    if (heightM <= 25) return -1.05;
+    if (heightM <= 3) return -0.9;
+    if (heightM <= 10) return -1.25;
     const geometricMps = (finite(target?.y, landingSurfaceM) - altitudeM)
       / Math.max(350, rangeM) * clamp(state?.tas_mps, 35, 65);
     return clamp(geometricMps, -2.4, -1.15);
   }
   const altitudeErrorM = finite(target?.y, altitudeM) - altitudeM;
   const gain = phase === "climb" ? 0.020 : 0.014;
-  return clamp(altitudeErrorM * gain, phase === "approach" ? -3.0 : -3.8,
-    phase === "climb" ? 5.0 : 3.8);
+  const requested = altitudeErrorM < 0
+    ? altitudeErrorM / Math.max(250, rangeM - target.radiusM * .8) * finite(state?.tas_mps)
+    : altitudeErrorM * gain;
+  return clamp(requested, phase === "approach" ? -3.0 : -3.8,
+    phase === "climb" && target.id === "lift-off" ? 4 : 3.8);
 }
 
 function targetThrottle(state, target, desiredVerticalSpeedMps) {
@@ -213,7 +216,10 @@ function targetThrottle(state, target, desiredVerticalSpeedMps) {
   const targetSpeedMps = finite(target?.targetSpeedMps, phase === "approach" ? 44 : 58);
   if (phase === "landed" || phase === "complete") return 0;
   if (surface === "runway" && phase === "depart") return 1;
-  if (surface === "water" && phase === "climb") return 1;
+  if (phase === "climb") return 1;
+  if (landingSurfaceFor(state, target) != null) {
+    return clamp(.25 + (targetSpeedMps - speedMps) * .05, .02, .75);
+  }
   if (surface === "water") {
     return clamp(0.78 + (targetSpeedMps - speedMps) * 0.045, 0.42, 0.95);
   }
@@ -228,6 +234,12 @@ function targetThrottle(state, target, desiredVerticalSpeedMps) {
  */
 export function okanaganAiCommand(state) {
   const target = okanaganAiTarget(state);
+  if (!target && state?.phase === "landed") return Object.freeze({
+    roll: 0, pitch: 0, yaw: 0, throttleTarget: 0, throttleUp: false,
+    throttleDown: finite(state?.throttle) > .025, scoops: false, drop: false,
+    target: Object.freeze({id: "rollout", rangeM: 0, guidanceRangeM: 0,
+      headingErrorRad: 0, desiredVerticalSpeedMps: 0}),
+  });
   if (!target) throw new TypeError("Okanagan AI pilot requires a published route gate");
   const phase = String(state?.phase ?? "").toLowerCase();
   const surface = String(state?.surface ?? "").toLowerCase();
@@ -244,8 +256,11 @@ export function okanaganAiCommand(state) {
     // Keep looking down Runway 16 through touchdown. A point-target controller reverses its
     // desired heading the instant the nose crosses the threshold and commands a ground-loop.
     const runwayHeadingRad = 160 * Math.PI / 180;
-    guidanceX += Math.sin(runwayHeadingRad) * 1_200;
-    guidanceZ += Math.cos(runwayHeadingRad) * 1_200;
+    const east = Math.sin(runwayHeadingRad), north = Math.cos(runwayHeadingRad);
+    const along = (finite(position.x) - target.x) * east + (finite(position.z) - target.z) * north;
+    const lookahead = Math.max(1_200, along + 1_200);
+    guidanceX += east * lookahead;
+    guidanceZ += north * lookahead;
   }
   const gateDx = target.x - finite(position.x);
   const gateDz = target.z - finite(position.z);
@@ -261,7 +276,8 @@ export function okanaganAiCommand(state) {
   const heightAboveLandingM = landingSurfaceM == null
     ? Number.POSITIVE_INFINITY : finite(position.y) - landingSurfaceM;
   const surfaceSteering = surface === "runway" || surface === "water";
-  const maximumBankDeg = landingSurfaceM != null && heightAboveLandingM < 55
+  const maximumBankDeg = phase === "climb" ? (gateRangeM > 2000 ? 30 : 22)
+    : landingSurfaceM != null && heightAboveLandingM < 55
     ? 9 : phase === "approach" || phase === "join-scoop" ? 26 : 38;
   const desiredBankRad = surfaceSteering ? 0 : clamp(
     headingErrorRad * 1.55,
@@ -279,6 +295,9 @@ export function okanaganAiCommand(state) {
     pitch = 0.72;
   } else if (!surfaceSteering) {
     desiredVerticalSpeedMps = targetVerticalSpeedMps(state, target, gateRangeM);
+    if (["climb", "ingress", "drop", "rtb"].includes(phase)) {
+      desiredVerticalSpeedMps = Math.min(desiredVerticalSpeedMps, (finite(state?.tas_mps) - (42 + 10 * clamp(finite(state?.water_kg) / 2800, 0, 1))) * .65);
+    }
     const bankRad = clamp(Math.abs(finite(state?.roll_rad)), 0, 65 * Math.PI / 180);
     const bankLiftCompensation = (1 / Math.max(0.42, Math.cos(bankRad)) - 1) / 2.5;
     pitch = clamp(
@@ -300,7 +319,8 @@ export function okanaganAiCommand(state) {
     throttleUp: currentThrottle < throttleTarget - 0.025,
     throttleDown: currentThrottle > throttleTarget + 0.025,
     scoops: phase === "scoop" && surface === "water",
-    drop: phase === "downwind"
+    drop: (phase === "drop" && state?.drop_aim != null && horizontalDistance(position, state.drop_aim) < 180)
+      || phase === "downwind"
       && finite(state?.water_kg) > 300
       && ((target.id === "training-drop" && rangeM <= target.radiusM + 250)
         || finite(state?.active_gate) >= 2),

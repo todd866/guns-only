@@ -1,48 +1,54 @@
+import { createBrowserPilotLogbook } from "../render/progression/pilot_logbook.js";
+import { installDisposedPageRestore } from "../render/onboarding/disposed_page_restore.js";
+const pilotLogbook = createBrowserPilotLogbook();
+installDisposedPageRestore();
+window.addEventListener("pagehide", () => pilotLogbook.finish({ outcome: "Left before completion" }));
 import * as THREE from "../vendor/three.module.js";
-import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=352";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=352";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=352";
-import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=352";
-import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=352";
+import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=356";
+import { createOkanaganSiteMarkers } from "../render/okanagan/okanagan_site_markers.js";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=356";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=356";
+import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=356";
+import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=356";
 import {
   createOkanaganTrafficCraft,
   poseOkanaganTrafficCraft,
-} from "../render/okanagan/okanagan_traffic.js?v=352";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=352";
-import { createHud } from "../hud.js?v=352";
+} from "../render/okanagan/okanagan_traffic.js?v=356";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=356";
+import { createHud } from "../hud.js?v=356";
 import {
   armFlightAudio,
   flightAudioDiagnostics,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=352";
+} from "../render/audio/flight_audio.js?v=356";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=352";
-import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=352";
-import { standardGamepadState } from "../render/input/dual_stick_input.js?v=352";
-import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=352";
+} from "../render/settings/player_settings.js?v=356";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=356";
+import { standardGamepadState } from "../render/input/dual_stick_input.js?v=356";
+import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=356";
 import {
   compactOkanaganCue,
   okanaganFlightState,
   okanaganRadioCaption,
   okanaganRadioHoldMs,
-} from "../render/okanagan/okanagan_hud_adapter.js?v=352";
+} from "../render/okanagan/okanagan_hud_adapter.js?v=356";
 import {
   cycleOkanaganTarget,
   okanaganTargets,
   retainOkanaganTarget,
-} from "../render/okanagan/okanagan_targets.js?v=352";
+} from "../render/okanagan/okanagan_targets.js?v=356";
 import {
   okanaganDebriefModel,
   okanaganMissionTerminal,
-} from "../render/okanagan/okanagan_debrief.js?v=352";
+} from "../render/okanagan/okanagan_debrief.js?v=356";
 import {
   okanaganDialogFocusables,
   okanaganDialogTabTarget,
-} from "../render/okanagan/okanagan_dialog_focus.js?v=352";
+} from "../render/okanagan/okanagan_dialog_focus.js?v=356";
 
 const SORTIES = Object.freeze({
   "water-circuits": {
@@ -69,6 +75,10 @@ const SORTIES = Object.freeze({
     objective: "Hold, then fly the assigned west-flank drops.",
     execution: "Wait for Air Attack · hit Division Alpha · recover",
   },
+  "peachland-defence": {index:3, title:"Peachland Defence", block:925, working:"—", objective:"Hold the hillside neighbourhood edge.", execution:"Homes above Beach Avenue · one load · hand off and recover"},
+  "big-white-defence": {index:4, title:"Big White Defence", block:925, working:"—", objective:"Protect Happy Valley homes and lift terminals.", execution:"Climb over the lake · cross the ridge · work downhill"},
+  "silver-star-defence": {index:5, title:"SilverStar Defence", block:925, working:"—", objective:"Protect the village and lift infrastructure.", execution:"Long ferry · watch the reserve · one downhill attack"},
+  "apex-defence": {index:6, title:"Apex Defence", block:925, working:"—", objective:"Defend the village below the ski slopes.", execution:"South valley ferry · ridge clearance · protect the escape"},
 });
 
 /** localStorage access itself can throw in locked-down browsing; a sortie must still boot. */
@@ -186,6 +196,7 @@ renderer.toneMappingExposure = 1.07;
 renderer.shadowMap.enabled = quality === "desktop";
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
+const siteMarkers = createOkanaganSiteMarkers(scene);
 scene.background = new THREE.Color(0x7895aa);
 scene.fog = new THREE.FogExp2(0x9eb2b7, quality === "mobile" ? 0.000095 : 0.00007);
 const camera = new THREE.PerspectiveCamera(67, 1, 0.25, 65_000);
@@ -305,6 +316,9 @@ function publishSortiePlanPreview(id) {
     const minimumRtbKg = Number(preview?.fuel_plan?.minimum_rtb_kg);
     if (!Number.isFinite(minimumRtbKg) || minimumRtbKg <= 0) throw new Error("invalid RTB minimum");
     planMinimum.textContent = `${Math.round(minimumRtbKg)} KG`;
+    const workingKg = Number(preview?.fuel_plan?.working_kg);
+    document.querySelector("#plan-working").textContent = Number.isFinite(workingKg)
+      ? `${Math.round(workingKg)} KG` : "—";
     return true;
   } catch (error) {
     console.warn("Fire Boss plan preview unavailable", error);
@@ -358,7 +372,7 @@ function trapDialogTab(event) {
   const dialog = activeMissionDialog();
   if (!dialog) return false;
   const focusable = okanaganDialogFocusables(dialog.querySelectorAll(
-    'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+    'button:not([disabled]), summary, a[href], [tabindex]:not([tabindex="-1"])',
   ));
   if (focusable.length === 0) return false;
   const next = okanaganDialogTabTarget(focusable, document.activeElement, event.shiftKey);
@@ -395,6 +409,12 @@ function showMissionResult(current) {
   const model = okanaganDebriefModel(current);
   if (!model || missionTerminal) return false;
   missionTerminal = true;
+  const sites = current.sites ?? [];
+  const reached = sites.filter(s => s.protected_by_drop === true).length;
+  const condition = sites.length ? ` · ${sites.filter(s => s.status === "intact").length} intact / ${sites.filter(s => s.status === "damaged").length} damaged / ${sites.filter(s => s.status === "lost").length} lost · ${reached} reached by drop` : "";
+  pilotLogbook.finish({ outcome: model.title + condition, correction: model.correction,
+    durationSeconds: current.mission_s, effectiveDrops: current.effective_drops,
+    waterKg: current.effective_water_kg, cycles: current.completed_cycles });
   missionResultModel = model;
   paused = true;
   running = false;
@@ -451,7 +471,9 @@ function startSortie(id) {
   menu.classList.remove("visible");
   menu.setAttribute("aria-hidden", "true");
   setMissionSurfaceInert(false);
+  pilotLogbook.finish({ outcome: "Left before completion" });
   bridge.Start(SORTIES[id].index);
+  pilotLogbook.begin({ activity: `Okanagan · ${SORTIES[id].title || id}` });
   state = JSON.parse(bridge.GetState());
   throttle = 0.65;
   scoops = false;
@@ -640,6 +662,17 @@ function updateView(current, deltaSeconds) {
 }
 
 function updateDom(current) {
+  siteMarkers.update(current.sites ?? []);
+  const sites = current.sites ?? [];
+  const condition = document.querySelector("#site-condition");
+  condition.hidden = sites.length === 0;
+  const lost = sites.filter(s => s.status === "lost").length;
+  const damaged = sites.filter(s => s.status === "damaged").length;
+  const threatened = sites.filter(s => s.threat > .08 && s.status !== "lost").length;
+  const reached = sites.filter(s => s.protected_by_drop === true).length;
+  condition.textContent = sites.length
+    ? `${sites.length-lost-damaged} INTACT · ${damaged} DAMAGED · ${lost} LOST · ${threatened} AT RISK${reached ? ` · ${reached} WET` : ""}`
+    : "";
   const now = performance.now();
   document.querySelector("#cue").textContent = compactOkanaganCue(current);
   const radio = document.querySelector("#radio");
@@ -741,15 +774,19 @@ function drawHud(current, deltaSeconds, nowSeconds) {
 function drawMap(current) {
   const w = mapCanvas.width; const h = mapCanvas.height;
   map.clearRect(0, 0, w, h); map.fillStyle = "rgba(3,15,18,.92)"; map.fillRect(0, 0, w, h);
-  const project = ({ x, z }) => [w * (0.5 + x / 48_000), h * (0.5 - z / 52_000)];
+  const targets = [current.position, ...(current.route ?? []).map(g=>g.position), ...(current.sites ?? []).map(s=>s.position)];
+  const minX=Math.min(-12_000,...targets.map(p=>p.x)), maxX=Math.max(12_000,...targets.map(p=>p.x));
+  const minZ=Math.min(-12_000,...targets.map(p=>p.z)), maxZ=Math.max(14_000,...targets.map(p=>p.z));
+  const cx=(minX+maxX)/2, cz=(minZ+maxZ)/2, scale=Math.max((maxX-minX)/w,(maxZ-minZ)/h)*1.2;
+  const project = ({ x, z }) => [w/2+(x-cx)/scale, h/2-(z-cz)/scale];
   const lake = world?.worldData?.lake?.shoreline ?? [];
   if (lake.length) {
     map.beginPath();
-    lake.forEach(([lon, lat], index) => {
+    [lake,...(world?.worldData?.lake?.islands ?? [])].forEach(ring => { ring.forEach(([lon, lat], index) => {
       const x = (lon + 119.5) * 71_800; const z = (lat - 49.88) * 111_320;
       const p = project({ x, z }); if (index === 0) map.moveTo(...p); else map.lineTo(...p);
     });
-    map.closePath(); map.fillStyle = "#205a70"; map.fill();
+    map.closePath(); }); map.fillStyle = "#205a70"; map.fill("evenodd");
   }
   map.strokeStyle = "#ffb84d"; map.lineWidth = 2; map.beginPath();
   current.route.forEach((gate, index) => { const p = project(gate.position); index === 0 ? map.moveTo(...p) : map.lineTo(...p); }); map.stroke();
@@ -759,6 +796,7 @@ function drawMap(current) {
     map.fillStyle = `rgba(255,90,20,${Math.min(1, 0.35 + cell.intensity)})`;
     map.fillRect(p[0] - size / 2, p[1] - size / 2, size, size);
   }
+  for (const site of current.sites ?? []) { const p=project(site.position); map.fillStyle=site.status==="lost"?"#ad6257":site.threat>.08?"#ffbc66":"#c6dc9b";map.fillRect(p[0]-1.5,p[1]-1.5,3,3); }
   if (current.drop_aim) {
     const aim = project(current.drop_aim);
     map.strokeStyle = "#ff6a2a";
@@ -793,6 +831,7 @@ function animate(now) {
     if (!mapCanvas.hidden) drawMap(state);
     if (okanaganMissionTerminal(state)) showMissionResult(state);
   }
+  world?.update(camera.position);
   renderer.render(scene, camera);
 }
 
@@ -849,7 +888,8 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("keyup", (event) => { keys.delete(event.code); if (event.code === "Space") { drop = false; dropButton.classList.remove("active"); } });
 window.addEventListener("blur", () => { keys.clear(); drop = false; leftStick = { x: 0, y: 0 }; rightStick = { x: 0, y: 0 }; });
 window.addEventListener("resize", resize, { passive: true });
-window.addEventListener("pagehide", () => { cancelAnimationFrame(animationFrame); suspendFlightAudio("okanagan-pagehide"); world?.dispose(); renderer.dispose(); }, { once: true });
+window.addEventListener("pagehide", () => { cancelAnimationFrame(animationFrame); suspendFlightAudio("okanagan-pagehide"); world?.dispose(); siteMarkers.dispose();
+  renderer.dispose(); }, { once: true });
 
 function bindFlightStick(element, update) {
   let pointerId = null;
@@ -887,11 +927,14 @@ bindFlightStick(document.querySelector("#right-stick"), (value) => { rightStick 
 
 async function boot() {
   resize();
-  const [terrainData, worldData] = await Promise.all([
+  const [terrainData, worldData, resortData] = await Promise.all([
     fetch("/content/packs/okanagan-fire/environment/okanagan-central.cdem.json").then((response) => response.json()),
     fetch("/content/packs/okanagan-fire/environment/okanagan-central.world.json").then((response) => response.json()),
+    fetch("/content/packs/okanagan-fire/environment/okanagan-resorts.osm.json").then((response) => response.json()),
   ]);
-  world = createOkanaganWorld(scene, terrainData, worldData, quality);
+  worldData.resorts = resortData.resorts;
+  const sceneryTextures = await loadOkanaganSceneryTextures(terrainData, quality);
+  world = createOkanaganWorld(scene, terrainData, worldData, quality, sceneryTextures);
   const blazor = await waitFor(() => globalThis.Blazor, "Fire Boss runtime unavailable");
   await blazor.start({ loadBootResource: (_type, name) => `/_framework/${name}` });
   const runtimeAccessor = await waitFor(() => globalThis.getDotnetRuntime, "Fire Boss bridge unavailable");

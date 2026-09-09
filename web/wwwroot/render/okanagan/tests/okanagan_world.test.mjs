@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import * as THREE from "../../../vendor/three.module.js";
 
 import {
+  terrainHierarchy,
   createOkanaganSurfaceSampler,
+  createOkanaganRawSampler,
+  createOkanaganWorld,
   geographicToWorld,
   isAgriculturePoint,
   okanaganForestStandChance,
@@ -29,17 +33,80 @@ test("the rendered CDEM is flattened under the scoop lane and Kelowna runway", a
 
 test("the scenery pack carries official shoreline resolution and recognizable valley landmarks", async () => {
   const world = JSON.parse(await readFile(new URL("okanagan-central.world.json", pack), "utf8"));
-  assert.equal(world.sources.shoreline, "British Columbia Freshwater Atlas Lakes");
+  assert.equal(world.sources.shoreline, "Regional District of Central Okanagan mapped Okanagan Lake");
   assert.ok(world.lake.shoreline.length >= 100, "the lake must not regress to a hand-drawn strip");
-  assert.ok(world.roads.some((road) => road.id === "highway-97" && road.points.length >= 12));
+  assert.ok(world.roads.some((road) => road.id === "highway-97" && road.paths.length >= 1));
   assert.deepEqual(world.agriculture.map((zone) => zone.id), [
     "ellison", "rutland", "east-kelowna", "west-bench",
   ]);
   assert.ok(world.agriculture.every((zone) => zone.epistemic === "surrogate"));
-  const highway = world.roads.find((road) => road.id === "highway-97");
-  const waterPoints = highway.points.filter((point) => pointInPolygon(point, world.lake.shoreline));
-  assert.deepEqual(waterPoints, [[-119.516, 49.8875]],
-    "only the William R. Bennett Bridge span may cross open water");
+  assert.ok(world.peachland.buildings.length > 4_000);
+  assert.ok(world.peachland.roads.some((road) => road.name === "Beach Ave"));
+  assert.ok(world.peachland.roads.some((road) => road.name === "Princeton Ave"));
+  assert.ok(world.peachland.parks.some((park) => park.name === "Swim Bay"));
+  for (const road of world.peachland.roads.filter(r => ["Highway 97", "Beach Ave", "Princeton Ave"].includes(r.name))) {
+    for (const path of road.paths) for (let i = 1; i < path.length; i++) {
+      const a = geographicToWorld(path[i-1][1], path[i-1][0]);
+      const b = geographicToWorld(path[i][1], path[i][0]);
+      const steps = Math.max(1,Math.ceil(a.distanceTo(b)/20));
+      for (let step=0;step<=steps;step++) {
+        const t=step/steps;
+        const point=[path[i-1][0]*(1-t)+path[i][0]*t,path[i-1][1]*(1-t)+path[i][1]*t];
+        assert.equal(pointInPolygon(point,world.lake.shoreline),false,
+          `${road.name} crossed mapped water at ${point}; test segments, not just control points`);
+      }
+    }
+  }
+});
+
+test("the detailed terrain blends continuously to the regional grid", () => {
+  const base = { bounds: { south: 49.68, north: 50.08, west: -119.86, east: -119.24 }, rows: 5, columns: 5,
+    elevationsM: Array.from({length:5}, () => Array(5).fill(400)) };
+  base.details = [{ bounds: { south: 49.78, north: 49.98, west: -119.705, east: -119.395 }, rows: 9, columns: 9,
+    blendCells: 1, elevationsM: Array.from({length:9}, () => Array(9).fill(800)) }];
+  const sample = createOkanaganRawSampler(base);
+  const at = (lat, lon) => { const p = geographicToWorld(lat, lon); return sample(p.x,p.z); };
+  assert.ok(Math.abs(at(49.88, -119.705) - 400) < 1e-6);
+  assert.ok(Math.abs(at(49.88, -119.55) - 800) < 1e-6);
+  assert.ok(Math.abs(at(49.83, -119.55) - 600) < 1e-6);
+  assert.ok(Math.abs(at(49.78 + 1e-8, -119.55) - at(49.78 - 1e-8, -119.55)) < 0.001);
+});
+
+test("closed lake rings do not classify every land point as water", () => {
+  const data = { bounds: { south:49, north:50, west:-120, east:-119 }, rows:2, columns:2,
+    elevationsM:[[600,600],[600,600]] };
+  const world = { lake:{surfaceElevationM:342,shoreline:[[-119.9,49.1],[-119.8,49.1],[-119.8,49.2],[-119.9,49.2],[-119.9,49.1]]}, airfields:[{elevationM:433}] };
+  const sample = createOkanaganSurfaceSampler(data, world);
+  const land = geographicToWorld(49.4,-119.7);
+  const water = geographicToWorld(49.15,-119.85);
+  assert.equal(sample(land.x,land.z),600);
+  assert.equal(sample(water.x,water.z),342);
+});
+
+test("Peachland mesh preserves the mapped shoreline without dense global tessellation", async () => {
+  const [terrain, world, resorts] = await Promise.all(["okanagan-central.cdem.json", "okanagan-central.world.json", "okanagan-resorts.osm.json"]
+    .map(name => readFile(new URL(name,pack),"utf8").then(JSON.parse)));
+  world.resorts = resorts.resorts;
+  assert.equal(terrain.rows,449);
+  assert.ok(terrain.bounds.west <= -119.83, "include the hillside neighbourhoods");
+  const detail = terrainHierarchy(terrain).map(({grid})=>grid).find(grid=>grid.id === "peachland");
+  assert.equal(detail.rows,385);
+  assert.ok(detail.shoreCells.length > 500);
+  assert.equal(detail.source.verticalDatum,"CGVD2013");
+  const scene = new THREE.Scene();
+  const rendered = createOkanaganWorld(scene,terrain,world,"mobile");
+  let triangles=0, meshes=0;
+  rendered.group.traverse(object=>{
+    if (!object.isMesh) return;
+    meshes++;
+    triangles += (object.geometry.index?.count ?? object.geometry.attributes.position.count)/3 * (object.isInstancedMesh ? object.count : 1);
+  });
+  // Complete 156 km valley + five local patches. Individual resort batches are frustum culled.
+  assert.ok(triangles < 1_800_000, `mobile scene exceeded geometry budget: ${triangles}`);
+  assert.ok(meshes < 80, `mapped buildings and roads must remain batched: ${meshes}`);
+  assert.ok(rendered.group.getObjectByName("Peachland building footprints"));
+  rendered.dispose();
+  assert.equal(scene.children.length,0);
 });
 
 test("agricultural scenery masks honour each authored rotation", () => {

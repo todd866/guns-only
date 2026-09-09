@@ -637,7 +637,7 @@ function gateFailures(legs, options) {
 async function bootPublishedApp(page, siteUrl) {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-  await page.goto(`${siteUrl}?program=first-merge`, { waitUntil: "load", timeout: 60_000 });
+  await page.goto(`${siteUrl}?program=first-merge&menu=1&server=off&audioQa=silent`, { waitUntil: "load", timeout: 60_000 });
   await page.waitForFunction(
     () => document.querySelector("#boot")?.classList.contains("ready") === true,
     undefined,
@@ -659,7 +659,7 @@ async function bootPublishedApp(page, siteUrl) {
     if (Number(lifecycle?.selectedBeat) !== beat) {
       throw new Error(
         `Harness requires beat ${beat}; selectedBeat=${lifecycle?.selectedBeat ?? "?"}. `
-        + "Open with ?program=first-merge (mission 7).",
+        + "Open with ?program=first-merge&menu=1 (mission 7).",
       );
     }
     if (globalThis.__gunsState?.session_phase === "ACTIVE") return;

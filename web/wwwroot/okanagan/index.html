@@ -7,7 +7,7 @@
   <base href="/">
   <title>Guns Only · Okanagan Fire Boss</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/okanagan/styles.css?v=352">
+  <link rel="stylesheet" href="/okanagan/styles.css?v=356">
 </head>
 <body class="paused">
   <main class="viewport" aria-label="Okanagan Fire Boss simulator">
@@ -19,6 +19,7 @@
       <span><b>WATER</b> <output id="water-value">0 L</output></span>
       <span id="scoop-state">SCOOPS UP</span>
     </div>
+    <output id="site-condition" aria-label="Defence sector condition" hidden></output>
     <canvas id="map" width="300" height="240" aria-label="North-up incident map" hidden></canvas>
     <button id="nav-button" type="button" aria-pressed="false" aria-controls="map">NAV</button>
     <div id="controls">
@@ -51,6 +52,10 @@
           <small>03 · EXTENSION</small><strong>Large Force Employment</strong>
           <span>Hold for Air Attack · Division Alpha</span>
         </button>
+        <button class="sortie" type="button" data-sortie="peachland-defence" role="radio" aria-checked="false" tabindex="-1"><small>04 · DEFENCE</small><strong>Peachland Defence</strong><span>Homes above Beach Avenue · one load · hand off and recover</span></button>
+        <button class="sortie" type="button" data-sortie="big-white-defence" role="radio" aria-checked="false" tabindex="-1"><small>05 · DEFENCE</small><strong>Big White Defence</strong><span>Climb over the lake · cross the ridge · work downhill</span></button>
+        <button class="sortie" type="button" data-sortie="silver-star-defence" role="radio" aria-checked="false" tabindex="-1"><small>06 · DEFENCE</small><strong>SilverStar Defence</strong><span>Long ferry · watch the reserve · one downhill attack</span></button>
+        <button class="sortie" type="button" data-sortie="apex-defence" role="radio" aria-checked="false" tabindex="-1"><small>07 · DEFENCE</small><strong>Apex Defence</strong><span>South valley ferry · ridge clearance · protect the escape</span></button>
       </div>
       <section class="dispatch-directive" aria-live="polite">
         <small>MISSION</small>
@@ -62,7 +67,12 @@
         <span>RTB MIN <strong id="plan-minimum">—</strong></span>
         <span>WORKING <strong id="plan-working">197 KG</strong></span>
       </section>
+      <p class="scenery-note">Defence exercises begin on arrival. Track mapped buildings and lift terminals through the attack, then hand off to ground crews. Fictional fires; recorded condition is not a forecast.</p>
       <p class="preflight-controls"><strong>CONTROL CHECK</strong> <span>ARROWS pitch/roll · A/D rudder · W/S power · E scoops · hold SPACE drop · TAB target · V padlock</span></p>
+      <details class="scenery-sources"><summary>Scenery and map credits</summary>
+        <p>Contains information licensed under the <a href="https://gis-rdco.hub.arcgis.com/pages/open-data-license" target="_blank" rel="noopener">Open Government License – Regional District of Central Okanagan</a>. Terrain: Natural Resources Canada. Resorts: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> and <a href="https://github.com/microsoft/CanadianBuildingFootprints" target="_blank" rel="noopener">Microsoft building footprints</a>, ODbL.</p>
+        <p><a href="/content/packs/okanagan-fire/environment/okanagan-resorts.osm.json" download>Download resort map data</a> · <a href="/content/packs/okanagan-fire/environment/SOURCES.md" target="_blank" rel="noopener">Sources and accuracy limits</a></p>
+      </details>
       <div class="menu-actions mission-actions">
         <a class="mission-action" href="/?program=okanagan-fireboss&amp;menu=1">Aircraft</a>
         <button id="start" class="mission-action mission-action--primary" type="button" aria-label="Start Water Circuits">Start</button>
@@ -101,7 +111,7 @@
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=352", location.href).searchParams.get("v");
+      const releaseBuild = new URL("../service-worker.js?v=356", location.href).searchParams.get("v");
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
       const workers = registrations.flatMap((registration) => [registration.active, registration.waiting, registration.installing]).filter(Boolean);
       const stale = [navigator.serviceWorker?.controller, ...workers].filter(Boolean)
@@ -116,15 +126,15 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/_framework/blazor.webassembly.js?v=352";
+        script.src = "/_framework/blazor.webassembly.js?v=356";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Fire Boss runtime.")), { once: true });
         document.head.append(script);
       });
-      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=352");
+      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=356");
       const access = renderExperienceGate({ experienceId: "okanagan-fireboss" });
-      if (access.allowed) await import("/okanagan/main.js?v=352");
+      if (access.allowed) await import("/okanagan/main.js?v=356");
     } catch (error) {
       console.error(error);
       document.querySelector("#status").textContent = error instanceof Error ? error.message : String(error);

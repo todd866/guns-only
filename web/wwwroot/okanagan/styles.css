@@ -64,7 +64,7 @@ body.nav-open #mission-data { display:none; }
 
 .overlay { position:fixed; z-index:20; inset:0; display:none; align-items:start; justify-items:center; padding:16px; overflow:auto; background:radial-gradient(circle at 65% 15%,rgba(81,124,148,.28),transparent 35%),rgba(2,9,13,.94); }
 .overlay.visible { display:grid; }
-.menu-card { width:min(980px,96vw); max-height:calc(100dvh - 32px); margin:auto; overflow:auto; border:1px solid rgba(77,255,136,.26); background:linear-gradient(145deg,#0b1d22,#071116); box-shadow:0 24px 90px #000; padding:22px; }
+.menu-card { width:min(980px,100%); min-width:0; max-height:calc(100dvh - 32px); margin:auto; overflow:auto; border:1px solid rgba(77,255,136,.26); background:linear-gradient(145deg,#0b1d22,#071116); box-shadow:0 24px 90px #000; padding:22px; }
 .menu-card header span, .pause-card small { color:var(--amber); font-size:10px; letter-spacing:.18em; }
 .menu-card h1 { margin:5px 0 0; font:750 clamp(28px,5vw,54px)/1 system-ui,sans-serif; }
 .menu-card header p { margin:7px 0; color:#9db8b4; font-size:12px; }
@@ -93,7 +93,7 @@ body.nav-open #mission-data { display:none; }
 .menu-actions { position:sticky; z-index:2; bottom:-1px; display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:14px; padding:10px 0 2px; background:linear-gradient(to bottom,rgba(7,17,22,0),#071116 9px); }
 .menu-actions a, .pause-card a { color:#a8c8c3; }
 .menu-actions button, .pause-card .mission-action--primary { padding:10px 16px; border:1px solid #a8ffc3; color:#07120b; background:var(--green); font-weight:900; cursor:pointer; }
-.pause-card { width:min(420px,92vw); max-height:calc(100dvh - 32px); margin:auto; overflow:auto; padding:20px; border:1px solid rgba(77,255,136,.28); background:#07151a; }
+.pause-card { width:min(420px,100%); max-height:calc(100dvh - 32px); margin:auto; overflow:auto; padding:20px; border:1px solid rgba(77,255,136,.28); background:#07151a; }
 .pause-card h2 { margin:6px 0 14px; font-size:28px; }
 .pause-card .mission-summary { margin:-7px 0 14px; color:#91aaa6; font-size:10px; line-height:1.5; text-align:left; }
 .pause-card button, .pause-card a { display:block; width:100%; margin:7px 0; text-align:center; }
@@ -102,7 +102,7 @@ body.nav-open #mission-data { display:none; }
 
 .mission-result { z-index:22; background:rgba(2,9,13,.96); }
 .mission-result__panel {
-  width:min(760px,94vw); max-height:min(760px,calc(100dvh - 32px)); margin:auto; overflow:auto; padding:22px;
+  width:min(760px,100%); max-height:min(760px,calc(100dvh - 32px)); margin:auto; overflow:auto; padding:22px;
   border:1px solid rgba(77,255,136,.34); background:linear-gradient(150deg,#0b1d22,#061015 72%);
   box-shadow:0 24px 90px #000, inset 0 0 0 1px rgba(255,255,255,.025);
 }
@@ -130,6 +130,23 @@ body.nav-open #mission-data { display:none; }
 .mission-action--primary { border-color:#a8ffc3; color:#07120b; background:var(--green); }
 .mission-action:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
 body.paused .viewport > :not(#scene):not(#hud):not(.overlay) { filter:saturate(.7); }
+
+/* Shared briefing/debrief typography; cockpit instruments keep their flight font. */
+.overlay .menu-card, .overlay .pause-card, .mission-result__panel {
+  color:#f4eddf; background:#151817; border-color:#8f8061;
+  font-family:system-ui,sans-serif;
+}
+.menu-card h1, .pause-card h2, .sortie strong, .mission-result__title {
+  font-family:Georgia,serif; color:#f6dfac;
+}
+.menu-card header p, .sortie span, .mission-result__summary { color:#c5cabb; font-size:13px; }
+.sortie { background:#20251f; border-color:#51564c; }
+.sortie:hover, .sortie.active { background:#30372b; border-color:#e4c990; }
+.menu-actions button, .pause-card .mission-action--primary {
+  background:#ead7ae; color:#191c16; border-color:#f6dfac; min-height:44px;
+}
+.mission-result__kicker { color:#e4c990; }
+.control-legend { color:#bdc9bd; font-size:10px; }
 
 @media (pointer:coarse) {
   #touch-flight-controls { display:block; }
@@ -185,3 +202,9 @@ body[data-input="touch"] #radio { bottom:calc(env(safe-area-inset-bottom,0px) + 
   .pause-card button, .pause-card a { min-height:36px; margin:0; padding:7px 10px; }
   .pause-card .control-legend { line-height:1.35; }
 }
+
+.scenery-note, .scenery-sources { color:#b8c0ad; font:12px/1.5 system-ui,sans-serif; margin:10px 0; }
+.scenery-sources a {color:#e4c990}.scenery-sources summary {cursor:pointer;padding:5px 0}
+#site-condition {position:fixed;z-index:4;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);transform:translateX(-50%);color:#e4c990;max-width:94vw;font:600 10px/1.4 ui-monospace,monospace;white-space:nowrap;padding:4px 7px;background:rgba(2,10,16,.76);border-radius:3px;pointer-events:none}
+.sortie-grid {grid-template-columns:repeat(3,minmax(0,1fr))}.sortie{min-height:104px}
+@media(max-width:700px){.sortie-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sortie{min-height:100px}.sortie strong{font-size:16px}#site-condition{bottom:calc(env(safe-area-inset-bottom,0px) + 224px);font-size:9px}}

@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../sim.Tests/GunsOnly.Sim.Tests.csproj" />
+    <ProjectReference Include="../../arena-server.Tests/GunsOnly.ArenaServer.Tests.csproj" />
     <ProjectReference Include="../../server.Tests/GunsOnly.Server.Tests.csproj" />
     <PackageReference Include="xunit.extensibility.execution" Version="2.9.3" />
   </ItemGroup>

@@ -137,7 +137,7 @@ jobs:
         run: |
           mkdir -p "$MEDEVAC_QA_CAPTURE_DIR"
           set -o pipefail
-          node --test web/smoke/smoke.test.mjs 2>&1 \
+          node --test --test-concurrency=1 web/smoke/smoke.test.mjs web/smoke/player-quality.test.mjs 2>&1 \
             | tee "$MEDEVAC_QA_CAPTURE_DIR/browser-smoke.log"
 
       - name: Run HUD geometry smoke
@@ -149,6 +149,15 @@ jobs:
           set -o pipefail
           node web/wwwroot/render/hud/tests/harness/assertions.mjs 2>&1 \
             | tee "$SMOKE_ARTIFACT_DIR/hud-geometry.log"
+
+      - name: Record exact artifact acceptance inventory
+        if: ${{ always() && steps.publish.outcome == 'success' }}
+        run: |
+          mkdir -p "${{ runner.temp }}/guns-only-smoke-artifacts"
+          node tools/release/acceptance-evidence.mjs \
+            --wwwroot "${{ runner.temp }}/guns-only-publish/wwwroot" \
+            --sha "${{ github.sha }}" \
+            --output "${{ runner.temp }}/guns-only-smoke-artifacts/acceptance.json"
 
       - name: Upload browser diagnostics
         if: ${{ always() }}

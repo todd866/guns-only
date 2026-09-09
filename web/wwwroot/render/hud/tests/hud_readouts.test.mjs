@@ -976,7 +976,7 @@ test("production HUD consumes stabilized KIAS plus physical corner and limits pa
   assert.match(source, /fixedMarkers:\s*speedTapeMarkers\(frame\.state\)/);
   assert.match(source,
     /this\.drawAirdataLabels\(frame\.state, tapeInset, this\.width - tapeInset, display\)/);
-  assert.match(source, /ctx\.fillText\("ALT FT", altitudeX/);
+  assert.match(source, /fillEssentialHudText\("ALT FT", altitudeX/);
   assert.match(source, /ctx\.fillText\(verticalText, altitudeX/,
     "vertical speed belongs to the altitude-side readout");
   assert.match(source, /verticalSpeedText\(verticalSpeedFpm\)/);

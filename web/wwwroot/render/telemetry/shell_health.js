@@ -136,7 +136,7 @@ export function createShellHealthBeacon({
   const startedAt = epochMs();
   const session = `shell-${startedAt}-${Math.floor(Math.random() * 1e6)}`;
   const device = classifyShellDevice(userAgent, viewport(), { maxTouchPoints });
-  const reached = new Set();
+  const milestoneAt = new Map();
   // Boot-shell events that are neither a milestone nor a fatal: a stall verdict, a fallback screen
   // being shown, a player taking the escape route. Bounded, because a stuck boot must not be able
   // to turn a health beacon into a firehose.
@@ -163,18 +163,18 @@ export function createShellHealthBeacon({
   }
 
   function rowsForFlush() {
-    const batchId = `shell-batch-${startedAt}-${reached.size}-${notes.length}-${lastFatal ? 1 : 0}-${Math.floor(Math.random() * 1e9)}`
+    const batchId = `shell-batch-${startedAt}-${milestoneAt.size}-${notes.length}-${lastFatal ? 1 : 0}-${Math.floor(Math.random() * 1e9)}`
       .replace(/[^A-Za-z0-9._-]/g, "-")
       .slice(0, 128);
     const rows = [headerRow(batchId)];
     for (const name of SHELL_HEALTH_MILESTONES) {
-      if (!reached.has(name)) continue;
+      if (!milestoneAt.has(name)) continue;
       rows.push({
         k: "in",
         type: "shell_health",
         code: "milestone",
         milestone: name,
-        t: Math.round(now()),
+        t: milestoneAt.get(name),
       });
     }
     for (const note of notes) rows.push({ ...note });
@@ -185,7 +185,7 @@ export function createShellHealthBeacon({
         code: "fatal",
         reason: lastFatal.reason,
         message: lastFatal.message,
-        t: Math.round(now()),
+        t: lastFatal.t,
       });
     }
     return { batchId, rows };
@@ -214,7 +214,7 @@ export function createShellHealthBeacon({
 
   function flush({ keepalive = false, force = false } = {}) {
     if (stopped && !force) return flushChain;
-    if (reached.size === 0 && notes.length === 0 && !lastFatal) return flushChain;
+    if (milestoneAt.size === 0 && notes.length === 0 && !lastFatal) return flushChain;
     if (flushTimer != null) {
       clearTimeout(flushTimer);
       flushTimer = null;
@@ -250,7 +250,7 @@ export function createShellHealthBeacon({
     session,
     device,
     get milestones() {
-      return [...SHELL_HEALTH_MILESTONES].filter((name) => reached.has(name));
+      return [...SHELL_HEALTH_MILESTONES].filter((name) => milestoneAt.has(name));
     },
     get lastFatal() {
       return lastFatal;
@@ -285,16 +285,21 @@ export function createShellHealthBeacon({
     mark(milestone) {
       if (stopped) return false;
       if (!SHELL_HEALTH_MILESTONES.includes(milestone)) return false;
-      const previous = [...reached].reduce((max, name) => Math.max(max, milestoneRank(name)), -1);
+      const previous = [...milestoneAt.keys()].reduce((max, name) => Math.max(max, milestoneRank(name)), -1);
       if (milestoneRank(milestone) < previous) return false;
-      const first = !reached.has(milestone);
-      reached.add(milestone);
+      const first = !milestoneAt.has(milestone);
+      if (first) milestoneAt.set(milestone, Math.round(now()));
       // Debounce boot-edge POSTs so milestone chatter cannot stall the render loop.
       if (first) scheduleFlush();
       return first;
     },
     fatal(error) {
-      lastFatal = classifyShellFatal(error);
+      if (!lastFatal) {
+        lastFatal = {
+          ...classifyShellFatal(error),
+          t: Math.round(now()),
+        };
+      }
       void flush({ keepalive: true, force: true });
       return lastFatal;
     },

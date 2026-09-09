@@ -394,7 +394,7 @@ test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sidewa
     const page = await context.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}?audioQa=silent`, {
+    await page.goto(`${site.url}?menu=1&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(30000),
     });
@@ -893,7 +893,7 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
   }
 });
 
-test("the published Okanagan route exposes three sorties, a continuous path and a real pause menu", async () => {
+test("the published Okanagan route exposes training and mapped defence sorties with a real pause menu", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
   const site = await serveStatic(WWWROOT);
   const browser = await chromium.launch({
@@ -911,7 +911,7 @@ test("the published Okanagan route exposes three sorties, a continuous path and 
       undefined,
       { timeout: scaled(60000) },
     );
-    assert.equal(await page.locator(".sortie").count(), 3);
+    assert.equal(await page.locator(".sortie").count(), 7);
     await page.locator('[data-sortie="large-force-employment"]').click();
     await page.locator("#start").click();
     await page.waitForFunction(() => window.__gunsOnlyOkanagan.getState()?.sortie === "large-force-employment"
@@ -925,6 +925,23 @@ test("the published Okanagan route exposes three sorties, a continuous path and 
     assert.ok(Number.isFinite(telemetry.terrain_clearance_m));
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => document.querySelector("#pause-menu")?.classList.contains("visible"));
+    for (const sortie of ["peachland-defence", "big-white-defence", "silver-star-defence", "apex-defence"]) {
+      await page.locator("#choose-sortie").click();
+      await page.locator(`[data-sortie="${sortie}"]`).click();
+      assert.match(await page.locator("#plan-working").innerText(), /^\d+ KG$/);
+      await page.locator("#start").click();
+      await page.waitForFunction(token => window.__gunsOnlyOkanagan.getState()?.sortie === token, sortie);
+      const defence = await page.evaluate(() => window.__gunsOnlyOkanagan.getState());
+      assert.ok(defence.sites.length >= 20);
+      assert.equal(defence.incident_active, false);
+      assert.ok(await page.locator("#site-condition").isVisible());
+      assert.ok(await page.locator("#site-condition").evaluate(node => !node.closest("#mission-data")),
+        "site condition must not be inside the accessibility-only instrument mirror");
+      await page.keyboard.press("Escape");
+    }
+    await page.locator("#choose-sortie").click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.ok(await page.locator("#sortie-menu").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
     assert.deepEqual(pageErrors, [], `uncaught Okanagan page errors:\n${pageErrors.join("\n")}`);
   } finally {
     await browser.close();
@@ -1340,7 +1357,7 @@ test("the published Medevac route resolves route hold, selective relay, and dive
   }
 });
 
-test("first-run valley waits for consent and remains replayable from the programme", async () => {
+test("a fresh human or automated visit briefs the valley and remains replayable", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
   const site = await serveStatic(WWWROOT);
@@ -1352,7 +1369,7 @@ test("first-run valley waits for consent and remains replayable from the program
     const page = await browser.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}?firstRun=1&audioQa=silent`, {
+    await page.goto(`${site.url}?audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(60000),
     });
@@ -1442,7 +1459,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
     // The real graph must activate, update and expose diagnostics, but release validation must
     // never put aircraft audio onto a developer's speakers. `audioQa=silent` leaves Web Audio
     // running while clamping only the destination master.
-    await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: scaled(60000) });
+    await page.goto(`${site.url}?menu=1&audioQa=silent`, { waitUntil: "load", timeout: scaled(60000) });
 
     // #boot gains the "ready" class when boot settles — on success (boot()) AND on a fatal error
     // (showFatal()). Waiting for it makes the assertion below deterministic instead of timing-based.
@@ -2272,7 +2289,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         const page = await context.newPage();
         const pageErrors = [];
         page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-        await page.goto(`${site.url}?audioQa=silent`,
+        await page.goto(`${site.url}?menu=1&audioQa=silent`,
           { waitUntil: "load", timeout: scaled(60000) });
         await page.waitForFunction(
           () => document.querySelector("#boot")?.classList.contains("ready") === true,
@@ -2963,7 +2980,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     const page = await context.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}?input=touch&audioQa=silent`, {
+    await page.goto(`${site.url}?menu=1&input=touch&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(60000),
     });
@@ -3227,7 +3244,7 @@ test("boot does not stutter: no application task is a wild frame outlier", async
       observer.observe({ type: "longtask", buffered: true });
       record.observer = observer;
     });
-    await page.goto(`${site.url}?server=off&audioQa=silent`, {
+    await page.goto(`${site.url}?menu=1&server=off&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(60000),
     });
@@ -3335,7 +3352,7 @@ test("rotating to landscape actually resizes the drawn surface", async () => {
   try {
     const context = await browser.newContext({ ...devices["iPhone 13"] });
     const page = await context.newPage();
-    await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: scaled(90000) });
+    await page.goto(`${site.url}?menu=1&audioQa=silent`, { waitUntil: "load", timeout: scaled(90000) });
     await page.waitForFunction(
       () => {
         const start = document.querySelector("#ready-start");

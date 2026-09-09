@@ -115,7 +115,7 @@ public sealed class DetachedOpponentWreck {
 /// Rendering shells supply timestamp-free key edges and elapsed wall time; this class owns the
 /// fixed-step accumulator, mission transitions, controls, combat, carrier recovery, and resources.
 /// </summary>
-public sealed class SimulationSession {
+public sealed partial class SimulationSession {
     public enum LifecycleState { Ready, Active, Paused, Finished }
 
     public const double FixedDeltaSeconds = 1.0 / AircraftSim.TickHz;
@@ -1381,6 +1381,7 @@ public sealed class SimulationSession {
         if (_firstRunValleyRuntime?.WeaponsCold == true)
             ShowTransition("FOLLOW THE VALLEY", 2800.0);
         Lifecycle = LifecycleState.Active;
+        BeginPractice();
         BeginRapierServiceLifeCapture();
         UpdateTimeCompressionDecision();
     }
@@ -3283,6 +3284,7 @@ public sealed class SimulationSession {
         if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
         StepPendingTerminalDecision();
         _tick++;
+        ObservePractice();
         ObserveRapierServiceLifeTick();
         if (Lifecycle != LifecycleState.Active)
             FinalizeRapierServiceLife(
@@ -3321,6 +3323,7 @@ public sealed class SimulationSession {
         UpdateSortieSchedule();
         UpdateApproachGuidance();
         _tick++;
+        ObservePractice();
         ObserveRapierServiceLifeTick();
         if (Lifecycle != LifecycleState.Active)
             FinalizeRapierServiceLife(
@@ -3685,6 +3688,7 @@ public sealed class SimulationSession {
         }
         FinishPreviousRecoveryAttempt();
         _beat = setup;
+        StagePractice();
         // Canonical Rapier v2 carries zero design drones. An explicitly configured legacy
         // prototype count is additional stowed mass, so initialize that mission loadout before
         // CreatePlayer/WithCurrentFuelMass and keep first-stage/restart mass identical.

@@ -206,7 +206,7 @@ public sealed class OkanaganFireMissionTests
     }
 
     [Fact]
-    public void WaterCircuitUsesTheNearKelownaLakeAndRemovesTheDeadTransit()
+    public void WaterCircuitKeepsItsDescentAndLoadedTakeoffOverMappedWater()
     {
         Vec3D start = OkanaganGeo.ToWorld(
             49.9670, -119.3778, OkanaganGeo.KelownaRunwayElevationM);
@@ -214,9 +214,11 @@ public sealed class OkanaganFireMissionTests
             start,
             OkanaganFireMission.RunwayDeparture,
             OkanaganFireMission.AirportDeparture,
+            OkanaganFireMission.LakeArrival,
             OkanaganFireMission.ScoopEntry,
             OkanaganFireMission.ScoopTouchdown,
             OkanaganFireMission.ScoopExit,
+            OkanaganFireMission.LoadedLiftoff,
             OkanaganFireMission.CircuitCrosswind,
             OkanaganFireMission.CircuitDownwind,
             OkanaganFireMission.TrainingDrop,
@@ -227,20 +229,24 @@ public sealed class OkanaganFireMissionTests
         ];
         double distanceM = nominalPath.Zip(nominalPath.Skip(1), HorizontalDistance).Sum();
 
-        Assert.InRange(distanceM, 32_000.0, 35_000.0);
-        Assert.InRange(distanceM / 55.0 / 60.0, 9.5, 10.75);
+        // The authored circuit is about 55.6 km: the lake join runs 5 km south of the scoop
+        // entry so the descent happens over water, not over the airport-side hills. The bound
+        // still refuses the former 28 km dead recovery dogleg (which would push this past 80 km).
+        Assert.InRange(distanceM, 45_000.0, 60_000.0);
         Assert.All(new[] {
             OkanaganFireMission.ScoopEntry,
             OkanaganFireMission.ScoopTouchdown,
             OkanaganFireMission.ScoopExit,
             OkanaganFireMission.CircuitDownwind,
             OkanaganFireMission.TrainingDrop,
+            OkanaganFireMission.LakeArrival,
+            OkanaganFireMission.LoadedLiftoff,
         }, point => Assert.True(OkanaganGeo.IsOverCentralLake(point),
             $"authored water-circuit point {point} left Okanagan Lake"));
         Assert.False(OkanaganGeo.IsOverCentralLake(OkanaganFireMission.RtbCrossing));
         Assert.InRange(HorizontalDistance(
             OkanaganFireMission.AirportDeparture,
-            OkanaganFireMission.ScoopEntry), 6_500.0, 7_250.0);
+            OkanaganFireMission.ScoopEntry), 8_000.0, 11_000.0);
     }
 
     [Fact]

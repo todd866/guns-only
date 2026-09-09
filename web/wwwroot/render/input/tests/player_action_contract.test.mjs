@@ -250,6 +250,8 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["incident-replay-play", /incidentReplayPlay\?\.addEventListener\("click"/],
     ["incident-replay-event-jump", /incidentReplayEventJump\?\.addEventListener\("click"/],
     ["incident-replay-skip", /incidentReplaySkip\?\.addEventListener\("click", skipIncidentReplay\)/],
+    ["ready-practice", /querySelector\("#ready-practice"\)\?\.addEventListener\("click", \(\) => pilotNotebook\.show\("practice"\)\)/],
+    ["ready-logbook", /querySelector\("#ready-logbook"\)\?\.addEventListener\("click", \(\) => pilotNotebook\.show\(\)\)/],
     ["ready-start", /readyStart\.addEventListener\("click"/],
     ["ready-replay", /readyReplay\?\.addEventListener\("click"/],
     ["ready-handoff", /readyHandoff\?\.addEventListener\("click", requestCombatHandoffFromPause\)/],
@@ -790,14 +792,14 @@ test("the shared mission-flow shell keeps one hierarchy across ready, pause, and
     "the pause escape back to mission choice must not look like an orphaned half-row utility");
 
   assert.match(appSource,
-    /readyRestart\.textContent = finished \? "Repeat sortie" : "Restart sortie"/,
+    /readyRestart\.textContent = selectedPracticeExercise \? "Restart practice" : finished \? "Repeat sortie" : "Restart sortie"/,
     "repeat-current must not share the primary programme-advance label");
   assert.match(appSource,
     /once both are away, the same control becomes the gun[\s\S]*?Follow valley → pop out → two heaters → guns → splash the pair → recover/,
     "first-run copy must describe the Fire transition and end the sortie after the pair");
   assert.doesNotMatch(appSource, /after both splashes|splash two targets → guns/,
     "a missile outcome must not be presented as the Fire authority switch");
-  assert.match(appSource, /readyReturn\.textContent = "Choose sortie"/,
+  assert.match(appSource, /readyReturn\.textContent = "Aircraft"/,
     "catalogue navigation must name the choice it opens");
   assert.match(appSource,
     /readyRestart\?\.addEventListener\("click", repeatSelectedSortieNow\)[\s\S]*?readyReturn\?\.addEventListener\("click", returnToCatalogue\)/,

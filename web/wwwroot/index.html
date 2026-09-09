@@ -3250,6 +3250,7 @@
        it shrinks to a footnote in the corner instead of sitting in the row of decisions. */
     #ready-screen[data-mode="program"] .ready-secondary-actions {
       display: flex;
+      flex-wrap: wrap;
       justify-content: center;
       margin-top: 12px;
     }
@@ -3486,7 +3487,7 @@
 
     /* ---------------------------------------------------------------------------------------
        SHARED MISSION-FLOW SURFACES
-       Build 352's picker, first-sortie brief, pause and result are one journey. This final layer
+       Build 356's picker, first-sortie brief, pause and result are one journey. This final layer
        gives those modes the same type scale, spacing, action hierarchy and responsive rules.
        It intentionally does not reach into any in-flight HUD or standalone mission route.
        --------------------------------------------------------------------------------------- */
@@ -3736,7 +3737,7 @@
       }
     }
 
-    /* This rule comes after the pictorial-picker override on purpose. Build 352's earlier
+    /* This rule comes after the pictorial-picker override on purpose. Build 356's earlier
        two-column rule was valid in isolation but lost the cascade to a later display:block,
        leaving Fly below a tall poster grid on phone-shaped landscape screens. */
     @media (max-height: 500px) and (orientation: landscape) {
@@ -3750,8 +3751,16 @@
 
       :root #ready-screen[data-mode="program"] .ready-card {
         width: min(1180px, 100%);
+        /* Centring an overflowing column cuts BOTH ends, and this card clips rather than scrolls:
+           at 667x375 the picker's content is 771 px inside a 359 px box, so the top of it -- Fly
+           included -- was unreachable by any gesture. `safe` centres only while the content fits
+           and falls back to the start edge once it does not; the plain value stays first so a
+           browser without `safe` keeps today's behaviour, and scrolling makes the rest reachable. */
         justify-content: center;
-        overflow: hidden;
+        justify-content: safe center;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
 
       :root #ready-screen[data-mode="program"] .ready-layout {
@@ -3759,7 +3768,12 @@
         min-height: 0;
         grid-template-columns: minmax(0, 1fr) minmax(190px, 250px);
         gap: var(--flow-space-3);
+        /* Centring a column taller than its row pushes the top of it off the card, and the card
+           can only scroll toward positive overflow -- so at 667x375 the actions column stood 20 px
+           above the card and Fly could not be reached by any gesture. `safe` centres while it fits
+           and starts at the top once it does not; the plain value stays first as the fallback. */
         align-items: center;
+        align-items: safe center;
       }
 
       :root #ready-screen[data-mode="program"] .ready-selector,
@@ -3880,6 +3894,7 @@
       .boot-pulse { animation: none; }
     }
   </style>
+  <link rel="stylesheet" href="./render/onboarding/pilot_notebook.css">
 </head>
 <body>
   <canvas id="scene" tabindex="0" aria-label="Air combat simulation view"></canvas>
@@ -4307,6 +4322,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
           <button id="ready-handoff" type="button" hidden disabled>CALL IT A DAY · RTB</button>
           <div class="ready-secondary-actions">
+            <button id="ready-practice" type="button">Practice</button>
+            <button id="ready-logbook" type="button">Logbook</button>
             <button id="ready-intro-replay" type="button" hidden>Replay valley intro</button>
             <button id="ready-settings" type="button">Settings</button>
             <button id="ready-restart" type="button" hidden>Restart sortie</button>
@@ -4332,7 +4349,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 352 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 356 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -4436,7 +4453,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=352", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=356", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -4532,11 +4549,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=352");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=352", {
+      await loadClassicScript("./multiplayer-config.js?v=356");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=356", {
         autostart: "false",
       });
-      await import("./app.js?v=352");
+      await import("./app.js?v=356");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -4549,8 +4566,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=352"),
-            import("./render/shell/boot_fallback.js?v=352"),
+            import("./render/shell/inapp_browser.js?v=356"),
+            import("./render/shell/boot_fallback.js?v=356"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,
@@ -4572,5 +4589,6 @@ Splash one bandit to qualify · H controls · R restarts</p>
       }
     }
   </script>
+<div id="practice-cue" hidden></div>
 </body>
 </html>

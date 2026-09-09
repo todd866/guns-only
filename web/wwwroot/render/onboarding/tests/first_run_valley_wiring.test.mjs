@@ -30,9 +30,9 @@ test("the F-22 shell stages the valley once, without bolting on first_run_contro
     "the F-22 shell keeps its native teaching; valley auto-start is not the cobra overlay");
 });
 
-test("Playwright and menu keep the picker; firstRun=1 is the QA replay seam", async () => {
+test("explicit menu keeps the picker; automated visits share human entry semantics", async () => {
   const app = await source("app.js");
-  assert.match(app, /navigator\.webdriver/);
+  assert.doesNotMatch(app, /navigator\.webdriver/);
   assert.match(app, /searchParams\.get\("menu"\)/);
   assert.match(app, /searchParams\.get\("firstRun"\)/);
 });
@@ -82,7 +82,7 @@ test("first run is a deliberate Ready interlock and Fire visibly names its live 
     source("render/hud/mission_guidance.js"),
   ]);
   assert.match(app,
-    /const firstRunReady = firstRunAutostartPending[\s\S]*readyScreen\.dataset\.mode = firstRunReady[\s\S]*?"intro"/,
+    /const firstRunReady = firstRunAutostartPending[\s\S]*readyScreen\.dataset\.mode = \(firstRunReady \|\| practiceReady\)[\s\S]*?"intro"/,
     "first visit must own a distinct Ready presentation instead of falling through to the picker");
   assert.match(app,
     /const firstRunReady = firstRunAutostartPending && ready && !finished;/,
