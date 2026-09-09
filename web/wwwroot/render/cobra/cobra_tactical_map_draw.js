@@ -14,7 +14,7 @@
 import {
   cobraConquestScoreLine,
   cobraMissionCountdown,
-} from "./cobra_objective_copy.js?v=356";
+} from "./cobra_objective_copy.js?v=357";
 
 // Palette is the shell's own legend (cobra-lab/styles.css --friendly / --hostile /
 // .landmark-key / --warm), so the map cannot disagree with the legend swatches beside it.
