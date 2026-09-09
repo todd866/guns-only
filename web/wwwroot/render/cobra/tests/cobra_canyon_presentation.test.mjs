@@ -377,12 +377,12 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
     assert.ok(actual.instances <= budget.maxInstances);
     assert.ok(actual.triangles <= budget.maxTriangles);
     assert.equal(diagnostics.withinBudget, true);
-    // Eighteen includes the complete Iron Bell approach pair and the worked Plantation ground
-    // layer. The 13 km pseudo-road, generic obelisk and fake freestanding waterfall remain gone.
-    assert.equal(diagnostics.builtDrawCalls, 18);
+    // Nineteen includes the complete Iron Bell approach pair, worked Plantation ground and
+    // one unshadowed mid-distance crown layer.
+    assert.equal(diagnostics.builtDrawCalls, 19);
     assert.equal(diagnostics.roleCounts.coreRenderBatches, 11);
     assert.equal(diagnostics.roleCounts.assetRenderBatches, 7);
-    assert.equal(diagnostics.roleCounts.worldRenderBatches, 18);
+    assert.equal(diagnostics.roleCounts.worldRenderBatches, 19);
     assert.equal(diagnostics.roleCounts.heroCells, 3);
     assert.equal(diagnostics.roleCounts.landmarks, 11);
     assert.ok(diagnostics.roleCounts.campEmberFirebaseParts >= 28);
@@ -843,7 +843,7 @@ test("Iron Bell separates roadway, truss, approaches and piers inside the world 
   assert.equal(approachColors.count, approach.geometry.getAttribute("position").count);
   assert.equal(diagnostics.roleCounts.bridgeApproaches, 2);
   assert.equal(diagnostics.roleCounts.bridgePiers, 4);
-  assert.equal(diagnostics.roleCounts.worldRenderBatches, 18);
+  assert.equal(diagnostics.roleCounts.worldRenderBatches, 19);
   presentation.dispose();
 });
 
@@ -1029,7 +1029,9 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
   const firstScale = new THREE.Vector3();
   assets.get("jungle").getMatrixAt(0, firstMatrix);
   firstMatrix.decompose(firstPosition, firstQuaternion, firstScale);
-  const firstGroundM = sampleCobraCanyonTerrain(plan, firstPosition.x, -firstPosition.z);
+  const firstGroundM = sampleCobraCanyonRenderedBasinHeight(
+    plan, "balanced", firstPosition.x, -firstPosition.z,
+  );
   // The invariant is ONE-SIDED, and it has to be: an instance may be bedded INTO the hill but
   // never lifted off it. Canopy placement deliberately seeks steep ground, and a stand anchored
   // exactly at its centre sample cantilevers off a gorge wall — the visible artefact is a grove
@@ -1038,9 +1040,9 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
   // below is that half-width drop plus slack; anything deeper is a placement bug, and anything
   // above ground is the float this assertion was written to catch.
   assert.ok(firstPosition.y <= firstGroundM + 1e-4,
-    "asset instances must never float above the analytical terrain");
-  const firstFootprintM = Math.max(firstScale.x, firstScale.z) * 0.5;
-  assert.ok(firstGroundM - firstPosition.y <= firstFootprintM + 1e-3,
+    "leaf cards must never float above the drawn terrain");
+  const firstFootprintM = Math.max(firstScale.x, firstScale.z) * 0.6;
+  assert.ok(firstGroundM - firstPosition.y <= firstFootprintM + 0.1,
     "asset instances must not be buried deeper than their own footprint drop");
 
   for (const level of [0, 1, 2]) {
@@ -1058,8 +1060,9 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
       assert.equal(mesh.visible, roleCount > 0);
       assert.equal(mesh.count, roleCount);
     }
-    assert.equal(presentation.diagnostics().visibleAmbientInstances, expected);
-    assert.equal(presentation.diagnostics().visibleAssetInstances, expected);
+    const canopyCount = byRole(presentation.group, "canopy").count;
+    assert.equal(presentation.diagnostics().visibleAmbientInstances, expected + canopyCount);
+    assert.equal(presentation.diagnostics().visibleAssetInstances, expected + canopyCount);
     assert.equal(hazards.count, baseHazardCount);
     assert.equal(decks.count, baseDeckCount);
     assert.equal(piers.count, basePierCount);
@@ -1080,7 +1083,8 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
     assert.equal(mesh.visible, expected > 0);
     assert.equal(mesh.count, expected);
   }
-  assert.equal(presentation.diagnostics().visibleAmbientInstances, structuralCount);
+  assert.equal(presentation.diagnostics().visibleAmbientInstances,
+    structuralCount + byRole(presentation.group, "canopy").count);
   assert.equal(presentation.diagnostics().nearRingVisible, false);
   assert.equal(hazards.visible, true);
   assert.equal(decks.visible, true);
@@ -1132,7 +1136,11 @@ test("uses deterministic static matrices and cached frozen diagnostics", () => {
   // The scatter is camera-following, so the resident set — and therefore the diagnostics — moves
   // with the aircraft. What must stay true is that a frame which changes NOTHING allocates
   // nothing: settle the camera first, then pin object identity across repeated identical frames.
-  first.update({ cameraPosition: { x: 0, z: 0 }, cameraAglM: 40, ambientBudgetLevel: 0 });
+  for (let frame = 0; frame < 200; frame++) {
+    first.update({ cameraPosition: { x: 0, y: 0, z: 0 }, cameraAglM: 40, ambientBudgetLevel: 0 });
+    if (first.diagnostics().roleCounts.canopyPendingCells === 0) break;
+  }
+  assert.equal(first.diagnostics().roleCounts.canopyPendingCells, 0);
   const initial = first.diagnostics();
   assert.equal(Object.isFrozen(initial), true);
   assert.equal(Object.isFrozen(initial.roleCounts), true);

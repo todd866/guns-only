@@ -1,0 +1,85 @@
+{
+  "note": "Local Node wall-clock CPU probes, not hardware frame rate; one sample sequence per tier. Actual production 472-triangle palm geometry (unused bitmap decoding stubbed).",
+  "pose": {
+    "x": -3050,
+    "y": 165,
+    "z": 700
+  },
+  "samples": [
+    {
+      "kind": "cold crown cells after emitted grid exists",
+      "tier": "mobile",
+      "frames": 81,
+      "totalMs": 76.18362100000002,
+      "meanMs": 0.9405385308641977,
+      "p95Ms": 1.4136669999999754,
+      "maxMs": 1.6233330000000024,
+      "resident": 144,
+      "triangles": 11520
+    },
+    {
+      "kind": "whole presentation first residency",
+      "tier": "mobile",
+      "frames": 81,
+      "totalMs": 75.37957800000021,
+      "meanMs": 0.9306120740740766,
+      "p95Ms": 1.3979159999999524,
+      "maxMs": 1.5481250000000273,
+      "canopy": 144,
+      "visibleTriangles": 57176,
+      "allocatedTriangles": 57176,
+      "allocatedInstances": 253,
+      "allocatedCalls": 19
+    },
+    {
+      "kind": "cold crown cells after emitted grid exists",
+      "tier": "balanced",
+      "frames": 144,
+      "totalMs": 152.404994,
+      "meanMs": 1.058368013888889,
+      "p95Ms": 2.07158400000003,
+      "maxMs": 2.700790999999981,
+      "resident": 981,
+      "triangles": 78480
+    },
+    {
+      "kind": "whole presentation first residency",
+      "tier": "balanced",
+      "frames": 144,
+      "totalMs": 195.38045499999907,
+      "meanMs": 1.3568087152777712,
+      "p95Ms": 2.0832910000001448,
+      "maxMs": 44.18933300000003,
+      "canopy": 981,
+      "visibleTriangles": 272734,
+      "allocatedTriangles": 335776,
+      "allocatedInstances": 3943,
+      "allocatedCalls": 20
+    },
+    {
+      "kind": "cold crown cells after emitted grid exists",
+      "tier": "desktop",
+      "frames": 176,
+      "totalMs": 178.5394180000003,
+      "meanMs": 1.014428511363638,
+      "p95Ms": 2.0204579999999623,
+      "maxMs": 2.555499999999938,
+      "resident": 1347,
+      "triangles": 107760
+    },
+    {
+      "kind": "whole presentation first residency",
+      "tier": "desktop",
+      "frames": 176,
+      "totalMs": 275.9960390000001,
+      "meanMs": 1.5681593125000006,
+      "p95Ms": 1.9849169999997684,
+      "maxMs": 101.0324169999999,
+      "canopy": 1347,
+      "visibleTriangles": 688141,
+      "allocatedTriangles": 794731,
+      "allocatedInstances": 9043,
+      "allocatedCalls": 20
+    }
+  ]
+}

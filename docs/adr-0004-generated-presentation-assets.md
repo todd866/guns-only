@@ -11,7 +11,7 @@ selected source, prompts, tool/date, known model metadata, encoding recipe, righ
 runtime use are recorded. Missing metadata remains explicitly unknown. Existing sources remain
 available under their original filenames; replacements use distinct versioned names.
 
-This pass admits only two selector illustrations and one Cobra foliage texture. The foliage
+The initial pass admitted two selector illustrations and one Cobra foliage texture. The foliage
 source encodes empty space as black RGB because the generator's attempted alpha outputs did
 not actually contain transparency. The renderer must interpret that encoding consistently in
 visible and shadow passes, while retaining the existing RGBA and synthetic fallback behavior.
@@ -21,6 +21,13 @@ Generated foliage is decorative, not a botanical reference or terrain/collision 
 The art does not change the simulation, instruments, mission state, contact visibility rules,
 mapped geography or physical obstacle geometry. Menu artwork is an idealized illustration;
 its appearance does not constitute evidence that the renderer achieves the same quality.
+
+The owner's 10 September instruction to continue extends this work to opaque generated
+limestone and treetop surface textures, with procedural tree crowns in the actual Cobra world.
+Both retain their masters, exact text-only prompts and encoding recipes. Their opposite edges
+do not match; mirrored sampling provides continuity. Limestone luminance supplies a bounded artistic relief
+proxy. It is not a measured height map, geological observation or collision surface. The crowns
+follow existing decorative biome bounds, with full-footprint mission/road/river exclusions.
 
 Each admitted asset must have a bounded runtime resolution, reviewed colors/edges and a
 working missing-asset fallback where applicable. Browser review must show the changed

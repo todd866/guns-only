@@ -1,0 +1,84 @@
+{
+  "$schema": "../../../../schemas/asset-license-set.schema.json",
+  "schemaVersion": "1.0.0",
+  "licenseSetId": "licenses.guns-only.cobra-vietnam.surfaces.v1",
+  "template": false,
+  "entries": [
+    {
+      "licenseId": "license.project-generated-limestone.v1",
+      "appliesTo": [
+        "environment.surface.limestone-generated.v1"
+      ],
+      "spdxExpression": "MIT",
+      "copyright": "Project asset under the repository MIT notice; no assertion of exclusive copyright in AI-generated output.",
+      "authors": [
+        "Ian Todd (project direction)",
+        "OpenAI image generation (tool)"
+      ],
+      "sourceUri": "repo://tools/assets/generators/cobra-surfaces/sources/limestone-generated-v1.png",
+      "redistribution": {
+        "allowed": true,
+        "commercialUseAllowed": true,
+        "modificationAllowed": true,
+        "shareAlikeRequired": false,
+        "notices": [
+          "Retain the repository MIT notice. Generated provenance is recorded in SOURCES.md."
+        ]
+      },
+      "attributionText": "Guns Only generated limestone presentation texture.",
+      "evidence": [
+        {
+          "type": "license_file",
+          "uri": "repo://LICENSE"
+        },
+        {
+          "type": "author_statement",
+          "uri": "repo://content/packs/cobra-vietnam/environment/surfaces/SOURCES.md"
+        },
+        {
+          "type": "author_statement",
+          "uri": "repo://tools/assets/generators/cobra-surfaces/sources/limestone-generated-v1.provenance.json"
+        }
+      ],
+      "notes": "Fictional material artwork; not geological, geographic or physical evidence. No source photograph or third-party image was used as a generation input."
+    },
+    {
+      "licenseId": "license.project-generated-canopy.v1",
+      "appliesTo": [
+        "environment.surface.canopy-generated.v1"
+      ],
+      "spdxExpression": "MIT",
+      "copyright": "Project asset under the repository MIT notice; no assertion of exclusive copyright in AI-generated output.",
+      "authors": [
+        "Ian Todd (project direction)",
+        "OpenAI image generation (tool)"
+      ],
+      "sourceUri": "repo://tools/assets/generators/cobra-surfaces/sources/canopy-generated-v1.png",
+      "redistribution": {
+        "allowed": true,
+        "commercialUseAllowed": true,
+        "modificationAllowed": true,
+        "shareAlikeRequired": false,
+        "notices": [
+          "Retain the repository MIT notice. Generated provenance is recorded in SOURCES.md."
+        ]
+      },
+      "attributionText": "Guns Only generated broadleaf treetop presentation texture.",
+      "evidence": [
+        {
+          "type": "license_file",
+          "uri": "repo://LICENSE"
+        },
+        {
+          "type": "author_statement",
+          "uri": "repo://content/packs/cobra-vietnam/environment/surfaces/SOURCES.md"
+        },
+        {
+          "type": "author_statement",
+          "uri": "repo://tools/assets/generators/cobra-surfaces/sources/canopy-generated-v1.provenance.json"
+        }
+      ],
+      "notes": "Fictional treetop color artwork; not botanical or physical evidence. No source photograph or third-party image was used as generation input."
+    }
+  ]
+}

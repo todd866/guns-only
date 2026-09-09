@@ -389,6 +389,39 @@ test("post-clump jungle variation cannot turn canopy or ferns into flight-path w
     `final grass/scrub height ${understory.heightM} m exceeds its band`);
 });
 
+test("rendered leaf blades stay plant-sized even at canopy placements while authored palms keep tree scale", () => {
+  const plan = planCobraCanyonWorld(world, { qualityTier: "balanced" });
+  const palm = new THREE.BufferGeometry();
+  palm.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(480 * 9), 3));
+  const kit = createCobraCanyonAssetKit(THREE, plan, { qualityTier: "balanced", maxInstances: 1000,
+    roleGeometries: { jungle: palm }, authoredTriangleBudget: 24000 });
+  try {
+    let canopyCardCount = 0; let treeCount = 0;
+    kit.group.traverse((mesh) => {
+      if (!mesh.isInstancedMesh || mesh.userData.cobraCanyon?.role !== "jungle") return;
+      const authored = mesh.name.endsWith("_HERO");
+      for (let i = 0; i < mesh.count; i++) {
+        const r = mesh.userData.cobraCanyonInstances[i];
+        const m = mesh.instanceMatrix.array.subarray(i * 16, (i + 1) * 16);
+        if (authored) {
+          if (m[5] > 4) treeCount++;
+          continue;
+        }
+        assert.ok(m[5] <= 4.000001, `leaf blades are ${m[5]} m tall`);
+        if (r.heightM > 16) canopyCardCount++;
+        // Degenerate edge-fade slots use a 0.1 mm numerical floor on each axis.
+        if (m[5] > 1e-3) {
+          const shrink = m[5] / r.heightM;
+          assert.ok(Math.abs(Math.hypot(m[0], m[2]) - r.widthM * shrink) < 1e-5);
+          assert.ok(Math.abs(Math.hypot(m[8], m[10]) - r.depthM * shrink) < 1e-5);
+        }
+      }
+    });
+    assert.ok(canopyCardCount > 0, "the regression must exercise tree-sized input descriptors");
+    assert.ok(treeCount > 0, "authored palms must not inherit the leaf-blade limit");
+  } finally { kit.dispose(); }
+});
+
 test("an authored scaleM still wins over both bands", () => {
   const declared = cobraCanyonAssetRoleScaleForTests("jungle",
     { id: "archetype.cobra-canyon.jungle-understory.v1", scaleM: { height: 9 } }, 0.5);

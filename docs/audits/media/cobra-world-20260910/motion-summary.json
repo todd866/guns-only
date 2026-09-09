@@ -1,0 +1,275 @@
+{
+  "schema": "guns-only.cobra-motion-summary.v1",
+  "method": "One metre east per rendered animation frame over 128 metres, fixed yaw/pitch/FOV/AGL; authority held at elapsed 0. Software-GPU timings are not hardware FPS.",
+  "sourceSnapshot": "pre-allocation canopy850d83af; final allocation170a2436 was checked in four later static frames only",
+  "sourceRuntimeHashes": [
+    {
+      "path": "cobra-lab/main.js",
+      "bytes": 122547,
+      "sha256": "d7dcfba6f0a3d9f67508549ec28624ecc9377194e4e9466f79bb60620f7da9fe",
+      "sourceMatchesPublished": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_terrain_material.js",
+      "bytes": 32507,
+      "sha256": "d4a42315edc58305fe011a15ae8300cca51d0ae89bb03fcb2364f734e8bbd397",
+      "sourceMatchesPublished": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_surface_textures.js",
+      "bytes": 2703,
+      "sha256": "4521a1ff22ba81188469854c731b248ffed85edacc47679a5cdadd46a5b70141",
+      "sourceMatchesPublished": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_canopy.js",
+      "bytes": 20748,
+      "sha256": "850d83aff85dcb9ab8ed6b3a19c4de77784e76a2f743d48915fb41e65581630a",
+      "sourceMatchesPublished": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_presentation.js",
+      "bytes": 111510,
+      "sha256": "1293b715825218e934975a3b08cf35c3b36f40abec43f947df8bbf3389b50994",
+      "sourceMatchesPublished": true
+    },
+    {
+      "path": "render/cobra/cobra_canyon_asset_kit.js",
+      "bytes": 102570,
+      "sha256": "ba89f416a7d39b64f95d14831a4bb885c8be3df689392ddf60f316af515f03f4",
+      "sourceMatchesPublished": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp",
+      "bytes": 344424,
+      "sha256": "568a68ecd66d0730a59f43e58f706f62cac705e9f7308eeebf996e703f0eec04",
+      "sourceMatchesPublished": true
+    },
+    {
+      "path": "content/packs/cobra-vietnam/environment/surfaces/canopy-generated-v1.webp",
+      "bytes": 362538,
+      "sha256": "31804fe8aa3b1d0f0c01e68af3cefa6f29dea0b5783a655155eafe3d30fa0e21",
+      "sourceMatchesPublished": true
+    }
+  ],
+  "sourceIdentityPath": "/tmp/guns-cobra-world-20260910/final-source-identity.json",
+  "sourceIdentitySha256": "5b583ce44ff5873cb1a4aca547a6a683808cd772afce68b9ea392c7b5ba4cca4",
+  "rawEvidencePath": "/tmp/guns-cobra-world-20260910/final-motion/evidence.json",
+  "rawEvidenceBytes": 134809671,
+  "rawEvidenceSha256": "68546f0c5f5749ed904a291b0f5263203c927b42f92f0cdb10385dfbef4af1d9",
+  "pageErrors": [],
+  "consoleErrors": [],
+  "shaderErrors": "No shader errors were logged during motion. All program link statuses were explicitly true in the static captures on this same runtime snapshot.",
+  "tiers": [
+    {
+      "tier": "balanced",
+      "panMetres": 128,
+      "renderedFrames": 129,
+      "maxCommonInstanceMatrixDelta": 0,
+      "occupancyRefreshMetres": [
+        48,
+        96
+      ],
+      "authorityTimeHeld": true,
+      "instanceCounts": [
+        576
+      ],
+      "rendererCalls": [
+        109,
+        110,
+        112,
+        114,
+        115,
+        117,
+        119,
+        120,
+        122
+      ],
+      "rendererTrianglesMin": 302010,
+      "rendererTrianglesMax": 303300,
+      "observedSoftwareRafMeanMs": 235.27734375,
+      "observedSoftwareRafP95Ms": 251.29999999999563,
+      "video": "/tmp/guns-cobra-world-20260910/final-motion/video-balanced/page@f7e4ea0c70dc3a5640f931d875a131e5.webm",
+      "frameCount": 129,
+      "firstStepM": 0,
+      "lastStepM": 128,
+      "cameraOneMetrePerFrameValid": true,
+      "cameraRanges": {
+        "x": [
+          -3050,
+          -2922
+        ],
+        "y": [
+          143.8857631954351,
+          165.1539645628533
+        ],
+        "z": [
+          700,
+          700
+        ]
+      },
+      "authorityElapsedRangeS": [
+        0,
+        0
+      ],
+      "initialPendingCells": 0,
+      "finalPendingCells": 0,
+      "residencyChanges": [
+        {
+          "stepM": 48,
+          "enteredCount": 19,
+          "exitedCount": 19,
+          "commonCount": 557,
+          "maxCommonMatrixDelta": 0
+        },
+        {
+          "stepM": 96,
+          "enteredCount": 16,
+          "exitedCount": 16,
+          "commonCount": 560,
+          "maxCommonMatrixDelta": 0
+        }
+      ]
+    },
+    {
+      "tier": "desktop",
+      "panMetres": 128,
+      "renderedFrames": 129,
+      "maxCommonInstanceMatrixDelta": 0,
+      "occupancyRefreshMetres": [
+        48,
+        96
+      ],
+      "authorityTimeHeld": true,
+      "instanceCounts": [
+        1080
+      ],
+      "rendererCalls": [
+        109,
+        110,
+        112,
+        114,
+        115,
+        117,
+        119,
+        120,
+        122
+      ],
+      "rendererTrianglesMin": 715357,
+      "rendererTrianglesMax": 722841,
+      "observedSoftwareRafMeanMs": 400.50468750000005,
+      "observedSoftwareRafP95Ms": 434.6000000000058,
+      "video": "/tmp/guns-cobra-world-20260910/final-motion/video-desktop/page@11557a4804657264957fd512cdd72d20.webm",
+      "frameCount": 129,
+      "firstStepM": 0,
+      "lastStepM": 128,
+      "cameraOneMetrePerFrameValid": true,
+      "cameraRanges": {
+        "x": [
+          -3050,
+          -2922
+        ],
+        "y": [
+          143.8857631954351,
+          165.1539645628533
+        ],
+        "z": [
+          700,
+          700
+        ]
+      },
+      "authorityElapsedRangeS": [
+        0,
+        0
+      ],
+      "initialPendingCells": 0,
+      "finalPendingCells": 0,
+      "residencyChanges": [
+        {
+          "stepM": 48,
+          "enteredCount": 30,
+          "exitedCount": 30,
+          "commonCount": 1050,
+          "maxCommonMatrixDelta": 0
+        },
+        {
+          "stepM": 96,
+          "enteredCount": 28,
+          "exitedCount": 28,
+          "commonCount": 1052,
+          "maxCommonMatrixDelta": 0
+        }
+      ]
+    },
+    {
+      "tier": "mobile",
+      "panMetres": 128,
+      "renderedFrames": 129,
+      "maxCommonInstanceMatrixDelta": 0,
+      "occupancyRefreshMetres": [
+        48,
+        96
+      ],
+      "authorityTimeHeld": true,
+      "instanceCounts": [
+        144
+      ],
+      "rendererCalls": [
+        108,
+        109,
+        111,
+        113,
+        114,
+        116,
+        118,
+        119,
+        121
+      ],
+      "rendererTrianglesMin": 56266,
+      "rendererTrianglesMax": 57134,
+      "observedSoftwareRafMeanMs": 136.45156249999997,
+      "observedSoftwareRafP95Ms": 150.09999999999854,
+      "video": "/tmp/guns-cobra-world-20260910/final-motion/video-mobile/page@735822209b7e65520f564f8938261505.webm",
+      "frameCount": 129,
+      "firstStepM": 0,
+      "lastStepM": 128,
+      "cameraOneMetrePerFrameValid": true,
+      "cameraRanges": {
+        "x": [
+          -3050,
+          -2922
+        ],
+        "y": [
+          143.8857631954351,
+          165.1539645628533
+        ],
+        "z": [
+          700,
+          700
+        ]
+      },
+      "authorityElapsedRangeS": [
+        0,
+        0
+      ],
+      "initialPendingCells": 0,
+      "finalPendingCells": 0,
+      "residencyChanges": [
+        {
+          "stepM": 48,
+          "enteredCount": 11,
+          "exitedCount": 11,
+          "commonCount": 133,
+          "maxCommonMatrixDelta": 0
+        },
+        {
+          "stepM": 96,
+          "enteredCount": 6,
+          "exitedCount": 6,
+          "commonCount": 138,
+          "maxCommonMatrixDelta": 0
+        }
+      ]
+    }
+  ]
+}

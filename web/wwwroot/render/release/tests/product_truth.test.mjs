@@ -48,7 +48,7 @@ test("the browser and installed-app descriptions match the six production experi
   assert.match(catalogue, /data-program-node="weekend-ride"/);
   assert.match(catalogue, /data-program-node="top-gun"/);
   assert.match(catalogue, /data-program-node="okanagan-fireboss"/);
-  assert.match(catalogue, /art\/jet-cobra\.webp/);
+  assert.match(catalogue, /art\/jet-cobra-generated-v4\.webp/);
   assert.match(catalogue, /art\/bike-yzf-r1\.webp/);
   assert.match(catalogue, /art\/jet-f14\.webp/);
   assert.match(catalogue, /art\/aircraft-fireboss\.webp/);

@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "asset": "limestone-generated-v1",
+  "status": "accepted-local-runtime-reviewed",
+  "epistemic": "fiction",
+  "generatedOn": "2026-09-10",
+  "dateTimezone": "Australia/Sydney",
+  "generatedAtUtc": "2026-09-09T14:16Z",
+  "generationTimestampPrecision": "Minute, reported by the originating task; seconds were not supplied.",
+  "tool": "image_gen.imagegen",
+  "mode": "built-in",
+  "model": null,
+  "modelNote": "The built-in tool did not report a backend model identity; no model name is asserted.",
+  "prompt": "Create a production-ready seamless tiling RGB albedo material for a tropical limestone gorge in a cinematic helicopter game. One square image, full bleed, the entire image is the FLAT ROCK SURFACE itself, photographed perfectly orthographically straight-on: no landscape, no perspective, no horizon, no cliff silhouette. Weathered damp tropical limestone, muted warm grey with subtle olive mineral staining, compact broad stone plates separated by irregular thin vertical and diagonal fissures, restrained broken horizontal sedimentary strata. Natural varied erosion and fine pitted mineral grain. Convey 18 metres of rock across the tile, fine detail within broad readable rock forms. The rock is predominantly light-mid grey, softly varied, never black or white. Flat diffuse overcast lighting with NO directional shadows, NO baked highlights or specular, NO strong ambient occlusion. Edge-to-edge perfectly tileable continuous texture with matching left/right and top/bottom, no border or vignette. No leaves, plants, moss tufts, roots, buildings, lettering, labels, watermark, people, weapons. Rich believable hand-crafted game material with painterly-realistic natural detail; visual texture should have the quality of cinematic tropical gorge concept art, but must remain a physically flat reusable albedo tile. Opaque RGB texture, no alpha, no checkerboard. Generate at 1024 by 1024 or nearest supported square size.",
+  "imageInputs": [],
+  "imageInputsNote": "The originating task confirmed text-only generation with no referenced images.",
+  "originalToolOutputPath": "/Users/iantodd/.codex/generated_images/01a08652-853b-75d2-b1d9-8282f0e61c44/exec-6f06a69d-f723-4da8-8a23-b35305476e9f.png",
+  "source": {
+    "path": "tools/assets/generators/cobra-surfaces/sources/limestone-generated-v1.png",
+    "width": 1254,
+    "height": 1254,
+    "colorMode": "RGB",
+    "hasAlpha": false,
+    "sizeBytes": 3530859,
+    "sha256": "8ce8cf6586defccd17116402ee1049feb7bcc2ea800aa50f00856799fb134427"
+  },
+  "runtime": {
+    "path": "content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp",
+    "mirror": "web/wwwroot/content/packs/cobra-vietnam/environment/surfaces/limestone-generated-v1.webp",
+    "width": 1024,
+    "height": 1024,
+    "colorMode": "RGB",
+    "hasAlpha": false,
+    "sizeBytes": 344424,
+    "sha256": "568a68ecd66d0730a59f43e58f706f62cac705e9f7308eeebf996e703f0eec04",
+    "conservativeTextureMemoryMiB": 5.334
+  },
+  "encoding": {
+    "tool": "cwebp",
+    "version": "1.6.0",
+    "libsharpyuvVersion": "0.4.2",
+    "arguments": [
+      "-q",
+      "86",
+      "-resize",
+      "1024",
+      "1024",
+      "-m",
+      "6",
+      "-sharp_yuv",
+      "<source>",
+      "-o",
+      "<runtime>"
+    ],
+    "rebuild": "node tools/assets/generators/cobra-surfaces/encode.mjs",
+    "verify": "node tools/assets/generators/cobra-surfaces/encode.mjs --check",
+    "operations": "Resizing and WebP encoding only. The generated master is retained byte-for-byte; no creative pixel edits, edge repair or height-map generation were performed."
+  },
+  "runtimeContract": {
+    "wrapping": "MirroredRepeatWrapping",
+    "anisotropy": 4,
+    "generateMipmaps": true,
+    "magFilter": "LinearFilter",
+    "minFilter": "LinearMipmapLinearFilter",
+    "sourceColorSpace": "sRGB color artwork",
+    "luminanceUse": "Any luminance-derived relief is an artistic height proxy, not a generated or measured height map.",
+    "sourceSeamless": false,
+    "physicalAuthority": "Presentation material only; not evidence of geology, geographic location, scale, elevation, collision or surface physics."
+  },
+  "visualReview": {
+    "nativeSourceInspected": true,
+    "notes": "Warm-grey stone plates, fissures, small pits and restrained olive staining. No text, border, checkerboard, object or landscape. Opposing source edges do not match; the image must not be represented as seamlessly tileable. The source also contains illustrated fissure shading, so it is not a calibrated reflectance measurement.",
+    "oppositeEdgeMeanAbsoluteRgbDifference": {
+      "units": "channel values out of 255",
+      "source": {
+        "leftRight": 19.421,
+        "topBottom": 23.346
+      },
+      "runtime": {
+        "leftRight": 19,
+        "topBottom": 22.915
+      }
+    },
+    "runtimeRecord": "docs/audits/2026-09-10-cobra-world-surfaces.md",
+    "runtimeNote": "Inspected in actual player-eye and fixed flight-route views with linked shaders and source-matched response bytes. This accepts the texture for this local pass, not parity with the illustrative menu image or a deployed release."
+  },
+  "validation": [
+    "Generated source copy preserves original SHA-256.",
+    "Runtime WebP is 1024x1024 RGB with no alpha.",
+    "Canonical and wwwroot WebP files match byte-for-byte.",
+    "Re-encoding with the recorded cwebp 1.6.0 command reproduces both runtime files."
+  ]
+}

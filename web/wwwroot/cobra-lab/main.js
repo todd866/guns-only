@@ -10,6 +10,10 @@ import {
   sampleCobraCanyonTerrain,
 } from "../render/cobra/cobra_canyon_plan.js?v=356";
 import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=356";
+import {
+  disposeCobraCanyonSurfaceTextures,
+  resolveCobraCanyonSurfaceTextures,
+} from "../render/cobra/cobra_canyon_surface_textures.js?v=356";
 import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=356";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
@@ -687,6 +691,7 @@ let plan = null;
 let presentation = null;
 /** @type {{ atlas: import("../vendor/three.module.js").Texture, synthetic?: boolean } | null} */
 let foliageTextures = null;
+let surfaceTextures = null;
 let roleGeometries = null;
 let activeRoute = null;
 let routeSampler = null;
@@ -1412,6 +1417,7 @@ function rebuildPresentation() {
   presentation = createCobraCanyonPresentation(THREE, plan, {
     qualityTier: qualitySelect.value,
     foliageTextures,
+    surfaceTextures,
     roleGeometries,
   });
   groundWarPresentation = createCobraGroundWarPresentation(THREE);
@@ -2605,6 +2611,8 @@ function teardownMission(reason) {
     ah1gPresence = null;
   }
   renderer.dispose();
+  disposeCobraCanyonSurfaceTextures(surfaceTextures);
+  surfaceTextures = null;
 }
 
 /** Escape's exit: tear the mission down first, then hand the browser back to the sortie list. */
@@ -2625,6 +2633,16 @@ async function boot() {
       loadCobraCanyonWorld(),
       resolveCobraVietnamFoliageTextures(THREE),
       loadCobraVietnamPalmGeometry(THREE),
+      resolveCobraCanyonSurfaceTextures(THREE).then((textures) => {
+        // Own the GPU resource as soon as it arrives, including a slower texture request after
+        // the runtime has failed or the player has left. Quality rebuilds only borrow it.
+        if (missionTornDown) {
+          disposeCobraCanyonSurfaceTextures(textures);
+          return null;
+        }
+        surfaceTextures = textures;
+        return textures;
+      }),
     ]);
     const runtimeBridge = (async () => {
       const blazor = await new Promise((resolve, reject) => {
@@ -2655,15 +2673,21 @@ async function boot() {
       const assemblyExports = await getAssemblyExports("GunsOnly.Web");
       return assemblyExports.GunsOnly.Web.CobraWebBridge;
     })();
-    const [[loadedWorld, loadedFoliageTextures, palm], loadedBridge] = await Promise.all([
+    const [[loadedWorld, loadedFoliageTextures, palm, loadedSurfaceTextures], loadedBridge] = await Promise.all([
       presentationAssets,
       runtimeBridge,
     ]);
+    if (missionTornDown) {
+      loadedFoliageTextures?.atlas.dispose();
+      palm?.geometry.dispose();
+      return;
+    }
     bridge = loadedBridge;
     // QA steering seam for crew-chain / headless lift-off (see web/smoke/cobra-crew-chain.test.mjs).
     window.__gunsOnlyCobraBridge = bridge;
     world = loadedWorld;
     foliageTextures = loadedFoliageTextures;
+    surfaceTextures = loadedSurfaceTextures;
     // Authored CC0 palms for the jungle role; null keeps the procedural cards.
     roleGeometries = palm ? { jungle: palm.geometry } : null;
     lockPlayRoute();
@@ -2722,6 +2746,7 @@ async function boot() {
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {
+    teardownMission("boot-error");
     console.error(error);
     setStatus(`Hold the Bridge failed: ${error.message}`, "error");
   }
