@@ -1,7 +1,6 @@
 # Rapier visual direction: Hermeus Ramjet-X
 
-Recorded 10 September 2026. This records the direction for the next aircraft design pass; it does
-not claim that the current runtime mesh has already been revised.
+Recorded 10 September 2026. The Build 358 candidate implements the appearance pass below.
 
 ## Owner direction and reference
 
@@ -59,3 +58,27 @@ authority. The [historical v1 directory](../rapier/README.md) is superseded.
 
 Keep manufacturer reference images linked and attributed. They are not project-owned runtime
 assets and should not silently enter the shipped asset set.
+
+## Build 358 appearance pass
+
+The production factory now uses a restrained metallic silver-grey finish, a dark nose and subtle
+circumferential seams. Body lofts retain the same linear stations with 32 radial segments instead
+of 12. Wings now follow the existing per-station thickness and installation height, with sharp
+edges and a closed symmetric mesh. The chordwise section is a presentation profile, not a new
+airfoil or an aerodynamic claim.
+
+The inlet has a narrow lip, a recessed dark interior and a cuff joining the existing tunnel
+surface. The axial lip depth no longer doubles as a very wide radial metal band. The single
+exhaust has an opaque recessed interior and stays inside the canonical nozzle radius; the old
+torus exceeded it. These surfaces close visual gaps without moving the authored openings.
+
+The canonical geometry, generated engineering, sockets, flight model and operating role are
+unchanged. The updated factory uses 1,464 triangles and 15 draws, versus 736 and
+10 before the pass. Front, rear, side and three-quarter captures were reviewed with identical
+cameras and lighting; all shader programs linked without browser errors.
+
+The new picker poster renders this same `createRapier()` factory with identity model transform
+and the game's environment lighting. Its retained PNG, source hashes, camera and renderer record
+live under `tools/assets/generators/menu-posters/sources/`; the WebP can be re-encoded from that
+PNG. The poster is a studio presentation of the game model, not a flight screenshot. It includes
+no manufacturer image pixels and makes no claim that a fresh GPU render is byte-reproducible.

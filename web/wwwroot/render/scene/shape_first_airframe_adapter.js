@@ -243,6 +243,8 @@ export function adaptShapeFirstAirframeDefinition(definition) {
     wing: {
       planform: wing.points,
       thickness: Math.max(...wing.stations.map((station) => station.thickness)),
+      halfStations: geometry.wing.halfStations.map((station) => ({ ...station })),
+      installationYM: finite(geometry.wing.installationYM, "geometry.wing.installationYM"),
       // The legacy primitive expands its outline by bevel size. Keep the bevel numerically
       // non-zero (zero selects that primitive's 44 mm fallback) but sub-millimetric so the
       // canonical station coordinates, not a presentation flourish, own rendered span and area.
@@ -257,11 +259,13 @@ export function adaptShapeFirstAirframeDefinition(definition) {
       position: inletCenter,
       // The lip plane is installed for canonical high-Mach trim, not for body alpha zero.
       rotX: inletIncidenceRad,
+      lipDepth,
     },
     exhaust: {
       radius: exhaustRadius,
       tube: Math.max(0.025, exhaustRadius * 0.12),
       position: exhaustCenter,
+      fairingLength: finite(geometry.exhaust.fairingLengthM, "geometry.exhaust.fairingLengthM"),
     },
     sockets: {
       cockpitCamera: {
@@ -276,11 +280,11 @@ export function adaptShapeFirstAirframeDefinition(definition) {
     },
     palette: {
       // Presentation-only finish, not a material or thermal claim.
-      upper: "#596b73",
-      lower: "#26343a",
-      hot: "#765244",
-      sensor: "#11191d",
-      accent: "#b85e32",
+      upper: "#a3a8aa",
+      lower: "#777f83",
+      hot: "#636268",
+      sensor: "#1e2529",
+      accent: "#92999d",
     },
   };
   if (tunnelBody) result.propulsionTunnel = { stations: tunnelBody.stations };

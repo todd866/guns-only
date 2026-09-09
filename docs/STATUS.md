@@ -1,8 +1,9 @@
 # Current product and verification status
 
 Updated: 2026-09-10
-Production: Build 352, revision `1ed5488d0271aad87118fa8c64eb9dcbd0d50c79`.
-Next candidate: Build 357, not deployed — adds the generated F-22 and Cobra picker artwork, textured limestone slopes, bounded forest canopy and close foliage, with a landscape picker fix. It retains the tested Build 354 scenery/defence checkpoint, adds Baldy footprints, and corrects the defence exercises from actual Fire Boss flight testing: the defence drop is now aimed at the buildings it is briefed to protect (the flown load reaches 20–39 mapped sites per resort, where Apex and Peachland previously reached none), the mountain approach no longer demands a climb over a secondary summit, and the debrief records which sites the load reached. It also stops a phone held sideways hiding the control that starts a mission: Cobra's flight brief pins its action row the way Okanagan's dispatch does, and the aircraft picker's secondary actions wrap instead of clipping off both edges. It is not deployed. See [scenery and defence audit](audits/2026-09-05-peachland-scenery.md) and [flight-validation record](audits/2026-09-06-okanagan-flight-validation.md).
+Production: Build 357, revision `b5d4007ba2ea3832111b22e853bfc30ef2f3b24a`.
+Next candidate: Build 358, not deployed — gives the actual Rapier model a Hermeus-inspired metallic finish and dark nose, honors its authored wing thickness, smooths the body, connects the intake and closes the exhaust. The picker renders that same model. Canonical geometry and flight behavior are unchanged. See [Rapier appearance record](airframes/rapier-v2/11-hermeus-visual-direction.md).
+Build 357 shipped the generated F-22 and Cobra picker artwork, limestone slopes, forest canopy and close foliage, plus the landscape picker fix. Build 356 shipped the Fire Boss defence and recovery corrections. See [scenery and defence audit](audits/2026-09-05-peachland-scenery.md) and [flight-validation record](audits/2026-09-06-okanagan-flight-validation.md).
 F-22 Guns Only remains an open-ended fight rather than a scored mission.
 Call It A Day or Bingo enters one typed, immediate ceasefire/RTB transition and publishes a
 terrain-aware left-hand runway pattern. Floating chevrons carry the energy lesson without another
@@ -124,7 +125,7 @@ drop voices follow published water rates; and AIM-9 launch, radio-priority ducki
 safety-warning arbiter make the important event audible without relying on limiter overload.
 All candidate audio acceptance is silent (`?audioQa=silent`).
 
-Production: Build 352, revision `1ed5488d0271aad87118fa8c64eb9dcbd0d50c79`. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
+Production: Build 357, revision `b5d4007ba2ea3832111b22e853bfc30ef2f3b24a`. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
 player journey and Top Gun bolter retry), 349 (mission-AI suite honesty), 350
 (conventional F-22 recovery), 351 (finite billed sorties, presenting Ace, Cobra pad combat)
 and 352 (Fire Boss sky chevrons, HUD hopper/cue, readable west-side fire)
@@ -346,7 +347,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 352, revision `1ed5488d0271aad87118fa8c64eb9dcbd0d50c79`. Local gate
+- Live production is Build 357, revision `b5d4007ba2ea3832111b22e853bfc30ef2f3b24a`. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.

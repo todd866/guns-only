@@ -11,6 +11,12 @@ import {
   adaptShapeFirstAirframeDefinition,
   isShapeFirstAirframeDefinition,
 } from "./shape_first_airframe_adapter.js?v=357";
+import { createShapeFirstWingGeometry } from "./shape_first_wing_geometry.js?v=357";
+import {
+  createRapierMaterials,
+  createRapierInlet,
+  createRapierExhaust,
+} from "./rapier_airframe_finish.js?v=357";
 
 function parseColor(value, fallback = 0x808080) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -81,21 +87,24 @@ export function createAirframeFromDefinition(definition, context = {}) {
     : definition;
   requireGeometry(def);
   const names = rapierPartNames(def);
-  const mats = paletteMaterials(def);
+  const shapeFirstRapier = def.id === "rapier.shape-first-engineering.v2";
+  const mats = shapeFirstRapier ? createRapierMaterials(def) : paletteMaterials(def);
   const group = new THREE.Group();
   group.name = names.group;
 
   const thickness = Number(def.wing.thickness) || 0.16;
   const bevel = Number(def.wing.bevel) || 0.044;
   const wing = new THREE.Mesh(
-    createPlanformGeometry(def.wing.planform, thickness, bevel),
+    shapeFirstRapier ? createShapeFirstWingGeometry(def.wing)
+      : createPlanformGeometry(def.wing.planform, thickness, bevel),
     [mats.upper, mats.lower],
   );
   wing.name = names.wing;
-  wing.position.y = 0.02;
+  wing.position.y = shapeFirstRapier ? 0 : 0.02;
   group.add(wing);
 
-  const body = new THREE.Mesh(createLoftGeometry(def.fuselage.stations, 12), mats.upper);
+  const body = new THREE.Mesh(createLoftGeometry(def.fuselage.stations,
+    shapeFirstRapier ? 32 : 12), mats.body ?? mats.upper);
   body.name = names.body;
   group.add(body);
 
@@ -109,21 +118,25 @@ export function createAirframeFromDefinition(definition, context = {}) {
   }
 
   if (def.intake) {
-    const innerR = Number(def.intake.innerR) || 0.29;
-    const outerR = Number(def.intake.outerR) || 0.55;
-    const intake = new THREE.Mesh(new THREE.RingGeometry(innerR, outerR, 14), mats.sensor);
-    intake.name = names.intake;
-    intake.scale.y = Number(def.intake.scaleY) || 1;
-    const [ix, iy, iz] = def.intake.position || [0, 0, 0];
-    intake.position.set(ix, iy, iz);
-    intake.rotation.y = Math.PI;
-    intake.rotation.x = Number(def.intake.rotX) || 0;
-    group.add(intake);
+    if (shapeFirstRapier) {
+      group.add(createRapierInlet(def, mats, names.intake));
+    } else {
+      const innerR = Number(def.intake.innerR) || 0.29;
+      const outerR = Number(def.intake.outerR) || 0.55;
+      const intake = new THREE.Mesh(new THREE.RingGeometry(innerR, outerR, 14), mats.sensor);
+      intake.name = names.intake;
+      intake.scale.y = Number(def.intake.scaleY) || 1;
+      const [ix, iy, iz] = def.intake.position || [0, 0, 0];
+      intake.position.set(ix, iy, iz);
+      intake.rotation.y = Math.PI;
+      intake.rotation.x = Number(def.intake.rotX) || 0;
+      group.add(intake);
+    }
   }
 
   if (Array.isArray(def.propulsionTunnel?.stations) && def.propulsionTunnel.stations.length >= 2) {
     const tunnel = new THREE.Mesh(
-      createLoftGeometry(def.propulsionTunnel.stations, 12),
+      createLoftGeometry(def.propulsionTunnel.stations, shapeFirstRapier ? 32 : 12),
       mats.lower,
     );
     tunnel.name = names.tunnel;
@@ -131,13 +144,17 @@ export function createAirframeFromDefinition(definition, context = {}) {
   }
 
   if (def.exhaust) {
-    const radius = Number(def.exhaust.radius) || 0.34;
-    const tube = Number(def.exhaust.tube) || 0.07;
-    const exhaust = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 7, 16), mats.hot);
-    const [ex, ey, ez] = def.exhaust.position || [0, 0, 0];
-    exhaust.position.set(ex, ey, ez);
-    exhaust.name = names.exhaust;
-    group.add(exhaust);
+    if (shapeFirstRapier) {
+      group.add(createRapierExhaust(def, mats, names.exhaust));
+    } else {
+      const radius = Number(def.exhaust.radius) || 0.34;
+      const tube = Number(def.exhaust.tube) || 0.07;
+      const exhaust = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 7, 16), mats.hot);
+      const [ex, ey, ez] = def.exhaust.position || [0, 0, 0];
+      exhaust.position.set(ex, ey, ez);
+      exhaust.name = names.exhaust;
+      group.add(exhaust);
+    }
   }
 
   const finDefs = Array.isArray(def.fins) ? def.fins : [];

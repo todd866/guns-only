@@ -43,6 +43,8 @@ const POSTERS = {
     rasterizer: "committed-raster", src: "sources/jet-f22-generated-v4" },
   "jet-cobra-generated-v4": { w: 1000, h: 1000, q: 82,
     rasterizer: "committed-raster", src: "sources/jet-cobra-generated-v4" },
+  "jet-rapier-hermeus-v1": { w: 1000, h: 1000, q: 82,
+    rasterizer: "committed-raster", src: "sources/jet-rapier-hermeus-v1" },
   "bike-yzf-r1": { w: 900, h: 1600, q: 82 },
   "menu-hangar": { w: 1600, h: 1067, q: 82 },
   "menu-hangar-small": { w: 900, h: 600, q: 80, src: "menu-hangar" },
