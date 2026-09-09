@@ -28,6 +28,13 @@ not a second exterior fuselage. The deeper belly is the engine and its high-spee
 it houses a `1.22 m × 4.88 m` core inside a `1.34 m × 5.48 m` installed envelope with explicit
 structural, thermal, fire-bulkhead, and equipment clearances.
 
+## Visual direction for the next pass
+
+The owner's 10 September 2026 direction makes Hermeus's air-launched Ramjet-X the primary visual
+reference for the next Rapier design pass. See [Hermeus visual direction](11-hermeus-visual-direction.md)
+for the inspected illustration, source facts and boundaries. This records design intent; the
+canonical geometry and derived engineering above still describe the current implementation.
+
 ## What problem it solves
 
 The baseline mission is intentionally narrow: catapult launch, climb, high-altitude M4-class dash,
