@@ -2,6 +2,7 @@ import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=356";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
+  applyCobraFoliageOpacity,
   createCobraSoftFalloffTexture,
   createSyntheticFoliageAtlasTexture,
 } from "./cobra_canyon_foliage.js?v=356";
@@ -1592,7 +1593,7 @@ function geometryForRole(THREE, role) {
   const colors = [];
   const uvs = role === "jungle" ? [] : null;
   if (role === "jungle") {
-    // ONE INSTANCE = two CC0 palm cards (crossed quads) + understory fern cards.
+    // ONE INSTANCE = two broad-leaf cards (crossed quads) + understory fern cards.
     // Textured alpha cutouts beat Lambert lobes for BF:V legibility and cost ~12 tris.
     const leafTint = [0.92, 0.98, 0.88];
     const underTint = [0.78, 0.92, 0.72];
@@ -1690,12 +1691,12 @@ function materialForRole(THREE, role, foliageAtlas = null, softFalloff = null) {
     return material;
   }
   if (role === "jungle") {
-    // Unlit alpha cards — Lambert was crushing the CC0 atlas to black silhouettes under gorge light.
+    // Unlit cutout cards retain leaf separation under gorge light.
     const material = new THREE.MeshBasicMaterial({
       map: foliageAtlas,
-      // The source atlas is deliberately dense and dark. A modest linear-space lift restores
-      // leaf separation under humid haze without making the unlit cards fluorescent.
-      color: new THREE.Color(1.16, 1.22, 1.10),
+      // Only the dark CC0 source needs this lift; it makes the generated midtones fluorescent.
+      color: foliageAtlas?.userData?.cobraFoliageEncoding === "black-matte-v1"
+        ? new THREE.Color(1, 1, 1) : new THREE.Color(1.16, 1.22, 1.10),
       vertexColors: true,
       alphaTest: 0.48,
       transparent: false,
@@ -1703,6 +1704,7 @@ function materialForRole(THREE, role, foliageAtlas = null, softFalloff = null) {
       side: THREE.DoubleSide,
     });
     material.name = "COBRA_CANYON_ASSET_JUNGLE_MATERIAL";
+    applyCobraFoliageOpacity(THREE, material);
     return material;
   }
   const material = new THREE.MeshLambertMaterial({
@@ -1845,6 +1847,21 @@ function createRoleMesh(
     ? authoredMeshMaterial(THREE, role)
     : materialForRole(THREE, role, foliageAtlas, softFalloff);
   const mesh = tagObject(new THREE.InstancedMesh(geometry, material, capacity), role, capacity);
+  if (role === "jungle" && !authoredGeometry
+      && foliageAtlas?.userData?.cobraFoliageEncoding === "black-matte-v1") {
+    // The RGB matte must also clip the shadow passes, or the leaves cast card-shaped rectangles.
+    mesh.customDepthMaterial = new THREE.MeshDepthMaterial({
+      map: foliageAtlas, alphaTest: material.alphaTest, side: material.side,
+      depthPacking: THREE.RGBADepthPacking,
+    });
+    mesh.customDistanceMaterial = new THREE.MeshDistanceMaterial({
+      map: foliageAtlas, alphaTest: material.alphaTest, side: material.side,
+    });
+    for (const shadowMaterial of [mesh.customDepthMaterial, mesh.customDistanceMaterial]) {
+      applyCobraFoliageOpacity(THREE, shadowMaterial);
+      resources.materials.add(shadowMaterial);
+    }
+  }
   mesh.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}${nameSuffix}`;
   // DynamicDrawUsage: the resident set is rewritten as the aircraft moves, not once at boot.
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -2034,7 +2051,7 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
     ...PRESENTATION_ONLY_TAG,
   });
   const resources = { geometries: new Set(), materials: new Set(), meshes: [], textures: [] };
-  // CC0 atlas when the shell preloads it; synthetic fallback keeps the alpha-card path in tests.
+  // Reviewed atlas when the shell preloads it; synthetic fallback keeps the alpha-card path in tests.
   let foliageAtlas = options.foliageTextures?.atlas ?? null;
   if (!foliageAtlas) {
     foliageAtlas = createSyntheticFoliageAtlasTexture(THREE);

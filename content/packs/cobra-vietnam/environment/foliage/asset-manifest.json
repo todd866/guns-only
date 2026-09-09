@@ -1,0 +1,56 @@
+{
+  "$schema": "../../../../schemas/asset-manifest.schema.json",
+  "schemaVersion": "1.0.0",
+  "manifestId": "manifest.cobra-vietnam.foliage.v2",
+  "manifestVersion": "0.2.0",
+  "packId": "cobra-vietnam",
+  "coordinateSystem": {
+    "units": "metres",
+    "upAxis": "+y",
+    "forwardAxis": "-z",
+    "handedness": "right"
+  },
+  "defaultLicenseSet": {
+    "id": "licenses.guns-only.cobra-vietnam.foliage.v1",
+    "uri": "licenses.json"
+  },
+  "assets": [
+    {
+      "id": "environment.foliage.generated-atlas.v2",
+      "kind": "texture",
+      "role": "environment.vegetation",
+      "status": "production",
+      "licenseRef": "license.project-generated-foliage.v2",
+      "sources": [
+        {
+          "uri": "foliage-atlas-generated-v2.png",
+          "format": "png",
+          "mediaType": "image/png",
+          "sha256": "e16bb50cb7a63083f0ab6a4af537631a31a86ce745ff82d00eaacd1bf44896c8",
+          "sizeBytes": 546554
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://cobra-canyon/foliage-cards/current",
+          "parameters": {
+            "role": "jungle"
+          },
+          "notes": "The existing synthetic alpha-card atlas remains the failed-load fallback."
+        }
+      ],
+      "budgets": {
+        "textureMemoryMiB": 2.667,
+        "maxTextureDimension": 1024
+      },
+      "notes": "1024x512 RGB atlas. The tagged runtime material derives coverage from near-black pixels; this source does not contain an alpha channel. Geometry and plant placement stay authored by the existing world.",
+      "extensions": {
+        "epistemic": "fiction",
+        "encoding": "black-matte-v1",
+        "sourceUvSplit": 0.52,
+        "provenance": "tools/assets/generators/cobra-foliage/sources/foliage-atlas-rgb-coverage-v2.provenance.json"
+      }
+    }
+  ]
+}

@@ -1,20 +1,20 @@
 /**
- * CC0 foliage atlas for Cobra Canyon near-field jungle cards.
+ * Reviewed foliage atlas for Cobra Canyon near-field jungle cards.
  * Provenance: content/packs/cobra-vietnam/environment/foliage/SOURCES.md
  */
 
 export const COBRA_VIETNAM_FOLIAGE_ATLAS_URL =
-  "/content/packs/cobra-vietnam/environment/foliage/foliage-atlas.png";
+  "/content/packs/cobra-vietnam/environment/foliage/foliage-atlas-generated-v2.png";
 
-/** Palm half of foliage-atlas.png (u ∈ [0, 0.5]). */
+/** Broad-leaf clump half of the atlas (u ∈ [0, 0.5]). */
 export const FOLIAGE_UV_PALM = Object.freeze({ u0: 0, u1: 0.5, v0: 0, v1: 1 });
 
-/** Understory half of foliage-atlas.png (u ∈ [0.5, 1]). */
+/** Understory half of the atlas (u ∈ [0.5, 1]). */
 export const FOLIAGE_UV_UNDERSTORY = Object.freeze({ u0: 0.5, u1: 1, v0: 0, v1: 1 });
 
 /**
  * Tiny procedural stand-in so Node tests and failed loads still exercise the alpha-card path.
- * Not a visual substitute for the shipped CC0 atlas in the browser.
+ * Not a visual substitute for the shipped atlas in the browser.
  */
 export function createSyntheticFoliageAtlasTexture(THREE) {
   const width = 16;
@@ -47,7 +47,7 @@ export function createSyntheticFoliageAtlasTexture(THREE) {
   return texture;
 }
 
-function configureFoliageTexture(THREE, texture) {
+function configureFoliageTexture(THREE, texture, url) {
   texture.name = texture.name || "COBRA_VIETNAM_FOLIAGE_ATLAS";
   texture.wrapS = THREE.ClampToEdgeWrapping;
   texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -58,11 +58,48 @@ function configureFoliageTexture(THREE, texture) {
   if ("SRGBColorSpace" in THREE) texture.colorSpace = THREE.SRGBColorSpace;
   else if ("sRGBEncoding" in THREE) texture.encoding = THREE.sRGBEncoding;
   texture.needsUpdate = true;
+  if (String(url).split("?")[0].endsWith(COBRA_VIETNAM_FOLIAGE_ATLAS_URL)) {
+    texture.userData.cobraFoliageEncoding = "black-matte-v1";
+  }
   return texture;
 }
 
 /**
- * Loads the shipped CC0 atlas. Rejects if TextureLoader is unavailable.
+ * The generated atlas stores colour against pure black rather than an alpha channel. Interpret
+ * that encoding only for the tagged source. Coverage is measured in linear texture space before
+ * scene/instance tint; the same hook is used in colour and shadow passes. Compensating the narrow
+ * matte transition reduces black fringes at minified leaf edges. This adds no texture fetch.
+ */
+export function applyCobraFoliageOpacity(THREE, material) {
+  if (material.map?.userData?.cobraFoliageEncoding !== "black-matte-v1") return false;
+  const mapFragment = THREE.ShaderChunk.map_fragment.replaceAll("vMapUv", "cobraFoliageUv");
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace("#include <map_fragment>", `
+      #ifdef USE_MAP
+        // The actual generated plants have a clear gap at u=.52. Preserve both silhouettes
+        // while mapping the geometry's existing half-atlas UVs into those source regions.
+        vec2 cobraFoliageUv = vec2(vMapUv.x < 0.5 ? vMapUv.x * 1.04
+          : 0.52 + (vMapUv.x - 0.5) * 0.96, vMapUv.y);
+      #endif
+      ${mapFragment}
+      #ifdef USE_MAP
+        float foliageCoverage = smoothstep(0.002, 0.018,
+          max(sampledDiffuseColor.r, max(sampledDiffuseColor.g, sampledDiffuseColor.b)));
+        diffuseColor.a *= foliageCoverage;
+        diffuseColor.rgb /= max(foliageCoverage, 0.001);
+        // The generated source already has lifted midtones. Calm its lime saturation after
+        // coverage is measured, so colour tuning cannot change the leaf silhouette or shadows.
+        float foliageLuminance = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+        diffuseColor.rgb = mix(vec3(foliageLuminance), diffuseColor.rgb, 0.7);
+      #endif
+    `);
+  };
+  material.customProgramCacheKey = () => "cobra-foliage-black-matte-v1-muted";
+  return true;
+}
+
+/**
+ * Loads the shipped atlas. Rejects if TextureLoader is unavailable.
  */
 export function loadCobraVietnamFoliageTextures(THREE, options = {}) {
   const url = options.url ?? COBRA_VIETNAM_FOLIAGE_ATLAS_URL;
@@ -74,7 +111,7 @@ export function loadCobraVietnamFoliageTextures(THREE, options = {}) {
     loader.load(
       url,
       (texture) => resolve(Object.freeze({
-        atlas: configureFoliageTexture(THREE, texture),
+        atlas: configureFoliageTexture(THREE, texture, url),
         url,
         synthetic: false,
       })),

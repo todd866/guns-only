@@ -3093,7 +3093,7 @@
     }
 
     #ready-screen .sortie-choice[data-aircraft="f22"] {
-      background-image: image-set(url("./art/jet-f22.webp") type("image/webp"));
+      background-image: image-set(url("./art/jet-f22-generated-v4.webp") type("image/webp"));
     }
 
     #ready-screen .sortie-choice[data-aircraft="rapier"] {
@@ -3101,7 +3101,7 @@
     }
 
     #ready-screen .sortie-choice[data-aircraft="cobra"] {
-      background-image: image-set(url("./art/jet-cobra.webp") type("image/webp"));
+      background-image: image-set(url("./art/jet-cobra-generated-v4.webp") type("image/webp"));
     }
 
     #ready-screen .sortie-choice[data-aircraft="bike"] {
@@ -3784,6 +3784,9 @@
       }
 
       :root #ready-screen[data-mode="program"] .ready-mission-groups {
+        /* Reset the earlier touch landscape block and narrow-screen column rail together. */
+        display: grid;
+        grid-auto-flow: row;
         grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
         gap: var(--flow-space-2);
       }

@@ -78,9 +78,19 @@ test("the aircraft picker keeps every secondary action reachable on a small scre
     const errors = []; page.on("pageerror", (error) => errors.push(error.stack || error.message));
     await page.goto(`${site.url}?menu=1&audioQa=silent&server=off`, { waitUntil: "load" });
     await page.waitForFunction(() => globalThis.__gunsState?.session_phase === "READY", null, { timeout: 90_000 });
-    for (const [width, height] of [[844, 390], [390, 844]]) {
+    for (const [width, height] of [[844, 390], [667, 375], [390, 844]]) {
       await page.setViewportSize({ width, height });
       await page.waitForFunction(() => document.querySelector(".ready-secondary-actions") !== null);
+      // An inherited display:block used to stack landscape posters at the full selector width.
+      // Choosing a lower card then scrolled the oversized row and took Fly off screen. Exercise
+      // real selection before checking geometry; a default focused action can hide that overflow.
+      await page.locator('[data-program-node="cobra-lab"]').click();
+      const primary = await page.locator("#ready-start").evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom };
+      });
+      assert.ok(primary.top >= -1 && primary.bottom <= height + 1,
+        `${width}x${height}: choosing a poster moved Fly off screen (${primary.top}..${primary.bottom})`);
       const row = await page.locator(".ready-secondary-actions").evaluate((node) => {
         const box = node.getBoundingClientRect();
         return {
