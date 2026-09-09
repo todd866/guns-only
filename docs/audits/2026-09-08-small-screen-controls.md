@@ -1,6 +1,6 @@
 # A phone held sideways hid the button that starts the mission
 
-Captured 7 September 2026 against the Build 355 candidate, published locally and driven headless at
+Captured 7 September 2026 against this candidate, since stamped Build 356, published locally and driven headless at
 three viewports: 1440x900 desktop, 390x844 portrait and 844x390 short landscape. Every production
 route was opened to its first screen, started, flown briefly, paused and resumed, and the frames
 were inspected. This record covers what the frames showed and what was changed; it is not a

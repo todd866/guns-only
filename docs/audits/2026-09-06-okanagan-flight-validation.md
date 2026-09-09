@@ -1,6 +1,6 @@
-# Okanagan flight validation and Baldy coverage — Build 355
+# Okanagan flight validation and Baldy coverage — Build 356
 
-Build 354 was committed as `baffca90` after its complete gate passed. Continued flight testing found route problems that the earlier coordinator tests could not reveal. This record belongs to the subsequent candidate; production remains Build 352.
+Build 354 was committed as `baffca90` after its complete gate passed. Continued flight testing found route problems that the earlier coordinator tests could not reveal. This record belongs to the subsequent candidate, now stamped Build 356; production remains Build 352.
 
 ## What the physical flights exposed
 
