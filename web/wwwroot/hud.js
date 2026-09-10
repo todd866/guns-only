@@ -32,7 +32,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=359";
+} from "./render/hud/contact_visibility.js?v=360";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   carrierAoARelevant,
@@ -71,15 +71,15 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=359";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=360";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=359";
+} from "./render/mission/rapier_high_mach_instruments.js?v=360";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
-} from "./render/hud/limits_panel.js?v=359";
+} from "./render/hud/limits_panel.js?v=360";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   fillLegibleHudText,
@@ -93,7 +93,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=359";
+} from "./render/audio/flight_audio.js?v=360";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -291,6 +291,29 @@ export function cameraReferencedAirframeAnchors(camera, width, height, state = {
       behind: false,
     },
   };
+}
+
+/** Optional civilian display corridor, leaving every existing mission's 44 px default intact. */
+export function civilianTargetLayout(projected, width, height, safeInsets = {}, horizontalInsetPx) {
+  const margin = 44;
+  const custom = Number.isFinite(horizontalInsetPx) && horizontalInsetPx > margin;
+  const inset = custom ? clamp(horizontalInsetPx, margin, Math.max(margin, width / 2 - 24)) : margin;
+  const left = inset, right = width - inset;
+  const top = margin + (safeInsets.top || 0), bottom = height - margin - (safeInsets.bottom || 0);
+  const behind = projected.behind === true;
+  const x = behind ? (projected.cameraX < 0 ? left : right) : clamp(projected.x, left, right);
+  const y = behind ? height * .5 : clamp(projected.y, top, bottom);
+  const onScreen = !behind && projected.x >= left && projected.x <= right && projected.y >= top && projected.y <= bottom;
+  const labelWidth = custom ? Math.max(0, Math.min(130, right - left - 20)) : 130;
+  let labelX = x, labelAlign = "center";
+  if (custom && x - labelWidth / 2 < left) {
+    labelAlign = "left";
+    labelX = Math.min(right - labelWidth, x + (onScreen ? 0 : 10));
+  } else if (custom && x + labelWidth / 2 > right) {
+    labelAlign = "right";
+    labelX = Math.max(left + labelWidth, x - (onScreen ? 0 : 10));
+  }
+  return { x, y, onScreen, labelX, labelAlign, labelWidth };
 }
 
 class CombatHud {
@@ -1836,17 +1859,8 @@ class CombatHud {
     const position = frame.civilianTargetPosition;
     if (!label || !position || !frame.camera) return;
     const projected = this.project(position, frame.camera, this.projectionA);
-    const margin = 44;
-    const behind = projected.behind === true;
-    const x = behind
-      ? (projected.cameraX < 0 ? margin : this.width - margin)
-      : clamp(projected.x, margin, this.width - margin);
-    const y = behind
-      ? this.height * 0.5
-      : clamp(projected.y, margin + this.safeInsets.top, this.height - margin - this.safeInsets.bottom);
-    const onScreen = !behind && projected.x >= margin && projected.x <= this.width - margin
-      && projected.y >= margin + this.safeInsets.top
-      && projected.y <= this.height - margin - this.safeInsets.bottom;
+    const { x, y, onScreen, labelX, labelAlign, labelWidth } = civilianTargetLayout(projected,
+      this.width, this.height, this.safeInsets, frame.state.civilian_target_horizontal_inset_px);
     const padlocked = frame.state.civilian_target_padlocked === true;
     const accent = padlocked ? AMBER : GREEN;
     const ctx = this.ctx;
@@ -1877,11 +1891,11 @@ class CombatHud {
     }
     ctx.shadowBlur = 0;
     ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "center";
+    ctx.textAlign = labelAlign;
     ctx.textBaseline = "top";
-    ctx.fillText(this.fitText(label, 130), x, y + 23);
+    ctx.fillText(this.fitText(label, labelWidth), labelX, y + 23);
     ctx.restore();
-    if (this._debug) this._debug.civilianTarget = { label, x, y, onScreen, padlocked };
+    if (this._debug) this._debug.civilianTarget = { label, x, y, onScreen, padlocked, labelX, labelAlign, labelWidth };
   }
 
   drawFireBossHopper(frame) {

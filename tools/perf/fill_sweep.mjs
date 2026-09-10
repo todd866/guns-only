@@ -39,7 +39,6 @@ try {
     await page.waitForFunction(() => document.querySelector("#status")?.dataset.ready === "true"
       && !!window.__gunsOnlyWeekendAuthority, undefined, { timeout: 120_000 });
   }
-  await page.bringToFront();
   await page.locator("#scene").focus().catch(() => {});
   await page.waitForTimeout(6000);
   if (MODE === "f22") { await page.keyboard.press("Escape"); await page.waitForTimeout(1500); }

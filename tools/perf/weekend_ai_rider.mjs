@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { perfBrowserLaunchOptions } from "./browser_launch.mjs";
 
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -535,12 +536,12 @@ export async function runWeekendAiRide({
     ? Number(durationSeconds)
     : goal === "lap" ? 900 : 300;
   const site = await serveStatic(wwwroot);
-  const browser = await chromium.launch({
-    headless: !hardware,
+  const browser = await chromium.launch(perfBrowserLaunchOptions({
+    hardware,
     args: hardware
       ? ["--use-angle=metal", "--enable-webgl-draft-extensions"]
       : ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
-  });
+  }));
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await context.addInitScript(INSTALL_WEEKEND_GAMEPAD);
   const page = await context.newPage();
@@ -590,7 +591,6 @@ export async function runWeekendAiRide({
     const startLatencyMs = Date.now() - startClickedAtMs;
     const teaching = page.locator("#controls-onboarding-dismiss");
     if (await teaching.isVisible()) await teaching.click();
-    await page.bringToFront();
     await page.locator("#scene").focus().catch(() => {});
     await capture("active");
 

@@ -13,6 +13,7 @@ public static partial class OkanaganWebBridge
     static FireBossPilotCommand _command;
     static FireBossPilotCommand _lastAppliedCommand;
     static readonly FireBossControlTapBuffer ControlTaps = new();
+    static readonly FireBossAutoTrim AutoTrim = new();
     static bool _paused;
     static double _accumulatorSeconds;
 
@@ -22,6 +23,7 @@ public static partial class OkanaganWebBridge
         _mission = OkanaganFireMission.Create(ResolveSortie(sortie));
         _command = new FireBossPilotCommand(0.0, 0.0, 0.0, 0.65, false, false);
         _lastAppliedCommand = _command;
+        AutoTrim.Reset(AutoTrim.State.Enabled);
         _paused = false;
         ControlTaps.Reset();
         _accumulatorSeconds = 0.0;
@@ -60,7 +62,11 @@ public static partial class OkanaganWebBridge
 
     [JSExport]
     public static void SetElevatorTrim(double trim) =>
-        _command = _command with { ElevatorTrim = Clamp(trim, -0.5, 0.5, nameof(trim)) };
+        _command = AutoTrim.SetManualTrim(Clamp(trim, -0.5, 0.5, nameof(trim)), _command);
+
+    [JSExport]
+    public static void SetAutoTrimEnabled(bool enabled) =>
+        _command = AutoTrim.SetEnabled(enabled, _command);
 
     [JSExport]
     public static void QueueControlTap(int axis, double direction, double durationSeconds)
@@ -91,7 +97,8 @@ public static partial class OkanaganWebBridge
                 _accumulatorSeconds = 0.0;
                 break;
             }
-            _lastAppliedCommand = ControlTaps.Apply(_command);
+            _lastAppliedCommand = AutoTrim.Apply(mission.Aircraft,
+                ControlTaps.Apply(_command), FixedDeltaSeconds);
             mission.Step(_lastAppliedCommand);
             _accumulatorSeconds -= FixedDeltaSeconds;
             ticks++;
@@ -101,13 +108,14 @@ public static partial class OkanaganWebBridge
 
     [JSExport]
     public static string GetState() => OkanaganSnapshotProjection.BuildStateJson(
-        RequireMission(), _lastAppliedCommand, ControlTaps, _command);
+        RequireMission(), _lastAppliedCommand, ControlTaps, _command, AutoTrim.State);
 
     [JSExport]
     public static void SetPaused(bool paused)
     {
         RequireMission().SetPaused(paused);
         _paused = paused;
+        AutoTrim.SetPaused(paused);
         if (paused)
         {
             ReleaseFlightControls();

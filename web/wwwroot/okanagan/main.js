@@ -4,57 +4,60 @@ const pilotLogbook = createBrowserPilotLogbook();
 installDisposedPageRestore();
 window.addEventListener("pagehide", () => pilotLogbook.finish({ outcome: "Left before completion" }));
 import * as THREE from "../vendor/three.module.js";
-import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=359";
+import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=360";
 import {
   createOkanaganWorldRoot, okanaganWorldToRender, okanaganRenderToWorld,
   setOkanaganCockpitCamera, lookAtOkanaganPoint,
-} from "../render/okanagan/okanagan_render_frame.js?v=359";
+} from "../render/okanagan/okanagan_render_frame.js?v=360";
 import { createOkanaganSiteMarkers } from "../render/okanagan/okanagan_site_markers.js";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=359";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=359";
-import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=359";
-import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=359";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=360";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=360";
+import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=360";
+import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=360";
 import {
   createOkanaganTrafficCraft,
   poseOkanaganTrafficCraft,
-} from "../render/okanagan/okanagan_traffic.js?v=359";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=359";
-import { createHud } from "../hud.js?v=359";
+} from "../render/okanagan/okanagan_traffic.js?v=360";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=360";
+import { createHud } from "../hud.js?v=360";
 import {
   armFlightAudio,
   flightAudioDiagnostics,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=359";
+} from "../render/audio/flight_audio.js?v=360";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=359";
-import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=359";
-import { standardGamepadState } from "../render/input/dual_stick_input.js?v=359";
-import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=359";
-import { createOkanaganKeyboardControls } from "../render/okanagan/okanagan_keyboard_controls.js?v=359";
-import { bindOkanaganDropButton } from "../render/okanagan/okanagan_drop_button.js?v=359";
+} from "../render/settings/player_settings.js?v=360";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=360";
+import { standardGamepadState } from "../render/input/dual_stick_input.js?v=360";
+import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=360";
+import { createOkanaganKeyboardControls } from "../render/okanagan/okanagan_keyboard_controls.js?v=360";
+import { bindOkanaganDropButton } from "../render/okanagan/okanagan_drop_button.js?v=360";
 import {
   compactOkanaganCue,
   okanaganFlightState,
   okanaganRadioCaption,
   okanaganRadioHoldMs,
-} from "../render/okanagan/okanagan_hud_adapter.js?v=359";
+} from "../render/okanagan/okanagan_hud_adapter.js?v=360";
 import {
   cycleOkanaganTarget,
   okanaganTargets,
   retainOkanaganTarget,
-} from "../render/okanagan/okanagan_targets.js?v=359";
+} from "../render/okanagan/okanagan_targets.js?v=360";
 import {
   okanaganDebriefModel,
   okanaganMissionTerminal,
-} from "../render/okanagan/okanagan_debrief.js?v=359";
+} from "../render/okanagan/okanagan_debrief.js?v=360";
 import {
   okanaganDialogFocusables,
   okanaganDialogTabTarget,
-} from "../render/okanagan/okanagan_dialog_focus.js?v=359";
+} from "../render/okanagan/okanagan_dialog_focus.js?v=360";
+
+import { okanaganNavigation, okanaganNavigationPlaces, drawOkanaganMap }
+  from "../render/okanagan/okanagan_navigation.js?v=360";
 
 const SORTIES = Object.freeze({
   "water-circuits": {
@@ -101,6 +104,19 @@ const preview = new URLSearchParams(location.search).get("preview");
 const hudCanvas = document.querySelector("#hud");
 const mapCanvas = document.querySelector("#map");
 const map = mapCanvas.getContext("2d");
+const mapPanel = document.querySelector("#nav-map");
+const mapModeButton = document.querySelector("#map-mode");
+const navigationPanel = document.querySelector("#navigation-director");
+const navigationTurn = document.querySelector("#navigation-turn");
+const navigationFix = document.querySelector("#navigation-fix");
+const navigationBearing = document.querySelector("#navigation-bearing");
+const navigationRange = document.querySelector("#navigation-range");
+const navigationAltitude = document.querySelector("#navigation-altitude");
+const navigationVertical = document.querySelector("#navigation-vertical");
+const navigationProcedure = document.querySelector("#navigation-procedure");
+let mapOverview = false;
+let navigationPlaces = [];
+let lastMapDraw = -Infinity;
 const flightHud = createHud(hudCanvas);
 const status = document.querySelector("#status");
 const missionSurface = document.querySelector(".viewport");
@@ -130,6 +146,7 @@ const dropButton = document.querySelector("#drop");
 const navButton = document.querySelector("#nav-button");
 const soundButton = document.querySelector("#sound");
 const trimValue = document.querySelector("#trim-value");
+const autoTrimButton = document.querySelector("#auto-trim");
 const trimDownButton = document.querySelector("#trim-down");
 const trimUpButton = document.querySelector("#trim-up");
 const standaloneReturnLinks = Array.from(document.querySelectorAll(
@@ -265,12 +282,16 @@ window.__gunsOnlyOkanagan = Object.freeze({
   getState: () => state,
   getQuality: () => quality,
   getRenderInfo: () => renderer.info,
+  getSceneryDiagnostics: () => world?.diagnostics?.() ?? null,
   getTelemetry: () => telemetryFrames.map((frame) => ({ ...frame })),
   getLastTelemetry: () => telemetryFrames.at(-1) ?? null,
   getAudioDiagnostics: () => flightAudioDiagnostics(),
   getSelectedTarget: () => selectedTarget(),
   getDebrief: () => missionResultModel,
   getGuidance: () => ({
+    navigation: okanaganNavigation(state),
+    mapVisible: !mapPanel.hidden,
+    mapOverview,
     visible: highway.group.visible === true,
     marks: highway.group.children.filter((child) => child.visible).map((child) => ({
       style: child.userData.guidanceStyle ?? null,
@@ -377,16 +398,36 @@ function releasePlayerInputs() {
 }
 
 function syncTrimControl() {
-  const percent = Math.round(elevatorTrim * 100);
+  const assist = state?.auto_trim;
+  const actualTrim = Number.isFinite(assist?.applied_trim) ? assist.applied_trim
+    : Number.isFinite(state?.elevator_trim) ? state.elevator_trim : elevatorTrim;
+  const automatic = assist?.enabled ?? true;
+  const percent = Math.round(actualTrim * 100);
   trimValue.textContent = `${percent > 0 ? "+" : ""}${percent}%`;
-  trimDownButton.disabled = elevatorTrim <= -0.5;
-  trimUpButton.disabled = elevatorTrim >= 0.5;
+  autoTrimButton.textContent = !automatic ? "MANUAL" : assist?.saturated ? "AUTO LIMIT"
+    : assist?.status === "low-speed" ? "AUTO SLOW"
+    : assist?.status === "attitude" ? "AUTO WAIT"
+    : assist?.status === "surface" || assist?.status === "waiting" ? "AUTO READY" : "AUTO TRIM";
+  autoTrimButton.setAttribute("aria-pressed", String(automatic));
+  const status = !automatic ? "Manual pitch trim" : assist?.saturated ? "Automatic trim at limit"
+    : assist?.status === "active" ? "Automatic trim holding nose attitude"
+    : assist?.status === "pilot" ? "Automatic trim waiting for stick release"
+    : assist?.status === "low-speed" ? "Automatic trim paused at low speed"
+    : assist?.status === "attitude" ? "Automatic trim paused during steep manoeuvre"
+    : "Automatic trim ready after takeoff";
+  autoTrimButton.setAttribute("aria-label", `${status}. Toggle automatic trim.`);
+  autoTrimButton.title = status;
+  autoTrimButton.dataset.status = assist?.saturated ? "limit" : assist?.status ?? "waiting";
+  trimDownButton.disabled = actualTrim <= -0.5;
+  trimUpButton.disabled = actualTrim >= 0.5;
 }
 
 function changeElevatorTrim(step) {
   if (!bridge || !running || paused || missionTerminal) return;
-  elevatorTrim = Math.max(-0.5, Math.min(0.5, Math.round((elevatorTrim + step) * 100) / 100));
+  const actual = Number.isFinite(state?.auto_trim?.applied_trim) ? state.auto_trim.applied_trim : elevatorTrim;
+  elevatorTrim = Math.max(-0.5, Math.min(0.5, Math.round((actual + step) * 100) / 100));
   bridge.SetElevatorTrim(elevatorTrim);
+  state = JSON.parse(bridge.GetState());
   syncTrimControl();
   canvas.focus({ preventScroll: true });
 }
@@ -616,8 +657,12 @@ function previewCamera(current) {
     x /= weight;
     y /= weight;
     z /= weight;
-    okanaganWorldToRender({x: x + 620, y: y + 95, z: z + 1_050}, camera.position);
-    lookAtOkanaganPoint(camera, {x, y: y + 28, z});
+    // The diagnostic view is offset uphill from the fire centroid. Using the fire's
+    // elevation here put this camera underground and made correctly seated trees float.
+    const viewX = x + 620, viewZ = z + 1_050;
+    const viewY = Math.max(y + 95, (world?.sampleHeight(viewX, viewZ) ?? y) + 80);
+    okanaganWorldToRender({x: viewX, y: viewY, z: viewZ}, camera.position);
+    lookAtOkanaganPoint(camera, {x, y: Math.max(y + 28, (world?.sampleHeight(x, z) ?? y) + 15), z});
     return true;
   }
   if (preview === "practice" && current.drop_aim) {
@@ -735,6 +780,22 @@ function updateDom(current) {
   scoopsButton.setAttribute("aria-pressed", String(current.scoops_commanded));
   padlockButton.setAttribute("aria-pressed", String(padlock));
   syncSoundControl();
+  syncTrimControl();
+  const nav = okanaganNavigation(current);
+  const procedure = compactOkanaganCue(current);
+  navigationPanel.hidden = !nav && !procedure;
+  navigationPanel.dataset.waypoint = String(Boolean(nav));
+  navigationProcedure.textContent = procedure;
+  navigationProcedure.hidden = Boolean(nav && (procedure === nav.label || procedure === `FLY ${nav.label}`));
+  if (nav) {
+    navigationPanel.dataset.direction = nav.direction;
+    navigationTurn.textContent = nav.turn;
+    navigationFix.textContent = nav.label;
+    navigationBearing.textContent = nav.bearingText;
+    navigationRange.textContent = nav.rangeText;
+    navigationAltitude.textContent = nav.altitudeText;
+    navigationVertical.textContent = nav.verticalText;
+  }
 }
 
 function recordTelemetry(current, inputDeltaSeconds) {
@@ -764,6 +825,7 @@ function recordTelemetry(current, inputDeltaSeconds) {
     engine_power_fraction: current.engine_power_fraction,
     throttle: current.throttle,
     elevator_trim: current.elevator_trim,
+    auto_trim: current.auto_trim,
     applied_controls: current.applied_controls,
     pending_controls: current.pending_controls,
     input_tap_ticks: current.input_tap_ticks,
@@ -804,6 +866,9 @@ function recordTelemetry(current, inputDeltaSeconds) {
 function drawHud(current, deltaSeconds, nowSeconds) {
   const target = selectedTarget();
   const flightState = okanaganFlightState(current);
+  // The navigation director presents the procedure beside bearing/range/altitude.
+  flightState.fireboss_cue = "";
+  flightState.civilian_target_horizontal_inset_px = 95;
   flightState.civilian_target_label = target?.label ?? "";
   flightState.civilian_target_kind = target?.kind ?? "";
   flightState.civilian_target_padlocked = padlock && Boolean(target);
@@ -822,42 +887,20 @@ function drawHud(current, deltaSeconds, nowSeconds) {
   updateFlightAudio(flightState, { muted: paused, nowSeconds });
 }
 
-function drawMap(current) {
-  const w = mapCanvas.width; const h = mapCanvas.height;
-  map.clearRect(0, 0, w, h); map.fillStyle = "rgba(3,15,18,.92)"; map.fillRect(0, 0, w, h);
-  const targets = [current.position, ...(current.route ?? []).map(g=>g.position), ...(current.sites ?? []).map(s=>s.position)];
-  const minX=Math.min(-12_000,...targets.map(p=>p.x)), maxX=Math.max(12_000,...targets.map(p=>p.x));
-  const minZ=Math.min(-12_000,...targets.map(p=>p.z)), maxZ=Math.max(14_000,...targets.map(p=>p.z));
-  const cx=(minX+maxX)/2, cz=(minZ+maxZ)/2, scale=Math.max((maxX-minX)/w,(maxZ-minZ)/h)*1.2;
-  const project = ({ x, z }) => [w/2+(x-cx)/scale, h/2-(z-cz)/scale];
-  const lake = world?.worldData?.lake?.shoreline ?? [];
-  if (lake.length) {
-    map.beginPath();
-    [lake,...(world?.worldData?.lake?.islands ?? [])].forEach(ring => { ring.forEach(([lon, lat], index) => {
-      const x = (lon + 119.5) * 71_800; const z = (lat - 49.88) * 111_320;
-      const p = project({ x, z }); if (index === 0) map.moveTo(...p); else map.lineTo(...p);
-    });
-    map.closePath(); }); map.fillStyle = "#205a70"; map.fill("evenodd");
+function drawMap(current, force = false) {
+  if (mapCanvas.hidden || !world) return;
+  const now = performance.now();
+  if (!force && now - lastMapDraw < 100) return;
+  lastMapDraw = now;
+  const rect = mapCanvas.getBoundingClientRect();
+  const ratio = Math.min(devicePixelRatio || 1, 2);
+  const width = Math.round(rect.width), height = Math.round(rect.height);
+  if (!width || !height) return;
+  if (mapCanvas.width !== Math.round(width * ratio) || mapCanvas.height !== Math.round(height * ratio)) {
+    mapCanvas.width = Math.round(width * ratio); mapCanvas.height = Math.round(height * ratio);
   }
-  map.strokeStyle = "#ffb84d"; map.lineWidth = 2; map.beginPath();
-  current.route.forEach((gate, index) => { const p = project(gate.position); index === 0 ? map.moveTo(...p) : map.lineTo(...p); }); map.stroke();
-  for (const cell of current.fire_cells ?? []) {
-    const p = project(cell);
-    const size = 3 + Math.round(Math.min(1, cell.intensity) * 5);
-    map.fillStyle = `rgba(255,90,20,${Math.min(1, 0.35 + cell.intensity)})`;
-    map.fillRect(p[0] - size / 2, p[1] - size / 2, size, size);
-  }
-  for (const site of current.sites ?? []) { const p=project(site.position); map.fillStyle=site.status==="lost"?"#ad6257":site.threat>.08?"#ffbc66":"#c6dc9b";map.fillRect(p[0]-1.5,p[1]-1.5,3,3); }
-  if (current.drop_aim) {
-    const aim = project(current.drop_aim);
-    map.strokeStyle = "#ff6a2a";
-    map.beginPath();
-    map.arc(aim[0], aim[1], 6, 0, Math.PI * 2);
-    map.stroke();
-  }
-  for (const track of current.traffic ?? []) { const p = project(track.position); map.fillStyle = "#ffd157"; map.fillRect(p[0] - 3, p[1] - 3, 6, 6); map.fillText(track.callsign, p[0] + 5, p[1]); }
-  const own = project(current.position); map.fillStyle = "#8ff6e8"; map.beginPath(); map.arc(own[0], own[1], 4, 0, Math.PI * 2); map.fill();
-  map.fillStyle = "#d5ece8"; map.font = "10px ui-monospace"; map.fillText("N ↑  OKANAGAN", 10, 15);
+  map.setTransform(ratio, 0, 0, ratio, 0, 0);
+  drawOkanaganMap(map, current, world.worldData, navigationPlaces, width, height, mapOverview);
 }
 
 function resize() {
@@ -902,12 +945,27 @@ padlockButton.addEventListener("click", () => togglePadlock());
 scoopsButton.addEventListener("click", () => { scoops = !scoops; scoopsButton.setAttribute("aria-pressed", String(scoops)); });
 navButton.addEventListener("click", () => {
   mapCanvas.hidden = !mapCanvas.hidden;
+  mapPanel.hidden = mapCanvas.hidden;
   document.body.classList.toggle("nav-open", !mapCanvas.hidden);
   navButton.setAttribute("aria-pressed", String(!mapCanvas.hidden));
-  if (!mapCanvas.hidden && state) drawMap(state);
+  if (!mapCanvas.hidden && state) drawMap(state, true);
+});
+mapModeButton.addEventListener("click", () => {
+  mapOverview = !mapOverview;
+  mapModeButton.textContent = mapOverview ? "ROUTE" : "LOCAL";
+  mapModeButton.setAttribute("aria-pressed", String(mapOverview));
+  if (state) drawMap(state, true);
 });
 soundButton.addEventListener("click", () => {
   setOkanaganAudioEnabled(!playerSettings.audio, { arm: true });
+});
+autoTrimButton.addEventListener("click", () => {
+  if (!bridge || !running || paused || missionTerminal) return;
+  bridge.SetAutoTrimEnabled(!(state?.auto_trim?.enabled ?? true));
+  state = JSON.parse(bridge.GetState());
+  elevatorTrim = state.auto_trim.manual_trim;
+  syncTrimControl();
+  canvas.focus({ preventScroll: true });
 });
 trimDownButton.addEventListener("click", () => changeElevatorTrim(-0.02));
 trimUpButton.addEventListener("click", () => changeElevatorTrim(0.02));
@@ -1008,6 +1066,7 @@ async function boot() {
     fetch("/content/packs/okanagan-fire/environment/okanagan-resorts.osm.json").then((response) => response.json()),
   ]);
   worldData.resorts = resortData.resorts;
+  navigationPlaces = okanaganNavigationPlaces(worldData);
   const sceneryTextures = await loadOkanaganSceneryTextures(terrainData, quality);
   world = createOkanaganWorld(geographicWorld, terrainData, worldData, quality, sceneryTextures);
   const blazor = await waitFor(() => globalThis.Blazor, "Fire Boss runtime unavailable");

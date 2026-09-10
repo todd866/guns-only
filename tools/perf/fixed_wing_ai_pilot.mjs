@@ -2,12 +2,14 @@
 
 const IS_NODE_RUNTIME = typeof process !== "undefined" && process?.versions?.node;
 let chromium;
+let perfBrowserLaunchOptions;
 let mkdir;
 let readFile;
 let runtimeProcess;
 let serveStatic;
 let writeFile;
 if (IS_NODE_RUNTIME) {
+  ({ perfBrowserLaunchOptions } = await import("./browser_launch.mjs"));
   const [{ createRequire }, fs, processModule, serverModule] = await Promise.all([
     import("node:module"),
     import("node:fs/promises"),
@@ -8442,8 +8444,8 @@ export async function runFixedWingAiFlight({
     "--disable-renderer-backgrounding",
     "--disable-backgrounding-occluded-windows",
   ];
-  const browser = await chromium.launch({
-    headless: !hardware,
+  const browser = await chromium.launch(perfBrowserLaunchOptions({
+    hardware,
     args: hardware
       ? ["--use-angle=metal", "--enable-webgl-draft-extensions", ...schedulingArgs]
       : [
@@ -8452,7 +8454,7 @@ export async function runFixedWingAiFlight({
         "--enable-unsafe-swiftshader",
         ...schedulingArgs,
       ],
-  });
+  }));
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await context.addInitScript(INSTALL_STANDARD_GAMEPAD);
   await context.addInitScript(INSTALL_KEYBOARD_QUARANTINE);

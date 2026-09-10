@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { perfBrowserLaunchOptions } from "./browser_launch.mjs";
 
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -608,12 +609,12 @@ export async function runIndoorAiPlayer({
 
   try {
     site = await serveStatic(wwwroot);
-    browser = await chromium.launch({
-      headless: !hardware,
+    browser = await chromium.launch(perfBrowserLaunchOptions({
+      hardware,
       args: hardware
         ? ["--use-angle=metal", "--enable-webgl-draft-extensions"]
         : ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
-    });
+    }));
     context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     await context.addInitScript(FAKE_STANDARD_PAD_SOURCE);
     page = await context.newPage();

@@ -8,7 +8,7 @@ node tools/perf/flight_frame_harness.mjs
 ```
 
 The harness serves `web/bin/Release/net8.0/publish/wwwroot`; `web/wwwroot` is not a runnable
-Blazor WASM publish. It opens a **headed** Chromium window, foregrounds it, starts fixed beat 7
+Blazor WASM publish. It runs full Chromium **headlessly**, without a desktop window, and starts fixed beat 7
 (seed 7), settles for 15 seconds and then measures a 60-second control leg near 9,000 ft AGL,
 then descends closed-loop, settles for another 15 seconds, and measures a 60-second high-speed
 terrain leg near 2,600 ft AGL. It fails if the page becomes hidden or loses focus, if either
@@ -16,10 +16,10 @@ measured window captures fewer than 600 animation-frame deltas, if the aircraft 
 or if the low leg does not stream new terrain ranges.
 
 Every run prints `UNMASKED_RENDERER_WEBGL`. The harness first tries a real GPU (ANGLE Metal on
-macOS) without `--disable-gpu`. It uses SwiftShader only if the real-GPU launch fails. The first
-software attempt is also headed. If the host cannot launch any headed browser (for example, a
-locked-down or display-less CI worker), the final fallback is headless SwiftShader; it is accepted
-only while Chromium reports the page visible and focused and the minimum RAF count is met.
+macOS) without `--disable-gpu`. It uses headless SwiftShader only if the real-GPU launch fails; it is accepted only while
+Chromium reports the document visible and focused and the minimum RAF count is met. Hardware
+launches explicitly select the full `chromium` channel; software CI keeps its existing headless
+shell and SwiftShader flags. No harness automatically falls back to a foreground window.
 
 **SwiftShader warning:** SwiftShader is software rasterisation. Its milliseconds are **not a frame
 rate** and say nothing about GPU or fill cost. SwiftShader output is labelled exactly
@@ -27,10 +27,10 @@ rate** and say nothing about GPU or fill cost. SwiftShader output is labelled ex
 because synchronous terrain geometry construction blocks the CPU main thread, but those numbers
 must never be quoted as GPU/frame-rate measurements.
 
-A hidden or background tab produces no useful `requestAnimationFrame` sample. Prefer a real
-foreground display (a virtual display is acceptable in CI), and do not hide or minimise the
-Chromium window while the profile is flying. The headless software-only fallback is not a
-substitute for a hardware frame-rate run.
+A hidden browser document produces no useful `requestAnimationFrame` sample. Headless Chromium
+can keep a document visible and internally focused without taking desktop focus; these states are
+still measured, not assumed. DOM canvas focus for controls remains enabled, but desktop browser
+activation is removed. The software-only fallback is not a substitute for a hardware frame-rate run.
 
 ## Gates and configuration
 

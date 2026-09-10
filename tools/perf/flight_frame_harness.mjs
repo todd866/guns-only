@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { perfBrowserLaunchOptions } from "./browser_launch.mjs";
 
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -200,20 +201,19 @@ async function queryRenderer(page, canvasSelector = null) {
   }, canvasSelector);
 }
 
-async function launchCandidate({ name, args, requireHardware, headless = false }) {
+async function launchCandidate({ name, args, requireHardware }) {
   let browser;
   try {
-    browser = await chromium.launch({
-      headless,
+    browser = await chromium.launch(perfBrowserLaunchOptions({
+      hardware: requireHardware,
       args,
-    });
+    }));
     const context = await browser.newContext({
       viewport: { width: 1440, height: 900 },
       deviceScaleFactor: 1,
     });
     const page = await context.newPage();
     await page.goto("data:text/html,<title>WebGL renderer probe</title><canvas></canvas>");
-    await page.bringToFront();
     await page.locator("canvas").focus();
     const renderer = await queryRenderer(page);
     const visibility = await page.evaluate(() => ({
@@ -222,7 +222,7 @@ async function launchCandidate({ name, args, requireHardware, headless = false }
     }));
     if (visibility.state !== "visible" || !visibility.focused) {
       throw new Error(
-        `probe page is not foregrounded (${visibility.state}, focused=${visibility.focused})`,
+        `probe document is not visible and focused (${visibility.state}, focused=${visibility.focused})`,
       );
     }
     if (requireHardware && isSoftwareRenderer(renderer)) {
@@ -244,41 +244,26 @@ async function launchGpuFirst() {
   try {
     return await launchCandidate({
       name: process.platform === "darwin"
-        ? "headed Chromium / ANGLE Metal"
-        : "headed Chromium / platform GPU",
+        ? "headless full Chromium / ANGLE Metal"
+        : "headless full Chromium / platform GPU",
       args: gpuArgs,
       requireHardware: true,
     });
   } catch (gpuError) {
     console.warn(`Real-GPU launch failed: ${gpuError.message}`);
-    console.warn("Falling back to headed Chromium / ANGLE SwiftShader.");
-    try {
-      return await launchCandidate({
-        name: "headed Chromium / ANGLE SwiftShader fallback",
-        args: [
-          "--use-gl=angle",
-          "--use-angle=swiftshader",
-          "--enable-unsafe-swiftshader",
-        ],
-        requireHardware: false,
-      });
-    } catch (headedSoftwareError) {
-      console.warn(`Headed SwiftShader launch failed: ${headedSoftwareError.message}`);
-      console.warn(
-        "Falling back to headless Chromium / ANGLE SwiftShader; "
-        + "DOM visibility, focus, and RAF-count assertions remain mandatory.",
-      );
-      return launchCandidate({
-        name: "headless Chromium / ANGLE SwiftShader fallback",
-        args: [
-          "--use-gl=angle",
-          "--use-angle=swiftshader",
-          "--enable-unsafe-swiftshader",
-        ],
-        requireHardware: false,
-        headless: true,
-      });
-    }
+    console.warn(
+      "Falling back to headless Chromium / ANGLE SwiftShader; "
+      + "DOM visibility, focus, and RAF-count assertions remain mandatory.",
+    );
+    return launchCandidate({
+      name: "headless Chromium / ANGLE SwiftShader fallback",
+      args: [
+        "--use-gl=angle",
+        "--use-angle=swiftshader",
+        "--enable-unsafe-swiftshader",
+      ],
+      requireHardware: false,
+    });
   }
 }
 
@@ -681,7 +666,6 @@ async function bootPublishedApp(page, siteUrl) {
     undefined,
     { timeout: 120_000 },
   );
-  await page.bringToFront();
   await page.locator("#scene").focus();
   const foreground = await page.evaluate(() => ({
     visibility: document.visibilityState,
@@ -689,7 +673,7 @@ async function bootPublishedApp(page, siteUrl) {
   }));
   if (foreground.visibility !== "visible" || !foreground.focused) {
     throw new Error(
-      `Flight page is not foregrounded (${foreground.visibility}, `
+      `Flight document is not visible and focused (${foreground.visibility}, `
       + `focused=${foreground.focused}). No frame sample was accepted.`,
     );
   }

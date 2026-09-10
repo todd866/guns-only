@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { perfBrowserLaunchOptions } from "./browser_launch.mjs";
 
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -956,12 +957,12 @@ export async function runCasevacAiFlight({
 
   try {
     site = await serveStatic(wwwroot);
-    browser = await chromium.launch({
-      headless: !hardware,
+    browser = await chromium.launch(perfBrowserLaunchOptions({
+      hardware,
       args: hardware
         ? ["--use-angle=metal", "--enable-webgl-draft-extensions"]
         : ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
-    });
+    }));
     context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     await context.addInitScript(INSTALL_STANDARD_GAMEPAD);
     page = await context.newPage();
@@ -1006,7 +1007,6 @@ export async function runCasevacAiFlight({
     journey.startLatencyMs = Date.now() - startClickedAt;
     const teaching = page.locator("#controls-onboarding-dismiss");
     if (await teaching.isVisible()) await teaching.click();
-    await page.bringToFront();
     await page.locator("#scene").focus().catch(() => {});
     startedAtMs = await page.evaluate(() => performance.now());
 

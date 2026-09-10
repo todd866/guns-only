@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { perfBrowserLaunchOptions } from "./browser_launch.mjs";
 // Engine-wide frame attribution probe.
 //
 // Answers one question with numbers: where does the frame actually go, per mode and per DPR?
@@ -375,14 +376,14 @@ const BRIDGE_PROBE = `globalThis.__perfBridgeAcc?.wrapped ?? null;`;
 
 // ---------------------------------------------------------------------------
 async function launch({ deviceScaleFactor, viewport, countGl }) {
-  const browser = await chromium.launch({
-    headless: false,
+  const browser = await chromium.launch(perfBrowserLaunchOptions({
+    hardware: true,
     args: [
       "--use-angle=metal",
       "--enable-webgl-draft-extensions",
       ...(process.env.UNCAPPED ? ["--disable-frame-rate-limit"] : []),
     ],
-  });
+  }));
   const context = await browser.newContext({ viewport, deviceScaleFactor });
   await context.addInitScript(probeSource(countGl));
   const page = await context.newPage();
