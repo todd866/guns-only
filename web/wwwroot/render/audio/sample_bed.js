@@ -6,7 +6,7 @@
 // that aircraft graph's decodedBedInput. A missing or undecodable file is therefore silent and
 // recoverable rather than fatal to flight audio.
 
-export const SAMPLE_BED_BUILD = "360";
+export const SAMPLE_BED_BUILD = "361";
 export const SAMPLE_BED_RETRY_MS = 30_000;
 
 function stampedUrl(relativePath) {
@@ -26,8 +26,8 @@ export const COBRA_COCKPIT_SAMPLE_BED = Object.freeze({
 });
 
 export const FIRE_BOSS_COCKPIT_SAMPLE_BED = Object.freeze({
-  id: "fireboss-single-pt6-public-domain-surrogate",
-  url: stampedUrl("./samples/turboprop/pt6_single_engine_public_domain_loop.wav"),
+  id: "fireboss-at802-family-cabin-surrogate",
+  url: stampedUrl("./samples/turboprop/at802_family_cabin_loop.wav"),
 });
 
 // AudioBuffer ownership and decode behavior vary by implementation, so buffers are deliberately
@@ -195,8 +195,36 @@ export async function ensureLoopingSampleBed(audioContext, voiceGraph, definitio
   const input = voiceGraph?.decodedBedInput;
   if (!input) return null;
   const existing = attachmentsFor(input).get(String(definition?.id ?? ""));
-  if (existing) return existing;
-  const buffer = await loadSampleBed(audioContext, definition, options);
-  if (!buffer) return null;
-  return attachLoopingSampleBed(audioContext, input, definition, buffer, options);
+  if (existing) {
+    voiceGraph.decodedBedAttachment = existing;
+    voiceGraph.decodedBedStatus = "ready";
+    return existing;
+  }
+  voiceGraph.decodedBedStatus = "loading";
+  try {
+    const buffer = await loadSampleBed(audioContext, definition, options);
+    if (!buffer) {
+      voiceGraph.decodedBedStatus = "retry-wait";
+      return null;
+    }
+    const attachment = attachLoopingSampleBed(audioContext, input, definition, buffer, options);
+    voiceGraph.decodedBedAttachment = attachment;
+    voiceGraph.decodedBedStatus = attachment ? "ready" : "unavailable";
+    return attachment;
+  } catch (error) {
+    voiceGraph.decodedBedStatus = "failed";
+    throw error;
+  }
+}
+
+/** A running AudioContext alone does not establish that the aircraft recording is present. */
+export function sampleBedDiagnostics(voiceGraph) {
+  const attachment = voiceGraph?.decodedBedAttachment;
+  return Object.freeze({
+    status: voiceGraph?.decodedBedStatus ?? "unrequested",
+    id: attachment?.id ?? null,
+    durationSeconds: attachment?.source?.buffer?.duration ?? null,
+    playbackRate: attachment?.source?.playbackRate?.value ?? null,
+    inputGain: voiceGraph?.decodedBedInput?.gain?.value ?? 0,
+  });
 }

@@ -1,8 +1,9 @@
 # Current product and verification status
 
 Updated: 2026-09-10
-Production: Build 359, revision `f0d47bd23642a13950b853ae640c1b374fa32677`.
-Next candidate: Build 360, not deployed — adds default optional Fire Boss automatic pitch trim, a visible next-waypoint director and named north-up map, and improves runway, shoreline and nearby forest detail. See [assistance and navigation audit](audits/2026-09-10-okanagan-assist-navigation.md).
+Production: Build 360, revision `5898a556a313860543e4cddafa91485282cd6c00`.
+Next candidate: Build 361, not deployed — replaces the synthetic-dominated Fire Boss audio with a 24-second recorded Air Tractor-family engine bed, cockpit-informed broad EQ, live power response and real rendered-audio regression checks. The source is an OA-1K exterior recording, an authored cabin surrogate, not a Fire Boss cockpit capture. See [recorded audio audit](audits/2026-09-10-fireboss-recorded-audio.md).
+Build 360 shipped default optional Fire Boss automatic pitch trim, a visible next-waypoint director and named north-up map, improved runway/shoreline/forest detail, and background-only hardware browser QA. See [assistance and navigation audit](audits/2026-09-10-okanagan-assist-navigation.md).
 Build 359 shipped the Fire Boss elevator/trim, surface-to-flight continuity, drag and cockpit-coordinate corrections, feasible water loads, and fuel-return/Apex escape guidance. Independent response checks, actual browser input evidence and full route regressions have distinct acceptance scopes. See [Fire Boss handling audit](audits/2026-09-10-fireboss-handling.md).
 Build 358 shipped the Hermeus-inspired finish and geometry refinements on the actual Rapier model and its picker rendering. See [Rapier appearance record](airframes/rapier-v2/11-hermeus-visual-direction.md).
 Build 357 shipped the generated F-22 and Cobra picker artwork, limestone slopes, forest canopy and close foliage, plus the landscape picker fix. Build 356 shipped the Fire Boss defence and recovery corrections. See [scenery and defence audit](audits/2026-09-05-peachland-scenery.md) and [flight-validation record](audits/2026-09-06-okanagan-flight-validation.md).
@@ -127,7 +128,7 @@ drop voices follow published water rates; and AIM-9 launch, radio-priority ducki
 safety-warning arbiter make the important event audible without relying on limiter overload.
 All candidate audio acceptance is silent (`?audioQa=silent`).
 
-Production: Build 359, revision `f0d47bd23642a13950b853ae640c1b374fa32677`. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
+Production: Build 360, revision `5898a556a313860543e4cddafa91485282cd6c00`. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
 player journey and Top Gun bolter retry), 349 (mission-AI suite honesty), 350
 (conventional F-22 recovery), 351 (finite billed sorties, presenting Ace, Cobra pad combat)
 and 352 (Fire Boss sky chevrons, HUD hopper/cue, readable west-side fire)

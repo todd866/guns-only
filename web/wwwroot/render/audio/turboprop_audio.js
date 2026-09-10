@@ -191,12 +191,16 @@ export function createTurbopropAudioVoices(context, destination) {
   cabin.Q.value = 0.58;
   cabin.connect(master);
 
-  // A rights-cleared, single-engine PT6 recording supplies the non-repeating machinery texture.
-  // Its low prop orders are removed in the asset so the live five-blade graph below remains the
-  // sole authority for Np and blade-pass cadence.
+  // The recording carries the engine, including its natural propeller pressure and machinery.
+  // Keep its low orders intact; adding a dominant synthesized fundamental over them sounds
+  // like a tone generator rather than an aircraft. The small procedural bed is a load cue/fallback.
   const decodedBedInput = context.createGain();
   decodedBedInput.gain.value = 0;
-  decodedBedInput.connect(cabin);
+  const decodedBedFilter = context.createBiquadFilter();
+  decodedBedFilter.type = "lowshelf";
+  decodedBedFilter.frequency.value = 300;
+  decodedBedFilter.gain.value = 0;
+  decodedBedInput.connect(decodedBedFilter).connect(cabin);
 
   const pulseShape = pressurePulseBuffer(context);
   const propPulse = context.createBufferSource();
@@ -218,13 +222,6 @@ export function createTurbopropAudioVoices(context, destination) {
   propHarmonicGain.gain.value = 0;
   propPulse.connect(propHarmonicFilter).connect(propHarmonicGain).connect(cabin);
   propPulse.start();
-
-  const shaft = context.createOscillator();
-  shaft.type = "sine";
-  const shaftGain = context.createGain();
-  shaftGain.gain.value = 0;
-  shaft.connect(shaftGain).connect(cabin);
-  shaft.start();
 
   const source = loopingNoise(context, "machinery");
 
@@ -269,12 +266,6 @@ export function createTurbopropAudioVoices(context, destination) {
   const compressorGain = context.createGain();
   compressorGain.gain.value = 0;
   source.connect(compressorFilter).connect(compressorGain).connect(cabin);
-  const compressor = context.createOscillator();
-  compressor.type = "sine";
-  const compressorToneGain = context.createGain();
-  compressorToneGain.gain.value = 0;
-  compressor.connect(compressorToneGain).connect(cabin);
-  compressor.start();
 
   const airFilter = context.createBiquadFilter();
   airFilter.type = "bandpass";
@@ -326,14 +317,13 @@ export function createTurbopropAudioVoices(context, destination) {
     master,
     cabin,
     decodedBedInput,
+    decodedBedFilter,
     propPulse,
     propPulseNativeHz: pulseShape.nativeCycleHz,
     propBodyFilter,
     propBodyGain,
     propHarmonicFilter,
     propHarmonicGain,
-    shaft,
-    shaftGain,
     propWashGain,
     propWashFilter,
     propWashOutput,
@@ -343,10 +333,8 @@ export function createTurbopropAudioVoices(context, destination) {
     exhaustGain,
     gearboxFilter,
     gearboxGain,
-    compressor,
     compressorFilter,
     compressorGain,
-    compressorToneGain,
     airFilter,
     airGain,
     hullSource,
@@ -417,6 +405,10 @@ export function updateTurbopropAudioVoices(voices, context, state = {}, { muted 
   const acoustic = projectTurbopropAcoustics(state);
   const live = !muted && acoustic.engineRunning && acoustic.propRpm > 1;
   const propEnergy = 0.38 + acoustic.torque01 * 0.62;
+  const recorded = voices.decodedBedAttachment != null;
+  // A missing sample remains usable at a restrained level, and cannot masquerade as the
+  // recording in diagnostics. Once decoded, actual engine audio is the primary voice.
+  const proceduralLevel = recorded ? 0.16 : 0.48;
   const waterEdge = advanceTurbopropWaterCueState(voices.waterCueState, acoustic);
   voices.waterCueState = waterEdge.state;
   if (live) {
@@ -427,31 +419,28 @@ export function updateTurbopropAudioVoices(voices, context, state = {}, { muted 
 
   smooth(voices.master.gain, live ? 0.47 : 0, now, live ? 0.18 : 0.035);
   smooth(voices.decodedBedInput.gain,
-    live ? 0.31 + acoustic.torque01 * 0.10 : 0, now, live ? 0.16 : 0.04);
+    live ? 0.52 + acoustic.torque01 * 0.34 : 0, now, live ? 0.16 : 0.04);
+  smooth(voices.decodedBedFilter.gain, -3 + acoustic.torque01 * 4.5, now, 0.3);
   smooth(voices.propPulse.playbackRate,
     acoustic.bladePassHz / Math.max(1, voices.propPulseNativeHz), now, 0.12);
   smooth(voices.propBodyFilter.frequency, Math.max(70, acoustic.bladePassHz * 1.02), now, 0.1);
-  smooth(voices.propBodyGain.gain, live ? 0.115 * propEnergy : 0, now, 0.08);
+  smooth(voices.propBodyGain.gain, live ? 0.015 * propEnergy * proceduralLevel : 0, now, 0.08);
   smooth(voices.propHarmonicFilter.frequency,
     Math.max(160, acoustic.bladePassHz * 2.16), now, 0.1);
-  smooth(voices.propHarmonicGain.gain, live ? 0.042 * propEnergy : 0, now, 0.08);
-  smooth(voices.shaft.frequency, Math.max(12, acoustic.shaftHz), now, 0.12);
-  smooth(voices.shaftGain.gain, live ? 0.018 + acoustic.torque01 * 0.012 : 0, now, 0.1);
+  smooth(voices.propHarmonicGain.gain, live ? 0.009 * propEnergy * proceduralLevel : 0, now, 0.08);
 
   smooth(voices.propModulator.frequency, acoustic.bladePassHz, now, 0.1);
   smooth(voices.propWashGain.gain, live ? 0.52 : 0, now, 0.08);
   smooth(voices.propModDepth.gain, live ? 0.31 : 0, now, 0.08);
   smooth(voices.propWashFilter.frequency, 390 + acoustic.torque01 * 250, now, 0.1);
-  smooth(voices.propWashOutput.gain, live ? 0.075 * propEnergy : 0, now, 0.08);
+  smooth(voices.propWashOutput.gain, live ? 0.075 * propEnergy * proceduralLevel : 0, now, 0.08);
 
   smooth(voices.exhaustFilter.frequency, 280 + acoustic.torque01 * 290, now, 0.09);
-  smooth(voices.exhaustGain.gain, live ? 0.035 + acoustic.torque01 * 0.13 : 0, now, 0.07);
+  smooth(voices.exhaustGain.gain, live ? (0.035 + acoustic.torque01 * 0.13) * proceduralLevel : 0, now, 0.07);
   smooth(voices.gearboxFilter.frequency, 790 + acoustic.torque01 * 430, now, 0.1);
-  smooth(voices.gearboxGain.gain, live ? 0.018 + acoustic.torque01 * 0.022 : 0, now, 0.1);
-  smooth(voices.compressor.frequency, acoustic.compressorHz, now, 0.14);
+  smooth(voices.gearboxGain.gain, live ? (0.018 + acoustic.torque01 * 0.022) * proceduralLevel : 0, now, 0.1);
   smooth(voices.compressorFilter.frequency, acoustic.compressorHz * 0.91, now, 0.14);
-  smooth(voices.compressorGain.gain, live ? 0.012 + acoustic.ng01 * 0.034 : 0, now, 0.12);
-  smooth(voices.compressorToneGain.gain, live ? 0.003 + acoustic.ng01 * 0.006 : 0, now, 0.14);
+  smooth(voices.compressorGain.gain, live ? (0.012 + acoustic.ng01 * 0.034) * proceduralLevel : 0, now, 0.12);
 
   smooth(voices.airFilter.frequency, 520 + Math.min(190, acoustic.speedKts) * 9, now, 0.1);
   smooth(voices.airGain.gain,

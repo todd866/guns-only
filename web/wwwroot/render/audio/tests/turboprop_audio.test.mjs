@@ -363,7 +363,7 @@ test("muted water edges are consumed and never replay after unmute", () => {
     "unmute restores continuous authority without replaying the historical edge");
 });
 
-test("the live graph is broadband and keeps blade cadence independent from load", () => {
+test("the voice graph keeps blade cadence independent from load", () => {
   const audio = new FakeAudioContext();
   const sharedBus = new FakeAudioNode("shared-bus");
   const voices = createTurbopropAudioVoices(audio, sharedBus);
@@ -391,7 +391,8 @@ test("the live graph is broadband and keeps blade cadence independent from load"
   });
 
   assert.deepEqual(voices.master.connections, [sharedBus]);
-  assert.deepEqual(voices.decodedBedInput.connections, [voices.cabin]);
+  assert.deepEqual(voices.decodedBedInput.connections, [voices.decodedBedFilter]);
+  assert.deepEqual(voices.decodedBedFilter.connections, [voices.cabin]);
   assert.ok(voices.decodedBedInput.gain.value > 0,
     "the recording input opens with the live turboprop graph");
   assert.equal(voices.propPulse.started, 1);
@@ -405,9 +406,30 @@ test("the live graph is broadband and keeps blade cadence independent from load"
   assert.equal(voices.propPulse.playbackRate.value, lowPlaybackRate);
   assert.ok(voices.exhaustGain.gain.value > lowExhaustGain);
   assert.ok(voices.compressorGain.gain.value > lowCompressorGain);
-  assert.ok(voices.exhaustGain.gain.value > voices.compressorToneGain.gain.value,
-    "cockpit body is broadband exhaust/prop energy, not a dominant synthetic turbine note");
+  assert.equal(voices.compressorToneGain, undefined, "no pure turbine whistle");
+  assert.equal(voices.shaftGain, undefined, "no synthesized shaft hum");
   const oscillators = audio.created.filter((node) => node.kind === "oscillator");
   assert.equal(oscillators.every((node) => node.type === "sine"), true,
     "the engine graph must not reintroduce sawtooth/triangle radial-synth timbre");
+});
+
+test("a loaded recording takes over from the restrained fallback without a power pitch sweep", () => {
+  const audio = new FakeAudioContext();
+  const voices = createTurbopropAudioVoices(audio, new FakeAudioNode("shared-bus"));
+  const state = { engine_running: true, engine_torque_fraction: 0.4, propeller_rpm: 1700 };
+  updateTurbopropAudioVoices(voices, audio, state);
+  const fallback = voices.exhaustGain.gain.value;
+  const source = new FakeAudioNode("buffer-source");
+  voices.decodedBedAttachment = { source };
+  updateTurbopropAudioVoices(voices, audio, state);
+  assert.ok(voices.exhaustGain.gain.value < fallback);
+  const lowInput = voices.decodedBedInput.gain.value;
+  const lowBody = voices.decodedBedFilter.gain.value;
+  updateTurbopropAudioVoices(voices, audio, { ...state, engine_torque_fraction: 1 });
+  assert.ok(voices.decodedBedInput.gain.value > lowInput);
+  assert.ok(voices.decodedBedFilter.gain.value > lowBody);
+  assert.equal(source.playbackRate.value, 1);
+  updateTurbopropAudioVoices(voices, audio, state, { muted: true });
+  assert.equal(voices.master.gain.value, 0);
+  assert.equal(voices.decodedBedInput.gain.value, 0);
 });
