@@ -25,6 +25,7 @@ const RASTER_POSTER_SOURCES = {
   "aircraft-fireboss.webp": "sources/aircraft-fireboss.png",
   "jet-f22-generated-v4.webp": "sources/jet-f22-generated-v4.png",
   "jet-cobra-generated-v4.webp": "sources/jet-cobra-generated-v4.png",
+  "jet-rapier-hermeus-v1.webp": "sources/jet-rapier-hermeus-v1.png",
 };
 
 test("every production shell painting has a hash-pinned fiction provenance card", async () => {
@@ -45,6 +46,7 @@ test("every production shell painting has a hash-pinned fiction provenance card"
     "jet-f22-generated-v4.webp",
     "jet-f22.webp",
     "jet-mig-28.webp",
+    "jet-rapier-hermeus-v1.webp",
     "jet-rapier.webp",
     "menu-hangar-small.webp",
     "menu-hangar.webp",

@@ -32,7 +32,29 @@ constant. They may not be reused as a source reference for a content pack.
   compositions. The Cobra illustration's scenery is aspirational. The previous SVG-derived
   WebPs and sources remain available under their original names; only picker references changed.
 
-### Front-door poster set v3 — RETAINED (four current, two superseded picker outputs)
+### Rapier production-model poster — CURRENT
+
+- Created: 2026-09-10 with `tools/assets/generators/menu-posters/rapier-model.mjs`.
+  It calls the actual `createRapier()` factory with identity model transform and no definition
+  or material override, using the game's environment reflections and a studio camera and lights.
+- Source of record: `tools/assets/generators/menu-posters/sources/jet-rapier-hermeus-v1.png`,
+  293,362 bytes, SHA-256 `0c4e8f111e9884afb9bacccd99e991994e5a3979ab4c0d7b38fee56cb30a957b`.
+  The sibling `jet-rapier-hermeus-v1.provenance.json` records 18 served-source hashes, generator
+  hash, model identity, camera, lights, Chromium 149.0.7827.55, Playwright 1.61.1 and SwiftShader.
+  Sidecar SHA-256: `1582b38f7232464b2ba2f8f09ee5f5e58802e0549811ba5b87b068f91a6be114`.
+- Design reference: the owner requested [Hermeus Ramjet-X](https://www.hermeus.com/article/hermeus-unveils-ramjet-x)
+  as Rapier's visual inspiration. No manufacturer image pixels or model assets are embedded,
+  and no image-generation model produced this poster.
+- Epistemic label: `fiction`. This is a studio render of the game's fictional aircraft, not a
+  gameplay screenshot or evidence of real aircraft performance. The source model has 1,464
+  triangles; front, side, rear and three-quarter views were reviewed, and the poster fits both
+  the desktop and phone cover crops.
+- Runtime encoding: `cwebp -q 82 -resize 1000 1000 -m 6 -sharp_yuv`. Recreate with
+  `node tools/assets/generators/menu-posters/render.mjs jet-rapier-hermeus-v1`.
+  Re-encoding from the retained PNG is reproducible; fresh GPU rendering may vary by backend.
+  The old Rapier SVG and WebP are retained as superseded art.
+
+### Front-door poster set v3 — RETAINED (three current, three superseded picker outputs)
 
 - Created: 2026-08-06.
 - Generation session: `https://claude.ai/code/session_01C5SeyugjJniHgibAgCbuNN`.
@@ -184,7 +206,7 @@ table further down stays the single place a filename is bound to a hash.
 | Card | Place, time, weather | What it is meant to say |
 | --- | --- | --- |
 | jet-f22 | Above a cloud deck at altitude, cold high sun | Clean, high, geometric, alone |
-| jet-rapier | Top of the atmosphere, dawn terminator | Fictional, hot, ascending, Mach 4 |
+| jet-rapier-hermeus-v1 | Dark studio presentation | The actual slender silver Rapier, with a dark nose and thin wings |
 | jet-cobra | Tropical gorge, humid backlit haze | Low, close, working, and dangerous |
 | bike-yzf-r1 | Disused runway circuit, broad daylight | Warm, human-scale, nobody shooting |
 | jet-f14 | Fictional training range, saturated late day | Big twin-tail fleet fighter, readable at picker scale |
@@ -196,10 +218,11 @@ table further down stays the single place a filename is bound to a hash.
 
 | File | Dimensions | Bytes | SHA-256 | Use |
 | --- | ---: | ---: | --- | --- |
+| `jet-rapier-hermeus-v1.webp` | 1000×1000 | 8294 | `adac612511b027207c7a40492010f841bbf2cde8b74cda316ef9696051228e58` | Current Rapier picker; actual game model render |
 | `jet-f22-generated-v4.webp` | 1000×1000 | 82730 | `523cb0cd8a722c189ac93e011b24fd31c622aa29d4f0ae23382d646e48557a8a` | Current F-22A picker; ImageGen source retained |
 | `jet-cobra-generated-v4.webp` | 1000×1000 | 120302 | `6ab96879304ea055ca0f80bead04510f32c4bd63afb936b2a56c319d0401238e` | Current Cobra picker; ImageGen source retained |
 | `jet-f22.webp` | 900×1600 | 19334 | `203d4b601bbe39e6d2c03d3c28ccc953c9867bb08935aef045f487fe79d32297` | F-22A picker poster |
-| `jet-rapier.webp` | 900×1600 | 21572 | `29699bb08e1878465d1cb21adc07da83f3e7b4479dbe8d57a375a74c05d3ec5b` | Rapier picker poster |
+| `jet-rapier.webp` | 900×1600 | 21572 | `29699bb08e1878465d1cb21adc07da83f3e7b4479dbe8d57a375a74c05d3ec5b` | Superseded Rapier SVG poster |
 | `jet-cobra.webp` | 900×1600 | 23000 | `2789e1aa005cb61482b032cee38913f93704abc047d2f630f0d98cafca616e1b` | AH-1G Cobra picker poster |
 | `bike-yzf-r1.webp` | 900×1600 | 31680 | `a42fe42d802e3f3b1ae61fe5b70567226aab2ad28b84349d57c38d6fa4618869` | Weekend Ride picker poster |
 | `jet-f14.webp` | 900×900 | 14886 | `e67c8ed4413eabf7bca198847e1be0bb64f61270c6c0e90b158852f00251d85e` | Top Gun F-14A picker vector render |

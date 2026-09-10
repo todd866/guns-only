@@ -1,0 +1,264 @@
+{
+  "schema": "guns-only.production-model-poster.v1",
+  "createdAt": "2026-09-09T23:48:10.893Z",
+  "fiction": true,
+  "sourceKind": "actual-production-factory-render",
+  "factory": "createRapier()",
+  "definitionOverride": false,
+  "materialOverride": false,
+  "model": {
+    "airframeId": "rapier.shape-first-engineering.v2",
+    "definitionRevision": "2.0.0",
+    "position": [
+      0,
+      0,
+      0
+    ],
+    "quaternion": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ],
+    "bounds": {
+      "min": [
+        -3.674999952316284,
+        -0.8747215612390595,
+        -6.5
+      ],
+      "max": [
+        3.674999952316284,
+        1.4222958723253953,
+        6.5
+      ]
+    },
+    "meshes": 12,
+    "triangles": 1464,
+    "projectedBounds": {
+      "min": [
+        0.235,
+        0.30392579847173745
+      ],
+      "max": [
+        0.765,
+        0.6960742015282625
+      ]
+    }
+  },
+  "camera": {
+    "type": "OrthographicCamera",
+    "position": [
+      10,
+      8.273787155543168,
+      -17
+    ],
+    "target": [
+      0,
+      0.2737871555431679,
+      0
+    ],
+    "quaternion": [
+      -0.050309512891083825,
+      0.9470130890264191,
+      0.1847520413730908,
+      0.2578795170884596
+    ],
+    "left": -6.5282237303941075,
+    "right": 6.34721754925678,
+    "top": 6.592849384048922,
+    "bottom": -6.282591895601966,
+    "near": 0.1,
+    "far": 100
+  },
+  "lights": [
+    {
+      "type": "HemisphereLight",
+      "sky": 14477552,
+      "ground": 1581354,
+      "intensity": 1.25
+    },
+    {
+      "type": "DirectionalLight",
+      "color": 16771795,
+      "intensity": 3.4,
+      "position": [
+        -7,
+        10,
+        -8
+      ]
+    },
+    {
+      "type": "DirectionalLight",
+      "color": 12113134,
+      "intensity": 2.1,
+      "position": [
+        8,
+        5,
+        7
+      ]
+    },
+    {
+      "type": "DirectionalLight",
+      "color": 16777215,
+      "intensity": 0.8,
+      "position": [
+        4,
+        1,
+        -10
+      ]
+    }
+  ],
+  "environmentFactory": "createLitEnvironment(renderer)",
+  "rendering": {
+    "width": 1000,
+    "height": 1000,
+    "pixelRatio": 1,
+    "antialias": true,
+    "toneMapping": "ACESFilmicToneMapping",
+    "exposure": 1.15,
+    "outputColorSpace": "srgb",
+    "background": "CSS radial gradient; exact source retained in document hash",
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
+    "vendor": "Google Inc. (Google)",
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+    "drawCalls": 15,
+    "triangles": 1464
+  },
+  "shaderDiagnostics": [
+    {
+      "name": "RAPIER_UPPER_FINISH",
+      "runnable": null
+    },
+    {
+      "name": "RAPIER_BODY_FINISH",
+      "runnable": null
+    },
+    {
+      "name": "",
+      "runnable": null
+    }
+  ],
+  "browser": {
+    "engine": "Chromium",
+    "version": "149.0.7827.55",
+    "playwrightVersion": "1.61.1",
+    "headless": true,
+    "launchArgs": [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-unsafe-swiftshader"
+    ]
+  },
+  "cachePolicy": "new browser context and ephemeral origin; no-store responses and unique entry URL",
+  "documentNonce": "b04c3ba4-bd05-4fa4-ba5b-e96e7e6521e9",
+  "generator": {
+    "path": "tools/assets/generators/menu-posters/rapier-model.mjs",
+    "bytes": 12892,
+    "sha256": "aadb579a8d1c720b744ed5f92948fe09136cc16e12387d1f7ec8b0fe2b892a73"
+  },
+  "servedSources": [
+    {
+      "path": "generated:poster-document",
+      "bytes": 5109,
+      "sha256": "d4dc0e154504ff7f3a7837e91f0e02c598c7e4cb4cc618cf483b7319b6ac2ea6"
+    },
+    {
+      "path": "web/wwwroot/airframes/rapier_v2.embedded.js",
+      "bytes": 13495,
+      "sha256": "5453274a350496dffa42da40cdb6dfaf91ac9370d80d4280639b445d6f82dbdc"
+    },
+    {
+      "path": "web/wwwroot/render/effects/rapier_launch_fx.js",
+      "bytes": 9274,
+      "sha256": "480bb2dc8f11268885acda201a4b54da1c0cb1a311efd522a51c4e4d3e70336e"
+    },
+    {
+      "path": "web/wwwroot/render/environment/korea_scenery_planner.js",
+      "bytes": 37041,
+      "sha256": "e09189fee6e99376e6eb493e657df23f911d7bc385260a49d637aded49597f97"
+    },
+    {
+      "path": "web/wwwroot/render/environment/korea_scenery.js",
+      "bytes": 51563,
+      "sha256": "18af6a7c060cd795c1577e6a9cf455867adfc8586a16c9124c17912492acbf8b"
+    },
+    {
+      "path": "web/wwwroot/render/environment/korea_terrain.js",
+      "bytes": 142197,
+      "sha256": "0a65d7dc8dde0837a720e0c11411074c737bbeda0e5b94b24e23d39ef46e1f46"
+    },
+    {
+      "path": "web/wwwroot/render/environment/mission_features.js",
+      "bytes": 47441,
+      "sha256": "3a2d6f52c88dffdd7e43fba3e2dcb9ea8b5c0687161d596644554f92801274d2"
+    },
+    {
+      "path": "web/wwwroot/render/environment/soft_world_atmosphere.js",
+      "bytes": 5680,
+      "sha256": "8f2400990049a10feb37122ed7cd115dd8e4996135772f966e4280ef55a0eb6a"
+    },
+    {
+      "path": "web/wwwroot/render/environment/terrain_mesh_builder.js",
+      "bytes": 23508,
+      "sha256": "51a3e980db82cd2fbddf9ad9f0260ba1b41620fe437df1c3731075e51d273cf3"
+    },
+    {
+      "path": "web/wwwroot/render/environment/terrain_shadow_receive.js",
+      "bytes": 4555,
+      "sha256": "27c489bed2f04baa49bf35679c777c7f5e03dfd2788b8f4605bb252941cd0b63"
+    },
+    {
+      "path": "web/wwwroot/render/scene/airframe_from_definition.js",
+      "bytes": 8179,
+      "sha256": "c746f6914cc01178ca7ea06df0907f099fa2c0ced1f5f619a3af4774e0104441"
+    },
+    {
+      "path": "web/wwwroot/render/scene/airframe_primitives.js",
+      "bytes": 6570,
+      "sha256": "d590b770210cddab363eb5ae3dade6bfe950d05948936c241d958d1249ef5a9a"
+    },
+    {
+      "path": "web/wwwroot/render/scene/rapier_airframe_finish.js",
+      "bytes": 6872,
+      "sha256": "350cfe4a1e3f38be3e9e0cba69e3c58e5f4509ca54d3f8146fa74e322b879c69"
+    },
+    {
+      "path": "web/wwwroot/render/scene/scene_builders.js",
+      "bytes": 127247,
+      "sha256": "c8474f25625cb931f79e05a51a01f1dd11739f71d2e5f8cd03ad5dcd7d4680c3"
+    },
+    {
+      "path": "web/wwwroot/render/scene/shape_first_airframe_adapter.js",
+      "bytes": 13349,
+      "sha256": "10674e99a2a4d1c217f5e7eed8f708d532d92e417241398ddc74d425b69a9e97"
+    },
+    {
+      "path": "web/wwwroot/render/scene/shape_first_wing_geometry.js",
+      "bytes": 7296,
+      "sha256": "378157e94f73600bb3cf8c09165e85b67a3dd503d8c653f9247935d43e1eabc0"
+    },
+    {
+      "path": "web/wwwroot/vendor/three.module.js",
+      "bytes": 1272972,
+      "sha256": "76dea8151bc9352aef3528b4262e249b2604f62543828328db978d060d61a495"
+    },
+    {
+      "path": "web/wwwroot/vendor/three/addons/utils/BufferGeometryUtils.js",
+      "bytes": 31925,
+      "sha256": "9ea34174671e7974c840a88476e6a7f77a9ab72ddadab73f201117351684e519"
+    }
+  ],
+  "output": {
+    "file": "jet-rapier-hermeus-v1.png",
+    "mimeType": "image/png",
+    "width": 1000,
+    "height": 1000,
+    "bytes": 293362,
+    "sha256": "0c4e8f111e9884afb9bacccd99e991994e5a3979ab4c0d7b38fee56cb30a957b"
+  }
+}

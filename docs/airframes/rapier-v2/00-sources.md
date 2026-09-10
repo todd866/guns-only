@@ -17,6 +17,19 @@ Rapier configuration.
 | `nasa-mach4-variable-cycle-fan` | [NASA/TM-2011-216769 Part 1, Results of an Advanced Fan Stage Operating Over a Wide Range of Speed and Bypass Ratio](https://ntrs.nasa.gov/citations/20110020830) | A Mach-4+ variable-cycle turbofan/ramjet needs multi-point fan operation across very large changes in bypass ratio, speed, inlet mass flow, pressure, and temperature | Rapier's co-annular layout, scale, engine rating, inlet, combustor, shared nozzle, or installed performance |
 | `nasa-limx-status` | [NASA, Status of the Combined-Cycle Engine Large-Scale Inlet Mode Transition Experiment](https://ntrs.nasa.gov/citations/20110011363) | TBCC inlet transition is an active control and operability problem involving two flowpaths, a splitter, turbine-face recovery/distortion, off-design Mach, and angle of attack | A single co-annular flowpath or a successful Rapier transition schedule |
 | `nasa-limx-high-speed-flowpath` | [NASA/TM-2012-217219, Computational Analyses of the LIMX TBCC Inlet High-Speed Flowpath](https://ntrs.nasa.gov/citations/20120002618) | High-speed-flowpath and isolator area, back-pressure robustness, and asymmetric inflow require dedicated analysis; LIMX is explicitly a dual over-under flowpath | Rapier's annular passage, combustor, shared circular nozzle, or total-pressure recovery floor |
+| `nasa-ramjet-propulsion` | [NASA Glenn, Ramjet Propulsion](https://www.grc.nasa.gov/www/k-12/BGP/ramjet.html) | Forward-speed dependence and absence of static thrust; explains the need for initial acceleration | A Rapier launch speed, transition schedule, thrust deck or installed engine performance |
+
+## External design references
+
+These sources support the [owner-directed Hermeus visual reference](11-hermeus-visual-direction.md),
+recorded and inspected on 10 September 2026. Manufacturer artwork is a visual reference, not
+measured geometry or evidence that Rapier's integrated design works.
+
+| ID | Source | Used for | Does not establish |
+|---|---|---|---|
+| `hermeus-ramjet-x-20260909` | [Hermeus, Ramjet-X announcement and hero illustration](https://www.hermeus.com/article/hermeus-unveils-ramjet-x) | Primary visual reference: slender opaque body, compact angular surfaces and restrained finish; identifies the Quarterhorse-launched expendable development vehicle | Demonstrated Ramjet-X performance, exact dimensions, production materials, image-reuse rights or Rapier engineering |
+| `hermeus-chimera-propulsion` | [Hermeus, propulsion roadmap](https://hermeus.com/propulsion) | Distinguishes the turbine/precooler/bypass/ramjet Chimera family from Ramjet-X | Rapier's co-annular integration, packaging, shared nozzle, engine rating or operability |
+| `hermeus-aircraft-roadmap` | [Hermeus, aircraft roadmap](https://www.hermeus.com/aircraft) | Distinguishes Quarterhorse/Mk 3 and reusable Darkhorse from the expendable Ramjet-X vehicle | A change to Rapier's crew, mission, basing or recovery requirements; completed future milestones |
 
 ## User-fixed product requirements
 
@@ -29,6 +42,10 @@ These are accepted design inputs and are not attributed to the external sources 
 - thermal limits that constrain the envelope, with plausible CMC help;
 - one gun-only high-altitude balloon intercept, zoom, reentry, and recovery;
 - no drones.
+
+The owner's 10 September 2026 request adds Hermeus's air-launched ramjet vehicle as the visual
+inspiration for the next design pass. [The direction note](11-hermeus-visual-direction.md) records
+the Ramjet-X reference and its limits; it does not claim an implemented geometry revision.
 
 ## Local engineering assumptions
 
