@@ -138,7 +138,7 @@ jobs:
         run: |
           mkdir -p "$MEDEVAC_QA_CAPTURE_DIR"
           set -o pipefail
-          node --test --test-concurrency=1 web/smoke/smoke.test.mjs web/smoke/player-quality.test.mjs web/smoke/fireboss-audio-render-smoke.test.mjs 2>&1 \
+          node --test --test-concurrency=1 web/smoke/smoke.test.mjs web/smoke/player-quality.test.mjs web/smoke/fireboss-audio-render-smoke.test.mjs web/smoke/cobra-audio-acoustics.test.mjs 2>&1 \
             | tee "$MEDEVAC_QA_CAPTURE_DIR/browser-smoke.log"
 
       - name: Run HUD geometry smoke

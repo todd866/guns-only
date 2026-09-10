@@ -31,7 +31,7 @@ import {
   FIRE_BOSS_COCKPIT_SAMPLE_BED,
   ensureLoopingSampleBed,
   sampleBedDiagnostics,
-} from "./sample_bed.js?v=362";
+} from "./sample_bed.js?v=363";
 import { resolvePropulsionCharacter } from "./audio_character.js";
 import { standardAtmosphereState } from "./atmosphere_audio.js";
 import {
@@ -194,6 +194,7 @@ function flightAudioDiagnosticsLocal() {
     createdAt: audioSessionCreatedAt,
     stopReason: lastStopReason,
     fireBossRecording: sampleBedDiagnostics(turbopropVoices),
+    cobraRecording: sampleBedDiagnostics(cobraVoices),
   });
 }
 

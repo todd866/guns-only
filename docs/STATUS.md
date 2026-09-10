@@ -1,8 +1,9 @@
 # Current product and verification status
 
 Updated: 2026-09-10
-Production: Build 360, revision `5898a556a313860543e4cddafa91485282cd6c00`.
-Next candidate: Build 362, not deployed — four named Fire Boss defence missions begin loaded and airborne near the incident, then finish after a useful drop and safe escape. Full-physics flights reach the first useful drop in 96–107 seconds and finish in 146–173 seconds. See [mission pacing and flight evidence](audits/2026-09-10-okanagan-airborne-missions.md). Audio now uses a 24-second recorded Air Tractor-family engine bed, cockpit-informed broad EQ, live power response and rendered-audio regression checks. The source is an OA-1K exterior recording, an authored cabin surrogate, not a Fire Boss cockpit capture. See [recorded audio audit](audits/2026-09-10-fireboss-recorded-audio.md).
+Production: Build 362, revision `49734a03dacf81c589724a57e534b97632cd56af`.
+Next candidate: Build 363, not deployed — Cobra running audio is led by its recorded UH-1H/T53 cabin surrogate; redundant synthetic tones are attenuated after successful decode. Silent PCM and live-route checks are documented in [Cobra audio evidence](audits/2026-09-10-cobra-recorded-mix.md).
+Build 362 shipped — four named Fire Boss defence missions begin loaded and airborne near the incident, then finish after a useful drop and safe escape. Full-physics flights reach the first useful drop in 96–107 seconds and finish in 146–173 seconds. See [mission pacing and flight evidence](audits/2026-09-10-okanagan-airborne-missions.md). Audio now uses a 24-second recorded Air Tractor-family engine bed, cockpit-informed broad EQ, live power response and rendered-audio regression checks. The source is an OA-1K exterior recording, an authored cabin surrogate, not a Fire Boss cockpit capture. See [recorded audio audit](audits/2026-09-10-fireboss-recorded-audio.md).
 Build 360 shipped default optional Fire Boss automatic pitch trim, a visible next-waypoint director and named north-up map, improved runway/shoreline/forest detail, and background-only hardware browser QA. See [assistance and navigation audit](audits/2026-09-10-okanagan-assist-navigation.md).
 Build 359 shipped the Fire Boss elevator/trim, surface-to-flight continuity, drag and cockpit-coordinate corrections, feasible water loads, and fuel-return/Apex escape guidance. Independent response checks, actual browser input evidence and full route regressions have distinct acceptance scopes. See [Fire Boss handling audit](audits/2026-09-10-fireboss-handling.md).
 Build 358 shipped the Hermeus-inspired finish and geometry refinements on the actual Rapier model and its picker rendering. See [Rapier appearance record](airframes/rapier-v2/11-hermeus-visual-direction.md).
@@ -128,7 +129,8 @@ drop voices follow published water rates; and AIM-9 launch, radio-priority ducki
 safety-warning arbiter make the important event audible without relying on limiter overload.
 All candidate audio acceptance is silent (`?audioQa=silent`).
 
-Production: Build 360, revision `5898a556a313860543e4cddafa91485282cd6c00`. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
+Production: Build 362, revision `49734a03dacf81c589724a57e534b97632cd56af`.
+Next candidate: Build 363, not deployed — Cobra running audio is led by its recorded UH-1H/T53 cabin surrogate; redundant synthetic tones are attenuated after successful decode. Silent PCM and live-route checks are documented in [Cobra audio evidence](audits/2026-09-10-cobra-recorded-mix.md). Builds 343 (Soniachne first-visit on-ramp), 347 (shared
 player journey and Top Gun bolter retry), 349 (mission-AI suite honesty), 350
 (conventional F-22 recovery), 351 (finite billed sorties, presenting Ace, Cobra pad combat)
 and 352 (Fire Boss sky chevrons, HUD hopper/cue, readable west-side fire)
@@ -350,7 +352,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 360, revision `5898a556a313860543e4cddafa91485282cd6c00`. Local gate
+- Live production is Build 362, revision `49734a03dacf81c589724a57e534b97632cd56af`. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.
