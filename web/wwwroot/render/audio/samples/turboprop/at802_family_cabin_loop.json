@@ -1,0 +1,63 @@
+{
+  "source_id": "dvids.991792",
+  "source_interval_seconds": [
+    640,
+    665
+  ],
+  "source_pcm_sha256": "bc9aafb9ee39d17105b7ac9bfcb9adc681e4b6599da20c1c8c350a4c834ff480",
+  "aircraft": "OA-1K / AT-802 family",
+  "source_perspective": "exterior, stationary engine running",
+  "presentation": "authored Fire Boss cabin surrogate; not a cockpit recording",
+  "sample_rate": 48000,
+  "frames": 1152000,
+  "seconds": 24.0,
+  "bytes": 2304044,
+  "sha256": "d2e4f35d148c60d89d18f3d62bec418768f9f66fd5e3d18474608d427a1dd09d",
+  "rms_dbfs": -19.000266012863243,
+  "peak_dbfs": -5.909453564301903,
+  "bands_hz": [
+    [
+      20,
+      80
+    ],
+    [
+      80,
+      250
+    ],
+    [
+      250,
+      800
+    ],
+    [
+      800,
+      2500
+    ],
+    [
+      2500,
+      8000
+    ]
+  ],
+  "source_band_fractions": [
+    0.029186597450023912,
+    0.14599140155753093,
+    0.2405198851064563,
+    0.41339140162293714,
+    0.17091071426305166
+  ],
+  "authored_target_band_fractions": [
+    0.27,
+    0.5,
+    0.17,
+    0.04,
+    0.02
+  ],
+  "output_band_fractions": [
+    0.2587060414456024,
+    0.5026051343638882,
+    0.17439591178497924,
+    0.04436999051836182,
+    0.019922921887168345
+  ],
+  "crossfade_seconds": 1,
+  "method": "mono, broad smooth EQ, equal-power wrap, RMS/peak trim; no pitch shift"
+}

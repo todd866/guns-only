@@ -305,8 +305,8 @@ test("dispatch selection publishes one objective and supports radio-group naviga
   assert.match(main,
     /dispatchObjective\.textContent = SORTIES\[id\]\.objective[\s\S]*dispatchExecution\.textContent = SORTIES\[id\]\.execution/u);
   assert.match(main,
-    /startButton\.textContent = "Start";[\s\S]*startButton\.setAttribute\("aria-label", `Start \$\{SORTIES\[id\]\.title\}`\)/u,
-    "the visible action stays short while its accessible name remains sortie-specific");
+    /startButton\.textContent = SORTIES\[id\]\.airborne \? "Start airborne" : "Start";[\s\S]*startButton\.setAttribute\("aria-label", `Start \$\{SORTIES\[id\]\.title\}`\)/u,
+    "the visible action distinguishes airborne starts while retaining the sortie-specific accessible name");
   assert.doesNotMatch(main, /textContent = `Fly \$\{SORTIES\[id\]\.title\}`/u);
   assert.match(index, /id="start"[^>]*aria-label="Start Water Circuits"[^>]*>Start</u);
   assert.match(main, /button\.tabIndex = selected \? 0 : -1/u);
@@ -314,8 +314,8 @@ test("dispatch selection publishes one objective and supports radio-group naviga
     /function moveSortieSelection\(event\)[\s\S]*"ArrowLeft"[\s\S]*"ArrowDown"[\s\S]*"Home"[\s\S]*"End"/u);
   assert.match(main, /menu\.addEventListener\("keydown", moveSortieSelection\)/u);
   assert.match(bridge,
-    /\[JSExport\]\s*public static string PreviewPlan\(int sortie\)[\s\S]*OkanaganFireMission\.Create\(ResolveSortie\(sortie\)\)/u,
-    "dispatch fuel must come from a read-only mission-authority preview");
+    /\[JSExport\]\s*public static string PreviewPlan\(int sortie\)[\s\S]*OkanaganFireMission\.CreateForPlayer\(ResolveSortie\(sortie\)\)/u,
+    "dispatch fuel must come from the same player-start factory as the selected mission");
   assert.match(main,
     /function publishSortiePlanPreview\(id\)[\s\S]*bridge\.PreviewPlan\(SORTIES\[id\]\.index\)[\s\S]*fuel_plan\?\.minimum_rtb_kg/u);
   assert.doesNotMatch(main, /minimumRtbKg\s*=\s*\d/u,
@@ -353,7 +353,7 @@ test("touch preview activates real dual sticks and short landscape keeps dispatc
 
 
 test("defence debrief reports site condition at handoff without inventing houses saved", () => {
-  const model=okanaganDebriefModel({phase:"complete",sortie:"big-white-defence",flyable:true,incident_handed_off:true,
+  const model=okanaganDebriefModel({phase:"complete",sortie:"big-white-defence",surface:"runway",flyable:true,incident_handed_off:true,
     sites:[{kind:"housing",status:"intact"},{kind:"housing",status:"lost"},{kind:"lift",status:"damaged"}],
     fuel_kg:350,fuel_plan:{minimum_rtb_kg:300,above_minimum_kg:50}});
   assert.equal(model.title,"Aircraft recovered");
@@ -377,4 +377,67 @@ test("defence debrief names the sites the load reached instead of claiming house
   assert.equal(fact(model,"sites-housing").value,"0 intact · 3 damaged · 0 lost");
   assert.equal(model.correction,"");
   assert.doesNotMatch(model.summary+JSON.stringify(model.facts),/saved|protected|objective met/i);
+});
+
+test("airborne defence handoffs describe the completed run without claiming aircraft recovery", () => {
+  for (const sortie of ["peachland-defence", "big-white-defence", "silver-star-defence", "apex-defence"]) {
+    const model = okanaganDebriefModel(terminalState({
+      sortie, surface: "airborne", incident_handed_off: true,
+      completed_cycles: 0, effective_drops: 1,
+      sites: [{ kind: "housing", status: "intact", protected_by_drop: true }],
+    }));
+    assert.equal(model.title, "Sector handed off", sortie);
+    assert.equal(model.summary, "1 drop · 1 site reached", sortie);
+    assert.equal(model.correction, "", `${sortie}: a successful defence is not an unfinished training circuit`);
+    assert.equal(fact(model, "site-scope").value, "AT GROUND-CREW HANDOFF");
+    assert.doesNotMatch(JSON.stringify(model), /aircraft recovered|complete one circuit|houses saved/i);
+  }
+});
+
+test("defence debrief never infers an unreported recovery or handoff", () => {
+  const state = terminalState({
+    sortie: "big-white-defence", sites: [{ kind: "lift", status: "intact" }],
+  });
+  assert.equal(okanaganDebriefModel(state).title, "Defence complete");
+  assert.equal(okanaganDebriefModel({ ...state, surface: "runway" }).title, "Aircraft recovered");
+  assert.equal(okanaganDebriefModel({ ...state, surface: "airborne", phase: "failed",
+    incident_handed_off: true }).title, "Failed");
+});
+
+test("circuit correction belongs to incomplete water training, not credited fire work", () => {
+  assert.equal(okanaganDebriefModel(terminalState({ completed_cycles: 0,
+    effective_drops: 1 })).correction, "");
+  assert.equal(okanaganDebriefModel(terminalState({ sortie: "water-circuits",
+    completed_cycles: 0, effective_drops: 0 })).correction, "Complete one circuit.");
+  assert.equal(okanaganDebriefModel(terminalState({ completed_cycles: 0,
+    effective_drops: 0 })).correction, "Release on the marked line.");
+});
+
+test("failed defence distinguishes a safely missed line from an unfinished runway recovery", () => {
+  const state = terminalState({
+    sortie: "big-white-defence", phase: "failed", surface: "airborne", flyable: true,
+    incident_handed_off: true, effective_drops: 0,
+    sites: [{ kind: "housing", status: "intact" }],
+  });
+  const missed = okanaganDebriefModel(state);
+  assert.equal(missed.title, "Defence line missed");
+  assert.equal(missed.outcome, "failed");
+  assert.equal(missed.summary, "");
+  assert.equal(okanaganDebriefModel({ ...state, surface: "runway",
+    incident_handed_off: false }).title, "Defence unfinished");
+});
+
+test("defence failure wording requires the published evidence and never invents a crash cause", () => {
+  const state = terminalState({
+    sortie: "apex-defence", phase: "failed", surface: "airborne", flyable: true,
+    incident_handed_off: true, effective_drops: 0,
+  });
+  for (const changed of [{ flyable: false }, { flyable: undefined },
+    { incident_handed_off: false }, { surface: undefined }, { effective_drops: 1 }, { effective_drops: undefined },
+    { sortie: "fire-attack" }]) {
+    const model = okanaganDebriefModel({ ...state, ...changed });
+    assert.equal(model.title, "Failed", JSON.stringify(changed));
+    assert.doesNotMatch(model.title + model.summary + model.correction,
+      /stall|impact|crash|defence line missed|defence unfinished/i);
+  }
 });

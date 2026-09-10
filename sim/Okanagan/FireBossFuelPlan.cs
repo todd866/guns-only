@@ -37,7 +37,8 @@ public static class FireBossFuelPlan
 
     public static FireBossFuelSnapshot Snapshot(double blockFuelKg, double fuelKg,
         in Vec3D position, int completedCycles, double plannedOutboundKg = PlannedOutboundTripKg,
-        double returnClimbAllowanceKg = 0, double plannedMinimumRtbKg = 0)
+        double returnClimbAllowanceKg = 0, double plannedMinimumRtbKg = 0,
+        double plannedTaxiOutKg = TaxiOutKg)
     {
         Vec3D arrival = OkanaganGeo.ToWorld(49.9442, -119.3650, 760.0);
         double distanceM = HorizontalDistance(position, arrival);
@@ -45,12 +46,12 @@ public static class FireBossFuelPlan
         double minimum = returnTripKg + OperationalReserveKg + FinalReserveKg + TaxiInKg;
         double joker = minimum + OneMoreCircuitProhibitedKg;
         double above = fuelKg - minimum;
-        double working = blockFuelKg - TaxiOutKg - plannedOutboundKg - Math.Max(minimum, plannedMinimumRtbKg);
+        double working = blockFuelKg - plannedTaxiOutKg - plannedOutboundKg - Math.Max(minimum, plannedMinimumRtbKg);
         string state = above <= 0.0 ? "MINIMUM FUEL — RTB"
             : above <= OneMoreCircuitProhibitedKg ? "ONE MORE CIRCUIT PROHIBITED"
             : completedCycles == 0 ? "WORKING FUEL AVAILABLE"
             : "CONTINUE / MONITOR";
-        return new FireBossFuelSnapshot(blockFuelKg, TaxiOutKg, plannedOutboundKg,
+        return new FireBossFuelSnapshot(blockFuelKg, plannedTaxiOutKg, plannedOutboundKg,
             Math.Max(0.0, working), returnTripKg, OperationalReserveKg, FinalReserveKg,
             TaxiInKg, minimum, joker, above, fuelKg / NominalCruiseBurnKgPerSecond / 60.0, state);
     }

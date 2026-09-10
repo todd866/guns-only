@@ -117,6 +117,7 @@ public sealed class OkanaganFireMission
 
     readonly OkanaganFireGrid _fire;
     readonly OkanaganIncident? _incident;
+    readonly bool _airborneIncidentStart;
     readonly OkanaganProtection? _protection;
     bool _incidentActive;
     bool _incidentHandedOff;
@@ -148,11 +149,13 @@ public sealed class OkanaganFireMission
     readonly double _blockFuelKg;
     internal FireBossMissionPerformancePlan PerformancePlan { get; }
 
-    OkanaganFireMission(OkanaganSortieType sortie, double? initialFuelKg = null)
+    OkanaganFireMission(OkanaganSortieType sortie, double? initialFuelKg = null,
+        bool nearIncident = false)
     {
         if (!Enum.IsDefined(sortie)) throw new ArgumentOutOfRangeException(nameof(sortie));
         Sortie = sortie;
         _incident = OkanaganIncident.For(sortie);
+        _airborneIncidentStart = nearIncident && _incident != null;
         _fire = new OkanaganFireGrid(_incident);
         _protection = _incident == null ? null : new OkanaganProtection(_incident.Sites);
         _incidentActive = _incident == null;
@@ -169,20 +172,41 @@ public sealed class OkanaganFireMission
             CorridorAltitude(ScoopEntry, IncidentTarget + _incidentUphill * 6_000, 400)),
             CorridorAltitude(IncidentTarget + _incidentUphill * 4_500, IncidentTarget + _incidentUphill * 300, 160));
         PerformancePlan = FireBossMissionPerformance.AtAltitude(_cruiseAltitude);
-        // Exercise planning allowance: measured ferry distance plus a conservative loaded climb.
-        _plannedOutboundFuel = _incident == null ? FireBossFuelPlan.PlannedOutboundTripKg
+        // Authored game planning allowance: airborne entries budget only their six-kilometre
+        // approach; full sorties retain the measured ferry distance and loaded climb allowance.
+        _plannedOutboundFuel = _airborneIncidentStart ? 6_000 / 58.0 * .15
+            : _incident == null ? FireBossFuelPlan.PlannedOutboundTripKg
             : 35 + HorizontalDistance(ScoopEntry, IncidentTarget) / 58 * .15
                 + Math.Max(0, _cruiseAltitude - 700) / FireBossMissionPerformance.RequiredClimbMps * .15;
-        _blockFuelKg = sortie == OkanaganSortieType.WaterCircuits
+        double defaultFuelKg = sortie == OkanaganSortieType.WaterCircuits
             ? FireBossFuelPlan.WaterCircuitsBlockFuelKg
             : _incident is null ? FireBossFuelPlan.FireAttackBlockFuelKg : FireBossDynamics.InitialFuelKg;
+        double fuelKg = Math.Clamp(initialFuelKg ?? defaultFuelKg, 1, FireBossDynamics.InitialFuelKg);
+        // For an airborne entry, the fuel ladder begins with the actual fuel aboard now.
+        _blockFuelKg = _airborneIncidentStart ? fuelKg : defaultFuelKg;
         _plannedMinimumRtb = _incident == null ? 0 : FireBossFuelPlan.Snapshot(_blockFuelKg, _blockFuelKg,
             IncidentTarget, 0, _plannedOutboundFuel, ReturnClimbFuel(IncidentTarget)).MinimumRtbFuelKg;
-        Aircraft = FireBossDynamics.AtKelownaDeparture(initialFuelKg ?? _blockFuelKg);
+        if (_airborneIncidentStart)
+        {
+            // Start at the already terrain-checked ridge join, pointing down the defence run.
+            // The six-kilometre entry gives roughly 100 seconds to identify the line and prepare
+            // the drop. The same performance allowance limits a preloaded aircraft and a scoop.
+            Vec3D position = (IncidentTarget + _incidentUphill * 6_000) with { Y = _cruiseAltitude };
+            double waterKg = Math.Max(0, Math.Min(FireBossDynamics.MaximumGrossMassKg,
+                PerformancePlan.MaximumGrossMassKg) - FireBossDynamics.EmptyOperatingMassKg - fuelKg);
+            Aircraft = FireBossDynamics.AtLoadedIngress(position,
+                Math.Atan2(-_incidentUphill.X, -_incidentUphill.Z), fuelKg, waterKg);
+        }
+        else Aircraft = FireBossDynamics.AtKelownaDeparture(fuelKg);
         _latestTelemetry = Aircraft.Telemetry;
         _scoopTargetWaterKg = PlannedScoopTarget(_latestTelemetry);
         Phase = OkanaganMissionPhase.Ready;
-        SetPhase(OkanaganMissionPhase.Depart);
+        if (_airborneIncidentStart)
+        {
+            CaptureAcquiredLoad(_latestTelemetry);
+            SetPhase(OkanaganMissionPhase.Ingress);
+        }
+        else SetPhase(OkanaganMissionPhase.Depart);
     }
 
     public OkanaganSortieType Sortie { get; }
@@ -196,6 +220,11 @@ public sealed class OkanaganFireMission
 
     public static OkanaganFireMission Create(OkanaganSortieType sortie,
         double? initialFuelKg = null) => new(sortie, initialFuelKg);
+
+    /// <summary>Player defence missions begin loaded near the incident and end at safe handoff.
+    /// Full departure/scoop/recovery sorties remain available through Create.</summary>
+    public static OkanaganFireMission CreateForPlayer(OkanaganSortieType sortie,
+        double? initialFuelKg = null) => new(sortie, initialFuelKg, nearIncident: true);
 
     public void SetPaused(bool paused)
     {
@@ -461,16 +490,41 @@ public sealed class OkanaganFireMission
             _dropCreditThisPass = 0.0;
             _sitesProtectedThisPass = 0;
             CompletedCycles++;
-            if (!FuelAllowsAnotherCircuit(fuel.FuelAboveMinimumKg) || _incident != null) SetPhase(OkanaganMissionPhase.Rtb);
+            if (_airborneIncidentStart) SetPhase(OkanaganMissionPhase.Egress);
+            else if (!FuelAllowsAnotherCircuit(fuel.FuelAboveMinimumKg) || _incident != null) SetPhase(OkanaganMissionPhase.Rtb);
             else if (Sortie == OkanaganSortieType.FireAttack && EffectiveDrops >= 2)
                 SetPhase(OkanaganMissionPhase.Rtb);
             else if (Sortie == OkanaganSortieType.LargeForceEmployment && EffectiveDrops >= 3)
                 SetPhase(OkanaganMissionPhase.Rtb);
             else SetPhase(OkanaganMissionPhase.Egress);
         }
-        if (Phase == OkanaganMissionPhase.Egress
-            && HorizontalDistance(telemetry.PositionWorldM, IncidentTarget) > 3_200.0)
-            SetPhase(OkanaganMissionPhase.JoinScoop);
+        if (_airborneIncidentStart && Phase == OkanaganMissionPhase.Drop
+            && (IncidentTarget - telemetry.PositionWorldM).Dot(_incidentUphill) > 700)
+        {
+            // Missing the release window is a finished attempt, not an endless orbit around
+            // the last drop gate. Fly the same safe escape before offering a failed-run retry.
+            SetPhase(OkanaganMissionPhase.Egress);
+        }
+        if (Phase == OkanaganMissionPhase.Egress)
+        {
+            if (_airborneIncidentStart)
+            {
+                // A real cleared escape, never completion on release alone. The terrain-checked
+                // escape's position and altitude gates include Apex's required valley turn.
+                bool clear = ActiveGateIndex >= _route.Count
+                    && HorizontalDistance(telemetry.PositionWorldM, IncidentTarget) > 3_200
+                    && telemetry.SurfaceMode == FireBossSurfaceMode.Airborne
+                    && telemetry.PositionWorldM.Y - OkanaganCdem.SampleSurfaceHeightM(telemetry.PositionWorldM) >= 200;
+                if (clear)
+                {
+                    _incidentHandedOff = true;
+                    SetPhase(EffectiveDrops > 0 && CompletedCycles > 0
+                        ? OkanaganMissionPhase.Complete : OkanaganMissionPhase.Failed);
+                }
+            }
+            else if (HorizontalDistance(telemetry.PositionWorldM, IncidentTarget) > 3_200.0)
+                SetPhase(OkanaganMissionPhase.JoinScoop);
+        }
         StepReturn(telemetry);
     }
 
@@ -519,6 +573,19 @@ public sealed class OkanaganFireMission
 
     internal IEnumerable<OkanaganRouteGate> RouteFor(OkanaganMissionPhase phase)
     {
+        if (_airborneIncidentStart && phase == OkanaganMissionPhase.Egress)
+        {
+            var escape = DefenceRoute(OkanaganMissionPhase.Rtb).Take(2).ToArray();
+            yield return escape[0];
+            // The handoff ends locally. Climbing to the later Kelowna ridge-crossing altitude
+            // needlessly traps a missed-drop aircraft still carrying its load in an orbit.
+            // Keep Apex's authored valley route; other sectors use this local corridor's CDEM.
+            double altitude = _incident?.Id == "apex" ? escape[1].PositionWorldM.Y
+                : CorridorAltitude(escape[0].PositionWorldM, escape[1].PositionWorldM, 300);
+            yield return Gate("sector-handoff", "CLEAR OF SECTOR",
+                escape[1].PositionWorldM with { Y = altitude }, escape[1].RadiusM, 60);
+            yield break;
+        }
         if (_incident != null && phase is OkanaganMissionPhase.Climb or OkanaganMissionPhase.Ingress or OkanaganMissionPhase.Drop or OkanaganMissionPhase.Rtb) {
             foreach (var gate in DefenceRoute(phase)) yield return gate;
             yield break;
@@ -613,22 +680,29 @@ public sealed class OkanaganFireMission
         OkanaganMissionPhase.Ingress => "Follow the target-entry corridor to Division Alpha",
         OkanaganMissionPhase.Drop => "Lay water along the marked west flank",
         OkanaganMissionPhase.Downwind => "Dump the training load on downwind",
+        OkanaganMissionPhase.Egress when _airborneIncidentStart => "Follow the escape corridor and hand the sector to ground crews",
         OkanaganMissionPhase.Egress => "Exit north, remain clear of helicopters, return to scoop",
         OkanaganMissionPhase.Rtb => "Protect the reserves and follow the RTB corridor to Kelowna",
         OkanaganMissionPhase.Approach => "Fly Runway 16 final and land",
         OkanaganMissionPhase.Landed => "Close power and stop on the runway",
+        OkanaganMissionPhase.Complete when _airborneIncidentStart => "Defence run complete — sector handed to ground crews",
         OkanaganMissionPhase.Complete => Sortie == OkanaganSortieType.WaterCircuits
             ? $"{CompletedCycles} water circuits complete" : _incident != null
                 ? "Aircraft recovered — review sector condition" : "Sortie complete — reserves protected",
+        OkanaganMissionPhase.Failed when _airborneIncidentStart && _latestTelemetry.SurfaceMode == FireBossSurfaceMode.Runway => "Aircraft recovered — defence run unfinished",
+        OkanaganMissionPhase.Failed when _airborneIncidentStart && _latestTelemetry.Flyable => "Defence line missed — review the drop and try again",
         OkanaganMissionPhase.Failed => "Aircraft lost",
         _ => "Fly the assigned profile",
     };
 
     string AirAttackCall() => _incident != null ? Phase switch {
         OkanaganMissionPhase.Climb => $"AIR ATTACK: Climb over the lake to {_cruiseAltitude * 3.28084:F0} feet before crossing the ridge.",
+        OkanaganMissionPhase.Ingress when _airborneIncidentStart => $"AIR ATTACK: {_incident.Name}. Water aboard. Follow the defence line, drop on the buildings, then fly the escape corridor.",
         OkanaganMissionPhase.Ingress => $"AIR ATTACK: {_incident.Name}. One load on the defence line, then recover.",
         OkanaganMissionPhase.Drop => "AIR ATTACK: Protect the downwind buildings. Keep the escape route open.",
+        OkanaganMissionPhase.Egress when _airborneIncidentStart => "AIR ATTACK: Off the line. Follow the escape corridor; ground crews take over once you are clear.",
         OkanaganMissionPhase.Rtb => "OPS: Climb clear, then return Kelowna. Ground crews take over when you leave the sector.",
+        OkanaganMissionPhase.Complete when _airborneIncidentStart => "AIR ATTACK: Clear of the sector. Ground crews have it. Review your defence run.",
         OkanaganMissionPhase.Complete => "OPS: Aircraft recovered. Review the recorded site condition.",
         _ => RadioCallFor(Sortie, Phase),
     } : RadioCallFor(Sortie, Phase);
@@ -728,7 +802,8 @@ public sealed class OkanaganFireMission
             && telemetry.SurfaceMode == FireBossSurfaceMode.Runway)
             SetPhase(OkanaganMissionPhase.Landed);
         if (Phase == OkanaganMissionPhase.Landed && telemetry.TrueAirspeedMps < 4.0)
-            SetPhase(OkanaganMissionPhase.Complete);
+            SetPhase(_airborneIncidentStart && (EffectiveDrops == 0 || CompletedCycles == 0 || !_incidentHandedOff)
+                ? OkanaganMissionPhase.Failed : OkanaganMissionPhase.Complete);
     }
 
     double CalculateScore(in FireBossTelemetry telemetry)
@@ -753,7 +828,8 @@ public sealed class OkanaganFireMission
 
     FireBossFuelSnapshot FuelPlanFor(in FireBossTelemetry telemetry) => FireBossFuelPlan.Snapshot(_blockFuelKg,
         telemetry.FuelKg, telemetry.PositionWorldM, CompletedCycles, _plannedOutboundFuel,
-        ReturnClimbFuel(telemetry.PositionWorldM), _plannedMinimumRtb);
+        ReturnClimbFuel(telemetry.PositionWorldM), _plannedMinimumRtb,
+        _airborneIncidentStart ? 0 : FireBossFuelPlan.TaxiOutKg);
 
     static Vec3D Ground(Vec3D point, double clearance) => point with { Y = OkanaganCdem.SampleSurfaceHeightM(point) + clearance };
 

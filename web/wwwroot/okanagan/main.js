@@ -4,60 +4,60 @@ const pilotLogbook = createBrowserPilotLogbook();
 installDisposedPageRestore();
 window.addEventListener("pagehide", () => pilotLogbook.finish({ outcome: "Left before completion" }));
 import * as THREE from "../vendor/three.module.js";
-import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=360";
+import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=362";
 import {
   createOkanaganWorldRoot, okanaganWorldToRender, okanaganRenderToWorld,
   setOkanaganCockpitCamera, lookAtOkanaganPoint,
-} from "../render/okanagan/okanagan_render_frame.js?v=360";
+} from "../render/okanagan/okanagan_render_frame.js?v=362";
 import { createOkanaganSiteMarkers } from "../render/okanagan/okanagan_site_markers.js";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=360";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=360";
-import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=360";
-import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=360";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=362";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=362";
+import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=362";
+import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=362";
 import {
   createOkanaganTrafficCraft,
   poseOkanaganTrafficCraft,
-} from "../render/okanagan/okanagan_traffic.js?v=360";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=360";
-import { createHud } from "../hud.js?v=360";
+} from "../render/okanagan/okanagan_traffic.js?v=362";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=362";
+import { createHud } from "../hud.js?v=362";
 import {
   armFlightAudio,
   flightAudioDiagnostics,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=360";
+} from "../render/audio/flight_audio.js?v=362";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=360";
-import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=360";
-import { standardGamepadState } from "../render/input/dual_stick_input.js?v=360";
-import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=360";
-import { createOkanaganKeyboardControls } from "../render/okanagan/okanagan_keyboard_controls.js?v=360";
-import { bindOkanaganDropButton } from "../render/okanagan/okanagan_drop_button.js?v=360";
+} from "../render/settings/player_settings.js?v=362";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=362";
+import { standardGamepadState } from "../render/input/dual_stick_input.js?v=362";
+import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=362";
+import { createOkanaganKeyboardControls } from "../render/okanagan/okanagan_keyboard_controls.js?v=362";
+import { bindOkanaganDropButton } from "../render/okanagan/okanagan_drop_button.js?v=362";
 import {
   compactOkanaganCue,
   okanaganFlightState,
   okanaganRadioCaption,
   okanaganRadioHoldMs,
-} from "../render/okanagan/okanagan_hud_adapter.js?v=360";
+} from "../render/okanagan/okanagan_hud_adapter.js?v=362";
 import {
   cycleOkanaganTarget,
   okanaganTargets,
   retainOkanaganTarget,
-} from "../render/okanagan/okanagan_targets.js?v=360";
+} from "../render/okanagan/okanagan_targets.js?v=362";
 import {
   okanaganDebriefModel,
   okanaganMissionTerminal,
-} from "../render/okanagan/okanagan_debrief.js?v=360";
+} from "../render/okanagan/okanagan_debrief.js?v=362";
 import {
   okanaganDialogFocusables,
   okanaganDialogTabTarget,
-} from "../render/okanagan/okanagan_dialog_focus.js?v=360";
+} from "../render/okanagan/okanagan_dialog_focus.js?v=362";
 
 import { okanaganNavigation, okanaganNavigationPlaces, drawOkanaganMap }
-  from "../render/okanagan/okanagan_navigation.js?v=360";
+  from "../render/okanagan/okanagan_navigation.js?v=362";
 
 const SORTIES = Object.freeze({
   "water-circuits": {
@@ -84,10 +84,10 @@ const SORTIES = Object.freeze({
     objective: "Hold, then fly the assigned west-flank drops.",
     execution: "Wait for Air Attack · hit Division Alpha · recover",
   },
-  "peachland-defence": {index:3, title:"Peachland Defence", block:925, working:"—", objective:"Hold the hillside neighbourhood edge.", execution:"Homes above Beach Avenue · one load · hand off and recover"},
-  "big-white-defence": {index:4, title:"Big White Defence", block:925, working:"—", objective:"Protect Happy Valley homes and lift terminals.", execution:"Climb over the lake · cross the ridge · work downhill"},
-  "silver-star-defence": {index:5, title:"SilverStar Defence", block:925, working:"—", objective:"Protect the village and lift infrastructure.", execution:"Long ferry · watch the reserve · one downhill attack"},
-  "apex-defence": {index:6, title:"Apex Defence", block:925, working:"—", objective:"Defend the village below the ski slopes.", execution:"South valley ferry · ridge clearance · protect the escape"},
+  "peachland-defence": {index:3, title:"Peachland Defence", airborne:true, block:925, working:"—", objective:"Hold the hillside neighbourhood edge.", execution:"Airborne with water · defend the homes · fly clear to finish"},
+  "big-white-defence": {index:4, title:"Big White Defence", airborne:true, block:925, working:"—", objective:"Protect Happy Valley homes and lift terminals.", execution:"Airborne above Big White · downhill drop · safe escape to finish"},
+  "silver-star-defence": {index:5, title:"SilverStar Defence", airborne:true, block:925, working:"—", objective:"Protect the village and lift infrastructure.", execution:"Airborne with water · one downhill attack · fly clear to finish"},
+  "apex-defence": {index:6, title:"Apex Defence", airborne:true, block:925, working:"—", objective:"Defend the village below the ski slopes.", execution:"Airborne above Apex · defend the village · follow the escape to finish"},
 });
 
 /** localStorage access itself can throw in locked-down browsing; a sortie must still boot. */
@@ -332,7 +332,7 @@ function selectSortie(id) {
     button.setAttribute("aria-checked", String(selected));
     button.tabIndex = selected ? 0 : -1;
   });
-  startButton.textContent = "Start";
+  startButton.textContent = SORTIES[id].airborne ? "Start airborne" : "Start";
   startButton.setAttribute("aria-label", `Start ${SORTIES[id].title}`);
   document.querySelector("#plan-working").textContent = SORTIES[id].working;
   document.querySelector("#plan-block").textContent = `${SORTIES[id].block} KG`;
@@ -550,7 +550,7 @@ function startSortie(id) {
   bridge.Start(SORTIES[id].index);
   pilotLogbook.begin({ activity: `Okanagan · ${SORTIES[id].title || id}` });
   state = JSON.parse(bridge.GetState());
-  throttle = 0.65;
+  throttle = state.throttle;
   elevatorTrim = 0;
   syncTrimControl();
   scoops = false;
@@ -561,6 +561,8 @@ function startSortie(id) {
   telemetryFrames.length = 0;
   lastTelemetryMissionSecond = -Infinity;
   lastTelemetryPhase = "";
+  lastRadio = "";
+  radioHideAt = 0;
   setPaused(false);
   planMinimum.textContent = `${Math.round(state.fuel_plan.minimum_rtb_kg)} KG`;
   status.textContent = "Flying";

@@ -20,8 +20,9 @@ public static partial class OkanaganWebBridge
     [JSExport]
     public static void Start(int sortie)
     {
-        _mission = OkanaganFireMission.Create(ResolveSortie(sortie));
-        _command = new FireBossPilotCommand(0.0, 0.0, 0.0, 0.65, false, false);
+        _mission = OkanaganFireMission.CreateForPlayer(ResolveSortie(sortie));
+        _command = new FireBossPilotCommand(0.0, 0.0, 0.0,
+            _mission.Aircraft.Telemetry.Throttle, false, false);
         _lastAppliedCommand = _command;
         AutoTrim.Reset(AutoTrim.State.Enabled);
         _paused = false;
@@ -32,7 +33,7 @@ public static partial class OkanaganWebBridge
     [JSExport]
     public static string PreviewPlan(int sortie) =>
         OkanaganSnapshotProjection.BuildStateJson(
-            OkanaganFireMission.Create(ResolveSortie(sortie)));
+            OkanaganFireMission.CreateForPlayer(ResolveSortie(sortie)));
 
     static OkanaganSortieType ResolveSortie(int sortie) =>
         sortie switch {

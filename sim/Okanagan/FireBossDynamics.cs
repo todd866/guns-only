@@ -86,11 +86,14 @@ public sealed class FireBossDynamics
     readonly double _initialElevatorTrim;
 
     FireBossDynamics(Vec3D position, double speedMps, double gammaRad,
-        double headingRad, FireBossSurfaceMode surfaceMode, double fuelKg)
+        double headingRad, FireBossSurfaceMode surfaceMode, double fuelKg,
+        double waterKg = 0.0, double initialPower = 0.65)
     {
         _surfaceMode = surfaceMode;
         _fuelKg = Math.Clamp(fuelKg, 1.0, InitialFuelKg);
-        double massKg = EmptyOperatingMassKg + _fuelKg;
+        _waterKg = Math.Clamp(waterKg, 0, Math.Min(MaximumWaterKg,
+            MaximumGrossMassKg - EmptyOperatingMassKg - _fuelKg));
+        double massKg = EmptyOperatingMassKg + _fuelKg + _waterKg;
         double alphaRad = surfaceMode == FireBossSurfaceMode.Airborne
             ? TrimAngleOfAttack(position.Y, speedMps, massKg)
             : 0.0;
@@ -104,13 +107,14 @@ public sealed class FireBossDynamics
             massKg, attitude, default);
         _aircraft = new AircraftSim(initial, FlightModel.At802fFireBossPublicDataSurrogate);
         _aircraft.SeedEnginePowerFraction(
-            surfaceMode == FireBossSurfaceMode.Destroyed ? 0.0 : 0.65);
+            surfaceMode == FireBossSurfaceMode.Destroyed ? 0.0 : initialPower);
         _adapter = new FixedWingAircraftVehicleAdapter(
             "aircraft.at-802f-fireboss",
             _aircraft,
             MaximumGrossMassKg,
             MaximumWaterKg);
-        Telemetry = BuildTelemetry(default, false, 0.0, 0.0, "");
+        Telemetry = BuildTelemetry(new(0, 0, 0, _aircraft.ThrustFraction, false, false),
+            false, 0.0, 0.0, "");
     }
 
     public FireBossTelemetry Telemetry { get; private set; }
@@ -126,6 +130,17 @@ public sealed class FireBossDynamics
         Vec3D threshold = OkanaganGeo.ToWorld(49.967, -119.3778, 433.0);
         return new FireBossDynamics(threshold, 0.0, 0.0,
             160.0 * Math.PI / 180.0, FireBossSurfaceMode.Runway, fuelKg);
+    }
+
+    /// <summary>Mission initialization only: actual water mass, aerodynamic trim and engine state.
+    /// Subsequent flight uses the unchanged shared rigid-body solver.</summary>
+    internal static FireBossDynamics AtLoadedIngress(Vec3D position, double headingRad,
+        double fuelKg, double waterKg)
+    {
+        const double initialPower = 0.85;
+        var aircraft = new FireBossDynamics(position, 58, 0, headingRad,
+            FireBossSurfaceMode.Airborne, fuelKg, waterKg, initialPower) { _hasFlown = true };
+        return aircraft;
     }
 
     public static FireBossDynamics OnScoopLane(double fuelKg = 610.0)

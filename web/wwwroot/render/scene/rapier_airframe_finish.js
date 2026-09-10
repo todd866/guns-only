@@ -1,5 +1,5 @@
 import * as THREE from "../../vendor/three.module.js";
-import { makeMaterial } from "./airframe_primitives.js?v=360";
+import { makeMaterial } from "./airframe_primitives.js?v=362";
 
 // Appearance only. Ramjet-X supplies the restrained finish reference; Rapier's
 // own canonical stations and opening dimensions still own every surface.

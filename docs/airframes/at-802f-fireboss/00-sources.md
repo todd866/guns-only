@@ -149,3 +149,12 @@ guidance on return. Crossing that operating limit does not itself create a simul
 the pilot still operates the drop control. Contact rotation now converts Euler steering/attitude
 rates to body P/Q/R before handing them to free flight, including combined steering and rotation.
 The wheel/float reaction constants remain provisional as declared above.
+
+## Recorded audio presentation — 2026-09-10
+
+The Fire Boss audio now uses an OA-1K / Air Tractor-family **exterior ground recording** as its
+primary engine bed, with broad EQ informed by an actual Fire Boss cockpit video. This is an
+**authored surrogate**, not a measured Fire Boss cockpit sample. [Audio provenance and limitations](../../../web/wwwroot/render/audio/samples/turboprop/SOURCES.md)
+record the original source, reference-only YouTube use, exact interval/checksums, conditioning,
+and the absence of auditory acceptance. No flight dynamics, propeller RPM authority or physical
+engine constants were changed for the sound adjustment.

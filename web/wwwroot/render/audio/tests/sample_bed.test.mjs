@@ -11,6 +11,7 @@ import {
   attachLoopingSampleBed,
   ensureLoopingSampleBed,
   loadSampleBed,
+  sampleBedDiagnostics,
   validateSampleBedUrl,
 } from "../sample_bed.js";
 import { RELEASE_BUILD } from "../../release/release_identity.js";
@@ -97,7 +98,7 @@ test("publishes honest same-origin build-stamped aircraft bed paths", () => {
   assert.equal(cobra.pathname.endsWith(
     "/samples/rotorcraft/uh1h_t53_ah1g_surrogate_loop.wav"), true);
   assert.equal(fireBoss.pathname.endsWith(
-    "/samples/turboprop/pt6_single_engine_public_domain_loop.wav"), true);
+    "/samples/turboprop/at802_family_cabin_loop.wav"), true);
   assert.equal(f14.search, `?v=${SAMPLE_BED_BUILD}`);
   assert.equal(cobra.search, `?v=${SAMPLE_BED_BUILD}`);
   assert.equal(fireBoss.search, `?v=${SAMPLE_BED_BUILD}`);
@@ -115,7 +116,7 @@ test("publishes honest same-origin build-stamped aircraft bed paths", () => {
 
 test("the Fire Boss definition resolves to the reviewed PCM and provenance record", async () => {
   const asset = await readFile(new URL(
-    "../samples/turboprop/pt6_single_engine_public_domain_loop.wav",
+    "../samples/turboprop/at802_family_cabin_loop.wav",
     import.meta.url,
   ));
   const sources = await readFile(new URL(
@@ -126,10 +127,10 @@ test("the Fire Boss definition resolves to the reviewed PCM and provenance recor
 
   assert.equal(asset.subarray(0, 4).toString("ascii"), "RIFF");
   assert.equal(asset.subarray(8, 12).toString("ascii"), "WAVE");
-  assert.equal(asset.byteLength, 403_278);
+  assert.equal(asset.byteLength, 2_304_044);
   assert.equal(digest,
-    "1e1685e2b3c09fde200c4ada58741ae27be1676ec48b82da373d5a5995860507");
-  assert.match(sources, /DOD_109494649/);
+    "d2e4f35d148c60d89d18f3d62bec418768f9f66fd5e3d18474608d427a1dd09d");
+  assert.match(sources, /DOD_111461879/);
   assert.match(sources, /PUBLIC DOMAIN/);
   assert.match(sources, new RegExp(digest));
 });
@@ -282,4 +283,31 @@ test("ensure remains allocation-free until called and deduplicates its graph att
   assert.strictEqual(first, second);
   assert.equal(fetchCalls, 1);
   assert.equal(audio.created.filter((node) => node.kind === "buffer-source").length, 1);
+  assert.equal(sampleBedDiagnostics(graph).status, "ready");
+  assert.equal(sampleBedDiagnostics(graph).id, DEFINITION.id);
+});
+
+test("recording diagnostics distinguish a failed decode from a working audio graph", async () => {
+  const audio = new FakeAudioContext();
+  const graph = { decodedBedInput: audio.createGain() };
+  audio.decodeAudioData = async () => { throw new Error("invalid PCM"); };
+  assert.equal(sampleBedDiagnostics(graph).status, "unrequested");
+  await assert.rejects(ensureLoopingSampleBed(audio, graph, DEFINITION, {
+    origin: ORIGIN, fetchImpl: async () => response(), nowMs: () => 10,
+  }), /invalid PCM/);
+  assert.equal(sampleBedDiagnostics(graph).status, "failed");
+  assert.equal(sampleBedDiagnostics(graph).id, null);
+  await ensureLoopingSampleBed(audio, graph, DEFINITION, {
+    origin: ORIGIN, fetchImpl: async () => response(), nowMs: () => 20,
+  });
+  assert.equal(sampleBedDiagnostics(graph).status, "retry-wait");
+  assert.equal(sampleBedDiagnostics(graph).id, null);
+  audio.decodeAudioData = async () => Object.freeze({ duration: 24 });
+  const recovered = await ensureLoopingSampleBed(audio, graph, DEFINITION, {
+    origin: ORIGIN, fetchImpl: async () => response(), nowMs: () => 40_000,
+  });
+  assert.ok(recovered);
+  assert.equal(sampleBedDiagnostics(graph).status, "ready");
+  assert.equal(sampleBedDiagnostics(graph).durationSeconds, 24);
+  assert.equal(sampleBedDiagnostics(graph).id, DEFINITION.id);
 });
