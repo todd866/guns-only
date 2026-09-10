@@ -1,7 +1,7 @@
-// Procedural AH-1G ownship presentation on the shared flight-audio bus.
+// Recording-led AH-1G ownship presentation on the shared flight-audio bus.
 //
-// This is an authored cockpit character, not a recording or a claim that the absolute T53,
-// gearbox, or blade timbre is measured. The authoritative facts are narrower: the late AH-1G
+// A UH-1H/T53 cabin recording supplies the running machinery (a surrogate, not an AH-1G
+// measurement). Procedural sound supplies startup, coast-down, load and combat cues. The late AH-1G
 // has a two-blade 324 rpm main rotor and a two-blade tail rotor geared 5.123:1. Those facts own
 // cadence; mission-published engine power and turnaround phases own the start/stop envelope.
 // The module never creates an AudioContext and never connects to context.destination directly.
@@ -1014,17 +1014,23 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
     : 0;
 
   target(voices.master.gain, live ? 0.58 : 0, now, live ? 0.16 : 0.02);
-  // The source loop represents governed flight, not starter engagement or rotor coast-down. Two
-  // smooth shoulders keep it entirely inside a narrow Nr window without clicking at the bounds;
-  // the procedural graph remains audible everywhere and therefore owns start/stop transitions.
+  // The source loop represents governed flight, not starter engagement or rotor coast-down.
+  // Keep its natural cadence and crossfade the redundant synthetic machinery away only after
+  // decode succeeds. A failed/late load must retain the startup/coast-down fallback.
   const governedNrPresence = sample.engineOperating && !sample.starting && !sample.shuttingDown
     ? smoothstep((main01 - 0.90) / 0.075)
       * smoothstep((1.08 - main01) / 0.055)
     : 0;
+  const recordingReady = Boolean(voices.decodedBedAttachment?.source?.buffer);
+  const recordedPresence = recordingReady ? governedNrPresence : 0;
+  // Even the fallback keeps electronic tones restrained; broadband rotor/startup cues remain
+  // available at full texture level. The recording must not open ahead of the synth crossfade.
+  const tonalPresence = 0.22 * (1 - recordedPresence) + 0.005 * recordedPresence;
+  const texturePresence = 1 - recordedPresence * 0.85;
   target(voices.decodedBedInput.gain,
-    live ? 0.48 * governedNrPresence : 0,
+    live ? (0.90 + sample.rotorLoad01 * 0.28) * recordedPresence : 0,
     now, live && governedNrPresence > 0 ? 0.26 : 0.035);
-  target(voices.inverterGain.gain, electricalPresence * 0.004, now, 0.12);
+  target(voices.inverterGain.gain, electricalPresence * 0.004 * tonalPresence, now, 0.26);
   target(voices.starter.frequency, 150 + sample.enginePower01 * 760, now, 0.11);
   target(voices.starterFilter.frequency, 380 + sample.enginePower01 * 1_050, now, 0.12);
   target(voices.starterGain.gain, starterPresence * 0.035, now, 0.07);
@@ -1032,47 +1038,51 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
   target(voices.turbine.frequency, 235 + enginePresence * 780, now, 0.16);
   target(voices.turbineHarmonic.frequency, 470 + enginePresence * 1_560, now, 0.16);
   target(voices.turbineFilter.frequency, 520 + enginePresence * 1_020, now, 0.14);
-  target(voices.turbineGain.gain, enginePresence * 0.032, now, 0.13);
+  target(voices.turbineGain.gain, enginePresence * 0.032 * tonalPresence, now, 0.26);
   target(voices.turbineNoiseFilter.frequency, 440 + enginePresence * 1_260, now, 0.14);
-  target(voices.turbineNoiseGain.gain, enginePresence * 0.022, now, 0.16);
+  target(voices.turbineNoiseGain.gain,
+    enginePresence * 0.022 * texturePresence, now, 0.26);
 
   target(voices.gearbox.frequency, 260 + main01 * 560, now, 0.14);
   target(voices.gearboxFilter.frequency, 330 + main01 * 610, now, 0.14);
   target(voices.gearboxGain.gain,
-    Math.pow(main01, 1.15) * (0.007 + sample.enginePower01 * 0.008), now, 0.16);
+    Math.pow(main01, 1.15) * (0.007 + sample.enginePower01 * 0.008) * tonalPresence,
+    now, 0.26);
   const upperGearHz = 1_150 + main01 * 1_850;
   target(voices.gearboxHigh.frequency, upperGearHz, now, 0.13);
   target(voices.gearboxHighFilter.frequency, upperGearHz, now, 0.13);
   target(voices.gearboxHighGain.gain,
-    Math.pow(main01, 1.35) * (0.0025 + sample.rotorLoad01 * 0.004), now, 0.13);
+    Math.pow(main01, 1.35) * (0.0025 + sample.rotorLoad01 * 0.004) * tonalPresence,
+    now, 0.26);
   const turbineWhineHz = 1_250 + enginePresence * 3_850;
   target(voices.turbineWhine.frequency, turbineWhineHz, now, 0.12);
   target(voices.turbineWhineFilter.frequency, turbineWhineHz, now, 0.12);
   target(voices.turbineWhineGain.gain,
-    Math.pow(enginePresence, 1.3) * 0.0055, now, 0.12);
+    Math.pow(enginePresence, 1.3) * 0.0055 * tonalPresence, now, 0.26);
 
   const mainPresence = Math.pow(main01, 0.72);
   target(voices.mainRotorMod.frequency, Math.max(0.2, sample.mainBladePassHz), now, 0.12);
   target(voices.mainRotorFilter.frequency, 105 + main01 * 125, now, 0.15);
   target(voices.mainRotorGain.gain,
     mainPresence * (0.041 + sample.rotorLoad01 * 0.023
-      + sample.groundEffect01 * 0.006), now, 0.13);
+      + sample.groundEffect01 * 0.006) * texturePresence, now, 0.26);
   target(voices.mainRotorModDepth.gain,
     mainPresence * (0.018 + sample.rotorLoad01 * 0.025
-      + sample.rotorRoughness01 * 0.008), now, 0.13);
+      + sample.rotorRoughness01 * 0.008) * texturePresence, now, 0.26);
   target(voices.mainRotorThump.frequency,
     Math.max(0.4, sample.mainBladePassHz * 2), now, 0.12);
   target(voices.mainRotorThumpGain.gain,
     mainPresence * (0.011 + sample.rotorLoad01 * 0.016
       + sample.groundEffect01 * 0.012
-      + sample.rotorRoughness01 * 0.006), now, 0.12);
+      + sample.rotorRoughness01 * 0.006) * tonalPresence, now, 0.26);
   target(voices.bladeSlapMod.frequency,
     Math.max(0.2, sample.mainBladePassHz), now, 0.09);
   target(voices.bladeSlapFilter.frequency,
     185 + sample.bladeSlap01 * 430 + sample.advanceRatio * 160, now, 0.1);
-  target(voices.bladeSlapGain.gain, sample.bladeSlap01 * 0.044, now, 0.075);
+  target(voices.bladeSlapGain.gain,
+    sample.bladeSlap01 * 0.044 * texturePresence, now, 0.26);
   target(voices.bladeSlapModDepth.gain,
-    sample.bladeSlap01 * 0.032, now, 0.075);
+    sample.bladeSlap01 * 0.032 * texturePresence, now, 0.26);
   target(voices.rotorRoughnessMod.frequency,
     Math.max(0.2, sample.mainBladePassHz), now, 0.08);
   target(voices.rotorRoughnessFilter.frequency,
@@ -1093,14 +1103,14 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
   target(voices.tailRotorFilter.frequency,
     75 + sample.tailBladePassHz * 1.25, now, 0.13);
   target(voices.tailRotorGain.gain,
-    tailPresence * (0.009 + sample.tailLoad01 * 0.012), now, 0.11);
+    tailPresence * (0.009 + sample.tailLoad01 * 0.012) * tonalPresence, now, 0.26);
   const tailHarmonicHz = Math.max(1, sample.tailBladePassHz * 6);
   target(voices.tailRotorHarmonic.frequency, tailHarmonicHz, now, 0.1);
   target(voices.tailRotorHarmonicFilter.frequency,
     tailHarmonicHz * 1.08, now, 0.1);
   target(voices.tailRotorHarmonicGain.gain,
     tailPresence * (0.0025 + sample.rotorLoad01 * 0.002
-      + sample.tailLoad01 * 0.007), now, 0.09);
+      + sample.tailLoad01 * 0.007) * tonalPresence, now, 0.26);
   target(voices.tailRotorNoiseFilter.frequency,
     520 + sample.tailBladePassHz * (6.5 + sample.tailLoad01 * 4.5), now, 0.09);
   target(voices.tailRotorNoiseGain.gain,

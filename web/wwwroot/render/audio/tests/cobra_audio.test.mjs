@@ -399,6 +399,7 @@ test("wires into the caller bus, follows authoritative BPF, and applies positive
   assert.doesNotMatch(cobraAudioSource, /audioContext\.destination/,
     "the Cobra layer must not bypass the shared compressor/master");
 
+  voices.decodedBedAttachment = { source: { buffer: {} } };
   const live = updateCobraAudioVoices(voices, audio, COBRA_RUNNING, { muted: false });
   assert.equal(live.sample.mainBladePassHz, 10.8);
   assert.ok(Math.abs(voices.mainRotorMod.frequency.value - 10.8) < 1e-9);
@@ -502,6 +503,39 @@ test("wires into the caller bus, follows authoritative BPF, and applies positive
   });
   assert.equal(voices.decodedBedInput.gain.value, 0,
     "the governed-flight recording does not mask an Nr overspeed");
+});
+
+test("a decoded recording replaces synthetic machinery and keeps collective response", () => {
+  const audio = new FakeAudioContext();
+  const voices = createCobraAudioVoices(audio, new FakeAudioNode("shared-compressor"));
+  updateCobraAudioVoices(voices, audio, COBRA_RUNNING);
+  const fallbackTone = voices.turbineGain.gain.value;
+  const fallbackRotor = voices.mainRotorGain.gain.value;
+  assert.equal(voices.decodedBedInput.gain.value, 0,
+    "late decode cannot fade a sample into an already-open recording input");
+  // A status string alone is not a successfully attached AudioBuffer.
+  voices.decodedBedStatus = "ready";
+  updateCobraAudioVoices(voices, audio, COBRA_RUNNING);
+  assert.equal(voices.turbineGain.gain.value, fallbackTone);
+  voices.decodedBedAttachment = { source: { buffer: {}, playbackRate: { value: 1 } } };
+  updateCobraAudioVoices(voices, audio, COBRA_RUNNING);
+  assert.ok(voices.turbineGain.gain.value < fallbackTone * 0.03);
+  assert.ok(voices.mainRotorGain.gain.value < fallbackRotor * 0.16);
+  assert.ok(voices.decodedBedInput.gain.value > 1);
+  const cruiseGain = voices.decodedBedInput.gain.value;
+  updateCobraAudioVoices(voices, audio, { ...COBRA_RUNNING, cobra_collective: 1 });
+  assert.ok(voices.decodedBedInput.gain.value > cruiseGain);
+  assert.equal(voices.decodedBedAttachment.source.playbackRate.value, 1,
+    "collective changes load, not the recording's governed rotor pitch");
+  updateCobraAudioVoices(voices, audio, {
+    ...COBRA_RUNNING, cobra_turnaround_phase: "shutting-down",
+  });
+  assert.equal(voices.decodedBedInput.gain.value, 0);
+  assert.equal(voices.turbineGain.gain.value, fallbackTone,
+    "the retiring recording restores the coast-down machinery");
+  updateCobraAudioVoices(voices, audio, COBRA_RUNNING, { muted: true });
+  assert.equal(voices.master.gain.value, 0);
+  assert.equal(voices.decodedBedInput.gain.value, 0);
 });
 
 test("fires each procedural turnaround edge exactly once in the live graph", () => {
