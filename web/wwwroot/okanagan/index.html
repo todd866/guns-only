@@ -7,7 +7,7 @@
   <base href="/">
   <title>Guns Only · Okanagan Fire Boss</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/okanagan/styles.css?v=358">
+  <link rel="stylesheet" href="/okanagan/styles.css?v=359">
 </head>
 <body class="paused">
   <main class="viewport" aria-label="Okanagan Fire Boss simulator">
@@ -29,6 +29,11 @@
       <button id="drop" type="button">DROP<br><kbd>SPACE</kbd></button>
     </div>
     <button id="pause-button" type="button" aria-label="Pause">Ⅱ</button>
+    <div id="trim-controls" role="group" aria-label="Pitch trim">
+      <button id="trim-down" type="button" aria-label="Trim nose down" title="Trim nose down [">−</button>
+      <span>TRIM <output id="trim-value" aria-live="polite">0%</output></span>
+      <button id="trim-up" type="button" aria-label="Trim nose up" title="Trim nose up ]">+</button>
+    </div>
     <div id="touch-flight-controls" aria-label="Mobile flight controls">
       <button id="left-stick" class="flight-stick" type="button" aria-label="Left stick: throttle and yaw"><i></i><span>THR / YAW</span></button>
       <button id="right-stick" class="flight-stick" type="button" aria-label="Right stick: pitch and roll"><i></i><span>STICK</span></button>
@@ -68,7 +73,7 @@
         <span>WORKING <strong id="plan-working">197 KG</strong></span>
       </section>
       <p class="scenery-note">Defence exercises begin on arrival. Track mapped buildings and lift terminals through the attack, then hand off to ground crews. Fictional fires; recorded condition is not a forecast.</p>
-      <p class="preflight-controls"><strong>CONTROL CHECK</strong> <span>ARROWS pitch/roll · A/D rudder · W/S power · E scoops · hold SPACE drop · TAB target · V padlock</span></p>
+      <p class="preflight-controls"><strong>CONTROL CHECK</strong> <span>ARROWS pitch/roll · A/D rudder · W/S power · [ / ] nose down/up trim · E scoops · hold SPACE drop · TAB target · V padlock</span></p>
       <details class="scenery-sources"><summary>Scenery and map credits</summary>
         <p>Contains information licensed under the <a href="https://gis-rdco.hub.arcgis.com/pages/open-data-license" target="_blank" rel="noopener">Open Government License – Regional District of Central Okanagan</a>. Terrain: Natural Resources Canada. Resorts: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> and <a href="https://github.com/microsoft/CanadianBuildingFootprints" target="_blank" rel="noopener">Microsoft building footprints</a>, ODbL.</p>
         <p><a href="/content/packs/okanagan-fire/environment/okanagan-resorts.osm.json" download>Download resort map data</a> · <a href="/content/packs/okanagan-fire/environment/SOURCES.md" target="_blank" rel="noopener">Sources and accuracy limits</a></p>
@@ -88,7 +93,7 @@
       <button id="restart" class="mission-action" type="button">Restart</button>
       <button id="choose-sortie" class="mission-action" type="button">Sorties</button>
       <button id="sound" class="mission-action" type="button" aria-pressed="true">Sound on</button>
-      <p class="control-legend">ARROWS PITCH / ROLL · A/D RUDDER · W/S POWER<br>TAB TARGET · V PADLOCK · E SCOOPS · HOLD SPACE DROP · M SOUND</p>
+      <p class="control-legend">ARROWS PITCH / ROLL · A/D RUDDER · W/S POWER<br>[ / ] TRIM NOSE DOWN / UP · +/− BUTTONS ALSO AVAILABLE<br>TAB TARGET · V PADLOCK · E SCOOPS · HOLD SPACE DROP · M SOUND</p>
       <a class="mission-action" href="/?program=okanagan-fireboss&amp;menu=1">Aircraft</a>
     </div>
   </section>
@@ -111,7 +116,7 @@
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=358", location.href).searchParams.get("v");
+      const releaseBuild = new URL("../service-worker.js?v=359", location.href).searchParams.get("v");
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
       const workers = registrations.flatMap((registration) => [registration.active, registration.waiting, registration.installing]).filter(Boolean);
       const stale = [navigator.serviceWorker?.controller, ...workers].filter(Boolean)
@@ -126,15 +131,15 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/_framework/blazor.webassembly.js?v=358";
+        script.src = "/_framework/blazor.webassembly.js?v=359";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Fire Boss runtime.")), { once: true });
         document.head.append(script);
       });
-      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=358");
+      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=359");
       const access = renderExperienceGate({ experienceId: "okanagan-fireboss" });
-      if (access.allowed) await import("/okanagan/main.js?v=358");
+      if (access.allowed) await import("/okanagan/main.js?v=359");
     } catch (error) {
       console.error(error);
       document.querySelector("#status").textContent = error instanceof Error ? error.message : String(error);

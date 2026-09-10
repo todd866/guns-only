@@ -8,7 +8,9 @@ public static class OkanaganSnapshotProjection
 {
     static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public static string BuildStateJson(OkanaganFireMission mission)
+    public static string BuildStateJson(OkanaganFireMission mission,
+        FireBossPilotCommand? appliedCommand = null, FireBossControlTapBuffer? controlTaps = null,
+        FireBossPilotCommand? pendingCommand = null)
     {
         OkanaganMissionSnapshot state = mission.Snapshot();
         FireBossTelemetry aircraft = state.Aircraft;
@@ -34,8 +36,26 @@ public static class OkanaganSnapshotProjection
             tas_mps = aircraft.TrueAirspeedMps,
             vertical_speed_mps = aircraft.VerticalSpeedMps,
             throttle = aircraft.Throttle,
+            elevator_trim = aircraft.ElevatorTrim,
+            applied_controls = appliedCommand is FireBossPilotCommand applied ? new {
+                pitch = applied.Pitch, roll = applied.Roll, yaw = applied.Yaw,
+                elevator_trim = applied.ElevatorTrim, throttle = applied.Throttle,
+                scoops = applied.ScoopsExtended, drop = applied.DropRequested,
+            } : null,
+            pending_controls = pendingCommand is FireBossPilotCommand pending ? new {
+                pitch = pending.Pitch, roll = pending.Roll, yaw = pending.Yaw,
+                elevator_trim = pending.ElevatorTrim, throttle = pending.Throttle,
+                scoops = pending.ScoopsExtended, drop = pending.DropRequested,
+            } : null,
+            input_tap_ticks = new {
+                pitch = controlTaps?.PitchTicks ?? 0,
+                roll = controlTaps?.RollTicks ?? 0,
+                yaw = controlTaps?.YawTicks ?? 0,
+            },
             water_kg = aircraft.WaterLoadKg,
             water_capacity_kg = FireBossDynamics.MaximumWaterKg,
+            scoop_target_water_kg = state.ScoopTargetWaterKg,
+            drop_target_water_kg = state.DropTargetWaterKg,
             water_released_this_tick_kg = aircraft.WaterReleasedThisTickKg,
             // Browser presentation runs at the display cadence, not the 120 Hz authority cadence.
             // Publish flow as well as the fixed-tick quantum so drop acoustics do not change when

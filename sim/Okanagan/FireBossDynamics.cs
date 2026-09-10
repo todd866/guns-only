@@ -16,7 +16,8 @@ public readonly record struct FireBossPilotCommand(
     double Yaw,
     double Throttle,
     bool ScoopsExtended,
-    bool DropRequested);
+    bool DropRequested,
+    double ElevatorTrim = 0.0);
 
 public readonly record struct FireBossTelemetry(
     Vec3D PositionWorldM,
@@ -42,7 +43,8 @@ public readonly record struct FireBossTelemetry(
     double ScoopRateKgPerSecond,
     double WaterReleasedThisTickKg,
     string ScoopFault,
-    bool Flyable);
+    bool Flyable,
+    double ElevatorTrim = 0.0);
 
 /// <summary>
 /// AT-802F mission shell. Airborne authority is the same AircraftSim used by every fixed-wing
@@ -55,11 +57,15 @@ public sealed class FireBossDynamics
     public const double MaximumWaterKg = 3_104.0;
     public const double EmptyOperatingMassKg = 4_420.0;
     public const double InitialFuelKg = 925.0;
-    public const double MaximumGrossMassKg = 8_200.0;
-    public const double PublishedMaximumSpeedMps = 89.4;
+    // Manufacturer land-takeoff / scooping limit; see source register.
+    public const double MaximumGrossMassKg = 7_257.0;
+    // Manufacturer land-landing limit. Mission guidance uses it to plan load release;
+    // exceeding an operating limit does not itself inject a damage/crash event.
+    public const double MaximumLandingMassKg = 5_216.0;
     public const double ScoopMinimumSpeedMps = 34.0;
     public const double ScoopMaximumSpeedMps = 49.0;
     public const double ScoopNominalRateKgPerSecond = 235.0;
+    public const double WaterPitchLimitRad = 8.0 * Math.PI / 180.0;
     public const double WingAreaM2 = 37.25;
     public const double MaximumShaftPowerW = 1_193_000.0;
     public const string DynamicsProviderId = FixedWingAircraftVehicleAdapter.ProviderId;
@@ -77,6 +83,7 @@ public sealed class FireBossDynamics
     FireBossSurfaceMode _surfaceMode;
     bool _flyable = true;
     bool _hasFlown;
+    readonly double _initialElevatorTrim;
 
     FireBossDynamics(Vec3D position, double speedMps, double gammaRad,
         double headingRad, FireBossSurfaceMode surfaceMode, double fuelKg)
@@ -87,6 +94,10 @@ public sealed class FireBossDynamics
         double alphaRad = surfaceMode == FireBossSurfaceMode.Airborne
             ? TrimAngleOfAttack(position.Y, speedMps, massKg)
             : 0.0;
+        _initialElevatorTrim = ConventionalTailAerodynamics.TrimElevator(
+            surfaceMode == FireBossSurfaceMode.Airborne ? alphaRad
+                : TrimAngleOfAttack(position.Y, 55.0, massKg),
+            FlightModel.At802fFireBossPublicDataSurrogate.ConventionalTail);
         double pitchRad = gammaRad + alphaRad;
         QuaternionD attitude = Attitude(headingRad, pitchRad, 0.0);
         var initial = new AircraftState(position, speedMps, gammaRad, headingRad, 0.0,
@@ -106,6 +117,7 @@ public sealed class FireBossDynamics
     public bool Flyable => _flyable;
 
     internal AircraftSim SharedAircraft => _aircraft;
+    internal double InitialElevatorTrim => _initialElevatorTrim;
     internal PlayerVehicleState SharedVehicleState => _adapter.State;
     internal long AirbornePhysicsSteps => _airborneAuthorityTick;
 
@@ -201,7 +213,7 @@ public sealed class FireBossDynamics
 
     void StepAirborne(in FireBossPilotCommand command)
     {
-        PilotCommand sharedCommand = ToSharedPilotCommand(command, _aircraft.State.Bank);
+        PilotCommand sharedCommand = ToSharedPilotCommand(command, _aircraft.BodyRollRad, _initialElevatorTrim);
         _adapter.Advance(new PlayerVehicleAdvanceInput(
             Tick: _airborneAuthorityTick++,
             Command: PlayerVehicleCommand.FromFixedWing(sharedCommand),
@@ -222,13 +234,20 @@ public sealed class FireBossDynamics
 
         AircraftState state = _aircraft.State;
         double speedMps = state.Speed;
-        double density = StandardAtmosphere1976.Instance.Sample(state.Position.Y).DensityKgM3;
-        double q = 0.5 * density * speedMps * speedMps;
-        double surfaceAeroDragN = q * WingAreaM2 * 0.115;
-        double accelerationMps2 = (_aircraft.LastEngineOperatingPoint.NetThrustN
-            - surfaceAeroDragN) / grossMassKg;
+        AircraftParams parameters = FlightModel.At802fFireBossPublicDataSurrogate;
+        PilotCommand sharedCommand = ToSharedPilotCommand(command, _aircraft.BodyRollRad,
+            _initialElevatorTrim);
+        var raw = new RawState(state.Position, state.VelocityVector(), state.Bank, grossMassKg,
+            state.BodyAttitude, state.BodyRates);
+        double thrust = _aircraft.LastEngineOperatingPoint.NetThrustN;
+        AeroResult aero = FlightModel.Aerodynamics(raw, sharedCommand, parameters, Vec3D.Zero,
+            thrust, AirframeAerodynamicState.Clean);
+        StateDeriv derivatives = FlightModel.Derivatives(raw, sharedCommand, parameters,
+            new Vec3D(0, 1, 0), Vec3D.Zero, thrust, AirframeAerodynamicState.Clean);
+        double normalForce = Math.Max(0.0, -aero.Accel.Y * grossMassKg);
+        double accelerationMps2 = aero.Accel.Dot(Forward(_aircraft.BodyYawRad));
         if (_surfaceMode == FireBossSurfaceMode.Runway)
-            accelerationMps2 -= 0.24;
+            accelerationMps2 -= 0.025 * normalForce / grossMassKg;
         else
         {
             double planing = Math.Clamp(speedMps / 34.0, 0.0, 1.0);
@@ -237,24 +256,41 @@ public sealed class FireBossDynamics
                 + 0.62 * (_waterKg / MaximumWaterKg);
             if (scoopDeployed) accelerationMps2 -= 1.05;
         }
+        speedMps = Math.Max(0.0, speedMps + accelerationMps2 * FixedDeltaSeconds);
 
-        speedMps = Math.Clamp(speedMps + accelerationMps2 * FixedDeltaSeconds,
-            0.0, PublishedMaximumSpeedMps);
-        double maximumPitchDeg = _surfaceMode == FireBossSurfaceMode.Runway ? 9.0 : 8.0;
-        double maximumRollDeg = 7.0;
-        double targetPitch = Math.Clamp(command.Pitch, -0.22, 1.0)
-            * maximumPitchDeg * Math.PI / 180.0;
-        double pitchRad = MoveToward(_aircraft.BodyPitchRad, targetPitch,
-            15.0 * Math.PI / 180.0 * FixedDeltaSeconds);
-        double targetRollRate = command.Roll * 25.0 * Math.PI / 180.0;
-        double rollRate = MoveToward(state.BodyRates.P, targetRollRate,
-            80.0 * Math.PI / 180.0 * FixedDeltaSeconds);
-        double rollRad = Math.Clamp(_aircraft.BodyRollRad + rollRate * FixedDeltaSeconds,
-            -maximumRollDeg * Math.PI / 180.0, maximumRollDeg * Math.PI / 180.0);
+        // The same elevator moment acts before and after liftoff. The remaining wheel/float
+        // reaction resists rotation while loaded; ground contact supplies pitch/roll stops.
+        // Lever arms/stops are explicit provisional contact geometry, not aircraft test data.
+        double maximumPitch = _surfaceMode == FireBossSurfaceMode.Runway
+            ? 9.0 * Math.PI / 180.0 : WaterPitchLimitRad;
+        double pitchAcceleration = derivatives.DBodyRates.Q - normalForce * 0.60 / parameters.IyyKgM2;
+        double bodyPitchRate = state.BodyRates.Q + pitchAcceleration * FixedDeltaSeconds;
+        double rollMoment = derivatives.RollMomentNm;
+        double contactRollMoment = normalForce * 2.0;
+        double rollAcceleration = Math.CopySign(Math.Max(0.0,
+            Math.Abs(rollMoment) - contactRollMoment), rollMoment) / parameters.IxxKgM2;
+        double bodyRollRate = state.BodyRates.P + rollAcceleration * FixedDeltaSeconds;
+        // Float/wheel support restores an already heeled aircraft while there is a normal load.
+        bodyRollRate -= (_aircraft.BodyRollRad * normalForce * 2.0 / parameters.IxxKgM2
+            + 4.0 * bodyRollRate) * FixedDeltaSeconds;
         double steeringAuthority = Math.Clamp(1.15 - speedMps / 58.0, 0.16, 1.0);
-        double headingRad = Wrap(_aircraft.BodyYawRad
-            + command.Yaw * 16.0 * Math.PI / 180.0
-                * steeringAuthority * FixedDeltaSeconds);
+        double headingRate = command.Yaw * Math.Min(speedMps / 18.0, 16.0 * Math.PI / 180.0)
+            * steeringAuthority;
+        // Steering constrains Euler heading rate. Convert body P/Q to Euler rates before
+        // advancing the contact pose; their components differ during a banked rotation/turn.
+        var eulerRates = FireBossSurfaceKinematics.ToEulerRates(_aircraft.BodyRollRad,
+            _aircraft.BodyPitchRad, new BodyRates(bodyRollRate, bodyPitchRate, state.BodyRates.R),
+            headingRate);
+        double pitchRate = eulerRates.Pitch;
+        double rollRate = eulerRates.Roll;
+        double pitchRad = _aircraft.BodyPitchRad + pitchRate * FixedDeltaSeconds;
+        if (pitchRad <= 0.0) { pitchRad = 0.0; pitchRate = Math.Max(0.0, pitchRate); }
+        if (pitchRad >= maximumPitch) { pitchRad = maximumPitch; pitchRate = Math.Min(0.0, pitchRate); }
+        double rollRad = Math.Clamp(_aircraft.BodyRollRad + rollRate * FixedDeltaSeconds,
+            -7.0 * Math.PI / 180.0, 7.0 * Math.PI / 180.0);
+        if (Math.Abs(rollRad) >= 7.0 * Math.PI / 180.0 && rollRad * rollRate > 0.0)
+            rollRate = 0.0;
+        double headingRad = Wrap(_aircraft.BodyYawRad + headingRate * FixedDeltaSeconds);
         Vec3D forward = Forward(headingRad);
         Vec3D velocity = forward * speedMps;
         Vec3D position = state.Position + velocity * FixedDeltaSeconds;
@@ -269,33 +305,21 @@ public sealed class FireBossDynamics
         position = position with { Y = surfaceHeight };
         QuaternionD attitude = Attitude(headingRad, pitchRad, rollRad);
         var constrained = new AircraftState(position, speedMps, 0.0, headingRad, rollRad,
-            grossMassKg, attitude, new BodyRates(rollRate, 0.0, 0.0));
+            grossMassKg, attitude, FireBossSurfaceKinematics.ToBodyRates(rollRad, pitchRad,
+                rollRate, pitchRate, headingRate));
         _aircraft.AdoptExternalKinematics(constrained, pilotNormalAccelerationG: 1.0);
 
-        double takeoffSpeed = _surfaceMode == FireBossSurfaceMode.Water
-            ? WaterTakeoffSpeedMps(grossMassKg) : StallSpeedMps(grossMassKg) * 1.03;
-        double rotationPitch = _surfaceMode == FireBossSurfaceMode.Water ? 4.0 : 3.0;
-        double surfaceLiftCoefficient = Math.Clamp(
-            FlightModel.At802fFireBossPublicDataSurrogate.ZeroLiftCoefficient
-            + FlightModel.At802fFireBossPublicDataSurrogate.CLAlpha * pitchRad,
-            -0.72, 2.25);
-        double surfaceLiftN = 0.5 * density * speedMps * speedMps
-            * WingAreaM2 * surfaceLiftCoefficient;
-        if (speedMps >= takeoffSpeed
-            && pitchRad >= rotationPitch * Math.PI / 180.0
-            && surfaceLiftN >= grossMassKg * GravityMps2 * 1.08
+        var rotated = new RawState(position, velocity, rollRad, grossMassKg, attitude,
+            constrained.BodyRates);
+        AeroResult takeoffAero = FlightModel.Aerodynamics(rotated, sharedCommand, parameters,
+            Vec3D.Zero, thrust, AirframeAerodynamicState.Clean);
+        if (takeoffAero.Accel.Y > 0.0
             && !(_surfaceMode == FireBossSurfaceMode.Water && scoopDeployed))
         {
             _surfaceMode = FireBossSurfaceMode.Airborne;
             _hasFlown = true;
-            double gammaRad = 1.5 / Math.Max(speedMps, 1.0);
-            Vec3D airbornePosition = position with { Y = surfaceHeight + 0.6 };
-            _aircraft.AdoptExternalKinematics(constrained with
-            {
-                Position = airbornePosition,
-                Gamma = gammaRad,
-                BodyRates = default
-            }, pilotNormalAccelerationG: 1.0);
+            // Lift removes the contact constraint. The next aerodynamic tick starts with exactly
+            // this position, velocity, attitude and rate: no height, climb-rate or rate-reset kick.
         }
     }
 
@@ -304,7 +328,7 @@ public sealed class FireBossDynamics
         AircraftState state = _aircraft.State;
         double sinkMps = Math.Max(0.0, -state.VelocityVector().Y);
         double rollRad = _aircraft.BodyRollRad;
-        if (state.Position.Y <= LakeHeightM + 0.15
+        if (state.VelocityVector().Y < 0.0 && state.Position.Y <= LakeHeightM
             && OkanaganGeo.IsOverCentralLake(state.Position))
         {
             if (sinkMps > 3.2 || Math.Abs(rollRad) > 13.0 * Math.PI / 180.0)
@@ -314,7 +338,7 @@ public sealed class FireBossDynamics
             return;
         }
 
-        if (_hasFlown && state.Position.Y <= 433.15
+        if (_hasFlown && state.VelocityVector().Y < 0.0 && state.Position.Y <= 433.0
             && OkanaganGeo.IsOverKelownaRunway(state.Position))
         {
             if (sinkMps > 3.0 || Math.Abs(rollRad) > 9.0 * Math.PI / 180.0)
@@ -388,23 +412,20 @@ public sealed class FireBossDynamics
             scoopRate,
             waterReleased,
             scoopFault,
-            _flyable);
+            _flyable,
+            command.ElevatorTrim);
     }
 
     internal static PilotCommand ToSharedPilotCommand(in FireBossPilotCommand command,
-        double currentBankRad = 0.0)
-    {
-        double gDemand = command.Pitch >= 0.0
-            ? 1.0 + command.Pitch * 2.5
-            : 1.0 + command.Pitch * 1.5;
-        return new PilotCommand(
-            GDemand: gDemand,
+        double currentBankRad = 0.0, double initialElevatorTrim = 0.0) => new(
+            GDemand: 1.0,
             BankTarget: currentBankRad,
             Throttle: command.Throttle,
             Rudder: command.Yaw,
             RollControl: command.Roll,
-            DirectLateralControl: true);
-    }
+            DirectLateralControl: true,
+            ElevatorControl: Math.Clamp(command.Pitch + initialElevatorTrim
+                + command.ElevatorTrim, -1.0, 1.0));
 
     static FireBossPilotCommand Sanitize(in FireBossPilotCommand command) => new(
         Math.Clamp(Finite(command.Pitch), -1.0, 1.0),
@@ -412,7 +433,8 @@ public sealed class FireBossDynamics
         Math.Clamp(Finite(command.Yaw), -1.0, 1.0),
         Math.Clamp(Finite(command.Throttle), 0.0, 1.0),
         command.ScoopsExtended,
-        command.DropRequested);
+        command.DropRequested,
+        Math.Clamp(Finite(command.ElevatorTrim), -0.5, 0.5));
 
     static double TrimAngleOfAttack(double altitudeM, double speedMps, double massKg)
     {
@@ -425,12 +447,6 @@ public sealed class FireBossDynamics
             -5.0 * Math.PI / 180.0,
             16.0 * Math.PI / 180.0);
     }
-
-    static double StallSpeedMps(double grossMassKg) =>
-        31.5 * Math.Sqrt(grossMassKg / 5_470.0);
-
-    static double WaterTakeoffSpeedMps(double grossMassKg) =>
-        39.0 * Math.Sqrt(grossMassKg / 5_470.0);
 
     static QuaternionD Attitude(double headingRad, double pitchRad, double rollRad)
     {

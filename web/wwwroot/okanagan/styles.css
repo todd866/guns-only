@@ -40,6 +40,31 @@ button, a { font:inherit; touch-action:manipulation; }
 #controls kbd { font-size:7px; opacity:.68; }
 .touch-target-control { display:none; }
 #pause-button { top:calc(env(safe-area-inset-top,0px) + 10px); left:calc(env(safe-area-inset-left,0px) + 10px); min-width:38px; z-index:5; }
+#trim-controls {
+  position:fixed; z-index:5; top:calc(env(safe-area-inset-top,0px) + 10px);
+  left:calc(env(safe-area-inset-left,0px) + 56px); display:flex; align-items:center; gap:5px;
+  color:rgba(217,255,229,.82); background:rgba(2,10,16,.66); border-radius:3px; font-size:9px;
+}
+#trim-controls span { min-width:72px; text-align:center; }
+#trim-controls button {
+  min-width:34px; min-height:34px; padding:4px; border:1px solid rgba(77,255,136,.28);
+  border-radius:3px; color:inherit; background:transparent; font-size:17px;
+}
+#trim-controls button:disabled { opacity:.35; }
+#trim-controls button:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
+body[data-input="touch"] #trim-controls button { min-width:40px; min-height:44px; }
+body[data-input="touch"] #trim-controls {
+  left:calc(env(safe-area-inset-left,0px) + 10px);
+  top:calc(env(safe-area-inset-top,0px) + 72px);
+}
+body[data-input="touch"] #nav-button {
+  left:calc(env(safe-area-inset-left,0px) + 56px); right:auto;
+}
+@media (orientation:landscape) {
+  body[data-input="touch"] #trim-controls {
+    left:calc(env(safe-area-inset-left,0px) + 92px);
+  }
+}
 #nav-button { top:calc(env(safe-area-inset-top,0px) + 10px); right:calc(env(safe-area-inset-right,0px) + 10px); min-width:48px; }
 #nav-button[aria-pressed="true"] { color:#07120b; background:var(--green); }
 #map { right:calc(env(safe-area-inset-right,0px) + 10px); top:calc(env(safe-area-inset-top,0px) + 52px); width:240px; height:192px; border:1px solid rgba(77,255,136,.3); background:rgba(2,12,15,.82); }

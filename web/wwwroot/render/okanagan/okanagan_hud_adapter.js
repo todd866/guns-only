@@ -150,18 +150,19 @@ export function okanaganFlightState(current = {}) {
     opponent_body_present: false,
     px: finite(position.x),
     py: finite(position.y),
-    // The shared flight snapshot is Z-north and the main renderer flips it. Okanagan renders
-    // Z-north directly, so publish the inverse here and let the shared HUD's one conversion put
-    // the conformal FPV back on the real velocity vector.
-    pz: -finite(position.z),
+    // The shared HUD converts the canonical Z-north snapshot to render Z-south once,
+    // matching Okanagan's geographic world root and cockpit camera.
+    pz: finite(position.z),
     vx: finite(velocity.x),
     vy: finite(velocity.y, verticalMps),
-    vz: -finite(velocity.z),
+    vz: finite(velocity.z),
     g_actual: finite(current.load_factor, 1),
     pilot_gz: finite(current.load_factor, 1),
     pilot_gz_valid: true,
     water_load_kg: Math.max(0, finite(current.water_kg)),
     water_capacity_kg: Math.max(1, finite(current.water_capacity_kg, 3_104)),
+    fireboss_scoop_target_kg: optionalFinite(current.scoop_target_water_kg),
+    fireboss_drop_target_kg: optionalFinite(current.drop_target_water_kg),
     fireboss_surface: String(current.surface ?? ""),
     fireboss_scoop_valid: current.scoop_valid === true,
     fireboss_scoops_commanded: current.scoops_commanded === true,

@@ -11,6 +11,9 @@ public static partial class OkanaganWebBridge
     const double MaximumFrameDeltaSeconds = 0.1;
     static OkanaganFireMission? _mission;
     static FireBossPilotCommand _command;
+    static FireBossPilotCommand _lastAppliedCommand;
+    static readonly FireBossControlTapBuffer ControlTaps = new();
+    static bool _paused;
     static double _accumulatorSeconds;
 
     [JSExport]
@@ -18,6 +21,9 @@ public static partial class OkanaganWebBridge
     {
         _mission = OkanaganFireMission.Create(ResolveSortie(sortie));
         _command = new FireBossPilotCommand(0.0, 0.0, 0.0, 0.65, false, false);
+        _lastAppliedCommand = _command;
+        _paused = false;
+        ControlTaps.Reset();
         _accumulatorSeconds = 0.0;
     }
 
@@ -48,7 +54,25 @@ public static partial class OkanaganWebBridge
             Clamp(yaw, -1.0, 1.0, nameof(yaw)),
             Clamp(throttle, 0.0, 1.0, nameof(throttle)),
             scoops,
-            drop);
+            drop,
+            _command.ElevatorTrim);
+    }
+
+    [JSExport]
+    public static void SetElevatorTrim(double trim) =>
+        _command = _command with { ElevatorTrim = Clamp(trim, -0.5, 0.5, nameof(trim)) };
+
+    [JSExport]
+    public static void QueueControlTap(int axis, double direction, double durationSeconds)
+    {
+        if (!_paused) ControlTaps.Queue(axis, direction, durationSeconds);
+    }
+
+    [JSExport]
+    public static void ReleaseFlightControls()
+    {
+        ControlTaps.Clear();
+        _command = _command with { Pitch = 0, Roll = 0, Yaw = 0, DropRequested = false };
     }
 
     [JSExport]
@@ -57,11 +81,18 @@ public static partial class OkanaganWebBridge
         OkanaganFireMission mission = RequireMission();
         if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0.0)
             throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        if (_paused) return 0;
         _accumulatorSeconds += Math.Min(deltaSeconds, MaximumFrameDeltaSeconds);
         int ticks = 0;
         while (_accumulatorSeconds + 1e-12 >= FixedDeltaSeconds && ticks < 12)
         {
-            mission.Step(_command);
+            if (mission.Phase is OkanaganMissionPhase.Complete or OkanaganMissionPhase.Failed)
+            {
+                _accumulatorSeconds = 0.0;
+                break;
+            }
+            _lastAppliedCommand = ControlTaps.Apply(_command);
+            mission.Step(_lastAppliedCommand);
             _accumulatorSeconds -= FixedDeltaSeconds;
             ticks++;
         }
@@ -69,10 +100,20 @@ public static partial class OkanaganWebBridge
     }
 
     [JSExport]
-    public static string GetState() => OkanaganSnapshotProjection.BuildStateJson(RequireMission());
+    public static string GetState() => OkanaganSnapshotProjection.BuildStateJson(
+        RequireMission(), _lastAppliedCommand, ControlTaps, _command);
 
     [JSExport]
-    public static void SetPaused(bool paused) => RequireMission().SetPaused(paused);
+    public static void SetPaused(bool paused)
+    {
+        RequireMission().SetPaused(paused);
+        _paused = paused;
+        if (paused)
+        {
+            ReleaseFlightControls();
+            _accumulatorSeconds = 0.0;
+        }
+    }
 
     static OkanaganFireMission RequireMission() =>
         _mission ?? throw new InvalidOperationException("Okanagan sortie has not been started.");

@@ -19,7 +19,7 @@ public sealed class OkanaganFlightPathTests
         var untreatedSites = incident == null ? null : new OkanaganProtection(incident.Sites);
         double untreatedAccumulator = 0;
         bool trackUntreated = false;
-        var pilot = new OkanaganTestPilot();
+        var pilot = new OkanaganTestPilot(mission.Aircraft.InitialElevatorTrim);
         var phases = new List<OkanaganMissionPhase>();
         var samples = new List<object>();
         var releases = new List<object>();
@@ -54,14 +54,18 @@ public sealed class OkanaganFlightPathTests
                         state.Aircraft.PositionWorldM, state.Aircraft.TrueAirspeedMps, state.Aircraft.FuelKg,
                         Gate = state.Route.ElementAtOrDefault(Math.Min(state.ActiveGateIndex, state.Route.Count - 1)),
                         state.Aircraft.VerticalSpeedMps, state.Aircraft.HeadingRad, state.Aircraft.RollRad,
+                        state.Aircraft.PitchRad, state.Aircraft.AngleOfAttackRad,
+                        state.Aircraft.PitchRateRadPerSecond, state.Aircraft.LoadFactor,
                         Command = command,
-                        state.Aircraft.WaterLoadKg, ClearanceM = agl, state.EffectiveWaterKg,
+                        state.Aircraft.WaterLoadKg, state.ScoopTargetWaterKg, state.DropTargetWaterKg, state.Cue,
+                        ClearanceM = agl, state.EffectiveWaterKg,
                         Intact = state.Sites.Count(s => s.Status == "intact"),
                         Damaged = state.Sites.Count(s => s.Status == "damaged"), Lost = state.Sites.Count(s => s.Status == "lost") });
                     nextSample = state.MissionSeconds + 5;
                 }
                 if (state.Phase is OkanaganMissionPhase.Complete or OkanaganMissionPhase.Failed) break;
-                command = pilot.Command(state);
+                command = pilot.Command(state, mission.Aircraft.SharedAircraft.LastEngineOperatingPoint.NetThrustN,
+                    mission.RecommendsShallowLoadedClimb());
             }
             mission.Step(command);
             // Match the observed incident clock to 0.1 s, with the same fixed fire step and
@@ -88,12 +92,21 @@ public sealed class OkanaganFlightPathTests
             Directory.CreateDirectory(directory);
             File.WriteAllText(Path.Combine(directory, $"{sortie}.json"), JsonSerializer.Serialize(new {
                 diagnostic, maximumWater, minimumTransitClearance, final.EffectiveWaterKg,
-                final.IncidentHandedOff, final.DropAimWorldM, final.Sites, UntreatedSites = untreatedSites?.Snapshot(), releases, samples }));
+                mission.PerformancePlan,
+                final.ScoopTargetWaterKg, final.DropTargetWaterKg,
+                final.IncidentHandedOff, final.DropAimWorldM, final.Sites, UntreatedSites = untreatedSites?.Snapshot(), releases, samples },
+                new JsonSerializerOptions {
+                    // A flight that never reaches transit leaves its minimum clearance at +∞.
+                    // Retain that explicit diagnostic instead of throwing before the assertion.
+                    NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals,
+                }));
         }
         Assert.True(final.Phase == OkanaganMissionPhase.Complete, diagnostic);
         Assert.True(final.Aircraft.Flyable && OkanaganGeo.IsOverKelownaRunway(final.Aircraft.PositionWorldM), diagnostic);
         Assert.InRange(final.Aircraft.TrueAirspeedMps, 0, 4);
-        Assert.True(maximumWater >= 2800 && maximumWater - final.Aircraft.WaterLoadKg >= 2400, diagnostic);
+        Assert.True(final.ScoopTargetWaterKg > 1 && final.DropTargetWaterKg > 0, diagnostic);
+        Assert.True(maximumWater >= final.ScoopTargetWaterKg - 1
+            && maximumWater - final.Aircraft.WaterLoadKg >= final.DropTargetWaterKg - 1, diagnostic);
         Assert.True(final.Aircraft.FuelKg >= final.FuelPlan.MinimumRtbFuelKg, diagnostic);
         Assert.True(minimumTransitClearance >= 25, diagnostic);
         Assert.Equal(1, final.CompletedCycles);

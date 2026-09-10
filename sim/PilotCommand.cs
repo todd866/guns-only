@@ -11,4 +11,7 @@ namespace GunsOnly.Sim;
 public readonly record struct PilotCommand(double GDemand, double BankTarget, double Throttle, double Rudder,
     double CommandedPitchRad = double.NaN, bool EnvelopeOverride = false,
     double RollControl = 0.0, double CommandedAlphaRad = double.NaN,
-    double SasRollControl = 0.0, bool DirectLateralControl = false);
+    double SasRollControl = 0.0, bool DirectLateralControl = false,
+    // Finite normalized elevator selects a conventional tail, when the airframe supplies one.
+    // NaN retains the existing G/attitude controller. This is actuator position, not G demand.
+    double ElevatorControl = double.NaN);

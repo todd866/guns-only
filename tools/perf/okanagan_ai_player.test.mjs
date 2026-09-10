@@ -6,6 +6,8 @@ import {
   OKANAGAN_REQUIRED_SCREENSHOTS,
   OkanaganDigitalAxisModulator,
   assessOkanaganAiFlight,
+  assessOkanaganTelemetrySanity,
+  compactOkanaganSample,
   okanaganAiCommand,
   okanaganPhaseTimeoutSeconds,
   okanaganAiTarget,
@@ -237,7 +239,7 @@ function successfulFixture() {
     "runway", "airborne", "water", "airborne", "airborne",
     "airborne", "airborne", "runway", "runway",
   ];
-  const water = [0, 0, 3_000, 3_000, 0, 0, 0, 0, 0];
+  const water = [0, 0, 2_200, 2_200, 0, 0, 0, 0, 0];
   return phases.map((phase, index) => ({
     wallS: index,
     simS: index,
@@ -250,8 +252,26 @@ function successfulFixture() {
     xM: index * 1_000,
     yM: surfaces[index] === "water" ? 342 : surfaces[index] === "runway" ? 433 : 700,
     zM: index * 1_100,
+    vxMps: 0,
+    vyMps: 0,
+    vzMps: 50,
+    speedMps: 50,
+    verticalSpeedMps: 0,
+    headingRad: 0,
+    pitchRad: 0.05,
+    rollRad: 0,
+    angleOfAttackRad: 0.05,
+    pitchRateRadPerSecond: 0,
+    rollRateRadPerSecond: 0,
+    loadFactor: 1,
+    enginePowerFraction: 0.65,
+    throttle: 0.65,
     waterKg: water[index],
+    scoopTargetWaterKg: 2_200,
+    dropTargetWaterKg: index >= 3 ? 1_870 : 0,
+    fuelKg: 500,
     completedCycles: index >= 5 ? 1 : 0,
+    activeGateIndex: 0,
     waterReleasedThisTickKg: phase === "downwind" ? 18 : 0,
     fuelAboveMinimumKg: 100,
     scoopsCommanded: phase === "scoop",
@@ -310,9 +330,108 @@ test("assessment requires the whole real-input scoop, drop, RTB and debrief life
   const samples = successfulFixture();
   const assessment = assessOkanaganAiFlight(samples, successfulJourney());
   assert.equal(assessment.pass, true, assessment.failures.join("\n"));
+  assert.equal(assessment.passScope, "mission-lifecycle-and-telemetry-sanity");
+  assert.equal(assessment.lifecycle.pass, true);
+  assert.equal(assessment.telemetrySanity.pass, true);
+  assert.equal(assessment.handlingEvidence.status, "unverified");
+  assert.equal(assessment.handlingEvidence.approved, false);
+  assert.equal(assessment.metrics.handlingApproved, false);
+  assert.equal(assessment.metrics.assessmentScope, assessment.passScope);
   assert.deepEqual(assessment.metrics.phases, OKANAGAN_REQUIRED_PHASES);
-  assert.equal(assessment.metrics.maximumWaterKg, 3_000);
-  assert.equal(assessment.metrics.releasedWaterKg, 3_000);
+  assert.equal(assessment.metrics.maximumWaterKg, 2_200);
+  assert.equal(assessment.metrics.releasedWaterKg, 2_200);
+});
+
+test("assessment uses the captured legal payload target and refuses missing or unmet targets", () => {
+  const valid = assessOkanaganAiFlight(successfulFixture(), successfulJourney());
+  assert.equal(valid.pass, true, valid.failures.join("\n"));
+  assert.equal(valid.metrics.scoopTargetWaterKg, 2_200);
+  assert.equal(valid.metrics.dropTargetWaterKg, 1_870);
+  for (const mutate of [
+    sample => ({ ...sample, scoopTargetWaterKg: undefined }),
+    sample => ({ ...sample, dropTargetWaterKg: NaN }),
+    sample => ({ ...sample, scoopTargetWaterKg: 2_400 }),
+    sample => ({ ...sample, waterKg: sample.waterKg > 0 ? 2_000 : 0 }),
+    sample => ({ ...sample, waterKg: sample.waterKg === 0 && sample.simS >= 4 ? 600 : sample.waterKg }),
+  ]) {
+    const result = assessOkanaganAiFlight(successfulFixture().map(mutate), successfulJourney());
+    assert.equal(result.pass, false, JSON.stringify(result.metrics));
+    assert.equal(result.handlingEvidence.approved, false);
+  }
+});
+
+test("completed lifecycle cannot hide nonfinite or missing flight observations", () => {
+  assert.equal(assessOkanaganTelemetrySanity([]).pass, false);
+  for (const value of [undefined, null, NaN, Infinity, "50"]) {
+    const samples = successfulFixture();
+    samples[2] = { ...samples[2], speedMps: value };
+    const result = assessOkanaganAiFlight(samples, successfulJourney());
+    assert.equal(result.lifecycle.pass, true);
+    assert.equal(result.pass, false);
+    assert.equal(result.telemetrySanity.pass, false);
+    assert.match(result.failures.join(" "), /speedMps is missing or nonfinite/);
+  }
+});
+
+test("telemetry sanity rejects impossible domains without inventing handling thresholds", () => {
+  for (const changes of [
+    { pitchRad: 4 * Math.PI }, { rollRad: -6 * Math.PI }, { headingRad: 3 * Math.PI },
+    { angleOfAttackRad: 4 }, { speedMps: -1 }, { waterKg: -1 }, { fuelKg: -1 },
+    { throttle: 1.2 }, { enginePowerFraction: -0.2 },
+    { waterReleasedThisTickKg: NaN }, { completedCycles: Infinity },
+    { verticalSpeedMps: 300, vyMps: 0 },
+    { authorityInput: { pitch: 2, roll: 0, yaw: 0 } },
+  ]) {
+    const samples = successfulFixture();
+    samples[1] = { ...samples[1], ...changes };
+    const result = assessOkanaganAiFlight(samples, successfulJourney());
+    assert.equal(result.pass, false, JSON.stringify(changes));
+    assert.equal(result.telemetrySanity.invalidSampleCount, 1);
+    assert.equal(result.handlingEvidence.approved, false);
+  }
+});
+
+test("sample serialization preserves invalid evidence and the input telemetry's own time", () => {
+  const sample = compactOkanaganSample({
+    wallS: 12,
+    state: state({ mission_s: 10, tas_mps: NaN, pitch_rad: Infinity,
+      velocity: { x: 0, y: NaN, z: 50 } }),
+    telemetry: { mission_s: 9.75, input: { pitch: -0.2, roll: 0, yaw: 0 } },
+  });
+  assert.equal(sample.speedMps, null);
+  assert.equal(sample.pitchRad, null);
+  assert.equal(sample.vyMps, null);
+  assert.equal(sample.fuelKg, null);
+  assert.equal(sample.authorityInputSimS, 9.75);
+  assert.equal(sample.simS, 10);
+  assert.equal(sample.commandTiming, "computed-after-observation; applied-later");
+  assert.equal(assessOkanaganTelemetrySanity([JSON.parse(JSON.stringify(sample))]).pass, false);
+});
+
+test("reversed input signs and saturated piloting cannot earn handling approval", () => {
+  for (const mutate of [
+    sample => ({ ...sample, authorityInput: { ...sample.authorityInput,
+      pitch: -sample.command.pitch, roll: -sample.command.roll } }),
+    sample => ({ ...sample, command: { ...sample.command, pitch: 1, roll: 1 },
+      authorityInput: { ...sample.authorityInput, pitch: 1, roll: 1 } }),
+  ]) {
+    const result = assessOkanaganAiFlight(successfulFixture().map(mutate), successfulJourney());
+    assert.equal(result.lifecycle.pass, true);
+    assert.equal(result.telemetrySanity.pass, true);
+    assert.equal(result.passScope, "mission-lifecycle-and-telemetry-sanity");
+    assert.equal(result.handlingEvidence.approved, false);
+    assert.equal(result.controlDirectionEvidence.status, "unverified");
+    assert.match(result.controlDirectionEvidence.reason, /no applied-command timestamp/);
+  }
+});
+
+test("mathematically valid extreme manoeuvres are not silently certified as good handling", () => {
+  const samples = successfulFixture().map(sample => ({ ...sample,
+    pitchRad: Math.PI / 2, rollRad: Math.PI, loadFactor: 20, pitchRateRadPerSecond: 10 }));
+  const result = assessOkanaganAiFlight(samples, successfulJourney());
+  assert.equal(result.telemetrySanity.pass, true);
+  assert.equal(result.handlingEvidence.approved, false);
+  assert.match(result.handlingEvidence.reason, /open-loop response/);
 });
 
 test("assessment rejects a launch-only trace that never scoops or recovers", () => {

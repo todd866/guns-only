@@ -72,7 +72,9 @@ public readonly record struct OkanaganMissionSnapshot(
     string IncidentName,
     bool IncidentActive,
     bool IncidentHandedOff,
-    IReadOnlyList<OkanaganSiteSnapshot> Sites);
+    IReadOnlyList<OkanaganSiteSnapshot> Sites,
+    double ScoopTargetWaterKg = 0.0,
+    double DropTargetWaterKg = 0.0);
 
 /// <summary>One complete scoop/drop training or incident-response sortie.</summary>
 public sealed class OkanaganFireMission
@@ -135,7 +137,16 @@ public sealed class OkanaganFireMission
     double _holdDwellSeconds;
     double _dropCreditThisTick;
     bool _hadUsefulLoad;
+    double _scoopTargetWaterKg;
+    double _dropTargetWaterKg;
+    Vec3D? _earlyReturnOrigin;
+    readonly Dictionary<(Vec3D Gate, int SpeedBand), double> _shallowHoldTerrainHeights = new();
+    // Exercise completion allowance, not an aircraft limit. The old 2,400/2,800 kg gates
+    // required approximately this fraction of an acquired load to be delivered.
+    const double DropCompletionFraction = 0.85;
+    const double LoadToleranceKg = 1.0;
     readonly double _blockFuelKg;
+    internal FireBossMissionPerformancePlan PerformancePlan { get; }
 
     OkanaganFireMission(OkanaganSortieType sortie, double? initialFuelKg = null)
     {
@@ -157,10 +168,11 @@ public sealed class OkanaganFireMission
         _cruiseAltitude = _incident == null ? 700 : Math.Max(Math.Max(CorridorAltitude(ScoopEntry, IncidentTarget, 400),
             CorridorAltitude(ScoopEntry, IncidentTarget + _incidentUphill * 6_000, 400)),
             CorridorAltitude(IncidentTarget + _incidentUphill * 4_500, IncidentTarget + _incidentUphill * 300, 160));
+        PerformancePlan = FireBossMissionPerformance.AtAltitude(_cruiseAltitude);
         // Exercise planning allowance: measured ferry distance plus a conservative loaded climb.
         _plannedOutboundFuel = _incident == null ? FireBossFuelPlan.PlannedOutboundTripKg
             : 35 + HorizontalDistance(ScoopEntry, IncidentTarget) / 58 * .15
-                + Math.Max(0, _cruiseAltitude - 700) / 2.5 * .15;
+                + Math.Max(0, _cruiseAltitude - 700) / FireBossMissionPerformance.RequiredClimbMps * .15;
         _blockFuelKg = sortie == OkanaganSortieType.WaterCircuits
             ? FireBossFuelPlan.WaterCircuitsBlockFuelKg
             : _incident is null ? FireBossFuelPlan.FireAttackBlockFuelKg : FireBossDynamics.InitialFuelKg;
@@ -168,6 +180,7 @@ public sealed class OkanaganFireMission
             IncidentTarget, 0, _plannedOutboundFuel, ReturnClimbFuel(IncidentTarget)).MinimumRtbFuelKg;
         Aircraft = FireBossDynamics.AtKelownaDeparture(initialFuelKg ?? _blockFuelKg);
         _latestTelemetry = Aircraft.Telemetry;
+        _scoopTargetWaterKg = PlannedScoopTarget(_latestTelemetry);
         Phase = OkanaganMissionPhase.Ready;
         SetPhase(OkanaganMissionPhase.Depart);
     }
@@ -245,7 +258,7 @@ public sealed class OkanaganFireMission
 
         AdvanceGate(telemetry.PositionWorldM);
         FireBossFuelSnapshot liveFuel = FuelPlanFor(telemetry);
-        if (liveFuel.FuelAboveMinimumKg <= 55.0
+        if (FuelRequiresReturn(liveFuel.FuelAboveMinimumKg)
             && Phase is not (OkanaganMissionPhase.Rtb or OkanaganMissionPhase.Approach
                 or OkanaganMissionPhase.Landed or OkanaganMissionPhase.Complete))
             SetPhase(OkanaganMissionPhase.Rtb);
@@ -255,6 +268,11 @@ public sealed class OkanaganFireMission
             StepFireAttack(telemetry);
         Score = CalculateScore(telemetry);
     }
+
+    // Bingo interrupts current work regardless of the number of previously completed circuits.
+    internal static bool FuelRequiresReturn(double fuelAboveMinimumKg) => fuelAboveMinimumKg <= 0;
+    internal static bool FuelAllowsAnotherCircuit(double fuelAboveMinimumKg) =>
+        fuelAboveMinimumKg > FireBossFuelPlan.OneMoreCircuitProhibitedKg;
 
     public OkanaganMissionSnapshot Snapshot() => new(
         Sortie,
@@ -282,7 +300,78 @@ public sealed class OkanaganFireMission
         _incident?.Name ?? "",
         _incidentActive,
         _incidentHandedOff,
-        _protection?.Snapshot() ?? []);
+        _protection?.Snapshot() ?? [],
+        _scoopTargetWaterKg,
+        _dropTargetWaterKg);
+
+    double PlannedScoopTarget(in FireBossTelemetry telemetry)
+    {
+        double plannedGross = PerformancePlan.MeetsClimbRequirement
+            ? Math.Min(FireBossDynamics.MaximumGrossMassKg, PerformancePlan.MaximumGrossMassKg) : 0;
+        return Math.Clamp(telemetry.WaterLoadKg + plannedGross - telemetry.GrossMassKg,
+            0.0, FireBossDynamics.MaximumWaterKg);
+    }
+
+    bool ScoopTargetReached(in FireBossTelemetry telemetry) =>
+        _scoopTargetWaterKg > LoadToleranceKg
+        && telemetry.WaterLoadKg >= _scoopTargetWaterKg - LoadToleranceKg;
+
+    // Guidance for the represented float-contact attitude, not an OEM V-speed. Accelerating
+    // level before rotation avoids trapping a heavy aircraft behind its high-incidence drag.
+    internal static double SuggestedWaterRotationSpeedMps(in FireBossTelemetry telemetry)
+    {
+        AircraftParams parameters = FlightModel.At802fFireBossPublicDataSurrogate;
+        double density = StandardAtmosphere1976.Instance.Sample(telemetry.PositionWorldM.Y).DensityKgM3;
+        double cl = FlightModel.LiftCoefficient(FireBossDynamics.WaterPitchLimitRad, parameters);
+        return 1.03 * Math.Sqrt(2 * telemetry.GrossMassKg * FlightModel.G0
+            / (density * parameters.WingAreaM2 * cl));
+    }
+
+    internal bool RecommendsShallowLoadedClimb()
+    {
+        var telemetry = _latestTelemetry;
+        if (telemetry.SurfaceMode != FireBossSurfaceMode.Airborne || telemetry.WaterLoadKg <= 1_000
+            || Phase is not (OkanaganMissionPhase.Climb or OkanaganMissionPhase.Rtb)
+            || ActiveGateIndex >= _route.Count) return false;
+        var gate = _route[ActiveGateIndex];
+        const double establishedRangeM = 2_000;
+        if (gate.PositionWorldM.Y - telemetry.PositionWorldM.Y <= 80
+            || HorizontalDistance(telemetry.PositionWorldM, gate.PositionWorldM) > establishedRangeM)
+            return false;
+        int speedBand = (int)Math.Ceiling(Math.Max(gate.TargetSpeedMps, telemetry.TrueAirspeedMps) / 5);
+        var key = (gate.PositionWorldM, speedBand);
+        if (!_shallowHoldTerrainHeights.TryGetValue(key, out double safeHeight))
+        {
+            double speed = speedBand * 5;
+            double turnRadius = speed * speed / (FlightModel.G0 * Math.Tan(12 * Math.PI / 180));
+            // A shallow pursuit turn can extend a full turn diameter beyond its starting point.
+            // Include the allowed entry range and sample all bearings, not only the gate chord.
+            double footprint = establishedRangeM + 2 * turnRadius;
+            safeHeight = 0;
+            for (int bearing = 0; bearing < 72; bearing++)
+            {
+                double angle = bearing * Math.PI / 36;
+                Vec3D edge = gate.PositionWorldM + new Vec3D(Math.Sin(angle), 0, Math.Cos(angle)) * footprint;
+                safeHeight = Math.Max(safeHeight, CorridorAltitude(gate.PositionWorldM, edge, 150));
+            }
+            _shallowHoldTerrainHeights[key] = safeHeight;
+        }
+        return telemetry.PositionWorldM.Y >= safeHeight;
+    }
+
+    internal static bool NeedsRecoveryLoadRelease(OkanaganMissionPhase phase, in FireBossTelemetry telemetry) =>
+        phase is OkanaganMissionPhase.Rtb or OkanaganMissionPhase.Approach
+        && telemetry.SurfaceMode == FireBossSurfaceMode.Airborne
+        && telemetry.WaterLoadKg > LoadToleranceKg
+        && telemetry.GrossMassKg > FireBossDynamics.MaximumLandingMassKg;
+
+    void CaptureAcquiredLoad(in FireBossTelemetry telemetry)
+    {
+        _hadUsefulLoad = true;
+        _dropTargetWaterKg = telemetry.WaterLoadKg * DropCompletionFraction;
+        // Water dumped during an earlier circuit or on the approach is not this pass's delivery.
+        _releasedThisPass = 0.0;
+    }
 
     void StepWaterCircuits(in FireBossTelemetry telemetry)
     {
@@ -291,19 +380,20 @@ public sealed class OkanaganFireMission
             && telemetry.SurfaceMode == FireBossSurfaceMode.Airborne
             && telemetry.PositionWorldM.Y >= 730.0
             && ActiveGateIndex >= 1
-            && HorizontalDistance(telemetry.PositionWorldM, AirportDeparture) < 2_200.0)
+            && (HorizontalDistance(telemetry.PositionWorldM, AirportDeparture) < 2_200.0
+                || ActiveGateIndex >= 2))
             SetPhase(OkanaganMissionPhase.JoinScoop);
         if (Phase == OkanaganMissionPhase.JoinScoop && onWater)
             SetPhase(OkanaganMissionPhase.Scoop);
-        if (Phase == OkanaganMissionPhase.Scoop && telemetry.WaterLoadKg >= 2_800.0)
+        if (Phase == OkanaganMissionPhase.Scoop && ScoopTargetReached(telemetry))
         {
-            _hadUsefulLoad = true;
+            CaptureAcquiredLoad(telemetry);
             SetPhase(OkanaganMissionPhase.Climb);
         }
         if (Phase == OkanaganMissionPhase.Climb && telemetry.PositionWorldM.Y >= 620.0)
             SetPhase(OkanaganMissionPhase.Downwind);
         if (Phase == OkanaganMissionPhase.Downwind && _hadUsefulLoad
-            && _releasedThisPass >= 2_400.0)
+            && _releasedThisPass >= _dropTargetWaterKg)
         {
             CompletedCycles++;
             _hadUsefulLoad = false;
@@ -333,13 +423,14 @@ public sealed class OkanaganFireMission
             && telemetry.SurfaceMode == FireBossSurfaceMode.Airborne
             && telemetry.PositionWorldM.Y >= 730.0
             && ActiveGateIndex >= 1
-            && HorizontalDistance(telemetry.PositionWorldM, AirportDeparture) < 2_200.0)
+            && (HorizontalDistance(telemetry.PositionWorldM, AirportDeparture) < 2_200.0
+                || ActiveGateIndex >= 2))
             SetPhase(OkanaganMissionPhase.JoinScoop);
         if (Phase == OkanaganMissionPhase.JoinScoop && onWater)
             SetPhase(OkanaganMissionPhase.Scoop);
-        if (Phase == OkanaganMissionPhase.Scoop && telemetry.WaterLoadKg >= 2_800.0)
+        if (Phase == OkanaganMissionPhase.Scoop && ScoopTargetReached(telemetry))
         {
-            _hadUsefulLoad = true;
+            CaptureAcquiredLoad(telemetry);
             SetPhase(OkanaganMissionPhase.Climb);
         }
         if (Phase == OkanaganMissionPhase.Climb && telemetry.PositionWorldM.Y >= _cruiseAltitude)
@@ -360,7 +451,7 @@ public sealed class OkanaganFireMission
             && (_incident == null || ActiveGateIndex >= _route.Count - 3))
             SetPhase(OkanaganMissionPhase.Drop);
         if (Phase == OkanaganMissionPhase.Drop && _hadUsefulLoad
-            && _releasedThisPass >= 2_400.0)
+            && _releasedThisPass >= _dropTargetWaterKg)
         {
             // A defence load is laid on the buildings, not the fire's centre, so it earns its
             // drop by reaching structures as well as by cooling cells.
@@ -370,7 +461,7 @@ public sealed class OkanaganFireMission
             _dropCreditThisPass = 0.0;
             _sitesProtectedThisPass = 0;
             CompletedCycles++;
-            if (fuel.FuelAboveMinimumKg <= 55.0 || _incident != null) SetPhase(OkanaganMissionPhase.Rtb);
+            if (!FuelAllowsAnotherCircuit(fuel.FuelAboveMinimumKg) || _incident != null) SetPhase(OkanaganMissionPhase.Rtb);
             else if (Sortie == OkanaganSortieType.FireAttack && EffectiveDrops >= 2)
                 SetPhase(OkanaganMissionPhase.Rtb);
             else if (Sortie == OkanaganSortieType.LargeForceEmployment && EffectiveDrops >= 3)
@@ -385,6 +476,20 @@ public sealed class OkanaganFireMission
 
     void SetPhase(OkanaganMissionPhase phase)
     {
+        if (phase == OkanaganMissionPhase.Rtb && Phase != OkanaganMissionPhase.Rtb)
+        {
+            // An abort before engagement must not first visit the remote fire's downhill exit.
+            // Freeze the actual abort position so the return corridor does not move each tick.
+            _earlyReturnOrigin = _incident != null && !_incidentActive && Phase != OkanaganMissionPhase.Drop
+                ? _latestTelemetry.PositionWorldM : null;
+        }
+        if (phase == OkanaganMissionPhase.Scoop && Phase != OkanaganMissionPhase.Scoop)
+        {
+            // Capture once, including any retained water. Burning fuel during a scoop must not
+            // move the finish line; the dynamics separately enforce the instantaneous gross cap.
+            _scoopTargetWaterKg = PlannedScoopTarget(_latestTelemetry);
+            _dropTargetWaterKg = 0.0;
+        }
         if (_incident != null && Phase == OkanaganMissionPhase.Ingress && phase == OkanaganMissionPhase.Drop) {
             Phase = phase;
             return; // This is the same corridor; its already-passed gates remain passed.
@@ -488,6 +593,10 @@ public sealed class OkanaganFireMission
         if (ActiveGateIndex >= _route.Count) return;
         OkanaganRouteGate gate = _route[ActiveGateIndex];
         if (gate.Id == "lift-off" && (_latestTelemetry.SurfaceMode != FireBossSurfaceMode.Airborne || position.Y < 500)) return;
+        // The authored Apex valley turn must reach its second waypoint before turning home;
+        // altitude alone would cut the corner across the ridge the escape route avoids.
+        if (gate.Id == "escape-climb" && _incident?.Id == "apex" && _earlyReturnOrigin == null
+            && HorizontalDistance(position, gate.PositionWorldM) > gate.RadiusM) return;
         bool altitudeGate = gate.Id is "escape-climb" or "lake-climb";
         if (altitudeGate ? position.Y >= gate.PositionWorldM.Y - 60
             : Distance(position, gate.PositionWorldM) <= gate.RadiusM) ActiveGateIndex++;
@@ -498,7 +607,7 @@ public sealed class OkanaganFireMission
         : Phase switch {
         OkanaganMissionPhase.Depart => "Depart Kelowna and join the assigned lake corridor",
         OkanaganMissionPhase.JoinScoop => "Fly the gates to the northbound scoop lane",
-        OkanaganMissionPhase.Scoop => "Hold the step and fill the 3,104 L hopper",
+        OkanaganMissionPhase.Scoop => "Hold the step and reach the planned water target",
         OkanaganMissionPhase.Climb => "Retract scoops, lift off, climb through the gates",
         OkanaganMissionPhase.Hold => "Enter Air Attack hold and wait for sequencing",
         OkanaganMissionPhase.Ingress => "Follow the target-entry corridor to Division Alpha",
@@ -562,10 +671,20 @@ public sealed class OkanaganFireMission
     {
         FireBossTelemetry telemetry = _latestTelemetry;
         if (!string.IsNullOrEmpty(telemetry.ScoopFault)) return telemetry.ScoopFault;
-        if (Phase == OkanaganMissionPhase.Rtb
-            && telemetry.SurfaceMode == FireBossSurfaceMode.Water) return "SCOOPS UP · TAKE OFF · RTB";
+        if (NeedsRecoveryLoadRelease(Phase, telemetry)) return "RTB · RELEASE LOAD OVER LAKE";
+        if (Phase is OkanaganMissionPhase.Climb or OkanaganMissionPhase.Rtb
+            && telemetry.SurfaceMode == FireBossSurfaceMode.Water)
+        {
+            double rotateSpeed = SuggestedWaterRotationSpeedMps(telemetry);
+            return telemetry.TrueAirspeedMps < rotateSpeed
+                ? $"SCOOPS UP · STEP TO {rotateSpeed * 1.943844:F0} KT · THEN ROTATE"
+                : "SCOOPS UP · ROTATE";
+        }
         if (Phase == OkanaganMissionPhase.Scoop && !telemetry.ScoopsCommanded) return "EXTEND SCOOPS";
-        if (Phase == OkanaganMissionPhase.Scoop) return $"FILL {telemetry.WaterLoadKg / FireBossDynamics.MaximumWaterKg:P0}";
+        if (RecommendsShallowLoadedClimb()) return "CLIMB · SHALLOW TURNS WITH LOAD";
+        if (Phase == OkanaganMissionPhase.Scoop) return _scoopTargetWaterKg > LoadToleranceKg
+            ? $"FILL {telemetry.WaterLoadKg / _scoopTargetWaterKg:P0} OF LOAD TARGET"
+            : "NO SCOOP LOAD AVAILABLE";
         if ((Phase is OkanaganMissionPhase.Drop or OkanaganMissionPhase.Downwind)
             && telemetry.WaterLoadKg > 300.0) return "HOLD DROP ON THE LINE";
         if (Phase == OkanaganMissionPhase.Hold
@@ -630,7 +749,7 @@ public sealed class OkanaganFireMission
         ? 0 : Math.Clamp((450 - clearanceM) / 330, 0, 1);
 
     double ReturnClimbFuel(Vec3D position) => _incident == null || HorizontalDistance(position, AirportInitial) < 20_000
-        ? 0 : 20 + Math.Max(0, _cruiseAltitude - position.Y) / 2.5 * .15;
+        ? 0 : 20 + Math.Max(0, _cruiseAltitude - position.Y) / FireBossMissionPerformance.RequiredClimbMps * .15;
 
     FireBossFuelSnapshot FuelPlanFor(in FireBossTelemetry telemetry) => FireBossFuelPlan.Snapshot(_blockFuelKg,
         telemetry.FuelKg, telemetry.PositionWorldM, CompletedCycles, _plannedOutboundFuel,
@@ -716,16 +835,29 @@ public sealed class OkanaganFireMission
             yield return Gate("escape", "CLIMB TO ESCAPE", Ground(target - uphill * 1_400, 450), 650, 62);
         } else {
             Vec3D exit = Ground(IncidentTarget - _incidentUphill * 1_800, 350);
-            yield return Gate("sector-exit", "CONTINUE DOWNHILL · CLIMB", exit, 450, 60);
-            Vec3D returnOrigin = exit;
+            bool apexValleyExit = _incident?.Id == "apex" && _earlyReturnOrigin == null;
+            if (apexValleyExit)
+            {
+                // Authored CDEM-checked valley escape: the apparent downhill continuation
+                // crosses a second ridge before an aircraft can climb clear after its drop.
+                var turn = OkanaganGeo.ToWorld(49.3823356091, -119.8805749981, 2100);
+                yield return Gate("apex-valley-turn", "TURN RIGHT · FOLLOW VALLEY", turn, 250, 60);
+            }
+            else if (_earlyReturnOrigin == null)
+                yield return Gate("sector-exit", "CONTINUE DOWNHILL · CLIMB", exit, 450, 60);
+            Vec3D returnOrigin = apexValleyExit
+                ? OkanaganGeo.ToWorld(49.3796406755, -119.8512999982, 2200)
+                : _earlyReturnOrigin ?? exit;
             Vec3D lakeArrival = OkanaganGeo.ToWorld(49.950, -119.482, 850);
             double safeAltitude = CorridorAltitude(returnOrigin, lakeArrival, 400);
-            yield return Gate("escape-climb", "CLIMB BEFORE CROSSING", (returnOrigin - _incidentUphill * 1_800) with {Y=safeAltitude+80}, 400, 60);
+            Vec3D climbOrigin = apexValleyExit ? returnOrigin : _earlyReturnOrigin ?? returnOrigin - _incidentUphill * 1_800;
+            yield return Gate("escape-climb", apexValleyExit ? "CLIMB CLEAR · FOLLOW VALLEY" : "CLIMB BEFORE CROSSING",
+                climbOrigin with {Y=Math.Max(returnOrigin.Y, safeAltitude+80)}, apexValleyExit ? 250 : 400, 60);
             // Remain above every ridge still ahead, then descend at no more than 4% along the
             // return. A vertical stack over the airport hills was neither a lake hold nor a
             // usable descent. These intermediate gates keep the gradual descent in the route.
             int steps = Math.Max(1, (int)Math.Ceiling(HorizontalDistance(returnOrigin, lakeArrival) / 2_000));
-            double altitude = safeAltitude;
+            double altitude = apexValleyExit ? Math.Max(safeAltitude, returnOrigin.Y) : safeAltitude;
             double leg = HorizontalDistance(returnOrigin, lakeArrival) / steps;
             for (int i = 1; i <= steps; i++) {
                 Vec3D p = returnOrigin + (lakeArrival - returnOrigin) * (i / (double)steps);

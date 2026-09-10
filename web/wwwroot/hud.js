@@ -32,7 +32,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=358";
+} from "./render/hud/contact_visibility.js?v=359";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   carrierAoARelevant,
@@ -55,6 +55,7 @@ import {
 } from "./render/hud/hud_stabilizer.js";
 import { AoAIndexerQualifier, DisplayCueQualifier } from "./render/hud/stable_cues.js";
 import { fighterHudLayout } from "./render/hud/fighter_layout.js";
+import { fireBossCueLayout } from "./render/hud/fireboss_cue_layout.js";
 import {
   gunFunnelProfile,
   gunFunnelRail,
@@ -70,15 +71,15 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=358";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=359";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=358";
+} from "./render/mission/rapier_high_mach_instruments.js?v=359";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
-} from "./render/hud/limits_panel.js?v=358";
+} from "./render/hud/limits_panel.js?v=359";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   fillLegibleHudText,
@@ -92,7 +93,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=358";
+} from "./render/audio/flight_audio.js?v=359";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -1915,17 +1916,19 @@ class CombatHud {
     const ctx = this.ctx;
     ctx.save();
     ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const width = Math.min(this.width - 48, Math.max(132, ctx.measureText(text).width + 22));
-    const height = 22;
-    const x = (this.width - width) / 2;
-    const y = this.usesMobileTacticalProfile()
-      ? this.safeInsets.top + 36
-      : this.annunciationTop();
+    const { x, y, width, height } = fireBossCueLayout({
+      width: this.width,
+      height: this.height,
+      textWidth: ctx.measureText(text).width,
+      mobile: this.usesMobileTacticalProfile(),
+      safeInsets: this.safeInsets,
+      desktopTop: this.annunciationTop(),
+    });
     this.glassPanel(x, y, width, height, AMBER);
     ctx.fillStyle = AMBER;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(this.fitText(text, width - 16), this.width / 2, y + height / 2);
+    ctx.fillText(this.fitText(text, width - 16), x + width / 2, y + height / 2);
     ctx.restore();
   }
 

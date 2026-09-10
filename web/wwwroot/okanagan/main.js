@@ -4,51 +4,57 @@ const pilotLogbook = createBrowserPilotLogbook();
 installDisposedPageRestore();
 window.addEventListener("pagehide", () => pilotLogbook.finish({ outcome: "Left before completion" }));
 import * as THREE from "../vendor/three.module.js";
-import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=358";
+import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=359";
+import {
+  createOkanaganWorldRoot, okanaganWorldToRender, okanaganRenderToWorld,
+  setOkanaganCockpitCamera, lookAtOkanaganPoint,
+} from "../render/okanagan/okanagan_render_frame.js?v=359";
 import { createOkanaganSiteMarkers } from "../render/okanagan/okanagan_site_markers.js";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=358";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=358";
-import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=358";
-import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=358";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=359";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=359";
+import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=359";
+import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=359";
 import {
   createOkanaganTrafficCraft,
   poseOkanaganTrafficCraft,
-} from "../render/okanagan/okanagan_traffic.js?v=358";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=358";
-import { createHud } from "../hud.js?v=358";
+} from "../render/okanagan/okanagan_traffic.js?v=359";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=359";
+import { createHud } from "../hud.js?v=359";
 import {
   armFlightAudio,
   flightAudioDiagnostics,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=358";
+} from "../render/audio/flight_audio.js?v=359";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=358";
-import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=358";
-import { standardGamepadState } from "../render/input/dual_stick_input.js?v=358";
-import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=358";
+} from "../render/settings/player_settings.js?v=359";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=359";
+import { standardGamepadState } from "../render/input/dual_stick_input.js?v=359";
+import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=359";
+import { createOkanaganKeyboardControls } from "../render/okanagan/okanagan_keyboard_controls.js?v=359";
+import { bindOkanaganDropButton } from "../render/okanagan/okanagan_drop_button.js?v=359";
 import {
   compactOkanaganCue,
   okanaganFlightState,
   okanaganRadioCaption,
   okanaganRadioHoldMs,
-} from "../render/okanagan/okanagan_hud_adapter.js?v=358";
+} from "../render/okanagan/okanagan_hud_adapter.js?v=359";
 import {
   cycleOkanaganTarget,
   okanaganTargets,
   retainOkanaganTarget,
-} from "../render/okanagan/okanagan_targets.js?v=358";
+} from "../render/okanagan/okanagan_targets.js?v=359";
 import {
   okanaganDebriefModel,
   okanaganMissionTerminal,
-} from "../render/okanagan/okanagan_debrief.js?v=358";
+} from "../render/okanagan/okanagan_debrief.js?v=359";
 import {
   okanaganDialogFocusables,
   okanaganDialogTabTarget,
-} from "../render/okanagan/okanagan_dialog_focus.js?v=358";
+} from "../render/okanagan/okanagan_dialog_focus.js?v=359";
 
 const SORTIES = Object.freeze({
   "water-circuits": {
@@ -123,6 +129,9 @@ const scoopsButton = document.querySelector("#scoops");
 const dropButton = document.querySelector("#drop");
 const navButton = document.querySelector("#nav-button");
 const soundButton = document.querySelector("#sound");
+const trimValue = document.querySelector("#trim-value");
+const trimDownButton = document.querySelector("#trim-down");
+const trimUpButton = document.querySelector("#trim-up");
 const standaloneReturnLinks = Array.from(document.querySelectorAll(
   'a[href*="program=okanagan-fireboss"]',
 ));
@@ -134,6 +143,8 @@ for (const returnLink of standaloneReturnLinks) {
 }
 const sortieButtons = Array.from(document.querySelectorAll(".sortie"));
 const keys = new Set();
+const keyboardControls = createOkanaganKeyboardControls();
+let dropButtonControl = null;
 const coarse = matchMedia?.("(pointer: coarse)")?.matches === true;
 const touchPreview = ["localhost", "127.0.0.1"].includes(location.hostname)
   && new URL(location.href).searchParams.get("input") === "touch";
@@ -151,6 +162,7 @@ let paused = true;
 let scoops = false;
 let drop = false;
 let throttle = 0.65;
+let elevatorTrim = 0;
 let animationFrame = 0;
 let lastTime = performance.now();
 const telemetryFrames = [];
@@ -196,7 +208,10 @@ renderer.toneMappingExposure = 1.07;
 renderer.shadowMap.enabled = quality === "desktop";
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-const siteMarkers = createOkanaganSiteMarkers(scene);
+const geographicWorld = createOkanaganWorldRoot();
+scene.add(geographicWorld);
+const sceneryQueryPosition = new THREE.Vector3();
+const siteMarkers = createOkanaganSiteMarkers(geographicWorld);
 scene.background = new THREE.Color(0x7895aa);
 scene.fog = new THREE.FogExp2(0x9eb2b7, quality === "mobile" ? 0.000095 : 0.00007);
 const camera = new THREE.PerspectiveCamera(67, 1, 0.25, 65_000);
@@ -219,7 +234,7 @@ const hudFrame = {
 };
 scene.add(new THREE.HemisphereLight(0xeaf3f5, 0x4d5135, 1.18));
 const sun = new THREE.DirectionalLight(0xffe4bd, 1.42);
-sun.position.set(-12_000, 18_000, 9_000);
+sun.position.set(-12_000, 18_000, -9_000);
 sun.castShadow = quality === "desktop";
 if (sun.castShadow) {
   sun.shadow.mapSize.set(2048, 2048);
@@ -238,13 +253,13 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(58_000, 24, 12), new THREE.S
 }));
 scene.add(sky);
 const cockpit = createFireBossCockpit(camera);
-const highway = createOkanaganHighway(scene);
-const fireEffects = createOkanaganFireEffects(scene, quality === "mobile" ? 80 : 180);
+const highway = createOkanaganHighway(geographicWorld);
+const fireEffects = createOkanaganFireEffects(geographicWorld, quality === "mobile" ? 80 : 180);
 const trafficGroup = new THREE.Group();
 const trafficModels = new Map();
-scene.add(trafficGroup);
-const dropCurtain = createOkanaganDropCurtain(scene);
-const practiceTarget = createOkanaganPracticeTarget(scene);
+geographicWorld.add(trafficGroup);
+const dropCurtain = createOkanaganDropCurtain(geographicWorld);
+const practiceTarget = createOkanaganPracticeTarget(geographicWorld);
 
 window.__gunsOnlyOkanagan = Object.freeze({
   getState: () => state,
@@ -351,10 +366,29 @@ function moveSortieSelection(event) {
 
 function releasePlayerInputs() {
   keys.clear();
+  keyboardControls.clear();
+  dropButtonControl?.release();
+  bridge?.ReleaseFlightControls();
+  if (bridge && state) state = JSON.parse(bridge.GetState());
   drop = false;
   leftStick = Object.freeze({ x: 0, y: 0 });
   rightStick = Object.freeze({ x: 0, y: 0 });
   dropButton.classList.remove("active");
+}
+
+function syncTrimControl() {
+  const percent = Math.round(elevatorTrim * 100);
+  trimValue.textContent = `${percent > 0 ? "+" : ""}${percent}%`;
+  trimDownButton.disabled = elevatorTrim <= -0.5;
+  trimUpButton.disabled = elevatorTrim >= 0.5;
+}
+
+function changeElevatorTrim(step) {
+  if (!bridge || !running || paused || missionTerminal) return;
+  elevatorTrim = Math.max(-0.5, Math.min(0.5, Math.round((elevatorTrim + step) * 100) / 100));
+  bridge.SetElevatorTrim(elevatorTrim);
+  syncTrimControl();
+  canvas.focus({ preventScroll: true });
 }
 
 function setMissionSurfaceInert(inert) {
@@ -476,6 +510,8 @@ function startSortie(id) {
   pilotLogbook.begin({ activity: `Okanagan · ${SORTIES[id].title || id}` });
   state = JSON.parse(bridge.GetState());
   throttle = 0.65;
+  elevatorTrim = 0;
+  syncTrimControl();
   scoops = false;
   drop = false;
   selectedTargetId = "";
@@ -496,7 +532,10 @@ function setPaused(value) {
   if (missionTerminal) return false;
   paused = value === true;
   if (paused) releasePlayerInputs();
-  if (running) bridge?.SetPaused(paused);
+  if (running && bridge) {
+    bridge.SetPaused(paused);
+    state = JSON.parse(bridge.GetState());
+  }
   const pauseVisible = paused && running && !menu.classList.contains("visible");
   pauseMenu.classList.toggle("visible", pauseVisible);
   pauseMenu.setAttribute("aria-hidden", String(!pauseVisible));
@@ -577,14 +616,14 @@ function previewCamera(current) {
     x /= weight;
     y /= weight;
     z /= weight;
-    camera.position.set(x + 620, y + 95, z + 1_050);
-    camera.lookAt(x, y + 28, z);
+    okanaganWorldToRender({x: x + 620, y: y + 95, z: z + 1_050}, camera.position);
+    lookAtOkanaganPoint(camera, {x, y: y + 28, z});
     return true;
   }
   if (preview === "practice" && current.drop_aim) {
     const aim = current.drop_aim;
-    camera.position.set(aim.x + 180, aim.y + 55, aim.z + 220);
-    camera.lookAt(aim.x, aim.y + 8, aim.z);
+    okanaganWorldToRender({x: aim.x + 180, y: aim.y + 55, z: aim.z + 220}, camera.position);
+    lookAtOkanaganPoint(camera, {x: aim.x, y: aim.y + 8, z: aim.z});
     return true;
   }
   if (preview === "traffic") {
@@ -605,14 +644,15 @@ function previewCamera(current) {
       weight += intensity;
     }
     if (weight < 0.1) {
-      camera.position.set(track.position.x - 220, track.position.y + 48, track.position.z + 160);
+      okanaganWorldToRender({x: track.position.x - 220, y: track.position.y + 48,
+        z: track.position.z + 160}, camera.position);
     } else {
       x /= weight;
       y /= weight;
       z /= weight;
-      camera.position.set(x + 1_350, y + 180, z + 420);
+      okanaganWorldToRender({x: x + 1_350, y: y + 180, z: z + 420}, camera.position);
     }
-    camera.lookAt(track.position.x, track.position.y + 4, track.position.z);
+    lookAtOkanaganPoint(camera, {...track.position, y: track.position.y + 4});
     return true;
   }
   return false;
@@ -620,12 +660,11 @@ function previewCamera(current) {
 
 function updateView(current, deltaSeconds) {
   if (!previewCamera(current)) {
-    camera.position.set(current.position.x, current.position.y + 2.25, current.position.z);
-    camera.rotation.set(current.pitch_rad, Math.PI + current.heading_rad, -current.roll_rad, "YXZ");
+    setOkanaganCockpitCamera(camera, current);
     const bodyQuaternion = camera.quaternion.clone();
     const target = selectedTarget();
     if (padlock && target) {
-      camera.lookAt(target.position.x, target.position.y, target.position.z);
+      lookAtOkanaganPoint(camera, target.position);
       cockpit.group.quaternion.copy(camera.quaternion).invert().multiply(bodyQuaternion);
     } else {
       cockpit.group.quaternion.identity();
@@ -655,8 +694,9 @@ function updateView(current, deltaSeconds) {
   );
   buildTraffic(current.traffic, current.mission_s);
   if (sun.castShadow) {
-    sun.position.set(current.position.x - 12_000, current.position.y + 18_000, current.position.z + 9_000);
-    sun.target.position.set(current.position.x, 500, current.position.z);
+    okanaganWorldToRender({x: current.position.x - 12_000,
+      y: current.position.y + 18_000, z: current.position.z + 9_000}, sun.position);
+    okanaganWorldToRender({x: current.position.x, y: 500, z: current.position.z}, sun.target.position);
     sun.target.updateMatrixWorld();
   }
 }
@@ -683,7 +723,10 @@ function updateDom(current) {
     radioHideAt = now + okanaganRadioHoldMs(transmission);
   }
   radio.dataset.visible = String(Boolean(transmission) && now < radioHideAt);
-  document.querySelector("#water-value").textContent = `${Math.round(current.water_kg).toLocaleString()} L`;
+  const waterTarget = Number(current.scoop_target_water_kg);
+  document.querySelector("#water-value").textContent = Number.isFinite(waterTarget) && waterTarget > 0
+    ? `${Math.round(current.water_kg).toLocaleString()} / ${Math.round(waterTarget).toLocaleString()} L target`
+    : `${Math.round(current.water_kg).toLocaleString()} L`;
   const scoopState = document.querySelector("#scoop-state");
   scoopState.textContent = current.scoop_fault || (current.scoop_valid
     ? `FILLING · ${Math.round(current.scoop_rate_kgps)} L/S`
@@ -720,10 +763,16 @@ function recordTelemetry(current, inputDeltaSeconds) {
     load_factor: current.load_factor,
     engine_power_fraction: current.engine_power_fraction,
     throttle: current.throttle,
+    elevator_trim: current.elevator_trim,
+    applied_controls: current.applied_controls,
+    pending_controls: current.pending_controls,
+    input_tap_ticks: current.input_tap_ticks,
     scoops_commanded: current.scoops_commanded,
     scoop_valid: current.scoop_valid,
     scoop_fault: current.scoop_fault,
     water_kg: current.water_kg,
+    scoop_target_water_kg: current.scoop_target_water_kg,
+    drop_target_water_kg: current.drop_target_water_kg,
     water_released_this_tick_kg: current.water_released_this_tick_kg,
     fuel_kg: current.fuel_kg,
     fuel_above_minimum_kg: current.fuel_plan.above_minimum_kg,
@@ -741,6 +790,7 @@ function recordTelemetry(current, inputDeltaSeconds) {
       yaw: THREE.MathUtils.clamp((keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0)
         + finiteControl(leftStick.x), -1, 1),
       throttle,
+      elevator_trim: elevatorTrim,
       scoops,
       drop,
       frame_dt_s: inputDeltaSeconds,
@@ -758,10 +808,11 @@ function drawHud(current, deltaSeconds, nowSeconds) {
   flightState.civilian_target_kind = target?.kind ?? "";
   flightState.civilian_target_padlocked = padlock && Boolean(target);
   hudFrame.state = flightState;
-  hudFrame.playerPosition.set(current.position.x, current.position.y, current.position.z);
-  hudFrame.playerForward.set(Math.sin(current.heading_rad) * Math.cos(current.pitch_rad),
-    Math.sin(current.pitch_rad), Math.cos(current.heading_rad) * Math.cos(current.pitch_rad));
-  if (target) hudFrame.civilianTargetPosition.set(target.position.x, target.position.y, target.position.z);
+  okanaganWorldToRender(current.position, hudFrame.playerPosition);
+  okanaganWorldToRender({x: Math.sin(current.heading_rad) * Math.cos(current.pitch_rad),
+    y: Math.sin(current.pitch_rad), z: Math.cos(current.heading_rad) * Math.cos(current.pitch_rad)},
+  hudFrame.playerForward);
+  if (target) okanaganWorldToRender(target.position, hudFrame.civilianTargetPosition);
   hudFrame.padlock = padlock && Boolean(target);
   hudFrame.padlockTarget = hudFrame.padlock ? "civilian" : null;
   hudFrame.padlockTargetPosition = hudFrame.padlock ? hudFrame.civilianTargetPosition : null;
@@ -825,13 +876,15 @@ function animate(now) {
   animationFrame = requestAnimationFrame(animate);
   const delta = Math.min(0.1, Math.max(0, (now - lastTime) / 1000)); lastTime = now;
   if (running && !paused) {
-    controls(delta); bridge.Advance(delta); state = JSON.parse(bridge.GetState());
+    controls(delta);
+    keyboardControls.applied(bridge.Advance(delta));
+    state = JSON.parse(bridge.GetState());
     recordTelemetry(state, delta);
     updateView(state, delta); updateDom(state); drawHud(state, delta, state.mission_s);
     if (!mapCanvas.hidden) drawMap(state);
     if (okanaganMissionTerminal(state)) showMissionResult(state);
   }
-  world?.update(camera.position);
+  world?.update(okanaganRenderToWorld(camera.position, sceneryQueryPosition));
   renderer.render(scene, camera);
 }
 
@@ -856,8 +909,15 @@ navButton.addEventListener("click", () => {
 soundButton.addEventListener("click", () => {
   setOkanaganAudioEnabled(!playerSettings.audio, { arm: true });
 });
-for (const type of ["pointerdown", "touchstart"]) dropButton.addEventListener(type, (event) => { event.preventDefault(); drop = true; dropButton.classList.add("active"); }, { passive: false });
-for (const type of ["pointerup", "pointercancel", "touchend"]) dropButton.addEventListener(type, () => { drop = false; dropButton.classList.remove("active"); });
+trimDownButton.addEventListener("click", () => changeElevatorTrim(-0.02));
+trimUpButton.addEventListener("click", () => changeElevatorTrim(0.02));
+dropButtonControl = bindOkanaganDropButton(dropButton, {
+  canPress: () => running && !paused && !missionTerminal,
+  onChange(pressed) {
+    drop = pressed;
+    dropButton.classList.toggle("active", pressed);
+  },
+});
 window.addEventListener("keydown", (event) => {
   if (event.code === "Tab" && trapDialogTab(event)) return;
   if (event.code === "Escape") {
@@ -873,6 +933,11 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (missionTerminal || !running || paused) return;
+  if (event.code === "BracketLeft" || event.code === "BracketRight") {
+    event.preventDefault();
+    if (!event.repeat) changeElevatorTrim(event.code === "BracketLeft" ? -0.02 : 0.02);
+    return;
+  }
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].includes(event.code)) event.preventDefault();
   if (event.code === "Tab" && !event.repeat && running) { cycleTarget(event.shiftKey ? -1 : 1); return; }
   if (event.code === "KeyV" && !event.repeat) { togglePadlock(); return; }
@@ -884,11 +949,21 @@ window.addEventListener("keydown", (event) => {
   if (event.code === "Space") { drop = true; dropButton.classList.add("active"); }
   if (playerSettings.audio && running && !paused) armFlightAudio(okanaganFlightState(state));
   keys.add(event.code);
+  keyboardControls.down(event.code, performance.now());
 });
-window.addEventListener("keyup", (event) => { keys.delete(event.code); if (event.code === "Space") { drop = false; dropButton.classList.remove("active"); } });
-window.addEventListener("blur", () => { keys.clear(); drop = false; leftStick = { x: 0, y: 0 }; rightStick = { x: 0, y: 0 }; });
+window.addEventListener("keyup", (event) => {
+  keys.delete(event.code);
+  const tap = keyboardControls.up(event.code, performance.now());
+  if (tap && bridge && running && !paused && !missionTerminal)
+    bridge.QueueControlTap(tap.axis, tap.direction, tap.durationSeconds);
+  if (event.code === "Space") { drop = false; dropButton.classList.remove("active"); }
+});
+window.addEventListener("blur", releasePlayerInputs);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) releasePlayerInputs();
+});
 window.addEventListener("resize", resize, { passive: true });
-window.addEventListener("pagehide", () => { cancelAnimationFrame(animationFrame); suspendFlightAudio("okanagan-pagehide"); world?.dispose(); siteMarkers.dispose();
+window.addEventListener("pagehide", () => { releasePlayerInputs(); cancelAnimationFrame(animationFrame); suspendFlightAudio("okanagan-pagehide"); world?.dispose(); siteMarkers.dispose();
   renderer.dispose(); }, { once: true });
 
 function bindFlightStick(element, update) {
@@ -934,7 +1009,7 @@ async function boot() {
   ]);
   worldData.resorts = resortData.resorts;
   const sceneryTextures = await loadOkanaganSceneryTextures(terrainData, quality);
-  world = createOkanaganWorld(scene, terrainData, worldData, quality, sceneryTextures);
+  world = createOkanaganWorld(geographicWorld, terrainData, worldData, quality, sceneryTextures);
   const blazor = await waitFor(() => globalThis.Blazor, "Fire Boss runtime unavailable");
   await blazor.start({ loadBootResource: (_type, name) => `/_framework/${name}` });
   const runtimeAccessor = await waitFor(() => globalThis.getDotnetRuntime, "Fire Boss bridge unavailable");
