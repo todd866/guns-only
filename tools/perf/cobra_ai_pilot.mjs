@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { perfBrowserLaunchOptions } from "./browser_launch.mjs";
 
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -1783,12 +1784,12 @@ export async function runCobraAiFlight({
   }
   const resolvedDurationSeconds = cobraAiGoalDurationSeconds(goal, durationSeconds);
   const site = await serveStatic(wwwroot);
-  const browser = await chromium.launch({
-    headless: !hardware,
+  const browser = await chromium.launch(perfBrowserLaunchOptions({
+    hardware,
     args: hardware
       ? ["--use-angle=metal", "--enable-webgl-draft-extensions"]
       : ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
-  });
+  }));
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await context.addInitScript(FAKE_PAD_SOURCE);
   const page = await context.newPage();
@@ -1822,7 +1823,6 @@ export async function runCobraAiFlight({
     const startLatencyMs = Date.now() - startClickedAtMs;
     const teaching = page.locator("#controls-onboarding-dismiss");
     if (await teaching.isVisible()) await teaching.click();
-    await page.bringToFront();
     await page.locator("#scene").focus().catch(() => {});
 
     const startedAtMs = await page.evaluate(() => performance.now());

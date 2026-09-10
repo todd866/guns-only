@@ -1,10 +1,10 @@
 #!/usr/bin/env node
+import { perfBrowserLaunchOptions } from "./browser_launch.mjs";
 // Hardware-facing Ukraine low-level performance gate. Run this on each supported device class;
 // it intentionally is not part of the software-rendered CI smoke suite.
 //
 //   node tools/perf/ukraine_hero_gate.mjs
 //   GUNS_HERO_GATE_TIERS=mobile,balanced node tools/perf/ukraine_hero_gate.mjs
-//   GUNS_HERO_GATE_HEADLESS=1 node tools/perf/ukraine_hero_gate.mjs
 //   GUNS_HERO_GATE_BASE_URL=http://device-host:8080/ node tools/perf/ukraine_hero_gate.mjs
 
 import { createRequire } from "node:module";
@@ -40,14 +40,11 @@ const site = requestedBaseUrl
       close: async () => {},
     }
   : await serveStatic(wwwroot);
-const browser = await chromium.launch({
-  // The default is deliberately headed: Chromium's macOS headless shell can force SwiftShader,
-  // which measures a software rasterizer rather than the supported device GPU this gate names.
-  headless: process.env.GUNS_HERO_GATE_HEADLESS === "1",
-});
+let browser;
 const results = [];
 
 try {
+  browser = await chromium.launch(perfBrowserLaunchOptions({ hardware: true }));
   for (const tier of requestedTiers) {
     const page = await browser.newPage({
       viewport: { width: 1920, height: 1080 },
@@ -73,6 +70,21 @@ try {
       null,
       { timeout: 120_000 },
     );
+    const rendererBackend = await page.evaluate(() => {
+      // Query the scene's actual context, not a launch flag or a second test canvas.
+      const canvas = document.querySelector("#scene");
+      const gl = canvas?.getContext("webgl2") || canvas?.getContext("webgl");
+      if (!gl || gl.isContextLost()) throw new Error("Hardware gate has no live scene WebGL context");
+      const extension = gl.getExtension("WEBGL_debug_renderer_info");
+      if (!extension) throw new Error("Hardware gate cannot identify the scene's WebGL backend");
+      const backend = gl.getParameter(extension.UNMASKED_RENDERER_WEBGL);
+      if (typeof backend !== "string" || !backend.trim()
+          || /unknown|swiftshader|software|llvmpipe|lavapipe|softpipe|basic render driver/i.test(backend)
+          || /^(?:webgl|webgl2|webkit webgl|angle)$/i.test(backend.trim())) {
+        throw new Error(`Hardware gate rejects unverified or software renderer: ${String(backend)}`);
+      }
+      return backend;
+    });
     await page.waitForFunction(
       () => window.__environmentLabDiagnostics?.snapshot().performanceGate.state !== "warming",
       null,
@@ -109,19 +121,20 @@ try {
     }
     results.push({
       tier,
+      rendererBackend,
       renderer: snapshot.renderer,
       shadows: snapshot.shadows,
       frameStats: snapshot.frameStats,
       gate: snapshot.performanceGate,
     });
-    console.log(`ok  ${tier}: ${snapshot.frameStats.fps.toFixed(1)} fps; `
+    console.log(`ok  ${tier}: ${rendererBackend}; ${snapshot.frameStats.fps.toFixed(1)} fps; `
       + `p95 ${snapshot.frameStats.p95Ms.toFixed(1)} ms; `
       + `p99 ${snapshot.frameStats.p99Ms.toFixed(1)} ms; `
       + `${(snapshot.frameStats.overBudgetFraction * 100).toFixed(1)}% late`);
   }
 } finally {
-  await browser.close();
-  await site.close();
+  try { await browser?.close(); }
+  finally { await site.close(); }
 }
 
 console.log(JSON.stringify({ results }, null, 2));

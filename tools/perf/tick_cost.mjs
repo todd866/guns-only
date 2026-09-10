@@ -35,7 +35,6 @@ try {
     const teaching = page.locator("#controls-onboarding-dismiss");
     if (await teaching.isVisible()) await teaching.click();
   }
-  await page.bringToFront();
   await page.locator("#scene").focus().catch(() => {});
   if (MODE === "ride") {
     const before = await page.evaluate(() => ({

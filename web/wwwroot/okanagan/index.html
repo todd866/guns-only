@@ -7,9 +7,9 @@
   <base href="/">
   <title>Guns Only · Okanagan Fire Boss</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/okanagan/styles.css?v=359">
+  <link rel="stylesheet" href="/okanagan/styles.css?v=360">
 </head>
-<body class="paused">
+<body class="paused nav-open">
   <main class="viewport" aria-label="Okanagan Fire Boss simulator">
     <canvas id="scene" tabindex="0" aria-label="Fire Boss flight view"></canvas>
     <canvas id="hud" aria-hidden="true"></canvas>
@@ -20,8 +20,17 @@
       <span id="scoop-state">SCOOPS UP</span>
     </div>
     <output id="site-condition" aria-label="Defence sector condition" hidden></output>
-    <canvas id="map" width="300" height="240" aria-label="North-up incident map" hidden></canvas>
-    <button id="nav-button" type="button" aria-pressed="false" aria-controls="map">NAV</button>
+    <section id="navigation-director" aria-label="Next waypoint" hidden>
+      <div class="navigation-course"><strong id="navigation-turn"></strong><span id="navigation-fix"></span></div>
+      <div class="navigation-numbers"><span id="navigation-bearing"></span><span id="navigation-range"></span><span id="navigation-altitude"></span></div>
+      <span id="navigation-vertical"></span>
+      <span id="navigation-procedure"></span>
+    </section>
+    <section id="nav-map" aria-label="Navigation map">
+      <canvas id="map" width="488" height="344" aria-label="North-up map with aircraft heading, named places and next waypoint"></canvas>
+      <button id="map-mode" type="button" aria-label="Toggle whole route overview" aria-pressed="false">LOCAL</button>
+    </section>
+    <button id="nav-button" type="button" aria-pressed="true" aria-controls="nav-map">MAP</button>
     <div id="controls">
       <button id="target-button" class="touch-target-control" type="button">TARGET<br><kbd>TAB</kbd></button>
       <button id="padlock-button" class="touch-target-control" type="button" aria-pressed="false">PADLOCK<br><kbd>V</kbd></button>
@@ -31,7 +40,8 @@
     <button id="pause-button" type="button" aria-label="Pause">Ⅱ</button>
     <div id="trim-controls" role="group" aria-label="Pitch trim">
       <button id="trim-down" type="button" aria-label="Trim nose down" title="Trim nose down [">−</button>
-      <span>TRIM <output id="trim-value" aria-live="polite">0%</output></span>
+      <button id="auto-trim" type="button" aria-pressed="true" aria-label="Automatic pitch trim enabled" title="Automatic trim holds your chosen nose attitude after you release the stick">AUTO TRIM</button>
+      <output id="trim-value" aria-live="off">0%</output>
       <button id="trim-up" type="button" aria-label="Trim nose up" title="Trim nose up ]">+</button>
     </div>
     <div id="touch-flight-controls" aria-label="Mobile flight controls">
@@ -73,7 +83,7 @@
         <span>WORKING <strong id="plan-working">197 KG</strong></span>
       </section>
       <p class="scenery-note">Defence exercises begin on arrival. Track mapped buildings and lift terminals through the attack, then hand off to ground crews. Fictional fires; recorded condition is not a forecast.</p>
-      <p class="preflight-controls"><strong>CONTROL CHECK</strong> <span>ARROWS pitch/roll · A/D rudder · W/S power · [ / ] nose down/up trim · E scoops · hold SPACE drop · TAB target · V padlock</span></p>
+      <p class="preflight-controls"><strong>CONTROL CHECK</strong> <span>ARROWS pitch/roll · A/D rudder · W/S power · Auto trim holds the nose on release · [ / ] manual trim · MAP shows places and route · E scoops · hold SPACE drop · TAB target · V padlock</span></p>
       <details class="scenery-sources"><summary>Scenery and map credits</summary>
         <p>Contains information licensed under the <a href="https://gis-rdco.hub.arcgis.com/pages/open-data-license" target="_blank" rel="noopener">Open Government License – Regional District of Central Okanagan</a>. Terrain: Natural Resources Canada. Resorts: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> and <a href="https://github.com/microsoft/CanadianBuildingFootprints" target="_blank" rel="noopener">Microsoft building footprints</a>, ODbL.</p>
         <p><a href="/content/packs/okanagan-fire/environment/okanagan-resorts.osm.json" download>Download resort map data</a> · <a href="/content/packs/okanagan-fire/environment/SOURCES.md" target="_blank" rel="noopener">Sources and accuracy limits</a></p>
@@ -116,7 +126,7 @@
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=359", location.href).searchParams.get("v");
+      const releaseBuild = new URL("../service-worker.js?v=360", location.href).searchParams.get("v");
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
       const workers = registrations.flatMap((registration) => [registration.active, registration.waiting, registration.installing]).filter(Boolean);
       const stale = [navigator.serviceWorker?.controller, ...workers].filter(Boolean)
@@ -131,15 +141,15 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/_framework/blazor.webassembly.js?v=359";
+        script.src = "/_framework/blazor.webassembly.js?v=360";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Fire Boss runtime.")), { once: true });
         document.head.append(script);
       });
-      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=359");
+      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=360");
       const access = renderExperienceGate({ experienceId: "okanagan-fireboss" });
-      if (access.allowed) await import("/okanagan/main.js?v=359");
+      if (access.allowed) await import("/okanagan/main.js?v=360");
     } catch (error) {
       console.error(error);
       document.querySelector("#status").textContent = error instanceof Error ? error.message : String(error);

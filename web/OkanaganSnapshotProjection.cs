@@ -10,7 +10,7 @@ public static class OkanaganSnapshotProjection
 
     public static string BuildStateJson(OkanaganFireMission mission,
         FireBossPilotCommand? appliedCommand = null, FireBossControlTapBuffer? controlTaps = null,
-        FireBossPilotCommand? pendingCommand = null)
+        FireBossPilotCommand? pendingCommand = null, FireBossAutoTrimState? autoTrim = null)
     {
         OkanaganMissionSnapshot state = mission.Snapshot();
         FireBossTelemetry aircraft = state.Aircraft;
@@ -37,6 +37,12 @@ public static class OkanaganSnapshotProjection
             vertical_speed_mps = aircraft.VerticalSpeedMps,
             throttle = aircraft.Throttle,
             elevator_trim = aircraft.ElevatorTrim,
+            auto_trim = autoTrim is FireBossAutoTrimState trim ? new {
+                enabled = trim.Enabled, status = trim.Status,
+                target_pitch_rad = trim.TargetPitchRad,
+                correction = trim.Correction, manual_trim = trim.ManualTrim,
+                applied_trim = trim.AppliedTrim, saturated = trim.Saturated,
+            } : null,
             applied_controls = appliedCommand is FireBossPilotCommand applied ? new {
                 pitch = applied.Pitch, roll = applied.Roll, yaw = applied.Yaw,
                 elevator_trim = applied.ElevatorTrim, throttle = applied.Throttle,

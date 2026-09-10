@@ -1,5 +1,14 @@
 # Working in this repo alongside other agents
 
+## Browser QA stays in the background
+
+The owner requested this on 2026-09-10 after test windows repeatedly stole focus.
+Use headless browsers for automated tests and screenshots. Hardware WebGL checks
+should use full Chromium headless (`headless: true`, `channel: "chromium"`) and
+verify the reported GPU. Do not fall back to visible windows or foreground an app
+without an explicit request for visible QA. Keep software rendering labeled and
+separate from hardware performance evidence. Close browsers and servers in `finally`.
+
 Several agents work in this checkout at once, often all told "push towards production". Every
 rule below is here because it cost someone real time, mostly on 2026-07-31. None of it is
 generic advice.

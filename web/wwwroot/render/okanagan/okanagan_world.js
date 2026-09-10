@@ -2,6 +2,7 @@ import * as THREE from "../../vendor/three.module.js";
 import { createPeachland, createPeachlandExclusion, withinPeachland } from "./peachland.js";
 
 import { createResortScenery, createResortExclusion } from "./resorts.js";
+import { animateOkanaganWater, createOkanaganAirportDetails, createOkanaganNearForest } from "./okanagan_orientation_scenery.js";
 
 const DEG_LAT_M = 111_320;
 const ANCHOR_LAT = 49.88;
@@ -87,8 +88,12 @@ export function createOkanaganWorld(scene, terrainData, worldData, quality = "de
   const localScenery = [];
 
   const terrain = createTerrain(terrainData, worldData, textures);
+  const sampleDrawnHeight = createDrawnTerrainSampler(terrainData, terrain.sampleHeight);
   group.add(terrain.mesh);
-  group.add(createLake(worldData));
+  const lake = createLake(worldData);
+  const water = animateOkanaganWater(lake.material);
+  group.add(lake);
+  group.add(createShorelineCue(worldData));
   group.add(createRoads(worldData, terrain.sampleHeight));
   group.add(createRunway(worldData, terrain.sampleHeight));
   group.add(createSettlements(worldData, terrain.sampleHeight, quality, terrain.isOperationalSurface));
@@ -101,10 +106,30 @@ export function createOkanaganWorld(scene, terrainData, worldData, quality = "de
     localScenery.push({ group: local, centre: geographicToWorld((b.south+b.north)/2, (b.west+b.east)/2) });
     group.add(local);
   }
-  group.add(createForest(terrainData, worldData, terrain.sampleHeight, quality,
+  group.add(createForest(terrainData, worldData, sampleDrawnHeight, quality,
     terrain.isOperationalSurface));
-  group.add(createIncidentTimber(worldData, terrain.sampleHeight, quality,
+  group.add(createIncidentTimber(worldData, sampleDrawnHeight, quality,
     terrain.isOperationalSurface));
+  const excludePeachland = createPeachlandExclusion(worldData.peachland, geographicToWorld);
+  const excludeResorts = (worldData.resorts ?? []).map(r => createResortExclusion(r, geographicToWorld));
+  const excludeRoads = createPeachlandExclusion({ roads: (worldData.roads ?? []).map(road =>
+    ({ ...road, paths: road.paths ?? [road.points] })) }, geographicToWorld);
+  const communityBounds = worldData.communities.map(c => ({ centre: geographicToWorld(c.latitude, c.longitude), radii: communityFootprint(c.id) }));
+  const nearForest = createOkanaganNearForest({
+    quality,
+    sampleHeight: sampleDrawnHeight,
+    accepts(x, z) {
+      const [longitude, latitude] = worldToGeographic(x, z), bounds = terrainData.bounds;
+      if (longitude <= bounds.west || longitude >= bounds.east || latitude <= bounds.south || latitude >= bounds.north) return false;
+      if (terrain.isOperationalSurface(x, z) || isAgriculturePoint(worldData, x, z, 1.04)
+        || excludeRoads(x, z) || excludePeachland(x, z) || excludeResorts.some(exclude => exclude(x, z))) return false;
+      return !communityBounds.some(({ centre, radii }) =>
+        ((x - centre.x) / radii[0]) ** 2 + ((z - centre.z) / radii[1]) ** 2 < 0.86);
+    },
+    density: (x, z, y) => okanaganForestStandChance(x, z, y, worldData),
+  });
+  group.add(nearForest.group);
+  const animationStart = globalThis.performance?.now?.() ?? Date.now();
 
   return Object.freeze({
     group,
@@ -112,14 +137,19 @@ export function createOkanaganWorld(scene, terrainData, worldData, quality = "de
     worldData,
     update(position) {
       for (const local of localScenery) local.group.visible = Math.hypot(position.x-local.centre.x,position.z-local.centre.z) < 25_000;
+      nearForest.update(position);
+      water.update(((globalThis.performance?.now?.() ?? Date.now()) - animationStart) / 1000);
     },
+    diagnostics() { return { nearForest: nearForest.diagnostics(), water: water.diagnostics(), groundDetail: "world-anchored-cover-v1" }; },
     dispose() {
-      for (const texture of textures.values()) texture.dispose();
+      for (const texture of new Set(textures.values())) texture.dispose();
+      const geometries = new Set(), materials = new Set();
       group.traverse((object) => {
-        object.geometry?.dispose?.();
-        if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose?.());
-        else object.material?.dispose?.();
+        if (object.geometry) geometries.add(object.geometry);
+        for (const material of Array.isArray(object.material) ? object.material : [object.material]) if (material) materials.add(material);
       });
+      for (const geometry of geometries) geometry.dispose();
+      for (const material of materials) material.dispose();
       group.removeFromParent();
     },
   });
@@ -145,6 +175,7 @@ function createTerrain(data, world, textures) {
     const uvs = [];
     const weights = [];
     const coverages = [];
+    const agriculture = [];
     const texture = textures.get(grid.id);
     const fallbackTexture = textures.get(`${grid.id}-fallback`);
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.98, map: texture ?? null });
@@ -161,6 +192,7 @@ function createTerrain(data, world, textures) {
       };
       material.customProgramCacheKey = () => "okanagan-georeferenced-cover-v1";
     }
+    addGroundDetail(material, Boolean(texture));
     const addVertex = (longitude, latitude) => {
       const p = geographicToWorld(latitude, longitude);
       p.y = sampleHeight(p.x, p.z);
@@ -170,6 +202,7 @@ function createTerrain(data, world, textures) {
       // Broad, coherent ground variation; independent noise per vertex made a triangular quilt.
       color.offsetHSL(0, 0, (Math.sin(p.x / 430) * Math.cos(p.z / 620)) * 0.025);
       if (isAgriculturePoint(world, p.x, p.z)) color.lerp(new THREE.Color(0x7b8148), 0.45);
+      agriculture.push(isAgriculturePoint(world, p.x, p.z) ? 1 : 0);
       const edge = Math.min((longitude - bounds.west) / ((parent.bounds.east - parent.bounds.west) / (parent.columns - 1)),
         (bounds.east - longitude) / ((parent.bounds.east - parent.bounds.west) / (parent.columns - 1)),
         (latitude - bounds.south) / ((parent.bounds.north - parent.bounds.south) / (parent.rows - 1)),
@@ -218,6 +251,7 @@ function createTerrain(data, world, textures) {
     geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
     geometry.setAttribute("mapWeight", new THREE.Float32BufferAttribute(weights, 1));
     geometry.setAttribute("coverWeight", new THREE.Float32BufferAttribute(coverages, 1));
+    geometry.setAttribute("farmWeight", new THREE.Float32BufferAttribute(agriculture, 1));
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
@@ -361,6 +395,35 @@ function createLake(world) {
   return lake;
 }
 
+// Shore color follows the existing mapped rings and extends only into water. It is a visual
+// water-edge cue, not a beach, new shoreline, or change to the shared surface sampler.
+function createShorelineCue(world) {
+  const vertices = [];
+  for (const ring of [world.lake.shoreline, ...(world.lake.islands ?? [])]) {
+    for (let i = 1; i < ring.length; i++) {
+      const a = geographicToWorld(ring[i - 1][1], ring[i - 1][0]);
+      const b = geographicToWorld(ring[i][1], ring[i][0]);
+      const length = a.distanceTo(b);
+      if (length < 0.01) continue;
+      const normal = new THREE.Vector3((b.z - a.z) / length, 0, -(b.x - a.x) / length);
+      const middle = a.clone().lerp(b, 0.5);
+      const test = middle.clone().addScaledVector(normal, 6);
+      if (!isOkanaganLake(world, ...worldToGeographic(test.x, test.z))) normal.negate();
+      const innerA = a.clone().addScaledVector(normal, 14), innerB = b.clone().addScaledVector(normal, 14);
+      if (![innerA, innerB].every(p => isOkanaganLake(world, ...worldToGeographic(p.x, p.z)))) continue;
+      const corners = [a, b, innerB, innerA];
+      const forward = b.clone().sub(a).cross(innerB.clone().sub(a)).y > 0;
+      for (const id of forward ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2])
+        vertices.push(corners[id].x, world.lake.surfaceElevationM + 0.68, corners[id].z);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0x609ba0, transparent: true, opacity: 0.22, depthWrite: false }));
+  mesh.name = "mapped-lake-shore-water-cue";
+  return mesh;
+}
+
 function createRunway(world, sampleHeight) {
   const airport = world.airfields[0];
   // The airport reference point is close to field centre. The simulation uses surveyed-looking
@@ -384,7 +447,7 @@ function createRunway(world, sampleHeight) {
       new THREE.MeshBasicMaterial({ color: 0xe8e8df }));
     edge.rotation.y = runway.rotation.y;
     edge.position.copy(runway.position).addScaledVector(across, side * 27.5);
-    edge.position.y += 0.08;
+    edge.position.y += 0.48;
     group.add(edge);
   }
   for (let index = -10; index <= 10; index += 1) {
@@ -393,7 +456,7 @@ function createRunway(world, sampleHeight) {
     mark.rotation.y = runway.rotation.y;
     mark.position.copy(runway.position);
     mark.position.addScaledVector(along, index * 105);
-    mark.position.y += 0.08;
+    mark.position.y += 0.48;
     group.add(mark);
   }
   for (const end of [-1, 1]) {
@@ -404,7 +467,7 @@ function createRunway(world, sampleHeight) {
       threshold.position.copy(runway.position)
         .addScaledVector(along, end * (airport.runwayLengthM / 2 - 70))
         .addScaledVector(across, stripe * 5.7);
-      threshold.position.y += 0.09;
+      threshold.position.y += 0.49;
       group.add(threshold);
     }
   }
@@ -442,6 +505,9 @@ function createRunway(world, sampleHeight) {
   terminal.position.copy(apronCentre).addScaledVector(across, -150);
   terminal.position.y += 6.8;
   group.add(terminal);
+  group.add(createOkanaganAirportDetails({ centre: runway.position, along, across,
+    runwayLength: airport.runwayLengthM, surfaceY: runway.position.y + 0.57,
+    terminalRoofY: terminal.position.y + terminal.geometry.parameters.height / 2 + 0.02 }));
   group.name = "Kelowna International Runway 16/34";
   return group;
 }
@@ -603,7 +669,7 @@ function createIncidentTimber(world, sampleHeight, quality, isOperationalSurface
   );
   const crowns = new THREE.InstancedMesh(
     new THREE.ConeGeometry(8.4, 26, 7),
-    new THREE.MeshStandardMaterial({ color: 0x2c432c, roughness: 0.96 }),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.96 }),
     count,
   );
   const dummy = new THREE.Object3D();
@@ -642,7 +708,7 @@ function createForest(terrainData, world, sampleHeight, quality, isOperationalSu
   const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.6, 0.9, 9, 5),
     new THREE.MeshStandardMaterial({ color: 0x4f3525, roughness: 1 }), count);
   const crowns = new THREE.InstancedMesh(new THREE.ConeGeometry(5.3, 18, 7),
-    new THREE.MeshStandardMaterial({ color: 0x304d31, roughness: 0.96 }), count);
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.96 }), count);
   const pines = new THREE.InstancedMesh(pineCrownGeometry(), crowns.material, count);
   const dummy = new THREE.Object3D();
   const bounds = terrainData.bounds;
@@ -715,4 +781,63 @@ function pineCrownGeometry() {
 function hash01(value) {
   const x = Math.sin(value * 12.9898) * 43758.5453;
   return x - Math.floor(x);
+}
+
+// The rendered terrain is two planar triangles per cell, while the shared physical sampler
+// remains bilinear. Seat visual tree roots on those actual triangles without changing contact.
+export function createDrawnTerrainSampler(data, sampleHeight) {
+  const caches = new WeakMap();
+  return (x, z) => {
+    const [longitude, latitude] = worldToGeographic(x, z);
+    let grid = data;
+    for (;;) {
+      const child = (grid.details ?? []).find(({ bounds: b }) => longitude > b.west && longitude < b.east && latitude > b.south && latitude < b.north);
+      if (!child) break;
+      grid = child;
+    }
+    const b = grid.bounds;
+    const u = THREE.MathUtils.clamp((longitude - b.west) / (b.east - b.west) * (grid.columns - 1), 0, grid.columns - 1);
+    const v = THREE.MathUtils.clamp((latitude - b.south) / (b.north - b.south) * (grid.rows - 1), 0, grid.rows - 1);
+    const col = Math.min(grid.columns - 2, Math.floor(u)), row = Math.min(grid.rows - 2, Math.floor(v));
+    const tx = u - col, tz = v - row;
+    if (!caches.has(grid)) caches.set(grid, new Map());
+    const cache = caches.get(grid);
+    if (cache.size > 12000) cache.clear();
+    const at = (c, r) => {
+      const key = r * grid.columns + c;
+      if (!cache.has(key)) {
+        const point = geographicToWorld(b.south + (b.north - b.south) * r / (grid.rows - 1),
+          b.west + (b.east - b.west) * c / (grid.columns - 1));
+        cache.set(key, Math.fround(sampleHeight(point.x, point.z)));
+      }
+      return cache.get(key);
+    };
+    if (tx + tz <= 1) return at(col, row) * (1 - tx - tz) + at(col + 1, row) * tx + at(col, row + 1) * tz;
+    return at(col + 1, row + 1) * (tx + tz - 1) + at(col, row + 1) * (1 - tx) + at(col + 1, row) * (1 - tz);
+  };
+}
+
+function addGroundDetail(material, hasPhotography) {
+  const existing = material.onBeforeCompile;
+  material.onBeforeCompile = shader => {
+    existing.call(material, shader);
+    shader.vertexShader = `attribute float farmWeight; varying float vFarmWeight; varying vec2 vGroundXZ;\n${shader.vertexShader}`
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvGroundXZ = position.xz; vFarmWeight = farmWeight;");
+    shader.fragmentShader = `varying float vFarmWeight; varying vec2 vGroundXZ;
+      float groundHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float groundNoise(vec2 p) { vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+        return mix(mix(groundHash(i),groundHash(i+vec2(1,0)),f.x),mix(groundHash(i+vec2(0,1)),groundHash(i+vec2(1,1)),f.x),f.y); }
+      ${shader.fragmentShader}`
+      .replace("#include <roughnessmap_fragment>", `#include <roughnessmap_fragment>
+        // Restrained surrogate ground structure; georeferenced aerial cover always takes priority.
+        float visible = ${hasPhotography ? "1.0 - vMapWeight * mix(vCoverWeight, 1.0, hasCoverFallback)" : "1.0"};
+        float stands = groundNoise(vGroundXZ / 95.0) - 0.5;
+        float mineral = groundNoise(vGroundXZ / 13.0) - 0.5;
+        float rowPhase = (vGroundXZ.x + vGroundXZ.y * 0.24) / 22.0;
+        float rowWidth = max(fwidth(rowPhase), 0.025);
+        float rows = (1.0 - smoothstep(0.15, 0.15 + rowWidth, abs(fract(rowPhase) - 0.5))) - 0.3;
+        float detail = mix(stands * 0.24 + mineral * 0.08, rows * 0.12 + stands * 0.12, vFarmWeight);
+        diffuseColor.rgb *= 1.0 + detail * visible;`);
+  };
+  material.customProgramCacheKey = () => `okanagan-ground-detail-v1-${hasPhotography ? "aerial" : "regional"}`;
 }

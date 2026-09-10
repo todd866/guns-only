@@ -64,7 +64,6 @@ const MODES = {
       );
       const teaching = page.locator("#controls-onboarding-dismiss");
       if (await teaching.isVisible()) await teaching.click();
-      await page.bringToFront();
       await page.locator("#scene").focus().catch(() => {});
       const beforeInput = await page.evaluate(() => ({
         atMs: performance.now(),
@@ -169,7 +168,6 @@ const MODES = {
         () => (globalThis.__gunsAssets?.snapshot?.terrain?.residentChunks ?? 0) > 0,
         undefined, { timeout: 180_000 },
       );
-      await page.bringToFront();
       await page.locator("#scene").focus().catch(() => {});
     },
     // "Parked" for a jet = paused: Advance() is skipped, RefreshHotFrame() still runs.
@@ -256,7 +254,6 @@ const MODES = {
       );
       const teaching = page.locator("#controls-onboarding-dismiss");
       if (await teaching.isVisible()) await teaching.click();
-      await page.bringToFront();
       await page.locator("#scene").focus().catch(() => {});
       return ready;
     },

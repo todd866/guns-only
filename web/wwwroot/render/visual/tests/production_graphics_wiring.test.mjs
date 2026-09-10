@@ -529,8 +529,15 @@ test("environment lab exercises the production terrain manifest and exposes the 
     /const expectedShadowPass = tier === "desktop"[\s\S]*?expectedAuthoredShadowDraws = expectedShadowPass \? 4 : 0[\s\S]*?rendererEnabled !== expectedShadowPass[\s\S]*?sunCastShadow !== expectedShadowPass[\s\S]*?pcfSoft !== true[\s\S]*?expectedShadowMapSize\[tier\][\s\S]*?camera\?\.far !== 3600[\s\S]*?missionFeatures\?\.shadowDrawCalls[\s\S]*?expectedAuthoredShadowDraws/,
     "the hardware gate must reject desktop runs that skip shadows and constrained runs that add them");
   assert.match(gateSource,
-    /headless: process\.env\.GUNS_HERO_GATE_HEADLESS === "1"/,
-    "the device gate must default to headed hardware acceleration rather than SwiftShader");
+    /chromium\.launch\(perfBrowserLaunchOptions\(\{ hardware: true \}\)\)/,
+    "the device gate must request background full Chromium hardware mode rather than a headed window or software CI mode");
+  assert.match(gateSource,
+    /const rendererBackend = await page\.evaluate\([\s\S]*?document\.querySelector\("#scene"\)[\s\S]*?gl\.isContextLost\(\)[\s\S]*?gl\.getExtension\("WEBGL_debug_renderer_info"\)[\s\S]*?gl\.getParameter\(extension\.UNMASKED_RENDERER_WEBGL\)[\s\S]*?unknown\|swiftshader\|software\|llvmpipe\|lavapipe[\s\S]*?throw new Error\(`Hardware gate rejects[\s\S]*?snapshot\.performanceGate\.pass/,
+    "hardware qualification must query the live scene context and reject absent or software identity before accepting frame statistics");
+  assert.match(gateSource, /results\.push\(\{\s*tier,\s*rendererBackend,/,
+    "each accepted result must record the actual unmasked backend separately from renderer settings");
+  assert.match(gateSource, /try \{\s*browser = await chromium\.launch[\s\S]*?finally \{\s*try \{ await browser\?\.close\(\); \}\s*finally \{ await site\.close\(\); \}/,
+    "failed hardware launch or qualification must still close both browser and local server");
   for (const id of [
     "render-pixels", "resident-chunks", "visible-scenery",
     "fps", "frame-p95", "frame-p99", "late-fraction", "frame-gate",
