@@ -13,15 +13,20 @@ public sealed class OkanaganProtectionTests
     {
         var mission = OkanaganFireMission.Create(sortie);
         var flight = mission.Snapshot().Aircraft;
+        double acquiredLoad = 0;
         void Observe(Vec3D position, FireBossSurfaceMode surface = FireBossSurfaceMode.Airborne,
-            double load = 2800, double released = 0, double speed = 58) {
-            flight = flight with { PositionWorldM = position, SurfaceMode = surface, WaterLoadKg = load,
+            double? load = null, double released = 0, double speed = 58) {
+            double water = load ?? acquiredLoad;
+            flight = flight with { PositionWorldM = position, SurfaceMode = surface, WaterLoadKg = water,
+                GrossMassKg = FireBossDynamics.EmptyOperatingMassKg + flight.FuelKg + water,
                 WaterReleasedThisTickKg = released, TrueAirspeedMps = speed };
             mission.ObserveFlight(flight);
         }
         Observe(OkanaganFireMission.RunwayDeparture, load:0);
         Observe(OkanaganFireMission.AirportDeparture, load:0);
         Assert.Equal(OkanaganMissionPhase.JoinScoop,mission.Phase);
+        Observe(OkanaganFireMission.ScoopTouchdown,FireBossSurfaceMode.Water,load:0);
+        acquiredLoad = mission.Snapshot().ScoopTargetWaterKg;
         Observe(OkanaganFireMission.ScoopTouchdown,FireBossSurfaceMode.Water);
         Assert.Equal(OkanaganMissionPhase.Climb,mission.Phase);
         Observe(mission.Snapshot().Route[^1].PositionWorldM);
@@ -31,13 +36,23 @@ public sealed class OkanaganProtectionTests
         Assert.Equal(OkanaganMissionPhase.Drop,mission.Phase);
         Assert.True(mission.ActiveGateIndex >= ingress.Count-3,"Drop phase must not reset passed ingress gates.");
         Vec3D target=mission.Snapshot().DropAimWorldM;
-        for(int i=0;i<240;i++) Observe(target with {Y=target.Y+100},load:2800-i*10,released:10);
+        int releaseTicks = (int)Math.Ceiling(mission.Snapshot().DropTargetWaterKg / 10);
+        for(int i=0;i<releaseTicks;i++)
+            Observe(target with {Y=target.Y+100},load:Math.Max(0,acquiredLoad-(i+1)*10),released:10);
         Assert.Equal(OkanaganMissionPhase.Rtb,mission.Phase);
         Assert.Equal(1,mission.CompletedCycles);
         var recovery=mission.Snapshot().Route;
         // A pilot may climb in the safe sector without revisiting the exact release coordinates.
         Observe(recovery[0].PositionWorldM,load:400);
         Observe(recovery[1].PositionWorldM+new Vec3D(1800,0,0),load:400);
+        if (sortie == OkanaganSortieType.ApexDefence)
+        {
+            // Both height and position are needed before turning out of Apex's valley.
+            Assert.Equal(1, mission.ActiveGateIndex);
+            Observe(recovery[1].PositionWorldM with {Y=recovery[1].PositionWorldM.Y-61},load:400);
+            Assert.Equal(1, mission.ActiveGateIndex);
+            Observe(recovery[1].PositionWorldM,load:400);
+        }
         Assert.Equal(2,mission.ActiveGateIndex);
         foreach(var gate in recovery.Skip(2)) Observe(gate.PositionWorldM,load:400);
         Assert.True(mission.Snapshot().IncidentHandedOff);
@@ -140,6 +155,37 @@ public sealed class OkanaganProtectionTests
         for(int i=1;i<route.Length;i++) for(int j=0;j<=50;j++) {
             Vec3D a=route[i-1].PositionWorldM,b=route[i].PositionWorldM,p=a+(b-a)*(j/50.0);
             Assert.True(p.Y-OkanaganCdem.SampleSurfaceHeightM(p)>30,$"{sortie} corridor intersects relief: {p}");
+        }
+    }
+
+    [Fact]
+    public void ApexEscapeValleyClearsTheObservedDropAndSecondaryRidge()
+    {
+        var mission = OkanaganFireMission.Create(OkanaganSortieType.ApexDefence);
+        var route = mission.RouteFor(OkanaganMissionPhase.Rtb).ToArray();
+        Assert.Equal("apex-valley-turn", route[0].Id);
+        Assert.Equal("escape-climb", route[1].Id);
+        Assert.Equal(250, route[0].RadiusM);
+        Assert.Equal(250, route[1].RadiusM);
+        // Actual failed flight's drop/RTB transition: the former straight exit hit the ridge.
+        var drop = new Vec3D(-29029.797546265083, 1988.7953714831087, -54533.220881312205);
+        var points = new[] { drop, route[0].PositionWorldM, route[1].PositionWorldM };
+        for (int i = 1; i < points.Length; i++)
+        for (int j = 0; j <= 100; j++)
+        {
+            Vec3D point = points[i - 1] + (points[i] - points[i - 1]) * (j / 100.0);
+            Assert.True(point.Y - OkanaganCdem.SampleSurfaceHeightM(point) >= 250,
+                $"Apex valley escape loses its terrain margin: {point}");
+        }
+        int lake = Array.FindIndex(route, gate => gate.Id == "lake-return");
+        Assert.True(lake > 1);
+        for (int i = 2; i <= lake; i++)
+        for (int j = 0; j <= 50; j++)
+        {
+            Vec3D a = route[i - 1].PositionWorldM, b = route[i].PositionWorldM;
+            Vec3D point = a + (b - a) * (j / 50.0);
+            Assert.True(point.Y - OkanaganCdem.SampleSurfaceHeightM(point) >= 250,
+                $"Apex return corridor intersects relief: {point}");
         }
     }
 }

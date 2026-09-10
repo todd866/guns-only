@@ -22,6 +22,8 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
     gross_mass_kg: 7_000,
     water_kg: 2_100,
     water_capacity_kg: 3_104,
+    scoop_target_water_kg: 2_600,
+    drop_target_water_kg: 2_210,
     scoop_valid: true,
     scoop_rate_kgps: 117.5,
     water_released_this_tick_kg: 18,
@@ -33,8 +35,8 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
   assert.equal(state.audio_profile_id, "audio.fireboss.pt6a-67f.v1");
   assert.equal(state.opponent_alive, false);
   assert.equal(state.suppress_systems_panel, true);
-  assert.equal(state.pz, -20);
-  assert.equal(state.vz, -40);
+  assert.equal(state.pz, 20);
+  assert.equal(state.vz, 40);
   assert.equal(state.heading_deg, 90);
   assert.equal(state.calibrated_airspeed_kts, undefined);
   assert.equal(state.indicated_airspeed_kts, undefined);
@@ -50,6 +52,9 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
   assert.ok(state.engine_ng_pct > 84 && state.engine_ng_pct < 85);
   assert.ok(state.stall_speed_kcas > 60);
   assert.equal(state.fireboss_scoop_rate_kgps, 117.5);
+  assert.equal(state.fireboss_scoop_target_kg, 2_600);
+  assert.equal(state.fireboss_drop_target_kg, 2_210);
+  assert.equal(state.water_capacity_kg, 3_104);
   assert.equal(state.scoop_fault, "");
   assert.equal(state.fireboss_water_release_kg, 18);
   assert.equal(state.fireboss_water_release_rate_kgps, 1_450);

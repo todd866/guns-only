@@ -959,6 +959,16 @@ test("Fire Boss hopper and scoops are a HUD readout, not a cockpit panel", () =>
   assert.equal(fault.caution, true);
 });
 
+test("Fire Boss legal load target is distinct from physical hopper capacity", () => {
+  const load = fireBossHopperReadout({
+    player_aircraft_id: "aircraft.at-802f-fireboss", water_load_kg: 2_000,
+    water_capacity_kg: 3_104, fireboss_scoop_target_kg: 2_600,
+  });
+  assert.equal(load.waterText, "LOAD 2,000/2,600 L");
+  assert.equal(load.fillFraction, 2_000 / 3_104);
+  assert.equal(load.targetFraction, 2_600 / 3_104);
+});
+
 test("systems mode allowlist retains an explicit barrier engagement", async () => {
   const source = await readFile(new URL("../hud_readouts.js", import.meta.url), "utf8");
   const declaration = source.match(

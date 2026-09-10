@@ -270,7 +270,8 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     /// Airframe lift coefficient at zero incidence. Zero preserves the historical symmetric polar;
     /// a cambered wing declares its offset here so lift, induced drag, stall incidence and the
     /// protected control law all consume one coefficient authority.
-    double ZeroLiftCoefficient = 0.0);
+    double ZeroLiftCoefficient = 0.0,
+    ConventionalTailParameters ConventionalTail = default);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -1117,7 +1118,9 @@ public static class FlightModel {
         MassKg: 5_345.0, // empty operating mass + representative launch fuel
         WingAreaM2: 37.25, // 401 sq ft (measured)
         ThrustMaxN: 30_000.0, // installed static-thrust cap (PROVISIONAL)
-        CD0: 0.058, InducedK: 0.067, CLMax: 2.25, CLMin: -0.72,
+        // PROVISIONAL whole-aircraft polar fit: 150 kt / 892 ft/min at 7,257 kg.
+        // Standard sea-level surrogate conditions; see source ledger for missing OEM conditions.
+        CD0: 0.0603, InducedK: 0.116, CLMax: 2.25, CLMin: -0.72,
         RollRateMaxRad: 1.30, BankTau: 0.48,
         MCrit: 0.55, WaveDragK: 120.0,
         SpoolUpTau: 1.35, SpoolDownTau: 0.90,
@@ -1149,7 +1152,11 @@ public static class FlightModel {
         MaximumShaftPowerW: 1_193_000.0,
         PropellerEfficiency: 0.82,
         StaticPropellerThrustCapN: 30_000.0,
-        ZeroLiftCoefficient: 0.92);
+        ZeroLiftCoefficient: 0.92,
+        // PROVISIONAL conventional tail surrogate, not an OEM derivative table. Unlike the
+        // fighter's normal-load law, elevator, static stability and damping all scale with q.
+        ConventionalTail: new(true, -1.2, -22.0, 1.1, 25.0 * System.Math.PI / 180.0,
+            0.11, -0.30, 0.07));
 
     /// F-14A PUBLIC-DATA SURROGATE for Top Gun visual merge. Measured anchors: 40,100 lb empty
     /// (Navy museum primary; Western Museum of Flight lists 40,104 lb — canonical empty mass uses
@@ -1531,7 +1538,10 @@ public static class FlightModel {
 
         double cl = LiftCoefficient(alpha, p, mach);
         double attached = p.CD0 * MachDragFactor(mach, p) + p.InducedK * cl * cl;
-        double peak = alpha >= 0.0 ? EffectiveClMax(p, mach) : -EffectiveClMin(p, mach);
+        // Camber can give positive lift at negative incidence. Normalize high-lift drag by
+        // the sign of the actual lift, not the incidence datum; otherwise crossing alpha=0
+        // switches between CLmin and CLmax and creates a finite, nonphysical drag step.
+        double peak = cl >= 0.0 ? EffectiveClMax(p, mach) : -EffectiveClMin(p, mach);
         double highLiftFraction = System.Math.Abs(cl) / System.Math.Max(peak, 1e-6);
         double highLiftExcess = System.Math.Max(0.0,
             highLiftFraction - p.HighLiftDragOnsetFraction);
@@ -1720,6 +1730,13 @@ public static class FlightModel {
                 ? F22RudderEffectiveness(alpha) : 1.0;
         double sideAccel = effectiveRudderCommand * rudderSideEffectiveness * 0.06 * speed
             - q * p.WingAreaM2 * p.CYBeta * beta / r.Mass;
+        if (p.ConventionalTail.Enabled && double.IsFinite(c.ElevatorControl)) {
+            // A right-yaw rudder pushes the tail left. The conventional aircraft must not
+            // inherit the generic fighter's lateral jink acceleration, proportional to V.
+            double rudder = System.Math.Clamp(c.Rudder, -1, 1) * p.MaxRudderDeflectionRad;
+            sideAccel = q * p.WingAreaM2 / r.Mass
+                * (p.ConventionalTail.CyDeltaRudder * rudder - p.CYBeta * beta);
+        }
         bool useF22BodyAxisForces = p.HighAlphaModel
             == HighAlphaModelKind.F22PublicDataSurrogate
             && alpha > (scheduledLiftLimit
@@ -2190,6 +2207,18 @@ public static class FlightModel {
                     RapierAerodynamics.YawControlMomentCapacityNm(dynamicPressure,
                         configuration.YawControlAuthorityFraction, mach))
                 : System.Math.Clamp(yawDemand, -p.YawMomentMaxNm, p.YawMomentMaxNm);
+
+        if (p.ConventionalTail.Enabled && double.IsFinite(c.ElevatorControl)) {
+            // A mechanical elevator does not acquire a G/attitude tracker at liftoff, and a
+            // conventional fin does not know a commanded heading. No fixed-Nm controller or
+            // stall-break moment survives this branch at zero airspeed.
+            pitchMoment = ConventionalTailAerodynamics.PitchMoment(dynamicPressure, speed,
+                p.WingAreaM2, meanChord, alpha, rates.Q, c.ElevatorControl, p.ConventionalTail)
+                + configurationPitchMoment;
+            yawMoment = ConventionalTailAerodynamics.YawMoment(dynamicPressure, speed,
+                p.WingAreaM2, span, beta, rates.R, rudderDeflection, p.ConventionalTail)
+                + stalledYawMoment;
+        }
 
         // Cold-gas RCS: fade non-q FCS moments when dynamic pressure dies, and fill with thrusters
         // while gas remains. Attached aileron moments already scale with q and are left alone.

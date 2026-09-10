@@ -710,6 +710,7 @@ export function fireBossHopperReadout(state = {}) {
   if (state.player_aircraft_id !== "aircraft.at-802f-fireboss") return null;
   const waterKg = Math.max(0, finiteNumber(state.water_load_kg) ?? 0);
   const capacityKg = Math.max(1, finiteNumber(state.water_capacity_kg) ?? 3_104);
+  const targetKg = finiteNumber(state.fireboss_scoop_target_kg);
   const fault = String(state.scoop_fault ?? "").trim();
   const scoopRate = finiteNumber(state.fireboss_scoop_rate_kgps);
   let scoopText = "SCOOPS UP";
@@ -718,10 +719,13 @@ export function fireBossHopperReadout(state = {}) {
     scoopText = `FILLING · ${Math.round(scoopRate ?? 0)} L/S`;
   } else if (state.fireboss_scoops_commanded === true) scoopText = "SCOOPS DOWN";
   return {
-    waterText: `WATER ${Math.round(waterKg).toLocaleString("en-US")} L`,
+    waterText: targetKg > 0
+      ? `LOAD ${Math.round(waterKg).toLocaleString("en-US")}/${Math.round(targetKg).toLocaleString("en-US")} L`
+      : `WATER ${Math.round(waterKg).toLocaleString("en-US")} L`,
     scoopText,
     dropping: state.fireboss_drop_active === true,
     caution: Boolean(fault),
     fillFraction: waterKg / capacityKg,
+    targetFraction: targetKg > 0 ? Math.min(1, targetKg / capacityKg) : null,
   };
 }

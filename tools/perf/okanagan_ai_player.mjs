@@ -387,6 +387,64 @@ function longestAuthorityStallSeconds(samples) {
   return longestS;
 }
 
+/** Serialization/domain checks only; these are not aircraft handling or performance limits. */
+export function assessOkanaganTelemetrySanity(samples) {
+  const sampleList = Array.isArray(samples) ? samples : [];
+  const fields = [
+    "wallS", "simS", "xM", "yM", "zM", "vxMps", "vyMps", "vzMps", "speedMps",
+    "verticalSpeedMps", "headingRad", "pitchRad", "rollRad", "angleOfAttackRad",
+    "pitchRateRadPerSecond", "rollRateRadPerSecond", "loadFactor", "enginePowerFraction",
+    "throttle", "waterKg", "waterReleasedThisTickKg", "fuelKg", "fuelAboveMinimumKg",
+    "completedCycles", "activeGateIndex", "scoopTargetWaterKg", "dropTargetWaterKg",
+  ];
+  const firstFailures = new Map();
+  const invalidSamples = new Set();
+  const fail = (index, reason) => {
+    invalidSamples.add(index);
+    if (!firstFailures.has(reason)) firstFailures.set(reason, `sample ${index}: ${reason}`);
+  };
+  const tolerance = 1e-6; // Floating-point serialization tolerance, not a response envelope.
+  if (sampleList.length === 0) firstFailures.set("samples", "no flight telemetry samples");
+  for (const [index, sample] of sampleList.entries()) {
+    for (const field of fields) {
+      if (!Number.isFinite(sample?.[field])) fail(index, `${field} is missing or nonfinite`);
+    }
+    for (const field of ["wallS", "simS", "speedMps", "waterKg", "waterReleasedThisTickKg",
+      "fuelKg", "completedCycles", "activeGateIndex", "scoopTargetWaterKg", "dropTargetWaterKg"]) {
+      if (sample?.[field] < -tolerance) fail(index, `${field} is negative`);
+    }
+    for (const field of ["throttle", "enginePowerFraction"]) {
+      if (sample?.[field] < -tolerance || sample?.[field] > 1 + tolerance) {
+        fail(index, `${field} is outside its normalized [0, 1] domain`);
+      }
+    }
+    // These are the ranges of AircraftSim's asin/atan2 attitude telemetry, not permissible banks.
+    for (const [field, limit] of [["pitchRad", Math.PI / 2], ["rollRad", Math.PI],
+      ["headingRad", Math.PI], ["angleOfAttackRad", Math.PI]]) {
+      if (Math.abs(sample?.[field]) > limit + tolerance) fail(index, `${field} is outside its angle domain`);
+    }
+    if (Number.isFinite(sample?.verticalSpeedMps) && Number.isFinite(sample?.vyMps)
+      && Math.abs(sample.verticalSpeedMps - sample.vyMps) > tolerance) {
+      fail(index, "verticalSpeedMps disagrees with world velocity Y");
+    }
+    for (const source of ["command", "authorityInput"]) {
+      if (sample?.[source] == null) continue;
+      for (const axis of ["pitch", "roll", "yaw"]) {
+        const value = sample[source][axis];
+        if (!Number.isFinite(value) || Math.abs(value) > 1 + tolerance) {
+          fail(index, `${source}.${axis} is missing, nonfinite or outside [-1, 1]`);
+        }
+      }
+    }
+  }
+  return Object.freeze({
+    pass: firstFailures.size === 0,
+    failures: Object.freeze([...firstFailures.values()]),
+    invalidSampleCount: invalidSamples.size,
+    scope: "finite telemetry, mathematical domains and vertical-velocity consistency only",
+  });
+}
+
 export function assessOkanaganAiFlight(samples, journey = {}, errors = []) {
   const sampleList = Array.isArray(samples) ? samples : [];
   const failures = [];
@@ -404,6 +462,11 @@ export function assessOkanaganAiFlight(samples, journey = {}, errors = []) {
       .map((sample) => Math.max(0, finite(sample.waterKg))))
     : 0;
   const releasedWaterKg = maximumWaterKg - minimumWaterAfterLoadKg;
+  // Dispatch displays a preview; only the target captured at the water run belongs to this
+  // circuit. Missing authority targets cannot be replaced with the former 2,800/2,400 kg gates.
+  const scoopTargetWaterKg = sampleList.find(sample => sample.phase === "scoop")?.scoopTargetWaterKg;
+  const dropTargetWaterKg = sampleList.find(sample => Number.isFinite(sample.dropTargetWaterKg)
+    && sample.dropTargetWaterKg > 0)?.dropTargetWaterKg;
   const maximumCycles = Math.max(0, ...sampleList.map((sample) => finite(sample.completedCycles)));
   const minimumFuelMarginKg = Math.min(...sampleList.map((sample) =>
     finite(sample.fuelAboveMinimumKg, Number.POSITIVE_INFINITY)));
@@ -465,8 +528,16 @@ export function assessOkanaganAiFlight(samples, journey = {}, errors = []) {
   }
   const maximumStallS = longestAuthorityStallSeconds(sampleList);
   if (maximumStallS > 0.75) failures.push(`authority stalled for ${maximumStallS.toFixed(2)} s`);
-  if (maximumWaterKg < 2_800) failures.push(`hopper filled only to ${maximumWaterKg.toFixed(0)} L`);
-  if (releasedWaterKg < 2_400) failures.push(`training drop released only ${releasedWaterKg.toFixed(0)} L`);
+  if (!Number.isFinite(scoopTargetWaterKg) || scoopTargetWaterKg <= 1) {
+    failures.push("authority published no positive scoop load target");
+  } else if (maximumWaterKg < scoopTargetWaterKg - 1) {
+    failures.push(`hopper filled only to ${maximumWaterKg.toFixed(0)} L of ${scoopTargetWaterKg.toFixed(0)} L target`);
+  }
+  if (!Number.isFinite(dropTargetWaterKg) || dropTargetWaterKg <= 0) {
+    failures.push("authority published no positive drop load target");
+  } else if (releasedWaterKg < dropTargetWaterKg - 1) {
+    failures.push(`training drop released only ${releasedWaterKg.toFixed(0)} L of ${dropTargetWaterKg.toFixed(0)} L target`);
+  }
   if (maximumCycles < 1) failures.push("authority credited no complete water circuit");
   if (!sampleList.some((sample) => sample.command?.scoops === true
     && sample.scoopsCommanded === true && sample.scoopValid === true)) {
@@ -503,10 +574,34 @@ export function assessOkanaganAiFlight(samples, journey = {}, errors = []) {
     failures.push("sortie did not protect the published RTB reserve");
   }
 
+  const lifecycle = Object.freeze({ pass: failures.length === 0, failures: Object.freeze([...failures]) });
+  const telemetrySanity = assessOkanaganTelemetrySanity(sampleList);
+  failures.push(...telemetrySanity.failures.map(reason => `telemetry: ${reason}`));
   return Object.freeze({
+    // Existing suite consumers retain their Boolean result. Its scope is explicit: even a clean
+    // completed journey does not approve handling, stability, control effort or aircraft fidelity.
     pass: failures.length === 0,
+    passScope: "mission-lifecycle-and-telemetry-sanity",
     failures: Object.freeze(failures),
+    lifecycle,
+    telemetrySanity,
+    handlingEvidence: Object.freeze({
+      status: "unverified",
+      approved: false,
+      reason: "A compensating route pilot and telemetry sanity do not establish human handling; "
+        + "open-loop response and actual human-input acceptance remain separate requirements.",
+    }),
+    controlDirectionEvidence: Object.freeze({
+      status: "unverified",
+      reason: "Each command is computed after its observation and applied later. Published input "
+        + "telemetry can be 0.25 simulation seconds older; there is no applied-command timestamp "
+        + "or acknowledgement for reliable sign correlation.",
+    }),
     metrics: Object.freeze({
+      // mission_ai_suite forwards metrics but not the detailed assessment fields above.
+      assessmentScope: "mission-lifecycle-and-telemetry-sanity",
+      handlingApproved: false,
+      controlDirectionVerified: false,
       readyMs: finite(journey.readyMs),
       startLatencyMs: finite(journey.startLatencyMs),
       sampleCount: sampleList.length,
@@ -517,6 +612,8 @@ export function assessOkanaganAiFlight(samples, journey = {}, errors = []) {
       distanceTravelledM: distanceTravelled(sampleList),
       maximumWaterKg,
       releasedWaterKg,
+      scoopTargetWaterKg: scoopTargetWaterKg ?? null,
+      dropTargetWaterKg: dropTargetWaterKg ?? null,
       maximumCycles,
       minimumFuelMarginKg,
       liveSilentAudioSamples: sampleList.filter(liveSilentAudio).length,
@@ -642,44 +739,54 @@ async function readObservation(page, startedAtMs) {
   }, startedAtMs);
 }
 
-function compactSample(observation, command = null, digitalYaw = 0) {
+export function compactOkanaganSample(observation, command = null, digitalYaw = 0) {
   const state = observation?.state ?? {};
   const telemetry = observation?.telemetry ?? {};
   const debrief = observation?.debrief ?? {};
   return {
-    wallS: finite(observation?.wallS),
-    simS: finite(state.mission_s),
+    // Preserve bad/missing observations as null so JSON does not silently turn them into valid 0s.
+    // The controller's separate finite() fallback must never become the assessment's evidence.
+    wallS: observedNumber(observation?.wallS),
+    simS: observedNumber(state.mission_s),
     sortie: state.sortie ?? null,
     phase: state.phase ?? null,
     surface: state.surface ?? null,
     flyable: state.flyable === true,
-    xM: finite(state.position?.x),
-    yM: finite(state.position?.y),
-    zM: finite(state.position?.z),
-    vxMps: finite(state.velocity?.x),
-    vyMps: finite(state.velocity?.y),
-    vzMps: finite(state.velocity?.z),
-    speedMps: finite(state.tas_mps),
-    verticalSpeedMps: finite(state.vertical_speed_mps),
-    headingRad: finite(state.heading_rad),
-    pitchRad: finite(state.pitch_rad),
-    rollRad: finite(state.roll_rad),
-    throttle: finite(state.throttle),
-    waterKg: finite(state.water_kg),
+    xM: observedNumber(state.position?.x),
+    yM: observedNumber(state.position?.y),
+    zM: observedNumber(state.position?.z),
+    vxMps: observedNumber(state.velocity?.x),
+    vyMps: observedNumber(state.velocity?.y),
+    vzMps: observedNumber(state.velocity?.z),
+    speedMps: observedNumber(state.tas_mps),
+    verticalSpeedMps: observedNumber(state.vertical_speed_mps),
+    headingRad: observedNumber(state.heading_rad),
+    pitchRad: observedNumber(state.pitch_rad),
+    rollRad: observedNumber(state.roll_rad),
+    angleOfAttackRad: observedNumber(state.aoa_rad),
+    pitchRateRadPerSecond: observedNumber(state.pitch_rate_radps),
+    rollRateRadPerSecond: observedNumber(state.roll_rate_radps),
+    loadFactor: observedNumber(state.load_factor),
+    enginePowerFraction: observedNumber(state.engine_power_fraction),
+    throttle: observedNumber(state.throttle),
+    waterKg: observedNumber(state.water_kg),
+    scoopTargetWaterKg: observedNumber(state.scoop_target_water_kg),
+    dropTargetWaterKg: observedNumber(state.drop_target_water_kg),
     scoopsCommanded: state.scoops_commanded === true,
     scoopValid: state.scoop_valid === true,
     scoopFault: state.scoop_fault ?? "",
-    waterReleasedThisTickKg: finite(state.water_released_this_tick_kg),
-    fuelKg: finite(state.fuel_kg),
-    fuelAboveMinimumKg: finite(state.fuel_plan?.above_minimum_kg),
-    completedCycles: finite(state.completed_cycles),
-    activeGateIndex: finite(state.active_gate),
+    waterReleasedThisTickKg: observedNumber(state.water_released_this_tick_kg),
+    fuelKg: observedNumber(state.fuel_kg),
+    fuelAboveMinimumKg: observedNumber(state.fuel_plan?.above_minimum_kg),
+    completedCycles: observedNumber(state.completed_cycles),
+    activeGateIndex: observedNumber(state.active_gate),
     activeGateId: state.route?.[state.active_gate]?.id ?? null,
     passedGateIds: Array.isArray(state.route)
       ? state.route.filter((gate) => gate?.passed === true).map((gate) => gate.id) : [],
-    terrainClearanceM: Number.isFinite(Number(telemetry.terrain_clearance_m))
-      ? Number(telemetry.terrain_clearance_m) : null,
+    terrainClearanceM: observedNumber(telemetry.terrain_clearance_m),
     authorityInput: telemetry.input ? { ...telemetry.input } : null,
+    authorityInputSimS: observedNumber(telemetry.mission_s),
+    commandTiming: "computed-after-observation; applied-later",
     audioBuilt: observation?.audio?.built === true,
     audioContextState: observation?.audio?.contextState ?? null,
     audioSilentQa: observation?.audio?.silentQa === true,
@@ -712,6 +819,10 @@ function compactSample(observation, command = null, digitalYaw = 0) {
     debriefSummary: observation?.ui?.resultSummary ?? "",
     debriefReserveProtected: debrief.reserve?.protectedReserve === true,
   };
+}
+
+function observedNumber(value) {
+  return Number.isFinite(value) ? value : null;
 }
 
 function phaseScreenshotName(phase) {
@@ -877,8 +988,10 @@ export async function runOkanaganAiFlight({
       const command = phase === "complete" || phase === "failed"
         ? null : okanaganAiCommand(state);
       const digitalYaw = command ? yawModulator.next(command.yaw) : 0;
-      const sample = compactSample(observation, command, digitalYaw);
+      const sample = compactOkanaganSample(observation, command, digitalYaw);
       samples.push(sample);
+      // Stop sending controls on corrupt observations; retain the sample for the final assessment.
+      if (!assessOkanaganTelemetrySanity([sample]).pass) break;
 
       const screenshotName = phaseScreenshotName(phase);
       if (screenshotName && okanaganScreenshotQualification(screenshotName, state)) {
@@ -887,7 +1000,7 @@ export async function runOkanaganAiFlight({
       if (phase === "complete" || phase === "failed") {
         await releaseControls(page, heldKeys);
         await page.waitForTimeout(100);
-        const terminal = compactSample(await readObservation(page, startedAtMs));
+        const terminal = compactOkanaganSample(await readObservation(page, startedAtMs));
         samples.push(terminal);
         await capture("result");
         break;
