@@ -32,6 +32,8 @@ listening acceptance or a claim of acoustically calibrated AH-1G simulation.
 
 Run the acoustic check explicitly with `SMOKE_WWWROOT=web/wwwroot node --test
 web/smoke/cobra-audio-acoustics.test.mjs` from a checkout with the smoke dependencies installed.
+Both the normal local browser gate and the required GitHub browser job also execute it against
+the published artifact.
 
 A silent headless check on the production Cobra route with candidate audio overlaid verified the
 exact served module/WAV bytes, recording attachment, unchanged playback rate under collective
