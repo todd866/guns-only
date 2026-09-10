@@ -60,7 +60,7 @@ function nextSortieCorrection({ failed, aircraftNotFlyable, fireMission, drops, 
   if (failed) return "";
   if (fireMission && drops === 0)
     return "Release on the marked line.";
-  if (cycles === 0)
+  if (!fireMission && cycles === 0)
     return "Complete one circuit.";
   return "";
 }
@@ -85,6 +85,13 @@ export function okanaganDebriefModel(state = {}) {
   const effectiveWaterKg = whole(state?.effective_water_kg);
   const reserve = reserveEvidence(state);
   const fireMission = sortie !== "water-circuits";
+  const defenceMission = ["peachland-defence", "big-white-defence", "silver-star-defence", "apex-defence"].includes(sortie);
+  let failureTitle = "Failed";
+  if (defenceMission && state.flyable === true && state.effective_drops === 0) {
+    if (state.surface === "airborne" && state.incident_handed_off === true)
+      failureTitle = "Defence line missed";
+    else if (state.surface === "runway") failureTitle = "Defence unfinished";
+  }
   const aircraftNotFlyable = state?.flyable === false;
   const aircraftState = aircraftNotFlyable
     ? "NOT FLYABLE"
@@ -118,7 +125,7 @@ export function okanaganDebriefModel(state = {}) {
       const damaged=category.length-intact-lost;
       facts.push(fact(`sites-${kind}`,label,`${intact} intact · ${damaged} damaged · ${lost} lost`,lost||damaged?"caution":"normal"));
     }
-    // Wetness has decayed by landing, so this is the authority's record of which standing sites
+    // Wetness may decay before sortie end, so this is the authority's record of standing sites
     // the load actually reached, not a claim about what would have burned without it.
     facts.push(fact("sites-reached","REACHED BY YOUR DROP",`${protectedSites} of ${sites.length}`,
       protectedSites > 0 ? "normal" : "caution"));
@@ -157,7 +164,10 @@ export function okanaganDebriefModel(state = {}) {
     failed,
     outcome: failed ? "failed" : "complete",
     kicker: sortieTitle.toUpperCase(),
-    title: failed ? "Failed" : sites.length ? "Aircraft recovered" : "Complete",
+    title: failed ? failureTitle : sites.length
+      ? state.surface === "runway" ? "Aircraft recovered"
+        : state.incident_handed_off === true ? "Sector handed off" : "Defence complete"
+      : "Complete",
     summary,
     correction,
     reserve,

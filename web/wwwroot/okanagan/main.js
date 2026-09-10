@@ -84,10 +84,10 @@ const SORTIES = Object.freeze({
     objective: "Hold, then fly the assigned west-flank drops.",
     execution: "Wait for Air Attack · hit Division Alpha · recover",
   },
-  "peachland-defence": {index:3, title:"Peachland Defence", block:925, working:"—", objective:"Hold the hillside neighbourhood edge.", execution:"Homes above Beach Avenue · one load · hand off and recover"},
-  "big-white-defence": {index:4, title:"Big White Defence", block:925, working:"—", objective:"Protect Happy Valley homes and lift terminals.", execution:"Climb over the lake · cross the ridge · work downhill"},
-  "silver-star-defence": {index:5, title:"SilverStar Defence", block:925, working:"—", objective:"Protect the village and lift infrastructure.", execution:"Long ferry · watch the reserve · one downhill attack"},
-  "apex-defence": {index:6, title:"Apex Defence", block:925, working:"—", objective:"Defend the village below the ski slopes.", execution:"South valley ferry · ridge clearance · protect the escape"},
+  "peachland-defence": {index:3, title:"Peachland Defence", airborne:true, block:925, working:"—", objective:"Hold the hillside neighbourhood edge.", execution:"Airborne with water · defend the homes · fly clear to finish"},
+  "big-white-defence": {index:4, title:"Big White Defence", airborne:true, block:925, working:"—", objective:"Protect Happy Valley homes and lift terminals.", execution:"Airborne above Big White · downhill drop · safe escape to finish"},
+  "silver-star-defence": {index:5, title:"SilverStar Defence", airborne:true, block:925, working:"—", objective:"Protect the village and lift infrastructure.", execution:"Airborne with water · one downhill attack · fly clear to finish"},
+  "apex-defence": {index:6, title:"Apex Defence", airborne:true, block:925, working:"—", objective:"Defend the village below the ski slopes.", execution:"Airborne above Apex · defend the village · follow the escape to finish"},
 });
 
 /** localStorage access itself can throw in locked-down browsing; a sortie must still boot. */
@@ -332,7 +332,7 @@ function selectSortie(id) {
     button.setAttribute("aria-checked", String(selected));
     button.tabIndex = selected ? 0 : -1;
   });
-  startButton.textContent = "Start";
+  startButton.textContent = SORTIES[id].airborne ? "Start airborne" : "Start";
   startButton.setAttribute("aria-label", `Start ${SORTIES[id].title}`);
   document.querySelector("#plan-working").textContent = SORTIES[id].working;
   document.querySelector("#plan-block").textContent = `${SORTIES[id].block} KG`;
@@ -550,7 +550,7 @@ function startSortie(id) {
   bridge.Start(SORTIES[id].index);
   pilotLogbook.begin({ activity: `Okanagan · ${SORTIES[id].title || id}` });
   state = JSON.parse(bridge.GetState());
-  throttle = 0.65;
+  throttle = state.throttle;
   elevatorTrim = 0;
   syncTrimControl();
   scoops = false;
@@ -561,6 +561,8 @@ function startSortie(id) {
   telemetryFrames.length = 0;
   lastTelemetryMissionSecond = -Infinity;
   lastTelemetryPhase = "";
+  lastRadio = "";
+  radioHideAt = 0;
   setPaused(false);
   planMinimum.textContent = `${Math.round(state.fuel_plan.minimum_rtb_kg)} KG`;
   status.textContent = "Flying";

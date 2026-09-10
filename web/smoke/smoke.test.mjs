@@ -896,11 +896,12 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
 test("the published Okanagan route exposes training and mapped defence sorties with a real pause menu", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
   const site = await serveStatic(WWWROOT);
-  const browser = await chromium.launch({
-    headless: true,
-    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
-  });
+  let browser;
   try {
+    browser = await chromium.launch({
+      headless: true,
+      args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+    });
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
@@ -925,27 +926,87 @@ test("the published Okanagan route exposes training and mapped defence sorties w
     assert.ok(Number.isFinite(telemetry.terrain_clearance_m));
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => document.querySelector("#pause-menu")?.classList.contains("visible"));
+    async function defenceOpening(sortie, action) {
+      await page.waitForFunction(token => {
+        const s = window.__gunsOnlyOkanagan.getState();
+        return s?.sortie === token && s.mission_s >= .25;
+      }, sortie, { timeout: scaled(15000) });
+      const opening = await page.evaluate(() => {
+        const api = window.__gunsOnlyOkanagan;
+        return { state: api.getState(), guidance: api.getGuidance(),
+          target: api.getSelectedTarget(), telemetry: api.getLastTelemetry(),
+          radio: document.querySelector("#radio")?.textContent,
+          radioVisible: document.querySelector("#radio")?.dataset.visible,
+          navigationFix: document.querySelector("#navigation-fix")?.textContent };
+      });
+      const { state: defence, guidance, target, telemetry } = opening;
+      const label = `${sortie}/${action}`;
+      assert.equal(defence.surface, "airborne", `${label}: defence must start in the air`);
+      assert.equal(defence.phase, "ingress", `${label}: no runway, scoop or ferry preamble`);
+      assert.equal(defence.flyable, true, label);
+      assert.ok(defence.water_kg > 300 && defence.water_kg <= defence.water_capacity_kg,
+        `${label}: a usable load within hopper capacity must already be aboard`);
+      assert.ok(defence.drop_target_water_kg > 0 && defence.drop_target_water_kg <= defence.water_kg,
+        `${label}: preloaded water must have an acquired delivery target`);
+      assert.ok(defence.sites.length >= 20, `${label}: selected mapped sector is present`);
+      assert.ok(Number.isFinite(telemetry.terrain_clearance_m) && telemetry.terrain_clearance_m >= 150,
+        `${label}: ridge arrival needs clearance above the actually rendered terrain`);
+      assert.ok(defence.tas_mps >= 50 && defence.tas_mps <= 70, `${label}: controlled approach speed`);
+      assert.ok(defence.fuel_plan.above_minimum_kg > 55, `${label}: usable work margin above Joker`);
+      const dropRange = Math.hypot(defence.drop_aim.x - defence.position.x, defence.drop_aim.z - defence.position.z);
+      assert.ok(dropRange <= 6500, `${label}: the selected defence run must be nearby, got ${dropRange}m`);
+      const gate = defence.route[defence.active_gate];
+      assert.ok(gate && !["departure", "turn-west", "lake-join", "lake-climb"].includes(gate.id),
+        `${label}: first guidance must belong to the defence approach`);
+      assert.equal(guidance.navigation?.gate.id, gate.id, `${label}: director follows authority`);
+      assert.equal(target?.id, `fix:${gate.id}`, `${label}: selected HUD target follows the same active gate`);
+      assert.equal(opening.navigationFix, guidance.navigation.label, `${label}: visible director matches published gate`);
+      assert.ok(guidance.navigation.rangeM > 0 && guidance.navigation.rangeM <= 2000,
+        `${label}: next approach gate is local`);
+      assert.ok(Math.abs(guidance.navigation.turnDeg) < 45, `${label}: approach starts ahead, not behind`);
+      // .85 is the authored arrival power. Test both actual and pending commands so the first
+      // browser update cannot quietly replace the flight initializer with the old .65 default.
+      for (const power of [defence.throttle, defence.pending_controls?.throttle, defence.applied_controls?.throttle])
+        assert.ok(Math.abs(power - .85) < 1e-6, `${label}: preserve initialized arrival power, got ${power}`);
+      assert.equal(opening.radioVisible, "true", `${label}: opening Air Attack instruction must be replayed`);
+      assert.equal(opening.radio, defence.radio, `${label}: visible opening radio matches authority`);
+      assert.match(opening.radio, /AIR ATTACK:.*Water aboard/u, `${label}: actionable loaded-start call`);
+      assert.ok(await page.locator("#site-condition").isVisible());
+      assert.ok(await page.locator("#site-condition").evaluate(node => !node.closest("#mission-data")),
+        "site condition must not be inside the accessibility-only instrument mirror");
+      return opening;
+    }
     for (const sortie of ["peachland-defence", "big-white-defence", "silver-star-defence", "apex-defence"]) {
       await page.locator("#choose-sortie").click();
       await page.locator(`[data-sortie="${sortie}"]`).click();
       assert.match(await page.locator("#plan-working").innerText(), /^\d+ KG$/);
+      assert.equal(await page.locator("#start").innerText(), "Start airborne");
+      const sortieTitle = await page.locator(`[data-sortie="${sortie}"] strong`).innerText();
+      assert.equal(await page.locator("#start").getAttribute("aria-label"), `Start ${sortieTitle}`);
       await page.locator("#start").click();
-      await page.waitForFunction(token => window.__gunsOnlyOkanagan.getState()?.sortie === token, sortie);
-      const defence = await page.evaluate(() => window.__gunsOnlyOkanagan.getState());
-      assert.ok(defence.sites.length >= 20);
-      assert.equal(defence.incident_active, false);
-      assert.ok(await page.locator("#site-condition").isVisible());
-      assert.ok(await page.locator("#site-condition").evaluate(node => !node.closest("#mission-data")),
-        "site condition must not be inside the accessibility-only instrument mirror");
+      await defenceOpening(sortie, "Start");
+      // Change power through the real key route before Restart, then let the original radio
+      // expire. Restart must restore arrival power and replay the same instruction afresh.
+      await page.keyboard.down("KeyS");
+      try {
+        await page.waitForFunction(() => window.__gunsOnlyOkanagan.getState()?.throttle < .80,
+          undefined, { timeout: scaled(10000) });
+      } finally { await page.keyboard.up("KeyS"); }
+      await page.waitForFunction(() => document.querySelector("#radio")?.dataset.visible === "false",
+        undefined, { timeout: scaled(10000) });
       await page.keyboard.press("Escape");
+      await page.waitForFunction(() => document.querySelector("#pause-menu")?.classList.contains("visible"));
+      await page.locator("#restart").click();
+      await defenceOpening(sortie, "Restart");
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => document.querySelector("#pause-menu")?.classList.contains("visible"));
     }
     await page.locator("#choose-sortie").click();
     await page.setViewportSize({ width: 390, height: 844 });
     assert.ok(await page.locator("#sortie-menu").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
     assert.deepEqual(pageErrors, [], `uncaught Okanagan page errors:\n${pageErrors.join("\n")}`);
   } finally {
-    await browser.close();
-    await site.close();
+    try { await browser?.close(); } finally { await site.close(); }
   }
 });
 

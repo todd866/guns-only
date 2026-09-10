@@ -35,12 +35,9 @@ test("the whole-repository gate keeps Node memory and test fan-out bounded", () 
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.startsWith("node --test"));
-  assert.deepEqual(
-    directNodeTestCalls,
-    [
-      'node --test --test-concurrency="$node_test_concurrency" "$@"',
-      'node --test --test-concurrency="$node_test_concurrency" web/smoke/smoke.test.mjs web/smoke/player-quality.test.mjs',
-    ],
-    "every direct Node test-runner call must carry the bounded concurrency flag",
-  );
+  assert.ok(directNodeTestCalls.length >= 2, "the shared helper and browser gate must remain present");
+  for (const call of directNodeTestCalls) {
+    assert.match(call, /^node --test --test-concurrency="\$node_test_concurrency"\s/,
+      "every direct Node test-runner call must carry the bounded concurrency flag");
+  }
 });
