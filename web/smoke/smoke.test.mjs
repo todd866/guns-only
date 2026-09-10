@@ -912,6 +912,19 @@ test("the published Okanagan route exposes training and mapped defence sorties w
       undefined,
       { timeout: scaled(60000) },
     );
+    // Observe the real DOM transition in-page. Software WebGL may spend longer than the
+    // caption's lifetime between Playwright calls; a later snapshot cannot prove it never aired.
+    await page.evaluate(() => {
+      window.__okanaganRadioOpenings = [];
+      const radio = document.querySelector("#radio");
+      new MutationObserver(() => {
+        if (radio.dataset.visible !== "true") return;
+        const state = window.__gunsOnlyOkanagan.getState();
+        window.__okanaganRadioOpenings.push({ sortie: state.sortie,
+          mission_s: state.mission_s, text: radio.textContent, visible: true });
+      }).observe(radio, { attributes: true, attributeFilter: ["data-visible"],
+        childList: true, characterData: true, subtree: true });
+    });
     assert.equal(await page.locator(".sortie").count(), 7);
     await page.locator('[data-sortie="large-force-employment"]').click();
     await page.locator("#start").click();
@@ -936,7 +949,8 @@ test("the published Okanagan route exposes training and mapped defence sorties w
         return { state: api.getState(), guidance: api.getGuidance(),
           target: api.getSelectedTarget(), telemetry: api.getLastTelemetry(),
           radio: document.querySelector("#radio")?.textContent,
-          radioVisible: document.querySelector("#radio")?.dataset.visible,
+          radioOpening: window.__okanaganRadioOpenings.find(event =>
+            event.sortie === api.getState().sortie && event.text === api.getState().radio),
           navigationFix: document.querySelector("#navigation-fix")?.textContent };
       });
       const { state: defence, guidance, target, telemetry } = opening;
@@ -968,7 +982,8 @@ test("the published Okanagan route exposes training and mapped defence sorties w
       // browser update cannot quietly replace the flight initializer with the old .65 default.
       for (const power of [defence.throttle, defence.pending_controls?.throttle, defence.applied_controls?.throttle])
         assert.ok(Math.abs(power - .85) < 1e-6, `${label}: preserve initialized arrival power, got ${power}`);
-      assert.equal(opening.radioVisible, "true", `${label}: opening Air Attack instruction must be replayed`);
+      assert.equal(opening.radioOpening?.visible, true, `${label}: opening Air Attack instruction must be replayed`);
+      assert.ok(opening.radioOpening.mission_s < 1, `${label}: radio must appear at the start of this attempt`);
       assert.equal(opening.radio, defence.radio, `${label}: visible opening radio matches authority`);
       assert.match(opening.radio, /AIR ATTACK:.*Water aboard/u, `${label}: actionable loaded-start call`);
       assert.ok(await page.locator("#site-condition").isVisible());
@@ -983,6 +998,7 @@ test("the published Okanagan route exposes training and mapped defence sorties w
       assert.equal(await page.locator("#start").innerText(), "Start airborne");
       const sortieTitle = await page.locator(`[data-sortie="${sortie}"] strong`).innerText();
       assert.equal(await page.locator("#start").getAttribute("aria-label"), `Start ${sortieTitle}`);
+      await page.evaluate(() => { window.__okanaganRadioOpenings = []; });
       await page.locator("#start").click();
       await defenceOpening(sortie, "Start");
       // Change power through the real key route before Restart, then let the original radio
@@ -996,6 +1012,7 @@ test("the published Okanagan route exposes training and mapped defence sorties w
         undefined, { timeout: scaled(10000) });
       await page.keyboard.press("Escape");
       await page.waitForFunction(() => document.querySelector("#pause-menu")?.classList.contains("visible"));
+      await page.evaluate(() => { window.__okanaganRadioOpenings = []; });
       await page.locator("#restart").click();
       await defenceOpening(sortie, "Restart");
       await page.keyboard.press("Escape");
