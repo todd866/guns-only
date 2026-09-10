@@ -2,7 +2,7 @@
 
 Updated: 2026-09-10
 Production: Build 360, revision `5898a556a313860543e4cddafa91485282cd6c00`.
-Next candidate: Build 361, not deployed — four named Fire Boss defence missions begin loaded and airborne near the incident, then finish after a useful drop and safe escape. Full-physics flights reach the first useful drop in 96–107 seconds and finish in 146–173 seconds. See [mission pacing and flight evidence](audits/2026-09-10-okanagan-airborne-missions.md). Audio now uses a 24-second recorded Air Tractor-family engine bed, cockpit-informed broad EQ, live power response and rendered-audio regression checks. The source is an OA-1K exterior recording, an authored cabin surrogate, not a Fire Boss cockpit capture. See [recorded audio audit](audits/2026-09-10-fireboss-recorded-audio.md).
+Next candidate: Build 362, not deployed — four named Fire Boss defence missions begin loaded and airborne near the incident, then finish after a useful drop and safe escape. Full-physics flights reach the first useful drop in 96–107 seconds and finish in 146–173 seconds. See [mission pacing and flight evidence](audits/2026-09-10-okanagan-airborne-missions.md). Audio now uses a 24-second recorded Air Tractor-family engine bed, cockpit-informed broad EQ, live power response and rendered-audio regression checks. The source is an OA-1K exterior recording, an authored cabin surrogate, not a Fire Boss cockpit capture. See [recorded audio audit](audits/2026-09-10-fireboss-recorded-audio.md).
 Build 360 shipped default optional Fire Boss automatic pitch trim, a visible next-waypoint director and named north-up map, improved runway/shoreline/forest detail, and background-only hardware browser QA. See [assistance and navigation audit](audits/2026-09-10-okanagan-assist-navigation.md).
 Build 359 shipped the Fire Boss elevator/trim, surface-to-flight continuity, drag and cockpit-coordinate corrections, feasible water loads, and fuel-return/Apex escape guidance. Independent response checks, actual browser input evidence and full route regressions have distinct acceptance scopes. See [Fire Boss handling audit](audits/2026-09-10-fireboss-handling.md).
 Build 358 shipped the Hermeus-inspired finish and geometry refinements on the actual Rapier model and its picker rendering. See [Rapier appearance record](airframes/rapier-v2/11-hermeus-visual-direction.md).
@@ -350,7 +350,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 359, revision `f0d47bd23642a13950b853ae640c1b374fa32677`. Local gate
+- Live production is Build 360, revision `5898a556a313860543e4cddafa91485282cd6c00`. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.

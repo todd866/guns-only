@@ -113,7 +113,8 @@ public sealed class FireBossDynamics
             _aircraft,
             MaximumGrossMassKg,
             MaximumWaterKg);
-        Telemetry = BuildTelemetry(default, false, 0.0, 0.0, "");
+        Telemetry = BuildTelemetry(new(0, 0, 0, _aircraft.ThrustFraction, false, false),
+            false, 0.0, 0.0, "");
     }
 
     public FireBossTelemetry Telemetry { get; private set; }
@@ -139,8 +140,6 @@ public sealed class FireBossDynamics
         const double initialPower = 0.85;
         var aircraft = new FireBossDynamics(position, 58, 0, headingRad,
             FireBossSurfaceMode.Airborne, fuelKg, waterKg, initialPower) { _hasFlown = true };
-        aircraft.Telemetry = aircraft.BuildTelemetry(new(0, 0, 0, initialPower, false, false),
-            false, 0, 0, "");
         return aircraft;
     }
 

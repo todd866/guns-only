@@ -54,6 +54,8 @@ public sealed class OkanaganAirborneStartTests
         Assert.Equal(OkanaganMissionPhase.Depart, state.Phase);
         Assert.Equal(FireBossSurfaceMode.Runway, state.Aircraft.SurfaceMode);
         Assert.Equal(0, state.Aircraft.WaterLoadKg);
+        Assert.Equal(.65, state.Aircraft.Throttle, 8);
+        Assert.Equal(.65, state.Aircraft.EnginePowerFraction, 8);
     }
 
     [Theory]

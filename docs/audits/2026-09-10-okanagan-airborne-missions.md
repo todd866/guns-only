@@ -50,3 +50,10 @@ Published browser acceptance checks normal menu selection and restart, loaded ai
 forward route guidance, the opening radio instruction, and correct initial power. Browser work
 is headless, with `audioQa=silent` clamping the real audio destination. Physical route evidence,
 browser integration and perceptual assessment remain distinct checks.
+
+The compiled candidate's background hardware browser check passed on Apple M5 / Metal: all four
+missions remained loaded and airborne at 58.3 m/s after five seconds, with rendered terrain
+clearances of 522–779 m. Restart preserved arrival power and replayed the opening instruction.
+Big White advanced through a full minute with default automatic trim and no flight input. These
+are initialization/integration checks, not evidence of a controller-flown browser drop. The browser
+and local server closed successfully. Evidence: `/private/tmp/fireboss-cockpit-audio-20260910/defence-candidate/evidence.json`.
