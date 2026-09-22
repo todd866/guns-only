@@ -37,6 +37,26 @@ export function okanaganRadioCaption(transmission) {
   return text;
 }
 
+/**
+ * Accumulate this tick's credited water and hold a short call after the pass.
+ * Instructor radio is suppressed during the drop, so this is the line that says the water hit.
+ * @param {{ kg?: number, until?: number }|null|undefined} previous
+ */
+export function okanaganDropHit(previous = {}, creditKg = 0, nowMs = 0, holdMs = 1600) {
+  const credit = Number(creditKg);
+  const hitting = Number.isFinite(credit) && credit > 0;
+  const now = Number(nowMs);
+  const kg = (Number(previous?.kg) || 0) + (hitting ? credit : 0);
+  const until = hitting ? now + holdMs : (Number(previous?.until) || 0);
+  const live = Number.isFinite(now) && kg >= 40 && now < until;
+  if (!live && !hitting) return Object.freeze({ kg: 0, until: 0, caption: "" });
+  return Object.freeze({
+    kg,
+    until,
+    caption: live ? `ON THE FIRE · ${Math.round(kg)} L` : "",
+  });
+}
+
 /** Keep transient radio readable without parking a subtitle over the outside view. */
 export function okanaganRadioHoldMs(transmission) {
   const words = String(transmission ?? "").trim().split(/\s+/u).filter(Boolean).length;

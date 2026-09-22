@@ -38,6 +38,7 @@ import { createOkanaganKeyboardControls } from "../render/okanagan/okanagan_keyb
 import { bindOkanaganDropButton } from "../render/okanagan/okanagan_drop_button.js?v=363";
 import {
   compactOkanaganCue,
+  okanaganDropHit,
   okanaganFlightState,
   okanaganRadioCaption,
   okanaganRadioHoldMs,
@@ -190,6 +191,7 @@ let leftStick = Object.freeze({ x: 0, y: 0 });
 let rightStick = Object.freeze({ x: 0, y: 0 });
 let lastRadio = "";
 let radioHideAt = 0;
+let dropHit = { kg: 0, until: 0, caption: "" };
 let selectedTargetId = "";
 let padlock = false;
 let missionTerminal = false;
@@ -230,7 +232,7 @@ scene.add(geographicWorld);
 const sceneryQueryPosition = new THREE.Vector3();
 const siteMarkers = createOkanaganSiteMarkers(geographicWorld);
 scene.background = new THREE.Color(0x7895aa);
-scene.fog = new THREE.FogExp2(0x9eb2b7, quality === "mobile" ? 0.000095 : 0.00007);
+scene.fog = new THREE.FogExp2(0x9eb2b7, quality === "mobile" ? 0.00007 : 0.000045);
 const camera = new THREE.PerspectiveCamera(67, 1, 0.25, 65_000);
 camera.rotation.order = "YXZ";
 scene.add(camera);
@@ -249,8 +251,8 @@ const hudFrame = {
   dt: 0,
   now: 0,
 };
-scene.add(new THREE.HemisphereLight(0xeaf3f5, 0x4d5135, 1.18));
-const sun = new THREE.DirectionalLight(0xffe4bd, 1.42);
+scene.add(new THREE.HemisphereLight(0xd5e2ea, 0x3e432c, 0.62));
+const sun = new THREE.DirectionalLight(0xffe0b0, 2.05);
 sun.position.set(-12_000, 18_000, -9_000);
 sun.castShadow = quality === "desktop";
 if (sun.castShadow) {
@@ -563,6 +565,7 @@ function startSortie(id) {
   lastTelemetryPhase = "";
   lastRadio = "";
   radioHideAt = 0;
+  dropHit = { kg: 0, until: 0, caption: "" };
   setPaused(false);
   planMinimum.textContent = `${Math.round(state.fuel_plan.minimum_rtb_kg)} KG`;
   status.textContent = "Flying";
@@ -763,13 +766,20 @@ function updateDom(current) {
   const now = performance.now();
   document.querySelector("#cue").textContent = compactOkanaganCue(current);
   const radio = document.querySelector("#radio");
+  dropHit = okanaganDropHit(dropHit, current.drop_credit_kg, now);
   const transmission = okanaganRadioCaption(current.radio);
-  if (transmission && transmission !== lastRadio) {
-    lastRadio = transmission;
-    radio.textContent = transmission;
-    radioHideAt = now + okanaganRadioHoldMs(transmission);
+  if (dropHit.caption) {
+    radio.textContent = dropHit.caption;
+    radio.dataset.visible = "true";
+  } else {
+    if (transmission && transmission !== lastRadio) {
+      lastRadio = transmission;
+      radioHideAt = now + okanaganRadioHoldMs(transmission);
+    }
+    const showing = Boolean(transmission) && now < radioHideAt;
+    if (showing) radio.textContent = transmission;
+    radio.dataset.visible = String(showing);
   }
-  radio.dataset.visible = String(Boolean(transmission) && now < radioHideAt);
   const waterTarget = Number(current.scoop_target_water_kg);
   document.querySelector("#water-value").textContent = Number.isFinite(waterTarget) && waterTarget > 0
     ? `${Math.round(current.water_kg).toLocaleString()} / ${Math.round(waterTarget).toLocaleString()} L target`

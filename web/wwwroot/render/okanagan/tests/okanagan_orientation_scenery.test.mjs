@@ -103,6 +103,7 @@ test("water animation advances only shading and preserves its stable material pr
   const material = new THREE.MeshStandardMaterial();
   const animation = animateOkanaganWater(material);
   const key = material.customProgramCacheKey();
+  assert.equal(key, "okanagan-lake-surface-v2");
   animation.update(18.5);
   assert.equal(animation.diagnostics().timeSeconds, 18.5);
   assert.equal(animation.diagnostics().vertexDisplacement, false);
@@ -139,6 +140,17 @@ test("integrated airport original edge and threshold paint clear the asphalt top
     });
   }
   assert.ok(checkedCrowns >= 2);
+  const firs = rendered.group.getObjectByName("ponderosa-douglas-fir-stands");
+  let firCrown = null;
+  firs.traverse((object) => {
+    if (firCrown || !object.isInstancedMesh || !object.instanceColor) return;
+    object.geometry.computeBoundingBox();
+    const span = object.geometry.boundingBox.max.y - object.geometry.boundingBox.min.y;
+    if (span > 12) firCrown = object;
+  });
+  const box = firCrown.geometry.boundingBox;
+  assert.ok(box.min.y <= -8, "the stacked fir still starts at the old cone base");
+  assert.ok(box.max.y >= 8, "the stacked fir still reaches the old cone tip");
   rendered.update(geographicToWorld(49.85,-119.55,800));
   assert.equal(rendered.diagnostics().water.animated, true);
   const disposed = new Map();

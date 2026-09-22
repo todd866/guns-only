@@ -5,6 +5,7 @@ import * as THREE from "../../../vendor/three.module.js";
 import { geographicToWorld } from "../okanagan_world.js";
 import {
   OKANAGAN_FIRE_VISUAL_CONTRACT,
+  OKANAGAN_FIRE_VOLUME_SHADER,
   createOkanaganFireEffects,
   okanaganFireVisualProfile,
   okanaganFireline,
@@ -193,6 +194,12 @@ test("the incident column ignores valley fog so it still reads from the lake", (
   assert.equal(effects.layers.plume.material.isMeshBasicMaterial, true,
     "lit smoke washes into the haze; the column must be an unlit dark mass");
   assert.ok(effects.layers.plume.material.opacity >= 0.78);
+  assert.match(OKANAGAN_FIRE_VOLUME_SHADER.scar, /discard/);
+  assert.match(OKANAGAN_FIRE_VOLUME_SHADER.flame, /discard/);
+  assert.match(OKANAGAN_FIRE_VOLUME_SHADER.smoke, /smoothstep/);
+  assert.doesNotMatch(OKANAGAN_FIRE_VOLUME_SHADER.plume, /discard/);
+  assert.equal(effects.layers.flames.material.customProgramCacheKey(), "okanagan-fire-volume-flame-v1");
+  assert.equal(effects.layers.plume.material.customProgramCacheKey(), "okanagan-fire-volume-plume-v1");
 });
 
 test("credited steam sits on the fire, not at drop height", () => {

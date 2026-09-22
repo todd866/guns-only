@@ -121,6 +121,19 @@ public sealed class OkanaganFireMissionTests
     }
 
     [Fact]
+    public void AKnockedDownCellStaysOnTheChartAsAWetLine()
+    {
+        var fire = new OkanaganFireGrid();
+        OkanaganFireCellSnapshot hot = fire.ActiveCells().OrderByDescending(cell => cell.Intensity).First();
+        fire.ApplyWater(new Vec3D(hot.X, hot.Y, hot.Z), 2_000.0);
+
+        OkanaganFireCellSnapshot wetted = fire.ActiveCells()
+            .First(cell => Math.Abs(cell.X - hot.X) < 1.0 && Math.Abs(cell.Z - hot.Z) < 1.0);
+        Assert.True(wetted.Wetness >= 0.40);
+        Assert.True(wetted.Intensity < hot.Intensity);
+    }
+
+    [Fact]
     public void LocalProjectionRoundTripsTheAirport()
     {
         Vec3D airport = OkanaganGeo.ToWorld(49.9561, -119.3778, 433.0);

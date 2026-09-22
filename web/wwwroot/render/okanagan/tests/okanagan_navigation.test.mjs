@@ -89,8 +89,13 @@ test("live map retains condition colours, drop aim and labeled moving traffic in
   };
   const ctx = recordingMapContext();
   const frame = drawOkanaganMap(ctx, current, {}, [], 244, 174);
-  for (const colour of ["#ad6257", "#ffbc66", "#c6dc9b", "#ffd157"])
-    assert.equal(ctx.calls.filter(c => c.method === "fillRect" && c.fillStyle === colour).length, 1);
+  assert.equal(ctx.calls.filter(c => c.method === "fillRect" && c.fillStyle === "#c6dc9b").length, 1,
+    "a holding site stays a square");
+  assert.equal(ctx.calls.filter(c => c.method === "fill" && c.fillStyle === "#ffbc66").length, 1,
+    "a threatened site is a diamond, not only a colour");
+  assert.ok(ctx.calls.some(c => c.method === "stroke" && c.strokeStyle === "#ad6257"),
+    "a lost site is an X");
+  assert.equal(ctx.calls.filter(c => c.method === "fillRect" && c.fillStyle === "#ffd157").length, 1);
   const callsign = ctx.calls.find(c => c.method === "fillText" && c.args[0] === "BIRD DOG");
   assert.ok(callsign, "the live traffic callsign must be visible");
   assert.deepEqual(callsign.clip, [0, 29, 244, 120]);
@@ -106,7 +111,37 @@ test("live map retains condition colours, drop aim and labeled moving traffic in
   const next = recordingMapContext();
   drawOkanaganMap(next, current, {}, [], 244, 174);
   assert.ok(next.calls.find(c => c.method === "fillRect" && c.fillStyle === "#ffd157").args[0] < marker.args[0]);
-  assert.equal(next.calls.filter(c => c.method === "fillRect" && c.fillStyle === "#ffbc66").length, 2);
+  assert.equal(next.calls.filter(c => c.method === "fill" && c.fillStyle === "#ffbc66").length, 2);
+});
+
+test("the fire chart uses the 140 m cell and keeps a wet drop visible", () => {
+  const current = {
+    ...state({x: 0, y: 500, z: 0}),
+    route: [],
+    fire_cells: [
+      {x: 0, y: 800, z: 140, intensity: 0.8, wetness: 0.1},
+      {x: 140, y: 800, z: 140, intensity: 0.3, wetness: 0.2},
+      {x: 0, y: 800, z: 0, intensity: 0.02, wetness: 0.85},
+    ],
+  };
+  const ctx = recordingMapContext();
+  const frame = drawOkanaganMap(ctx, current, {}, [], 244, 174);
+  const size = Math.max(2.5, 140 / frame.metresPerPixel);
+  const hot = ctx.calls.find(c => c.method === "fillRect" && c.fillStyle === "#ff4a12");
+  const flank = ctx.calls.find(c => c.method === "fillRect" && c.fillStyle === "#e06a22");
+  assert.ok(hot, "the hot core is a filled cell");
+  assert.ok(flank, "the flank is a dimmer filled cell");
+  assert.equal(hot.args[2], size);
+  assert.equal(flank.args[2], size);
+  const hotPoint = frame.project({x: 0, z: 140});
+  const flankPoint = frame.project({x: 140, z: 140});
+  assert.ok(Math.abs((flank.args[0] - hot.args[0]) - (flankPoint.x - hotPoint.x)) < 0.01,
+    "adjacent cells share the grid, so the flank reads as one fire");
+  const wetStroke = ctx.calls.find(c => c.method === "stroke" && c.strokeStyle === "#7ddec8");
+  assert.ok(wetStroke, "a knocked-down cell stays on the chart as a cool edge");
+  assert.equal(ctx.calls.filter(c => c.method === "fillRect"
+    && ["#ff4a12", "#e06a22", "#8a3d18"].includes(c.fillStyle)).length, 2,
+    "a wet cell with no remaining heat is not painted as fire");
 });
 
 test("invalid live overlay coordinates cannot reach canvas or invent a map marker", () => {

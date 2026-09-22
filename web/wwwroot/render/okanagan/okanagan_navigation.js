@@ -103,6 +103,67 @@ function drawMapLabel(ctx, value, point, width, height, reserved) {
   }
 }
 
+/** Same footprint the fire grid burns. The chart has to show a flank, not a 4 px speck. */
+const FIRE_CELL_M = 140;
+
+function drawFireFootprint(ctx, cells, project, metresPerPixel) {
+  const size = Math.max(2.5, FIRE_CELL_M / metresPerPixel);
+  const ordered = [...(cells ?? [])].filter(finitePoint)
+    .sort((a, b) => (Number(a.intensity) || 0) - (Number(b.intensity) || 0));
+  for (const cell of ordered) {
+    const intensity = Number(cell.intensity);
+    const wetness = Number(cell.wetness);
+    const burning = Number.isFinite(intensity) && intensity >= 0.08;
+    const wet = Number.isFinite(wetness) && wetness >= 0.4;
+    if (!burning && !wet) continue;
+    const p = project(cell);
+    const x = p.x - size / 2;
+    const y = p.y - size / 2;
+    if (burning) {
+      ctx.fillStyle = intensity >= 0.55 ? "#ff4a12"
+        : intensity >= 0.25 ? "#e06a22" : "#8a3d18";
+      ctx.fillRect(x, y, size, size);
+    }
+    if (wet) {
+      ctx.strokeStyle = "#7ddec8";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.rect(x, y, size, size);
+      ctx.stroke();
+    }
+  }
+}
+
+/** Lost is an X, threatened a diamond, holding a square. Colour repeats the shape. */
+function drawSiteMark(ctx, site, p) {
+  const lost = site.status === "lost";
+  const threatened = !lost && Number(site.threat) > 0.08;
+  const color = lost ? "#ad6257" : threatened ? "#ffbc66" : "#c6dc9b";
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.5;
+  if (lost) {
+    ctx.beginPath();
+    ctx.moveTo(p.x - 3.5, p.y - 3.5);
+    ctx.lineTo(p.x + 3.5, p.y + 3.5);
+    ctx.moveTo(p.x + 3.5, p.y - 3.5);
+    ctx.lineTo(p.x - 3.5, p.y + 3.5);
+    ctx.stroke();
+    return;
+  }
+  if (threatened) {
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - 4);
+    ctx.lineTo(p.x + 4, p.y);
+    ctx.lineTo(p.x, p.y + 4);
+    ctx.lineTo(p.x - 4, p.y);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
+}
+
 export function drawOkanaganMap(ctx, current, world, places, width, height, overview = false) {
   if (!finitePoint(current?.position)) return;
   const frame = okanaganMapFrame(current, width, height, overview);
@@ -146,16 +207,11 @@ export function drawOkanaganMap(ctx, current, world, places, width, height, over
     reserved.push({left: edge.x - 8, right: edge.x + 8, top: edge.y - 8, bottom: edge.y + 8},
       labelBounds(ctx, "NEXT", labelX, edge.y + 3, ctx.textAlign));
   }
-  for (const cell of current.fire_cells ?? []) {
-    if (cell.intensity < .15) continue;
-    const p = project(cell); ctx.fillStyle = "rgba(255,111,44,.65)"; ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
-  }
+  drawFireFootprint(ctx, current.fire_cells, project, metresPerPixel);
   // Live operational overlays remain inside the same clip as terrain and route geometry.
   for (const site of current.sites ?? []) {
     if (!finitePoint(site?.position)) continue;
-    const p = project(site.position);
-    ctx.fillStyle = site.status === "lost" ? "#ad6257" : site.threat > .08 ? "#ffbc66" : "#c6dc9b";
-    ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
+    drawSiteMark(ctx, site, project(site.position));
   }
   if (finitePoint(current.drop_aim)) {
     const p = project(current.drop_aim);
