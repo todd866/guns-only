@@ -2,7 +2,7 @@
 
 Updated: 2026-09-10
 Production: Build 362, revision `49734a03dacf81c589724a57e534b97632cd56af`.
-Next candidate: Build 363, not deployed — Cobra running audio is led by its recorded UH-1H/T53 cabin surrogate; redundant synthetic tones are attenuated after successful decode. Silent PCM and live-route checks are documented in [Cobra audio evidence](audits/2026-09-10-cobra-recorded-mix.md).
+Next candidate: Build 364, not deployed — the F-22 sight and pattern energy stay readable, and the Okanagan chart keeps a wet line, calls a drop that hits, and draws a softer fire, lake and timber stand. This candidate also carries the unreleased Build 363 Cobra cabin-audio mix. See [Cobra audio evidence](audits/2026-09-10-cobra-recorded-mix.md).
 Build 362 shipped — four named Fire Boss defence missions begin loaded and airborne near the incident, then finish after a useful drop and safe escape. Full-physics flights reach the first useful drop in 96–107 seconds and finish in 146–173 seconds. See [mission pacing and flight evidence](audits/2026-09-10-okanagan-airborne-missions.md). Audio now uses a 24-second recorded Air Tractor-family engine bed, cockpit-informed broad EQ, live power response and rendered-audio regression checks. The source is an OA-1K exterior recording, an authored cabin surrogate, not a Fire Boss cockpit capture. See [recorded audio audit](audits/2026-09-10-fireboss-recorded-audio.md).
 Build 360 shipped default optional Fire Boss automatic pitch trim, a visible next-waypoint director and named north-up map, improved runway/shoreline/forest detail, and background-only hardware browser QA. See [assistance and navigation audit](audits/2026-09-10-okanagan-assist-navigation.md).
 Build 359 shipped the Fire Boss elevator/trim, surface-to-flight continuity, drag and cockpit-coordinate corrections, feasible water loads, and fuel-return/Apex escape guidance. Independent response checks, actual browser input evidence and full route regressions have distinct acceptance scopes. See [Fire Boss handling audit](audits/2026-09-10-fireboss-handling.md).
@@ -130,7 +130,7 @@ safety-warning arbiter make the important event audible without relying on limit
 All candidate audio acceptance is silent (`?audioQa=silent`).
 
 Production: Build 362, revision `49734a03dacf81c589724a57e534b97632cd56af`.
-Next candidate: Build 363, not deployed — Cobra running audio is led by its recorded UH-1H/T53 cabin surrogate; redundant synthetic tones are attenuated after successful decode. Silent PCM and live-route checks are documented in [Cobra audio evidence](audits/2026-09-10-cobra-recorded-mix.md). Builds 343 (Soniachne first-visit on-ramp), 347 (shared
+Next candidate: Build 364, not deployed — the F-22 sight and pattern energy stay readable, and the Okanagan chart keeps a wet line, calls a drop that hits, and draws a softer fire, lake and timber stand. This candidate also carries the unreleased Build 363 Cobra cabin-audio mix. See [Cobra audio evidence](audits/2026-09-10-cobra-recorded-mix.md). Builds 343 (Soniachne first-visit on-ramp), 347 (shared
 player journey and Top Gun bolter retry), 349 (mission-AI suite honesty), 350
 (conventional F-22 recovery), 351 (finite billed sorties, presenting Ace, Cobra pad combat)
 and 352 (Fire Boss sky chevrons, HUD hopper/cue, readable west-side fire)
