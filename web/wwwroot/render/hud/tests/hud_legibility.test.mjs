@@ -9,6 +9,7 @@ import {
   captureCanvasTextStyle,
   fillLegibleHudText,
   isEssentialHudGreenFill,
+  strokeLegiblePath,
 } from "../hud_legibility.js";
 
 function recordingTextContext(initial = {}) {
@@ -132,12 +133,90 @@ test("fillLegibleHudText restores canvas text style after drawing", () => {
   assert.equal(ctx.calls[1].maxWidth, 40);
 });
 
+function recordingStrokeContext() {
+  const calls = [];
+  const style = {
+    strokeStyle: "#4dff88",
+    lineWidth: 1.2,
+    lineDash: [12, 7],
+    shadowBlur: 4,
+  };
+  let saved = null;
+  return {
+    calls,
+    style,
+    save() {
+      saved = { ...style, lineDash: [...style.lineDash] };
+    },
+    restore() {
+      if (!saved) return;
+      Object.assign(style, saved);
+      style.lineDash = [...saved.lineDash];
+      saved = null;
+    },
+    setLineDash(dash) {
+      style.lineDash = [...dash];
+    },
+    stroke() {
+      calls.push({
+        strokeStyle: style.strokeStyle,
+        lineWidth: style.lineWidth,
+        lineDash: [...style.lineDash],
+        shadowBlur: style.shadowBlur,
+      });
+    },
+    get strokeStyle() { return style.strokeStyle; },
+    set strokeStyle(value) { style.strokeStyle = value; },
+    get lineWidth() { return style.lineWidth; },
+    set lineWidth(value) { style.lineWidth = value; },
+    get shadowBlur() { return style.shadowBlur; },
+    set shadowBlur(value) { style.shadowBlur = value; },
+  };
+}
+
+test("strokeLegiblePath draws a solid dark underlay then the caller's stroke", () => {
+  const ctx = recordingStrokeContext();
+  const before = {
+    strokeStyle: ctx.strokeStyle,
+    lineWidth: ctx.lineWidth,
+    lineDash: [...ctx.style.lineDash],
+    shadowBlur: ctx.shadowBlur,
+  };
+
+  strokeLegiblePath(ctx);
+
+  assert.equal(ctx.calls.length, 2);
+  assert.equal(ctx.calls[0].strokeStyle, HUD_LEGIBLE_UNDERLAY);
+  assert.equal(ctx.calls[0].lineWidth, before.lineWidth + HUD_LEGIBLE_STROKE_WIDTH);
+  assert.deepEqual(ctx.calls[0].lineDash, []);
+  assert.equal(ctx.calls[0].shadowBlur, 0);
+  assert.equal(ctx.calls[1].strokeStyle, before.strokeStyle);
+  assert.equal(ctx.calls[1].lineWidth, before.lineWidth);
+  assert.deepEqual(ctx.calls[1].lineDash, before.lineDash);
+  assert.equal(ctx.calls[1].shadowBlur, before.shadowBlur);
+  assert.equal(ctx.strokeStyle, before.strokeStyle);
+  assert.equal(ctx.lineWidth, before.lineWidth);
+  assert.deepEqual(ctx.style.lineDash, before.lineDash);
+  assert.equal(ctx.shadowBlur, before.shadowBlur);
+});
+
 test("production HUD routes essential green labels through the legibility helper", async () => {
   const hud = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
   assert.match(hud, /from "\.\/render\/hud\/hud_legibility\.js"/);
   assert.match(hud, /fillEssentialHudText\(/);
   assert.match(hud, /fillEssentialHudText\("ALT FT", altitudeX/);
   assert.match(hud, /fillEssentialHudText\(cue\.call, this\.width \/ 2, y\)/);
-  assert.match(hud, /fillEssentialHudText\(text, clampedX, placedY\)/);
+  assert.match(hud, /fillLegibleHudText\(ctx, text, clampedX, placedY,/);
   assert.match(hud, /fillEssentialHudText\("PULL", cx, cy \+ ballRadius \* 0\.52\)/);
+  assert.match(hud, /strokeLegiblePath/);
+  const method = (name, next) => {
+    const start = hud.indexOf(`  ${name}(`);
+    const end = hud.indexOf(`  ${next}(`, start + 1);
+    return hud.slice(start, end);
+  };
+  assert.match(method("drawPitchLadder", "drawAirframeSymbols"), /this\.strokeLegible\(\)/);
+  assert.match(method("drawGunFunnel", "drawAimPoint"), /this\.strokeLegible\(\)/);
+  assert.match(method("drawGunSight", "drawGunFunnel"), /fillLegibleHudText\(ctx, cue,/);
+  assert.match(method("drawBandit", "drawCivilianTarget"), /this\.strokeLegible\(\)/);
+  assert.match(method("drawVisibleTargetBox", "drawBandit"), /this\.strokeLegible\(\)/);
 });

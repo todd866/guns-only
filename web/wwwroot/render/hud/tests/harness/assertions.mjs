@@ -261,8 +261,30 @@ function assertLadder(data) {
   }
 }
 
+function assertPatternEnergy(data) {
+  const { name, geometry } = data;
+  const bare = name.split(":").pop();
+  if (bare === "pattern-energy-fast") {
+    const cue = geometry.patternEnergy;
+    check(name, "conventional pattern too-fast chip reads FAST",
+      cue?.word === "FAST" && cue?.mark === 1 && Number.isFinite(cue?.y),
+      cue ? JSON.stringify(cue) : "missing");
+    return;
+  }
+  if (bare === "forward-level") {
+    check(name, "fight HUD does not invent a pattern energy chip",
+      geometry.patternEnergy == null,
+      geometry.patternEnergy ? JSON.stringify(geometry.patternEnergy) : "clear");
+  }
+}
+
 function assertFunnel(data) {
   const { name, geometry, probes, state } = data;
+  if (name === "forward-level" || name.endsWith(":forward-level")) {
+    check(name, "unsighted selected target keeps its identity caption",
+      geometry.sightCaption === "TARGET 1 · SELECTED",
+      geometry.sightCaption ?? "missing");
+  }
   const selectedAlive = typeof state.opponent_alive === "boolean"
     ? state.opponent_alive
     : state.bandit_alive === true;
@@ -275,6 +297,11 @@ function assertFunnel(data) {
   }
   check(name, "funnel drawn", Array.isArray(geometry.funnel) && geometry.funnel.length >= 2,
     geometry.funnel ? `${geometry.funnel.length} samples` : "missing");
+  if (state.gun_solution === true) {
+    check(name, "solution sight does not repeat SHOOT under the bracket",
+      geometry.sightCaption == null || !String(geometry.sightCaption).includes("SHOOT"),
+      geometry.sightCaption ?? "clear");
+  }
   if (!Array.isArray(geometry.funnel)) return;
 
   const span = Number(state.target_wingspan_m);
@@ -1016,6 +1043,7 @@ async function runViewport(site, browser, {
     assertAirframeSymbols(data);
     assertLadder(data);
     assertFunnel(data);
+    assertPatternEnergy(data);
     assertBandit(data);
     if (data.padlock) assertPadlockDirector(data);
     assertTargetTwoDirector(data);

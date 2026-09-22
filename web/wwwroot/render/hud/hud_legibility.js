@@ -37,6 +37,21 @@ export function canvasTextStyleMatches(ctx, snapshot) {
  * Stroke a dark halo then fill green HUD copy. Restores every canvas text style it touches.
  * Geometry and alignment come from the caller's existing font/textAlign/textBaseline.
  */
+/**
+ * Stroke the current path twice: a solid dark underlay, then the caller's own stroke.
+ * Restores dash, colour, width and shadow. The path itself is left in place.
+ */
+export function strokeLegiblePath(ctx) {
+  ctx.save();
+  ctx.shadowBlur = 0;
+  ctx.setLineDash([]);
+  ctx.strokeStyle = HUD_LEGIBLE_UNDERLAY;
+  ctx.lineWidth += HUD_LEGIBLE_STROKE_WIDTH;
+  ctx.stroke();
+  ctx.restore();
+  ctx.stroke();
+}
+
 export function fillLegibleHudText(ctx, text, x, y, {
   fillStyle = ctx.fillStyle,
   maxWidth,
