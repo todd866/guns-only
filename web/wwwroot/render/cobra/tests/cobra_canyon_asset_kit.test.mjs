@@ -408,8 +408,10 @@ test("rendered leaf blades stay plant-sized even at canopy placements while auth
           continue;
         }
         assert.ok(m[5] <= 4.000001, `leaf blades are ${m[5]} m tall`);
-        if (r.heightM > 16) canopyCardCount++;
-        // Degenerate edge-fade slots use a 0.1 mm numerical floor on each axis.
+        if (r.heightM > 16) {
+          canopyCardCount++;
+          assert.ok(m[5] > 3.5, "distance must not shrink a tree card");
+        }
         if (m[5] > 1e-3) {
           const shrink = m[5] / r.heightM;
           assert.ok(Math.abs(Math.hypot(m[0], m[2]) - r.widthM * shrink) < 1e-5);
