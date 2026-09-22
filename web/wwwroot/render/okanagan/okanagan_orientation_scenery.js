@@ -199,13 +199,16 @@ export function animateOkanaganWater(material) {
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvLakeXZ = (modelMatrix * vec4(transformed, 1.0)).xz;");
     shader.fragmentShader = `varying vec2 vLakeXZ; uniform float lakeTime;\n${shader.fragmentShader}`
       .replace("#include <color_fragment>", `#include <color_fragment>
-        float broad = sin(vLakeXZ.x * 0.0007 + sin(vLakeXZ.y * 0.0005)) * 0.025;
-        diffuseColor.rgb *= 1.0 + broad;`)
+        float swell = sin(dot(vLakeXZ, vec2(0.0011, 0.0008)) + lakeTime * 0.22);
+        float chop = sin(dot(vLakeXZ, vec2(0.008, -0.006)) + lakeTime * 0.85);
+        vec3 deep = diffuseColor.rgb * vec3(0.62, 0.78, 0.86);
+        vec3 glare = diffuseColor.rgb * vec3(1.08, 1.04, 0.92);
+        diffuseColor.rgb = mix(deep, glare, clamp(0.45 + swell * 0.38 + chop * 0.12, 0.0, 1.0));`)
       .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
-        vec2 wave = vec2(cos(dot(vLakeXZ, vec2(0.17, 0.10)) + lakeTime * 0.9),
-          sin(dot(vLakeXZ, vec2(-0.12, 0.23)) + lakeTime * 1.15));
-        normal = normalize(normal + mat3(viewMatrix) * vec3(wave.x * 0.045, 0.0, wave.y * 0.045));`);
+        vec2 wave = vec2(cos(dot(vLakeXZ, vec2(0.09, 0.05)) + lakeTime * 0.7),
+          sin(dot(vLakeXZ, vec2(-0.06, 0.11)) + lakeTime * 0.95));
+        normal = normalize(normal + mat3(viewMatrix) * vec3(wave.x * 0.16, 0.0, wave.y * 0.16));`);
   };
-  material.customProgramCacheKey = () => "okanagan-lake-surface-ripples-v1";
+  material.customProgramCacheKey = () => "okanagan-lake-surface-v2";
   return { update(seconds) { if (Number.isFinite(seconds)) time.value = seconds; }, diagnostics() { return { animated: true, timeSeconds: time.value, vertexDisplacement: false }; } };
 }

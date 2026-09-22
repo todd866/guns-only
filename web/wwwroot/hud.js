@@ -32,8 +32,9 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=363";
+} from "./render/hud/contact_visibility.js?v=364";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
+import { patternEnergyWord } from "./render/hud/approach_energy.js";
 import {
   carrierAoARelevant,
   carrierConfigurationCue,
@@ -71,19 +72,20 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=363";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=364";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=363";
+} from "./render/mission/rapier_high_mach_instruments.js?v=364";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
-} from "./render/hud/limits_panel.js?v=363";
+} from "./render/hud/limits_panel.js?v=364";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   fillLegibleHudText,
   isEssentialHudGreenFill,
+  strokeLegiblePath,
 } from "./render/hud/hud_legibility.js";
 import {
   cobraAccelCaretPx,
@@ -93,7 +95,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=363";
+} from "./render/audio/flight_audio.js?v=364";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -578,6 +580,10 @@ class CombatHud {
     ctx.lineJoin = "round";
   }
 
+  strokeLegible() {
+    strokeLegiblePath(this.ctx);
+  }
+
   glassPanel(x, y, width, height, border = GREEN_FAINT) {
     const ctx = this.ctx;
     roundedRect(ctx, x, y, width, height, 5);
@@ -729,7 +735,7 @@ class CombatHud {
       ctx.beginPath();
       segment(-halfWidth, localY, -centerGap, localY);
       segment(centerGap, localY, halfWidth, localY);
-      ctx.stroke();
+      this.strokeLegible();
       if (major && rung !== 0) {
         // Solid end teeth pointing toward the horizon, even on dashed negative rungs.
         ctx.setLineDash([]);
@@ -737,12 +743,12 @@ class CombatHud {
         ctx.beginPath();
         segment(-halfWidth, localY, -halfWidth, localY + tooth);
         segment(halfWidth, localY, halfWidth, localY + tooth);
-        ctx.stroke();
+        this.strokeLegible();
       } else if (rung === 0) {
         ctx.beginPath();
         segment(-centerGap, localY, -centerGap + 8, localY - 5);
         segment(centerGap, localY, centerGap - 8, localY - 5);
-        ctx.stroke();
+        this.strokeLegible();
       }
 
       if (major) {
@@ -793,7 +799,7 @@ class CombatHud {
     ctx.lineTo(0, 5);
     ctx.lineTo(6, 0);
     ctx.lineTo(15, 0);
-    ctx.stroke();
+    this.strokeLegible();
     ctx.restore();
 
     const fpvVisible = fpvAnchor && !fpvAnchor.behind
@@ -812,7 +818,7 @@ class CombatHud {
       ctx.lineTo(24, 0);
       ctx.moveTo(0, -7);
       ctx.lineTo(0, -14);
-      ctx.stroke();
+      this.strokeLegible();
       if (heli && state.heli_fpv_gun_ready === true) {
         // Inboard gun-ready tick — only when Hold F actually fires.
         ctx.beginPath();
@@ -979,10 +985,13 @@ class CombatHud {
     this.drawGunHeat(state);
     ctx.save();
     if (cue && overheatVisible) {
-      ctx.fillStyle = cueColor;
       ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
-      this.fillEssentialHudText(cue, this.width / 2, this.getLayout().weaponCueY);
+      // SHOOT is green, but OVERHEAT and the no-solution cue are red. Halo every weapon word,
+      // not only the green ones the essential-fill helper recognises.
+      fillLegibleHudText(ctx, cue, this.width / 2, this.getLayout().weaponCueY, {
+        fillStyle: cueColor,
+      });
     }
     ctx.restore();
     if (this._debug) {
@@ -1057,7 +1066,7 @@ class CombatHud {
       ctx.moveTo(13, 0); ctx.lineTo(25, 0);
       ctx.moveTo(0, -25); ctx.lineTo(0, -13);
       ctx.moveTo(0, 13); ctx.lineTo(0, 25);
-      ctx.stroke();
+      this.strokeLegible();
       ctx.beginPath();
       ctx.arc(0, 0, 2, 0, Math.PI * 2);
       ctx.fill();
@@ -1082,7 +1091,7 @@ class CombatHud {
     ctx.moveTo(4, 0); ctx.lineTo(14, 0);
     ctx.moveTo(0, -9); ctx.lineTo(0, -3);
     ctx.moveTo(0, 3); ctx.lineTo(0, 9);
-    ctx.stroke();
+    this.strokeLegible();
     ctx.restore();
 
     // The wingspan-ranging funnel exists only when it can actually range: a live target, a
@@ -1143,7 +1152,7 @@ class CombatHud {
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       });
-      ctx.stroke();
+      this.strokeLegible();
     }
     ctx.shadowBlur = 0;
 
@@ -1159,7 +1168,7 @@ class CombatHud {
         ctx.lineTo(s.x + side * s.perpX * (s.halfWidthPx - 2),
           s.y + side * s.perpY * (s.halfWidthPx - 2));
       }
-      ctx.stroke();
+      this.strokeLegible();
     }
     ctx.restore();
 
@@ -1456,12 +1465,16 @@ class CombatHud {
       ctx.fill();
     }
     if (selected) {
-      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillStyle = AMBER;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      this.placeContactLabel(solution ? "TARGET 2 · SHOOT" : "TARGET 2 · SELECTED",
-        projection.x, projection.y + size + 5);
+      // A live solution already owns the centred SHOOT cue. Repeating it under the bracket
+      // put "TARGET 2 · SHOOT" in the funnel mouth, on top of the pipper.
+      if (!solution) {
+        ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.fillStyle = AMBER;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        this.placeSightCaption("TARGET 2 · SELECTED",
+          projection.x, projection.y + size + 5);
+      }
       this.drawTargetDataLine(projection, size, state, color);
     } else if (!circuitTraffic) {
       // Named AND ranged even when it is not the gun target, so both on-screen bandits carry their
@@ -1514,7 +1527,7 @@ class CombatHud {
     ctx.moveTo(x - size + corner, y + size);
     ctx.lineTo(x - size, y + size);
     ctx.lineTo(x - size, y + size - corner);
-    ctx.stroke();
+    this.strokeLegible();
     ctx.shadowBlur = 0;
     const state = frame.state;
     let label;
@@ -1605,7 +1618,7 @@ class CombatHud {
       ctx.moveTo(projection.x - size + corner, projection.y + size);
       ctx.lineTo(projection.x - size, projection.y + size);
       ctx.lineTo(projection.x - size, projection.y + size - corner);
-      ctx.stroke();
+      this.strokeLegible();
       ctx.shadowBlur = 0;
 
       // The selected padlock target gets one centre dot inside the ordinary target brackets.
@@ -1622,12 +1635,14 @@ class CombatHud {
       // measures.
       if (targetDataLineOwner(state) === "primary")
         this.drawTargetDataLine(projection, size, state, color);
-      if (selectedPrimary) {
+      if (selectedPrimary && !solution) {
+        // Same rule as the wingman: the weapon cue already says SHOOT. A second copy
+        // under the bracket lands in the funnel exactly when the pilot is tracking.
         ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
         ctx.fillStyle = AMBER;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        this.placeContactLabel(solution ? "TARGET 1 · SHOOT" : "TARGET 1 · SELECTED",
+        this.placeSightCaption("TARGET 1 · SELECTED",
           projection.x, projection.y + size + 5);
       } else if (frame.wingmanPresent === true) {
         // In a 2v1 the unselected primary is also named AND ranged, so both bandits carry numbers.
@@ -1807,7 +1822,7 @@ class CombatHud {
     ctx.lineTo(locatorTail, locatorHalfHeight);
     ctx.closePath();
     ctx.fill();
-    ctx.stroke();
+    this.strokeLegible();
     ctx.shadowBlur = 0;
     ctx.restore();
 
@@ -1993,7 +2008,7 @@ class CombatHud {
         ctx.beginPath();
         ctx.moveTo(x, y);
         ctx.lineTo(x, y + (major ? 7 : 4));
-        ctx.stroke();
+        this.strokeLegible();
         if (major) {
           this.fillEssentialHudText(String(Math.round(wrap360(mark) / 10)).padStart(2, "0"), x, y - 12);
         }
@@ -2014,13 +2029,13 @@ class CombatHud {
     ctx.lineTo(this.width / 2 - 22, y + 11);
     ctx.closePath();
     ctx.fill();
-    ctx.stroke();
+    this.strokeLegible();
     ctx.fillStyle = GREEN;
     ctx.font = "700 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const shownHeading = Number.isFinite(headingDigits) ? headingDigits : heading;
-    ctx.fillText(Number.isFinite(shownHeading)
+    this.fillEssentialHudText(Number.isFinite(shownHeading)
       ? String(Math.round(wrap360(shownHeading))).padStart(3, "0") : "---",
       this.width / 2, y - 2);
     if (padlock) {
@@ -2225,6 +2240,51 @@ class CombatHud {
         : `IMPACT PHYSICS RUNNING · KILLS ${kills}`;
       ctx.fillText(detail, cueX + width - 12, cueY + height / 2);
     }
+    ctx.restore();
+  }
+
+  drawPatternEnergyWord(state) {
+    const cue = patternEnergyWord(state);
+    if (this._debug) this._debug.patternEnergy = null;
+    if (!cue) return;
+    const layout = this.getLayout();
+    // The warning-to-weapon lane starts on the first pitch rung. Keep this one word in the
+    // clear band under the heading tape, and skip it if that band is shorter than the chip.
+    const y = layout.heading.bottom + 8;
+    const fits = Number.isFinite(y) && y + 8 < layout.ladderSafe.top;
+    if (this._debug) {
+      this._debug.patternEnergy = fits
+        ? { word: cue.word, mark: cue.mark, y }
+        : { word: cue.word, mark: cue.mark, y: null };
+    }
+    if (!fits) return;
+    const ctx = this.ctx;
+    const accent = cue.mark > 0 ? AMBER : cue.mark < 0 ? RED : GREEN;
+    const x = this.width / 2;
+    ctx.save();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    if (cue.mark > 0) {
+      ctx.moveTo(x - 46, y + 4);
+      ctx.lineTo(x - 36, y - 4);
+      ctx.lineTo(x - 26, y + 4);
+    } else if (cue.mark < 0) {
+      ctx.moveTo(x - 46, y);
+      ctx.lineTo(x - 26, y);
+    } else {
+      ctx.moveTo(x - 44, y - 4);
+      ctx.lineTo(x - 36, y + 4);
+      ctx.lineTo(x - 28, y - 4);
+    }
+    this.strokeLegible();
+    ctx.beginPath();
+    ctx.font = "800 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    fillLegibleHudText(ctx, cue.word, x + 12, y, { fillStyle: accent });
     ctx.restore();
   }
 
@@ -5525,6 +5585,11 @@ class CombatHud {
   /// until the line clears every label already placed this frame. Placement follows draw order,
   /// so the selected target keeps its natural position beneath its bracket and later contacts are
   /// the ones that move.
+  placeSightCaption(text, x, y) {
+    if (this._debug) this._debug.sightCaption = text;
+    this.placeContactLabel(text, x, y);
+  }
+
   placeContactLabel(text, x, y) {
     const ctx = this.ctx;
     const half = ctx.measureText(text).width / 2;
@@ -5542,7 +5607,8 @@ class CombatHud {
     );
     const placedY = this.reserveContactLabelRow(
       y, clampedX - half, clampedX + half, CombatHud.CONTACT_LABEL_ROW);
-    this.fillEssentialHudText(text, clampedX, placedY);
+    // Selected captions and range lines are amber as often as they are green. Halo both.
+    fillLegibleHudText(ctx, text, clampedX, placedY, { fillStyle: ctx.fillStyle });
   }
 
   /// Claim a row in this frame's contact-label registry and return the y to draw at. Shared by the
@@ -5711,6 +5777,8 @@ class CombatHud {
         banditPx: null,
         gunHeat: null,
         gunOverheatAnnunciation: null,
+        sightCaption: null,
+        patternEnergy: null,
         presentationProfile: this.presentationProfile,
         mobileTactical: null,
         desktopFlightChrome: false,
@@ -5845,6 +5913,7 @@ class CombatHud {
       });
     }
     this.drawRtbCue(frame.state);
+    this.drawPatternEnergyWord(frame.state);
 
     // Speed trend: a windowed presentation estimate projected ~6 s ahead. The rate estimator
     // deliberately ignores one-frame IAS reversals so the caret reports energy trend, not noise.

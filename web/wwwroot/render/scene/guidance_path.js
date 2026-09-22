@@ -75,7 +75,7 @@ export const GUIDANCE_PATH_DEFAULTS = Object.freeze({
   ingressGateCount: 8,
   ingressLeadM: 260,
   // The sim owns conventional-pattern geometry and energy classification. Presentation only
-  // chooses the restrained chevron palette and physical draw size.
+  // chooses the restrained chevron palette, a non-colour mark, and physical draw size.
   patternOnSpeedColor: 0x45e06f,
   patternFastColor: 0xffd54f,
   patternSlowColor: 0xff4f55,
@@ -114,10 +114,15 @@ export function conventionalPatternEnergy(state = {}, options = {}) {
       || targetKtas === null || !(toleranceKtas >= 0)) return null;
   const color = status === "ON_SPEED" ? config.patternOnSpeedColor
     : status === "TOO_FAST" ? config.patternFastColor : config.patternSlowColor;
+  // 1 draws a second chevron above the V, -1 a bar under the point, 0 the plain V.
+  // Colour stays, but the shape has to carry the same state for a pilot who cannot use it.
+  const mark = status === "TOO_FAST" ? 1 : status === "TOO_SLOW" ? -1 : 0;
   const patternLeg = String(state?.approach_pattern_leg ?? "NONE").trim().toUpperCase();
   const label = String(state?.approach_next_label || patternLeg.replaceAll("_", " "))
     .trim().toUpperCase();
-  return Object.freeze({ status, color, targetKtas, toleranceKtas, patternLeg, label });
+  return Object.freeze({
+    status, color, mark, targetKtas, toleranceKtas, patternLeg, label,
+  });
 }
 
 function midpointGate(from, to, index) {
@@ -394,6 +399,9 @@ const RTB_FRAGMENT = /* glsl */`
   precision mediump float;
   uniform vec3 uColor;
   uniform float uOpacity;
+  // Conventional pattern only. 0 is the plain V. 1 adds a shorter V above it (too fast).
+  // -1 adds a short bar under the point (too slow). Other chevrons leave this at 0.
+  uniform float uMark;
   varying vec2 vLocal;
   void main() {
     float x = abs(vLocal.x);
@@ -401,7 +409,14 @@ const RTB_FRAGMENT = /* glsl */`
     float chevronY = mix(-0.40, 0.34, shoulder);
     float stroke = 1.0 - smoothstep(0.055, 0.13, abs(vLocal.y - chevronY));
     float ends = 1.0 - smoothstep(0.92, 1.02, x);
-    float alpha = stroke * ends * uOpacity;
+    float fastY = chevronY + 0.26;
+    float fastStroke = 1.0 - smoothstep(0.04, 0.09, abs(vLocal.y - fastY));
+    float fastEnds = 1.0 - smoothstep(0.52, 0.64, x);
+    fastStroke *= fastEnds * step(0.5, uMark);
+    float slowBar = 1.0 - smoothstep(0.035, 0.08, abs(vLocal.y + 0.62));
+    float slowEnds = 1.0 - smoothstep(0.18, 0.30, x);
+    slowBar *= slowEnds * step(0.5, -uMark);
+    float alpha = max(stroke * ends, max(fastStroke, slowBar)) * uOpacity;
     if (alpha < 0.004) discard;
     gl_FragColor = vec4(uColor, alpha);
   }
@@ -450,6 +465,7 @@ export function createGuidancePath(THREE, options = {}) {
     uniforms: {
       uColor: { value: new THREE.Color(config.rtbColor) },
       uOpacity: { value: config.rtbOpacity },
+      uMark: { value: 0 },
     },
     vertexShader: GATE_VERTEX,
     fragmentShader: RTB_FRAGMENT,
@@ -466,10 +482,12 @@ export function createGuidancePath(THREE, options = {}) {
     mesh.visible = false;
     mesh.userData = mesh.userData ?? {};
     mesh.userData.guidanceStyle = "procedure-volume";
-    const tint = { color: config.gateColor, opacity: config.gateOpacity };
+    const tint = { color: config.gateColor, opacity: config.gateOpacity, mark: 0 };
     mesh.onBeforeRender = () => {
       mesh.material.uniforms.uColor.value.set(tint.color);
       mesh.material.uniforms.uOpacity.value = tint.opacity;
+      const mark = mesh.material.uniforms.uMark;
+      if (mark) mark.value = tint.mark || 0;
     };
     gates.push({ mesh, tint });
     root.add(mesh);
@@ -718,13 +736,19 @@ export function createGuidancePath(THREE, options = {}) {
           }
         }
 
+        // Shared chevron material: a fast pattern frame must not leave its mark on the next
+        // ingress or RTB chevron. Pattern overwrites this; every other style stays plain.
+        tint.mark = 0;
+        mesh.userData.guidanceEnergyMark = null;
         if (conventionalPattern && gate.pattern === true) {
           mesh.material = rtbMaterial;
           mesh.userData.guidanceStyle = "pattern-chevron";
           mesh.userData.guidanceLabel = gate.label || patternEnergy.label;
           mesh.userData.guidancePatternLeg = gate.patternLeg || patternEnergy.patternLeg;
           mesh.userData.guidanceEnergyStatus = patternEnergy.status;
+          mesh.userData.guidanceEnergyMark = patternEnergy.mark;
           tint.color = patternEnergy.color;
+          tint.mark = patternEnergy.mark;
           tint.opacity = gate.active ? config.patternActiveOpacity : config.patternOpacity;
         } else if (gate.rtb === true) {
           mesh.material = rtbMaterial;

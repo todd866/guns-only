@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   compactOkanaganCue,
   okanaganFlightState,
+  okanaganDropHit,
   okanaganRadioCaption,
   okanaganRadioHoldMs,
 } from "../okanagan_hud_adapter.js";
@@ -162,6 +163,17 @@ test("instructor radio does not occupy the outside view; agency calls still do",
   assert.equal(okanaganRadioCaption("TOWER: Boss 21, cleared to land 16."),
     "TOWER: Boss 21, cleared to land 16.");
   assert.equal(okanaganRadioCaption(""), "");
+});
+
+test("a drop that reaches the fire says so, then clears", () => {
+  const first = okanaganDropHit({}, 25, 1_000);
+  assert.equal(first.caption, "");
+  const hit = okanaganDropHit(first, 30, 1_050);
+  assert.equal(hit.caption, "ON THE FIRE · 55 L");
+  const held = okanaganDropHit(hit, 0, 2_000);
+  assert.equal(held.caption, "ON THE FIRE · 55 L");
+  assert.equal(okanaganDropHit(held, 0, 3_000).caption, "");
+  assert.equal(okanaganDropHit({}, 0, 1_000).caption, "");
 });
 
 test("transient radio dwell scales with terse copy and clears the outside view promptly", () => {

@@ -182,64 +182,103 @@ function creditedSteamOrigin(cells, impact) {
   return { x: finite(impact?.x), y, z: finite(impact?.z) };
 }
 
+/** Local-space falloff so a cone or blob does not keep a hard geometric silhouette. */
+export const OKANAGAN_FIRE_VOLUME_SHADER = Object.freeze({
+  flame: `
+    float flameHeight = clamp(vFireLocal.y + 0.5, 0.0, 1.0);
+    float flameEdge = length(vFireLocal.xz) / max(0.05, 1.0 - flameHeight);
+    float flameBody = (1.0 - smoothstep(0.22, 0.92, flameEdge))
+      * (1.0 - smoothstep(0.58, 1.0, flameHeight));
+    if (flameBody < 0.05) discard;
+    gl_FragColor.rgb = mix(vec3(1.0, 0.93, 0.62), vec3(1.0, 0.28, 0.04), smoothstep(0.04, 0.72, flameHeight));
+    gl_FragColor.a *= flameBody;
+  `,
+  smoke: `
+    float smokeFalloff = 1.0 - smoothstep(0.22, 0.96, length(vFireLocal));
+    if (smokeFalloff < 0.04) discard;
+    gl_FragColor.a *= smokeFalloff;
+  `,
+  plume: `
+    float plumeFalloff = 1.0 - smoothstep(0.42, 1.0, length(vFireLocal));
+    gl_FragColor.a *= mix(0.35, 1.0, plumeFalloff);
+  `,
+  scar: `
+    float scarBody = 1.0 - smoothstep(0.55, 1.0, length(vFireLocal.xy));
+    if (scarBody < 0.04) discard;
+    gl_FragColor.a *= scarBody;
+  `,
+});
+
+function softenFireVolume(material, kind) {
+  const body = OKANAGAN_FIRE_VOLUME_SHADER[kind];
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = `varying vec3 vFireLocal;\n${shader.vertexShader}`
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFireLocal = position;");
+    shader.fragmentShader = `varying vec3 vFireLocal;\n${shader.fragmentShader}`
+      .replace("#include <opaque_fragment>", `#include <opaque_fragment>\n${body}`);
+  };
+  material.customProgramCacheKey = () => `okanagan-fire-volume-${kind}-v1`;
+  return material;
+}
+
 export function createOkanaganFireEffects(scene, capacity = 180) {
   const group = new THREE.Group();
   group.name = "authority-backed Okanagan fire";
   const boundedCapacity = Math.max(1, Math.trunc(finite(capacity, 180)));
-  const footprintMaterial = new THREE.MeshBasicMaterial({
+  const footprintMaterial = softenFireVolume(new THREE.MeshBasicMaterial({
     color: 0x2a1810,
     transparent: true,
     opacity: 0.86,
     depthWrite: false,
-  });
-  const emberMaterial = new THREE.MeshBasicMaterial({
+  }), "scar");
+  const emberMaterial = softenFireVolume(new THREE.MeshBasicMaterial({
     color: 0xff4618,
     transparent: true,
     opacity: 0.55,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-  });
-  const outerMaterial = new THREE.MeshBasicMaterial({
+  }), "scar");
+  const outerMaterial = softenFireVolume(new THREE.MeshBasicMaterial({
     color: 0xff641c,
     transparent: true,
     opacity: 0.92,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-  });
-  const coreMaterial = new THREE.MeshBasicMaterial({
+  }), "flame");
+  const coreMaterial = softenFireVolume(new THREE.MeshBasicMaterial({
     color: 0xffe18a,
     transparent: true,
     opacity: 0.95,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-  });
-  const smokeMaterial = new THREE.MeshBasicMaterial({
+  }), "flame");
+  const smokeMaterial = softenFireVolume(new THREE.MeshBasicMaterial({
     color: 0x2c3032,
     transparent: true,
     opacity: 0.58,
     depthWrite: false,
-  });
-  const plumeMaterial = new THREE.MeshBasicMaterial({
+  }), "smoke");
+  const plumeMaterial = softenFireVolume(new THREE.MeshBasicMaterial({
     color: 0x121416,
     transparent: true,
     opacity: 0.86,
     depthWrite: false,
     fog: false,
-  });
-  const firelineMaterial = new THREE.MeshBasicMaterial({
+  }), "plume");
+  const firelineMaterial = softenFireVolume(new THREE.MeshBasicMaterial({
     color: 0xff5a18,
     transparent: true,
     opacity: 0.88,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     fog: false,
-  });
-  const steamMaterial = new THREE.MeshBasicMaterial({
+  }), "flame");
+  const steamMaterial = softenFireVolume(new THREE.MeshBasicMaterial({
     color: 0xd8e4ea,
     transparent: true,
     opacity: 0.55,
     depthWrite: false,
-  });
+  }), "smoke");
   const footprints = new THREE.InstancedMesh(
     new THREE.CircleGeometry(1, 14), footprintMaterial, boundedCapacity);
   const embers = new THREE.InstancedMesh(

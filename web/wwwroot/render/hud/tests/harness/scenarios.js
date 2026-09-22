@@ -591,6 +591,21 @@ export const SCENARIOS = [
     state: { range_m: 950 },
   },
   {
+    name: "pattern-energy-fast",
+    about: "Conventional F-22 pattern, too fast: a one-word FAST chip under the heading. The prose-and-numbers panel stays hidden.",
+    player: { headingDeg: 5, pitchDeg: 0, bankDeg: 0, altFt: 1200 },
+    bandit: { azimuthDeg: 3, elevationDeg: 1, rangeM: 950 },
+    lead: null,
+    state: {
+      range_m: 950,
+      conventional_rtb_pattern_active: true,
+      approach_energy_state_code: 3,
+      approach_energy_state: "TOO_FAST",
+      approach_energy_target_ktas: 220,
+      approach_energy_tolerance_ktas: 25,
+    },
+  },
+  {
     // Cobra gorge forward view: production heading/FOV and a body-aligned rear-seat camera.
     // W must sit on the principal point while FPV remains velocity-through-camera.
     name: "cobra-forward-level",

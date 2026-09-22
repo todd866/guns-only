@@ -141,7 +141,11 @@ public sealed class OkanaganFireGrid
             Cell cell = _cells[column, row];
             if (!cell.Burnable) continue;
             double intensity = Intensity(cell);
-            if (intensity < 0.035 && cell.Fuel > 0.10) continue;
+            // A drop that knocks the heat down used to drop the cell off the published list, so
+            // the map showed the fire vanishing instead of a wet line. Baseline moisture never
+            // reaches this; only ApplyWater does.
+            bool knockedDown = cell.Wetness >= 0.40;
+            if (intensity < 0.035 && !knockedDown && cell.Fuel > 0.10) continue;
             Vec3D position = CellPosition(column, row);
             result.Add(new OkanaganFireCellSnapshot(column, row, position.X,
                 cell.ElevationM, position.Z, intensity, cell.Fuel, cell.Wetness, cell.FuelType));

@@ -4,60 +4,61 @@ const pilotLogbook = createBrowserPilotLogbook();
 installDisposedPageRestore();
 window.addEventListener("pagehide", () => pilotLogbook.finish({ outcome: "Left before completion" }));
 import * as THREE from "../vendor/three.module.js";
-import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=363";
+import { createOkanaganWorld, loadOkanaganSceneryTextures } from "../render/okanagan/okanagan_world.js?v=364";
 import {
   createOkanaganWorldRoot, okanaganWorldToRender, okanaganRenderToWorld,
   setOkanaganCockpitCamera, lookAtOkanaganPoint,
-} from "../render/okanagan/okanagan_render_frame.js?v=363";
+} from "../render/okanagan/okanagan_render_frame.js?v=364";
 import { createOkanaganSiteMarkers } from "../render/okanagan/okanagan_site_markers.js";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=363";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=363";
-import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=363";
-import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=363";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=364";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=364";
+import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=364";
+import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=364";
 import {
   createOkanaganTrafficCraft,
   poseOkanaganTrafficCraft,
-} from "../render/okanagan/okanagan_traffic.js?v=363";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=363";
-import { createHud } from "../hud.js?v=363";
+} from "../render/okanagan/okanagan_traffic.js?v=364";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=364";
+import { createHud } from "../hud.js?v=364";
 import {
   armFlightAudio,
   flightAudioDiagnostics,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=363";
+} from "../render/audio/flight_audio.js?v=364";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=363";
-import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=363";
-import { standardGamepadState } from "../render/input/dual_stick_input.js?v=363";
-import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=363";
-import { createOkanaganKeyboardControls } from "../render/okanagan/okanagan_keyboard_controls.js?v=363";
-import { bindOkanaganDropButton } from "../render/okanagan/okanagan_drop_button.js?v=363";
+} from "../render/settings/player_settings.js?v=364";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=364";
+import { standardGamepadState } from "../render/input/dual_stick_input.js?v=364";
+import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=364";
+import { createOkanaganKeyboardControls } from "../render/okanagan/okanagan_keyboard_controls.js?v=364";
+import { bindOkanaganDropButton } from "../render/okanagan/okanagan_drop_button.js?v=364";
 import {
   compactOkanaganCue,
+  okanaganDropHit,
   okanaganFlightState,
   okanaganRadioCaption,
   okanaganRadioHoldMs,
-} from "../render/okanagan/okanagan_hud_adapter.js?v=363";
+} from "../render/okanagan/okanagan_hud_adapter.js?v=364";
 import {
   cycleOkanaganTarget,
   okanaganTargets,
   retainOkanaganTarget,
-} from "../render/okanagan/okanagan_targets.js?v=363";
+} from "../render/okanagan/okanagan_targets.js?v=364";
 import {
   okanaganDebriefModel,
   okanaganMissionTerminal,
-} from "../render/okanagan/okanagan_debrief.js?v=363";
+} from "../render/okanagan/okanagan_debrief.js?v=364";
 import {
   okanaganDialogFocusables,
   okanaganDialogTabTarget,
-} from "../render/okanagan/okanagan_dialog_focus.js?v=363";
+} from "../render/okanagan/okanagan_dialog_focus.js?v=364";
 
 import { okanaganNavigation, okanaganNavigationPlaces, drawOkanaganMap }
-  from "../render/okanagan/okanagan_navigation.js?v=363";
+  from "../render/okanagan/okanagan_navigation.js?v=364";
 
 const SORTIES = Object.freeze({
   "water-circuits": {
@@ -190,6 +191,7 @@ let leftStick = Object.freeze({ x: 0, y: 0 });
 let rightStick = Object.freeze({ x: 0, y: 0 });
 let lastRadio = "";
 let radioHideAt = 0;
+let dropHit = { kg: 0, until: 0, caption: "" };
 let selectedTargetId = "";
 let padlock = false;
 let missionTerminal = false;
@@ -230,7 +232,7 @@ scene.add(geographicWorld);
 const sceneryQueryPosition = new THREE.Vector3();
 const siteMarkers = createOkanaganSiteMarkers(geographicWorld);
 scene.background = new THREE.Color(0x7895aa);
-scene.fog = new THREE.FogExp2(0x9eb2b7, quality === "mobile" ? 0.000095 : 0.00007);
+scene.fog = new THREE.FogExp2(0x9eb2b7, quality === "mobile" ? 0.00007 : 0.000045);
 const camera = new THREE.PerspectiveCamera(67, 1, 0.25, 65_000);
 camera.rotation.order = "YXZ";
 scene.add(camera);
@@ -249,8 +251,8 @@ const hudFrame = {
   dt: 0,
   now: 0,
 };
-scene.add(new THREE.HemisphereLight(0xeaf3f5, 0x4d5135, 1.18));
-const sun = new THREE.DirectionalLight(0xffe4bd, 1.42);
+scene.add(new THREE.HemisphereLight(0xd5e2ea, 0x3e432c, 0.62));
+const sun = new THREE.DirectionalLight(0xffe0b0, 2.05);
 sun.position.set(-12_000, 18_000, -9_000);
 sun.castShadow = quality === "desktop";
 if (sun.castShadow) {
@@ -563,6 +565,7 @@ function startSortie(id) {
   lastTelemetryPhase = "";
   lastRadio = "";
   radioHideAt = 0;
+  dropHit = { kg: 0, until: 0, caption: "" };
   setPaused(false);
   planMinimum.textContent = `${Math.round(state.fuel_plan.minimum_rtb_kg)} KG`;
   status.textContent = "Flying";
@@ -763,13 +766,20 @@ function updateDom(current) {
   const now = performance.now();
   document.querySelector("#cue").textContent = compactOkanaganCue(current);
   const radio = document.querySelector("#radio");
+  dropHit = okanaganDropHit(dropHit, current.drop_credit_kg, now);
   const transmission = okanaganRadioCaption(current.radio);
-  if (transmission && transmission !== lastRadio) {
-    lastRadio = transmission;
-    radio.textContent = transmission;
-    radioHideAt = now + okanaganRadioHoldMs(transmission);
+  if (dropHit.caption) {
+    radio.textContent = dropHit.caption;
+    radio.dataset.visible = "true";
+  } else {
+    if (transmission && transmission !== lastRadio) {
+      lastRadio = transmission;
+      radioHideAt = now + okanaganRadioHoldMs(transmission);
+    }
+    const showing = Boolean(transmission) && now < radioHideAt;
+    if (showing) radio.textContent = transmission;
+    radio.dataset.visible = String(showing);
   }
-  radio.dataset.visible = String(Boolean(transmission) && now < radioHideAt);
   const waterTarget = Number(current.scoop_target_water_kg);
   document.querySelector("#water-value").textContent = Number.isFinite(waterTarget) && waterTarget > 0
     ? `${Math.round(current.water_kg).toLocaleString()} / ${Math.round(waterTarget).toLocaleString()} L target`

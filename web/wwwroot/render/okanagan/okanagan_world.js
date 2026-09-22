@@ -668,7 +668,7 @@ function createIncidentTimber(world, sampleHeight, quality, isOperationalSurface
     count,
   );
   const crowns = new THREE.InstancedMesh(
-    new THREE.ConeGeometry(8.4, 26, 7),
+    stackedCrownGeometry(8.4, 26),
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.96 }),
     count,
   );
@@ -707,7 +707,7 @@ function createForest(terrainData, world, sampleHeight, quality, isOperationalSu
   group.name = "ponderosa-douglas-fir-stands";
   const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.6, 0.9, 9, 5),
     new THREE.MeshStandardMaterial({ color: 0x4f3525, roughness: 1 }), count);
-  const crowns = new THREE.InstancedMesh(new THREE.ConeGeometry(5.3, 18, 7),
+  const crowns = new THREE.InstancedMesh(stackedCrownGeometry(5.3, 18),
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.96 }), count);
   const pines = new THREE.InstancedMesh(pineCrownGeometry(), crowns.material, count);
   const dummy = new THREE.Object3D();
@@ -761,6 +761,26 @@ function createForest(terrainData, world, sampleHeight, quality, isOperationalSu
   trunks.receiveShadow = crowns.receiveShadow = pines.receiveShadow = true;
   group.add(trunks, crowns, pines);
   return group;
+}
+
+/** Same overall height and radius as the old single cone, built as overlapping boughs. */
+function stackedCrownGeometry(radius, height) {
+  const positions = [];
+  for (const [radiusScale, heightScale, base] of [
+    [1, 0.45, -0.5],
+    [0.72, 0.42, -0.08],
+    [0.46, 0.42, 0.29],
+  ]) {
+    const tierHeight = height * heightScale;
+    const part = new THREE.ConeGeometry(radius * radiusScale, tierHeight, 6, 1, true).toNonIndexed();
+    part.translate(0, height * base + tierHeight / 2, 0);
+    positions.push(...part.attributes.position.array);
+    part.dispose();
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function pineCrownGeometry() {
@@ -836,8 +856,8 @@ function addGroundDetail(material, hasPhotography) {
         float rowPhase = (vGroundXZ.x + vGroundXZ.y * 0.24) / 22.0;
         float rowWidth = max(fwidth(rowPhase), 0.025);
         float rows = (1.0 - smoothstep(0.15, 0.15 + rowWidth, abs(fract(rowPhase) - 0.5))) - 0.3;
-        float detail = mix(stands * 0.24 + mineral * 0.08, rows * 0.12 + stands * 0.12, vFarmWeight);
+        float detail = mix(stands * 0.42 + mineral * 0.14, rows * 0.16 + stands * 0.18, vFarmWeight);
         diffuseColor.rgb *= 1.0 + detail * visible;`);
   };
-  material.customProgramCacheKey = () => `okanagan-ground-detail-v1-${hasPhotography ? "aerial" : "regional"}`;
+  material.customProgramCacheKey = () => `okanagan-ground-detail-v2-${hasPhotography ? "aerial" : "regional"}`;
 }

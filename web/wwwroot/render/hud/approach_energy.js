@@ -5,9 +5,8 @@
  * @returns {{ label: string, targetAltM: number, targetTasMps: number, altErrorM: number, tasErrorMps: number }|null}
  */
 export function approachEnergyCue(state) {
-  // The F-22 conventional recovery teaches with world-space pattern shape and chevron colour.
-  // Keep its observable authority fields available to instruments and renderers without also
-  // filling the HUD with the generic gate's prose-and-numbers panel.
+  // The F-22 conventional recovery teaches with world-space pattern shape and a one-word
+  // energy chip. Keep the generic gate's prose-and-numbers panel off that pattern.
   if (state?.conventional_rtb_pattern_active === true) return null;
   if (state?.approach_guidance_active !== true || state?.approach_valid !== true) return null;
   const targetAltM = Number(state.approach_next_alt_m);
@@ -31,6 +30,26 @@ export function approachEnergyCue(state) {
  * Compact HUD copy in the units pilots use. Targets and deviations deliberately share units.
  * @param {{ label: string, targetAltM: number, targetTasMps: number, altErrorM: number, tasErrorMps: number }} cue
  */
+/**
+ * One word for the conventional F-22 pattern. Null hides the chip, including when the sim has
+ * not published an authoritative target. The prose panel stays a separate, suppressed cue.
+ * @param {Record<string, unknown>|null|undefined} state
+ * @returns {{ status: "TOO_FAST"|"ON_SPEED"|"TOO_SLOW", word: string, mark: number }|null}
+ */
+export function patternEnergyWord(state) {
+  if (state?.conventional_rtb_pattern_active !== true) return null;
+  const code = Math.floor(Number(state?.approach_energy_state_code) || 0);
+  const status = ({ 1: "TOO_SLOW", 2: "ON_SPEED", 3: "TOO_FAST" })[code]
+    ?? String(state?.approach_energy_state ?? "").trim().toUpperCase();
+  const targetKtas = Number(state?.approach_energy_target_ktas);
+  const toleranceKtas = Number(state?.approach_energy_tolerance_ktas);
+  if (!Number.isFinite(targetKtas) || !(toleranceKtas >= 0)) return null;
+  if (status === "TOO_FAST") return Object.freeze({ status, word: "FAST", mark: 1 });
+  if (status === "TOO_SLOW") return Object.freeze({ status, word: "SLOW", mark: -1 });
+  if (status === "ON_SPEED") return Object.freeze({ status, word: "ON SPEED", mark: 0 });
+  return null;
+}
+
 export function formatApproachEnergyLine(cue) {
   const targetFt = Math.round(cue.targetAltM * 3.280839895);
   const targetKt = Math.round(cue.targetTasMps * 1.943844492);
