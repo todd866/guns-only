@@ -1378,10 +1378,8 @@ function createScatterField(plan, entries, capacities, options) {
 }
 
 /**
- * Scale-in at the outer edge. An instance entering the resident set arrives at zero size and grows
- * to full over the outer band of its role's achieved radius, so the boundary is a thickening of
- * cover rather than a line of trees switching on — the same shed idiom as `ambientRungs`, read
- * radially instead of by rung.
+ * Presence at the outer edge. The plant stays the size it was authored; only coverage falls
+ * across the outer band, so a shrub does not grow out of the ground as the aircraft approaches.
  */
 function edgeFade(distanceM, radiusM) {
   const fullM = radiusM * SCATTER_FULL_SCALE_FRACTION;
@@ -1676,6 +1674,32 @@ function geometryForRole(THREE, role) {
   );
 }
 
+function geometryWithStableFade(THREE, source, capacity) {
+  const owned = new THREE.BufferGeometry();
+  for (const name of Object.keys(source.attributes)) owned.setAttribute(name, source.getAttribute(name));
+  if (source.index) owned.setIndex(source.index);
+  const fade = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+  fade.setUsage(THREE.DynamicDrawUsage);
+  owned.setAttribute("scatterFade", fade);
+  owned.userData.scatterFadeOnlyDispose = true;
+  return owned;
+}
+
+function fadeScatterInShader(material) {
+  const existing = material.onBeforeCompile;
+  const previousKey = material.customProgramCacheKey?.bind(material);
+  material.onBeforeCompile = (shader) => {
+    existing.call(material, shader);
+    shader.vertexShader = `attribute float scatterFade;\nvarying float vScatterFade;\n${shader.vertexShader}`
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvScatterFade = scatterFade;");
+    shader.fragmentShader = `varying float vScatterFade;\n${shader.fragmentShader}`
+      .replace("#include <alphatest_fragment>", `#include <alphatest_fragment>
+        float scatterStipple = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+        if (scatterStipple > vScatterFade) discard;`);
+  };
+  material.customProgramCacheKey = () => `${previousKey ? previousKey() : "cobra-scatter"}-size-stable-v1`;
+}
+
 function materialForRole(THREE, role, foliageAtlas = null, softFalloff = null) {
   if (role === "mist" || role === "waterAccent") {
     const material = new THREE.MeshBasicMaterial({
@@ -1838,7 +1862,8 @@ function createRoleMesh(
   // An authored CC0 mesh wins over the procedural cards when one is supplied for this batch.
   // The cards stay as the declared fallback (asset-manifest.json), so a failed asset load
   // costs detail, never the scene.
-  const geometry = authoredGeometry ?? cardGeometry ?? geometryForRole(THREE, role);
+  const sourceGeometry = authoredGeometry ?? cardGeometry ?? geometryForRole(THREE, role);
+  const geometry = geometryWithStableFade(THREE, sourceGeometry, capacity);
   // An authored mesh carries its OWN UVs. Handing it the foliage card atlas makes it sample
   // arbitrary regions of an unrelated texture, and with alphaTest 0.48 that punches holes clean
   // through the trunk and fronds — which is why the CC0 palms rendered as black spiky scraps
@@ -1846,6 +1871,7 @@ function createRoleMesh(
   const material = authoredGeometry
     ? authoredMeshMaterial(THREE, role)
     : materialForRole(THREE, role, foliageAtlas, softFalloff);
+  fadeScatterInShader(material);
   const mesh = tagObject(new THREE.InstancedMesh(geometry, material, capacity), role, capacity);
   if (role === "jungle" && !authoredGeometry
       && foliageAtlas?.userData?.cobraFoliageEncoding === "black-matte-v1") {
@@ -1859,6 +1885,7 @@ function createRoleMesh(
     });
     for (const shadowMaterial of [mesh.customDepthMaterial, mesh.customDistanceMaterial]) {
       applyCobraFoliageOpacity(THREE, shadowMaterial);
+      fadeScatterInShader(shadowMaterial);
       resources.materials.add(shadowMaterial);
     }
   }
@@ -1886,6 +1913,7 @@ function createRoleMesh(
   const live = [];
   mesh.userData.cobraCanyonInstances = live;
   resources.geometries.add(geometry);
+  resources.geometries.add(sourceGeometry);
   resources.materials.add(material);
   resources.meshes.push(mesh);
   group.add(mesh);
@@ -1920,10 +1948,10 @@ function createRoleMesh(
         // A leaf cutout depicts one plant even when a canopy descriptor supplied the placement.
         // Keep those blades at scrub height and shrink their footprint proportionally. Authored
         // palms retain their existing tree scale; the separate crown field carries forest mass.
-        // World placement/exclusion bounds stay conservative and are never shrunk with the art.
+        // Distance fades coverage only. World size stays the authored size.
         const cardScale = role === "jungle" && !authoredGeometry
           ? Math.min(1, 4 / Math.max(0.1, placement.heightM)) : 1;
-        const unit = unitScale * cardScale * fade;
+        const unit = unitScale * cardScale;
         const scaleX = Math.max(1e-4, placement.widthM * unit);
         const scaleY = Math.max(1e-4, placement.heightM * unit);
         const scaleZ = Math.max(1e-4, placement.depthM * unit);
@@ -1965,6 +1993,7 @@ function createRoleMesh(
         } else matrices[at + 13] = placement.y;
         matrices[at + 14] = placement.z;
         matrices[at + 15] = 1;
+        geometry.getAttribute("scatterFade").setX(index, fade);
         // Memoised on the placement: tints are a property of the prop, and a placement object
         // survives in the tile cache, so a prop is tinted once ever rather than once per rebuild.
         const tint = placement.tint ?? (placement.tint = instanceTint(role, placement));
@@ -1977,8 +2006,7 @@ function createRoleMesh(
         record.setPieceId = placement.setPieceId ?? null;
         record.archetypeId = placement.archetypeId ?? null;
         // Read-only placement evidence. Keeping this beside the stable ids lets tests and visual
-        // tooling certify footprint/terrain contracts without reverse-engineering a matrix whose
-        // edge-fade scale may legitimately change at the resident-set boundary.
+        // tooling certify footprint/terrain contracts. Distance changes coverage, not this size.
         record.eastM = placement.eastM ?? placement.x;
         record.northM = placement.northM ?? -placement.z;
         record.yaw = placement.yaw;
@@ -1995,11 +2023,13 @@ function createRoleMesh(
         matrices[at + 5] = 1e-6;
         matrices[at + 10] = 1e-6;
         matrices[at + 15] = 1;
+        geometry.getAttribute("scatterFade").setX(index, 0);
       }
       live.length = count;
       for (let index = 0; index < count; index++) live[index] = records[index];
       controller.baseCount = count;
       mesh.instanceMatrix.needsUpdate = true;
+      geometry.getAttribute("scatterFade").needsUpdate = true;
       mesh.instanceColor.needsUpdate = true;
       // A camera-centred sphere, not a scan of every instance: `computeBoundingSphere` walks the
       // whole matrix buffer, and it would run on every rebuild for no gain — the resident set is
@@ -2021,7 +2051,15 @@ function disposeResources(resources) {
     if (typeof mesh.dispose === "function") mesh.dispose();
     mesh.removeFromParent();
   }
-  for (const geometry of resources.geometries) geometry.dispose();
+  for (const geometry of resources.geometries) {
+    if (geometry.userData?.scatterFadeOnlyDispose) {
+      for (const name of Object.keys(geometry.attributes)) {
+        if (name !== "scatterFade") geometry.deleteAttribute(name);
+      }
+      geometry.setIndex(null);
+    }
+    geometry.dispose();
+  }
   for (const material of resources.materials) material.dispose();
   for (const texture of resources.textures ?? []) texture.dispose();
 }

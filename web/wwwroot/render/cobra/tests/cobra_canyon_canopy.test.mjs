@@ -144,8 +144,11 @@ test("a continuous 96 m camera move never resizes surviving crown instance trans
     }
     assert.ok(checked > 100, "the pan must exercise crowns across two occupancy refreshes");
     assert.match(shader.vertexShader, /cameraPosition\.xz - canopyCentre\.xz/);
-    assert.match(shader.vertexShader, /transformed \*= canopyFade/);
-    assert.ok(shader.uniforms.cobraCanopyFadeRange.value.w > 0);
+    assert.doesNotMatch(shader.vertexShader, /transformed \*=/);
+    assert.match(shader.fragmentShader, /canopyStipple > vCanopyFade[\s\S]*discard/);
+    const range = shader.uniforms.cobraCanopyFadeRange.value;
+    assert.ok(range.y - range.x < 90, "the inner dissolve must stay a short band");
+    assert.ok(range.w > 0);
   } finally { field.dispose(); }
 });
 

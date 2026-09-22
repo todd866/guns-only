@@ -160,7 +160,10 @@ function crownGeometry(THREE) {
     const top = crown ? 1 : 0.92;
     const point = (index, ring) => {
       const a = index * Math.PI / 4 + crown * 0.31;
-      const r = [0.16, 0.32, 0.245][ring];
+      // Same triangle count. A small per-lobe change keeps the rounded shoulder and breaks the
+      // perfect disc that read as a balloon.
+      const lobe = 0.88 + ((index * 3 + crown * 5) % 5) * 0.045;
+      const r = [0.16, 0.32, 0.245][ring] * lobe;
       const y = [-0.12, top * 0.50, top * 0.86][ring];
       const radialNormal = [0.75, 0.95, 0.50][ring];
       return { p: [cx + Math.cos(a) * r, y, cz + Math.sin(a) * r],
@@ -191,7 +194,10 @@ export function createCobraCanopyField(THREE, plan, {
 } = {}) {
   const budget = COBRA_CANOPY_BUDGETS[qualityTier] ?? COBRA_CANOPY_BUDGETS.balanced;
   const geometry = crownGeometry(THREE);
-  const fadeRange = { value: new THREE.Vector4(budget.nearM, budget.fullM,
+  // The inner band only covers the occupancy handoff. A crown stays its real size across the
+  // valley; pixels dissolve over this short range instead of the mesh growing or shrinking.
+  const fadeRange = { value: new THREE.Vector4(
+    Math.max(0, budget.nearM - REBUILD_M), budget.nearM + 24,
     budget.radiusM * 0.78, budget.radiusM) };
   const canopySurface = surfaceTextures?.canopy ?? null;
   const material = new THREE.MeshLambertMaterial({ color: canopySurface ? 0xffffff : 0x435332, vertexColors: true,
@@ -212,6 +218,7 @@ export function createCobraCanopyField(THREE, plan, {
     );
     shader.vertexShader = `varying vec3 vCanopyWorld;
       varying vec3 vCanopyWorldNormal;
+      varying float vCanopyFade;
       uniform vec4 cobraCanopyFadeRange;\n${shader.vertexShader}`.replace(
       "#include <defaultnormal_vertex>", normalChunk,
     ).replace(
@@ -219,9 +226,8 @@ export function createCobraCanopyField(THREE, plan, {
       `#include <begin_vertex>
        vec3 canopyCentre = (modelMatrix * instanceMatrix * vec4(0., 0., 0., 1.)).xyz;
        float canopyDistance = length(cameraPosition.xz - canopyCentre.xz);
-       float canopyFade = smoothstep(cobraCanopyFadeRange.x, cobraCanopyFadeRange.y, canopyDistance)
-         * (1.0 - smoothstep(cobraCanopyFadeRange.z, cobraCanopyFadeRange.w, canopyDistance));
-       transformed *= canopyFade;`,
+       vCanopyFade = smoothstep(cobraCanopyFadeRange.x, cobraCanopyFadeRange.y, canopyDistance)
+         * (1.0 - smoothstep(cobraCanopyFadeRange.z, cobraCanopyFadeRange.w, canopyDistance));`,
     ).replace(
       "#include <project_vertex>",
       `#include <project_vertex>
@@ -232,8 +238,14 @@ export function createCobraCanopyField(THREE, plan, {
        vCanopyWorldNormal = inverseTransformDirection(transformedNormal, viewMatrix);`);
     shader.fragmentShader = `varying vec3 vCanopyWorld;
       varying vec3 vCanopyWorldNormal;
+      varying float vCanopyFade;
       ${canopySurface ? "uniform sampler2D uCanopySurface;" : ""}
       ${COBRA_NOISE_CHUNK}\n${shader.fragmentShader}`.replace(
+      "#include <alphatest_fragment>",
+      `#include <alphatest_fragment>
+       float canopyStipple = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+       if (canopyStipple > vCanopyFade) discard;`,
+    ).replace(
       "#include <color_fragment>",
       `#include <color_fragment>
        float canopyMottle = cobraNoise(vCanopyWorld.xz / 11.0) * 0.6
@@ -245,10 +257,11 @@ export function createCobraCanopyField(THREE, plan, {
          + texture2D(uCanopySurface, vCanopyWorld.xz / 12.0).rgb * canopyWeights.y
          + texture2D(uCanopySurface, vCanopyWorld.xy / 12.0).rgb * canopyWeights.z;
        diffuseColor.rgb *= canopyAlbedo * mix(0.85, 1.10, canopyMottle);`
-    : "diffuseColor.rgb *= mix(vec3(0.62, 0.73, 0.65), vec3(1.20, 1.12, 0.95), canopyMottle);"}`,
+    : `float canopyForm = mix(0.58, 1.0, clamp(vCanopyWorldNormal.y * 0.55 + 0.45, 0.0, 1.0));
+       diffuseColor.rgb *= mix(vec3(0.62, 0.73, 0.65), vec3(1.20, 1.12, 0.95), canopyMottle) * canopyForm;`}`,
     );
   };
-  material.customProgramCacheKey = () => `cobra-canopy-rounded-triplanar-v5-${canopySurface ? "surface" : "fallback"}`;
+  material.customProgramCacheKey = () => `cobra-canopy-rounded-triplanar-v6-${canopySurface ? "surface" : "fallback"}`;
   const mesh = new THREE.InstancedMesh(geometry, material, budget.capacity);
   mesh.name = "COBRA_MIDFIELD_CANOPY";
   mesh.userData.cobraCanyon = TAG;
@@ -321,8 +334,8 @@ export function createCobraCanopyField(THREE, plan, {
       const cell = queue[i];
       for (const record of cache.get(`${cell.cx}:${cell.cn}`)) {
         const distance = Math.hypot(record.x - camera.x, record.n - camera.n);
-        // Keep zero-scale neighbours resident across the complete next 48 m step; the vertex
-        // shader follows the actual camera continuously while occupancy rebuilds remain bounded.
+        // Keep the handoff ring resident across the next 48 m step. The shader dissolves it;
+        // the crown's instance scale stays the size it was built.
         if (distance > budget.nearM - REBUILD_M && distance < budget.radiusM + REBUILD_M) {
           candidates.push({ record, distance });
         }
