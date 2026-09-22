@@ -5,6 +5,7 @@ import {
   approachEnergyPanelY,
   approachPowerFallback,
   formatApproachEnergyLine,
+  patternEnergyWord,
 } from "../approach_energy.js";
 import { fighterHudLayout } from "../fighter_layout.js";
 import { sortiePowerCommand } from "../sortie_power.js";
@@ -34,7 +35,7 @@ test("energy cue projects next-gate targets and errors", () => {
 });
 
 test("conventional F-22 pattern keeps the prose-and-numbers panel hidden", () => {
-  assert.equal(approachEnergyCue({
+  const state = {
     approach_guidance_active: true,
     approach_valid: true,
     conventional_rtb_pattern_active: true,
@@ -42,6 +43,36 @@ test("conventional F-22 pattern keeps the prose-and-numbers panel hidden", () =>
     approach_next_tas_mps: 110,
     approach_alt_error_m: 20,
     approach_tas_error_mps: 3,
+    approach_energy_state_code: 3,
+    approach_energy_state: "TOO_FAST",
+    approach_energy_target_ktas: 220,
+    approach_energy_tolerance_ktas: 25,
+  };
+  assert.equal(approachEnergyCue(state), null);
+  assert.deepEqual(patternEnergyWord(state), { status: "TOO_FAST", word: "FAST", mark: 1 });
+});
+
+test("pattern energy word is one token and fails closed without authority", () => {
+  const base = {
+    conventional_rtb_pattern_active: true,
+    approach_energy_target_ktas: 170,
+    approach_energy_tolerance_ktas: 25,
+  };
+  assert.deepEqual(patternEnergyWord({
+    ...base, approach_energy_state_code: 1, approach_energy_state: "TOO_SLOW",
+  }), { status: "TOO_SLOW", word: "SLOW", mark: -1 });
+  assert.deepEqual(patternEnergyWord({
+    ...base, approach_energy_state_code: 2, approach_energy_state: "ON_SPEED",
+  }), { status: "ON_SPEED", word: "ON SPEED", mark: 0 });
+  assert.equal(patternEnergyWord({ ...base, conventional_rtb_pattern_active: false,
+    approach_energy_state_code: 3, approach_energy_state: "TOO_FAST" }), null);
+  assert.equal(patternEnergyWord({
+    ...base, approach_energy_state_code: 0, approach_energy_state: "UNAVAILABLE",
+  }), null);
+  assert.equal(patternEnergyWord({
+    conventional_rtb_pattern_active: true,
+    approach_energy_state_code: 3,
+    approach_energy_state: "TOO_FAST",
   }), null);
 });
 

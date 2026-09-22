@@ -590,8 +590,10 @@ test("authoritative pattern energy state drives green, yellow, red and a non-col
       approach_energy_state: status,
     };
     const energy = conventionalPatternEnergy(state);
+    const mark = status === "TOO_FAST" ? 1 : status === "TOO_SLOW" ? -1 : 0;
     assert.equal(energy.status, status);
     assert.equal(energy.color, color);
+    assert.equal(energy.mark, mark);
     assert.equal(energy.targetKtas, 220);
     assert.equal(energy.toleranceKtas, 25);
 
@@ -600,9 +602,36 @@ test("authoritative pattern energy state drives green, yellow, red and a non-col
     const first = path.object3d.children.find((mesh) => mesh.visible);
     first.onBeforeRender();
     assert.equal(first.material.uniforms.uColor.value.value, color);
+    assert.equal(first.material.uniforms.uMark.value, mark,
+      "the chevron shader must change shape with energy, not only colour");
+    assert.match(first.material.fragmentShader, /uMark/);
     assert.equal(first.userData.guidanceEnergyStatus, status,
       "status remains observable without relying on colour perception");
+    assert.equal(first.userData.guidanceEnergyMark, mark);
   }
+});
+
+test("a pattern energy mark does not leak onto the next plain chevron", () => {
+  const path = createGuidancePath(THREE);
+  assert.ok(path.update({
+    ...conventionalPatternState,
+    approach_energy_state_code: 3,
+    approach_energy_state: "TOO_FAST",
+  }) > 0);
+  const patterned = path.object3d.children.find((mesh) => mesh.visible);
+  patterned.onBeforeRender();
+  assert.equal(patterned.material.uniforms.uMark.value, 1);
+
+  path.update({
+    ...conventionalPatternState,
+    conventional_rtb_pattern_active: false,
+  });
+  const plain = path.object3d.children.find((mesh) => mesh.visible);
+  plain.onBeforeRender();
+  assert.equal(plain.userData.guidanceStyle, "rtb-chevron");
+  assert.equal(plain.material.uniforms.uMark.value, 0,
+    "shared chevron material must drop the fast mark when the pattern ends");
+  assert.equal(plain.userData.guidanceEnergyMark, null);
 });
 
 test("pattern chevrons fail closed outside conventional RTB or without authority energy", () => {
