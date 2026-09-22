@@ -24,8 +24,8 @@
  */
 
 /** Presentation contract id, in the house `guns-only.<thing>.vN` form. */
-import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=364";
-import { emberRtbVisualState } from "./cobra_ember_path.js?v=364";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=365";
+import { emberRtbVisualState } from "./cobra_ember_path.js?v=365";
 
 export const COBRA_GOLDEN_PATH_SCHEMA = "guns-only.cobra-golden-path.v2";
 /** Keep the attack cue and the aircraft above the bridge deck / gun-pit elevation. */
