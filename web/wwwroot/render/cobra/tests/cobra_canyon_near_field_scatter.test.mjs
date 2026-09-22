@@ -76,6 +76,7 @@ function residents(root) {
         widthM: scale.x,
         heightM: scale.y,
         depthM: scale.z,
+        fade: mesh.geometry.getAttribute("scatterFade")?.getX(index) ?? 1,
       });
     }
   }
@@ -157,7 +158,7 @@ test("a prop occupies the same world position every time the camera returns", ()
   kit.dispose();
 });
 
-test("props scale in at the outer edge instead of switching on at full size", () => {
+test("props keep their size at the outer edge and stipple instead of growing in", () => {
   const { kit } = create("desktop");
   const eastM = -3_000;
   const northM = -1_000;
@@ -174,11 +175,19 @@ test("props scale in at the outer edge instead of switching on at full size", ()
   assert.ok(jungle.length > 100);
   const outermost = jungle.slice(0, 20);
   const inner = jungle.slice(Math.floor(jungle.length * 0.6));
-  const meanHeight = (list) => list.reduce((sum, e) => sum + e.heightM, 0) / list.length;
-  // The band is a fade, not a wall: the last props in are visibly smaller than the settled field.
+  const mean = (list, key) => list.reduce((sum, entry) => sum + entry[key], 0) / list.length;
+  // Distance changes coverage. The last plants in stay the size of the settled field.
   assert.ok(
-    meanHeight(outermost) < meanHeight(inner) * 0.6,
-    `edge props are ${meanHeight(outermost).toFixed(1)} m against ${meanHeight(inner).toFixed(1)} m inside`,
+    mean(outermost, "heightM") > mean(inner, "heightM") * 0.85,
+    `edge props shrank to ${mean(outermost, "heightM").toFixed(1)} m against ${mean(inner, "heightM").toFixed(1)} m inside`,
+  );
+  assert.ok(
+    mean(outermost, "fade") < 0.85,
+    `edge coverage stayed ${mean(outermost, "fade").toFixed(2)}`,
+  );
+  assert.ok(
+    mean(inner, "fade") > 0.95,
+    `settled coverage dropped to ${mean(inner, "fade").toFixed(2)}`,
   );
   kit.dispose();
 });
@@ -202,9 +211,8 @@ test("keeps the Camp Ember eye clear and every prop on the ground, wherever the 
         entry.y <= groundM + 1e-3,
         `${name}: ${entry.role} floats ${(entry.y - groundM).toFixed(2)} m above the terrain`,
       );
-      // Seat drop is bounded by the instance's own half-footprint at FULL size, and the widest
-      // thing this world plants is a 120 m paddy panel. The rendered width cannot be used as the
-      // bound because an instance inside the fade band is drawn smaller than it is seated for.
+      // Seat drop is bounded by the instance's own half-footprint, and the widest thing this
+      // world plants is a 120 m paddy panel. Coverage fade does not change that seated size.
       assert.ok(
         groundM - entry.y <= 75,
         `${name}: ${entry.role} is buried ${(groundM - entry.y).toFixed(1)} m into the hill`,

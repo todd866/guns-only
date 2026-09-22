@@ -117,7 +117,7 @@ export const COBRA_CANYON_SCATTER_RADIUS_M = Object.freeze({
  */
 const SCATTER_MAXIMUM_RADIUS_MULTIPLE = 1.6;
 
-/** Instances inside this fraction of a role's achieved radius are at full size. */
+/** Instances inside this fraction of a role's achieved radius are fully covered. */
 const SCATTER_FULL_SCALE_FRACTION = 0.78;
 
 /** Camera travel that re-collects the resident set. Well under the fade band width. */
