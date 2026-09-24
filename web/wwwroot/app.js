@@ -284,10 +284,17 @@ import {
 } from "./render/scene/scene_builders.js?v=366";
 import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=366";
 import {
+  cueInterfaceSound,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
 } from "./render/audio/flight_audio.js?v=366";
+import {
+  applyGameFeelToCamera,
+  createGameFeelState,
+  paintGameFeel,
+  stepGameFeel,
+} from "./render/feel/game_feel.js";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -586,6 +593,10 @@ const settingsScreen = document.querySelector("#settings-screen");
 const settingsClose = document.querySelector("#settings-close");
 const settingsCloseBottom = document.querySelector("#settings-close-bottom");
 const settingsAudio = document.querySelector("#setting-audio");
+const settingsMusic = document.querySelector("#setting-music");
+const settingsInterfaceSounds = document.querySelector("#setting-interface-sounds");
+const settingsGameFeel = document.querySelector("#setting-game-feel");
+const gameFeelRoot = document.querySelector("#game-feel");
 const settingsRadioVoice = document.querySelector("#setting-radio-voice");
 const settingsRadioCaptions = document.querySelector("#setting-radio-captions");
 const settingsAutoGcas = document.querySelector("#setting-autogcas");
@@ -3084,6 +3095,15 @@ function applyPlayerSettings() {
   activeView?.hud.setAudioEnabled(playerSettings.audio);
   activeView?.hud.setControlBindings?.(playerSettings.bindings);
   if (settingsAudio) settingsAudio.checked = playerSettings.audio;
+  if (settingsMusic) {
+    settingsMusic.checked = playerSettings.music !== false;
+    settingsMusic.disabled = !playerSettings.audio;
+  }
+  if (settingsInterfaceSounds) {
+    settingsInterfaceSounds.checked = playerSettings.interfaceSounds !== false;
+    settingsInterfaceSounds.disabled = !playerSettings.audio;
+  }
+  if (settingsGameFeel) settingsGameFeel.checked = playerSettings.gameFeel !== false;
   if (settingsRadioVoice) {
     settingsRadioVoice.checked = playerSettings.radioVoice !== false;
     settingsRadioVoice.disabled = !playerSettings.audio;
@@ -3107,6 +3127,9 @@ function commitPlayerSettings(next) {
   applyPlayerSettings();
   recorder.context("player_settings", {
     audio: playerSettings.audio,
+    music: playerSettings.music,
+    interfaceSounds: playerSettings.interfaceSounds,
+    gameFeel: playerSettings.gameFeel,
     radioVoice: playerSettings.radioVoice,
     radioCaptions: playerSettings.radioCaptions,
     highContrast: playerSettings.highContrast,
@@ -3220,6 +3243,15 @@ settingsAutoGcas?.addEventListener("change", () => commitPlayerSettings({
 settingsAudio?.addEventListener("change", () => {
   commitAudioPreferenceFromGesture(settingsAudio.checked);
 });
+settingsMusic?.addEventListener("change", () => commitPlayerSettings({
+  ...playerSettings, music: settingsMusic.checked,
+}));
+settingsInterfaceSounds?.addEventListener("change", () => commitPlayerSettings({
+  ...playerSettings, interfaceSounds: settingsInterfaceSounds.checked,
+}));
+settingsGameFeel?.addEventListener("change", () => commitPlayerSettings({
+  ...playerSettings, gameFeel: settingsGameFeel.checked,
+}));
 for (const control of [readyTelemetrySharing, settingsTelemetrySharing]) {
   control?.addEventListener("change", () => {
     commitTelemetrySharingPreference(control.checked);
@@ -3246,6 +3278,31 @@ settingsTiltSensitivity?.addEventListener("input", () => commitPlayerSettings({
 settingsResetBindings?.addEventListener("click", () => commitPlayerSettings(
   resetControlBindings(playerSettings),
 ));
+
+function cueSettingsInterface(kind) {
+  if (playerSettings.audio === false || playerSettings.interfaceSounds === false) return;
+  cueInterfaceSound(kind);
+}
+for (const surface of [settingsScreen, readyScreen]) {
+  surface?.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("button, a, label"))
+      cueSettingsInterface("click");
+  });
+  surface?.addEventListener("pointerover", (event) => {
+    const control = event.target instanceof Element
+      ? event.target.closest("button, a")
+      : null;
+    if (!control || control.dataset.feelHover === "1") return;
+    control.dataset.feelHover = "1";
+    cueSettingsInterface("hover");
+  });
+  surface?.addEventListener("pointerout", (event) => {
+    const control = event.target instanceof Element
+      ? event.target.closest("button, a")
+      : null;
+    if (control) delete control.dataset.feelHover;
+  });
+}
 applyPlayerSettings();
 
 readyBuildReload?.addEventListener("click", reloadCurrentBuild);
@@ -7953,6 +8010,12 @@ class FlightView {
 
     this.presentationAssets = new PresentationAssetManager(this.renderer, this.scene, this.camera);
     this.cockpitHead = createCockpitHeadPresentation(THREE);
+    this.gameFeel = createGameFeelState();
+    this.gameFeelScratch = {
+      offset: new THREE.Vector3(),
+      euler: new THREE.Euler(0, 0, 0, "YXZ"),
+      quaternion: new THREE.Quaternion(),
+    };
     this.f22CanopyGlass = createF22CanopyGlass(THREE);
     this.periodGunsight = createPeriodGunsight(THREE);
     this.banditContact = createDistantAircraftImpostor(THREE);
@@ -9603,6 +9666,19 @@ class FlightView {
     // target solve makes the contact and every view-relative cue wander by a degree or two.
     if (casevac || replayExternal || padlock) this.cockpitHead.reset(state);
     else this.cockpitHead.update(this.camera, state, dt);
+    const gameFeelFrame = stepGameFeel(this.gameFeel, state, dt, {
+      enabled: playerSettings.gameFeel !== false,
+      reducedMotion: playerSettings.reducedMotion === true,
+      externalCamera: replayExternal || casevac,
+    });
+    applyGameFeelToCamera(
+      THREE,
+      this.camera,
+      gameFeelFrame,
+      this.lowSpeedLens.fovDeg,
+      this.gameFeelScratch,
+    );
+    paintGameFeel(gameFeelRoot, gameFeelFrame);
     this.camera.updateMatrixWorld(true);
     // Live frames carry no replay_camera; they are the cockpit view, so the default must
     // be COCKPIT — defaulting to CHASE made this gate constant-false and the canopy glass
@@ -9838,6 +9914,9 @@ class FlightView {
         || state?.paused === true,
       triggerHeld: !casevac && isGkeyHeld(8),
       radioVoiceEnabled: playerSettings.radioVoice !== false,
+      music: playerSettings.music !== false,
+      interfaceSounds: playerSettings.interfaceSounds !== false,
+      scene: readyScreen?.classList.contains("visible") ? "title" : "flight",
       nowSeconds,
     });
     updateCasevacAudio(state, {

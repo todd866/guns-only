@@ -184,6 +184,53 @@
       pointer-events: none;
     }
 
+    #game-feel {
+      --feel-vignette: 0;
+      --feel-lines: 0;
+      --feel-flash: 0;
+      position: fixed;
+      z-index: 14;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    #game-feel[hidden] { display: none; }
+    .run-paused #game-feel,
+    .incident-replay #game-feel { display: none !important; }
+    .game-feel-layer {
+      position: absolute;
+      inset: 0;
+    }
+    #game-feel-vignette {
+      opacity: var(--feel-vignette);
+      background: radial-gradient(
+        ellipse 68% 60% at 50% 46%,
+        rgba(18, 18, 20, 0) 28%,
+        rgba(10, 10, 12, .55) 72%,
+        rgba(0, 0, 0, .92) 100%
+      );
+    }
+    #game-feel-lines {
+      opacity: calc(var(--feel-lines) * 0.72);
+      background:
+        repeating-linear-gradient(
+          90deg,
+          transparent 0 18px,
+          rgba(255, 255, 255, .14) 18px 19px
+        );
+      mask-image: linear-gradient(90deg, #000 0%, transparent 18%, transparent 82%, #000 100%);
+      animation: game-feel-lines 0.42s linear infinite;
+    }
+    #game-feel-flash {
+      opacity: var(--feel-flash);
+      background: rgba(255, 246, 230, .82);
+    }
+    @keyframes game-feel-lines {
+      from { transform: scaleX(1); }
+      to { transform: scaleX(1.08); }
+    }
+    .forced-reduced-motion #game-feel-lines { animation: none; }
+
     #pilot-physiology[hidden] { display: none; }
     .run-paused #pilot-physiology { display: none !important; }
 
@@ -3910,6 +3957,12 @@
     <output id="rapier-radio-text" role="status" aria-live="polite" aria-atomic="true"></output>
   </section>
 
+  <div id="game-feel" aria-hidden="true" hidden>
+    <div id="game-feel-vignette" class="game-feel-layer"></div>
+    <div id="game-feel-lines" class="game-feel-layer"></div>
+    <div id="game-feel-flash" class="game-feel-layer"></div>
+  </div>
+
   <div id="pilot-physiology" aria-hidden="true" hidden>
     <div id="pilot-physiology-vignette" class="pilot-physiology-layer"></div>
     <div id="pilot-physiology-blackout" class="pilot-physiology-layer"></div>
@@ -4374,6 +4427,9 @@ Splash one bandit to qualify · H controls · R restarts</p>
       <p id="settings-copy" class="settings-copy">Preferences apply immediately and stay on this device. Touch controls retain their labelled actions when keyboard bindings change.</p>
       <div class="settings-grid">
         <label class="settings-toggle"><input id="setting-audio" type="checkbox"> Sound</label>
+        <label class="settings-toggle"><input id="setting-music" type="checkbox"> Music</label>
+        <label class="settings-toggle"><input id="setting-interface-sounds" type="checkbox"> Interface sounds</label>
+        <label class="settings-toggle"><input id="setting-game-feel" type="checkbox"> Combat camera feel</label>
         <label class="settings-toggle"><input id="setting-radio-voice" type="checkbox"> Radio voices</label>
         <label class="settings-toggle"><input id="setting-radio-captions" type="checkbox"> Radio captions</label>
         <label class="settings-toggle"><input id="setting-autogcas" type="checkbox"> Auto-GCAS backstop</label>

@@ -40,6 +40,9 @@ const defaultBindings = () => Object.fromEntries(
 
 export const DEFAULT_PLAYER_SETTINGS = Object.freeze({
   audio: true,
+  music: true,
+  interfaceSounds: true,
+  gameFeel: true,
   radioVoice: true,
   radioCaptions: false,
   highContrast: false,
@@ -78,6 +81,9 @@ export function normalisePlayerSettings(value = {}) {
   }
   return Object.freeze({
     audio: bool(value?.audio, DEFAULT_PLAYER_SETTINGS.audio),
+    music: bool(value?.music, DEFAULT_PLAYER_SETTINGS.music),
+    interfaceSounds: bool(value?.interfaceSounds, DEFAULT_PLAYER_SETTINGS.interfaceSounds),
+    gameFeel: bool(value?.gameFeel, DEFAULT_PLAYER_SETTINGS.gameFeel),
     radioVoice: bool(value?.radioVoice, DEFAULT_PLAYER_SETTINGS.radioVoice),
     radioCaptions: bool(value?.radioCaptions, DEFAULT_PLAYER_SETTINGS.radioCaptions),
     highContrast: bool(value?.highContrast, DEFAULT_PLAYER_SETTINGS.highContrast),

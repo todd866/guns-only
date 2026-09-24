@@ -24,6 +24,9 @@ test("settings normalisation is bounded and produces one unique key per action",
   assert.equal(settings.tiltSensitivity, 1.6);
   assert.equal(settings.radioVoice, false);
   assert.equal(settings.radioCaptions, true);
+  assert.equal(settings.music, true);
+  assert.equal(settings.interfaceSounds, true);
+  assert.equal(settings.gameFeel, true);
   assert.equal(settings.bindings.pull, "KeyZ");
   assert.equal(settings.bindings.push, "ArrowUp");
   assert.equal(settings.bindings.fire, "KeyF");
