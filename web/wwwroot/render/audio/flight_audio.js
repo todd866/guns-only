@@ -48,6 +48,11 @@ import {
   updateTrapVoice,
 } from "./event_audio.js";
 import { createWarningVoices, updateWarningVoices } from "./warning_audio.js";
+import {
+  createFeelVoices,
+  cueFeelInterface,
+  updateFeelVoices,
+} from "./feel_audio.js";
 import { createSharedFlightAudioFacade } from "./flight_audio_singleton.js";
 import { createRadioVoice, updateRadioVoice } from "./radio_audio.js";
 
@@ -72,6 +77,7 @@ let formationContactVoices = [];
 let formationContactTracks = [];
 let warningVoices = null;
 let radioVoice = null;
+let feelVoices = null;
 let disabled = false;
 let enabled = true;
 let sampleLoad = null;
@@ -376,6 +382,7 @@ function build() {
     propulsionDuck,
     worldDuck,
   });
+  feelVoices = createFeelVoices(context, eventBus);
   installFlightAudioLifecycle();
   publishFlightAudioRuntimeState();
   return true;
@@ -933,6 +940,9 @@ function updateFlightAudioLocal(state, {
   triggerHeld = false,
   radioVoiceEnabled = true,
   nowSeconds = 0,
+  music = false,
+  interfaceSounds = false,
+  scene = "flight",
 } = {}) {
   if (disabled) return;
   try {
@@ -1042,6 +1052,13 @@ function updateFlightAudioLocal(state, {
       enabled: live,
       nowSeconds,
     });
+    updateFeelVoices(feelVoices, context, audioState, {
+      enabled: live,
+      music,
+      interfaceSounds,
+      scene,
+      nowSeconds,
+    });
     // Radio owns the shared downstream duck multiplier, independent of which mutually-exclusive
     // aircraft graph is live. No per-frame graph trim can overwrite an async transmission duck.
     updateRadioVoice(radioVoice, context, state, {
@@ -1093,4 +1110,15 @@ export function suspendFlightAudio(reason = "manual") {
 /// Drive every continuous voice from the flat snapshot. `triggerHeld` gates gun reports.
 export function updateFlightAudio(state, options = {}) {
   return sharedFlightAudio.update(state, options);
+}
+
+/// UI click and hover ticks. No-ops until the shared graph exists, and stays silent under mute
+/// because the tick is scheduled on the same master the silent-QA clamp already owns.
+export function cueInterfaceSound(kind = "click") {
+  if (!context || !feelVoices || disabled || !enabled || silentQa) return false;
+  try {
+    return cueFeelInterface(feelVoices, context, kind);
+  } catch {
+    return false;
+  }
 }
