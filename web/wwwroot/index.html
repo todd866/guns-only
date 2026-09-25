@@ -2599,6 +2599,7 @@
 
     html.top-gun-anime-1986.run-paused #ready-screen #ready-start {
       border: 2px solid var(--tg-tape);
+      color: var(--tg-lamp);
       background: rgba(255, 196, 96, .18);
       box-shadow: inset 0 0 0 1px var(--tg-tape-edge), 0 0 30px rgba(255, 160, 64, .22);
     }
@@ -3898,49 +3899,11 @@
        uses that same painting as a hero behind the posters. Intro, pause, and debrief share
        the type scale already pinned above; this layer only changes what a screenshot shows.
        --------------------------------------------------------------------------------------- */
-    #boot {
-      color: #fdf6e6;
-      background:
-        linear-gradient(100deg, rgba(6, 8, 12, .82) 0%, rgba(6, 8, 12, .28) 46%, rgba(6, 8, 12, .55) 100%),
-        url("./art/jet-f22-generated-v4.webp") center 42% / cover no-repeat,
-        #07090d;
-    }
 
-    #boot.ready {
-      transition-delay: .9s;
-      transition-duration: .45s;
-    }
 
-    .boot-title {
-      position: relative;
-      z-index: 1;
-      max-width: 12ch;
-    }
 
-    .boot-kicker {
-      margin: 0 0 14px;
-      color: #f0cf8b;
-      font: 750 12px/1 var(--flow-font-data);
-      letter-spacing: .34em;
-      text-transform: uppercase;
-    }
 
-    .boot-wordmark {
-      margin: 0;
-      font-family: var(--flow-font-display);
-      font-size: clamp(84px, 14vw, 168px);
-      font-weight: 500;
-      letter-spacing: -0.045em;
-      line-height: .84;
-      text-shadow: 0 18px 50px rgba(0, 0, 0, .45);
-    }
 
-    .boot-rule {
-      max-width: 22ch;
-      margin: 22px 0 0;
-      color: rgba(253, 246, 230, .82);
-      font: 500 18px/1.35 var(--flow-font-display);
-    }
 
     .boot-load {
       padding: 8px 12px;
@@ -3976,16 +3939,6 @@
       padding: 0 8px 8px;
     }
 
-    #ready-screen[data-mode="program"] .ready-menu-brand {
-      display: block;
-      color: #fdf6e6;
-      font-family: var(--flow-font-display);
-      font-size: clamp(40px, 5vw, 68px);
-      font-weight: 500;
-      letter-spacing: -0.04em;
-      line-height: .86;
-      text-transform: none;
-    }
 
     #ready-screen[data-mode="program"] #ready-menu-title {
       position: absolute;
@@ -3999,7 +3952,7 @@
     :root #ready-screen[data-mode="program"] #ready-start,
     :root #ready-screen[data-mode="program"] #ready-start:hover:not(:disabled),
     :root #ready-screen[data-mode="program"] #ready-start:focus-visible:not(:disabled) {
-      width: min(440px, 86vw);
+      width: min(440px, 100%);
       min-height: 64px;
       border: 0;
       color: #1c1408;
@@ -4199,9 +4152,10 @@
     @media (max-width: 760px) {
       #ready-screen[data-mode="program"] .ready-secondary-actions {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
       }
+      :root #ready-screen[data-mode="program"] #ready-start { min-height: 52px; font-size: 19px; }
       #ready-laptop-hint {
         max-width: 34rem;
         font-size: 12px;
@@ -4213,7 +4167,6 @@
       .sortie-grade { grid-template-columns: 1fr; }
       .sortie-grade-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       #ready-screen[data-mode="intro"] .valley-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .boot-wordmark { font-size: clamp(64px, 18vw, 96px); }
     }
 
     @keyframes boot-pulse {
@@ -4766,11 +4719,6 @@ Splash one bandit to qualify · H controls · R restarts</p>
     an unpainted canvas off the screen, and it still carries the shell's phase and status contract.
   -->
   <div id="boot" data-phase="files" aria-busy="true">
-    <div class="boot-title">
-      <p class="boot-kicker">Air combat</p>
-      <p class="boot-wordmark">Guns<br>Only</p>
-      <p class="boot-rule">Guns on the merge.</p>
-    </div>
     <div class="boot-load">
       <i class="boot-pulse" aria-hidden="true"></i>
       <div id="boot-status" role="status" aria-live="polite" aria-atomic="true"></div>
