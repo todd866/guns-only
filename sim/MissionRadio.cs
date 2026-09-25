@@ -864,9 +864,11 @@ public sealed class MissionRadioDirector {
         // Only owner-approved recorded clips are spoken (no generated R/T). The overhead uses the
         // same exchange the Rapier pattern already flies: the pilot reports initial and tower
         // approves the (left-hand) break; the pilot then reports base with three greens once the
-        // gear is locked. The break and final legs are flown silently, as in practice.
+        // gear is locked. The published gate is the TARGET gate, so "break" becoming the target is
+        // the moment the jet is established on initial -- when the initial call is actually made.
+        // Final is flown silently.
         switch (gate) {
-            case "initial":
+            case "break":
                 EnqueueExchange(
                     state,
                     MissionRadioExchangeContracts.PatternEntry,

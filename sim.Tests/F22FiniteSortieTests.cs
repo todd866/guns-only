@@ -136,7 +136,8 @@ public class F22FiniteSortieTests {
         double clock = 0;
         director.Step(Overhead(clock, ""));
         var heard = new List<string>();
-        foreach (string gate in new[] { "initial", "break", "perch", "final" }) {
+        // Published gates are the director's TARGET: ingress, then break once on initial.
+        foreach (string gate in new[] { "pattern_ingress_0", "break", "downwind", "perch", "final" }) {
             for (int i = 0; i < 10; i++) {
                 clock += 1;
                 MissionRadioTransmission tx = director.Step(Overhead(clock, gate, gearDown: gate is "perch" or "final"));
