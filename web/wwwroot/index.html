@@ -196,11 +196,13 @@
 
     #pilot-physiology-vignette {
       opacity: var(--pilot-vignette-opacity);
+      /* Grey-out is lost colour in the periphery. Central black is the separate blackout layer,
+         driven by the same published retinal state. */
       background: radial-gradient(
-        ellipse 72% 64% at 50% 48%,
-        rgba(0, 0, 0, 0) 12%,
-        rgba(0, 0, 0, .16) 48%,
-        rgba(0, 0, 0, .98) 100%
+        ellipse 78% 70% at 50% 46%,
+        rgba(128, 128, 132, 0) 16%,
+        rgba(86, 86, 90, .5) 54%,
+        rgba(54, 54, 58, .9) 100%
       );
     }
 
@@ -4729,6 +4731,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
           <legend>Audio</legend>
           <div class="settings-grid">
             <label class="settings-toggle"><input id="setting-audio" type="checkbox"> Sound</label>
+            <label class="settings-toggle"><input id="setting-music" type="checkbox"> Music</label>
+            <label class="settings-toggle"><input id="setting-interface-sounds" type="checkbox"> Interface sounds</label>
             <label class="settings-toggle"><input id="setting-radio-voice" type="checkbox"> Radio voices</label>
             <label class="settings-toggle"><input id="setting-radio-captions" type="checkbox"> Radio captions</label>
           </div>

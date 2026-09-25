@@ -115,4 +115,8 @@ test("production app renders authoritative physiology through a normally hidden 
     "physiological occlusion must sit above in-world touch and test-flight UI");
   assert.match(html, /\.run-paused #pilot-physiology \{ display: none !important; \}/,
     "paused meta controls remain deliberately outside the simulated visual channel");
+  assert.doesNotMatch(html, /id="game-feel"|setting-game-feel|game-feel-lines/);
+  assert.match(html, /#pilot-physiology-vignette\s*\{[\s\S]*?rgba\(86,\s*86,\s*90/,
+    "grey-out is a grey peripheral tunnel on the physiology layer, not a second combat vignette");
+  assert.doesNotMatch(app, /game_feel|stepGameFeel|setting-game-feel/);
 });
