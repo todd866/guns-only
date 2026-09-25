@@ -526,7 +526,6 @@ const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
 const readyScreen = document.querySelector("#ready-screen");
 const sortieGrade = document.querySelector("#sortie-grade");
-const sortieGradeLetter = document.querySelector("#sortie-grade-letter");
 const sortieGradeKills = document.querySelector("#sortie-grade-kills");
 const sortieGradeAccuracy = document.querySelector("#sortie-grade-accuracy");
 const sortieGradeG = document.querySelector("#sortie-grade-g");
@@ -4722,7 +4721,6 @@ function paintSortieGrade(state) {
   }
   const board = sortieGradeBoard(state);
   sortieGrade.hidden = false;
-  if (sortieGradeLetter) sortieGradeLetter.textContent = board.letter;
   if (sortieGradeKills) sortieGradeKills.textContent = board.kills;
   if (sortieGradeAccuracy) sortieGradeAccuracy.textContent = board.accuracy;
   if (sortieGradeG) sortieGradeG.textContent = board.g;

@@ -12,7 +12,6 @@ test("a clean kill with disciplined gunnery is an A", () => {
     sortie_outcome: "QUALIFIED",
     player_health: 1,
   });
-  assert.equal(board.letter, "A");
   assert.equal(board.kills, "1");
   assert.equal(board.accuracy, "30%");
   assert.equal(board.g, "7.4");
@@ -26,7 +25,6 @@ test("a kill with no recorded rounds is a B, not a fabricated accuracy", () => {
     sortie_rounds_fired: 0,
     simulation_time_s: 40,
   });
-  assert.equal(board.letter, "B");
   assert.equal(board.accuracy, "—");
   assert.equal(board.g, "—");
 });
@@ -40,14 +38,12 @@ test("dying without a kill is a D", () => {
     simulation_time_s: 12.2,
     pilot_peak_positive_g: 9,
   });
-  assert.equal(board.letter, "D");
   assert.equal(board.time, "0:12");
 });
 
 test("missing snapshot fields stay blank rather than NaN", () => {
   const board = sortieGradeBoard(null);
   assert.deepEqual(board, {
-    letter: "C",
     kills: "0",
     accuracy: "—",
     g: "—",

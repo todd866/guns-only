@@ -4141,10 +4141,7 @@
     }
 
     .sortie-grade {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      gap: var(--flow-space-4);
-      align-items: center;
+      display: block;
       margin: 0 0 var(--flow-space-4);
       padding: var(--flow-space-3);
       border: 1px solid var(--flow-line);
@@ -4154,13 +4151,6 @@
 
     .sortie-grade[hidden] { display: none; }
 
-    .sortie-grade-letter {
-      margin: 0;
-      min-width: 1.4ch;
-      color: #f0cf8b;
-      font: 500 clamp(72px, 10vw, 112px)/.8 var(--flow-font-display);
-      letter-spacing: -0.05em;
-    }
 
     .sortie-grade-stats {
       display: grid;
@@ -4641,8 +4631,7 @@
             <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">F-22A vs Su-27S · guns only · opening 1v2 guns hot</span></div>
             <div class="ready-fact"><small id="ready-config-label">Configuration</small><span id="ready-config">F-22 public-data surrogate · 480 rounds · Auto-GCAS armed</span></div>
           </div>
-          <section id="sortie-grade" class="sortie-grade" hidden aria-label="Sortie grade">
-            <p class="sortie-grade-letter" id="sortie-grade-letter">—</p>
+          <section id="sortie-grade" class="sortie-grade" hidden aria-label="Sortie results">
             <dl class="sortie-grade-stats">
               <div><dt>Kills</dt><dd id="sortie-grade-kills">0</dd></div>
               <div><dt>Accuracy</dt><dd id="sortie-grade-accuracy">—</dd></div>

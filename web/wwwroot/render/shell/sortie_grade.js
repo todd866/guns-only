@@ -11,7 +11,7 @@ function formatClock(seconds) {
 }
 
 /**
- * Post-sortie scoreboard. Reads snapshot counters the debrief already trusts
+ * Post-sortie scoreboard: measured numbers only, no letter grade. Reads snapshot counters the debrief already trusts
  * (kills, rounds, hits, peak G, clock). Does not invent ballistics.
  */
 export function sortieGradeBoard(state = {}) {
@@ -22,17 +22,8 @@ export function sortieGradeBoard(state = {}) {
   const time = finite(snapshot.simulation_time_s);
   const peakG = finite(snapshot.pilot_peak_positive_g);
   const accuracy = rounds > 0 ? hits / rounds : null;
-  const outcome = String(snapshot.sortie_outcome || "").toUpperCase();
-  const lost = outcome.includes("LOST") || finite(snapshot.player_health) === 0;
-
-  let letter = "C";
-  if (lost && kills === 0) letter = "D";
-  else if (kills >= 1 && accuracy !== null && accuracy >= 0.2 && !lost) letter = "A";
-  else if (kills >= 1) letter = "B";
-  else if (hits === 0 && rounds >= 20) letter = "D";
 
   return Object.freeze({
-    letter,
     kills: String(kills),
     accuracy: accuracy === null ? "—" : `${Math.round(accuracy * 100)}%`,
     g: peakG === null ? "—" : peakG.toFixed(1),
