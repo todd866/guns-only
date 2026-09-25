@@ -68,16 +68,18 @@ function ownshipOnDepartPad(authorityState, pad) {
 export function emberPathGuidanceState(authorityState) {
   const gates = Array.isArray(authorityState?.path_gates) ? authorityState.path_gates : [];
   const act = String(authorityState?.mission_act ?? "").toLowerCase();
-  const routeLeg = act === "rtb" ? "rtb" : "outbound";
+  const routeLeg = act === "rtb" ? "rtb"
+    : (act === "engage" || act === "hold") ? "attack" : "outbound";
   const continuityKey = [
     "cobra",
     authorityState?.world_id ?? "world",
     authorityState?.route_id ?? authorityState?.route ?? "route",
     routeLeg,
   ].join(":");
-  // Engage/Hold are owned by the objective golden path. Sim retains a bridge gate for authority
-  // diagnostics, but drawing it here contradicted the attack cue after Iron Bell changed hands.
-  if (act === "engage" || act === "hold" || act === "complete") {
+  // Before Iron Bell flips the kernel publishes no attack chain. After it flips, those gates
+  // point at the next hostile gun pit and are the path. An empty combat frame still drops the
+  // ladder so a stale gorge cannot linger. Complete never draws.
+  if (act === "complete" || ((act === "engage" || act === "hold") && gates.length === 0)) {
     return {
       approach_guidance_active: false,
       // Cobra publishes a complete world-space gate chain. The shared ownship-relative join
