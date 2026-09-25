@@ -7670,13 +7670,16 @@ public sealed partial class SimulationSession {
             && _carrier.DeckSinkRateMps(_player.State) > 0.0;
         Carrier.SolidCollision solid = _carrier.SweptSolidCollision(
             previousPlayerState.Position, _player.State.Position);
-        bool caseIConfigured = _systems.HookDown
-            && _systems.AllGearDownAndLocked
+        bool approachDirty = _systems.HookDown
             && Math.Min(_systems.LeftFlapDegrees, _systems.RightFlapDegrees)
                 >= _systems.FullFlapDegrees - FlapTargetToleranceDeg;
+        // A bolter is wheels on deck and a missed arrestment. Gear up, or gear not locked,
+        // is a deck strike. Hook up or flaps short of the approach setting, with the gear
+        // down and locked and a survivable touchdown, is the flyaway.
         bool unconfiguredCaseIBolter = TopGunFightRuntime.IsTopGunMission(
                 _beat.MissionIdentity.Id)
-            && !caseIConfigured
+            && _systems.AllGearDownAndLocked
+            && !approachDirty
             && solid == Carrier.SolidCollision.FlightDeck
             && topDeckContact
             && contact is Carrier.Recovery.Trap or Carrier.Recovery.Bolter;

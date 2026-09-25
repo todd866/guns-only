@@ -724,6 +724,8 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
   assert.doesNotMatch(appSource,
     /selectedMission\?\.closest\("\.sortie-option"\)\?\.scrollIntoView/,
     "WebKit scrollIntoView must not shift the overflow-hidden outer Ready card sideways");
+  assert.doesNotMatch(appSource, /configurationPractice=1 lets the pattern/,
+    "Ready help must not advertise the configurationPractice query");
   assert.match(appSource, /mobileControls \? "Tap Fly to launch" : "Press Enter to fly"/,
     "the touch briefing must name its real launch gesture");
   assert.match(indexSource, /\.sortie-choice\s*\{[\s\S]*?min-height:\s*78px/);

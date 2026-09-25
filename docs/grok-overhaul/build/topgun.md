@@ -39,3 +39,9 @@ Not done: DLC, on-speed AoA as a separate instrument, a ball call, or Rapier rad
 ## Left for later
 
 Item 3 (MiG heater) and item 5 (joker and a military/afterburner split).
+
+## Review fixes
+
+Gear-up (or not locked) deck contact is a crash. A bolter still requires the gear down and locked, wheels on the deck, and a missed arrestment: hook up, or flaps short of the approach setting. The old test staged a clean jet on the three-wire and expected a bolter; that expectation was the bug, so it is now `GearUpDeckContactIsACrashNotABolter`. `HookUpWithGearDownAndLockedIsABolter` and `FlapsUpWithGearDownAndLockedIsABolter` keep the flyaway for a survivable, gear-down pass.
+
+The picker contract stays "Splash two MiG-28s · trap aboard". That replaces "Repeated DACT · Case I recovery", which described a loop this sortie does not fly. Ready help no longer mentions `configurationPractice=1`. The query still turns automation on; it is not a player-facing control.

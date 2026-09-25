@@ -856,20 +856,43 @@ public sealed class MissionRadioDirector {
         string gate = state.ConventionalOverheadGate ?? "";
         if (gate.Length == 0 || gate == _overheadGate || gate.StartsWith("pattern_ingress", StringComparison.Ordinal))
             return;
+        // Do not latch the perch until the gear is actually down, so a clean pass
+        // cannot report "gear down" and a later lock on the same gate still can.
+        if (gate == "perch" && !state.GearDownAndLocked)
+            return;
         _overheadGate = gate;
-        (string id, string text) = gate switch {
-            "initial" => ("f22-initial", $"{PlayerSpoken}, initial."),
-            "break" => ("f22-break", $"{PlayerSpoken}, breaking."),
-            "perch" => ("f22-perch", $"{PlayerSpoken}, gear down."),
-            "final" => ("f22-final", $"{PlayerSpoken}, final."),
-            _ => ("", ""),
-        };
-        if (id.Length == 0) return;
-        Enqueue(state, Tower(
-            id, Player, "TOWER",
-            text,
-            "pilot", MissionRadioPriority.Routine,
-            new(MissionRadioTruthKind.ConventionalOverhead, gate)));
+        // Only owner-approved recorded clips are spoken (no generated R/T). The overhead uses the
+        // same exchange the Rapier pattern already flies: the pilot reports initial and tower
+        // approves the (left-hand) break; the pilot then reports base with three greens once the
+        // gear is locked. The published gate is the TARGET gate, so "break" becoming the target is
+        // the moment the jet is established on initial -- when the initial call is actually made.
+        // Final is flown silently.
+        switch (gate) {
+            case "break":
+                EnqueueExchange(
+                    state,
+                    MissionRadioExchangeContracts.PatternEntry,
+                    [
+                        Tower(
+                            "pilot-initial", Player, "TOWER",
+                            $"{PlayerSpoken}, initial.",
+                            "pilot", MissionRadioPriority.Routine,
+                            new(MissionRadioTruthKind.ConventionalOverhead, gate)),
+                        Tower(
+                            "tower-break-approved", "TOWER", Player,
+                            $"{PlayerSpoken}, left break approved.",
+                            "tower", MissionRadioPriority.Advisory,
+                            new(MissionRadioTruthKind.ConventionalOverhead, gate)),
+                    ]);
+                break;
+            case "perch":
+                Enqueue(state, Tower(
+                    "pilot-base", Player, "TOWER",
+                    $"{PlayerSpoken}, base, three greens.",
+                    "pilot", MissionRadioPriority.Routine,
+                    new(MissionRadioTruthKind.ConventionalOverhead, gate)));
+                break;
+        }
     }
 
     void QueuePlayerLeg(string leg, in MissionRadioState state) {
@@ -1910,7 +1933,8 @@ public sealed class MissionRadioDirector {
                 && !state.GearDownAndLocked,
             MissionRadioTruthKind.ConventionalOverhead =>
                 state.MissionActive
-                && state.ConventionalOverheadGate == subject,
+                && state.ConventionalOverheadGate == subject
+                && (subject != "perch" || state.GearDownAndLocked),
             _ => false,
         };
     }

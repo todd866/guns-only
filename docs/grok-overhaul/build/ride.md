@@ -45,3 +45,7 @@ Club loop on the Rapier strip, a braking reference from the centreline, pit-in a
 - Item 3, physical tyre walls. The cones and walls are still presentation. Off-paint still spoils the lap and still cuts μ. A wall volume that calls `ResetToGrid` was left so this slice could finish the corner, the cue, the pit, and the debrief.
 - No chase camera, no YRC lamps, no riders'-meeting modal, no second bike, no terrain move.
 - `RiderCerebellum` stays off the debrief. It still resets on `Begin`.
+
+## Review fixes
+
+`SustainedThrottleReachesTheFirstCornerInsideFifteenSeconds` no longer treats straight-line distance from the grid as proof of the corner. The rider looks ahead on the centreline, brakes when that heading departs, and the test requires circuit `ProgressM` past the first 0.4 rad bend, `IsOnTrack`, and a yaw change of more than 0.4 rad from the grid heading. Peak speed on the straight still has to clear the hairpin's steady speed.

@@ -165,6 +165,64 @@ public class CobraMissionActTests
             "the active gate must leave the bridge once Iron Bell is friendly");
     }
 
+    [Fact]
+    public void GunPitChainClearsTerrainOnEverySegment()
+    {
+        CobraCanyonDefinition definition = CobraCanyonDefinition.Create();
+        CobraCanyonRouteDefinition route = definition.Route(CobraCanyonRouteChoice.RiverGorge);
+        var war = new CobraGroundWarRuntime(definition, definition.CreateTerrainSurface(), seed: 7);
+        ContestedSite ironBell = war.Sites.Single(site =>
+            site.LandmarkId == "landmark.cobra-canyon.iron-bell-bridge.v1");
+        ironBell.SetInitialOwner(GroundSiteOwner.Friendly);
+        Vec3D aircraft = new(ironBell.PositionWorldM.X, ironBell.PositionWorldM.Y + 40.0, ironBell.PositionWorldM.Z);
+        IReadOnlyList<CobraPathGate> flat = CobraMissionActProgress.BuildPathGates(
+            CobraMissionAct.Engage, route, Fob, 232.0, aircraft, terrain: null, sites: war.Sites);
+        Assert.Equal(4, flat.Count);
+        var ridge = new RidgeOnSegment(flat, segmentIndex: 1, heightM: 640.0, radiusM: 150.0);
+        IReadOnlyList<CobraPathGate> cleared = CobraMissionActProgress.BuildPathGates(
+            CobraMissionAct.Engage, route, Fob, 232.0, aircraft, ridge, war.Sites);
+
+        double floorM = ridge.RidgeHeightM + CobraMissionActProgress.GunPitCueClearanceM;
+        Assert.True(cleared[0].UpM >= floorM - 0.01);
+        Assert.True(cleared[1].UpM >= floorM - 0.01);
+        Assert.True(cleared[2].UpM < floorM - 50.0,
+            "a ridge on an earlier segment must not lift every later gate");
+        Assert.Equal(flat[^1].EastM, cleared[^1].EastM, 6);
+        Assert.InRange(cleared[^1].UpM, flat[^1].UpM - 1.0, flat[^1].UpM + 1.0);
+    }
+
+    sealed class RidgeOnSegment : ITerrainSurface
+    {
+        readonly double _eastM;
+        readonly double _northM;
+        public double RidgeHeightM { get; }
+
+        readonly double _radiusM;
+
+        public RidgeOnSegment(
+            IReadOnlyList<CobraPathGate> flat, int segmentIndex, double heightM, double radiusM)
+        {
+            CobraPathGate a = flat[segmentIndex - 1];
+            CobraPathGate b = flat[segmentIndex];
+            _eastM = (a.EastM + b.EastM) * 0.5;
+            _northM = (a.NorthM + b.NorthM) * 0.5;
+            RidgeHeightM = heightM;
+            _radiusM = radiusM;
+        }
+
+        public TerrainBounds Bounds => new(-1_000_000, 1_000_000, -1_000_000, 1_000_000);
+        public double HorizontalResolutionM => 50;
+        public bool TrySample(double eastM, double northM, out TerrainSample sample) =>
+            throw new InvalidOperationException("gun-pit marches use TryHeightM");
+        public bool TryHeightM(double eastM, double northM, out double sampledHeightM)
+        {
+            double de = eastM - _eastM;
+            double dn = northM - _northM;
+            sampledHeightM = de * de + dn * dn < _radiusM * _radiusM ? RidgeHeightM : 0.0;
+            return true;
+        }
+    }
+
     static double Horizontal(double eastM, double northM, in Vec3D site)
     {
         double de = eastM - site.X;

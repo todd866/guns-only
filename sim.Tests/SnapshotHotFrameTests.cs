@@ -1456,7 +1456,7 @@ public class SnapshotHotFrameTests {
                 .EnumerateArray()
                 .Select(key => key.GetString())
                 .ToArray());
-            Assert.Equal(9, root.GetProperty("approach_gate_count").GetInt32());
+            Assert.Equal(schedule.Count, root.GetProperty("approach_gate_count").GetInt32());
             Assert.True(root.GetProperty(
                 "conventional_rtb_pattern_active").GetBoolean());
             Assert.Equal((int)ApproachPatternLeg.PatternEntry,

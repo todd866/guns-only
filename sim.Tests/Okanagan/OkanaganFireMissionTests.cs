@@ -418,6 +418,27 @@ public sealed class OkanaganFireMissionTests
         Assert.Equal(0, DropsAfterRelease(new(grass.X, 900, grass.Z)));
         Assert.Equal(0, DropsAfterRelease(new(timber.X, 900, timber.Z)));
         Assert.Equal(1, DropsAfterRelease(crossing));
+        Assert.True(Flat(grass, timber) > OkanaganFireGrid.DropFootprintRadiusM);
+        Assert.Equal(0, DropsAfterSplitRelease(
+            new(grass.X, 900, grass.Z), new(timber.X, 900, timber.Z)));
+    }
+
+    [Fact]
+    public void TrainingMarkRequiresTheCompletionFractionOnTheMark()
+    {
+        var mission = OkanaganFireMission.Create(OkanaganSortieType.WaterCircuits);
+        double fuel = mission.Snapshot().Aircraft.FuelKg;
+        Observe(mission, OkanaganFireMission.RunwayDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.AirportDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, 0, FireBossSurfaceMode.Water);
+        double load = mission.Snapshot().ScoopTargetWaterKg;
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, load, FireBossSurfaceMode.Water);
+        Observe(mission, OkanaganFireMission.CircuitDownwind, fuel, load);
+        double drop = mission.Snapshot().DropTargetWaterKg;
+        double sip = Math.Min(40.0, drop * 0.05);
+        Observe(mission, OkanaganFireMission.TrainingDrop, fuel, load - sip, released: sip);
+        Observe(mission, OkanaganFireMission.CircuitDownwind, fuel, 0, released: drop - sip);
+        Assert.Equal(0, mission.CompletedCycles);
     }
 
     static OkanaganFireCellSnapshot IsolatedHotCell(
@@ -426,6 +447,24 @@ public sealed class OkanaganFireMissionTests
             .OrderByDescending(cell => cells.Where(candidate => candidate.FuelType == other)
                 .Min(candidate => Flat(cell, candidate)))
             .First();
+
+    static int DropsAfterSplitRelease(Vec3D first, Vec3D second)
+    {
+        var mission = OkanaganFireMission.Create(OkanaganSortieType.FireAttack);
+        double fuel = mission.Snapshot().Aircraft.FuelKg;
+        Observe(mission, OkanaganFireMission.RunwayDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.AirportDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, 0, FireBossSurfaceMode.Water);
+        double load = mission.Snapshot().ScoopTargetWaterKg;
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, load, FireBossSurfaceMode.Water);
+        Observe(mission, OkanaganFireMission.ScoopExit with { Y = 800 }, fuel, load);
+        Observe(mission, OkanaganGeo.ToWorld(49.850, -119.655, 900), fuel, load);
+        Assert.Equal(OkanaganMissionPhase.Drop, mission.Phase);
+        double half = load * 0.5;
+        Observe(mission, first, fuel, load - half, released: half);
+        Observe(mission, second, fuel, 0, released: load - half);
+        return mission.EffectiveDrops;
+    }
 
     static int DropsAfterRelease(Vec3D at)
     {

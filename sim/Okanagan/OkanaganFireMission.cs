@@ -135,9 +135,13 @@ public sealed class OkanaganFireMission
     long _ticks;
     OkanaganMissionPhase _phaseBeforePause;
     double _dropCreditThisPass;
-    bool _passHitGrass;
-    bool _passHitTimber;
-    bool _trainingMarkCovered;
+    bool _releaseOpen;
+    Vec3D _releaseAnchor;
+    bool _footprintGrass;
+    bool _footprintTimber;
+    double _footprintOnMarkKg;
+    bool _footprintCrossedBoth;
+    double _onMarkThisPassKg;
     int _sitesProtectedThisPass;
     double _releasedThisPass;
     double _holdDwellSeconds;
@@ -288,24 +292,9 @@ public sealed class OkanaganFireMission
         }
 
         if (telemetry.WaterReleasedThisTickKg > 0.0)
-        {
-            _releasedThisPass += telemetry.WaterReleasedThisTickKg;
-            WaterReleasedKg += telemetry.WaterReleasedThisTickKg;
-            if (Sortie == OkanaganSortieType.WaterCircuits
-                && HorizontalDistance(telemetry.PositionWorldM, TrainingDrop) <= OkanaganFireGrid.DropFootprintRadiusM)
-                _trainingMarkCovered = true;
-            if (Sortie != OkanaganSortieType.WaterCircuits && _incidentActive
-                && !DropIsWithheld())
-            {
-                double dose = telemetry.WaterReleasedThisTickKg * (_incident == null ? 1 :
-                    DropDeliveryFraction(telemetry.PositionWorldM.Y - OkanaganCdem.SampleSurfaceHeightM(telemetry.PositionWorldM)));
-                _dropCreditThisTick = _fire.ApplyWater(telemetry.PositionWorldM, dose);
-                _passHitGrass |= _fire.LastStrikeHitGrass;
-                _passHitTimber |= _fire.LastStrikeHitTimber;
-                _sitesProtectedThisPass += _protection?.ApplyWater(telemetry.PositionWorldM, dose) ?? 0;
-                _dropCreditThisPass += _dropCreditThisTick;
-            }
-        }
+            AccountRelease(telemetry);
+        else
+            CloseFootprint();
 
         AdvanceGate(telemetry.PositionWorldM);
         FireBossFuelSnapshot liveFuel = FuelPlanFor(telemetry);
@@ -416,12 +405,65 @@ public sealed class OkanaganFireMission
         && telemetry.WaterLoadKg > LoadToleranceKg
         && telemetry.GrossMassKg > FireBossDynamics.MaximumLandingMassKg;
 
+    double OnMarkMassKg => _onMarkThisPassKg + (_releaseOpen ? _footprintOnMarkKg : 0.0);
+
+    bool FootprintCrossedBoth =>
+        _footprintCrossedBoth || (_releaseOpen && _footprintGrass && _footprintTimber);
+
+    void AccountRelease(in FireBossTelemetry telemetry)
+    {
+        double released = telemetry.WaterReleasedThisTickKg;
+        bool contiguous = _releaseOpen
+            && HorizontalDistance(telemetry.PositionWorldM, _releaseAnchor)
+                <= OkanaganFireGrid.DropFootprintRadiusM;
+        if (!contiguous) CloseFootprint();
+        if (!_releaseOpen)
+        {
+            _releaseOpen = true;
+            _footprintGrass = false;
+            _footprintTimber = false;
+            _footprintOnMarkKg = 0.0;
+        }
+        _releaseAnchor = telemetry.PositionWorldM;
+        _releasedThisPass += released;
+        WaterReleasedKg += released;
+        if (Sortie == OkanaganSortieType.WaterCircuits
+            && HorizontalDistance(telemetry.PositionWorldM, TrainingDrop)
+                <= OkanaganFireGrid.DropFootprintRadiusM)
+            _footprintOnMarkKg += released;
+        if (Sortie != OkanaganSortieType.WaterCircuits && _incidentActive && !DropIsWithheld())
+        {
+            double dose = released * (_incident == null ? 1 :
+                DropDeliveryFraction(telemetry.PositionWorldM.Y
+                    - OkanaganCdem.SampleSurfaceHeightM(telemetry.PositionWorldM)));
+            _dropCreditThisTick = _fire.ApplyWater(telemetry.PositionWorldM, dose);
+            _footprintGrass |= _fire.LastStrikeHitGrass;
+            _footprintTimber |= _fire.LastStrikeHitTimber;
+            _sitesProtectedThisPass += _protection?.ApplyWater(telemetry.PositionWorldM, dose) ?? 0;
+            _dropCreditThisPass += _dropCreditThisTick;
+        }
+    }
+
+    void CloseFootprint()
+    {
+        if (!_releaseOpen) return;
+        if (_footprintGrass && _footprintTimber) _footprintCrossedBoth = true;
+        _onMarkThisPassKg += _footprintOnMarkKg;
+        _releaseOpen = false;
+        _footprintGrass = false;
+        _footprintTimber = false;
+        _footprintOnMarkKg = 0.0;
+    }
+
     void CaptureAcquiredLoad(in FireBossTelemetry telemetry)
     {
         _hadUsefulLoad = true;
         _dropTargetWaterKg = telemetry.WaterLoadKg * DropCompletionFraction;
         // Water dumped during an earlier circuit or on the approach is not this pass's delivery.
         _releasedThisPass = 0.0;
+        CloseFootprint();
+        _footprintCrossedBoth = false;
+        _onMarkThisPassKg = 0.0;
     }
 
     void StepWaterCircuits(in FireBossTelemetry telemetry)
@@ -444,11 +486,14 @@ public sealed class OkanaganFireMission
         if (Phase == OkanaganMissionPhase.Climb && telemetry.PositionWorldM.Y >= 620.0)
             SetPhase(OkanaganMissionPhase.Downwind);
         if (Phase == OkanaganMissionPhase.Downwind && _hadUsefulLoad
-            && _releasedThisPass >= _dropTargetWaterKg && _trainingMarkCovered)
+            && _releasedThisPass >= _dropTargetWaterKg
+            && OnMarkMassKg >= _dropTargetWaterKg)
         {
             CompletedCycles++;
             _hadUsefulLoad = false;
             _releasedThisPass = 0.0;
+            CloseFootprint();
+            _onMarkThisPassKg = 0.0;
             // Dispatch promises one complete scoop/drop/recovery circuit. Returning to the scoop
             // lane here silently turned that finite training sortie into an endurance loop and
             // made its success result unreachable until fuel happened to force an RTB.
@@ -511,14 +556,15 @@ public sealed class OkanaganFireMission
             // drop by reaching structures as well as by cooling cells.
             // Boucherie credit is a load that wets both the windward grass and the
             // downwind timber. A defence run is scored on the buildings it reaches.
-            bool flankJoined = _incident != null || (_passHitGrass && _passHitTimber);
+            bool flankJoined = _incident != null || FootprintCrossedBoth;
             if ((_dropCreditThisPass >= 420.0 && flankJoined) || _sitesProtectedThisPass >= 3)
                 EffectiveDrops++;
             _hadUsefulLoad = false;
             _releasedThisPass = 0.0;
             _dropCreditThisPass = 0.0;
-            _passHitGrass = false;
-            _passHitTimber = false;
+            CloseFootprint();
+            _footprintCrossedBoth = false;
+            _onMarkThisPassKg = 0.0;
             _sitesProtectedThisPass = 0;
             CompletedCycles++;
             if (_airborneIncidentStart) SetPhase(OkanaganMissionPhase.Egress);
