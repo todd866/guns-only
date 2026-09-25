@@ -2,7 +2,7 @@
 
 Updated: 2026-09-10
 Production: Build 364, revision `20a6add2723db2868df98327ef3317fd0f9764e6`.
-Next candidate: Build 366, not deployed — canyon trees and shrubs keep their authored size, and the mid-distance crowns break a round silhouette without a new draw or more triangles.
+Next candidate: Build 367, not deployed — the front door opens on the F-22 hero painting with the mission dock over it; the first-person F-22 view is clear of the muzzle-flash volume and the drawn canopy shell; a phosphor HUD combiner; wind, G-strain and gun layers on the flight bus, with grey-out still driven by pilot physiology; a measured sortie board with no letter grade. It also carries Build 366: canyon trees and shrubs keep their authored size, and the mid-distance crowns break a round silhouette without a new draw or more triangles.
 Build 364 shipped the readable F-22 sight and pattern energy, and the Okanagan chart, drop call, fire, lake and timber.
 Build 362 shipped — four named Fire Boss defence missions begin loaded and airborne near the incident, then finish after a useful drop and safe escape. Full-physics flights reach the first useful drop in 96–107 seconds and finish in 146–173 seconds. See [mission pacing and flight evidence](audits/2026-09-10-okanagan-airborne-missions.md). Audio now uses a 24-second recorded Air Tractor-family engine bed, cockpit-informed broad EQ, live power response and rendered-audio regression checks. The source is an OA-1K exterior recording, an authored cabin surrogate, not a Fire Boss cockpit capture. See [recorded audio audit](audits/2026-09-10-fireboss-recorded-audio.md).
 Build 360 shipped default optional Fire Boss automatic pitch trim, a visible next-waypoint director and named north-up map, improved runway/shoreline/forest detail, and background-only hardware browser QA. See [assistance and navigation audit](audits/2026-09-10-okanagan-assist-navigation.md).
@@ -131,7 +131,7 @@ safety-warning arbiter make the important event audible without relying on limit
 All candidate audio acceptance is silent (`?audioQa=silent`).
 
 Production: Build 364, revision `20a6add2723db2868df98327ef3317fd0f9764e6`.
-Next candidate: Build 366, not deployed — canyon trees and shrubs keep their authored size, and the mid-distance crowns break a round silhouette without a new draw or more triangles. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
+Next candidate: Build 367, not deployed — the front door opens on the F-22 hero painting with the mission dock over it; the first-person F-22 view is clear of the muzzle-flash volume and the drawn canopy shell; a phosphor HUD combiner; wind, G-strain and gun layers on the flight bus, with grey-out still driven by pilot physiology; a measured sortie board with no letter grade. It also carries Build 366: canyon trees and shrubs keep their authored size, and the mid-distance crowns break a round silhouette without a new draw or more triangles. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
 player journey and Top Gun bolter retry), 349 (mission-AI suite honesty), 350
 (conventional F-22 recovery), 351 (finite billed sorties, presenting Ace, Cobra pad combat)
 and 352 (Fire Boss sky chevrons, HUD hopper/cue, readable west-side fire)
