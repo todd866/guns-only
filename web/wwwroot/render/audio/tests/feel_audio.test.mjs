@@ -5,7 +5,7 @@ import {
   combatIntensity,
   createFeelVoices,
   cueFeelInterface,
-  threatTone,
+  gStrain01,
   updateFeelVoices,
 } from "../feel_audio.js";
 
@@ -66,15 +66,12 @@ test("combat intensity stays quiet on the title bed and rises in a close fight",
   assert.ok(close > 0.7);
 });
 
-test("RWR steps from search to lock to a gun warning", () => {
-  assert.equal(threatTone({ bandit_alive: true, range_m: 7000 }).mode, "search");
-  assert.equal(threatTone({ bandit_alive: true, range_m: 900, closure_kts: 120 }).mode, "lock");
-  assert.equal(threatTone({
-    bandit_alive: true,
-    range_m: 300,
-    opponent_gun_firing: true,
-  }).mode, "launch");
-  assert.equal(threatTone({}).mode, "quiet");
+test("G-strain follows published physiology and ignores a bare G number", () => {
+  assert.equal(gStrain01({ g_actual: 7.2, pilot_gz: 7.2, pilot_state: "NORMAL" }), 0);
+  assert.equal(gStrain01({ pilot_state: "G_LOC", pilot_agsm_engagement_01: 0 }), 0);
+  assert.ok(gStrain01({ pilot_state: "STRAINING", pilot_agsm_engagement_01: 0.2 }) >= 0.4);
+  assert.equal(gStrain01({ pilot_state: "NORMAL", pilot_agsm_engagement_01: 0.7 }), 0.7);
+  assert.ok(gStrain01({ pilot_state: "GRAYOUT", pilot_peripheral_vision_01: 0.4 }) >= 0.4);
 });
 
 test("a distant kill waits on the speed of sound", () => {
@@ -90,6 +87,8 @@ test("wind follows speed, music stays off unless asked, and a kill schedules a d
     true_airspeed_mps: 250,
     mach: 0.75,
     aoa_deg: 14,
+    pilot_state: "STRAINING",
+    pilot_agsm_engagement_01: 0.55,
     g_actual: 5,
     bandit_alive: true,
     range_m: 800,
@@ -97,7 +96,18 @@ test("wind follows speed, music stays off unless asked, and a kill schedules a d
   }, { enabled: true, music: false, scene: "flight", nowSeconds: 0.2 });
   assert.ok(cruise.wind > 0.05);
   assert.ok(cruise.aoaLevel > 0);
+  assert.ok(cruise.strain >= 0.4);
   assert.equal(cruise.musicLevel, 0);
+  const unloaded = updateFeelVoices(voices, audio, {
+    true_airspeed_mps: 250,
+    g_actual: 6.5,
+    pilot_state: "NORMAL",
+    pilot_agsm_engagement_01: 0,
+    aoa_deg: 2,
+    bandit_alive: true,
+    range_m: 800,
+  }, { enabled: true, music: false, scene: "flight", nowSeconds: 0.4 });
+  assert.equal(unloaded.strain, 0);
 
   const seeded = updateFeelVoices(voices, audio, {
     bandit_alive: true,

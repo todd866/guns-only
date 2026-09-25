@@ -290,12 +290,6 @@ import {
   updateFlightAudio,
 } from "./render/audio/flight_audio.js?v=366";
 import {
-  applyGameFeelToCamera,
-  createGameFeelState,
-  paintGameFeel,
-  stepGameFeel,
-} from "./render/feel/game_feel.js";
-import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
   updateCasevacAudio,
@@ -595,8 +589,6 @@ const settingsCloseBottom = document.querySelector("#settings-close-bottom");
 const settingsAudio = document.querySelector("#setting-audio");
 const settingsMusic = document.querySelector("#setting-music");
 const settingsInterfaceSounds = document.querySelector("#setting-interface-sounds");
-const settingsGameFeel = document.querySelector("#setting-game-feel");
-const gameFeelRoot = document.querySelector("#game-feel");
 const settingsRadioVoice = document.querySelector("#setting-radio-voice");
 const settingsRadioCaptions = document.querySelector("#setting-radio-captions");
 const settingsAutoGcas = document.querySelector("#setting-autogcas");
@@ -3103,7 +3095,6 @@ function applyPlayerSettings() {
     settingsInterfaceSounds.checked = playerSettings.interfaceSounds !== false;
     settingsInterfaceSounds.disabled = !playerSettings.audio;
   }
-  if (settingsGameFeel) settingsGameFeel.checked = playerSettings.gameFeel !== false;
   if (settingsRadioVoice) {
     settingsRadioVoice.checked = playerSettings.radioVoice !== false;
     settingsRadioVoice.disabled = !playerSettings.audio;
@@ -3129,7 +3120,6 @@ function commitPlayerSettings(next) {
     audio: playerSettings.audio,
     music: playerSettings.music,
     interfaceSounds: playerSettings.interfaceSounds,
-    gameFeel: playerSettings.gameFeel,
     radioVoice: playerSettings.radioVoice,
     radioCaptions: playerSettings.radioCaptions,
     highContrast: playerSettings.highContrast,
@@ -3248,9 +3238,6 @@ settingsMusic?.addEventListener("change", () => commitPlayerSettings({
 }));
 settingsInterfaceSounds?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, interfaceSounds: settingsInterfaceSounds.checked,
-}));
-settingsGameFeel?.addEventListener("change", () => commitPlayerSettings({
-  ...playerSettings, gameFeel: settingsGameFeel.checked,
 }));
 for (const control of [readyTelemetrySharing, settingsTelemetrySharing]) {
   control?.addEventListener("change", () => {
@@ -8010,12 +7997,6 @@ class FlightView {
 
     this.presentationAssets = new PresentationAssetManager(this.renderer, this.scene, this.camera);
     this.cockpitHead = createCockpitHeadPresentation(THREE);
-    this.gameFeel = createGameFeelState();
-    this.gameFeelScratch = {
-      offset: new THREE.Vector3(),
-      euler: new THREE.Euler(0, 0, 0, "YXZ"),
-      quaternion: new THREE.Quaternion(),
-    };
     this.f22CanopyGlass = createF22CanopyGlass(THREE);
     this.periodGunsight = createPeriodGunsight(THREE);
     this.banditContact = createDistantAircraftImpostor(THREE);
@@ -9666,19 +9647,6 @@ class FlightView {
     // target solve makes the contact and every view-relative cue wander by a degree or two.
     if (casevac || replayExternal || padlock) this.cockpitHead.reset(state);
     else this.cockpitHead.update(this.camera, state, dt);
-    const gameFeelFrame = stepGameFeel(this.gameFeel, state, dt, {
-      enabled: playerSettings.gameFeel !== false,
-      reducedMotion: playerSettings.reducedMotion === true,
-      externalCamera: replayExternal || casevac,
-    });
-    applyGameFeelToCamera(
-      THREE,
-      this.camera,
-      gameFeelFrame,
-      this.lowSpeedLens.fovDeg,
-      this.gameFeelScratch,
-    );
-    paintGameFeel(gameFeelRoot, gameFeelFrame);
     this.camera.updateMatrixWorld(true);
     // Live frames carry no replay_camera; they are the cockpit view, so the default must
     // be COCKPIT — defaulting to CHASE made this gate constant-false and the canopy glass

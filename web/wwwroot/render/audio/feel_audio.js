@@ -1,7 +1,8 @@
-// Procedural combat feel on the shared flight bus: wind, AoA hiss, G-strain breathing,
-// a restrained RWR, impact weight, a distance-delayed boom, UI ticks, and a quiet adaptive bed.
-// One-shots are scheduled on the existing context. Continuous lanes stay at zero while muted,
-// and edge counters still advance so a pause cannot replay a kill.
+// Procedural flight feel on the shared flight bus: wind from true airspeed, a high-AoA hiss,
+// G-strain breathing from the published physiology state, impact weight, a distance-delayed boom,
+// UI ticks, and a quiet adaptive bed. One-shots are scheduled on the existing context.
+// Continuous lanes stay at zero while muted, and edge counters still advance so a pause
+// cannot replay a kill. There is no radar-warning tone: the sim has no RWR.
 
 import { pinkNoiseBuffer, whiteNoiseBuffer } from "./engine_audio.js";
 
@@ -62,16 +63,18 @@ export function combatIntensity(state, scene = "flight") {
   return clamp01(intensity);
 }
 
-export function threatTone(state) {
-  const range = Math.max(0, finite(state?.range_m, 20000));
-  const alive = opponentAlive(state) && state?.rapier_pattern_only !== true;
-  if (!alive || range > 14000) return { mode: "quiet", level: 0, hz: 1400, period: 1.4 };
-  if (state?.opponent_gun_firing === true && range < 800)
-    return { mode: "launch", level: 0.045, hz: 2680, period: 0.16 };
-  const locked = state?.gun_solution === true || (range < 1800 && finite(state?.closure_kts, 0) > 50);
-  if (locked) return { mode: "lock", level: 0.028, hz: 2140, period: 0.28 };
-  if (range < 9000) return { mode: "search", level: 0.016, hz: 1680, period: 1.15 };
-  return { mode: "quiet", level: 0, hz: 1400, period: 1.4 };
+const STRAIN_STAGES = new Set(["STRAINING", "GRAYOUT"]);
+
+/**
+ * Strain breath level from the kernel's physiology, never from an instantaneous G threshold.
+ * Anti-G technique engagement is the continuous signal. STRAINING and GRAYOUT are the stages
+ * where the pilot is still conscious and working. High seat G with a normal stage stays silent.
+ */
+export function gStrain01(state) {
+  const stage = String(state?.pilot_state ?? "").trim().toUpperCase().replaceAll("-", "_");
+  const agsm = clamp01(finite(state?.pilot_agsm_engagement_01, 0) ?? 0);
+  if (STRAIN_STAGES.has(stage)) return clamp01(Math.max(0.4, agsm));
+  return agsm;
 }
 
 export function boomDelaySeconds(rangeM) {
@@ -137,18 +140,6 @@ export function createFeelVoices(audioContext, destination) {
   breathSource.connect(breathFilter).connect(breathGain).connect(bus);
   breathSource.start();
 
-  const rwr = audioContext.createOscillator();
-  rwr.type = "square";
-  rwr.frequency.value = 1680;
-  const rwrFilter = audioContext.createBiquadFilter();
-  rwrFilter.type = "bandpass";
-  rwrFilter.frequency.value = 1800;
-  rwrFilter.Q.value = 6;
-  const rwrGain = audioContext.createGain();
-  rwrGain.gain.value = 0;
-  rwr.connect(rwrFilter).connect(rwrGain).connect(bus);
-  rwr.start();
-
   const musicA = audioContext.createOscillator();
   musicA.type = "triangle";
   musicA.frequency.value = 110;
@@ -175,9 +166,6 @@ export function createFeelVoices(audioContext, destination) {
     aoaGain,
     breathFilter,
     breathGain,
-    rwr,
-    rwrFilter,
-    rwrGain,
     musicA,
     musicB,
     musicFilter,
@@ -230,7 +218,6 @@ export function updateFeelVoices(voices, audioContext, state, {
   const speed = airspeedMps(state);
   const mach = Math.max(0, finite(state?.mach, speed / SPEED_OF_SOUND_MPS));
   const aoa = Math.abs(finite(state?.aoa_deg, 0));
-  const g = finite(state?.g_actual, finite(state?.pilot_gz, 1));
   const rounds = Math.max(0, Math.trunc(finite(state?.rounds_fired, 0)));
   const hits = Math.max(0, Math.trunc(finite(state?.hits, 0)));
   const opponentHits = Math.max(0, Math.trunc(finite(state?.opponent_hits, 0)));
@@ -261,18 +248,11 @@ export function updateFeelVoices(voices, audioContext, state, {
   target(voices.aoaGain.gain, aoaLevel, now, 0.08);
   target(voices.aoaFilter.frequency, 900 + aoa * 42, now, 0.1);
 
-  const strain = live ? clamp((Math.max(0, g) - 2.8) / 4.2, 0, 1) : 0;
+  const strain = live ? gStrain01(state) : 0;
   const breathPhase = ((Number(nowSeconds) || 0) * (0.28 + strain * 0.55)) % 1;
   const breathWindow = breathPhase < 0.42 ? Math.sin((breathPhase / 0.42) * Math.PI) : 0;
   target(voices.breathGain.gain, strain * 0.07 * breathWindow, now, 0.05);
   target(voices.breathFilter.frequency, 280 + strain * 260, now, 0.1);
-
-  const tone = threatTone(state);
-  const rwrPhase = ((Number(nowSeconds) || 0) % tone.period) / tone.period;
-  const rwrOn = live && tone.level > 0 && rwrPhase < (tone.mode === "launch" ? 0.45 : 0.12);
-  target(voices.rwr.frequency, tone.hz, now, 0.02);
-  target(voices.rwrFilter.frequency, tone.hz, now, 0.02);
-  target(voices.rwrGain.gain, rwrOn ? tone.level : 0, now, 0.012);
 
   const intensity = combatIntensity(state, scene);
   const musicLevel = live && music ? (scene === "title" ? 0.02 : 0.012 + intensity * 0.02) : 0;
@@ -340,7 +320,6 @@ export function updateFeelVoices(voices, audioContext, state, {
     wind,
     aoaLevel,
     strain,
-    threat: tone.mode,
     intensity,
     musicLevel,
   });
