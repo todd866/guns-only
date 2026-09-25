@@ -856,6 +856,10 @@ public sealed class MissionRadioDirector {
         string gate = state.ConventionalOverheadGate ?? "";
         if (gate.Length == 0 || gate == _overheadGate || gate.StartsWith("pattern_ingress", StringComparison.Ordinal))
             return;
+        // Do not latch the perch until the gear is actually down, so a clean pass
+        // cannot report "gear down" and a later lock on the same gate still can.
+        if (gate == "perch" && !state.GearDownAndLocked)
+            return;
         _overheadGate = gate;
         (string id, string text) = gate switch {
             "initial" => ("f22-initial", $"{PlayerSpoken}, initial."),
@@ -1910,7 +1914,8 @@ public sealed class MissionRadioDirector {
                 && !state.GearDownAndLocked,
             MissionRadioTruthKind.ConventionalOverhead =>
                 state.MissionActive
-                && state.ConventionalOverheadGate == subject,
+                && state.ConventionalOverheadGate == subject
+                && (subject != "perch" || state.GearDownAndLocked),
             _ => false,
         };
     }

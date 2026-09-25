@@ -153,6 +153,22 @@ public class F22FiniteSortieTests {
         Assert.DoesNotContain("breaking", heard[0]);
     }
 
+    [Fact]
+    public void OverheadDoesNotCallGearDownWhileTheGearIsUp() {
+        var director = new MissionRadioDirector();
+        director.Step(Overhead(0, ""));
+        for (int i = 0; i < 6; i++) {
+            MissionRadioTransmission tx = director.Step(Overhead(3 + i, "perch", gearDown: false));
+            Assert.NotEqual("f22-perch", tx.Id);
+            Assert.DoesNotContain("gear down", tx.Text, StringComparison.OrdinalIgnoreCase);
+        }
+        MissionRadioTransmission locked = director.Step(Overhead(12, "perch", gearDown: true));
+        for (int i = 0; i < 8 && locked.Id != "f22-perch"; i++)
+            locked = director.Step(Overhead(13 + i, "perch", gearDown: true));
+        Assert.Equal("f22-perch", locked.Id);
+        Assert.Contains("gear down", locked.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
     static string ExpectedId(string gate) => gate switch {
         "initial" => "f22-initial",
         "break" => "f22-break",
@@ -161,7 +177,7 @@ public class F22FiniteSortieTests {
         _ => throw new ArgumentOutOfRangeException(nameof(gate)),
     };
 
-    static MissionRadioState Overhead(double time, string gate) => new(
+    static MissionRadioState Overhead(double time, string gate, bool? gearDown = null) => new(
         TimeSeconds: time,
         MissionActive: true,
         RapierMissionAvailable: false,
@@ -170,7 +186,7 @@ public class F22FiniteSortieTests {
         CatapultActive: false,
         PlayerLeg: "",
         Traffic: [],
-        GearDownAndLocked: gate is "perch" or "final",
+        GearDownAndLocked: gearDown ?? gate is "perch" or "final",
         PlayerLandingIntent: CircuitLandingIntent.FullStop,
         LandingAuthorityAvailable: false,
         PilotGoingAround: false,
