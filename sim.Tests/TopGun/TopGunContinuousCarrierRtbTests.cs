@@ -277,7 +277,7 @@ public sealed class TopGunContinuousCarrierRtbTests
     }
 
     [Fact]
-    public void UnconfiguredCaseIPassAtTheThreeWireIsABolter()
+    public void GearUpDeckContactIsACrashNotABolter()
     {
         SimulationSession session = Start();
         Assert.False(session.ConfigurationAutomationEnabled);
@@ -310,9 +310,51 @@ public sealed class TopGunContinuousCarrierRtbTests
         StageCarrierContact(session, ship.WireAlongM(3) + Carrier.HookToMainGearM);
         session.StepFixed();
 
+        Assert.NotEqual(Carrier.Recovery.Bolter, session.Recovery);
+        Assert.NotEqual(AircraftTerminalState.Flying, session.PlayerTerminalState);
         Assert.NotEqual(ArrestmentModel.ArrestmentPhase.Stopped, session.Arrestment.Phase);
+    }
+
+    [Fact]
+    public void HookUpWithGearDownAndLockedIsABolter()
+    {
+        SimulationSession session = StartConfiguredCarrierRtb();
+        session.FeedKey(GKey.HookToggle, true);
+        session.FeedKey(GKey.HookToggle, false);
+        Assert.False(session.PlayerSystems.HookDown);
+        Assert.True(session.PlayerSystems.AllGearDownAndLocked);
+        Assert.True(session.PlayerSystems.LeftFlapDegrees
+            >= session.PlayerSystems.FullFlapDegrees - 1.0);
+
+        Carrier ship = session.Carrier!;
+        StageCarrierContact(session, ship.WireAlongM(3) + Carrier.HookToMainGearM);
+        session.StepFixed();
+
         Assert.Equal(Carrier.Recovery.Bolter, session.Recovery);
         Assert.Equal(Carrier.HookOutcome.MissedWires, session.Touchdown.Hook);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
         Assert.True(session.PlayerRtbActive);
+    }
+
+    [Fact]
+    public void FlapsUpWithGearDownAndLockedIsABolter()
+    {
+        SimulationSession session = StartConfiguredCarrierRtb();
+        session.FeedKey(GKey.FlapUp, true);
+        for (int tick = 0; tick < 12 * (int)AircraftSim.TickHz
+            && session.PlayerSystems.LeftFlapDegrees > 1.0; tick++)
+            session.StepFixed();
+        session.FeedKey(GKey.FlapUp, false);
+        Assert.True(session.PlayerSystems.HookDown);
+        Assert.True(session.PlayerSystems.AllGearDownAndLocked);
+        Assert.True(session.PlayerSystems.LeftFlapDegrees < 1.0);
+
+        Carrier ship = session.Carrier!;
+        StageCarrierContact(session, ship.WireAlongM(3) + Carrier.HookToMainGearM);
+        session.StepFixed();
+
+        Assert.Equal(Carrier.Recovery.Bolter, session.Recovery);
+        Assert.Equal(Carrier.HookOutcome.MissedWires, session.Touchdown.Hook);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
     }
 }
