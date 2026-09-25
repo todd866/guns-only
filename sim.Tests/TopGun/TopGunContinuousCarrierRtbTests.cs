@@ -311,7 +311,8 @@ public sealed class TopGunContinuousCarrierRtbTests
         session.StepFixed();
 
         Assert.NotEqual(Carrier.Recovery.Bolter, session.Recovery);
-        Assert.NotEqual(AircraftTerminalState.Flying, session.PlayerTerminalState);
+        Assert.Equal(AircraftTerminalState.Impacted, session.PlayerTerminalState);
+        Assert.Equal(ImpactSurface.FlightDeck, session.PlayerImpactSurface);
         Assert.NotEqual(ArrestmentModel.ArrestmentPhase.Stopped, session.Arrestment.Phase);
     }
 
