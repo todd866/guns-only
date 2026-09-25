@@ -2879,7 +2879,9 @@ export function createDecisionSupportSky() {
         // above ~0.4 linear into the top sRGB decile, so a blue sky has to be authored well BELOW
         // that — these values were solved backwards through ACES at exposure 1.08 to land near
         // (90, 140, 205) at low level and (45, 85, 155) at Rapier altitude.
-        vec3 horizonWarm = mix(vec3(0.94, 0.86, 0.70), vec3(0.76, 0.72, 0.60), altitudeMix);
+        // Stay under ~0.45 linear. The old 0.94 horizon survived ACES as a pure-white
+        // faceted cap across the lower first-person frame and hid the horizon.
+        vec3 horizonWarm = mix(vec3(0.42, 0.34, 0.26), vec3(0.30, 0.28, 0.24), altitudeMix);
         vec3 zenithWarm = mix(vec3(0.080, 0.170, 0.460), vec3(0.033, 0.072, 0.199), altitudeMix);
         vec3 horizon = mix(horizonCool, horizonWarm, uSoftWorld);
         vec3 zenith = mix(zenithCool, zenithWarm, uSoftWorld);
@@ -2931,7 +2933,7 @@ export function createDecisionSupportSky() {
       }
     `,
   });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(4096, 36, 20), material);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(4096, 96, 48), material);
   mesh.name = "DECISION_SUPPORT_SKY";
   mesh.frustumCulled = false;
   mesh.renderOrder = -100;
