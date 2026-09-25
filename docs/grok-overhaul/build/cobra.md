@@ -44,3 +44,7 @@ Not done: no new DShK ballistics, no change to acquisition timing in `CobraThrea
 - Item 2 (a vehicle must cross the bridge) and item 5 (station clock / fuel).
 - Rockets, TOW, mouse turret, cockpit switches, route picker, ticket widgets.
 - No commit in this worktree: the session constraint forbids commits.
+
+## Review fixes
+
+The gun-pit chain samples terrain every 100 m on each segment and lifts both ends of that segment to the surface plus `GunPitCueClearanceM` (36 m, the same rotor-clearance surrogate as the Camp Ember departure route, not a surveyed attack altitude). A ridge between two cues raises those cues. It does not lift the rest of the chain, and it does not move the pit. `GunPitChainClearsTerrainOnEverySegment`.
