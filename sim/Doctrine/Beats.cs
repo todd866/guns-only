@@ -634,7 +634,9 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
                 mergeInitial, mergeAir, mergeSkill, terrain,
                 profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
                 doctrineIndex: spec?.DoctrineIndex,
-                presenting: spec?.Sparring == true || FirstRunValley is not null);
+                presenting: spec?.Sparring == true
+                    || (FirstRunValley is not null && spec is null),
+                endPresentOnProximity: spec?.Sparring != true);
         }
         if (!UsesReactiveBandit)
             return new RailBandit(authoredBandit, BanditAir, BanditTimeline);
@@ -716,7 +718,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
             doctrineIndex: spec?.DoctrineIndex,
             presenting: spec?.Sparring == true,
-            wingLead: wingLead);
+            wingLead: wingLead,
+            endPresentOnProximity: spec?.Sparring != true);
     }
 }
 
@@ -1611,10 +1614,9 @@ public static class Beats {
             // 1,800 lb above EMERGENCY FUEL; it is deliberately below 4,000 lb Bingo, which remains
             // the action threshold for turning home rather than the desired fuel at touchdown.
             RecoveryPlan: F22NorthRecovery(),
-            // The opening fight is Ace (ForEngagement is the ceiling from engagement 1). Continuous
-            // successors stay on that same function at CreateNextBandit; easing is the director's
-            // job on evidence, not a scripted Novice→Ace ramp.
-            BanditSkill: BanditSkillProfile.ForEngagement(1));
+            // Cold floor when no director spec is passed. The live opening is FightDirector
+            // rung 0 (Competent, one ship, Present). Ace and the pair are later rungs.
+            BanditSkill: BanditSkillProfile.ForRung(0));
     }
 
     /// <summary>

@@ -380,7 +380,11 @@ public sealed partial class SimulationSession {
         public int ShotsInWindowAtStart;
         public int OvershootsAtStart;
         public int GcasActivationsAtStart;
+        public int PlayerHitsScoredAtStart;
+        public double TimeToFirstHitSeconds;
     }
+
+    double _weaponsHotAtSeconds = double.NaN;
 
     Carrier? _carrier;
     readonly RecoveryProgress _recoveryProgress = new();
@@ -982,10 +986,29 @@ public sealed partial class SimulationSession {
     public BanditMount CurrentBanditMount =>
         LastDirectorSpawn?.Mount ?? BanditMount.Baseline;
     public int DirectorWalkoverStreak => _fightDirector.WalkoverStreak;
+    /// Current difficulty rung. Telemetry and debrief read it. The HUD does not print a grade.
+    public int DifficultyRung => _fightDirector.Rung;
     /// Carry the pacing estimate across a page reload. See FightDirector.ExportState.
     public string ExportDirectorState() => _fightDirector.ExportState();
     public bool TryImportDirectorState(string? state) =>
         _fightDirector.TryImportState(state);
+    /// Stash a blob to apply after the next StartBeat reset and before the opening spawn.
+    /// StartBeat clears the director on purpose; restoring after StageBeat would miss that spawn.
+    public void ArmDirectorStateForNextStage(string? state) =>
+        _directorStateForNextStage = string.IsNullOrWhiteSpace(state) ? null : state;
+
+    string? _directorStateForNextStage;
+
+    static bool UsesDifficultyRamp(BeatSetup beat) =>
+        beat.FirstRunValley is not null
+        || beat.MissionIdentity.Id
+            == "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1";
+
+    void ApplyArmedDirectorState() {
+        if (_directorStateForNextStage is null) return;
+        _fightDirector.TryImportState(_directorStateForNextStage);
+        _directorStateForNextStage = null;
+    }
     public bool OpponentReplacementPending =>
         OpponentPresent
         && !CombatHandoffRequested
@@ -1270,6 +1293,7 @@ public sealed partial class SimulationSession {
         _deckConfiguration = deckConfiguration;
         _beatFactory = () => Beats.BuiltIn(index, deckConfiguration);
         _fightDirector.Reset();
+        ApplyArmedDirectorState();
         StageBeat(_beatFactory());
     }
 
@@ -1318,6 +1342,7 @@ public sealed partial class SimulationSession {
         _prechargeSystemsOnStage = false;
         _beatFactory = beatFactory;
         _fightDirector.Reset();
+        ApplyArmedDirectorState();
         BeatSetup setup = beatFactory();
         if (setup.FirstRunValley is not null
             && _terrainSurface is not null
@@ -2645,6 +2670,8 @@ public sealed partial class SimulationSession {
             || _playerTerminalState != AircraftTerminalState.Flying)
             return;
         if (!_firstRunValleyRuntime.ObservePlayer(_player.State)) return;
+        if (double.IsNaN(_weaponsHotAtSeconds))
+            _weaponsHotAtSeconds = TimeSeconds;
         _bandit.EndPresentation();
         foreach (Wingman wingman in _wingmen)
             wingman.Bandit.EndPresentation();
@@ -3859,10 +3886,14 @@ public sealed partial class SimulationSession {
         // Pacing memory survives the pilot: when the director has observed history and this beat
         // fields a skill-driven continuous-combat opponent, the OPENING spawn is a director
         // decision too — a boss loss last life opens this life in RELEASE, not back at the ramp.
-        SpawnSpec? openingSpawn = stagesOpponent
+        bool difficultyRamp = UsesDifficultyRamp(_beat);
+        bool directorCanStage = stagesOpponent
             && _beat.ContinuousCombat is not null
-            && (_beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit)
-            && _fightDirector.HasHistory
+            && (_beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit);
+        // The rung table is the F-22 front door. Other continuous fixtures keep their authored
+        // skill and a cold pair capped by their own formation ceiling.
+        SpawnSpec? openingSpawn = directorCanStage
+            && (difficultyRamp || _fightDirector.HasHistory)
             ? _fightDirector.NextSpawn(1)
             : null;
         ClearWingmen();
@@ -3876,8 +3907,15 @@ public sealed partial class SimulationSession {
             // if I win that it stays that way." A cold start has no director decision yet, so ask
             // the director what an opening looks like rather than hard-coding a number here.
             // Multiplayer lane applies arena handicap and is always 1v1 (AI fill until humans).
-            if (_beat.ContinuousCombat is not null && !_arenaHandicapActive)
-                StageWingmen(openingSpawn ?? _fightDirector.NextSpawn(1), 1);
+            if (_beat.ContinuousCombat is not null && !_arenaHandicapActive) {
+                SpawnSpec wingSpec = openingSpawn
+                    ?? (difficultyRamp
+                        ? _fightDirector.NextSpawn(1)
+                        : new SpawnSpec(
+                            _beat.BanditSkill, 0, false, "authored formation",
+                            FormationSize: 2));
+                StageWingmen(wingSpec, 1);
+            }
             else if (_beat.ScriptedIntercept is { FormationSize: > 1 } scriptedFormation)
                 StageScriptedFormation(scriptedFormation.FormationSize);
             ConfigureFormationLookaheadCadence();
@@ -3975,6 +4013,7 @@ public sealed partial class SimulationSession {
         _sortieGunLedger.Clear();
         _sortiePlayerRoundsFired = 0;
         _sortiePlayerHits = 0;
+        _weaponsHotAtSeconds = double.NaN;
         _sortieOpponentRoundsFired = 0;
         _sortieLoadFactorSeen = false;
         _sortiePeakLoadFactorG = 0.0;
@@ -6345,7 +6384,11 @@ public sealed partial class SimulationSession {
         int nextEngagement = _engagementNumber + 1;
         CompleteEngagementIfEnded();
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
-        SpawnSpec directorSpawn = _fightDirector.NextSpawn(nextEngagement);
+        SpawnSpec directorSpawn = UsesDifficultyRamp(_beat)
+            ? _fightDirector.NextSpawn(nextEngagement)
+            : new SpawnSpec(
+                _beat.BanditSkill, 0, false, "authored successor",
+                FormationSize: 2);
         LastDirectorSpawn = directorSpawn;
         _bandit = _beat.CreateNextBandit(
             _player.State, nextEngagement, _terrainSurface, directorSpawn);
@@ -6408,8 +6451,13 @@ public sealed partial class SimulationSession {
             ShotsTotalAtStart = _shotsTotal,
             ShotsInWindowAtStart = _shotsInWindow,
             OvershootsAtStart = _visualMergeEvaluation?.Overshoots ?? 0,
-            GcasActivationsAtStart = _autoGcasState.ActivationCount
+            GcasActivationsAtStart = _autoGcasState.ActivationCount,
+            PlayerHitsScoredAtStart = _sortiePlayerHits,
+            TimeToFirstHitSeconds = double.NaN,
         };
+        if (_firstRunValleyRuntime is not { WeaponsCold: true }
+            && double.IsNaN(_weaponsHotAtSeconds))
+            _weaponsHotAtSeconds = TimeSeconds;
     }
 
     void AccumulateEngagementCounters() {
@@ -6476,6 +6524,12 @@ public sealed partial class SimulationSession {
         }
         int rounds = Math.Max(0, gun.RoundsFired - baseline.Rounds);
         int hits = Math.Max(0, gun.TotalHitCount - baseline.Hits);
+        if (hits > 0 && ReferenceEquals(gun, _gunKill)
+            && _engagementCounters.Active
+            && double.IsNaN(_engagementCounters.TimeToFirstHitSeconds)
+            && !double.IsNaN(_weaponsHotAtSeconds))
+            _engagementCounters.TimeToFirstHitSeconds =
+                Math.Max(0.0, TimeSeconds - _weaponsHotAtSeconds);
         _sortieGunLedger[gun] = new GunLedgerBaseline {
             Rounds = gun.RoundsFired,
             Hits = gun.TotalHitCount
@@ -6530,7 +6584,10 @@ public sealed partial class SimulationSession {
             _visualMergeEvaluation?.MinimumEnergyKias ?? double.PositiveInfinity,
             Math.Max(0, _autoGcasState.ActivationCount
                 - _engagementCounters.GcasActivationsAtStart),
-            endReason);
+            endReason,
+            HitsScored: Math.Max(0,
+                _sortiePlayerHits - _engagementCounters.PlayerHitsScoredAtStart),
+            TimeToFirstHitSeconds: _engagementCounters.TimeToFirstHitSeconds);
 
     void DetachCurrentOpponent(AircraftTerminalState terminalState,
         ImpactSurface impactSurface) {
@@ -7120,17 +7177,30 @@ public sealed partial class SimulationSession {
         // A wider capture cone and one extra protected G on touch: tilt input cannot hold the
         // funnel the way arrow keys can. Ballistics stay untouched — the assist magnetises the
         // nose, the rounds still have to fly there.
-        AircraftParams assistAir = _touchControlModality
+        FightDirector.PitchAssistScale assistScale = _fightDirector.PitchAssist;
+        AircraftParams assistAir = _beat.PlayerAir with {
+            GunneryPitchAssistGainPerSecond =
+                _beat.PlayerAir.GunneryPitchAssistGainPerSecond * assistScale.GainScale,
+            GunneryPitchAssistMaxCorrectionG =
+                _beat.PlayerAir.GunneryPitchAssistMaxCorrectionG * assistScale.CorrectionScale,
+        };
+        if (!assistScale.Active) {
+            assistAir = assistAir with {
+                GunneryPitchAssistGainPerSecond = 0.0,
+                GunneryPitchAssistMaxCorrectionG = 0.0,
+            };
+        } else if (_touchControlModality
             && !CardTwelveRequiresPilotGunTrigger
-            ? _beat.PlayerAir with {
+            && _fightDirector.Rung <= 1) {
+            assistAir = assistAir with {
                 GunneryPitchAssistCaptureAngleRad =
                     _beat.PlayerAir.GunneryPitchAssistCaptureAngleRad * 1.35,
                 GunneryPitchAssistMaxCorrectionG =
-                    _beat.PlayerAir.GunneryPitchAssistMaxCorrectionG + 1.0,
+                    assistAir.GunneryPitchAssistMaxCorrectionG + 1.0,
                 GunneryLateralAssistRollGain =
                     _beat.PlayerAir.GunneryLateralAssistRollGain * 1.25,
-            }
-            : _beat.PlayerAir;
+            };
+        }
         GunneryPitchAssistResult result = GunsOnly.Sim.GunneryPitchAssist.Apply(
             requestedPilotCommand,
             _player.State,

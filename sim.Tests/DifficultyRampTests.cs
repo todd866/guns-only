@@ -1,0 +1,312 @@
+using GunsOnly.Sim;
+using GunsOnly.Sim.Doctrine;
+using GunsOnly.Web;
+using Xunit;
+
+namespace GunsOnly.Sim.Tests;
+
+public class DifficultyRampTests {
+    static EngagementReport Report(
+        int number,
+        SortieOutcome outcome,
+        int hitsScored = 0,
+        int hitsTaken = 0,
+        double solutionSeconds = 0.0,
+        double timeToFirstHit = double.NaN) => new(
+            number,
+            PilotSkill.Competent,
+            OpponentWasBoss: false,
+            outcome,
+            DurationSeconds: 30.0,
+            SolutionSecondsConceded: solutionSeconds,
+            HitsTaken: hitsTaken,
+            ShotsTotal: 4,
+            ShotsInWindow: 4,
+            Overshoots: 0,
+            MinimumEnergyKias: 340.0,
+            GcasActivations: 0,
+            HitsScored: hitsScored,
+            TimeToFirstHitSeconds: timeToFirstHit);
+
+    static void Observe(FightDirector director, EngagementReport report) =>
+        director.Observe(in report);
+
+    [Fact]
+    public void EmptyDirectorOpensAtTheUnprovenRung() {
+        var director = new FightDirector();
+        SpawnSpec first = director.NextSpawn(1);
+        SpawnSpec again = director.NextSpawn(1);
+        Assert.Equal(first, again);
+        Assert.Equal(PilotSkill.Competent, first.Skill);
+        Assert.Equal(BanditMount.Baseline, first.Mount);
+        Assert.Equal(1, first.FormationSize);
+        Assert.True(first.Sparring);
+        Assert.NotEqual(PilotSkill.Ace, first.Skill);
+    }
+
+    [Fact]
+    public void AHitThenADefeatPromotesAndASecondKillEarnsThePair() {
+        var director = new FightDirector();
+        EngagementReport hit = Report(1, SortieOutcome.Defeat, hitsScored: 1, hitsTaken: 2);
+        director.Observe(in hit);
+        SpawnSpec veteran = director.NextSpawn(2);
+        Assert.Equal(PilotSkill.Veteran, veteran.Skill);
+        Assert.False(veteran.Sparring);
+        Assert.Equal(1, veteran.FormationSize);
+
+        EngagementReport kill = Report(2, SortieOutcome.Victory, hitsScored: 1, hitsTaken: 1,
+            solutionSeconds: 2.0);
+        director.Observe(in kill);
+        SpawnSpec ace = director.NextSpawn(3);
+        Assert.Equal(PilotSkill.Ace, ace.Skill);
+        Assert.Equal(BanditMount.Baseline, ace.Mount);
+        Assert.Equal(1, ace.FormationSize);
+
+        EngagementReport second = Report(3, SortieOutcome.Victory, hitsScored: 1, hitsTaken: 1,
+            solutionSeconds: 2.0);
+        director.Observe(in second);
+        SpawnSpec pair = director.NextSpawn(4);
+        Assert.Equal(3, director.Rung);
+        Assert.Equal(PilotSkill.Ace, pair.Skill);
+        Assert.Equal(BanditMount.Uprated, pair.Mount);
+        Assert.Equal(2, pair.FormationSize);
+        Assert.False(pair.Sparring);
+    }
+
+    [Fact]
+    public void AWalkoverOnTheEarnedAceAlsoFieldsThePair() {
+        var director = new FightDirector();
+        EngagementReport kill = Report(1, SortieOutcome.Victory, hitsScored: 1, hitsTaken: 1,
+            solutionSeconds: 2.0);
+        director.Observe(in kill);
+        Assert.Equal(2, director.Rung);
+        EngagementReport walkover = Report(2, SortieOutcome.Victory, hitsScored: 1);
+        director.Observe(in walkover);
+        SpawnSpec pair = director.NextSpawn(3);
+        Assert.Equal(3, director.Rung);
+        Assert.Equal(2, pair.FormationSize);
+        Assert.Equal(BanditMount.Uprated, pair.Mount);
+    }
+
+    [Fact]
+    public void TwoHitlessDefeatsDropOneRungAndAHitDoesNot() {
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 2));
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, hitsTaken: 1,
+            solutionSeconds: 2.0));
+        Assert.Equal(3, director.Rung);
+
+        Observe(director, Report(3, SortieOutcome.Defeat, hitsScored: 1, hitsTaken: 3));
+        Assert.Equal(3, director.Rung);
+
+        Observe(director, Report(4, SortieOutcome.Defeat));
+        Assert.Equal(3, director.Rung);
+        Observe(director, Report(5, SortieOutcome.Defeat));
+        Assert.Equal(2, director.Rung);
+        Assert.Equal(1, director.NextSpawn(6).FormationSize);
+    }
+
+    [Fact]
+    public void AbandoningWithoutAnObservationLeavesTheColdRung() {
+        var director = new FightDirector();
+        string before = director.ExportState();
+        var next = new FightDirector();
+        Assert.True(next.TryImportState(before));
+        SpawnSpec spawn = next.NextSpawn(1);
+        Assert.Equal(0, next.Rung);
+        Assert.Equal(PilotSkill.Competent, spawn.Skill);
+        Assert.NotEqual(PilotSkill.Ace, spawn.Skill);
+    }
+
+    [Fact]
+    public void AStoredKillOpensAtRungTwoEvenOnTheFirstEngagement() {
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1,
+            timeToFirstHit: 12.5));
+        string blob = director.ExportState();
+        var restored = new FightDirector();
+        Assert.True(restored.TryImportState(blob));
+        SpawnSpec opening = restored.NextSpawn(1);
+        Assert.Equal(2, restored.Rung);
+        Assert.Equal(PilotSkill.Ace, opening.Skill);
+        Assert.Equal(1, opening.FormationSize);
+        Assert.Equal(12.5, restored.TimeToFirstHitSeconds);
+    }
+
+    [Fact]
+    public void AStoredRungThreeOpensOnThePair() {
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1));
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1));
+        var restored = new FightDirector();
+        Assert.True(restored.TryImportState(director.ExportState()));
+        SpawnSpec opening = restored.NextSpawn(1);
+        Assert.Equal(3, restored.Rung);
+        Assert.Equal(2, opening.FormationSize);
+        Assert.Equal(BanditMount.Uprated, opening.Mount);
+    }
+
+    [Fact]
+    public void ACorruptBlobDoesNotChangeStateAndALegacyBlobOpensAtRungZero() {
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1));
+        string intact = director.ExportState();
+        Assert.False(director.TryImportState("v2|nope"));
+        Assert.False(director.TryImportState("v9|3|1|1|0|-|0|0|0|0|0|0|0|0|0|0|0|1|1|1"));
+        Assert.Equal(intact, director.ExportState());
+        Assert.Equal(2, director.Rung);
+
+        Assert.True(director.TryImportState(
+            "v1|1|1|1|0|0|0.0|0|0|0|0|0|0|0|0"));
+        Assert.Equal(0, director.Rung);
+        Assert.Equal(PilotSkill.Competent, director.NextSpawn(1).Skill);
+    }
+
+    [Fact]
+    public void RoundTripAgreesAndPitchAssistFadesByRung() {
+        var director = new FightDirector();
+        Assert.Equal(1.0, director.PitchAssist.GainScale);
+        Assert.Equal(3.5, FlightModel.F22APublicDataSurrogate.GunneryPitchAssistMaxCorrectionG
+            * director.PitchAssist.CorrectionScale, 3);
+        Assert.True(director.PitchAssist.Active);
+
+        Observe(director, Report(1, SortieOutcome.Defeat, hitsScored: 1));
+        Assert.Equal(0.5, director.PitchAssist.GainScale);
+        Assert.Equal(1.75, FlightModel.F22APublicDataSurrogate.GunneryPitchAssistMaxCorrectionG
+            * director.PitchAssist.CorrectionScale, 3);
+
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1));
+        Assert.False(director.PitchAssist.Active);
+        Assert.Equal(0.0, director.PitchAssist.CorrectionScale);
+
+        var copy = new FightDirector();
+        Assert.True(copy.TryImportState(director.ExportState()));
+        Assert.Equal(director.ExportState(), copy.ExportState());
+        Assert.False(copy.PitchAssist.Active);
+    }
+
+    [Fact]
+    public void AssistIsInactiveWhenTheRungTurnsItOff() {
+        AircraftParams air = FlightModel.F22APublicDataSurrogate with {
+            GunneryPitchAssistGainPerSecond = 0.0,
+            GunneryPitchAssistMaxCorrectionG = 0.0,
+        };
+        var state = new AircraftState(new Vec3D(0.0, 3000.0, 0.0), 250.0,
+            0.0, 0.0, 0.0, air.MassKg);
+        var aircraft = new AircraftSim(state, air);
+        GunneryPitchAssistResult result = GunneryPitchAssist.Apply(
+            new PilotCommand(1.0, 0.0, 0.9, 0.0),
+            state, air, 250.0, aircraft.AtmosphereModel,
+            new Vec3D(0.0, 0.05, 1.0), hasBallisticLead: true,
+            rangeM: 600.0, enabled: true);
+        Assert.False(result.State.Active);
+    }
+
+    [Fact]
+    public void ASolutionBeyondRoundLifeIsRefused() {
+        GunProfile gun = GunProfiles.M61A2PublicDataSurrogate;
+        double beyond = gun.MuzzleVelocityMps * gun.MaximumFlightSeconds + 100.0;
+        var shooter = new AircraftState(Vec3D.Zero, 200.0, 0.0, 0.0, 0.0, 1000.0);
+        var far = shooter with { Position = new Vec3D(0.0, 0.0, beyond) };
+        GunBallisticSolution refused = GunKill.EvaluateBallisticLead(
+            shooter, far, gun, gun.EffectiveHitRadiusM);
+        Assert.False(refused.HasLeadSolution);
+        Assert.False(refused.BodyAxisOnSolution);
+
+        var near = shooter with { Position = new Vec3D(0.0, 0.0, 500.0) };
+        GunBallisticSolution accepted = GunKill.EvaluateBallisticLead(
+            shooter, near, gun, gun.EffectiveHitRadiusM);
+        Assert.True(accepted.HasLeadSolution);
+    }
+
+    [Fact]
+    public void RoundsFiredBeyondRoundLifeDoNotHitAndACloseBurstDoes() {
+        GunProfile gun = GunProfiles.M61A2PublicDataSurrogate;
+        var farGun = new GunKill(40, 3, gun.EffectiveHitRadiusM, gun);
+        AircraftState shooter = new(Vec3D.Zero, 250.0, 0.0, 0.0, 0.0,
+            FlightModel.F22APublicDataSurrogate.MassKg);
+        double beyond = gun.MuzzleVelocityMps * gun.MaximumFlightSeconds + 200.0;
+        AircraftState farTarget = shooter with { Position = new Vec3D(0.0, 0.0, beyond) };
+        const long id = 1;
+        var farTargets = new[] { new GunTarget(id, farTarget) };
+        for (int i = 0; i < 240; i++)
+            farGun.Step(true, shooter, id, farTargets, 1.0 / 120.0);
+        Assert.Equal(0, farGun.TotalHitCount);
+
+        var nearGun = new GunKill(80, 3, gun.EffectiveHitRadiusM, gun);
+        AircraftState nearTarget = shooter with { Position = new Vec3D(0.0, 0.0, 500.0) };
+        var nearTargets = new[] { new GunTarget(id, nearTarget) };
+        for (int i = 0; i < 240; i++)
+            nearGun.Step(true, shooter, id, nearTargets, 1.0 / 120.0);
+        Assert.True(nearGun.TotalHitCount > 0);
+
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Defeat, hitsScored: nearGun.TotalHitCount,
+            hitsTaken: 1));
+        Assert.Equal(PilotSkill.Veteran, director.NextSpawn(2).Skill);
+    }
+
+    [Fact]
+    public void AutoGcasStaysAvailableAtRungZeroAndRungThree() {
+        var cold = new SimulationSession();
+        cold.StartBeat(() => Beats.ModernVisualMerge());
+        Assert.True(cold.PlayerAutoGcasCapability.Available);
+        Assert.Equal(0, cold.DifficultyRung);
+
+        var earned = new SimulationSession();
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1));
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1));
+        earned.ArmDirectorStateForNextStage(director.ExportState());
+        earned.StartBeat(() => Beats.ModernVisualMerge());
+        Assert.True(earned.PlayerAutoGcasCapability.Available);
+        Assert.Equal(3, earned.DifficultyRung);
+        Assert.Contains("\"difficulty_rung\":3", SnapshotOf(earned));
+    }
+
+    static string SnapshotOf(SimulationSession session) =>
+        SnapshotProjection.BuildState(
+            session, Carrier.DeckConfiguration.Axial, 0.0, 0.0, false, null);
+
+    [Fact]
+    public void TheLiveOpeningSpawnIsTheUnprovenRungIncludingARestoredValley() {
+        var session = new SimulationSession();
+        session.StartBeat(() => Beats.ModernVisualMerge());
+        Assert.Equal(0, session.DifficultyRung);
+        Assert.Equal(PilotSkill.Competent, ((NeutralMergeBandit)session.Bandit).Skill);
+        Assert.Contains("\"difficulty_rung\":0", SnapshotOf(session));
+
+        var valley = new SimulationSession();
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1));
+        valley.ArmDirectorStateForNextStage(director.ExportState());
+        valley.StartBeat(() => Beats.ModernVisualMergeFirstRun());
+        Assert.Equal(2, valley.DifficultyRung);
+        Assert.Equal(PilotSkill.Ace, ((NeutralMergeBandit)valley.Bandit).Skill);
+    }
+
+    [Fact]
+    public void RungZeroPresentClearsOnATrackingHoldAndNotOnProximity() {
+        ReactiveBandit Make() => new(
+            new AircraftState(new Vec3D(0.0, 1000.0, 0.0), 180.0, 0.0, 0.0, 0.0,
+                FlightModel.Sabre.MassKg),
+            FlightModel.Sabre, PilotSkill.Competent, presenting: true,
+            endPresentOnProximity: false);
+        double dt = 1.0 / AircraftSim.TickHz;
+
+        ReactiveBandit nearby = Make();
+        for (int i = 0; i < (int)(10.0 / dt); i++) {
+            var player = new AircraftState(
+                new Vec3D(1200.0, 1000.0, nearby.State.Position.Z), 180.0, 0.0, 0.0, 0.0,
+                FlightModel.Sabre.MassKg);
+            nearby.Step(player, dt);
+        }
+        Assert.True(nearby.Presenting);
+
+        ReactiveBandit tracking = Make();
+        var onNose = new AircraftState(
+            new Vec3D(0.0, 1000.0, -500.0), 180.0, 0.0, 0.0, 0.0, FlightModel.Sabre.MassKg);
+        for (int i = 0; i < (int)(3.0 / dt); i++) tracking.Step(onNose, dt);
+        Assert.False(tracking.Presenting);
+    }
+}

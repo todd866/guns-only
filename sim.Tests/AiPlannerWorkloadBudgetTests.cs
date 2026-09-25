@@ -102,6 +102,7 @@ public class AiPlannerWorkloadBudgetTests {
         var terrain = new FlatTerrain();
         WeatherProfile weather = WorkloadWeather(terrain);
         var session = new SimulationSession(weather: weather);
+        session.ArmDirectorStateForNextStage(FrontDoorRampFixtures.EarnedPairState());
         session.StartBeat(() => Beats.ModernVisualMerge() with {
             // Keep the production Ace/Ace pair and merge geometry, but disarm the fixture so a
             // gun result cannot replace either stable actor while their workload is inspected.

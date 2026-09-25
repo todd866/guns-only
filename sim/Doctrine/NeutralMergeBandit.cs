@@ -21,6 +21,7 @@ public sealed class NeutralMergeBandit :
     /// neutral pass ends, instead of snapping straight into a fight they cannot win. Mutable for
     /// exactly one transition: EndPresentation latches it false when the pair graduates.
     bool _presenting;
+    bool _endPresentOnProximity = true;
 
     /// Before the merge gate this is the briefed intent; after it, the live fight owns the answer.
     public bool Presenting => _fight?.Presenting ?? _presenting;
@@ -52,8 +53,10 @@ public sealed class NeutralMergeBandit :
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
         BanditSkillProfile? profile = null,
         int? doctrineIndex = null,
-        bool presenting = false) {
+        bool presenting = false,
+        bool endPresentOnProximity = true) {
         _presenting = presenting;
+        _endPresentOnProximity = endPresentOnProximity;
         _parameters = parameters;
         _skill = skill;
         _profile = profile ?? BanditSkillProfile.For(skill);
@@ -216,7 +219,8 @@ public sealed class NeutralMergeBandit :
         var fight = new ReactiveBandit(
             _mergeSim.State, _parameters, _skill, _terrain,
             profile: _profile, doctrineIndex: _doctrineIndex,
-            presenting: _presenting) {
+            presenting: _presenting,
+            endPresentOnProximity: _endPresentOnProximity) {
             Wind = _wind,
             Atmosphere = _atmosphere
         };

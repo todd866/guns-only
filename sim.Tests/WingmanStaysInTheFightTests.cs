@@ -24,6 +24,26 @@ public sealed class WingmanStaysInTheFightTests {
 
     public WingmanStaysInTheFightTests(ITestOutputHelper output) => _output = output;
 
+    static string EarnedPairState() {
+        var director = new FightDirector();
+        for (int engagement = 1; engagement <= 2; engagement++) {
+            EngagementReport kill = new(
+                engagement, PilotSkill.Competent, false, SortieOutcome.Victory,
+                30.0, 0.0, 0, 4, 4, 0, 340.0, 0);
+            director.Observe(in kill);
+        }
+        return director.ExportState();
+    }
+
+    static string EarnedAceState() {
+        var director = new FightDirector();
+        EngagementReport kill = new(
+            1, PilotSkill.Competent, false, SortieOutcome.Victory,
+            30.0, 0.0, 0, 4, 4, 0, 340.0, 0);
+        director.Observe(in kill);
+        return director.ExportState();
+    }
+
     static BeatSetup TwoShipFixture() {
         BeatSetup beat = Beats.ModernVisualMerge();
         return beat with {
@@ -73,6 +93,7 @@ public sealed class WingmanStaysInTheFightTests {
         double playerRollPulseSeconds = 0.0,
         Func<BeatSetup>? fixture = null) {
         var session = new SimulationSession();
+        session.ArmDirectorStateForNextStage(EarnedPairState());
         session.StartBeat(fixture ?? TwoShipFixture);
         var samples = new System.Collections.Generic.List<Sample>();
         const double Dt = 1.0 / 120.0;
@@ -248,6 +269,7 @@ public sealed class WingmanStaysInTheFightTests {
 
     static System.Collections.Generic.List<SoloSample> FlySolo(double seconds) {
         var session = new SimulationSession();
+        session.ArmDirectorStateForNextStage(EarnedAceState());
         session.StartBeat(OneShipFixture);
         var samples = new System.Collections.Generic.List<SoloSample>();
         const double Dt = 1.0 / 120.0;

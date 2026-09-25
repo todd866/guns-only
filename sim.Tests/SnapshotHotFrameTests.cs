@@ -42,8 +42,11 @@ public class SnapshotHotFrameTests {
     }
 
     static SimulationSession StartSession(int beatIndex, ITerrainSurface? terrain) {
-        var session = new SimulationSession(beatIndex, Carrier.DeckConfiguration.Angled,
-            KoreaWeatherPresets.ForBeat(beatIndex));
+        var weather = KoreaWeatherPresets.ForBeat(beatIndex);
+        var session = new SimulationSession(1, Carrier.DeckConfiguration.Angled, weather);
+        if (beatIndex == 7)
+            session.ArmDirectorStateForNextStage(FrontDoorRampFixtures.EarnedPairState());
+        session.StartBeat(beatIndex, Carrier.DeckConfiguration.Angled);
         session.Begin();
         if (terrain is not null) session.SetTerrainSurface(terrain);
         return session;

@@ -239,8 +239,18 @@ function selectedOpponentIsAlive(state) {
   return selectedAlive && state.fight !== "Splash";
 }
 
+function insideRoundLife(state) {
+  const velocity = Number(state?.gun_muzzle_velocity_mps);
+  const life = Number(state?.gun_max_flight_s);
+  if (!Number.isFinite(velocity) || !Number.isFinite(life) || velocity <= 0 || life <= 0)
+    return true;
+  const range = Number(state?.range_m);
+  if (!Number.isFinite(range)) return true;
+  return range <= velocity * life;
+}
+
 function hasGunSolution(state) {
-  return state.gun_solution === true;
+  return state.gun_solution === true && insideRoundLife(state);
 }
 
 function isFightHudActive(state) {
@@ -1138,7 +1148,7 @@ class CombatHud {
     this.drawGunFunnel(frame, anchor);
 
     let rawPipperVisible = false;
-    if (state.lead_valid === true && leadPipper) {
+    if (state.lead_valid === true && leadPipper && insideRoundLife(state)) {
       const leadProjection = this.project(leadPipper, camera, this.projectionA);
       if (!leadProjection.behind && Number.isFinite(leadProjection.x)
         && Number.isFinite(leadProjection.y)) {

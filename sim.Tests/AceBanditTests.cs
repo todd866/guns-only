@@ -143,7 +143,8 @@ public class AceBanditTests {
         var player = new AircraftState(new Vec3D(0.0, 3000.0, 0.0),
             240.0, 0.0, 0.0, 0.0, FlightModel.F22APublicDataSurrogate.MassKg);
         var spawned = Assert.IsType<ReactiveBandit>(
-            beat.CreateNextBandit(player, engagementNumber: 4));
+            beat.CreateNextBandit(player, engagementNumber: 4,
+                spec: new SpawnSpec(PilotSkill.Ace, 0, false, "ace probe")));
         Assert.Equal(PilotSkill.Ace, spawned.Skill);
 
         // This is a PURSUIT probe, not a merge: the reference is already 1.6 km displaced and

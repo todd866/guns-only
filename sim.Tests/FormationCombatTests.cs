@@ -11,10 +11,16 @@ public class FormationCombatTests {
     public FormationCombatTests(ITestOutputHelper output) => _out = output;
 
     [Fact]
-    public void TheOpeningWaveIsAPairAndBothFlyAndShoot() {
-        var session = new SimulationSession(7);
-        session.Begin();
+    public void TheOpeningWaveIsOneShipAndTheEarnedPairIsTheLaterRung() {
+        var cold = new SimulationSession(7);
+        cold.Begin();
+        Assert.Empty(cold.Wingmen);
+        Assert.Equal(1, cold.LiveOpponentCount);
+        Assert.Equal(0, cold.DifficultyRung);
 
+        var session = FrontDoorRampFixtures.EarnedPairSession();
+        session.Begin();
+        Assert.Equal(3, session.DifficultyRung);
         Assert.Single(session.Wingmen);
         Assert.Equal(2, session.LiveOpponentCount);
         Wingman wingman = session.Wingmen[0];
@@ -41,7 +47,7 @@ public class FormationCombatTests {
 
     [Fact]
     public void BothOpponentsShareOneDamagePoolOnThePlayer() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         Assert.Equal(0, session.PlayerHitsTaken);
 
@@ -75,9 +81,16 @@ public class FormationCombatTests {
     [Fact]
     public void NumbersSurviveOneLossAndEaseOnTheSecond() {
         var director = new FightDirector();
-        SpawnSpec opening = director.NextSpawn(1);
-        Assert.Equal(2, opening.FormationSize);
-        Assert.Equal(PilotSkill.Ace, opening.Skill);
+        Assert.Equal(1, director.NextSpawn(1).FormationSize);
+        for (int engagement = 1; engagement <= 2; engagement++) {
+            EngagementReport kill = new(
+                engagement, PilotSkill.Competent, false, SortieOutcome.Victory,
+                30.0, 1.5, 0, 4, 4, 0, 340.0, 0, HitsScored: 1);
+            director.Observe(in kill);
+        }
+        SpawnSpec pair = director.NextSpawn(3);
+        Assert.Equal(2, pair.FormationSize);
+        Assert.Equal(PilotSkill.Ace, pair.Skill);
 
         static EngagementReport Loss(int engagement, PilotSkill skill) => new(
             engagement, skill, OpponentWasBoss: false, SortieOutcome.Defeat,
@@ -85,24 +98,17 @@ public class FormationCombatTests {
             ShotsTotal: 8, ShotsInWindow: 1, Overshoots: 2,
             MinimumEnergyKias: 180.0, GcasActivations: 0);
 
-        EngagementReport first = Loss(1, opening.Skill);
+        EngagementReport first = Loss(3, pair.Skill);
         director.Observe(in first);
-        SpawnSpec afterOne = director.NextSpawn(2);
+        SpawnSpec afterOne = director.NextSpawn(4);
         Assert.Equal(2, afterOne.FormationSize);
-        // The first death buys relief on the tier, not on the shape of the fight.
-        Assert.True(afterOne.Skill < opening.Skill,
-            "a defeat must ease something; the tier is what moves first");
-        Assert.True(afterOne.Skill >= PilotSkill.Veteran,
-            $"one loss stepped the tier too far: {afterOne.Skill}");
+        Assert.Equal(PilotSkill.Ace, afterOne.Skill);
 
-        EngagementReport second = Loss(2, afterOne.Skill);
+        EngagementReport second = Loss(4, afterOne.Skill);
         director.Observe(in second);
-        SpawnSpec afterTwo = director.NextSpawn(3);
+        SpawnSpec afterTwo = director.NextSpawn(5);
         Assert.Equal(1, afterTwo.FormationSize);
-        // Two losses is genuine trouble and the ladder is allowed to give real ground, but it must
-        // still be a ladder: never a free-fall straight back to the warm-up rung.
-        Assert.True(afterTwo.Skill >= PilotSkill.Competent,
-            $"two losses collapsed the ladder instead of stepping it: {afterTwo.Skill}");
+        Assert.Equal(PilotSkill.Ace, afterTwo.Skill);
     }
 
     [Fact]
@@ -114,13 +120,13 @@ public class FormationCombatTests {
 
     [Fact]
     public void KillingTheLeaderPromotesTheWingmanWithinTheSameEngagement() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         Assert.Equal(1, session.EngagementNumber);
         IBandit leader = session.Bandit;
         IBandit wingman = session.Wingmen[0].Bandit;
-        Assert.True(wingman.Presenting,
-            "the opening survivor must begin in the sparring presentation for this regression");
+        Assert.False(wingman.Presenting,
+            "the earned pair is already fighting; presentation is the unproven rung");
 
         // Take the leader out of the fight the way a gun result does.
         session.ForceOpponentDefeatForTest();
@@ -140,7 +146,7 @@ public class FormationCombatTests {
 
     [Fact]
     public void ForcedLeaderDefeatPromotesSurvivorImmediatelyWithoutTerminalDelay() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         IBandit leader = session.Bandit;
         IBandit survivor = session.Wingmen[0].Bandit;
@@ -159,7 +165,7 @@ public class FormationCombatTests {
 
     [Fact]
     public void RetiringLeaderRoundSurvivesImmediatePromotionAndAdvancesNextTick() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         GunKill retiringGun = session.OpponentGun;
         GunRound launched = LaunchSyntheticMiss(retiringGun);
@@ -186,7 +192,7 @@ public class FormationCombatTests {
 
     [Fact]
     public void DestroyedWingmanRoundContinuesAdvancingAfterShooterIsLost() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         Wingman wingman = session.Wingmen[0];
         GunRound launched = LaunchSyntheticMiss(wingman.Gun);
@@ -213,7 +219,7 @@ public class FormationCombatTests {
 
     [Fact]
     public void RealGunSplashDoesNotCarryOntoThePromotedWingman() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         IBandit leader = session.Bandit;
         IBandit wingman = session.Wingmen[0].Bandit;
@@ -257,7 +263,7 @@ public class FormationCombatTests {
 
     [Fact]
     public void PlayerCanKillTheWingmanFirstWithoutDestroyingTheLeader() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         IBandit leader = session.Bandit;
         Wingman wingman = session.Wingmen[0];
@@ -293,7 +299,7 @@ public class FormationCombatTests {
 
     [Fact]
     public void PromotedWingmanKeepsItsExistingDamageAndTheSamePhysicalGun() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         GunKill physicalGun = session.PlayerGun;
         IBandit leader = session.Bandit;
@@ -332,7 +338,7 @@ public class FormationCombatTests {
 
     [Fact]
     public void PromotedWingmanHitsAreNotCountedTwiceAgainstThePlayer() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         IBandit leader = session.Bandit;
         Wingman wingman = session.Wingmen[0];
@@ -356,7 +362,7 @@ public class FormationCombatTests {
 
     [Fact]
     public void LeaderHitsRemainInThePlayerLedgerAfterPromotion() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         IBandit leader = session.Bandit;
 

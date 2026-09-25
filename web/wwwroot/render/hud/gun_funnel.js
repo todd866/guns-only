@@ -122,6 +122,11 @@ export function gunFunnelUsable(state = {}, envelope) {
     : state.bandit_alive === true;
   if (!selectedAlive) return false;
   if (state.lead_valid !== true) return false;
+  const roundLifeM = env
+    ? Number(state.gun_muzzle_velocity_mps) * Number(state.gun_max_flight_s)
+    : NaN;
+  if (Number.isFinite(roundLifeM) && roundLifeM > 0
+    && Number(state.range_m) > roundLifeM) return false;
   if (!(positive(state.target_wingspan_m, 0) > 0)) return false;
   const range = Number(state.range_m);
   if (!Number.isFinite(range)) return false;

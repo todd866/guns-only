@@ -154,6 +154,12 @@ test("funnel is usable only with a live target, a valid solution, and range in t
   assert.equal(gunFunnelUsable(legacyDead, env), false,
     "older snapshots still fall back to primary liveness");
   assert.equal(gunFunnelUsable({ ...usable, lead_valid: false }, env), false);
+  assert.equal(gunFunnelUsable({
+    ...usable,
+    range_m: 3700,
+    gun_muzzle_velocity_mps: 1030,
+    gun_max_flight_s: 2,
+  }, env), false, "a solution past round life is not a gunsight");
   assert.equal(gunFunnelUsable({ ...usable, target_wingspan_m: 0 }, env), false);
   assert.equal(gunFunnelUsable({ ...usable, range_m: env.farRangeM + 50 }, env), false); // too far
   assert.equal(gunFunnelUsable({ ...usable, range_m: env.nearRangeM - 50 }, env), false); // too close

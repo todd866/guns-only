@@ -28,15 +28,17 @@ public class FightDirectorSessionTests {
 
         var reference = new FightDirector();
         reference.Observe(session.EngagementReports[0]);
-        SpawnSpec expected = reference.NextSpawn(2);
 
         SpawnSpec actual = Assert.IsType<SpawnSpec>(session.LastDirectorSpawn);
-        Assert.Equal(expected, actual);
+        // This fixture is not the front door. The ramp must not retune it: the successor stays
+        // the authored Competent ship, while the director still records the kill.
+        Assert.Equal("authored successor", actual.Reason);
+        Assert.Equal(PilotSkill.Competent, actual.Skill);
+        var probe = new FightDirector();
+        Assert.True(probe.TryImportState(reference.ExportState()));
+        Assert.NotEqual(probe.NextSpawn(2), actual);
         var successor = Assert.IsType<ReactiveBandit>(session.Bandit);
-        Assert.Equal(expected.Skill, successor.Skill);
-        // A clean fast first kill reads as Sharp gunnery/defence: the director must already be
-        // adapting (one step up from the Competent fixture opponent), not replaying the ladder.
-        Assert.Equal(PilotSkill.Veteran, successor.Skill);
+        Assert.Equal(actual.Skill, successor.Skill);
         Assert.False(string.IsNullOrWhiteSpace(actual.Reason));
         Assert.Equal(reference.Phase, session.DirectorPhase);
 

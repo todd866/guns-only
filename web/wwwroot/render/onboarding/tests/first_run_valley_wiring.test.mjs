@@ -105,8 +105,8 @@ test("first run is a deliberate Ready interlock and Fire visibly names its live 
     /"first-merge": Object\.freeze\(\{[\s\S]*?\n  \}\),/,
   )?.[0] ?? "";
   assert.match(firstMergeBrief,
-    /sortie: "F-22A vs escalating opposition · guns only · opening 1v2 guns hot"/,
-    "the programme brief must disclose that the opening pair is already guns hot");
+    /sortie: "F-22A vs escalating opposition · guns only"/,
+    "the programme brief names the fight without claiming an opening pair");
   assert.doesNotMatch(firstMergeBrief, /first pass safe/i,
     "the production 1v2 opens guns-free and must not advertise a safe pass");
   assert.match(index,

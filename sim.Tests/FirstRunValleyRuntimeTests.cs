@@ -70,14 +70,10 @@ public sealed class FirstRunValleySessionTests {
     public void ValleyTeachesTheDrawAndParksACoAltitudeMouthPair() {
         var session = Stage(Beats.ModernVisualMergeFirstRun());
         Assert.Contains("FOLLOW THE VALLEY", session.TransitionCue);
-        Assert.Single(session.Wingmen);
+        Assert.Empty(session.Wingmen);
         AircraftState lead = session.Bandit.State;
-        AircraftState dash2 = session.Wingmen[0].Bandit.State;
         Assert.Equal(FirstRunValleyRuntime.SpawnAltitudeM, lead.Position.Y, 1);
-        Assert.Equal(lead.Position.Y, dash2.Position.Y, 5);
-        double pairRangeM = (lead.Position - dash2.Position).Length;
-        Assert.InRange(pairRangeM, 800.0, 1_600.0);
-        Assert.Equal(lead.Chi, dash2.Chi, 3);
+        Assert.Equal(1, session.LiveOpponentCount);
     }
 
     [Fact]
@@ -85,7 +81,7 @@ public sealed class FirstRunValleySessionTests {
         var session = Stage(Beats.ModernVisualMergeFirstRun());
         Assert.True(session.FirstRunWeaponsCold);
         Assert.True(session.Bandit.Presenting);
-        Assert.True(session.Wingmen[0].Bandit.Presenting);
+        Assert.Empty(session.Wingmen);
     }
 
     [Fact]
@@ -102,8 +98,8 @@ public sealed class FirstRunValleySessionTests {
         session.StepFixed();
         Assert.False(session.FirstRunWeaponsCold);
         Assert.False(session.Bandit.Presenting,
-            "weapons-hot still left the mouth pair presenting, so they would not fire");
-        Assert.False(session.Wingmen[0].Bandit.Presenting);
+            "weapons-hot still left the lead presenting, so it would not fire");
+        Assert.Empty(session.Wingmen);
     }
 
     [Fact]
@@ -146,20 +142,21 @@ public sealed class FirstRunValleySessionTests {
         for (int i = 0; i < 3600 && session.Aim9InFlight; i++)
             session.StepFixed();
 
-        session.FeedKey(GKey.Trigger, true);
-        session.FeedKey(GKey.Trigger, false);
-        Assert.Equal(0, session.Aim9Remaining);
-
-        int roundsBeforeGuns = session.PlayerGun.RoundsFired;
-        session.FeedKey(GKey.Trigger, true);
-        session.StepFixed(12);
-        session.FeedKey(GKey.Trigger, false);
-        Assert.True(session.PlayerGun.RoundsFired > roundsBeforeGuns);
+        if (session.LiveOpponentCount > 0) {
+            session.FeedKey(GKey.Trigger, true);
+            session.FeedKey(GKey.Trigger, false);
+            Assert.Equal(0, session.Aim9Remaining);
+            int roundsBeforeGuns = session.PlayerGun.RoundsFired;
+            session.FeedKey(GKey.Trigger, true);
+            session.StepFixed(12);
+            session.FeedKey(GKey.Trigger, false);
+            Assert.True(session.PlayerGun.RoundsFired > roundsBeforeGuns);
+        } else {
+            Assert.Equal(1, session.Aim9Remaining);
+        }
     }
 
-    static void SplashTheMouthPair(SimulationSession session) {
-        Assert.Equal(2, session.LiveOpponentCount);
-        session.ForceOpponentDefeatForTest();
+    static void SplashTheOpeningContact(SimulationSession session) {
         Assert.Equal(1, session.LiveOpponentCount);
         session.ForceOpponentDefeatForTest();
         Assert.Equal(0, session.LiveOpponentCount);
@@ -170,7 +167,7 @@ public sealed class FirstRunValleySessionTests {
         // The Ready card already sells a finite first sortie (valley → heaters → guns / RTB).
         // Live 350 then stages the endless gauntlet anyway, so the opening never ends.
         var session = Stage(Beats.ModernVisualMergeFirstRun());
-        SplashTheMouthPair(session);
+        SplashTheOpeningContact(session);
         long spawnAfterPair = session.BanditSpawnSequence;
         session.StepFixed((int)(5.0 * AircraftSim.TickHz));
         Assert.Equal(spawnAfterPair, session.BanditSpawnSequence);
@@ -183,7 +180,7 @@ public sealed class FirstRunValleySessionTests {
     [Fact]
     public void SplashingTheMouthPairHandsTheSortieToRecovery() {
         var session = Stage(Beats.ModernVisualMergeFirstRun());
-        SplashTheMouthPair(session);
+        SplashTheOpeningContact(session);
         session.StepFixed();
         Assert.True(session.PlayerRtbActive,
             "the first sortie must send you home after the mouth pair, not wait for O");
@@ -195,7 +192,7 @@ public sealed class FirstRunValleySessionTests {
     [Fact]
     public void ReturningGunsOnlyStillStagesTheNextMergeAfterThePair() {
         var session = Stage(Beats.ModernVisualMerge());
-        SplashTheMouthPair(session);
+        SplashTheOpeningContact(session);
         Assert.True(session.OpponentReplacementPending);
         Assert.False(session.PlayerRtbActive);
     }

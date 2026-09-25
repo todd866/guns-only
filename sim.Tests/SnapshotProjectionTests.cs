@@ -342,7 +342,8 @@ public class SnapshotProjectionTests {
         // The legacy Rapier intercept fields a doctrine pilot. Card 12 intentionally targets a
         // free balloon, so it must not acquire a fighter skill tier merely to satisfy old copy.
         JsonElement banditSkill = root.GetProperty("bandit_skill");
-        if (beatIndex is 7 or 9) Assert.Equal("ACE", banditSkill.GetString());
+        if (beatIndex is 7) Assert.Equal("COMPETENT", banditSkill.GetString());
+        else if (beatIndex is 9) Assert.Equal("ACE", banditSkill.GetString());
         else if (beatIndex is 10) {
             Assert.Equal(JsonValueKind.String, banditSkill.ValueKind);
             Assert.False(string.IsNullOrWhiteSpace(banditSkill.GetString()),

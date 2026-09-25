@@ -2060,11 +2060,15 @@ function resetAdaptiveAiBudget({ recordInitial = false } = {}) {
 //
 // The payload is opaque to this layer and self-validating on the far side: anything malformed is
 // rejected wholesale and the sortie opens cold, so a corrupt value can never half-apply.
-const DIRECTOR_STATE_STORAGE = "guns-only.fight-director.v1";
+const DIRECTOR_STATE_STORAGE = "guns-only.fight-director.v2";
+const DIRECTOR_STATE_STORAGE_V1 = "guns-only.fight-director.v1";
 
 function loadDirectorState() {
-  try { return globalThis.localStorage?.getItem(DIRECTOR_STATE_STORAGE) || ""; }
-  catch { return ""; }
+  try {
+    return globalThis.localStorage?.getItem(DIRECTOR_STATE_STORAGE)
+      || globalThis.localStorage?.getItem(DIRECTOR_STATE_STORAGE_V1)
+      || "";
+  } catch { return ""; }
 }
 
 function saveDirectorState() {
@@ -2074,11 +2078,15 @@ function saveDirectorState() {
   } catch { /* persistence must never be able to disturb a sortie */ }
 }
 
-function restoreDirectorState() {
+function armDirectorRestore() {
   try {
     const saved = loadDirectorState();
-    if (saved) bridge?.ImportDirectorState?.(saved);
-  } catch { /* a bad stored value opens a normal cold sortie */ }
+    if (saved) bridge?.ArmDirectorStateForNextStage?.(saved);
+  } catch { /* a bad stored value opens at rung 0 */ }
+}
+
+function restoreDirectorState() {
+  armDirectorRestore();
 }
 
 // Renderer/scene counters for the 0.2 Hz perf row. Frame deltas say a stall HAPPENED; these say
@@ -3573,7 +3581,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "first-merge": Object.freeze({
     kicker: "2030s Ukraine · F-22A · endless",
     title: "Guns Only",
-    sortie: "F-22A vs escalating opposition · guns only · opening 1v2 guns hot",
+    sortie: "F-22A vs escalating opposition · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     brief: "You start at the merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going. The director watches how you actually flew and answers in kind.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · H controls",
@@ -3766,8 +3774,8 @@ function stageTopGunOnBridge() {
     const practice = new URLSearchParams(window.location.search)
       .get("configurationPractice") === "1";
     bridge.SetTopGunConfigurationPractice?.(practice);
+    armDirectorRestore();
     bridge.StartTopGun(selectedTopGunSeat);
-    restoreDirectorState();
   }
   stagedMissionAuthority = desiredAuthority;
   return true;
@@ -5212,6 +5220,7 @@ function enterReady({
         top_gun_seat: topGunSeatLabel(selectedTopGunSeat),
       });
     } else if (forceFirstRunValley || shouldStageFirstRunValley()) {
+      armDirectorRestore();
       bridge.StartFirstRunValley();
       stagedMissionAuthority = firstRunValleyMissionAuthority();
       firstRunAutostartPending = true;
@@ -5230,10 +5239,9 @@ function enterReady({
       const sameSortie = sameMissionAuthority(stagedMissionAuthority, desiredAuthority)
         && bridge.RestartSortie?.(selectedBeat);
       if (!sameSortie) {
+        // StartBeat resets the director, then applies an armed blob before the opening spawn.
+        armDirectorRestore();
         bridge.StartBeat(selectedBeat);
-        // StartBeat resets the director by design (picking a mission is not a respawn), so the
-        // persisted estimate has to be reapplied AFTER it.
-        restoreDirectorState();
       }
       stagedMissionAuthority = desiredAuthority;
       recorder.event("lifecycle", "sortie_staged", {
@@ -11793,11 +11801,13 @@ async function boot() {
   // on-ramp. A blocked Top Gun deep link never becomes selected, and even an acknowledged preview
   // crosses StartTopGun only after this harmless default exists behind the Ready interlock.
   if (shouldStageFirstRunValley()) {
+    armDirectorRestore();
     bridge.StartFirstRunValley();
     stagedMissionAuthority = firstRunValleyMissionAuthority();
     firstRunAutostartPending = true;
     autoLaunchPending = false;
   } else {
+    armDirectorRestore();
     bridge.StartBeat(selectedBeat);
     stagedMissionAuthority = selectedProductionMissionAuthority();
     if (isTopGunProgram()

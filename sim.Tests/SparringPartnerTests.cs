@@ -31,11 +31,18 @@ public class SparringPartnerTests {
     }
 
     [Fact]
-    public void ItStaysAnAceUnderneath() {
-        // The scaffolding is behaviour, not tier. The doctrine that the opening fight is the
-        // hardest one survives intact.
-        var bandit = SparringPartner();
-        Assert.Equal(PilotSkill.Ace, bandit.Skill);
+    public void RungZeroPresentDoesNotGraduateOnProximity() {
+        var bandit = new ReactiveBandit(
+            State(0.0, 1000.0, 0.0, 180.0), FlightModel.Sabre,
+            PilotSkill.Competent, terrain: null, engagementNumber: 1,
+            presenting: true, endPresentOnProximity: false);
+        int ticks = (int)(10.0 * AircraftSim.TickHz);
+        for (int i = 0; i < ticks; i++) {
+            var player = State(1200.0, 1000.0, bandit.State.Position.Z, 180.0);
+            bandit.Step(player, Dt);
+        }
+        Assert.True(bandit.Presenting);
+        Assert.Equal(PilotSkill.Competent, bandit.Skill);
     }
 
     [Fact]

@@ -1857,6 +1857,7 @@ internal static class SnapshotProjection {
             // leaving it to be inferred. bandit_mount is the airframe rung; the walkover
             // streak is the evidence that drove both the tier and the mount.
             + $"\"bandit_mount\":{banditMountJson},"
+            + $"\"difficulty_rung\":{Session.DifficultyRung},"
             + $"\"director_phase\":{JsonString(Session.DirectorPhase.ToString())},"
             + $"\"director_walkover_streak\":{Session.DirectorWalkoverStreak},"
             + $"\"director_reason\":{JsonString(Session.LastDirectorSpawn?.Reason ?? "")},"

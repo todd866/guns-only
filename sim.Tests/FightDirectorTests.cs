@@ -56,7 +56,10 @@ public class FightDirectorTests {
 
         for (int engagement = 1; engagement <= 10; engagement++) {
             SpawnSpec spawn = director.NextSpawn(engagement);
-            PilotSkill expected = BanditSkillProfile.ForEngagement(engagement);
+            PilotSkill expected = PilotSkill.Competent;
+            Assert.Equal(BanditMount.Baseline, spawn.Mount);
+            Assert.Equal(1, spawn.FormationSize);
+            Assert.True(spawn.Sparring);
             int doctrineCount = BanditSkillProfile.For(expected).DoctrineCount;
 
             Assert.Equal(expected, spawn.Skill);
@@ -80,54 +83,46 @@ public class FightDirectorTests {
             durationSeconds: 90.0) with { SolutionSecondsConceded = 1.5 };
 
     [Fact]
-    public void BuildMovesOnlyOneTierPerContestedEngagement() {
-        var descending = new FightDirector();
-        EngagementReport firstLoss = WeakReport(1, PilotSkill.Ace);
-        descending.Observe(in firstLoss);
-        Assert.Equal(PilotSkill.Veteran, descending.NextSpawn(2).Skill);
+    public void HitsAndKillsClimbTheRungAndAHitSurvivesTheSameDefeat() {
+        var director = new FightDirector();
+        Assert.Equal(PilotSkill.Competent, director.NextSpawn(1).Skill);
 
-        EngagementReport secondLoss = WeakReport(2, PilotSkill.Veteran);
-        descending.Observe(in secondLoss);
-        Assert.Equal(PilotSkill.Competent, descending.NextSpawn(3).Skill);
+        EngagementReport hitThenDie = WeakReport(1, PilotSkill.Competent) with {
+            HitsScored = 1,
+        };
+        director.Observe(in hitThenDie);
+        SpawnSpec veteran = director.NextSpawn(2);
+        Assert.Equal(PilotSkill.Veteran, veteran.Skill);
+        Assert.Equal(1, veteran.FormationSize);
+        Assert.False(veteran.Sparring);
 
-        EngagementReport thirdLoss = WeakReport(3, PilotSkill.Competent);
-        descending.Observe(in thirdLoss);
-        Assert.Equal(PilotSkill.Novice, descending.NextSpawn(4).Skill);
-
-        var climbing = new FightDirector();
-        EngagementReport noviceWin = ContestedWin(1, PilotSkill.Novice);
-        climbing.Observe(in noviceWin);
-        Assert.Equal(PilotSkill.Competent, climbing.NextSpawn(2).Skill);
-
-        EngagementReport competentWin = ContestedWin(2, PilotSkill.Competent);
-        climbing.Observe(in competentWin);
-        Assert.Equal(PilotSkill.Veteran, climbing.NextSpawn(3).Skill);
-
-        EngagementReport veteranWin = ContestedWin(3, PilotSkill.Veteran);
-        climbing.Observe(in veteranWin);
-        Assert.Equal(PilotSkill.Ace, climbing.NextSpawn(4).Skill);
-        Assert.Equal(DirectorPhase.Build, climbing.Phase);
-        Assert.Equal(0, climbing.WalkoverStreak);
+        EngagementReport kill = StrongReport(2, PilotSkill.Veteran);
+        director.Observe(in kill);
+        SpawnSpec ace = director.NextSpawn(3);
+        Assert.Equal(PilotSkill.Ace, ace.Skill);
+        Assert.Equal(BanditMount.Baseline, ace.Mount);
+        Assert.Equal(1, ace.FormationSize);
     }
 
-    // The opening fight is now the HARDEST one, on the pilot's instruction: "the first bad guy
-    // should always default to really hard and then once he guns your brains out we can make
-    // things easier." The old ramp opened against a 2.40 G Novice with no lookahead, which could
-    // not turn with a pilot pulling 8-12 G and never fired a round.
+    // Cold open is the floor. Ace, the uprated jet, and the pair are rungs you earn.
     [Fact]
-    public void TheOpeningFightIsTheHardestAndUntouchedWinsHoldItThere() {
+    public void TheOpeningFightIsTheUnprovenRungAndAKillEarnsTheAce() {
         var director = new FightDirector();
 
         SpawnSpec opening = director.NextSpawn(1);
-        Assert.Equal(PilotSkill.Ace, opening.Skill);
-        Assert.Equal(BanditMount.Uprated, opening.Mount);
+        Assert.Equal(PilotSkill.Competent, opening.Skill);
+        Assert.Equal(BanditMount.Baseline, opening.Mount);
+        Assert.Equal(1, opening.FormationSize);
+        Assert.True(opening.Sparring);
+        Assert.False(opening.Boss);
 
-        // Walking over it must not relax anything.
-        EngagementReport walkover = StrongReport(
-            1, opening.Skill, durationSeconds: 20.0);
-        director.Observe(in walkover);
-        Assert.Equal(1, director.WalkoverStreak);
-        Assert.Equal(PilotSkill.Ace, director.NextSpawn(2).Skill);
+        EngagementReport kill = StrongReport(1, opening.Skill, durationSeconds: 20.0);
+        director.Observe(in kill);
+        SpawnSpec earned = director.NextSpawn(2);
+        Assert.Equal(PilotSkill.Ace, earned.Skill);
+        Assert.Equal(BanditMount.Baseline, earned.Mount);
+        Assert.Equal(1, earned.FormationSize);
+        Assert.False(earned.Sparring);
     }
 
     // The other half of the pilot's rule: getting your brains gunned out makes it easier, one rung
@@ -146,9 +141,8 @@ public class FightDirectorTests {
             director.Observe(in loss);
         }
 
-        Assert.Equal(PilotSkill.Ace, served[0]);
-        Assert.True(served[^1] < served[0],
-            $"losing every fight must ease the ladder: {string.Join(" -> ", served)}");
+        Assert.Equal(PilotSkill.Competent, served[0]);
+        Assert.Equal(PilotSkill.Competent, served[^1]);
         // Monotone: a pilot being beaten never gets a HARDER opponent than the one before.
         for (int i = 1; i < served.Count; i++)
             Assert.True(served[i] <= served[i - 1],
@@ -174,7 +168,9 @@ public class FightDirectorTests {
 
         Assert.Equal(0, director.WalkoverStreak);
         SpawnSpec next = director.NextSpawn(4);
-        Assert.Contains("build", next.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, director.Rung);
+        Assert.Equal(PilotSkill.Ace, next.Skill);
+        Assert.Equal(BanditMount.Uprated, next.Mount);
     }
 
     [Fact]
@@ -283,7 +279,10 @@ public class FightDirectorTests {
         director.Observe(in secondReleaseWin);
 
         Assert.Equal(DirectorPhase.Build, director.Phase);
-        Assert.Equal(PilotSkill.Veteran, director.NextSpawn(8).Skill);
+        SpawnSpec afterRelease = director.NextSpawn(8);
+        Assert.Equal(3, director.Rung);
+        Assert.Equal(PilotSkill.Ace, afterRelease.Skill);
+        Assert.Equal(2, afterRelease.FormationSize);
     }
 
     // Regression for the sawtooth caught in the Build 100 production sortie: the player beat the
@@ -376,15 +375,15 @@ public class FightDirectorTests {
             director.Observe(in win);
         }
 
+        Assert.Equal(3, director.Rung);
         SpawnSpec firstLossSpawn = director.NextSpawn(5);
-        Assert.Equal(PilotSkill.Ace, firstLossSpawn.Skill);
         EngagementReport firstLoss = StrongReport(
             5,
             firstLossSpawn.Skill,
             outcome: SortieOutcome.Defeat,
             durationSeconds: 10.0);
         director.Observe(in firstLoss);
-        Assert.Equal(PilotSkill.Ace, director.NextSpawn(6).Skill);
+        Assert.Equal(3, director.Rung);
 
         EngagementReport secondLoss = StrongReport(
             6,
@@ -393,24 +392,10 @@ public class FightDirectorTests {
             durationSeconds: 10.0);
         director.Observe(in secondLoss);
         SpawnSpec eased = director.NextSpawn(7);
-        Assert.Equal(PilotSkill.Veteran, eased.Skill);
-        Assert.Contains("ease", eased.Reason, StringComparison.OrdinalIgnoreCase);
-
-        EngagementReport thirdLoss = StrongReport(
-            7,
-            eased.Skill,
-            outcome: SortieOutcome.Defeat,
-            durationSeconds: 10.0);
-        director.Observe(in thirdLoss);
-        Assert.Equal(PilotSkill.Veteran, director.NextSpawn(8).Skill);
-
-        EngagementReport recovery = StrongReport(
-            8,
-            PilotSkill.Veteran,
-            outcome: SortieOutcome.Victory,
-            durationSeconds: 10.0);
-        director.Observe(in recovery);
-        Assert.Equal(PilotSkill.Ace, director.NextSpawn(9).Skill);
+        Assert.Equal(2, director.Rung);
+        Assert.Equal(PilotSkill.Ace, eased.Skill);
+        Assert.Equal(1, eased.FormationSize);
+        Assert.Equal(BanditMount.Baseline, eased.Mount);
     }
 
     [Fact]
@@ -450,7 +435,8 @@ public class FightDirectorTests {
         Assert.Equal(DirectorPhase.Calm, director.Phase);
         for (int engagement = 1; engagement <= 5; engagement++) {
             SpawnSpec spawn = director.NextSpawn(engagement);
-            Assert.Equal(BanditSkillProfile.ForEngagement(engagement), spawn.Skill);
+            Assert.Equal(PilotSkill.Competent, spawn.Skill);
+            Assert.True(spawn.Sparring);
             Assert.False(spawn.Boss);
         }
     }

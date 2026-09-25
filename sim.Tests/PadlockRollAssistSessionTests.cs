@@ -213,7 +213,7 @@ public class PadlockRollAssistSessionTests {
 
     [Fact]
     public void FormationWingmanSelectionOwnsRollGeometryAndRebindsByIdentity() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         Assert.Single(session.Wingmen);
 
