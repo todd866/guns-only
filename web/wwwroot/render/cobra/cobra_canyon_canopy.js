@@ -1,8 +1,8 @@
 import {
   COBRA_CANYON_CAMP_EMBER_APRON,
   sampleCobraCanyonTerrain,
-} from "./cobra_canyon_plan.js?v=366";
-import { COBRA_NOISE_CHUNK } from "./cobra_canyon_terrain_material.js?v=366";
+} from "./cobra_canyon_plan.js?v=368";
+import { COBRA_NOISE_CHUNK } from "./cobra_canyon_terrain_material.js?v=368";
 
 // A canopy patch is a small stand of rounded tree crowns. One submission adds the
 // missing mid-distance silhouette. These allocations are reserved before the close foliage kit

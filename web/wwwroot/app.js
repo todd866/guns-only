@@ -3,7 +3,7 @@ import { practiceExercise, practiceResult } from "./render/onboarding/practice.j
 import { installDisposedPageRestore } from "./render/onboarding/disposed_page_restore.js";
 import { createPilotNotebook } from "./render/onboarding/pilot_notebook.js";
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=366";
+import { createHud } from "./hud.js?v=368";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -27,7 +27,8 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
   visualMergeDebriefPresentation,
-} from "./render/debrief/sortie_result.js?v=366";
+} from "./render/debrief/sortie_result.js?v=368";
+import { sortieGradeBoard } from "./render/shell/sortie_grade.js?v=368";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -50,11 +51,11 @@ import {
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
   touchFireVisibleLabel,
-} from "./render/onboarding/first_run_valley.js?v=366";
+} from "./render/onboarding/first_run_valley.js?v=368";
 import {
   dialogTabDestination,
   renderedDialogControl,
-} from "./render/onboarding/modal_focus.js?v=366";
+} from "./render/onboarding/modal_focus.js?v=368";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -97,8 +98,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=366";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=366";
+} from "./render/release/release_identity.js?v=368";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=368";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -111,7 +112,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=366";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=368";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -120,10 +121,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=366";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=368";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=366";
+} from "./render/nav/carrier_sortie_touch_control.js?v=368";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -207,7 +208,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=366";
+} from "./render/telemetry/ai_frame_pressure.js?v=368";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -217,15 +218,15 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=366";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=366";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=366";
-import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=366";
+} from "./render/telemetry/telemetry_batch.js?v=368";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=368";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=368";
+import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=368";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=366";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=366";
+} from "./render/shell/boot_watchdog.js?v=368";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=368";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -234,7 +235,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=366";
+} from "./render/settings/player_settings.js?v=368";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -281,13 +282,14 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=366";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=366";
+} from "./render/scene/scene_builders.js?v=368";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=368";
 import {
+  cueInterfaceSound,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=366";
+} from "./render/audio/flight_audio.js?v=368";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -523,6 +525,11 @@ const targetStickHelp = document.querySelector("#target-stick-help");
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
 const readyScreen = document.querySelector("#ready-screen");
+const sortieGrade = document.querySelector("#sortie-grade");
+const sortieGradeKills = document.querySelector("#sortie-grade-kills");
+const sortieGradeAccuracy = document.querySelector("#sortie-grade-accuracy");
+const sortieGradeG = document.querySelector("#sortie-grade-g");
+const sortieGradeTime = document.querySelector("#sortie-grade-time");
 const readyKicker = document.querySelector("#ready-kicker");
 const readyTitle = document.querySelector("#ready-title");
 const readyBrief = document.querySelector("#ready-brief");
@@ -586,6 +593,8 @@ const settingsScreen = document.querySelector("#settings-screen");
 const settingsClose = document.querySelector("#settings-close");
 const settingsCloseBottom = document.querySelector("#settings-close-bottom");
 const settingsAudio = document.querySelector("#setting-audio");
+const settingsMusic = document.querySelector("#setting-music");
+const settingsInterfaceSounds = document.querySelector("#setting-interface-sounds");
 const settingsRadioVoice = document.querySelector("#setting-radio-voice");
 const settingsRadioCaptions = document.querySelector("#setting-radio-captions");
 const settingsAutoGcas = document.querySelector("#setting-autogcas");
@@ -3084,6 +3093,14 @@ function applyPlayerSettings() {
   activeView?.hud.setAudioEnabled(playerSettings.audio);
   activeView?.hud.setControlBindings?.(playerSettings.bindings);
   if (settingsAudio) settingsAudio.checked = playerSettings.audio;
+  if (settingsMusic) {
+    settingsMusic.checked = playerSettings.music !== false;
+    settingsMusic.disabled = !playerSettings.audio;
+  }
+  if (settingsInterfaceSounds) {
+    settingsInterfaceSounds.checked = playerSettings.interfaceSounds !== false;
+    settingsInterfaceSounds.disabled = !playerSettings.audio;
+  }
   if (settingsRadioVoice) {
     settingsRadioVoice.checked = playerSettings.radioVoice !== false;
     settingsRadioVoice.disabled = !playerSettings.audio;
@@ -3107,6 +3124,8 @@ function commitPlayerSettings(next) {
   applyPlayerSettings();
   recorder.context("player_settings", {
     audio: playerSettings.audio,
+    music: playerSettings.music,
+    interfaceSounds: playerSettings.interfaceSounds,
     radioVoice: playerSettings.radioVoice,
     radioCaptions: playerSettings.radioCaptions,
     highContrast: playerSettings.highContrast,
@@ -3220,6 +3239,12 @@ settingsAutoGcas?.addEventListener("change", () => commitPlayerSettings({
 settingsAudio?.addEventListener("change", () => {
   commitAudioPreferenceFromGesture(settingsAudio.checked);
 });
+settingsMusic?.addEventListener("change", () => commitPlayerSettings({
+  ...playerSettings, music: settingsMusic.checked,
+}));
+settingsInterfaceSounds?.addEventListener("change", () => commitPlayerSettings({
+  ...playerSettings, interfaceSounds: settingsInterfaceSounds.checked,
+}));
 for (const control of [readyTelemetrySharing, settingsTelemetrySharing]) {
   control?.addEventListener("change", () => {
     commitTelemetrySharingPreference(control.checked);
@@ -3246,6 +3271,31 @@ settingsTiltSensitivity?.addEventListener("input", () => commitPlayerSettings({
 settingsResetBindings?.addEventListener("click", () => commitPlayerSettings(
   resetControlBindings(playerSettings),
 ));
+
+function cueSettingsInterface(kind) {
+  if (playerSettings.audio === false || playerSettings.interfaceSounds === false) return;
+  cueInterfaceSound(kind);
+}
+for (const surface of [settingsScreen, readyScreen]) {
+  surface?.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("button, a, label"))
+      cueSettingsInterface("click");
+  });
+  surface?.addEventListener("pointerover", (event) => {
+    const control = event.target instanceof Element
+      ? event.target.closest("button, a")
+      : null;
+    if (!control || control.dataset.feelHover === "1") return;
+    control.dataset.feelHover = "1";
+    cueSettingsInterface("hover");
+  });
+  surface?.addEventListener("pointerout", (event) => {
+    const control = event.target instanceof Element
+      ? event.target.closest("button, a")
+      : null;
+    if (control) delete control.dataset.feelHover;
+  });
+}
 applyPlayerSettings();
 
 readyBuildReload?.addEventListener("click", reloadCurrentBuild);
@@ -4479,8 +4529,10 @@ function renderCampaignProgress() {
             ? "coming-soon"
             : "available",
     );
-    if (selected) button.setAttribute("aria-current", "step");
-    else button.removeAttribute("aria-current");
+    if (selected) {
+      button.setAttribute("aria-current", "step");
+      readyScreen.dataset.hero = button.dataset.aircraft || "f22";
+    } else button.removeAttribute("aria-current");
   }
   for (const status of readyProgramStatuses) {
     const nodeId = status.dataset.programStatus;
@@ -4661,6 +4713,20 @@ function renderTopGunPresentationTheme(state = latestState) {
   }));
 }
 
+function paintSortieGrade(state) {
+  if (!sortieGrade) return;
+  if (!state) {
+    sortieGrade.hidden = true;
+    return;
+  }
+  const board = sortieGradeBoard(state);
+  sortieGrade.hidden = false;
+  if (sortieGradeKills) sortieGradeKills.textContent = board.kills;
+  if (sortieGradeAccuracy) sortieGradeAccuracy.textContent = board.accuracy;
+  if (sortieGradeG) sortieGradeG.textContent = board.g;
+  if (sortieGradeTime) sortieGradeTime.textContent = board.time;
+}
+
 function renderPauseUi(state = latestState) {
   const ready = pauseReasons.has("ready");
   const finished = pauseReasons.has("finished");
@@ -4689,6 +4755,7 @@ function renderPauseUi(state = latestState) {
   const practiceReady = ready && !!selectedPracticeExercise;
   readyScreen.dataset.mode = (firstRunReady || practiceReady)
     ? "intro" : ready ? "program" : finished ? "debrief" : "pause";
+  paintSortieGrade(finished && !practiceReady ? state : null);
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
   const casevacReady = ready && selectedBeat === 13;
   readyScreen.dataset.casevacReady = String(casevacReady);
@@ -6309,8 +6376,11 @@ function updateTracerChannel(channel, rounds, authoredLengthMetres = null) {
 
 function updateMuzzleChannel(channel, active, origin, forward, quaternion, roundsFired,
   flashOffset, coneOffset, intensity) {
-  channel.flash.visible = active;
-  channel.cone.visible = active;
+  // The pilot eye sits just aft of the muzzle. The flash sphere and the long cone cross
+  // the near plane and paint an unlit white mass over the lower first-person view.
+  // Tracers carry the gun. These volumes stay off.
+  channel.flash.visible = false;
+  channel.cone.visible = false;
   channel.flash.position.copy(origin).addScaledVector(forward, flashOffset);
   channel.flash.quaternion.copy(quaternion);
   channel.cone.position.copy(origin).addScaledVector(forward, coneOffset);
@@ -6318,11 +6388,11 @@ function updateMuzzleChannel(channel, active, origin, forward, quaternion, round
   channel.light.position.copy(channel.flash.position);
   if (active) {
     const pulse = 0.82 + 0.18 * Math.sin(roundsFired * 2.17);
-    channel.flash.scale.set(1.45 * pulse, 0.72 * pulse, 2.7 * pulse);
+    channel.flash.scale.setScalar(0.35 * pulse);
     channel.cone.scale.set(0.9 * pulse, 0.9 * pulse, 1.45 * pulse);
-    channel.flash.material.opacity = 0.84;
-    channel.cone.material.opacity = 0.72;
-    channel.light.intensity = intensity;
+    channel.flash.material.opacity = 0;
+    channel.cone.material.opacity = 0;
+    channel.light.intensity = 0;
   } else {
     channel.flash.material.opacity = 0;
     channel.cone.material.opacity = 0;
@@ -9838,6 +9908,9 @@ class FlightView {
         || state?.paused === true,
       triggerHeld: !casevac && isGkeyHeld(8),
       radioVoiceEnabled: playerSettings.radioVoice !== false,
+      music: playerSettings.music !== false,
+      interfaceSounds: playerSettings.interfaceSounds !== false,
+      scene: readyScreen?.classList.contains("visible") ? "title" : "flight",
       nowSeconds,
     });
     updateCasevacAudio(state, {
@@ -12053,7 +12126,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=366")
+    navigator.serviceWorker.register("service-worker.js?v=368")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

@@ -196,11 +196,13 @@
 
     #pilot-physiology-vignette {
       opacity: var(--pilot-vignette-opacity);
+      /* Grey-out is lost colour in the periphery. Central black is the separate blackout layer,
+         driven by the same published retinal state. */
       background: radial-gradient(
-        ellipse 72% 64% at 50% 48%,
-        rgba(0, 0, 0, 0) 12%,
-        rgba(0, 0, 0, .16) 48%,
-        rgba(0, 0, 0, .98) 100%
+        ellipse 78% 70% at 50% 46%,
+        rgba(128, 128, 132, 0) 16%,
+        rgba(86, 86, 90, .5) 54%,
+        rgba(54, 54, 58, .9) 100%
       );
     }
 
@@ -2597,6 +2599,7 @@
 
     html.top-gun-anime-1986.run-paused #ready-screen #ready-start {
       border: 2px solid var(--tg-tape);
+      color: var(--tg-lamp);
       background: rgba(255, 196, 96, .18);
       box-shadow: inset 0 0 0 1px var(--tg-tape-edge), 0 0 30px rgba(255, 160, 64, .22);
     }
@@ -3487,7 +3490,7 @@
 
     /* ---------------------------------------------------------------------------------------
        SHARED MISSION-FLOW SURFACES
-       Build 366's picker, first-sortie brief, pause and result are one journey. This final layer
+       Build 368's picker, first-sortie brief, pause and result are one journey. This final layer
        gives those modes the same type scale, spacing, action hierarchy and responsive rules.
        It intentionally does not reach into any in-flight HUD or standalone mission route.
        --------------------------------------------------------------------------------------- */
@@ -3737,7 +3740,7 @@
       }
     }
 
-    /* This rule comes after the pictorial-picker override on purpose. Build 366's earlier
+    /* This rule comes after the pictorial-picker override on purpose. Build 368's earlier
        two-column rule was valid in isolation but lost the cascade to a later display:block,
        leaving Fly below a tall poster grid on phone-shaped landscape screens. */
     @media (max-height: 500px) and (orientation: landscape) {
@@ -3827,6 +3830,8 @@
         #ready-kicker, #ready-title, #ready-brief, .ready-facts
       ) { grid-column: 1; }
 
+      :root #ready-screen[data-mode="debrief"] #sortie-grade { grid-column: 1; }
+
       :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) :is(
         .ready-controls, #ready-start, #ready-replay, #ready-handoff,
         .ready-secondary-actions, #ready-hint, #ready-build-row
@@ -3886,6 +3891,282 @@
         padding-inline: 4px;
         font-size: 11px;
       }
+    }
+
+    /* ---------------------------------------------------------------------------------------
+       FRONT DOOR
+       Boot holds a full-bleed aircraft long enough for the first paint. The programme menu
+       uses that same painting as a hero behind the posters. Intro, pause, and debrief share
+       the type scale already pinned above; this layer only changes what a screenshot shows.
+       --------------------------------------------------------------------------------------- */
+
+
+
+
+
+
+    .boot-load {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(7, 9, 13, .55);
+    }
+
+    #ready-screen[data-mode="program"] {
+      --front-hero: url("./art/jet-f22-generated-v4.webp");
+      background-color: #07090d;
+      background-image:
+        linear-gradient(180deg, rgba(7, 9, 13, .28) 0%, rgba(7, 9, 13, .02) 36%, rgba(7, 9, 13, .78) 76%, #07090d 100%),
+        linear-gradient(90deg, rgba(7, 9, 13, .62) 0%, rgba(7, 9, 13, .08) 46%, rgba(7, 9, 13, .35) 100%),
+        var(--front-hero);
+      background-position: 78% 18%;
+      background-size: cover;
+    }
+
+    #ready-screen[data-hero="f22"] { --front-hero: url("./art/jet-f22-generated-v4.webp"); }
+    #ready-screen[data-hero="rapier"] { --front-hero: url("./art/jet-rapier-hermeus-v1.webp"); }
+    #ready-screen[data-hero="cobra"] { --front-hero: url("./art/jet-cobra-generated-v4.webp"); }
+    #ready-screen[data-hero="bike"] { --front-hero: url("./art/bike-yzf-r1.webp"); }
+    #ready-screen[data-hero="f14"] { --front-hero: url("./art/jet-f14.webp"); }
+    #ready-screen[data-hero="fireboss"] { --front-hero: url("./art/aircraft-fireboss.webp"); }
+    #ready-screen[data-hero="mig-28"] { --front-hero: url("./art/jet-mig-28.webp"); }
+
+    #ready-screen[data-mode="program"] .ready-menu-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: 0 8px 8px;
+    }
+
+
+    #ready-screen[data-mode="program"] #ready-menu-title {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+
+    :root #ready-screen[data-mode="program"] #ready-start,
+    :root #ready-screen[data-mode="program"] #ready-start:hover:not(:disabled),
+    :root #ready-screen[data-mode="program"] #ready-start:focus-visible:not(:disabled) {
+      width: min(440px, 100%);
+      min-height: 64px;
+      border: 0;
+      color: #1c1408;
+      background: linear-gradient(180deg, #fff1c9, #e4b85a);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, .5);
+      font: 600 22px/1 var(--flow-font-display);
+      letter-spacing: .03em;
+      text-transform: none;
+      outline: 3px solid #1c1408;
+      outline-offset: -6px;
+    }
+
+    #ready-screen[data-mode="program"] .ready-domain-tabs button[aria-pressed="true"] {
+      border-color: #e4b85a;
+      color: #1c1408;
+      background: #e4b85a;
+    }
+
+    #ready-screen[data-mode="program"] .ready-mission-groups {
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(7, 9, 13, .55);
+    }
+
+    #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] {
+      border-color: #e4b85a;
+      box-shadow: 0 0 0 1px #e4b85a, 0 16px 40px rgba(0, 0, 0, .45);
+    }
+
+    #ready-screen[data-mode="program"] .ready-secondary-actions button {
+      min-height: 40px;
+      border-color: rgba(253, 246, 230, .28);
+      color: rgba(253, 246, 230, .88);
+      background: rgba(7, 9, 13, .55);
+    }
+
+    #ready-screen[data-mode="program"] #ready-start::after { display: none; }
+
+    #ready-screen[data-mode="program"] .ready-telemetry-disclosure small,
+    #ready-screen[data-mode="program"] .ready-telemetry-disclosure output {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+
+    #ready-screen[data-mode="program"] .ready-telemetry-disclosure {
+      position: relative;
+      margin-top: 8px;
+      text-align: center;
+    }
+
+    .valley-steps {
+      display: none;
+      margin: 0 0 var(--flow-space-4);
+      padding: 0;
+      list-style: none;
+    }
+
+    #ready-screen[data-mode="intro"] .valley-steps {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      max-width: var(--flow-reading-width);
+    }
+
+    #ready-screen[data-mode="intro"] .valley-steps li {
+      display: grid;
+      gap: 4px;
+      min-height: 64px;
+      padding: 8px;
+      border-top: 2px solid #e4b85a;
+      color: var(--flow-ink);
+      background: rgba(7, 9, 13, .45);
+      font: 500 13px/1.1 var(--flow-font-display);
+    }
+
+    #ready-screen[data-mode="intro"] .valley-steps b {
+      color: #f0cf8b;
+      font: 750 9px/1 var(--flow-font-data);
+      letter-spacing: .12em;
+    }
+
+    #ready-screen[data-mode="intro"] .ready-card {
+      width: min(1080px, 100%);
+      border: 0;
+      background:
+        linear-gradient(100deg, rgba(8, 10, 14, .92) 0%, rgba(8, 10, 14, .78) 42%, rgba(8, 10, 14, .28) 100%),
+        url("./art/jet-f22-generated-v4.webp") center 40% / cover no-repeat;
+    }
+
+    #ready-screen[data-mode="intro"] {
+      background-color: #07090d;
+      background-image:
+        linear-gradient(180deg, rgba(7, 9, 13, .35), rgba(7, 9, 13, .72)),
+        url("./art/jet-f22-generated-v4.webp");
+      background-size: cover;
+      background-position: center 40%;
+    }
+
+    #ready-screen[data-mode="intro"] #ready-brief {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-start:focus-visible,
+    :root #ready-screen[data-mode="pause"] #ready-start:focus-visible {
+      outline: 3px solid #1c1408;
+      outline-offset: -6px;
+    }
+
+    #ready-screen[data-mode="intro"] #ready-title {
+      font-size: clamp(48px, 7vw, 84px);
+      letter-spacing: -0.03em;
+    }
+
+    #ready-screen[data-mode="pause"] .ready-menu-header,
+    #ready-screen[data-mode="pause"] #ready-title {
+      display: block;
+    }
+
+    #ready-screen[data-mode="pause"] #ready-menu-title { display: none; }
+
+    #ready-screen[data-mode="pause"] #ready-title {
+      margin: 0 0 18px;
+      color: #fdf6e6;
+      font: 500 clamp(64px, 9vw, 108px)/.9 var(--flow-font-display);
+      letter-spacing: -0.04em;
+      text-align: center;
+    }
+
+    #ready-screen[data-mode="debrief"] #ready-title {
+      font-size: clamp(40px, 6vw, 72px);
+      letter-spacing: -0.03em;
+    }
+
+    .sortie-grade {
+      display: block;
+      margin: 0 0 var(--flow-space-4);
+      padding: var(--flow-space-3);
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-md);
+      background: rgba(7, 9, 13, .55);
+    }
+
+    .sortie-grade[hidden] { display: none; }
+
+
+    .sortie-grade-stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--flow-space-2);
+      margin: 0;
+    }
+
+    .sortie-grade-stats div { min-width: 0; }
+
+    .sortie-grade-stats dt {
+      color: var(--flow-ink-faint);
+      font: 750 9px/1.2 var(--flow-font-data);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .sortie-grade-stats dd {
+      margin: 6px 0 0;
+      color: var(--flow-ink);
+      font: 560 20px/1.1 var(--flow-font-display);
+    }
+
+    .settings-sections { display: grid; gap: 14px; margin: 18px 0; }
+
+    .settings-section {
+      margin: 0;
+      padding: 12px 14px 4px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-md);
+      background: rgba(255, 252, 244, .03);
+    }
+
+    .settings-section legend {
+      padding: 0 8px;
+      color: #f0cf8b;
+      font: 750 10px/1 var(--flow-font-data);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .settings-card { border-top: 3px solid #e4b85a; }
+    .settings-toggle input { accent-color: #e4b85a; }
+    .settings-range input { accent-color: #e4b85a; }
+
+    @media (max-width: 760px) {
+      #ready-screen[data-mode="program"] .ready-secondary-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+      :root #ready-screen[data-mode="program"] #ready-start { min-height: 52px; font-size: 19px; }
+      #ready-laptop-hint {
+        max-width: 34rem;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .sortie-grade { grid-template-columns: 1fr; }
+      .sortie-grade-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #ready-screen[data-mode="intro"] .valley-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
 
     @keyframes boot-pulse {
@@ -4176,7 +4457,7 @@
     <div id="rotate-hint" hidden></div>
   </div>
 
-  <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="program" data-domain="military">
+  <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="program" data-domain="military" data-hero="f22">
     <div class="ready-card">
       <header class="ready-menu-header">
         <div class="ready-menu-brand">Guns Only</div>
@@ -4292,10 +4573,25 @@
           <div id="ready-kicker">Raptor programme · qualification 01</div>
           <h2 id="ready-title">First Merge</h2>
           <p id="ready-brief">You are already at the visual merge. Survive the first pass, fight into the rear quarter, and splash one Su-27 surrogate.</p>
+          <ol class="valley-steps" aria-hidden="true">
+            <li><b>01</b>Valley</li>
+            <li><b>02</b>Pop</li>
+            <li><b>03</b>Heaters</li>
+            <li><b>04</b>Guns</li>
+            <li><b>05</b>Recover</li>
+          </ol>
           <div class="ready-facts" aria-label="Mission details">
             <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">F-22A vs Su-27S · guns only · opening 1v2 guns hot</span></div>
             <div class="ready-fact"><small id="ready-config-label">Configuration</small><span id="ready-config">F-22 public-data surrogate · 480 rounds · Auto-GCAS armed</span></div>
           </div>
+          <section id="sortie-grade" class="sortie-grade" hidden aria-label="Sortie results">
+            <dl class="sortie-grade-stats">
+              <div><dt>Kills</dt><dd id="sortie-grade-kills">0</dd></div>
+              <div><dt>Accuracy</dt><dd id="sortie-grade-accuracy">—</dd></div>
+              <div><dt>Peak G</dt><dd id="sortie-grade-g">—</dd></div>
+              <div><dt>Time</dt><dd id="sortie-grade-time">—</dd></div>
+            </dl>
+          </section>
           <div id="ready-deck-config" class="ready-deck-config" hidden>
             <span class="ready-deck-label">Deck layout</span>
             <div class="ready-deck-options" role="group" aria-label="Carrier deck layout">
@@ -4352,7 +4648,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 366 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 368 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -4372,17 +4668,34 @@ Splash one bandit to qualify · H controls · R restarts</p>
         <button id="settings-close" type="button">Done · Esc</button>
       </header>
       <p id="settings-copy" class="settings-copy">Preferences apply immediately and stay on this device. Touch controls retain their labelled actions when keyboard bindings change.</p>
-      <div class="settings-grid">
-        <label class="settings-toggle"><input id="setting-audio" type="checkbox"> Sound</label>
-        <label class="settings-toggle"><input id="setting-radio-voice" type="checkbox"> Radio voices</label>
-        <label class="settings-toggle"><input id="setting-radio-captions" type="checkbox"> Radio captions</label>
-        <label class="settings-toggle"><input id="setting-autogcas" type="checkbox"> Auto-GCAS backstop</label>
-        <label class="settings-toggle"><input id="setting-high-contrast" type="checkbox"> High-contrast HUD</label>
-        <label class="settings-toggle"><input id="setting-reduced-motion" type="checkbox"> Reduce motion</label>
-        <label class="settings-toggle"><input id="setting-large-text" type="checkbox"> Larger interface text</label>
-        <label class="settings-toggle"><input id="setting-telemetry-sharing" type="checkbox" aria-describedby="setting-telemetry-sharing-copy"> Share detailed flight diagnostics</label>
-        <p id="setting-telemetry-sharing-copy" class="settings-telemetry-copy">Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards anything not yet sent. Minimal shell-health (boot and fatal signals, device class) remains always-on.</p>
-        <label class="settings-range" for="setting-tilt-sensitivity"><span>Tilt sensitivity</span><output id="setting-tilt-sensitivity-value">1.00×</output><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1"></label>
+      <div class="settings-sections">
+        <fieldset class="settings-section">
+          <legend>Audio</legend>
+          <div class="settings-grid">
+            <label class="settings-toggle"><input id="setting-audio" type="checkbox"> Sound</label>
+            <label class="settings-toggle"><input id="setting-music" type="checkbox"> Music</label>
+            <label class="settings-toggle"><input id="setting-interface-sounds" type="checkbox"> Interface sounds</label>
+            <label class="settings-toggle"><input id="setting-radio-voice" type="checkbox"> Radio voices</label>
+            <label class="settings-toggle"><input id="setting-radio-captions" type="checkbox"> Radio captions</label>
+          </div>
+        </fieldset>
+        <fieldset class="settings-section">
+          <legend>Picture</legend>
+          <div class="settings-grid">
+            <label class="settings-toggle"><input id="setting-high-contrast" type="checkbox"> High-contrast HUD</label>
+            <label class="settings-toggle"><input id="setting-reduced-motion" type="checkbox"> Reduce motion</label>
+            <label class="settings-toggle"><input id="setting-large-text" type="checkbox"> Larger interface text</label>
+          </div>
+        </fieldset>
+        <fieldset class="settings-section">
+          <legend>Aircraft</legend>
+          <div class="settings-grid">
+            <label class="settings-toggle"><input id="setting-autogcas" type="checkbox"> Auto-GCAS backstop</label>
+            <label class="settings-range" for="setting-tilt-sensitivity"><span>Tilt sensitivity</span><output id="setting-tilt-sensitivity-value">1.00×</output><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1"></label>
+            <label class="settings-toggle"><input id="setting-telemetry-sharing" type="checkbox" aria-describedby="setting-telemetry-sharing-copy"> Share detailed flight diagnostics</label>
+            <p id="setting-telemetry-sharing-copy" class="settings-telemetry-copy">Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards anything not yet sent. Minimal shell-health (boot and fatal signals, device class) remains always-on.</p>
+          </div>
+        </fieldset>
       </div>
       <details id="settings-keyboard-bindings" class="settings-disclosure" open>
         <summary>Keyboard flight controls</summary>
@@ -4456,7 +4769,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=366", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=368", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -4552,11 +4865,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=366");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=366", {
+      await loadClassicScript("./multiplayer-config.js?v=368");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=368", {
         autostart: "false",
       });
-      await import("./app.js?v=366");
+      await import("./app.js?v=368");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -4569,8 +4882,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=366"),
-            import("./render/shell/boot_fallback.js?v=366"),
+            import("./render/shell/inapp_browser.js?v=368"),
+            import("./render/shell/boot_fallback.js?v=368"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,

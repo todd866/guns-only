@@ -32,7 +32,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=366";
+} from "./render/hud/contact_visibility.js?v=368";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import { patternEnergyWord } from "./render/hud/approach_energy.js";
 import {
@@ -72,21 +72,36 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=366";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=368";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=366";
+} from "./render/mission/rapier_high_mach_instruments.js?v=368";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
-} from "./render/hud/limits_panel.js?v=366";
+} from "./render/hud/limits_panel.js?v=368";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   fillLegibleHudText,
   isEssentialHudGreenFill,
   strokeLegiblePath,
 } from "./render/hud/hud_legibility.js";
+import {
+  annunciatorChrome,
+  bankIndexTicks,
+  hitMarkerOffsets,
+  hudFont,
+  killFlashPresentation,
+  leadPipperSpec,
+  readHudPhosphorOptions,
+  strokePhosphorPass,
+  traceAnnunciatorPlate,
+  traceCornerBrackets,
+  traceHitMarker,
+  traceLeadPipper,
+  traceOffscreenArrow,
+} from "./render/hud/hud_phosphor.js";
 import {
   cobraAccelCaretPx,
   cobraHoverStubPixels,
@@ -95,7 +110,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=366";
+} from "./render/audio/flight_audio.js?v=368";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -418,6 +433,10 @@ class CombatHud {
     this._padlockLiftCaptured = false;
     this._padlockCaptureEntityId = "";
     this._padlockTrackEstablished = false;
+    this._phosphor = readHudPhosphorOptions(null);
+    this._splashCueLatched = false;
+    this._splashStartedAt = -Infinity;
+    this._ownHitCount = 0;
   }
 
   resize(width, height, pixelRatio, safeInsets = null) {
@@ -486,6 +505,7 @@ class CombatHud {
   noteCombatEvent(event, now) {
     if (!event || !Number.isFinite(now)) return;
     if (event.type === "HIT" && event.target === "OPPONENT") {
+      this._ownHitCount = Math.max(1, Math.floor(Number(event.count) || 1));
       this._hitFlashUntil = Math.max(this._hitFlashUntil, now + 0.34);
     } else if (event.type === "HIT" && event.target === "PLAYER") {
       this._incomingHitCount = Math.max(1, Math.floor(Number(event.count) || 1));
@@ -573,9 +593,10 @@ class CombatHud {
 
   setLine(color = GREEN, width = 1.35) {
     const ctx = this.ctx;
+    const scale = this._phosphor?.scale ?? 1;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    ctx.lineWidth = width;
+    ctx.lineWidth = width * (this._phosphor?.highContrast ? Math.max(scale, 1.15) : scale);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
   }
@@ -584,14 +605,49 @@ class CombatHud {
     strokeLegiblePath(this.ctx);
   }
 
+  glowPath(glow = this._phosphor?.palette?.glow) {
+    const phosphor = this._phosphor;
+    strokePhosphorPass(this.ctx, {
+      glow: phosphor?.highContrast ? null : glow,
+      alpha: phosphor?.glowAlpha ?? 0.28,
+      lineWidthBoost: 2.1 * (phosphor?.scale ?? 1),
+    });
+  }
+
+  // Soft phosphor halo, then the dark underlay + crisp stroke. One extra vector pass, no blur.
+  strokePhosphor(glow = this._phosphor?.palette?.glow) {
+    this.glowPath(glow);
+    this.strokeLegible();
+  }
+
+  hudFont(sizePx, weight = 700) {
+    return hudFont(sizePx, { weight, scale: this._phosphor?.scale ?? 1 });
+  }
+
+  paintAnnunciator(x, y, width, height, level) {
+    const ctx = this.ctx;
+    const chrome = annunciatorChrome(level);
+    traceAnnunciatorPlate(ctx, x, y, width, height);
+    ctx.fillStyle = chrome.fill;
+    ctx.fill();
+    ctx.strokeStyle = chrome.stroke;
+    ctx.lineWidth = (level === "critical" ? 1.6 : 1.15) * (this._phosphor?.scale ?? 1);
+    this.strokePhosphor(chrome.stroke);
+    return chrome;
+  }
+
   glassPanel(x, y, width, height, border = GREEN_FAINT) {
     const ctx = this.ctx;
-    roundedRect(ctx, x, y, width, height, 5);
-    ctx.fillStyle = GLASS;
+    const level = border === RED ? "critical"
+      : border === AMBER ? "caution"
+        : border === GREEN ? "confirm" : "advisory";
+    const chrome = annunciatorChrome(level);
+    traceAnnunciatorPlate(ctx, x, y, width, height);
+    ctx.fillStyle = this._phosphor?.palette?.plate ?? GLASS;
     ctx.fill();
-    ctx.strokeStyle = border;
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    ctx.strokeStyle = level === "advisory" ? border : chrome.stroke;
+    ctx.lineWidth = 1.15 * (this._phosphor?.scale ?? 1);
+    this.strokePhosphor(level === "advisory" ? border : chrome.stroke);
   }
 
   getTapeInset() {
@@ -679,7 +735,7 @@ class CombatHud {
     ctx.arc(projectionCenterX, projectionCenterY, exclusionRadius, 0, Math.PI * 2);
     ctx.clip("evenodd");
 
-    ctx.font = `${compactMobile ? "700 8px" : "600 10px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    ctx.font = this.hudFont(compactMobile ? 9 : 11, compactMobile ? 700 : 600);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const rungStep = compactMobile ? 10 : 5;
@@ -729,12 +785,13 @@ class CombatHud {
       ctx.globalAlpha *= edgeAlpha;
       ctx.strokeStyle = rung === 0 ? GREEN : GREEN_DIM;
       ctx.fillStyle = rung === 0 ? GREEN : GREEN_DIM;
-      ctx.lineWidth = rung === 0 ? 1.8 : major ? 1.2 : 1.0;
+      ctx.lineWidth = (rung === 0 ? 1.85 : major ? 1.35 : 1.05) * (this._phosphor?.scale ?? 1);
       // Negative rungs: calm long dashes, not confetti.
       ctx.setLineDash(rung < 0 ? [12, 7] : []);
       ctx.beginPath();
       segment(-halfWidth, localY, -centerGap, localY);
       segment(centerGap, localY, halfWidth, localY);
+      this.glowPath(rung === 0 ? this._phosphor?.palette?.hot : undefined);
       this.strokeLegible();
       if (major && rung !== 0) {
         // Solid end teeth pointing toward the horizon, even on dashed negative rungs.
@@ -743,11 +800,13 @@ class CombatHud {
         ctx.beginPath();
         segment(-halfWidth, localY, -halfWidth, localY + tooth);
         segment(halfWidth, localY, halfWidth, localY + tooth);
+        this.glowPath();
         this.strokeLegible();
       } else if (rung === 0) {
         ctx.beginPath();
         segment(-centerGap, localY, -centerGap + 8, localY - 5);
         segment(centerGap, localY, centerGap - 8, localY - 5);
+        this.glowPath();
         this.strokeLegible();
       }
 
@@ -799,8 +858,10 @@ class CombatHud {
     ctx.lineTo(0, 5);
     ctx.lineTo(6, 0);
     ctx.lineTo(15, 0);
+    this.glowPath();
     this.strokeLegible();
     ctx.restore();
+    this.drawBankIndex(anchor, state);
 
     const fpvVisible = fpvAnchor && !fpvAnchor.behind
       && Number.isFinite(fpvAnchor.x) && Number.isFinite(fpvAnchor.y);
@@ -875,6 +936,60 @@ class CombatHud {
       ctx.restore();
     }
     void dt;
+    ctx.restore();
+  }
+
+  // Screen-up caret over a banked tick arc, sitting in the ladder's centre hole.
+  drawBankIndex(anchor, state) {
+    if (this.usesMobileTacticalProfile()) return;
+    const ctx = this.ctx;
+    const scale = this._phosphor?.scale ?? 1;
+    const radius = 34 * scale;
+    const bank = -(Number(state?.bank_deg) || 0) * DEG;
+    ctx.save();
+    ctx.translate(anchor.x, anchor.y);
+    ctx.strokeStyle = GREEN_DIM;
+    ctx.fillStyle = GREEN;
+    ctx.lineWidth = 1.15 * scale;
+    ctx.beginPath();
+    for (const tick of bankIndexTicks(bank)) {
+      const inner = tick.major ? radius - 7 * scale : radius - 4 * scale;
+      const outer = radius;
+      ctx.moveTo(Math.sin(tick.rad) * inner, -Math.cos(tick.rad) * inner);
+      ctx.lineTo(Math.sin(tick.rad) * outer, -Math.cos(tick.rad) * outer);
+    }
+    this.glowPath();
+    this.strokeLegible();
+    ctx.beginPath();
+    ctx.moveTo(0, -radius - 2 * scale);
+    ctx.lineTo(-4.5 * scale, -radius - 9 * scale);
+    ctx.lineTo(4.5 * scale, -radius - 9 * scale);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawHitMarkers(x, y, now) {
+    const age = 0.34 - (this._hitFlashUntil - now);
+    const marks = hitMarkerOffsets(age, this._ownHitCount || 1, {
+      reducedMotion: this._phosphor?.reducedMotion === true,
+    });
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.strokeStyle = GREEN;
+    ctx.lineWidth = 1.4 * (this._phosphor?.scale ?? 1);
+    for (const mark of marks) {
+      if (mark.alpha <= 0.02) continue;
+      ctx.save();
+      ctx.globalAlpha *= mark.alpha;
+      ctx.beginPath();
+      ctx.translate(mark.x, mark.y);
+      traceHitMarker(ctx, mark.size);
+      this.glowPath(GREEN);
+      this.strokeLegible();
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -968,6 +1083,7 @@ class CombatHud {
     const hits = Number(state.hits) || 0;
     if (hits < this._lastHudHits) this._lastHudHits = hits;
     if (!Array.isArray(state.recent_events) && hits > this._lastHudHits) {
+      this._ownHitCount = hits - this._lastHudHits;
       this._hitFlashUntil = now + 0.34;
     }
     this._lastHudHits = hits;
@@ -1057,20 +1173,21 @@ class CombatHud {
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.translate(pipperX, pipperY);
-      this.setLine(color, solution || triggerHeld ? 2.0 : 1.45);
-      ctx.shadowColor = hitFlash ? "rgba(77, 255, 136, 0.8)" : "rgba(255, 176, 32, 0.52)";
-      ctx.shadowBlur = solution || hitFlash ? 9 : 4;
-      ctx.beginPath();
-      ctx.arc(0, 0, 17, 0, Math.PI * 2);
-      ctx.moveTo(-25, 0); ctx.lineTo(-13, 0);
-      ctx.moveTo(13, 0); ctx.lineTo(25, 0);
-      ctx.moveTo(0, -25); ctx.lineTo(0, -13);
-      ctx.moveTo(0, 13); ctx.lineTo(0, 25);
+      const pipper = leadPipperSpec({
+        inRange: solution,
+        hit: hitFlash,
+        wasted,
+        scale: this._phosphor?.scale ?? 1,
+      });
+      this.setLine(pipper.stroke, pipper.lineWidth);
+      traceLeadPipper(ctx, pipper);
+      this.glowPath(hitFlash || solution ? GREEN : AMBER);
       this.strokeLegible();
       ctx.beginPath();
-      ctx.arc(0, 0, 2, 0, Math.PI * 2);
+      ctx.fillStyle = pipper.stroke;
+      ctx.arc(0, 0, pipper.dot, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
+      if (hitFlash) this.drawHitMarkers(0, 0, now);
       ctx.restore();
     }
 
@@ -1510,25 +1627,15 @@ class CombatHud {
     const ctx = this.ctx;
     const size = 18;
     const corner = 6;
+    ctx.save();
+    ctx.translate(x, y);
     this.setLine(color, 1.35);
-    ctx.shadowColor = color === AMBER
-      ? "rgba(255, 176, 32, 0.34)" : "rgba(77, 255, 136, 0.30)";
-    ctx.shadowBlur = 4;
     ctx.beginPath();
-    ctx.moveTo(x - size, y - size + corner);
-    ctx.lineTo(x - size, y - size);
-    ctx.lineTo(x - size + corner, y - size);
-    ctx.moveTo(x + size - corner, y - size);
-    ctx.lineTo(x + size, y - size);
-    ctx.lineTo(x + size, y - size + corner);
-    ctx.moveTo(x + size, y + size - corner);
-    ctx.lineTo(x + size, y + size);
-    ctx.lineTo(x + size - corner, y + size);
-    ctx.moveTo(x - size + corner, y + size);
-    ctx.lineTo(x - size, y + size);
-    ctx.lineTo(x - size, y + size - corner);
+    traceCornerBrackets(ctx, size, corner);
+    traceCornerBrackets(ctx, size + 4, 3, 0);
+    this.glowPath(color);
     this.strokeLegible();
-    ctx.shadowBlur = 0;
+    ctx.restore();
     const state = frame.state;
     let label;
     if (selected) {
@@ -1602,24 +1709,15 @@ class CombatHud {
 
     if (inside && !bvrContact) {
       const corner = 8;
+      ctx.save();
+      ctx.translate(projection.x, projection.y);
       this.setLine(color, solution ? 1.8 : 1.35);
-      ctx.shadowColor = solution ? "rgba(255, 176, 32, 0.46)" : "rgba(77, 255, 136, 0.34)";
-      ctx.shadowBlur = 5;
       ctx.beginPath();
-      ctx.moveTo(projection.x - size, projection.y - size + corner);
-      ctx.lineTo(projection.x - size, projection.y - size);
-      ctx.lineTo(projection.x - size + corner, projection.y - size);
-      ctx.moveTo(projection.x + size - corner, projection.y - size);
-      ctx.lineTo(projection.x + size, projection.y - size);
-      ctx.lineTo(projection.x + size, projection.y - size + corner);
-      ctx.moveTo(projection.x + size, projection.y + size - corner);
-      ctx.lineTo(projection.x + size, projection.y + size);
-      ctx.lineTo(projection.x + size - corner, projection.y + size);
-      ctx.moveTo(projection.x - size + corner, projection.y + size);
-      ctx.lineTo(projection.x - size, projection.y + size);
-      ctx.lineTo(projection.x - size, projection.y + size - corner);
+      traceCornerBrackets(ctx, size, corner);
+      if (solution) traceCornerBrackets(ctx, size - 6, 4);
+      this.glowPath(color);
       this.strokeLegible();
-      ctx.shadowBlur = 0;
+      ctx.restore();
 
       // The selected padlock target gets one centre dot inside the ordinary target brackets.
       // drawPadlockSa deliberately does not add a second diamond over the same aircraft.
@@ -1810,20 +1908,11 @@ class CombatHud {
     ctx.rotate(angle);
     this.setLine(locatorAmber ? AMBER : GREEN, frame.padlock ? 2.25 : 1.6);
     ctx.fillStyle = locatorFill;
-    ctx.shadowColor = frame.padlock ? "rgba(255, 176, 32, 0.68)" : "transparent";
-    ctx.shadowBlur = frame.padlock ? 8 : 0;
-    const locatorTip = mobileTactical ? 17 : 12;
-    const locatorTail = mobileTactical ? -10 : -8;
-    const locatorHalfHeight = mobileTactical ? 10 : 8;
     ctx.beginPath();
-    ctx.moveTo(locatorTip, 0);
-    ctx.lineTo(locatorTail, -locatorHalfHeight);
-    ctx.lineTo(mobileTactical ? -3 : -3, 0);
-    ctx.lineTo(locatorTail, locatorHalfHeight);
-    ctx.closePath();
+    traceOffscreenArrow(ctx, { scale: (mobileTactical ? 1.35 : 1) * (this._phosphor?.scale ?? 1) });
     ctx.fill();
+    this.glowPath(locatorAmber ? AMBER : GREEN);
     this.strokeLegible();
-    ctx.shadowBlur = 0;
     ctx.restore();
 
     const length = Math.hypot(dx, dy) || 1;
@@ -2031,7 +2120,7 @@ class CombatHud {
     ctx.fill();
     this.strokeLegible();
     ctx.fillStyle = GREEN;
-    ctx.font = "700 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = this.hudFont(15, 700);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const shownHeading = Number.isFinite(headingDigits) ? headingDigits : heading;
@@ -2209,6 +2298,20 @@ class CombatHud {
     }
 
     if (!raid && state.splash_cue === true && state.finished !== true) {
+      const flash = killFlashPresentation(
+        Math.max(0, Number(frame.now) - this._splashStartedAt),
+        { reducedMotion: this._phosphor?.reducedMotion === true },
+      );
+      if (flash.alpha > 0.015) {
+        const bloom = ctx.createRadialGradient(
+          this.width * 0.5, this.height * 0.42, 40,
+          this.width * 0.5, this.height * 0.5, Math.max(this.width, this.height) * 0.55,
+        );
+        bloom.addColorStop(0, `rgba(77, 255, 136, ${flash.alpha})`);
+        bloom.addColorStop(1, "rgba(77, 255, 136, 0)");
+        ctx.fillStyle = bloom;
+        ctx.fillRect(0, 0, this.width, this.height);
+      }
       const width = Math.min(330, this.width - 34);
       const height = CombatHud.ANNUNCIATION_ROW;
       const cueX = (this.width - width) / 2;
@@ -2641,7 +2744,7 @@ class CombatHud {
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = GREEN;
-    ctx.font = "700 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = this.hudFont(13, 700);
     ctx.textAlign = "center";
     ctx.fillText(displayValueValid ? `${displayValue.toFixed(decimals)}${suffix}` : "---",
       x, centerY + 0.5);
@@ -3177,14 +3280,17 @@ class CombatHud {
       const text = gcasActive ? "AUTO GCAS · FLYUP"
         : gcasWarning ? "PULL UP"
           : gcasLowEnergy ? "AIRSPEED" : "GCAS TERRAIN";
-      ctx.shadowColor = gcasActive || gcasWarning
-        ? "rgba(255, 70, 93, 0.62)" : "rgba(255, 176, 32, 0.5)";
-      ctx.shadowBlur = 10;
-      ctx.fillStyle = gcasActive || gcasWarning ? RED : AMBER;
-      ctx.font = "800 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      const level = gcasActive || gcasWarning ? "critical" : "caution";
+      ctx.save();
+      ctx.font = this.hudFont(level === "critical" ? 18 : 15, 800);
       ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const plateWidth = Math.min(this.width - 48, Math.max(148, ctx.measureText(text).width + 36));
+      const chrome = this.paintAnnunciator(
+        (this.width - plateWidth) / 2, warningY - 16, plateWidth, 32, level);
+      ctx.fillStyle = chrome.label;
       ctx.fillText(text, this.width / 2, warningY);
-      ctx.shadowBlur = 0;
+      ctx.restore();
       occupiedLines += 1;
       if (this._debug) this._debug.warningLine = text;
     } else if (gcasBottomLineVisible) {
@@ -3314,6 +3420,11 @@ class CombatHud {
       const pullUpY = frame.padlock
         ? Math.max(this.safeInsets.top + 150, this.height - this.safeInsets.bottom - 286)
         : this.height - this.safeInsets.bottom - 104;
+      ctx.font = this.hudFont(18, 800);
+      const plateWidth = Math.min(220, this.width - 48);
+      const chrome = this.paintAnnunciator(
+        (this.width - plateWidth) / 2, pullUpY - 16, plateWidth, 32, "critical");
+      ctx.fillStyle = chrome.label;
       ctx.fillText("PULL UP", this.width / 2, pullUpY);
       ctx.restore();
     }
@@ -5741,6 +5852,15 @@ class CombatHud {
 
   draw(frame) {
     const ctx = this.ctx;
+    const root = typeof document !== "undefined" ? document.documentElement : null;
+    this._phosphor = readHudPhosphorOptions(root, { width: this.width, height: this.height });
+    const splashNow = frame.state?.splash_cue === true && frame.state?.finished !== true;
+    if (splashNow && this._splashCueLatched !== true) {
+      this._splashStartedAt = Number(frame.now) || 0;
+      this._splashCueLatched = true;
+    } else if (!splashNow) {
+      this._splashCueLatched = false;
+    }
     ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
     // Contact-label collision avoidance is per-frame; stale rectangles would push this frame's
