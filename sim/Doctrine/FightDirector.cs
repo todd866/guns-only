@@ -109,8 +109,10 @@ public sealed class FightDirector {
     /// player's death into their next life instead of resetting with the sortie.
     public bool HasHistory => _anyObserved || _phase != DirectorPhase.Calm;
 
-    public void Observe(in EngagementReport report) {
-        if (report.EligibleForLearning)
+    public void Observe(in EngagementReport report, bool advanceRamp = true) {
+        // advanceRamp is the F-22 ladder only. Other beats still teach the learner
+        // and the boss phase; they must not climb a rung or fade their own gun law.
+        if (advanceRamp && report.EligibleForLearning)
             ApplyRamp(in report);
         _learner.Observe(in report);
         _lastOpponent = report.OpponentSkill;

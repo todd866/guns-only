@@ -6557,8 +6557,10 @@ public sealed partial class SimulationSession {
         EngagementReport report = BuildEngagementReport(
             outcome, EngagementEndReason.CombatResult);
         _engagementReports.Add(report);
+        // Only the F-22 ramp (visual merge and the valley) moves rungs. Other
+        // beats still record the fight for the learner, without fading their assist.
         if (report.EligibleForLearning)
-            _fightDirector.Observe(in report);
+            _fightDirector.Observe(in report, advanceRamp: UsesDifficultyRamp(_beat));
         _engagementCounters.Active = false;
     }
 
@@ -7167,6 +7169,44 @@ public sealed partial class SimulationSession {
         _pilotLateralCommitmentState = _pilotLateralCommitment.Step(
             rawPilotRollControl, FixedDeltaSeconds);
 
+    /// <summary>
+    /// Authored gun-assist law for this beat. The F-22 ramp fades gain and correction by rung.
+    /// Every other aircraft keeps the parameters on its airframe, plus the touch widening that
+    /// origin/main applied whenever the pilot is on tilt controls.
+    /// </summary>
+    internal AircraftParams GunneryPitchAssistAir() {
+        if (!UsesDifficultyRamp(_beat)) {
+            if (_touchControlModality && !CardTwelveRequiresPilotGunTrigger)
+                return WidenGunneryAssistForTouch(_beat.PlayerAir);
+            return _beat.PlayerAir;
+        }
+
+        FightDirector.PitchAssistScale assistScale = _fightDirector.PitchAssist;
+        AircraftParams assistAir = _beat.PlayerAir with {
+            GunneryPitchAssistGainPerSecond =
+                _beat.PlayerAir.GunneryPitchAssistGainPerSecond * assistScale.GainScale,
+            GunneryPitchAssistMaxCorrectionG =
+                _beat.PlayerAir.GunneryPitchAssistMaxCorrectionG * assistScale.CorrectionScale,
+        };
+        if (!assistScale.Active) {
+            return assistAir with {
+                GunneryPitchAssistGainPerSecond = 0.0,
+                GunneryPitchAssistMaxCorrectionG = 0.0,
+            };
+        }
+        if (_touchControlModality
+            && !CardTwelveRequiresPilotGunTrigger
+            && _fightDirector.Rung <= 1)
+            return WidenGunneryAssistForTouch(assistAir);
+        return assistAir;
+    }
+
+    static AircraftParams WidenGunneryAssistForTouch(AircraftParams air) => air with {
+        GunneryPitchAssistCaptureAngleRad = air.GunneryPitchAssistCaptureAngleRad * 1.35,
+        GunneryPitchAssistMaxCorrectionG = air.GunneryPitchAssistMaxCorrectionG + 1.0,
+        GunneryLateralAssistRollGain = air.GunneryLateralAssistRollGain * 1.25,
+    };
+
     PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {
         AircraftState selectedTarget = SelectedOpponentState;
         bool enabled = !CardTwelveRequiresPilotGunTrigger
@@ -7185,31 +7225,9 @@ public sealed partial class SimulationSession {
             && _playerGunTargetPadlockRollAssistTargetId == _selectedPlayerGunTargetId;
         // A wider capture cone and one extra protected G on touch: tilt input cannot hold the
         // funnel the way arrow keys can. Ballistics stay untouched — the assist magnetises the
-        // nose, the rounds still have to fly there.
-        FightDirector.PitchAssistScale assistScale = _fightDirector.PitchAssist;
-        AircraftParams assistAir = _beat.PlayerAir with {
-            GunneryPitchAssistGainPerSecond =
-                _beat.PlayerAir.GunneryPitchAssistGainPerSecond * assistScale.GainScale,
-            GunneryPitchAssistMaxCorrectionG =
-                _beat.PlayerAir.GunneryPitchAssistMaxCorrectionG * assistScale.CorrectionScale,
-        };
-        if (!assistScale.Active) {
-            assistAir = assistAir with {
-                GunneryPitchAssistGainPerSecond = 0.0,
-                GunneryPitchAssistMaxCorrectionG = 0.0,
-            };
-        } else if (_touchControlModality
-            && !CardTwelveRequiresPilotGunTrigger
-            && _fightDirector.Rung <= 1) {
-            assistAir = assistAir with {
-                GunneryPitchAssistCaptureAngleRad =
-                    _beat.PlayerAir.GunneryPitchAssistCaptureAngleRad * 1.35,
-                GunneryPitchAssistMaxCorrectionG =
-                    assistAir.GunneryPitchAssistMaxCorrectionG + 1.0,
-                GunneryLateralAssistRollGain =
-                    _beat.PlayerAir.GunneryLateralAssistRollGain * 1.25,
-            };
-        }
+        // nose, the rounds still have to fly there. The rung scale is the F-22 ramp only.
+        // Every other beat keeps the authored law, including the touch widening from origin/main.
+        AircraftParams assistAir = GunneryPitchAssistAir();
         GunneryPitchAssistResult result = GunsOnly.Sim.GunneryPitchAssist.Apply(
             requestedPilotCommand,
             _player.State,
@@ -8024,9 +8042,13 @@ public sealed partial class SimulationSession {
         if (!CompletePlayerRecovery()) return;
 
         // A knock-it-off before the billed cap is a discontinue. Splashing the cap and stopping
-        // on the runway is the end of the sortie. The Kestrel first sortie keeps its own rule:
-        // splash the pair and recover.
-        bool firstRunComplete = _beat.FirstRunValley is not null && _killCount >= 2;
+        // on the runway is the end of the sortie. Kestrel's rung-0 opening is one aircraft;
+        // a restored higher rung may still be a pair. Landing after that fight is empty is
+        // the victory. Leaving with nobody splashed stays a discontinue.
+        bool firstRunComplete = _beat.FirstRunValley is not null
+            && _killCount >= 1
+            && _opponentTerminalState != AircraftTerminalState.Flying
+            && !_wingmen.Any(static wingman => wingman.StillFighting);
         SortieOutcome recovered = firstRunComplete || _billedSortieComplete
             ? SortieOutcome.Victory
             : SortieOutcome.Discontinued;

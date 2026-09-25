@@ -1,4 +1,9 @@
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
+import {
+  createDirectorPersistence,
+  rampMissionActive as directorRampMissionActive,
+  routeRestoresDirector,
+} from "./render/progression/difficulty_ramp_persist.js";
 import { practiceExercise, practiceResult } from "./render/onboarding/practice.js";
 import { installDisposedPageRestore } from "./render/onboarding/disposed_page_restore.js";
 import { createPilotNotebook } from "./render/onboarding/pilot_notebook.js";
@@ -2060,52 +2065,31 @@ function resetAdaptiveAiBudget({ recordInitial = false } = {}) {
 //
 // The payload is opaque to this layer and self-validating on the far side: anything malformed is
 // rejected wholesale and the sortie opens cold, so a corrupt value can never half-apply.
-const DIRECTOR_STATE_STORAGE = "guns-only.fight-director.v2";
-const DIRECTOR_STATE_STORAGE_V1 = "guns-only.fight-director.v1";
-
-function loadDirectorState() {
-  try {
-    return globalThis.localStorage?.getItem(DIRECTOR_STATE_STORAGE)
-      || globalThis.localStorage?.getItem(DIRECTOR_STATE_STORAGE_V1)
-      || "";
-  } catch { return ""; }
-}
-
 function rampMissionActive(state) {
-  return selectedProgramNodeId === "first-merge"
-    || state?.mission_id === "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1"
-    || state?.mission_id === "mission.modern.visual-merge.first-run-valley.v1";
+  const source = state === undefined ? latestState : state;
+  return directorRampMissionActive({
+    programId: selectedProgramNodeId,
+    missionId: source?.mission_id ?? "",
+  });
 }
 
-let directorObservationKey = "";
+const directorPersistence = createDirectorPersistence({
+  storage: globalThis.localStorage,
+  exportState: () => bridge?.ExportDirectorState?.() ?? "",
+  armState: (blob) => bridge?.ArmDirectorStateForNextStage?.(blob),
+  missionActive: (state) => rampMissionActive(state),
+});
 
 function persistDirectorObservation(state) {
-  if (!rampMissionActive(state)) return;
-  const key = [
-    state?.engagement_number,
-    state?.kill_count,
-    state?.difficulty_rung,
-    state?.session_phase,
-  ].join("|");
-  if (key === directorObservationKey) return;
-  const hadPrior = directorObservationKey !== "";
-  directorObservationKey = key;
-  if (hadPrior) saveDirectorState();
+  directorPersistence.persistObservation(state);
 }
 
 function saveDirectorState() {
-  try {
-    if (!rampMissionActive(latestState)) return;
-    const state = bridge?.ExportDirectorState?.();
-    if (state) globalThis.localStorage?.setItem(DIRECTOR_STATE_STORAGE, state);
-  } catch { /* persistence must never be able to disturb a sortie */ }
+  directorPersistence.save();
 }
 
 function armDirectorRestore() {
-  try {
-    const saved = loadDirectorState();
-    if (saved) bridge?.ArmDirectorStateForNextStage?.(saved);
-  } catch { /* a bad stored value opens at rung 0 */ }
+  directorPersistence.restore();
 }
 
 function restoreDirectorState() {
@@ -2745,10 +2729,8 @@ window.addEventListener("beforeunload", () => {
   recorder.flush({ force: true });
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    saveDirectorState();
-    recorder.flush({ force: true });
-  }
+  if (document.hidden) saveDirectorState();
+  if (document.hidden) recorder.flush({ force: true });
   else if (!document.hidden) void resolveBuildIdentity();
 });
 installDisposedPageRestore();
@@ -3606,7 +3588,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     controls: "Arrows fly · W/S power · O returns to ship when the route calls RTB\nSpace G limiter · H controls",
   }),
   "first-merge": Object.freeze({
-    kicker: "2030s Ukraine · F-22A · endless",
+    kicker: "2030s Ukraine · F-22A · two engagements",
     title: "Guns Only",
     sortie: "F-22A vs escalating opposition · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
@@ -5246,7 +5228,7 @@ function enterReady({
         top_gun_seat: topGunSeatLabel(selectedTopGunSeat),
       });
     } else if (forceFirstRunValley || shouldStageFirstRunValley()) {
-      armDirectorRestore();
+      if (routeRestoresDirector({ valley: true })) armDirectorRestore();
       bridge.StartFirstRunValley();
       stagedMissionAuthority = firstRunValleyMissionAuthority();
       firstRunAutostartPending = true;
@@ -5267,7 +5249,7 @@ function enterReady({
       if (!sameSortie) {
         // StartBeat resets the director, then applies an armed blob before the opening spawn.
         // Only the F-22 ramp reads that blob. Other beats keep their authored opening.
-        if (selectedProgramNodeId === "first-merge") armDirectorRestore();
+        if (routeRestoresDirector({ programId: selectedProgramNodeId })) armDirectorRestore();
         bridge.StartBeat(selectedBeat);
       }
       stagedMissionAuthority = desiredAuthority;
@@ -11828,13 +11810,13 @@ async function boot() {
   // on-ramp. A blocked Top Gun deep link never becomes selected, and even an acknowledged preview
   // crosses StartTopGun only after this harmless default exists behind the Ready interlock.
   if (shouldStageFirstRunValley()) {
-    armDirectorRestore();
+    if (routeRestoresDirector({ valley: true })) armDirectorRestore();
     bridge.StartFirstRunValley();
     stagedMissionAuthority = firstRunValleyMissionAuthority();
     firstRunAutostartPending = true;
     autoLaunchPending = false;
   } else {
-    if (selectedProgramNodeId === "first-merge") armDirectorRestore();
+    if (routeRestoresDirector({ programId: selectedProgramNodeId })) armDirectorRestore();
     bridge.StartBeat(selectedBeat);
     stagedMissionAuthority = selectedProductionMissionAuthority();
     if (isTopGunProgram()

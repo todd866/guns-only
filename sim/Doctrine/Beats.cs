@@ -1636,9 +1636,9 @@ public static class Beats {
     }
 
     /// <summary>
-    /// First-visit Kestrel Gorge: a finite first sortie. Pop-out onto a parked opening pair,
-    /// two AIM-9s on Fire, then guns. Splashing the pair ends the fight and hands the aircraft
-    /// to recovery. Returning visits keep beat 7's endless gym.
+    /// First-visit Kestrel Gorge: a finite first sortie. Pop-out onto one parked aircraft,
+    /// two AIM-9s on Fire, then guns. Splashing that aircraft and landing ends the sortie.
+    /// Returning visits fly beat 7: two engagements, then the landing.
     /// </summary>
     public static BeatSetup ModernVisualMergeFirstRun() {
         BeatSetup merge = ModernVisualMerge();

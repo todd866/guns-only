@@ -1,5 +1,6 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
 using GunsOnly.Web;
 using Xunit;
 
@@ -276,29 +277,117 @@ public class DifficultyRampTests {
     }
 
     [Fact]
-    public void TheLiveOpeningSpawnIsTheUnprovenRungIncludingARestoredValley() {
-        // Production menu Fly is StartBeat(7), the built-in visual merge, not a hand-built bandit.
+    public void MenuFlyAndTheValleyOpenPresentAtAboutAKilometre() {
+        // ?menu=1 skips the valley and Fly calls WebBridge.StartBeat: weather for the
+        // beat, the angled deck the bridge is constructed with, then built-in 7.
         var session = new SimulationSession();
-        session.StartBeat(7);
+        session.StartBeatWithEnvironment(
+            7,
+            KoreaWeatherPresets.ForBeat(7),
+            terrain: null,
+            Carrier.DeckConfiguration.Angled);
         Assert.Equal(0, session.DifficultyRung);
         var opening = Assert.IsType<NeutralMergeBandit>(session.Bandit);
         Assert.Equal(PilotSkill.Competent, opening.Skill);
         Assert.True(opening.Presenting);
         Assert.InRange(
             SlantRangeM(session.Player.State.Position, opening.State.Position),
-            700.0, 1_200.0);
+            900.0, 1_100.0);
         Assert.Contains("\"difficulty_rung\":0", SnapshotOf(session));
 
+        // The valley door is WebBridge.StartFirstRunValley: the first-run factory and
+        // beat-13 weather. The contact is a kilometre past the pop-out, and it is Present.
         var valley = new SimulationSession();
+        valley.StartBeatWithEnvironment(
+            Beats.ModernVisualMergeFirstRun,
+            KoreaWeatherPresets.ForBeat(13),
+            terrain: null);
+        var parked = Assert.IsType<NeutralMergeBandit>(valley.Bandit);
+        Assert.True(parked.Presenting);
+        var gate = new Vec3D(
+            parked.State.Position.X,
+            parked.State.Position.Y,
+            FirstRunValleyRuntime.PopOutNorthM);
+        Assert.InRange(SlantRangeM(gate, parked.State.Position), 900.0, 1_100.0);
+    }
+
+    [Fact]
+    public void AnAssistedBeatKeepsAuthoredGainsAfterAStoredRung3Blob() {
+        var cold = new SimulationSession();
+        cold.StartBeat(AssistedRapier);
+        AircraftParams coldLaw = cold.GunneryPitchAssistAir();
+        Assert.Equal(2.2, coldLaw.GunneryPitchAssistGainPerSecond, 6);
+        Assert.Equal(2.5, coldLaw.GunneryPitchAssistMaxCorrectionG, 6);
+
         var director = new FightDirector();
         Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
-        valley.ArmDirectorStateForNextStage(director.ExportState());
-        valley.StartBeat(() => Beats.ModernVisualMergeFirstRun());
-        Assert.Equal(2, valley.DifficultyRung);
-        Assert.Equal(PilotSkill.Ace, ((NeutralMergeBandit)valley.Bandit).Skill);
-        double pastTheGateM = valley.Bandit.State.Position.Z
-            - FirstRunValleyRuntime.PopOutNorthM;
-        Assert.InRange(pastTheGateM, 700.0, 1_200.0);
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
+        Assert.Equal(3, director.Rung);
+        Assert.False(director.PitchAssist.Active);
+
+        var armed = new SimulationSession();
+        armed.ArmDirectorStateForNextStage(director.ExportState());
+        armed.StartBeat(AssistedRapier);
+        Assert.Equal(0, armed.DifficultyRung);
+        AircraftParams armedLaw = armed.GunneryPitchAssistAir();
+        Assert.Equal(coldLaw.GunneryPitchAssistGainPerSecond,
+            armedLaw.GunneryPitchAssistGainPerSecond, 6);
+        Assert.Equal(coldLaw.GunneryPitchAssistMaxCorrectionG,
+            armedLaw.GunneryPitchAssistMaxCorrectionG, 6);
+
+        var topGun = new SimulationSession();
+        topGun.ArmDirectorStateForNextStage(director.ExportState());
+        topGun.StartBeat(() => Beats.TopGunAcm(TopGunSeat.F14A));
+        Assert.Equal(0, topGun.DifficultyRung);
+        Assert.Equal(
+            FlightModel.F14APublicDataSurrogate.GunneryPitchAssistGainPerSecond,
+            topGun.GunneryPitchAssistAir().GunneryPitchAssistGainPerSecond, 6);
+        Assert.Equal(
+            FlightModel.F14APublicDataSurrogate.GunneryPitchAssistMaxCorrectionG,
+            topGun.GunneryPitchAssistAir().GunneryPitchAssistMaxCorrectionG, 6);
+
+        armed.Begin();
+        armed.FeedKey(GKey.Trigger, true);
+        for (int i = 0; i < 40 * AircraftSim.TickHz && armed.KillCount < 1; i++) {
+            if (armed.OpponentPresent
+                && armed.Bandit.State.Position.Z - armed.Player.State.Position.Z > 200.0) {
+                AircraftState bandit = armed.Bandit.State;
+                armed.Player.AdoptExternalKinematics(bandit with {
+                    Position = bandit.Position + new Vec3D(0, 0, -80),
+                    Speed = bandit.Speed + 15,
+                    Chi = bandit.Chi,
+                });
+            }
+            armed.StepFixed();
+        }
+        armed.FeedKey(GKey.Trigger, false);
+        Assert.Equal(1, armed.KillCount);
+        Assert.Equal(0, armed.DifficultyRung);
+        armed.Restart();
+        AircraftParams afterRestart = armed.GunneryPitchAssistAir();
+        Assert.Equal(coldLaw.GunneryPitchAssistGainPerSecond,
+            afterRestart.GunneryPitchAssistGainPerSecond, 6);
+        Assert.Equal(coldLaw.GunneryPitchAssistMaxCorrectionG,
+            afterRestart.GunneryPitchAssistMaxCorrectionG, 6);
+    }
+
+    static BeatSetup AssistedRapier() {
+        BeatSetup perch = Beats.Perch();
+        AircraftParams rapier = FlightModel.RapierPublicDataSurrogate;
+        AircraftState player = new(
+            new Vec3D(0.0, 5486.4, 0.0), 250.0, 0.0, 0.0, 0.0, rapier.MassKg);
+        AircraftState bandit = new(
+            new Vec3D(0.0, 5526.4, 600.0), 240.0, 0.0, 0.0, 0.0,
+            perch.BanditAir.MassKg);
+        return perch with {
+            Name = "Rapier assist witness",
+            Player = player,
+            Bandit = bandit,
+            PlayerParams = rapier,
+            UsesNeutralMergeBandit = false,
+            UsesReactiveBandit = false,
+            Combat = perch.CombatRules with { OpponentHitsToDefeat = 1 },
+        };
     }
 
     [Fact]
