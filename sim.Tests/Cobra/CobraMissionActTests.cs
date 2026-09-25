@@ -191,6 +191,55 @@ public class CobraMissionActTests
         Assert.InRange(cleared[^1].UpM, flat[^1].UpM - 1.0, flat[^1].UpM + 1.0);
     }
 
+    [Fact]
+    public void GunPitChainClearsTheRidgeBetweenTheAircraftAndTheFirstCue()
+    {
+        CobraCanyonDefinition definition = CobraCanyonDefinition.Create();
+        CobraCanyonRouteDefinition route = definition.Route(CobraCanyonRouteChoice.RiverGorge);
+        var war = new CobraGroundWarRuntime(definition, definition.CreateTerrainSurface(), seed: 7);
+        ContestedSite ironBell = war.Sites.Single(site =>
+            site.LandmarkId == "landmark.cobra-canyon.iron-bell-bridge.v1");
+        ironBell.SetInitialOwner(GroundSiteOwner.Friendly);
+        Vec3D aircraft = new(ironBell.PositionWorldM.X, ironBell.PositionWorldM.Y + 40.0, ironBell.PositionWorldM.Z);
+        IReadOnlyList<CobraPathGate> flat = CobraMissionActProgress.BuildPathGates(
+            CobraMissionAct.Engage, route, Fob, 232.0, aircraft, terrain: null, sites: war.Sites);
+        Assert.Equal(4, flat.Count);
+        double segmentM = Math.Sqrt(
+            Math.Pow(flat[0].EastM - aircraft.X, 2) + Math.Pow(flat[0].NorthM - aircraft.Z, 2));
+        int samples = Math.Max(1, (int)Math.Ceiling(segmentM / 100.0));
+        int sample = Math.Max(1, samples / 2);
+        double t = (double)sample / samples;
+        double ridgeEast = aircraft.X + (flat[0].EastM - aircraft.X) * t;
+        double ridgeNorth = aircraft.Z + (flat[0].NorthM - aircraft.Z) * t;
+        const double ridgeHeightM = 640.0;
+        var ridge = new RidgeAt(ridgeEast, ridgeNorth, ridgeHeightM, radiusM: 30.0);
+        IReadOnlyList<CobraPathGate> cleared = CobraMissionActProgress.BuildPathGates(
+            CobraMissionAct.Engage, route, Fob, 232.0, aircraft, ridge, war.Sites);
+
+        double floorM = ridgeHeightM + CobraMissionActProgress.GunPitCueClearanceM;
+        double chordM = aircraft.Y + (cleared[0].UpM - aircraft.Y) * t;
+        Assert.True(chordM >= floorM - 0.01,
+            $"aircraft-to-first-cue chord is {chordM:F1} m at the ridge, below {floorM:F1} m");
+        Assert.True(cleared[2].UpM < floorM - 50.0,
+            "a ridge before the first cue must not lift every later gate");
+        Assert.Equal(flat[^1].EastM, cleared[^1].EastM, 6);
+    }
+
+    sealed class RidgeAt(double eastM, double northM, double heightM, double radiusM) : ITerrainSurface
+    {
+        public TerrainBounds Bounds => new(-1_000_000, 1_000_000, -1_000_000, 1_000_000);
+        public double HorizontalResolutionM => 50;
+        public bool TrySample(double sampleEastM, double sampleNorthM, out TerrainSample sample) =>
+            throw new InvalidOperationException("gun-pit marches use TryHeightM");
+        public bool TryHeightM(double sampleEastM, double sampleNorthM, out double sampledHeightM)
+        {
+            double de = sampleEastM - eastM;
+            double dn = sampleNorthM - northM;
+            sampledHeightM = de * de + dn * dn < radiusM * radiusM ? heightM : 0.0;
+            return true;
+        }
+    }
+
     sealed class RidgeOnSegment : ITerrainSurface
     {
         readonly double _eastM;

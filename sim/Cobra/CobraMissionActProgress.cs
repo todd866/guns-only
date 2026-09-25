@@ -270,6 +270,11 @@ public static class CobraMissionActProgress
             Vec3D previous = from;
             for (int i = 0; i < count; i++) {
                 double floorM = SegmentClearanceFloor(terrain, previous, positions[i]);
+                // The aircraft is not a cue. Raising only the first gate to the ridge
+                // top still lets the chord from a lower aircraft cut the ridge, so the
+                // first gate is lifted until that whole segment clears.
+                if (i == 0)
+                    floorM = Math.Max(floorM, ChordClearanceGateUpM(terrain, previous, positions[i]));
                 positions[i] = positions[i] with { Y = Math.Max(positions[i].Y, floorM) };
                 if (i > 0)
                     positions[i - 1] = positions[i - 1] with {
@@ -304,6 +309,27 @@ public static class CobraMissionActProgress
             floorM = Math.Max(floorM, heightM + GunPitCueClearanceM);
         }
         return floorM;
+    }
+
+    /// <summary>
+    /// Gate altitude that keeps the straight chord from <paramref name="from"/> above
+    /// every sampled surface plus <see cref="GunPitCueClearanceM"/>. Later segments
+    /// raise both cues to the same floor, so their chord is already level and clear.
+    /// </summary>
+    static double ChordClearanceGateUpM(ITerrainSurface terrain, in Vec3D from, in Vec3D to)
+    {
+        double distanceM = HorizontalDistanceM(from, to);
+        int samples = Math.Max(1, (int)Math.Ceiling(distanceM / 100.0));
+        double requiredUpM = double.NegativeInfinity;
+        for (int i = 1; i <= samples; i++) {
+            double t = (double)i / samples;
+            double eastM = from.X + (to.X - from.X) * t;
+            double northM = from.Z + (to.Z - from.Z) * t;
+            if (!terrain.TryHeightM(eastM, northM, out double heightM)) continue;
+            double neededM = heightM + GunPitCueClearanceM;
+            requiredUpM = Math.Max(requiredUpM, from.Y + (neededM - from.Y) / t);
+        }
+        return requiredUpM;
     }
 
     static int FindBridgePointIndex(IReadOnlyList<CobraCanyonRoutePoint> points)
