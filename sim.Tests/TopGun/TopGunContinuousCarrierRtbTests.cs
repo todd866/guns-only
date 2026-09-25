@@ -16,6 +16,7 @@ public sealed class TopGunContinuousCarrierRtbTests
     static SimulationSession StartConfiguredCarrierRtb()
     {
         SimulationSession session = Start();
+        session.SetCarrierConfigurationPractice(true);
         session.ForceOpponentDefeatForTest();
         session.FeedKey(GKey.KnockItOff, true);
         session.FeedKey(GKey.KnockItOff, false);
@@ -273,5 +274,45 @@ public sealed class TopGunContinuousCarrierRtbTests
         Assert.Equal(CombatHandoffPhase.Recovered, session.CombatHandoffPhase);
         Assert.False(session.PlayerRtbActive);
         Assert.Equal(SortieOutcome.Victory, session.Outcome);
+    }
+
+    [Fact]
+    public void UnconfiguredCaseIPassAtTheThreeWireIsABolter()
+    {
+        SimulationSession session = Start();
+        Assert.False(session.ConfigurationAutomationEnabled);
+        Assert.False(session.PlayerSystems.HookDown);
+        Assert.Equal(LandingGearHandle.Up, session.PlayerSystems.GearHandle);
+
+        session.ForceOpponentDefeatForTest();
+        long firstSequence = session.BanditSpawnSequence;
+        for (int tick = 0; tick < 5 * (int)AircraftSim.TickHz
+            && session.BanditSpawnSequence == firstSequence; tick++)
+            session.StepFixed();
+        session.ForceOpponentDefeatForTest();
+        session.StepFixed();
+        Assert.True(session.PlayerRtbActive);
+
+        Carrier ship = session.Carrier!;
+        for (int gateIndex = 0; gateIndex < 3; gateIndex++) {
+            for (int tick = 0; tick < 20; tick++) {
+                var gate = ConventionalCarrierRecoveryDirector.BuildSchedule(ship, 78.0)[gateIndex];
+                session.Player.AdoptExternalKinematics(
+                    session.Player.State with { Position = gate.Position });
+                session.StepFixed();
+            }
+        }
+
+        Assert.Contains("ABEAM", session.ApproachGuidancePlan.NextLabel);
+        Assert.False(session.PlayerSystems.HookDown);
+        Assert.False(session.PlayerSystems.AllGearDownAndLocked);
+
+        StageCarrierContact(session, ship.WireAlongM(3) + Carrier.HookToMainGearM);
+        session.StepFixed();
+
+        Assert.NotEqual(ArrestmentModel.ArrestmentPhase.Stopped, session.Arrestment.Phase);
+        Assert.Equal(Carrier.Recovery.Bolter, session.Recovery);
+        Assert.Equal(Carrier.HookOutcome.MissedWires, session.Touchdown.Hook);
+        Assert.True(session.PlayerRtbActive);
     }
 }

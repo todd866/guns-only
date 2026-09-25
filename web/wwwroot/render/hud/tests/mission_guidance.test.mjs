@@ -81,16 +81,17 @@ test("Top Gun objective strip owns engage, replacement choice, continuing fight,
   assert.equal(missionGuidanceActionText(replacement.secondaryAction),
     "O · RTB TO CARRIER");
 
-  const continuing = flightMissionGuidance({
+  const liveHandoff = flightMissionGuidance({
     ...TOP_GUN,
-    engagement_number: 3,
+    engagement_number: 1,
     rtb_available: true,
+    combat_handoff_phase: 1,
+    combat_handoff_phase_name: "AVAILABLE",
   });
-  assert.equal(continuing.id, "top-gun-continue");
-  assert.equal(continuing.status, "ENGAGEMENT 3 · BANDIT LIVE");
-  assert.equal(continuing.primaryAction.label, "CONTINUE THE FIGHT");
-  assert.equal(missionGuidanceActionText(continuing.secondaryAction),
-    "O · RTB TO CARRIER");
+  assert.equal(liveHandoff.id, "top-gun-engage");
+  assert.equal(liveHandoff.objective, "ENGAGE THE BANDIT");
+  assert.equal(liveHandoff.primaryAction.label, "FIRE GUNS ON SOLUTION");
+  assert.notEqual(liveHandoff.id, "top-gun-continue");
 
   const rtb = flightMissionGuidance({ ...TOP_GUN, player_rtb_active: true });
   assert.equal(rtb.id, "top-gun-rtb");

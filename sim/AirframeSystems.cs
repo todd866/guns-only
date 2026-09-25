@@ -5,6 +5,7 @@ namespace GunsOnly.Sim;
 /// any of the three legs actually are.
 /// </summary>
 public enum LandingGearHandle { Up, Down }
+public enum TailhookHandle { Up, Down }
 
 /// <summary>
 /// The F-86 flap lever is a three-position motor command. HOLD removes motor power and the actuator
@@ -303,6 +304,8 @@ public sealed class AirframeSystems {
     public IReadOnlySet<AirframeSystemFailure> Failures => _failures;
 
     public LandingGearHandle GearHandle { get; private set; }
+    public TailhookHandle HookHandle { get; private set; }
+    public bool HookDown => HookHandle == TailhookHandle.Down;
     public WingFlapLever FlapLever { get; private set; } = WingFlapLever.Hold;
     public bool BatterySwitchOn { get; private set; } = true;
     public bool EmergencyGearReleaseHeld { get; private set; }
@@ -411,7 +414,8 @@ public sealed class AirframeSystems {
         AirframeSystemsProfile? profile = null,
         LandingGearHandle initialGear = LandingGearHandle.Up,
         double initialFlapDegrees = 0.0,
-        double initialUtilityHydraulicPressureFraction = 0.0) {
+        double initialUtilityHydraulicPressureFraction = 0.0,
+        TailhookHandle initialHook = TailhookHandle.Down) {
         _profile = profile ?? AirframeSystemsProfile.F86FResearchBasis;
         if (!double.IsFinite(initialFlapDegrees)
             || initialFlapDegrees < 0.0
@@ -423,6 +427,7 @@ public sealed class AirframeSystems {
             throw new ArgumentOutOfRangeException(nameof(initialUtilityHydraulicPressureFraction));
 
         GearHandle = initialGear;
+        HookHandle = initialHook;
         double gear = initialGear == LandingGearHandle.Down ? 1.0 : 0.0;
         NoseGearPosition = LeftMainGearPosition = RightMainGearPosition = gear;
         LeftFlapDegrees = RightFlapDegrees = initialFlapDegrees;
@@ -430,6 +435,7 @@ public sealed class AirframeSystems {
     }
 
     public void CommandGear(LandingGearHandle handle) => GearHandle = handle;
+    public void CommandHook(TailhookHandle handle) => HookHandle = handle;
     public void SetFlapLever(WingFlapLever lever) =>
         FlapLever = PilotOperatedFlapsAvailable ? lever : WingFlapLever.Hold;
     public void SetBatterySwitch(bool on) => BatterySwitchOn = on;

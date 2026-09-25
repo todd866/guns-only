@@ -1006,6 +1006,7 @@ internal static class SnapshotProjection {
             + $"\"fuel_reserve_margin_lb\":{NullableNumberJson(recoveryNavigation.ReserveMarginLb)},"
             + MeshNavJson(simulationPosition, groundVelocity, displayHeadingRad)
             + $"\"gear_handle\":\"{GearHandleToken(_systems.GearHandle)}\","
+            + $"\"hook_down\":{(_systems.HookDown ? "true" : "false")},"
             + $"\"gear_nose\":{_systems.NoseGearPosition:F4},\"gear_left\":{_systems.LeftMainGearPosition:F4},\"gear_right\":{_systems.RightMainGearPosition:F4},"
             + $"\"gear_nose_indication\":\"{GearIndicationToken(_systems.NoseGearIndication)}\","
             + $"\"gear_left_indication\":\"{GearIndicationToken(_systems.LeftMainGearIndication)}\","

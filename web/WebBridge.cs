@@ -37,6 +37,10 @@ public static partial class WebBridge {
     /// player aircraft is deliberately fixed to the F-14A; the MiG-28 is an adversary only.
     /// </summary>
     [JSExport]
+    public static void SetTopGunConfigurationPractice(bool enabled) =>
+        Session.SetCarrierConfigurationPractice(enabled);
+
+    [JSExport]
     public static void StartTopGun(int _seat) {
         MissionEnvironmentContract environment = TopGunEnvironment.Contract;
         Session.StartBeatWithEnvironment(
