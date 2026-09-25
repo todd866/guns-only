@@ -171,9 +171,11 @@ public sealed class ConventionalRunwayPatternRecoveryDirector {
     }
 
     /// <summary>
-    /// Left-hand runway pattern expressed entirely in the runway's threshold/heading frame. The
-    /// final, threshold-crossing, and touchdown-aim gates share one 3-degree line anchored at the
-    /// physical aim point and wheel-reference height. They guide only; touchdown remains physical.
+    /// Overhead recovery in the runway frame: initial on the extended centreline, break at the
+    /// numbers, perch abeam, then the same 3° final. Altitudes are a stable surrogate for the
+    /// overhead in AFI 11-202 Volume 3 (initial, break, perch, continuous turn to final), not an
+    /// F-22 local supplement. The final, threshold, and touchdown gates share one 3-degree line
+    /// anchored at the physical aim point. They guide only; touchdown remains physical.
     /// </summary>
     public static IReadOnlyList<PatternGate> BuildSchedule(
         ConventionalRunway runway,
@@ -200,15 +202,13 @@ public sealed class ConventionalRunwayPatternRecoveryDirector {
                     touchdownReferenceHeightM + trackToAimM * Math.Tan(FinalSlopeRad),
                     0.0);
         }
-        double entryCalibratedMps = Math.Min(
-            250.0 / AirData.MpsToKnots,
-            approachCalibratedAirspeedMps * 1.30);
-        double downwindCalibratedMps = Math.Min(
+        // Initial is flown fast and clean. 300 KCAS is the familiar overhead number, not a
+        // quoted F-22 approach speed. The break is still clean; the perch is the gear call.
+        double initialCalibratedMps = 300.0 / AirData.MpsToKnots;
+        double breakCalibratedMps = 250.0 / AirData.MpsToKnots;
+        double perchCalibratedMps = Math.Min(
             220.0 / AirData.MpsToKnots,
             approachCalibratedAirspeedMps * 1.15);
-        double baseCalibratedMps = Math.Min(
-            200.0 / AirData.MpsToKnots,
-            approachCalibratedAirspeedMps * 1.08);
 
         PatternGate Gate(
             string id,
@@ -231,18 +231,12 @@ public sealed class ConventionalRunwayPatternRecoveryDirector {
                 dirty);
 
         PatternGate[] result = {
-            Gate("pattern_entry", "PATTERN ENTRY · 45", ApproachPatternLeg.PatternEntry,
-                Point(5_000.0, -6_000.0, 1_200.0), 800.0, entryCalibratedMps, false),
-            Gate("join_downwind", "JOIN DOWNWIND", ApproachPatternLeg.Downwind,
-                Point(3_000.0, -3_000.0, 1_000.0), 650.0, downwindCalibratedMps, false),
-            Gate("downwind", "DOWNWIND · GEAR", ApproachPatternLeg.Downwind,
-                Point(700.0, -3_000.0, 1_000.0), 550.0, downwindCalibratedMps, true),
-            Gate("abeam", "ABEAM · BASE NEXT", ApproachPatternLeg.Downwind,
-                Point(-500.0, -3_000.0, 900.0), 500.0, downwindCalibratedMps, true),
-            Gate("base_entry", "BASE", ApproachPatternLeg.Base,
-                Point(-3_500.0, -2_200.0, 700.0), 500.0, baseCalibratedMps, true),
-            Gate("base_final", "BASE · TURN FINAL", ApproachPatternLeg.Base,
-                Point(-4_000.0, -800.0, 650.0), 450.0, baseCalibratedMps, true),
+            Gate("initial", "INITIAL", ApproachPatternLeg.PatternEntry,
+                Point(-8_000.0, 0.0, 1_500.0), 700.0, initialCalibratedMps, false),
+            Gate("break", "BREAK", ApproachPatternLeg.Downwind,
+                Point(0.0, 0.0, 1_500.0), 550.0, breakCalibratedMps, false),
+            Gate("perch", "PERCH", ApproachPatternLeg.Downwind,
+                Point(-200.0, -1_852.0, 1_000.0), 500.0, perchCalibratedMps, true),
             Gate("final", "FINAL · 3 DEG", ApproachPatternLeg.Final,
                 Final(-3_000.0), 400.0, approachCalibratedAirspeedMps, true),
             Gate("threshold", "THRESHOLD", ApproachPatternLeg.Threshold,

@@ -320,6 +320,7 @@ public sealed partial class SimulationSession {
     int _shotsInWindow;
     int _killCount;
     int _engagementNumber = 1;
+    bool _billedSortieComplete;
     EngagementCounters _engagementCounters;
     readonly List<EngagementReport> _engagementReports = new();
     readonly FightDirector _fightDirector = new();
@@ -890,7 +891,8 @@ public sealed partial class SimulationSession {
             || OpponentReplacementPending
             || (TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
                 && _beat.RecoveryPlan is not null)
-            || (_beat.FirstRunValley is not null && _beat.RecoveryPlan is not null));
+            || (_beat.FirstRunValley is not null && _beat.RecoveryPlan is not null)
+            || (_billedSortieComplete && _beat.RecoveryPlan is not null));
     /// Latched from the accepted rising edge through recovery.
     public bool CombatHandoffRequested =>
         _combatHandoffPhase >= CombatHandoffPhase.Requested;
@@ -3068,6 +3070,14 @@ public sealed partial class SimulationSession {
             _beat.RecoveryPlan is not null || _carrier is not null));
     }
 
+    string ConventionalOverheadGate() {
+        if (!_approachGuidance.ConventionalPattern
+            || !_approachGuidance.GuidanceActive
+            || _approachGuidance.Gates.Count == 0)
+            return "";
+        return _approachGuidance.Gates[0].Id;
+    }
+
     void UpdateMissionRadio() {
         LsoAdvice? radioLso = null;
         if (_carrier?.IsMaritime == true && !_arrestment.IsActive && !_catapult.IsActive) {
@@ -3112,7 +3122,8 @@ public sealed partial class SimulationSession {
             _fuel.IsBingo,
             _recentEvents,
             _missionChecklist.Name,
-            _missionChecklist.CompletedCall));
+            _missionChecklist.CompletedCall,
+            ConventionalOverheadGate()));
         _circuitComms = _beat.ScriptedIntercept?.PatternOnly == true
             && _missionRadio.Active
                 ? $"{_missionRadio.Speaker} · {_missionRadio.Callsign} · "
@@ -3951,6 +3962,7 @@ public sealed partial class SimulationSession {
         _reliefKills = 0;
         _playerHitsTaken = 0;
         _engagementNumber = stagesOpponent ? 1 : 0;
+        _billedSortieComplete = false;
         _engagementCounters = default;
         _engagementReports.Clear();
         LastDirectorSpawn = openingSpawn;
@@ -5769,6 +5781,15 @@ public sealed partial class SimulationSession {
             if (_opponentTerminalState != AircraftTerminalState.Flying) return;
             bool formationSurvivorRemains =
                 _wingmen.Any(static wingman => wingman.StillFighting);
+            // The billed cap is complete only when the last engagement is actually splashed
+            // and nobody has already knocked it off. An early Bingo or O leaves the flag clear,
+            // so the later full stop stays Discontinued.
+            if (_beat.FirstRunValley is null
+                && !CombatHandoffRequested
+                && ReplacementBudgetExhausted
+                && !formationSurvivorRemains
+                && _playerTerminalState == AircraftTerminalState.Flying)
+                _billedSortieComplete = true;
             // Kestrel is a finite first sortie: the mouth pair is the job. A replacement wave
             // here is how live 350 turned "guns / RTB" into the endless gym.
             bool nextWaveExpected = !CombatHandoffRequested
@@ -7871,9 +7892,11 @@ public sealed partial class SimulationSession {
         // physically stopped and vulnerable on the runway while the combat session remains live.
         if (!CompletePlayerRecovery()) return;
 
-        // A guns-only gym handoff is a deliberate discontinue. The Kestrel first sortie is a
-        // finite job: splash the pair and recover, which is victory, not knocking it off.
-        SortieOutcome recovered = _beat.FirstRunValley is not null && _killCount >= 2
+        // A knock-it-off before the billed cap is a discontinue. Splashing the cap and stopping
+        // on the runway is the end of the sortie. The Kestrel first sortie keeps its own rule:
+        // splash the pair and recover.
+        bool firstRunComplete = _beat.FirstRunValley is not null && _killCount >= 2;
+        SortieOutcome recovered = firstRunComplete || _billedSortieComplete
             ? SortieOutcome.Victory
             : SortieOutcome.Discontinued;
         _pendingOutcome = recovered;

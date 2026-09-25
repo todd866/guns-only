@@ -43,14 +43,14 @@ public sealed class ConventionalRunwayPatternRecoveryTests {
             ConventionalRunwayPatternRecoveryDirector.BuildSchedule(
                 runway, approachCalibratedMps);
 
-        Assert.Equal(9, gates.Count);
+        Assert.Equal(6, gates.Count);
+        Assert.Equal(new[] {
+            "initial", "break", "perch", "final", "threshold", "touchdown_aim",
+        }, gates.Select(gate => gate.Id));
         Assert.Equal(new[] {
             ApproachPatternLeg.PatternEntry,
             ApproachPatternLeg.Downwind,
             ApproachPatternLeg.Downwind,
-            ApproachPatternLeg.Downwind,
-            ApproachPatternLeg.Base,
-            ApproachPatternLeg.Base,
             ApproachPatternLeg.Final,
             ApproachPatternLeg.Threshold,
             ApproachPatternLeg.Threshold,
@@ -59,26 +59,27 @@ public sealed class ConventionalRunwayPatternRecoveryTests {
             "WIRE", gate.Label, StringComparison.OrdinalIgnoreCase));
 
         var entry = runway.Frame(gates[0].Position);
-        Assert.Equal(5_000.0, entry.along, precision: 6);
-        Assert.Equal(-6_000.0, entry.cross, precision: 6);
-        var downwind = runway.Frame(gates[2].Position);
-        Assert.Equal(700.0, downwind.along, precision: 6);
-        Assert.Equal(-3_000.0, downwind.cross, precision: 6);
-        var baseLeg = runway.Frame(gates[4].Position);
-        Assert.True(baseLeg.along < 0.0);
-        Assert.InRange(baseLeg.cross, -2_201.0, -2_199.0);
-        var final = runway.Frame(gates[6].Position);
-        var threshold = runway.Frame(gates[7].Position);
-        var touchdownAim = runway.Frame(gates[8].Position);
+        Assert.Equal(-8_000.0, entry.along, precision: 6);
+        Assert.Equal(0.0, entry.cross, precision: 6);
+        Assert.Equal(1_500.0 * 0.3048, entry.height, precision: 4);
+        var brk = runway.Frame(gates[1].Position);
+        Assert.Equal(0.0, brk.along, precision: 6);
+        Assert.Equal(0.0, brk.cross, precision: 6);
+        var perch = runway.Frame(gates[2].Position);
+        Assert.Equal(-200.0, perch.along, precision: 6);
+        Assert.Equal(-1_852.0, perch.cross, precision: 6);
+        Assert.Equal(1_000.0 * 0.3048, perch.height, precision: 4);
+        var final = runway.Frame(gates[3].Position);
+        var threshold = runway.Frame(gates[4].Position);
+        var touchdownAim = runway.Frame(gates[5].Position);
         Assert.Equal(-3_000.0, final.along, precision: 6);
         Assert.Equal(0.0, final.cross, precision: 6);
         Assert.Equal(0.0, threshold.along, precision: 6);
         Assert.Equal(0.0, threshold.cross, precision: 6);
         Assert.Equal(runway.TouchdownAimAlongM, touchdownAim.along, precision: 6);
         Assert.Equal(0.0, touchdownAim.cross, precision: 6);
-        Assert.True(gates[4].Position.Y > gates[5].Position.Y);
-        Assert.True(gates[5].Position.Y > gates[6].Position.Y,
-            "base-to-final guidance must descend continuously, never command a climb");
+        Assert.True(gates[2].Position.Y > gates[3].Position.Y,
+            "perch-to-final guidance must descend, never command a climb");
     }
 
     [Fact]
@@ -92,7 +93,7 @@ public sealed class ConventionalRunwayPatternRecoveryTests {
             new ConventionalLandingEnvelope().MinimumAirspeedMps,
             new ConventionalLandingEnvelope().MaximumAirspeedMps);
         foreach (ConventionalRunwayPatternRecoveryDirector.PatternGate gate
-            in gates.Skip(6)) {
+            in gates.Skip(3)) {
             Assert.Equal(
                 AirData.TrueAirspeedForCalibratedAirspeedMps(
                     approachCalibratedMps, gate.Position.Y),
@@ -115,7 +116,7 @@ public sealed class ConventionalRunwayPatternRecoveryTests {
 
         double slope = Math.Tan(3.0 * Math.PI / 180.0);
         foreach (ConventionalRunwayPatternRecoveryDirector.PatternGate gate
-            in gates.Skip(6)) {
+            in gates.Skip(3)) {
             var frame = runway.Frame(gate.Position);
             double expectedHeightM = touchdownReferenceHeightM
                 + Math.Max(0.0, runway.TouchdownAimAlongM - frame.along) * slope;
@@ -205,11 +206,12 @@ public sealed class ConventionalRunwayPatternRecoveryTests {
         Assert.Equal(1, capturedDirector.ActiveIndex);
         Assert.True(state.ConventionalPattern);
         Assert.Equal(ApproachPatternLeg.Downwind, state.ActivePatternLeg);
+        Assert.Equal("break", state.Gates[0].Id);
         Assert.Equal(ApproachGuidance.DefaultSpeedToleranceKtas,
             state.TargetSpeedToleranceKtas);
         Assert.Equal(ApproachEnergyState.TooFast, state.EnergyState);
-        Assert.Equal("JOIN DOWNWIND", state.NextLabel);
-        Assert.Equal(8, state.Gates.Count);
+        Assert.Equal("BREAK", state.NextLabel);
+        Assert.Equal(5, state.Gates.Count);
         Assert.Equal("touchdown_aim", state.Gates[^1].Id);
         Assert.DoesNotContain("WIRE", ApproachGuidance.GatesJson(state),
             StringComparison.OrdinalIgnoreCase);
@@ -223,7 +225,7 @@ public sealed class ConventionalRunwayPatternRecoveryTests {
                 runway, approachCalibratedMps);
         var director = new ConventionalRunwayPatternRecoveryDirector();
 
-        for (int index = 0; index < 6; index++) {
+        for (int index = 0; index < 3; index++) {
             ConventionalRunwayPatternRecoveryDirector.PatternGate gate = schedule[index];
             ConventionalRunwayPatternRecoveryDirector.PatternGate next = schedule[index + 1];
             double headingRad = Math.Atan2(
@@ -243,12 +245,12 @@ public sealed class ConventionalRunwayPatternRecoveryTests {
                 cleanDragToWeight: TestCleanDragToWeight,
                 touchdownReferenceHeightM: TestTouchdownReferenceHeightM);
         }
-        Assert.Equal(6, director.ActiveIndex);
+        Assert.Equal(3, director.ActiveIndex);
 
         AircraftState missed = beat.Player with {
             Position = runway.SurfacePoint(runway.TouchdownAimAlongM + 300.0)
                 + new Vec3D(0.0, TestTouchdownReferenceHeightM + 10.0, 0.0),
-            Speed = schedule[6].TargetSpeedMps,
+            Speed = schedule[3].TargetSpeedMps,
             Chi = runway.HeadingRad,
         };
         ApproachGuidanceState restarted = director.Step(
@@ -383,7 +385,7 @@ public sealed class ConventionalRunwayPatternRecoveryTests {
         AircraftState player = beat.Player with {
             Position = new Vec3D(
                 beat.Player.Position.X, 400.0, beat.Player.Position.Z),
-            Speed = 120.0,
+            Speed = 250.0,
             Chi = 0.0,
         };
         double initialEnergyM = ApproachEnergy.SpecificEnergyM(
