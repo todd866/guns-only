@@ -693,6 +693,12 @@ test("production keeps the rejected authored cockpit out of the pilot's SA view"
     "a hidden authoring cockpit must not retain ownership of the live gunsight");
 });
 
+test("first-person muzzle volumes stay off so the flash cannot cross the eye", async () => {
+  const source = await readFile(appUrl, "utf8");
+  assert.match(source, /channel\.flash\.visible = false/);
+  assert.match(source, /channel\.cone\.visible = false/);
+});
+
 test("F-22 canopy glass is aircraft-fixed and never admitted for Rapier or external replay", async () => {
   const source = await readFile(appUrl, "utf8");
   assert.match(source, /createF22CanopyGlass\(THREE\)/);

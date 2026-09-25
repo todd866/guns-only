@@ -28,6 +28,9 @@ export function createF22CanopyGlass(THREE) {
   shell.scale.set(1.45, 0.78, 1.8);
   shell.position.set(0, -0.42, 0.32);
   shell.renderOrder = 1;
+  // Canopy glass, bow etch, and helmet reflection imitate a cockpit the player
+  // does not have. The named nodes stay for the contract tests; none of them draw.
+  shell.visible = false;
 
   const darkAxis = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([
@@ -43,6 +46,7 @@ export function createF22CanopyGlass(THREE) {
   );
   darkAxis.name = "F22_CANOPY_MID_AXIS_DARK";
   darkAxis.renderOrder = 2;
+  darkAxis.visible = false;
 
   const lightAxis = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([
@@ -58,6 +62,7 @@ export function createF22CanopyGlass(THREE) {
   );
   lightAxis.name = "F22_CANOPY_MID_AXIS_LIGHT";
   lightAxis.renderOrder = 2;
+  lightAxis.visible = false;
 
   const reflection = new THREE.Mesh(
     new THREE.PlaneGeometry(0.48, 0.68),
@@ -67,6 +72,7 @@ export function createF22CanopyGlass(THREE) {
   reflection.position.set(0, 0.18, 1.28);
   reflection.rotation.x = -0.28;
   reflection.renderOrder = 2;
+  reflection.visible = false;
 
   group.add(shell, darkAxis, lightAxis, reflection);
   return {

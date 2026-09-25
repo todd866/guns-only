@@ -6378,8 +6378,11 @@ function updateTracerChannel(channel, rounds, authoredLengthMetres = null) {
 
 function updateMuzzleChannel(channel, active, origin, forward, quaternion, roundsFired,
   flashOffset, coneOffset, intensity) {
-  channel.flash.visible = active;
-  channel.cone.visible = active;
+  // The pilot eye sits just aft of the muzzle. The flash sphere and the long cone cross
+  // the near plane and paint an unlit white mass over the lower first-person view.
+  // Tracers carry the gun. These volumes stay off.
+  channel.flash.visible = false;
+  channel.cone.visible = false;
   channel.flash.position.copy(origin).addScaledVector(forward, flashOffset);
   channel.flash.quaternion.copy(quaternion);
   channel.cone.position.copy(origin).addScaledVector(forward, coneOffset);
@@ -6387,11 +6390,11 @@ function updateMuzzleChannel(channel, active, origin, forward, quaternion, round
   channel.light.position.copy(channel.flash.position);
   if (active) {
     const pulse = 0.82 + 0.18 * Math.sin(roundsFired * 2.17);
-    channel.flash.scale.set(1.45 * pulse, 0.72 * pulse, 2.7 * pulse);
+    channel.flash.scale.setScalar(0.35 * pulse);
     channel.cone.scale.set(0.9 * pulse, 0.9 * pulse, 1.45 * pulse);
-    channel.flash.material.opacity = 0.84;
-    channel.cone.material.opacity = 0.72;
-    channel.light.intensity = intensity;
+    channel.flash.material.opacity = 0;
+    channel.cone.material.opacity = 0;
+    channel.light.intensity = 0;
   } else {
     channel.flash.material.opacity = 0;
     channel.cone.material.opacity = 0;
