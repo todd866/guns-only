@@ -47,6 +47,62 @@ public sealed class OkanaganAirborneStartTests
         Assert.Equal(FireBossFuelPlan.TaxiOutKg, full.FuelPlan.TaxiOutKg);
     }
 
+    [Theory]
+    [InlineData(OkanaganSortieType.FireAttack)]
+    [InlineData(OkanaganSortieType.LargeForceEmployment)]
+    public void PlayerAttackStartsOnTheNorthScoopApproachAndStillScoops(OkanaganSortieType sortie)
+    {
+        var mission = OkanaganFireMission.CreateForPlayer(sortie);
+        var state = mission.Snapshot();
+        Assert.Equal(OkanaganMissionPhase.JoinScoop, state.Phase);
+        Assert.Equal(FireBossSurfaceMode.Airborne, state.Aircraft.SurfaceMode);
+        Assert.Equal(0, state.Aircraft.WaterLoadKg);
+        Assert.True(OkanaganGeo.IsOverCentralLake(state.Aircraft.PositionWorldM));
+        Assert.False(OkanaganGeo.IsOverKelownaRunway(state.Aircraft.PositionWorldM));
+        Assert.Contains("DESCEND OVER LAKE", state.Cue);
+        Assert.DoesNotContain("DEPART 16", state.Cue);
+        Assert.Equal(FireBossFuelPlan.FireAttackBlockFuelKg, state.FuelPlan.BlockFuelKg);
+        Assert.Equal(FireBossFuelPlan.TaxiOutKg, state.FuelPlan.TaxiOutKg);
+        Assert.Equal("scoop-entry", state.Route[0].Id);
+
+        var full = OkanaganFireMission.Create(sortie).Snapshot();
+        Assert.Equal(OkanaganMissionPhase.Depart, full.Phase);
+        Assert.True(OkanaganGeo.IsOverKelownaRunway(full.Aircraft.PositionWorldM));
+    }
+
+    [Fact]
+    public void InitialAttackScoopsWithinSecondsAndDropsWithinMinutes()
+    {
+        var mission = OkanaganFireMission.CreateForPlayer(OkanaganSortieType.FireAttack);
+        var pilot = new OkanaganTestPilot(mission.Aircraft.InitialElevatorTrim);
+        FireBossPilotCommand command = new(0, 0, 0, 0.55, false, false);
+        double? onWater = null;
+        double? loadedDrop = null;
+        for (int tick = 0; tick < 540 / FireBossDynamics.FixedDeltaSeconds; tick++)
+        {
+            var state = mission.Snapshot();
+            if (state.Phase == OkanaganMissionPhase.Scoop) onWater ??= state.MissionSeconds;
+            if (state.Phase == OkanaganMissionPhase.Drop && state.Aircraft.WaterLoadKg > 1_000)
+            {
+                loadedDrop ??= state.MissionSeconds;
+                break;
+            }
+            if (state.Phase is OkanaganMissionPhase.Failed or OkanaganMissionPhase.Complete
+                or OkanaganMissionPhase.Rtb) break;
+            if (tick % 12 == 0) command = pilot.Command(state,
+                mission.Aircraft.SharedAircraft.LastEngineOperatingPoint.NetThrustN,
+                mission.RecommendsShallowLoadedClimb());
+            mission.Step(command);
+        }
+        var final = mission.Snapshot();
+        string diagnostic = $"{final.Phase} at {final.MissionSeconds:F1}s, on water {onWater}, "
+            + $"loaded on the line {loadedDrop}, gate {final.ActiveGateIndex}/{final.Route.Count}, "
+            + $"water {final.Aircraft.WaterLoadKg:F0}, {final.Cue}";
+        Assert.True(onWater is > 0 and < 90, diagnostic);
+        Assert.True(loadedDrop is > 60 and < 540, diagnostic);
+        Assert.DoesNotContain("DEPART 16", final.Cue);
+    }
+
     [Fact]
     public void WaterPracticeKeepsItsPhysicalTakeoffAndScoopTraining()
     {
