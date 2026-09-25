@@ -21,6 +21,11 @@ public sealed class WeekendRideMissionRuntime
     const double GrassFrictionPerSecond = 0.75;
     const double FixedDeltaSeconds = PlayerVehicleContract.FixedDeltaSeconds;
     const double LapTimingStartSpeedMps = 0.5;
+    /// <summary>
+    /// Ordinary ACU/MSUK national pit-lane maximum. Provisional procedure, not a
+    /// measured YZF-R1 figure.
+    /// </summary>
+    public const double PitLaneSpeedLimitMps = 60.0 / 3.6;
 
     readonly double _gridHeadingRad;
     readonly double _recurringBaseMassKg;
@@ -30,6 +35,7 @@ public sealed class WeekendRideMissionRuntime
     readonly RideLapTiming _lapTiming = new();
     double _currentLapElapsedSeconds;
     double _lapProgressM;
+    double _sessionSeconds;
     double _offTrackSeconds;
     double _tipRecoveryFlashSeconds;
     bool _lapTimingActive;
@@ -45,6 +51,7 @@ public sealed class WeekendRideMissionRuntime
         Circuit = circuit;
         GridPosition = gridPosition;
         _gridHeadingRad = gridHeadingRad;
+        PitLane = PitLaneBeside(gridPosition);
         _recurringBaseMassKg = YzfR1Definition.CombinedMassKg;
         Phase = WeekendRidePhase.Ready;
     }
@@ -53,7 +60,10 @@ public sealed class WeekendRideMissionRuntime
     public YzfR1Dynamics Bike { get; }
     public PaintedCircuit Circuit { get; }
     public Vec3D GridPosition { get; }
+    public PitLaneBox PitLane { get; }
     public double GridHeadingRad => _gridHeadingRad;
+    public double SessionSeconds => _sessionSeconds;
+    public double ProgressM => _lapProgressM;
     public double LapTimeSeconds => _currentLapElapsedSeconds;
 
     /// <summary>The most recently completed lap, seconds; 0 before the first crossing.</summary>
@@ -125,6 +135,7 @@ public sealed class WeekendRideMissionRuntime
         if (Phase != WeekendRidePhase.Active)
             return;
 
+        _sessionSeconds += FixedDeltaSeconds;
         PlayerVehicleEnvironmentSample environment = CreateEnvironment(Bike.State.PositionWorldM);
         Bike.Advance(new PlayerVehicleAdvanceInput(
             _authorityTick,
@@ -166,6 +177,12 @@ public sealed class WeekendRideMissionRuntime
         }
         else if (_tipRecoveryFlashSeconds > 0.0)
             _tipRecoveryFlashSeconds = Math.Max(0.0, _tipRecoveryFlashSeconds - FixedDeltaSeconds);
+
+        // Pit-in is the only world event that ends the session. Esc still calls Finish()
+        // from the pause menu; crossing the line, leaving the paint, and tipping do not.
+        if (PitLane.Contains(Bike.State.PositionWorldM)
+            && Bike.Telemetry.SpeedMps <= PitLaneSpeedLimitMps)
+            Finish();
     }
 
     public void StepFixed(
@@ -264,14 +281,23 @@ public sealed class WeekendRideMissionRuntime
             telemetry.CogEnvelopeHalfAlongM,
             telemetry.CogEnvelopeHalfLateralM,
             telemetry.CogInsideEnvelope,
-            telemetry.CerebellarAssistScale);
+            telemetry.CerebellarAssistScale,
+            _lapProgressM,
+            _sessionSeconds,
+            NextApex.DistanceM,
+            NextApex.SteadySpeedMps,
+            NextApex.ReportingExit);
     }
+
+    public CircuitApexReference NextApex => Circuit.NextApex(_lapProgressM);
 
     void ResetMissionState()
     {
         _authorityTick = 0;
         _circuitQueryState = default;
         _currentLapElapsedSeconds = 0.0;
+        _lapProgressM = 0.0;
+        _sessionSeconds = 0.0;
         _offTrackSeconds = 0.0;
         _tipRecoveryFlashSeconds = 0.0;
         _lapTimingActive = false;
@@ -295,4 +321,37 @@ public sealed class WeekendRideMissionRuntime
                     ? RunwayFrictionPerSecond
                     : GrassFrictionPerSecond));
     }
+
+    /// <summary>
+    /// The paddock row <c>track_day_presentation.js</c> already reserves beside the grid:
+    /// x = clamp(grid.x - 80 - (index % 3) * 22, -900, 900), z = 54 + floor(index / 3) * 14.
+    /// </summary>
+    static PitLaneBox PitLaneBeside(Vec3D grid)
+    {
+        double firstX = Math.Clamp(grid.X - 80.0, -900.0, 900.0);
+        double lastX = Math.Clamp(grid.X - 80.0 - 44.0, -900.0, 900.0);
+        return new PitLaneBox(
+            Math.Min(firstX, lastX) - 14.0,
+            Math.Max(firstX, lastX) + 14.0,
+            48.0,
+            82.0,
+            PitLaneSpeedLimitMps);
+    }
+}
+
+public readonly record struct PitLaneBox(
+    double MinX,
+    double MaxX,
+    double MinZ,
+    double MaxZ,
+    double SpeedLimitMps)
+{
+    public bool Contains(Vec3D position) =>
+        position.X >= MinX && position.X <= MaxX
+        && position.Z >= MinZ && position.Z <= MaxZ;
+
+    public Vec3D Centre => new(
+        (MinX + MaxX) * 0.5,
+        0.0,
+        (MinZ + MaxZ) * 0.5);
 }

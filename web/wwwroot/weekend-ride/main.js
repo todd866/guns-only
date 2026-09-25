@@ -928,6 +928,8 @@ async function boot() {
     // The centreline is immutable: fetch it once instead of re-marshalling ~1,700
     // points inside every per-frame GetState snapshot.
     const circuitPoints = JSON.parse(bridge.GetCircuit());
+    // Same QA seam as __gunsOnlyWeekendAuthority: a headless script can follow the polyline.
+    window.__gunsOnlyWeekendCircuit = circuitPoints;
     rideCircuitIdentity = {
       circuitId: "rapier-strip-weekend",
       circuitLengthM: Number(snapshot?.circuit_length_m) || circuitPoints.length,

@@ -1,5 +1,15 @@
 namespace GunsOnly.Sim.Motorcycle;
 
+/// <summary>
+/// Braking reference read off the centreline. Steady speed is the level-turn
+/// limit sqrt(μ g r), not a painted board the bike ignores.
+/// </summary>
+public readonly record struct CircuitApexReference(
+    double DistanceM,
+    double RadiusM,
+    double SteadySpeedMps,
+    bool ReportingExit);
+
 public readonly record struct PaintedCircuitQueryResult(
     bool OnTrack,
     double ProgressM,
@@ -36,6 +46,7 @@ public sealed class PaintedCircuit
     readonly double[] _segmentLengthM;
     readonly double[] _cumulativeLengthM;
     readonly double[] _sectorGateProgressM;
+    readonly ApexMarker[] _apexes;
     readonly Vec3D _runwayOrigin;
     readonly Vec3D _runwayForward;
     readonly Vec3D _runwayRight;
@@ -76,7 +87,10 @@ public sealed class PaintedCircuit
         }
 
         CircuitLengthM = totalLengthM;
+        _apexes = FindHairpinApexes();
     }
+
+    readonly record struct ApexMarker(double ProgressM, double RadiusM, double ExitProgressM);
 
     public IReadOnlyList<Vec3D> Centreline => _centreline;
     public double TrackWidthM { get; }
@@ -97,9 +111,11 @@ public sealed class PaintedCircuit
         Vec3D right = RunwayRight(headingRad);
         Vec3D origin = originOverride ?? new Vec3D(0.0, elevM, 0.0);
 
-        // Closed loop anchored to the 3,048 m x 48 m strip: esses along the straights, a
-        // wide hairpin (r >= 28 m after corner rounding) on a paved apron at each threshold.
-        // alongM is positive toward the western threshold; crossM is positive toward runway right.
+        // Club loop on the same strip, not a 6 km runway oval. The first hairpin is a few
+        // hundred metres from the grid so a pinned throttle meets a real heading change
+        // inside 15 s. alongM is positive toward the western threshold; crossM is positive
+        // toward runway right. Hairpin centres stay on opposite sides of the origin so
+        // Math.Sign(centreAlongM) still bulges each 180° turn outward.
         Vec3D At(double alongM, double crossM) =>
             origin + forward * alongM + right * crossM;
 
@@ -119,34 +135,21 @@ public sealed class PaintedCircuit
 
         Vec3D[] controlPoints =
         [
-            At(-1_300.0, -14.0),
-            At(-900.0, -12.0),
-            At(-500.0, -8.0),
-            At(-100.0, -14.0),
-            At(300.0, -8.0),
-            At(700.0, -14.0),
-            At(1_050.0, -14.0),
-            At(1_200.0, -26.0),
-            At(1_300.0, -40.0),
-            At(1_360.0, -44.0),
-            .. Hairpin(1_438.0, 1.0),
-            At(1_360.0, 44.0),
-            At(1_300.0, 40.0),
-            At(1_200.0, 26.0),
-            At(1_050.0, 14.0),
-            At(700.0, 14.0),
-            At(300.0, 8.0),
-            At(-100.0, 14.0),
-            At(-500.0, 8.0),
-            At(-900.0, 12.0),
-            At(-1_050.0, 14.0),
-            At(-1_200.0, 26.0),
-            At(-1_300.0, 40.0),
-            At(-1_360.0, 44.0),
-            .. Hairpin(-1_438.0, -1.0),
-            At(-1_390.0, -43.0),
-            At(-1_340.0, -33.0),
-            At(-1_300.0, -14.0),
+            At(-280.0, -14.0),
+            At(-40.0, -14.0),
+            At(40.0, -30.0),
+            At(100.0, -42.0),
+            .. Hairpin(170.0, 1.0),
+            At(100.0, 42.0),
+            At(40.0, 30.0),
+            At(-40.0, 14.0),
+            At(-280.0, 14.0),
+            At(-380.0, 28.0),
+            At(-440.0, 42.0),
+            .. Hairpin(-520.0, -1.0),
+            At(-470.0, -40.0),
+            At(-400.0, -28.0),
+            At(-280.0, -14.0),
         ];
         Vec3D[] centreline = BuildRoundedCentreline(controlPoints);
 
@@ -197,6 +200,183 @@ public sealed class PaintedCircuit
         if (onRunway)
             return true;
         return FindClosestSegment(positionWorld).LateralDistanceM <= PavedApronHalfWidthM;
+    }
+
+    /// <summary>
+    /// Distance to the next hairpin apex, and the steady speed sqrt(μ g r) that radius
+    /// can hold. μ is <see cref="YzfR1Definition.TirePeakFrictionCoefficient"/> (surrogate
+    /// 1.20, docs/vehicles/yamaha-yzf-r1/00-sources.md). g is standard gravity 9.80665.
+    /// Once progress has passed the apex and not yet the exit, the distance is the exit
+    /// of this corner rather than the apex already under the bike.
+    /// </summary>
+    public CircuitApexReference NextApex(double progressM)
+    {
+        const double gravityMps2 = 9.80665;
+        double mu = YzfR1Definition.TirePeakFrictionCoefficient;
+        if (_apexes.Length == 0 || CircuitLengthM <= 1.0)
+        {
+            return new CircuitApexReference(0.0, HairpinRadiusM,
+                Math.Sqrt(mu * gravityMps2 * HairpinRadiusM), false);
+        }
+
+        double progress = WrapProgress(progressM);
+        foreach (ApexMarker apex in _apexes)
+        {
+            double intoCornerM = ForwardDistance(apex.ProgressM, progress);
+            double cornerLengthM = ForwardDistance(apex.ProgressM, apex.ExitProgressM);
+            if (intoCornerM > 2.0 && intoCornerM <= cornerLengthM)
+            {
+                return new CircuitApexReference(
+                    ForwardDistance(progress, apex.ExitProgressM),
+                    apex.RadiusM,
+                    Math.Sqrt(mu * gravityMps2 * Math.Max(apex.RadiusM, 1.0)),
+                    ReportingExit: true);
+            }
+        }
+
+        ApexMarker next = _apexes[0];
+        double bestDistanceM = double.PositiveInfinity;
+        foreach (ApexMarker apex in _apexes)
+        {
+            double distanceM = ForwardDistance(progress, apex.ProgressM);
+            if (distanceM < 2.0)
+                distanceM = CircuitLengthM;
+            if (distanceM < bestDistanceM)
+            {
+                bestDistanceM = distanceM;
+                next = apex;
+            }
+        }
+
+        return new CircuitApexReference(
+            bestDistanceM,
+            next.RadiusM,
+            Math.Sqrt(mu * gravityMps2 * Math.Max(next.RadiusM, 1.0)),
+            ReportingExit: false);
+    }
+
+    ApexMarker[] FindHairpinApexes()
+    {
+        int unique = _centreline.Length - 1;
+        if (unique < 8)
+            return [];
+
+        var radiusM = new double[unique];
+        for (int index = 0; index < unique; index++)
+            radiusM[index] = CornerRadiusAt(index, unique);
+
+        var markers = new List<ApexMarker>();
+        for (int index = 1; index < unique - 1; index++)
+        {
+            if (radiusM[index] > 55.0)
+                continue;
+            if (radiusM[index] > radiusM[index - 1] + 0.25)
+                continue;
+            if (radiusM[index] > radiusM[index + 1] + 0.25)
+                continue;
+            double progressM = _cumulativeLengthM[index];
+            if (markers.Count > 0
+                && ForwardDistance(markers[^1].ProgressM, progressM) < 40.0
+                && ForwardDistance(markers[^1].ProgressM, progressM) > 0.0)
+            {
+                if (radiusM[index] < markers[^1].RadiusM)
+                    markers[^1] = new ApexMarker(progressM, radiusM[index], progressM);
+                continue;
+            }
+
+            markers.Add(new ApexMarker(progressM, radiusM[index], progressM));
+        }
+
+        for (int markerIndex = 0; markerIndex < markers.Count; markerIndex++)
+        {
+            ApexMarker marker = markers[markerIndex];
+            double exitProgressM = marker.ProgressM;
+            double travelledM = 0.0;
+            int index = IndexNearProgress(marker.ProgressM);
+            for (int step = 0; step < unique && travelledM < 140.0; step++)
+            {
+                int next = (index + 1) % unique;
+                travelledM += _segmentLengthM[index];
+                index = next;
+                exitProgressM = _cumulativeLengthM[index];
+                if (CornerRadiusAt(index, unique) > 80.0 && travelledM > 12.0)
+                    break;
+            }
+
+            markers[markerIndex] = marker with { ExitProgressM = exitProgressM };
+        }
+
+        return markers.ToArray();
+    }
+
+    int IndexNearProgress(double progressM)
+    {
+        int best = 0;
+        double bestDeltaM = double.PositiveInfinity;
+        int unique = _centreline.Length - 1;
+        for (int index = 0; index < unique; index++)
+        {
+            double deltaM = Math.Abs(_cumulativeLengthM[index] - progressM);
+            if (deltaM < bestDeltaM)
+            {
+                bestDeltaM = deltaM;
+                best = index;
+            }
+        }
+
+        return best;
+    }
+
+    double CornerRadiusAt(int index, int unique)
+    {
+        const double windowM = 6.0;
+        Vec3D b = _centreline[index];
+        Vec3D a = WalkCentreline(index, -windowM, unique);
+        Vec3D c = WalkCentreline(index, windowM, unique);
+        double ab = HorizontalDistance(a, b);
+        double bc = HorizontalDistance(b, c);
+        double ca = HorizontalDistance(c, a);
+        double cross = (b.X - a.X) * (c.Z - a.Z) - (b.Z - a.Z) * (c.X - a.X);
+        double areaTwice = Math.Abs(cross);
+        if (areaTwice < 1e-6 || ab < 1e-3 || bc < 1e-3 || ca < 1e-3)
+            return double.PositiveInfinity;
+        return ab * bc * ca / (2.0 * areaTwice);
+    }
+
+    Vec3D WalkCentreline(int index, double signedDistanceM, int unique)
+    {
+        int direction = signedDistanceM >= 0.0 ? 1 : -1;
+        double remainingM = Math.Abs(signedDistanceM);
+        int cursor = index;
+        while (remainingM > 0.0)
+        {
+            int next = direction > 0
+                ? (cursor + 1) % unique
+                : (cursor - 1 + unique) % unique;
+            double segmentM = HorizontalDistance(_centreline[cursor], _centreline[next]);
+            if (segmentM >= remainingM || segmentM < 1e-6)
+                return _centreline[next];
+            remainingM -= segmentM;
+            cursor = next;
+        }
+
+        return _centreline[index];
+    }
+
+    double ForwardDistance(double fromM, double toM)
+    {
+        double distanceM = toM - fromM;
+        if (distanceM < 0.0)
+            distanceM += CircuitLengthM;
+        return distanceM;
+    }
+
+    double WrapProgress(double progressM)
+    {
+        if (!double.IsFinite(progressM) || CircuitLengthM <= 0.0)
+            return 0.0;
+        double wrapped = progressM % CircuitLengthM;
+        return wrapped < 0.0 ? wrapped + CircuitLengthM : wrapped;
     }
 
     static Vec3D[] BuildRoundedCentreline(IReadOnlyList<Vec3D> closedControlPoints)
