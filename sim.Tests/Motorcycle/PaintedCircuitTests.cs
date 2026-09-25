@@ -50,13 +50,36 @@ public sealed class PaintedCircuitTests
             }
         }
 
-        // Far off the corridor and outside the runway rectangle must NOT read as paved.
+        // Beyond the paint, and eventually beyond the runway rectangle, must read as grass.
+        // The old 120 m extrapolation assumed a hairpin on the threshold; a club loop infield
+        // of that threshold is still inside the 3,048 m rectangle at 120 m.
+        Vec3D centroid = default;
+        foreach (Vec3D point in points)
+            centroid += point;
+        centroid = new Vec3D(
+            centroid.X / points.Count,
+            centroid.Y / points.Count,
+            centroid.Z / points.Count);
         Vec3D apex = points[0];
         foreach (Vec3D point in points)
-            if (Horizontal(point, points[0]) > Horizontal(apex, points[0]))
+            if (Horizontal(point, centroid) > Horizontal(apex, centroid))
                 apex = point;
-        Vec3D away = apex + (apex - points[0]) * (120.0 / Math.Max(1.0, Horizontal(apex, points[0])));
-        Assert.False(circuit.IsOnPavement(away), $"expected grass at {away}");
+        Vec3D outward = apex - centroid;
+        double outwardLength = Math.Max(1.0, Horizontal(apex, centroid));
+        bool foundGrass = false;
+        Vec3D grass = apex;
+        for (double extraM = 40.0; extraM <= 4_000.0; extraM += 40.0)
+        {
+            grass = apex + outward * (extraM / outwardLength);
+            if (!circuit.IsOnPavement(grass))
+            {
+                foundGrass = true;
+                break;
+            }
+        }
+
+        Assert.True(foundGrass, $"pavement never ended beyond {apex}");
+        Assert.False(circuit.IsOnPavement(grass), $"expected grass at {grass}");
     }
 
     [Fact]
@@ -140,7 +163,8 @@ public sealed class PaintedCircuitTests
     public void ClosedCircuitHasPositiveLengthAndTrackWidth()
     {
         var circuit = PaintedCircuit.RapierStripWeekend();
-        Assert.True(circuit.CircuitLengthM > 1500.0);
+        // Club-circuit band. The old `> 1500` pin still accepted the 6 km runway oval.
+        Assert.InRange(circuit.CircuitLengthM, 1_200.0, 2_600.0);
         Assert.InRange(circuit.TrackWidthM, 8.0, 20.0);
         Assert.Equal(circuit.Centreline[0], circuit.Centreline[^1]);
         Assert.True(circuit.SectorGateProgressM.Count >= 3);
@@ -247,5 +271,93 @@ public sealed class PaintedCircuitTests
         Assert.False(result.CrossedStartFinish);
         Assert.Equal(0, result.LapIndex);
         Assert.Equal(0, state.NextSectorIndex);
+    }
+
+    [Fact]
+    public void FirstRealHeadingChangeIsAFewHundredMetresFromTheGrid()
+    {
+        var circuit = PaintedCircuit.RapierStripWeekend();
+        double distanceM = DistanceToHeadingChange(circuit, 0.4);
+
+        Assert.InRange(distanceM, 120.0, 450.0);
+        CircuitApexReference atGrid = circuit.NextApex(0.0);
+        Assert.False(atGrid.ReportingExit);
+        Assert.InRange(atGrid.DistanceM, 120.0, 500.0);
+        Assert.InRange(atGrid.SteadySpeedMps, 12.0, 28.0);
+        Assert.True(
+            atGrid.SteadySpeedMps < 40.0,
+            "hairpin steady speed must sit well below a straight's terminal speed");
+    }
+
+    [Fact]
+    public void InsideTheHairpinTheReferenceIsTheExitNotTheApexUnderTheBike()
+    {
+        var circuit = PaintedCircuit.RapierStripWeekend();
+        (int apexIndex, double radiusM) = TightestSample(circuit);
+        Assert.True(radiusM < 50.0, $"expected a hairpin, tightest radius was {radiusM:F1} m");
+
+        int unique = circuit.Centreline.Count - 1;
+        int inside = (apexIndex + 8) % unique;
+        PaintedCircuitQueryResult sample = circuit.Query(circuit.Centreline[inside]);
+        CircuitApexReference atApex = circuit.NextApex(
+            circuit.Query(circuit.Centreline[apexIndex]).ProgressM);
+        CircuitApexReference insideCorner = circuit.NextApex(sample.ProgressM);
+
+        Assert.True(insideCorner.ReportingExit);
+        Assert.InRange(insideCorner.DistanceM, 5.0, 120.0);
+        Assert.True(insideCorner.DistanceM < atApex.DistanceM);
+    }
+
+    static (int Index, double RadiusM) TightestSample(PaintedCircuit circuit)
+    {
+        IReadOnlyList<Vec3D> points = circuit.Centreline;
+        int unique = points.Count - 1;
+        double best = double.PositiveInfinity;
+        int bestIndex = 0;
+        for (int index = 0; index < unique; index++)
+        {
+            Vec3D b = points[index];
+            Vec3D a = points[(index - 6 + unique) % unique];
+            Vec3D c = points[(index + 6) % unique];
+            double ab = Horizontal(a, b);
+            double bc = Horizontal(b, c);
+            double ca = Horizontal(c, a);
+            double cross = (b.X - a.X) * (c.Z - a.Z) - (b.Z - a.Z) * (c.X - a.X);
+            double areaTwice = Math.Abs(cross);
+            if (areaTwice < 1e-6)
+                continue;
+            double radiusM = ab * bc * ca / (2.0 * areaTwice);
+            if (radiusM < best)
+            {
+                best = radiusM;
+                bestIndex = index;
+            }
+        }
+
+        return (bestIndex, best);
+    }
+
+    static double DistanceToHeadingChange(PaintedCircuit circuit, double changeRad)
+    {
+        IReadOnlyList<Vec3D> points = circuit.Centreline;
+        Vec3D initial = points[1] - points[0];
+        double initialLength = Math.Sqrt(initial.X * initial.X + initial.Z * initial.Z);
+        double travelledM = 0.0;
+        for (int index = 1; index < points.Count - 1; index++)
+        {
+            Vec3D step = points[index] - points[index - 1];
+            double stepLength = Math.Sqrt(step.X * step.X + step.Z * step.Z);
+            travelledM += stepLength;
+            Vec3D tangent = points[index + 1] - points[index];
+            double tangentLength = Math.Sqrt(tangent.X * tangent.X + tangent.Z * tangent.Z);
+            if (stepLength < 1e-6 || tangentLength < 1e-6 || initialLength < 1e-6)
+                continue;
+            double dot = (initial.X * tangent.X + initial.Z * tangent.Z)
+                / (initialLength * tangentLength);
+            if (Math.Acos(Math.Clamp(dot, -1.0, 1.0)) > changeRad)
+                return travelledM;
+        }
+
+        return double.PositiveInfinity;
     }
 }

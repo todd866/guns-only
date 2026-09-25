@@ -201,7 +201,7 @@ public static partial class CobraWebBridge
             && ticks++ < 12
             && runtime.MissionFlyable) {
             int airframeSwapsBeforeTick = runtime.AirframeSwaps;
-            runtime.Advance(_controlLatch.Command, _turnaroundActionHeld);
+            runtime.Advance(_controlLatch.Command, _turnaroundActionHeld, _engagementConsent);
             _accumulatorSeconds -= FixedDeltaSeconds;
             if (runtime.AirframeSwaps > airframeSwapsBeforeTick) {
                 _controlLatch.ObserveAuthoritySwap(runtime.AirframeSwaps);

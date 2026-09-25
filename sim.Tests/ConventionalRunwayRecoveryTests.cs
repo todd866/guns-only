@@ -36,10 +36,14 @@ public sealed class ConventionalRunwayRecoveryTests {
             Doctrine.Beats.ModernVisualMerge().RecoveryPlan);
         ConventionalRunway runway = ConventionalRunway.FromRecoveryPlan(plan);
 
-        Assert.Equal(plan.Position, runway.TouchdownAimPoint);
+        // The aim point is rebuilt from threshold + heading, so it matches the authored position to
+        // floating-point precision, not bit-for-bit (1 ulp of easting at the relocated runway).
+        Assert.Equal(plan.Position.X, runway.TouchdownAimPoint.X, 1e-6);
+        Assert.Equal(plan.Position.Y, runway.TouchdownAimPoint.Y, 1e-6);
+        Assert.Equal(plan.Position.Z, runway.TouchdownAimPoint.Z, 1e-6);
         Assert.Equal(3000.0, runway.LengthM);
         Assert.Equal(45.0, runway.WidthM);
-        Assert.Equal(300.0, runway.TouchdownAimAlongM);
+        Assert.Equal(300.0, runway.TouchdownAimAlongM, 1e-6);
         Assert.Throws<ArgumentException>(() => ConventionalRunway.FromRecoveryPlan(
             new RecoveryPlan("recovery.no-runway.v1", "No runway",
                 Vec3D.Zero, requiredLandingReserveLb: 0.0)));

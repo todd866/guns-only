@@ -539,7 +539,8 @@ public sealed class CobraMissionRuntime
         _groundWar.Fob.CentreWorldM,
         fobPathAltitudeM: _groundWar.Fob.CentreWorldM.Y + 30.0,
         aircraftWorldM: _cobra.State.PositionWorldM,
-        terrain: _terrain);
+        terrain: _terrain,
+        sites: _groundWar.Sites);
     public IReadOnlyList<CobraResolvedObstacle> ResolvedObstacles => _resolvedObstacles;
     public IReadOnlyList<CobraResolvedThreatObserver> ResolvedThreatObservers =>
         _resolvedThreatObservers;
@@ -572,7 +573,8 @@ public sealed class CobraMissionRuntime
 
     public CobraMissionAdvanceResult Advance(
         in VerticalLiftPilotCommand command,
-        bool turnaroundActionHeld = false)
+        bool turnaroundActionHeld = false,
+        bool gunnerConsent = false)
     {
         if (Status != CobraMissionStatus.Active)
             throw new InvalidOperationException(
@@ -661,8 +663,8 @@ public sealed class CobraMissionRuntime
 
         // Strategic cadence (see GroundWarStepHz): batch the airframe's fixed steps until a
         // ground-war step is due, then advance the basin fight by exactly the time that elapsed.
-        // Rearm stays at authority rate — it is one terrain sample and the pilot must feel it
-        // the instant the skids settle on the Camp Ember pad.
+        // Rearm is a pad action sampled at authority rate. The ground war keeps its own
+        // cadence above; the magazine fills only after the dwell inside TryResupplyAtFob.
         if (GroundWarCombatLive) {
             _groundWarAccumulatorSeconds += PlayerVehicleContract.FixedDeltaSeconds;
             if (_groundWarAccumulatorSeconds + 1e-12 >= GroundWarStepSeconds) {
@@ -675,7 +677,11 @@ public sealed class CobraMissionRuntime
             _groundWarAccumulatorSeconds = 0.0;
         }
         if (Status == CobraMissionStatus.Active)
-            _groundWar.TryResupplyAtFob(currentPositionWorldM);
+            _groundWar.TryResupplyAtFob(
+                currentPositionWorldM,
+                PlayerVehicleContract.FixedDeltaSeconds,
+                command.Collective,
+                gunnerConsent);
         if (Status == CobraMissionStatus.Active)
         {
             CobraTurnaroundDirective turnaround = _turnaround.Advance(

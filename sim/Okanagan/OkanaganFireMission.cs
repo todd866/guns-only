@@ -101,8 +101,9 @@ public sealed class OkanaganFireMission
         OkanaganGeo.ToWorld(49.960, -119.500, 720.0);
     internal static readonly Vec3D CircuitDownwind =
         OkanaganGeo.ToWorld(49.945, -119.482, 650.0);
-    internal static readonly Vec3D TrainingDrop =
-        CircuitDownwind + new Vec3D(0.0, 0.0, -1_800.0);
+    // East of the lake, on the bench beside the downwind leg. Dumping on the water is the
+    // overweight-landing out, not the training target.
+    internal static readonly Vec3D TrainingDrop = ShorePracticeMark();
     internal static readonly Vec3D RtbCrossing =
         OkanaganGeo.ToWorld(49.950, -119.450, 850.0);
     // Runway 16 runs from the north-west threshold toward the south-east. The original recovery
@@ -118,6 +119,7 @@ public sealed class OkanaganFireMission
     readonly OkanaganFireGrid _fire;
     readonly OkanaganIncident? _incident;
     readonly bool _airborneIncidentStart;
+    readonly bool _scoopApproachStart;
     readonly OkanaganProtection? _protection;
     bool _incidentActive;
     bool _incidentHandedOff;
@@ -133,6 +135,13 @@ public sealed class OkanaganFireMission
     long _ticks;
     OkanaganMissionPhase _phaseBeforePause;
     double _dropCreditThisPass;
+    bool _releaseOpen;
+    Vec3D _releaseAnchor;
+    bool _footprintGrass;
+    bool _footprintTimber;
+    double _footprintOnMarkKg;
+    bool _footprintCrossedBoth;
+    double _onMarkThisPassKg;
     int _sitesProtectedThisPass;
     double _releasedThisPass;
     double _holdDwellSeconds;
@@ -156,6 +165,11 @@ public sealed class OkanaganFireMission
         Sortie = sortie;
         _incident = OkanaganIncident.For(sortie);
         _airborneIncidentStart = nearIncident && _incident != null;
+        // Player Initial Attack and Large Force skip the Kelowna ferry and join the live
+        // north scoop lane. Water Circuits keeps the runway: that sortie is the departure lesson.
+        // Create() still starts every sortie on the runway.
+        _scoopApproachStart = nearIncident && _incident == null
+            && sortie is OkanaganSortieType.FireAttack or OkanaganSortieType.LargeForceEmployment;
         _fire = new OkanaganFireGrid(_incident);
         _protection = _incident == null ? null : new OkanaganProtection(_incident.Sites);
         _incidentActive = _incident == null;
@@ -197,6 +211,8 @@ public sealed class OkanaganFireMission
             Aircraft = FireBossDynamics.AtLoadedIngress(position,
                 Math.Atan2(-_incidentUphill.X, -_incidentUphill.Z), fuelKg, waterKg);
         }
+        else if (_scoopApproachStart)
+            Aircraft = FireBossDynamics.AtNorthScoopApproach(fuelKg);
         else Aircraft = FireBossDynamics.AtKelownaDeparture(fuelKg);
         _latestTelemetry = Aircraft.Telemetry;
         _scoopTargetWaterKg = PlannedScoopTarget(_latestTelemetry);
@@ -206,6 +222,8 @@ public sealed class OkanaganFireMission
             CaptureAcquiredLoad(_latestTelemetry);
             SetPhase(OkanaganMissionPhase.Ingress);
         }
+        else if (_scoopApproachStart)
+            SetPhase(OkanaganMissionPhase.JoinScoop);
         else SetPhase(OkanaganMissionPhase.Depart);
     }
 
@@ -215,6 +233,7 @@ public sealed class OkanaganFireMission
     public int ActiveGateIndex { get; private set; }
     public int CompletedCycles { get; private set; }
     public int EffectiveDrops { get; private set; }
+    public double WaterReleasedKg { get; private set; }
     public double Score { get; private set; }
     public double MissionSeconds => _ticks * FireBossDynamics.FixedDeltaSeconds;
 
@@ -273,17 +292,9 @@ public sealed class OkanaganFireMission
         }
 
         if (telemetry.WaterReleasedThisTickKg > 0.0)
-        {
-            _releasedThisPass += telemetry.WaterReleasedThisTickKg;
-            if (Sortie != OkanaganSortieType.WaterCircuits && _incidentActive)
-            {
-                double dose = telemetry.WaterReleasedThisTickKg * (_incident == null ? 1 :
-                    DropDeliveryFraction(telemetry.PositionWorldM.Y - OkanaganCdem.SampleSurfaceHeightM(telemetry.PositionWorldM)));
-                _dropCreditThisTick = _fire.ApplyWater(telemetry.PositionWorldM, dose);
-                _sitesProtectedThisPass += _protection?.ApplyWater(telemetry.PositionWorldM, dose) ?? 0;
-                _dropCreditThisPass += _dropCreditThisTick;
-            }
-        }
+            AccountRelease(telemetry);
+        else
+            CloseFootprint();
 
         AdvanceGate(telemetry.PositionWorldM);
         FireBossFuelSnapshot liveFuel = FuelPlanFor(telemetry);
@@ -394,12 +405,65 @@ public sealed class OkanaganFireMission
         && telemetry.WaterLoadKg > LoadToleranceKg
         && telemetry.GrossMassKg > FireBossDynamics.MaximumLandingMassKg;
 
+    double OnMarkMassKg => _onMarkThisPassKg + (_releaseOpen ? _footprintOnMarkKg : 0.0);
+
+    bool FootprintCrossedBoth =>
+        _footprintCrossedBoth || (_releaseOpen && _footprintGrass && _footprintTimber);
+
+    void AccountRelease(in FireBossTelemetry telemetry)
+    {
+        double released = telemetry.WaterReleasedThisTickKg;
+        bool contiguous = _releaseOpen
+            && HorizontalDistance(telemetry.PositionWorldM, _releaseAnchor)
+                <= OkanaganFireGrid.DropFootprintRadiusM;
+        if (!contiguous) CloseFootprint();
+        if (!_releaseOpen)
+        {
+            _releaseOpen = true;
+            _footprintGrass = false;
+            _footprintTimber = false;
+            _footprintOnMarkKg = 0.0;
+        }
+        _releaseAnchor = telemetry.PositionWorldM;
+        _releasedThisPass += released;
+        WaterReleasedKg += released;
+        if (Sortie == OkanaganSortieType.WaterCircuits
+            && HorizontalDistance(telemetry.PositionWorldM, TrainingDrop)
+                <= OkanaganFireGrid.DropFootprintRadiusM)
+            _footprintOnMarkKg += released;
+        if (Sortie != OkanaganSortieType.WaterCircuits && _incidentActive && !DropIsWithheld())
+        {
+            double dose = released * (_incident == null ? 1 :
+                DropDeliveryFraction(telemetry.PositionWorldM.Y
+                    - OkanaganCdem.SampleSurfaceHeightM(telemetry.PositionWorldM)));
+            _dropCreditThisTick = _fire.ApplyWater(telemetry.PositionWorldM, dose);
+            _footprintGrass |= _fire.LastStrikeHitGrass;
+            _footprintTimber |= _fire.LastStrikeHitTimber;
+            _sitesProtectedThisPass += _protection?.ApplyWater(telemetry.PositionWorldM, dose) ?? 0;
+            _dropCreditThisPass += _dropCreditThisTick;
+        }
+    }
+
+    void CloseFootprint()
+    {
+        if (!_releaseOpen) return;
+        if (_footprintGrass && _footprintTimber) _footprintCrossedBoth = true;
+        _onMarkThisPassKg += _footprintOnMarkKg;
+        _releaseOpen = false;
+        _footprintGrass = false;
+        _footprintTimber = false;
+        _footprintOnMarkKg = 0.0;
+    }
+
     void CaptureAcquiredLoad(in FireBossTelemetry telemetry)
     {
         _hadUsefulLoad = true;
         _dropTargetWaterKg = telemetry.WaterLoadKg * DropCompletionFraction;
         // Water dumped during an earlier circuit or on the approach is not this pass's delivery.
         _releasedThisPass = 0.0;
+        CloseFootprint();
+        _footprintCrossedBoth = false;
+        _onMarkThisPassKg = 0.0;
     }
 
     void StepWaterCircuits(in FireBossTelemetry telemetry)
@@ -422,11 +486,14 @@ public sealed class OkanaganFireMission
         if (Phase == OkanaganMissionPhase.Climb && telemetry.PositionWorldM.Y >= 620.0)
             SetPhase(OkanaganMissionPhase.Downwind);
         if (Phase == OkanaganMissionPhase.Downwind && _hadUsefulLoad
-            && _releasedThisPass >= _dropTargetWaterKg)
+            && _releasedThisPass >= _dropTargetWaterKg
+            && OnMarkMassKg >= _dropTargetWaterKg)
         {
             CompletedCycles++;
             _hadUsefulLoad = false;
             _releasedThisPass = 0.0;
+            CloseFootprint();
+            _onMarkThisPassKg = 0.0;
             // Dispatch promises one complete scoop/drop/recovery circuit. Returning to the scoop
             // lane here silently turned that finite training sortie into an endurance loop and
             // made its success result unreachable until fuel happened to force an RTB.
@@ -473,7 +540,10 @@ public sealed class OkanaganFireMission
             else
                 _holdDwellSeconds = 0.0;
             if (AirAttackHoldClears(_holdDwellSeconds, rangeM))
+            {
+                _airAttackCleared = true;
                 SetPhase(OkanaganMissionPhase.Ingress);
+            }
         }
         if (Phase == OkanaganMissionPhase.Ingress
             && HorizontalDistance(telemetry.PositionWorldM, IncidentTarget) < 1_900.0
@@ -484,10 +554,17 @@ public sealed class OkanaganFireMission
         {
             // A defence load is laid on the buildings, not the fire's centre, so it earns its
             // drop by reaching structures as well as by cooling cells.
-            if (_dropCreditThisPass >= 420.0 || _sitesProtectedThisPass >= 3) EffectiveDrops++;
+            // Boucherie credit is a load that wets both the windward grass and the
+            // downwind timber. A defence run is scored on the buildings it reaches.
+            bool flankJoined = _incident != null || FootprintCrossedBoth;
+            if ((_dropCreditThisPass >= 420.0 && flankJoined) || _sitesProtectedThisPass >= 3)
+                EffectiveDrops++;
             _hadUsefulLoad = false;
             _releasedThisPass = 0.0;
             _dropCreditThisPass = 0.0;
+            CloseFootprint();
+            _footprintCrossedBoth = false;
+            _onMarkThisPassKg = 0.0;
             _sitesProtectedThisPass = 0;
             CompletedCycles++;
             if (_airborneIncidentStart) SetPhase(OkanaganMissionPhase.Egress);
@@ -544,7 +621,8 @@ public sealed class OkanaganFireMission
             _scoopTargetWaterKg = PlannedScoopTarget(_latestTelemetry);
             _dropTargetWaterKg = 0.0;
         }
-        if (_incident != null && Phase == OkanaganMissionPhase.Ingress && phase == OkanaganMissionPhase.Drop) {
+        if (Phase == OkanaganMissionPhase.Ingress && phase == OkanaganMissionPhase.Drop
+            && (_incident != null || _scoopApproachStart)) {
             Phase = phase;
             return; // This is the same corridor; its already-passed gates remain passed.
         }
@@ -555,6 +633,21 @@ public sealed class OkanaganFireMission
         foreach (OkanaganRouteGate gate in RouteFor(phase)) _route.Add(gate);
     }
 
+    bool _airAttackCleared;
+
+    bool DropIsWithheld() => Phase == OkanaganMissionPhase.Hold
+        || (Sortie == OkanaganSortieType.LargeForceEmployment && !_airAttackCleared
+            && HelicopterDistanceToTarget() <= HelicopterLineRadiusM);
+
+    double HelicopterDistanceToTarget()
+    {
+        double t = MissionSeconds;
+        Vec3D helicopter = FireTarget + new Vec3D(
+            Math.Sin(t * 0.11) * 90.0, 0.0, Math.Cos(t * 0.11) * 280.0);
+        return HorizontalDistance(helicopter, IncidentTarget);
+    }
+
+    internal const double HelicopterLineRadiusM = 200.0;
     internal const double AirAttackHoldRadiusM = 1_350.0;
     internal const double AirAttackHoldDwellSeconds = 12.0;
 
@@ -567,9 +660,13 @@ public sealed class OkanaganFireMission
         return rangeM < AirAttackHoldRadiusM && dwellSeconds >= AirAttackHoldDwellSeconds;
     }
 
-    Vec3D DropAim() => Sortie == OkanaganSortieType.WaterCircuits
-        ? TrainingDrop with { Y = OkanaganGeo.LakeSurfaceElevationM }
-        : IncidentTarget;
+    Vec3D DropAim() => Sortie == OkanaganSortieType.WaterCircuits ? TrainingDrop : IncidentTarget;
+
+    static Vec3D ShorePracticeMark()
+    {
+        Vec3D bench = OkanaganGeo.ToWorld(49.9530, -119.4480, 0.0);
+        return bench with { Y = OkanaganCdem.SampleSurfaceHeightM(bench) };
+    }
 
     internal IEnumerable<OkanaganRouteGate> RouteFor(OkanaganMissionPhase phase)
     {
@@ -598,7 +695,10 @@ public sealed class OkanaganFireMission
         }
         else if (phase is OkanaganMissionPhase.JoinScoop or OkanaganMissionPhase.Scoop)
         {
-            yield return Gate("lake-arrival", "CROSS HILLS · HOLD ALTITUDE", LakeArrival, 450, 58);
+            // The hill crossing belongs to the runway departure. A sortie that already
+            // starts on the lake would be sent back south and uphill to reach it.
+            if (!_scoopApproachStart)
+                yield return Gate("lake-arrival", "CROSS HILLS · HOLD ALTITUDE", LakeArrival, 450, 58);
             yield return Gate("scoop-entry", "DESCEND OVER LAKE", ScoopEntry, 650.0, 47.0);
             yield return Gate("scoop-touch", "TOUCH · STEP", ScoopTouchdown, 420.0, 42.0);
             yield return Gate("scoop-lane", "SCOOPS", ScoopExit, 650.0, 43.0);
@@ -611,7 +711,10 @@ public sealed class OkanaganFireMission
         else if (phase == OkanaganMissionPhase.Downwind)
         {
             yield return Gate("downwind-entry", "DOWNWIND", CircuitDownwind, 900.0, 58.0);
-            yield return Gate("training-drop", "DROP WATER", TrainingDrop, 900.0, 58.0);
+            // The mark sits on the bench. The gate stays above that ground so the pattern
+            // does not become a descent into the hillside.
+            double dropAltitude = Math.Max(CircuitDownwind.Y, TrainingDrop.Y + 120.0);
+            yield return Gate("training-drop", "DROP WATER", TrainingDrop with { Y = dropAltitude }, 900.0, 58.0);
             if (Sortie == OkanaganSortieType.WaterCircuits)
             {
                 // The first credited training load ends this finite circuit. Keep the last

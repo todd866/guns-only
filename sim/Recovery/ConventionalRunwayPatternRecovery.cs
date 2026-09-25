@@ -22,6 +22,8 @@ public sealed class ConventionalRunwayPatternRecoveryDirector {
     const double IngressProjectionBacktrackM = 250.0;
     const double IngressTerrainClearanceM = 300.0;
     const double GoAroundPastAimM = 250.0;
+    // Tight enough that a heading pointed at short final cannot capture the downwind perch.
+    const double CaptureHeadingToleranceRad = 30.0 * Math.PI / 180.0;
 
     int _activeIndex;
     bool _active;
@@ -171,9 +173,11 @@ public sealed class ConventionalRunwayPatternRecoveryDirector {
     }
 
     /// <summary>
-    /// Left-hand runway pattern expressed entirely in the runway's threshold/heading frame. The
-    /// final, threshold-crossing, and touchdown-aim gates share one 3-degree line anchored at the
-    /// physical aim point and wheel-reference height. They guide only; touchdown remains physical.
+    /// Overhead recovery in the runway frame: initial on the extended centreline, break at the
+    /// numbers, perch abeam, then the same 3° final. Altitudes are a stable surrogate for the
+    /// overhead in AFI 11-202 Volume 3 (initial, break, perch, continuous turn to final), not an
+    /// F-22 local supplement. The final, threshold, and touchdown gates share one 3-degree line
+    /// anchored at the physical aim point. They guide only; touchdown remains physical.
     /// </summary>
     public static IReadOnlyList<PatternGate> BuildSchedule(
         ConventionalRunway runway,
@@ -200,15 +204,28 @@ public sealed class ConventionalRunwayPatternRecoveryDirector {
                     touchdownReferenceHeightM + trackToAimM * Math.Tan(FinalSlopeRad),
                     0.0);
         }
-        double entryCalibratedMps = Math.Min(
-            250.0 / AirData.MpsToKnots,
-            approachCalibratedAirspeedMps * 1.30);
-        double downwindCalibratedMps = Math.Min(
+        // Surrogate overhead, not an F-22 local supplement. AFI 11-202 Volume 3 is the
+        // procedure shape: initial, break, reciprocal downwind, gear abeam, then a
+        // continuous descending 180 to short final. 1 500 ft / 300 KCAS and a 1 NM
+        // pattern are the familiar fast-jet numbers, not a type NATOPS.
+        const double patternOffsetM = 1_852.0;
+        const double shortFinalAlongM = -1_500.0;
+        double aimAlongM = runway.TouchdownAimAlongM;
+        double turnRadiusM = patternOffsetM / 2.0;
+        double initialCalibratedMps = 300.0 / AirData.MpsToKnots;
+        double breakCalibratedMps = 250.0 / AirData.MpsToKnots;
+        double perchCalibratedMps = Math.Min(
             220.0 / AirData.MpsToKnots,
             approachCalibratedAirspeedMps * 1.15);
-        double baseCalibratedMps = Math.Min(
-            200.0 / AirData.MpsToKnots,
-            approachCalibratedAirspeedMps * 1.08);
+        Vec3D perch = Point(aimAlongM, -patternOffsetM, 1_000.0);
+        Vec3D rollout = Final(shortFinalAlongM);
+        Vec3D Arc(double phi) {
+            Vec3D horizontal = runway.SurfacePoint(
+                shortFinalAlongM - turnRadiusM * Math.Sin(phi),
+                -turnRadiusM * (1.0 + Math.Cos(phi)));
+            double y = perch.Y + (rollout.Y - perch.Y) * (phi / Math.PI);
+            return new Vec3D(horizontal.X, y, horizontal.Z);
+        }
 
         PatternGate Gate(
             string id,
@@ -231,20 +248,23 @@ public sealed class ConventionalRunwayPatternRecoveryDirector {
                 dirty);
 
         PatternGate[] result = {
-            Gate("pattern_entry", "PATTERN ENTRY · 45", ApproachPatternLeg.PatternEntry,
-                Point(5_000.0, -6_000.0, 1_200.0), 800.0, entryCalibratedMps, false),
-            Gate("join_downwind", "JOIN DOWNWIND", ApproachPatternLeg.Downwind,
-                Point(3_000.0, -3_000.0, 1_000.0), 650.0, downwindCalibratedMps, false),
-            Gate("downwind", "DOWNWIND · GEAR", ApproachPatternLeg.Downwind,
-                Point(700.0, -3_000.0, 1_000.0), 550.0, downwindCalibratedMps, true),
-            Gate("abeam", "ABEAM · BASE NEXT", ApproachPatternLeg.Downwind,
-                Point(-500.0, -3_000.0, 900.0), 500.0, downwindCalibratedMps, true),
-            Gate("base_entry", "BASE", ApproachPatternLeg.Base,
-                Point(-3_500.0, -2_200.0, 700.0), 500.0, baseCalibratedMps, true),
-            Gate("base_final", "BASE · TURN FINAL", ApproachPatternLeg.Base,
-                Point(-4_000.0, -800.0, 650.0), 450.0, baseCalibratedMps, true),
+            Gate("initial", "INITIAL", ApproachPatternLeg.PatternEntry,
+                Point(-8_000.0, 0.0, 1_500.0), 700.0, initialCalibratedMps, false),
+            Gate("break", "BREAK", ApproachPatternLeg.Downwind,
+                Point(0.0, 0.0, 1_500.0), 550.0, breakCalibratedMps, false),
+            Gate("downwind", "DOWNWIND", ApproachPatternLeg.Downwind,
+                Point(aimAlongM + 1_200.0, -patternOffsetM, 1_200.0),
+                500.0, perchCalibratedMps, false),
+            Gate("perch", "PERCH", ApproachPatternLeg.Downwind,
+                perch, 450.0, perchCalibratedMps, true),
+            Gate("turn_45", "APPROACH", ApproachPatternLeg.Base,
+                Arc(Math.PI / 4.0), 400.0, perchCalibratedMps, true),
+            Gate("turn_90", "APPROACH", ApproachPatternLeg.Base,
+                Arc(Math.PI / 2.0), 400.0, perchCalibratedMps, true),
+            Gate("turn_135", "APPROACH", ApproachPatternLeg.Base,
+                Arc(3.0 * Math.PI / 4.0), 400.0, approachCalibratedAirspeedMps, true),
             Gate("final", "FINAL · 3 DEG", ApproachPatternLeg.Final,
-                Final(-3_000.0), 400.0, approachCalibratedAirspeedMps, true),
+                rollout, 350.0, approachCalibratedAirspeedMps, true),
             Gate("threshold", "THRESHOLD", ApproachPatternLeg.Threshold,
                 Final(0.0), 300.0, approachCalibratedAirspeedMps, true),
             Gate("touchdown_aim", "TOUCHDOWN", ApproachPatternLeg.Threshold,
@@ -483,7 +503,7 @@ public sealed class ConventionalRunwayPatternRecoveryDirector {
         double headingErrorRad = Math.Abs(Math.IEEERemainder(
             player.Chi - requiredHeadingRad,
             2.0 * Math.PI));
-        return headingErrorRad <= 75.0 * Math.PI / 180.0;
+        return headingErrorRad <= CaptureHeadingToleranceRad;
     }
 
     double TerrainClearanceFloor(

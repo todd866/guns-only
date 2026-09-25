@@ -5,6 +5,18 @@ function finitePositive(value) {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
 
+function finiteNonNegative(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+}
+
+function stoppedBeforeHairpin(metres) {
+  const distance = metres >= 1000
+    ? `${(metres / 1000).toFixed(1)} km`
+    : `${Math.round(metres)} m`;
+  return `Stopped ~${distance} before the hairpin.`;
+}
+
 function wholeCount(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
@@ -52,6 +64,11 @@ export function weekendRideResult(state, { recordAtStartSeconds = null } = {}) {
   else if (currentLapSeconds !== null)
     summary = `Open lap · ${formatLapTime(currentLapSeconds)}.`;
 
+  const nextApexM = finiteNonNegative(state?.next_apex_m);
+  const seededDeltaSeconds = startingRecordSeconds !== null && lastLapSeconds !== null
+    ? lastLapSeconds - startingRecordSeconds
+    : null;
+
   let correction = "Next · bank one clean lap.";
   if (offTrackSeconds > 0)
     correction = "Next · brake earlier. Stay inside the paint.";
@@ -59,6 +76,10 @@ export function weekendRideResult(state, { recordAtStartSeconds = null } = {}) {
     correction = "Next · reset and bank a clean lap.";
   else if (improvedRecord)
     correction = "Next · repeat it clean.";
+  else if (seededDeltaSeconds !== null && seededDeltaSeconds > 0.05)
+    correction = `Next · ${seededDeltaSeconds.toFixed(1)} s off the record.`;
+  else if (laps === 0 && nextApexM !== null)
+    correction = stoppedBeforeHairpin(nextApexM);
   else if (laps > 0)
     correction = "Next · protect the line, then chase time.";
 

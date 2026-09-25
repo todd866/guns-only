@@ -287,7 +287,8 @@ public readonly record struct MissionRadioState(
     bool Bingo,
     IReadOnlyList<SessionEvent> Events,
     string ChecklistName = "",
-    string ChecklistCompletedCall = "");
+    string ChecklistCompletedCall = "",
+    string ConventionalOverheadGate = "");
 
 enum MissionRadioTruthKind {
     Unspecified = 0,
@@ -313,6 +314,7 @@ enum MissionRadioTruthKind {
     SessionEvent = 20,
     PilotGoingAround = 21,
     PlayerGearUnsafe = 22,
+    ConventionalOverhead = 23,
 }
 
 readonly record struct MissionRadioTruth(
@@ -427,6 +429,7 @@ public sealed class MissionRadioDirector {
     int _missilesRemaining;
     int _dronesRemaining;
     int _gunAmmoRemaining;
+    string _overheadGate = "";
     long _lastEventSequence;
     double _lastLsoCallAtSeconds = double.NegativeInfinity;
     string _lsoCall = "";
@@ -520,6 +523,7 @@ public sealed class MissionRadioDirector {
         _decisions.Clear();
         _current = MissionRadioTransmission.Silent;
         _playerLeg = "";
+        _overheadGate = "";
         _initialized = false;
         _catapultActive = false;
         _playerInitialReported = false;
@@ -637,11 +641,13 @@ public sealed class MissionRadioDirector {
                 QueueCommit(state);
             }
             ObserveEvents(state);
+            ObserveConventionalOverhead(state);
         } else {
             if (state.PatternOnly)
                 ObservePattern(state, playerLeg);
             else
                 ObserveTacticalMission(state);
+            ObserveConventionalOverhead(state);
             ObserveRecovery(state);
             ObserveLso(state);
             ObserveWeaponsAndFuel(state);
@@ -840,6 +846,53 @@ public sealed class MissionRadioDirector {
             nowSeconds,
             report.Id,
             reason);
+    }
+
+    /// <summary>
+    /// One pilot call when the overhead gate changes. Ingress chevrons are not a leg.
+    /// Phraseology is the same Ghost callsign the rest of the director already uses.
+    /// </summary>
+    void ObserveConventionalOverhead(in MissionRadioState state) {
+        string gate = state.ConventionalOverheadGate ?? "";
+        if (gate.Length == 0 || gate == _overheadGate || gate.StartsWith("pattern_ingress", StringComparison.Ordinal))
+            return;
+        // Do not latch the perch until the gear is actually down, so a clean pass
+        // cannot report "gear down" and a later lock on the same gate still can.
+        if (gate == "perch" && !state.GearDownAndLocked)
+            return;
+        _overheadGate = gate;
+        // Only owner-approved recorded clips are spoken (no generated R/T). The overhead uses the
+        // same exchange the Rapier pattern already flies: the pilot reports initial and tower
+        // approves the (left-hand) break; the pilot then reports base with three greens once the
+        // gear is locked. The published gate is the TARGET gate, so "break" becoming the target is
+        // the moment the jet is established on initial -- when the initial call is actually made.
+        // Final is flown silently.
+        switch (gate) {
+            case "break":
+                EnqueueExchange(
+                    state,
+                    MissionRadioExchangeContracts.PatternEntry,
+                    [
+                        Tower(
+                            "pilot-initial", Player, "TOWER",
+                            $"{PlayerSpoken}, initial.",
+                            "pilot", MissionRadioPriority.Routine,
+                            new(MissionRadioTruthKind.ConventionalOverhead, gate)),
+                        Tower(
+                            "tower-break-approved", "TOWER", Player,
+                            $"{PlayerSpoken}, left break approved.",
+                            "tower", MissionRadioPriority.Advisory,
+                            new(MissionRadioTruthKind.ConventionalOverhead, gate)),
+                    ]);
+                break;
+            case "perch":
+                Enqueue(state, Tower(
+                    "pilot-base", Player, "TOWER",
+                    $"{PlayerSpoken}, base, three greens.",
+                    "pilot", MissionRadioPriority.Routine,
+                    new(MissionRadioTruthKind.ConventionalOverhead, gate)));
+                break;
+        }
     }
 
     void QueuePlayerLeg(string leg, in MissionRadioState state) {
@@ -1878,6 +1931,10 @@ public sealed class MissionRadioDirector {
                 && state.PatternOnly
                 && playerLeg == subject
                 && !state.GearDownAndLocked,
+            MissionRadioTruthKind.ConventionalOverhead =>
+                state.MissionActive
+                && state.ConventionalOverheadGate == subject
+                && (subject != "perch" || state.GearDownAndLocked),
             _ => false,
         };
     }

@@ -481,6 +481,35 @@ test("critical rotor warnings retain the lane ahead of amber damage awareness", 
   ]);
 });
 
+test("a masked DShK acquisition draws a caution, and a burst in flight draws taking fire", () => {
+  const masked = modelFixture({
+    masking: { state: "masked", observers_in_range: 1, observers_with_line_of_sight: 0 },
+    battle_damage: {
+      receiving_fire: false,
+      acquisition_progress: 0.5,
+      threat_tracking: false,
+    },
+  });
+  assert.deepEqual(cobraRotorcraftHudModel(masked).warnings, [
+    { text: "MASKED", level: "caution" },
+  ]);
+
+  const fired = modelFixture({
+    masking: { state: "exposed", observers_in_range: 1, observers_with_line_of_sight: 1 },
+    battle_damage: {
+      receiving_fire: true,
+      acquisition_progress: 1,
+      recent_bursts: [{ will_hit: false }],
+    },
+  });
+  const ctx = recordingHudContext();
+  const model = cobraRotorcraftHudModel(fired);
+  assert.deepEqual(model.warnings, [{ text: "GROUND FIRE", level: "caution" }]);
+  drawCobraRotorcraftHud(ctx, model, { width: 1280, height: 720 });
+  const caution = ctx.textCalls.find((call) => call.text === "GROUND FIRE");
+  assert.equal(caution?.fillStyle, "#ffb020");
+});
+
 test("active ground fire names the source clock direction when burst truth is available", () => {
   const fixture = modelFixture({
     battle_damage: {

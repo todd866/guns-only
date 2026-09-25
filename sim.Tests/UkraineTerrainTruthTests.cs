@@ -175,8 +175,8 @@ public class UkraineTerrainTruthTests {
             Assert.Equal(TerrainSurfaceKind.Land, ground.Kind);
             Assert.InRange(
                 runway.ElevationM - ground.HeightM,
-                0.2,
-                1.9);
+                0.30,
+                3.30);
         }
     }
 

@@ -309,7 +309,7 @@ public class FuelModelTests {
         double horizontalRangeNm = Math.Sqrt(
             Math.Pow(plan.Position.X - beat.Player.Position.X, 2.0)
             + Math.Pow(plan.Position.Z - beat.Player.Position.Z, 2.0)) / 1852.0;
-        Assert.InRange(horizontalRangeNm, 40.0, 45.0);
+        Assert.InRange(horizontalRangeNm, 10.0, 16.0);
         Assert.Equal(3000.0, plan.RequiredLandingReserveLb);
         Assert.True(plan.RequiredLandingReserveLb
             > beat.FuelLoadout.MinimumFuelThresholdLb);
@@ -321,12 +321,14 @@ public class FuelModelTests {
             Assert.IsType<ConventionalRunwayGeometry>(plan.ConventionalRunway);
         Assert.Equal(3000.0, runway.LengthM);
         Assert.Equal(45.0, runway.WidthM);
-        Assert.Equal(106.75, runway.ElevationM);
-        Assert.Equal(Math.PI / 2.0, runway.LandingHeadingRad);
-        Assert.Equal(new Vec3D(-61_952.0, 106.75, -56_576.0),
-            runway.ThresholdPosition);
-        Assert.Equal(new Vec3D(-58_952.0, 106.75, -56_576.0),
-            runway.FarEndPosition);
+        Assert.Equal(77.50, runway.ElevationM);
+        Assert.Equal(15.0 * Math.PI / 180.0, runway.LandingHeadingRad, precision: 8);
+        Assert.Equal(600.0, runway.ThresholdPosition.X, precision: 6);
+        Assert.Equal(19_400.0, runway.ThresholdPosition.Z, precision: 6);
+        double rolloutM = Math.Sqrt(
+            Math.Pow(runway.FarEndPosition.X - runway.ThresholdPosition.X, 2.0)
+            + Math.Pow(runway.FarEndPosition.Z - runway.ThresholdPosition.Z, 2.0));
+        Assert.Equal(3_000.0, rolloutM, precision: 6);
         Assert.Null(Beats.RapierIntercept().RecoveryPlan!.ConventionalRunway);
         Assert.Equal(plan, Beats.ModernAceDuel().RecoveryPlan);
     }

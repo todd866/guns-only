@@ -32,6 +32,21 @@ export function minimapDotPlacement(bounds, frame, px, pz) {
   return Object.freeze({ x, y, clamped: x !== rawX || y !== rawY });
 }
 
+/** Braking reference from the kernel apex cue. Empty when the snapshot has no geometry. */
+export function apexCueText(state = {}) {
+  const distanceM = Number(state.next_apex_m);
+  const speedMps = Number(state.next_apex_mps);
+  if (!Number.isFinite(distanceM) || !Number.isFinite(speedMps) || distanceM < 0 || speedMps <= 0) {
+    return "";
+  }
+  const distance = distanceM >= 1000
+    ? `${(distanceM / 1000).toFixed(1)} km`
+    : `${Math.round(distanceM)} m`;
+  const speedKmh = Math.round(speedMps * 3.6);
+  const where = state.next_apex_exit ? "EXIT" : "APEX";
+  return `${where} ${distance} · ${speedKmh} km/h`;
+}
+
 export function trackDayStatusLine(state = {}) {
   if ((state.tip_recovery_flash_s ?? 0) > 0) {
     return Object.freeze({ text: "TIP-OVER · RECOVERED", tone: "danger" });
@@ -158,13 +173,15 @@ export class HelmetHud {
       deltaSeconds: state.delta_s,
       lapValid: state.lap_valid !== false,
     });
+    const apex = apexCueText(state);
     const x = w * 0.72;
     const y = h * 0.12;
     ctx.save();
     ctx.fillStyle = "rgba(8, 16, 13, 0.72)";
     ctx.strokeStyle = "rgba(196, 210, 171, 0.28)";
     ctx.lineWidth = 1;
-    roundRect(ctx, x - 10, y - 22, 176, readout.delta ? 96 : 76, 6);
+    const cardHeight = (readout.delta ? 96 : 76) + (apex ? 18 : 0);
+    roundRect(ctx, x - 10, y - 22, 188, cardHeight, 6);
     ctx.fill();
     ctx.stroke();
 
@@ -185,6 +202,11 @@ export class HelmetHud {
     ctx.fillText(`LAST ${readout.last}`, x, y + 32);
     ctx.fillStyle = "#c7b78c";
     ctx.fillText(`BEST ${readout.best}`, x, y + 46);
+    if (apex) {
+      ctx.fillStyle = "#d7e2cf";
+      ctx.font = "600 12px ui-monospace, SFMono-Regular, Menlo, monospace";
+      ctx.fillText(apex, x, y + (readout.delta ? 88 : 64));
+    }
 
     if (!readout.delta) {
       ctx.restore();

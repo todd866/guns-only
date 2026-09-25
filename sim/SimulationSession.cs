@@ -320,6 +320,7 @@ public sealed partial class SimulationSession {
     int _shotsInWindow;
     int _killCount;
     int _engagementNumber = 1;
+    bool _billedSortieComplete;
     EngagementCounters _engagementCounters;
     readonly List<EngagementReport> _engagementReports = new();
     readonly FightDirector _fightDirector = new();
@@ -400,8 +401,10 @@ public sealed partial class SimulationSession {
     double _waveOffUntilMs = double.NegativeInfinity;
     FlightConfigurationTarget _configurationTarget = FlightConfigurationTarget.Combat;
     bool _configurationAutomationEnabled;
+    bool _carrierConfigurationPractice;
     bool _manualGearConfiguration;
     bool _manualFlapConfiguration;
+    bool _manualHookConfiguration;
     bool _configurationWasReady = true;
     double _configurationReadyCueUntilMs = double.NegativeInfinity;
 
@@ -890,7 +893,8 @@ public sealed partial class SimulationSession {
             || OpponentReplacementPending
             || (TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
                 && _beat.RecoveryPlan is not null)
-            || (_beat.FirstRunValley is not null && _beat.RecoveryPlan is not null));
+            || (_beat.FirstRunValley is not null && _beat.RecoveryPlan is not null)
+            || (_billedSortieComplete && _beat.RecoveryPlan is not null));
     /// Latched from the accepted rising edge through recovery.
     public bool CombatHandoffRequested =>
         _combatHandoffPhase >= CombatHandoffPhase.Requested;
@@ -1124,6 +1128,24 @@ public sealed partial class SimulationSession {
     public bool WaveOffActive => _carrier is not null && _simTimeMs < _waveOffUntilMs;
     public FlightConfigurationTarget ConfigurationTarget => _configurationTarget;
     public bool ConfigurationAutomationEnabled => _configurationAutomationEnabled;
+
+    /// <summary>
+    /// Top Gun leaves gear, flaps and the hook to the pilot. This turns the existing pattern
+    /// automation back on for a practice pass without changing the production default.
+    /// </summary>
+    public void SetCarrierConfigurationPractice(bool enabled) {
+        _carrierConfigurationPractice = enabled;
+        if (!TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)) return;
+        bool maintenanceRecovery = _beat.MaintenanceScenario
+            == MaintenanceScenarioKind.F86EmergencyGearRecovery;
+        _configurationAutomationEnabled = enabled
+            && PlayerSystemsSimulated
+            && _carrier is not null
+            && !maintenanceRecovery;
+        if (_configurationAutomationEnabled)
+            ApplyAutomaticConfigurationCommands();
+    }
+
     public bool AutomaticGearSelection => _configurationAutomationEnabled
         && !_manualGearConfiguration;
     public bool AutomaticFlapSelection => _configurationAutomationEnabled
@@ -2019,6 +2041,11 @@ public sealed partial class SimulationSession {
             else
                 _systems.CommandGear(selected);
         }
+        if (key == GKey.HookToggle && newPress) {
+            if (_configurationAutomationEnabled) _manualHookConfiguration = true;
+            _systems.CommandHook(_systems.HookDown
+                ? TailhookHandle.Up : TailhookHandle.Down);
+        }
         if (key is GKey.FlapUp or GKey.FlapDown) {
             if (newPress && _configurationAutomationEnabled) _manualFlapConfiguration = true;
             RefreshFlapLeverFromHeldInput();
@@ -2225,7 +2252,7 @@ public sealed partial class SimulationSession {
         SetPlayerGunTargetPadlockRollAssist(selected);
 
     static bool IsPlayerSystemsAction(GKey key) => key is
-        GKey.GearToggle or GKey.FlapUp or GKey.FlapDown
+        GKey.GearToggle or GKey.FlapUp or GKey.FlapDown or GKey.HookToggle
         or GKey.EmergencyGearRelease or GKey.GearHornCutout
         or GKey.ConfirmGearExtensionFailure or GKey.InspectGearDownlocks;
 
@@ -3068,6 +3095,14 @@ public sealed partial class SimulationSession {
             _beat.RecoveryPlan is not null || _carrier is not null));
     }
 
+    string ConventionalOverheadGate() {
+        if (!_approachGuidance.ConventionalPattern
+            || !_approachGuidance.GuidanceActive
+            || _approachGuidance.Gates.Count == 0)
+            return "";
+        return _approachGuidance.Gates[0].Id;
+    }
+
     void UpdateMissionRadio() {
         LsoAdvice? radioLso = null;
         if (_carrier?.IsMaritime == true && !_arrestment.IsActive && !_catapult.IsActive) {
@@ -3112,7 +3147,8 @@ public sealed partial class SimulationSession {
             _fuel.IsBingo,
             _recentEvents,
             _missionChecklist.Name,
-            _missionChecklist.CompletedCall));
+            _missionChecklist.CompletedCall,
+            ConventionalOverheadGate()));
         _circuitComms = _beat.ScriptedIntercept?.PatternOnly == true
             && _missionRadio.Active
                 ? $"{_missionRadio.Speaker} · {_missionRadio.Callsign} · "
@@ -3744,7 +3780,9 @@ public sealed partial class SimulationSession {
             : null;
         _droneRaidTargetIndex = 0;
         _configurationAutomationEnabled = PlayerSystemsSimulated
-            && _carrier is not null && !maintenanceRecovery;
+            && _carrier is not null && !maintenanceRecovery
+            && (!TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
+                || _carrierConfigurationPractice);
         // Circuits starts clean (Combat). Carrier approach beats stage Recovery.
         _configurationTarget = _configurationAutomationEnabled
             ? (stagesOnCarrierApproach
@@ -3753,6 +3791,7 @@ public sealed partial class SimulationSession {
             : FlightConfigurationTarget.Combat;
         _manualGearConfiguration = false;
         _manualFlapConfiguration = false;
+        _manualHookConfiguration = false;
         _configurationWasReady = ConfigurationReady;
         _configurationReadyCueUntilMs = double.NegativeInfinity;
         if (_carrier is not null) {
@@ -3951,6 +3990,7 @@ public sealed partial class SimulationSession {
         _reliefKills = 0;
         _playerHitsTaken = 0;
         _engagementNumber = stagesOpponent ? 1 : 0;
+        _billedSortieComplete = false;
         _engagementCounters = default;
         _engagementReports.Clear();
         LastDirectorSpawn = openingSpawn;
@@ -4654,11 +4694,8 @@ public sealed partial class SimulationSession {
         profile: PlayerSystemsProfile,
         initialGear: onApproach ? LandingGearHandle.Down : LandingGearHandle.Up,
         initialFlapDegrees: onApproach ? PlayerSystemsProfile.FullFlapDegrees : 0.0,
-        // Every current beat starts with an already-running airborne jet. Prime the normal system
-        // to that steady state instead of flashing a fictitious pump failure during the first
-        // numerical time constant. The maintenance beat deliberately starts unpressurised because
-        // its utility-pump failure is injected at staging.
-        initialUtilityHydraulicPressureFraction: prechargeUtilityHydraulics ? 1.0 : 0.0);
+        initialUtilityHydraulicPressureFraction: prechargeUtilityHydraulics ? 1.0 : 0.0,
+        initialHook: onApproach ? TailhookHandle.Down : TailhookHandle.Up);
 
     AircraftState WithCurrentFuelMass(in AircraftState state) {
         double fuelFreeMass = PlayerFuelFreeMassKgWithStores();
@@ -4794,6 +4831,7 @@ public sealed partial class SimulationSession {
         _configurationTarget = target;
         _manualGearConfiguration = false;
         _manualFlapConfiguration = false;
+        _manualHookConfiguration = false;
         _configurationReadyCueUntilMs = double.NegativeInfinity;
         _configurationWasReady = ConfigurationReady;
         ApplyAutomaticConfigurationCommands();
@@ -4810,6 +4848,10 @@ public sealed partial class SimulationSession {
                 : _configurationTarget == FlightConfigurationTarget.Recovery
                     ? WingFlapLever.Down : WingFlapLever.Up;
             _systems.SetFlapLever(lever);
+        }
+        if (!_manualHookConfiguration) {
+            _systems.CommandHook(_configurationTarget == FlightConfigurationTarget.Recovery
+                ? TailhookHandle.Down : TailhookHandle.Up);
         }
     }
 
@@ -5769,6 +5811,15 @@ public sealed partial class SimulationSession {
             if (_opponentTerminalState != AircraftTerminalState.Flying) return;
             bool formationSurvivorRemains =
                 _wingmen.Any(static wingman => wingman.StillFighting);
+            // The billed cap is complete only when the last engagement is actually splashed
+            // and nobody has already knocked it off. An early Bingo or O leaves the flag clear,
+            // so the later full stop stays Discontinued.
+            if (_beat.FirstRunValley is null
+                && !CombatHandoffRequested
+                && ReplacementBudgetExhausted
+                && !formationSurvivorRemains
+                && _playerTerminalState == AircraftTerminalState.Flying)
+                _billedSortieComplete = true;
             // Kestrel is a finite first sortie: the mouth pair is the job. A replacement wave
             // here is how live 350 turned "guns / RTB" into the endless gym.
             bool nextWaveExpected = !CombatHandoffRequested
@@ -7549,6 +7600,27 @@ public sealed partial class SimulationSession {
             && _carrier.DeckSinkRateMps(_player.State) > 0.0;
         Carrier.SolidCollision solid = _carrier.SweptSolidCollision(
             previousPlayerState.Position, _player.State.Position);
+        bool approachDirty = _systems.HookDown
+            && Math.Min(_systems.LeftFlapDegrees, _systems.RightFlapDegrees)
+                >= _systems.FullFlapDegrees - FlapTargetToleranceDeg;
+        // A bolter is wheels on deck and a missed arrestment. Gear up, or gear not locked,
+        // is a deck strike. Hook up or flaps short of the approach setting, with the gear
+        // down and locked and a survivable touchdown, is the flyaway.
+        bool unconfiguredCaseIBolter = TopGunFightRuntime.IsTopGunMission(
+                _beat.MissionIdentity.Id)
+            && _systems.AllGearDownAndLocked
+            && !approachDirty
+            && solid == Carrier.SolidCollision.FlightDeck
+            && topDeckContact
+            && contact is Carrier.Recovery.Trap or Carrier.Recovery.Bolter;
+        if (unconfiguredCaseIBolter && contact == Carrier.Recovery.Trap) {
+            touchdown = touchdown with {
+                Recovery = Carrier.Recovery.Bolter,
+                Hook = Carrier.HookOutcome.MissedWires,
+                Wire = 0,
+            };
+            contact = Carrier.Recovery.Bolter;
+        }
 
         // The recorded result must be the ENGAGEMENT, not the arrival. A strip recovery now makes
         // contact as RollingOut and only takes the wire a kilometre later, so latching the first
@@ -7578,7 +7650,8 @@ public sealed partial class SimulationSession {
             && !_carrier.WithinDeckFootprint(_player.State.Position);
         if (naturalSurfaceOwnsContact && RegisterPlayerNaturalSurfaceImpact()) return;
 
-        if (solid != Carrier.SolidCollision.None && !validRecoveryContact) {
+        if (solid != Carrier.SolidCollision.None && !validRecoveryContact
+            && !unconfiguredCaseIBolter) {
             _attemptHadSetback = true;
             ImpactSurface surface = SurfaceFor(solid);
             Vec3D surfaceVelocity = _carrier.DeckVelocityWorld
@@ -7871,9 +7944,11 @@ public sealed partial class SimulationSession {
         // physically stopped and vulnerable on the runway while the combat session remains live.
         if (!CompletePlayerRecovery()) return;
 
-        // A guns-only gym handoff is a deliberate discontinue. The Kestrel first sortie is a
-        // finite job: splash the pair and recover, which is victory, not knocking it off.
-        SortieOutcome recovered = _beat.FirstRunValley is not null && _killCount >= 2
+        // A knock-it-off before the billed cap is a discontinue. Splashing the cap and stopping
+        // on the runway is the end of the sortie. The Kestrel first sortie keeps its own rule:
+        // splash the pair and recover.
+        bool firstRunComplete = _beat.FirstRunValley is not null && _killCount >= 2;
+        SortieOutcome recovered = firstRunComplete || _billedSortieComplete
             ? SortieOutcome.Victory
             : SortieOutcome.Discontinued;
         _pendingOutcome = recovered;

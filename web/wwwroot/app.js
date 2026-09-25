@@ -3,7 +3,7 @@ import { practiceExercise, practiceResult } from "./render/onboarding/practice.j
 import { installDisposedPageRestore } from "./render/onboarding/disposed_page_restore.js";
 import { createPilotNotebook } from "./render/onboarding/pilot_notebook.js";
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=368";
+import { createHud } from "./hud.js?v=369";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -27,8 +27,8 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
   visualMergeDebriefPresentation,
-} from "./render/debrief/sortie_result.js?v=368";
-import { sortieGradeBoard } from "./render/shell/sortie_grade.js?v=368";
+} from "./render/debrief/sortie_result.js?v=369";
+import { sortieGradeBoard } from "./render/shell/sortie_grade.js?v=369";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -51,11 +51,11 @@ import {
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
   touchFireVisibleLabel,
-} from "./render/onboarding/first_run_valley.js?v=368";
+} from "./render/onboarding/first_run_valley.js?v=369";
 import {
   dialogTabDestination,
   renderedDialogControl,
-} from "./render/onboarding/modal_focus.js?v=368";
+} from "./render/onboarding/modal_focus.js?v=369";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -98,8 +98,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=368";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=368";
+} from "./render/release/release_identity.js?v=369";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=369";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -112,7 +112,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=368";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=369";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -121,10 +121,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=368";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=369";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=368";
+} from "./render/nav/carrier_sortie_touch_control.js?v=369";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -208,7 +208,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=368";
+} from "./render/telemetry/ai_frame_pressure.js?v=369";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -218,15 +218,15 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=368";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=368";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=368";
-import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=368";
+} from "./render/telemetry/telemetry_batch.js?v=369";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=369";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=369";
+import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=369";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=368";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=368";
+} from "./render/shell/boot_watchdog.js?v=369";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=369";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -235,7 +235,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=368";
+} from "./render/settings/player_settings.js?v=369";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -282,14 +282,14 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=368";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=368";
+} from "./render/scene/scene_builders.js?v=369";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=369";
 import {
   cueInterfaceSound,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=368";
+} from "./render/audio/flight_audio.js?v=369";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -3669,7 +3669,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "Two MiG-28s · guns and Sidewinders · Case I trap",
      configuration: "F-14A · M61 + AIM-9 · anime-1986 presentation · production programme",
      brief: "Two Ace merges against MiG-28 aggressors, then the boat. Guns and heaters, then the taught Case I pattern: initial, break, downwind, approach turn and groove. Knock it off early if you need the trap before the second jet.",
-     controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target\nNavigation opens after a splash with the carrier RTB choice",
+     controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target\nG gear · U hook · [ ] flaps — gear up on deck is a crash; hook or flaps short is a bolter",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -3763,6 +3763,9 @@ function stageTopGunOnBridge() {
     && isTopGunBeatStaged();
   const restarted = sameSeat && bridge.RestartSortie?.(0);
   if (!restarted) {
+    const practice = new URLSearchParams(window.location.search)
+      .get("configurationPractice") === "1";
+    bridge.SetTopGunConfigurationPractice?.(practice);
     bridge.StartTopGun(selectedTopGunSeat);
     restoreDirectorState();
   }
@@ -12126,7 +12129,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=368")
+    navigator.serviceWorker.register("service-worker.js?v=369")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

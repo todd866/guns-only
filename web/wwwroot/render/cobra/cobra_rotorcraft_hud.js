@@ -251,9 +251,8 @@ export function cobraRotorcraftHudModel(authorityState, formation = null) {
   const battleDamage = authorityState?.battle_damage ?? null;
   const warnings = [];
   // Battle damage is authoritative and deliberately terse. ENGINE OUT is the only red
-  // damage plate; SCAS failure and fire currently striking the aircraft are amber. Never
-  // turn acquisition/tracking or a predicted impact into a cockpit warning: that would give
-  // the player information the crew does not have. Severity sorting keeps immediate rotor
+  // damage plate; SCAS failure, a masked acquisition, and fire currently striking the
+  // aircraft are amber. A predicted impact time stays off the plate. Severity sorting keeps immediate rotor
   // emergencies ahead of the amber plates, while insertion order gives damage the promised
   // ENGINE > SCAS > active fire priority inside each level.
   if (battleDamage?.engine_damaged === true) warnings.push({ text: "ENGINE OUT", level: "warning" });
@@ -262,6 +261,17 @@ export function cobraRotorcraftHudModel(authorityState, formation = null) {
   if (mast >= 0.35) warnings.push({ text: "MAST BUMP", level: "warning" });
   if (rbs >= 0.75) warnings.push({ text: "BLADE STALL", level: "warning" });
   if (battleDamage?.scas_damaged === true) warnings.push({ text: "SCAS OUT", level: "caution" });
+  // MASKED is the crew's terrain call: only when the sim assessment says the ridge is
+  // between the aircraft and a gun that is still acquiring. A predicted impact time is
+  // not a caution. Receiving fire uses the burst caution below.
+  const maskingState = String(authorityState?.masking?.state ?? "").toLowerCase();
+  const acquisition = Number(battleDamage?.acquisition_progress);
+  if (maskingState === "masked"
+    && Number.isFinite(acquisition)
+    && acquisition > 0
+    && battleDamage?.receiving_fire !== true) {
+    warnings.push({ text: "MASKED", level: "caution" });
+  }
   const fireWarning = groundFireWarning(battleDamage, vehicle);
   if (fireWarning) warnings.push({ text: fireWarning, level: "caution" });
   if (vrs >= 0.2 && vrs < 0.35) warnings.push({ text: "SETTLING WITH POWER", level: "caution" });

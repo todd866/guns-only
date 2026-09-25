@@ -84,5 +84,9 @@ public sealed class MotorcycleSnapshotProjectionTests
         Assert.True(root.TryGetProperty("lap_valid", out JsonElement validity));
         Assert.Equal(JsonValueKind.True, validity.ValueKind);
         Assert.True(root.TryGetProperty("off_track_s", out _));
+        Assert.True(root.GetProperty("next_apex_m").GetDouble() > 0.0);
+        Assert.True(root.GetProperty("next_apex_mps").GetDouble() > 0.0);
+        Assert.True(root.TryGetProperty("progress_m", out _));
+        Assert.True(root.GetProperty("session_s").GetDouble() > 0.0);
     }
 }

@@ -39,6 +39,7 @@ test("a carried record is not falsely claimed as a personal best", () => {
   assert.equal(result.verdict, "LAPS RECORDED");
   assert.equal(result.improvedRecord, false);
   assert.equal(result.summary, "1 lap · record 1:22.00.");
+  assert.equal(result.correction, "Next · 8.0 s off the record.");
 });
 
 test("an invalid open lap and off-track evidence remain explicit", () => {
@@ -96,6 +97,32 @@ test("a grid reset cannot turn retained off-track evidence into a clean debrief"
   assert.equal(result.metrics.find(({ label }) => label === "OFF TRACK").value, "4.5 s");
   assert.equal(result.summary, "No clean lap · 4.5 s off track.");
   assert.equal(result.correction, "Next · brake earlier. Stay inside the paint.");
+});
+
+test("a quit before the hairpin says how far the apex still was", () => {
+  const result = weekendRideResult({
+    lap: 0,
+    lap_time_s: 5.7,
+    lap_valid: true,
+    off_track_s: 0,
+    next_apex_m: 2600,
+    progress_m: 124,
+  });
+
+  assert.equal(result.correction, "Stopped ~2.6 km before the hairpin.");
+  assert.equal(result.summary, "Open lap · 0:05.70.");
+});
+
+test("a nearer apex is stated in metres from the same progress field", () => {
+  const result = weekendRideResult({
+    lap: 0,
+    lap_time_s: 6.2,
+    lap_valid: true,
+    off_track_s: 0,
+    next_apex_m: 340,
+  });
+
+  assert.equal(result.correction, "Stopped ~340 m before the hairpin.");
 });
 
 test("debrief prose stays compact beside authoritative metrics", () => {

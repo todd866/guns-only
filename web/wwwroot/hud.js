@@ -32,7 +32,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=368";
+} from "./render/hud/contact_visibility.js?v=369";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import { patternEnergyWord } from "./render/hud/approach_energy.js";
 import {
@@ -72,15 +72,15 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=368";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=369";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=368";
+} from "./render/mission/rapier_high_mach_instruments.js?v=369";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
-} from "./render/hud/limits_panel.js?v=368";
+} from "./render/hud/limits_panel.js?v=369";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   fillLegibleHudText,
@@ -110,7 +110,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=368";
+} from "./render/audio/flight_audio.js?v=369";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -5812,7 +5812,7 @@ class CombatHud {
 
     const wideLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
-      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${fireQuicklook}   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
+      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("hookToggle", "KeyU")}  HOOK   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${fireQuicklook}   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
       `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   ${restartOrRtbQuicklook}   ·   M  SOUND   ·   \`  SYNC MARK   ·   H  HIDE`,
       "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF",
       topGunQuicklook

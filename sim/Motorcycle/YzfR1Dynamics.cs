@@ -305,6 +305,17 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             ClutchEngagement: 1.0);
     }
 
+    /// <summary>Test hook so a pit-in check can see a speed ResetTo would have zeroed.</summary>
+    public void DebugSetGroundSpeed(double speedMps)
+    {
+        Vec3D velocity = new(
+            Math.Sin(_headingRad) * speedMps,
+            0.0,
+            Math.Cos(_headingRad) * speedMps);
+        State = State with { GroundVelocityMps = velocity };
+        Telemetry = Telemetry with { SpeedMps = Math.Abs(speedMps) };
+    }
+
     /// <summary>Test hook to latch tip-over without a full dynamics excursion.</summary>
     public void DebugForceTipOver()
     {

@@ -2,11 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  apexCueText,
   formatLapTime,
   minimapDotPlacement,
   trackDayStatusLine,
   weekendHudLayerVisibility,
 } from "../helmet_hud.js";
+
+test("the helmet lap card reads the kernel apex cue", () => {
+  assert.equal(apexCueText({}), "");
+  assert.equal(apexCueText({ next_apex_m: 420, next_apex_mps: 21.4 }), "APEX 420 m · 77 km/h");
+  assert.equal(
+    apexCueText({ next_apex_m: 48, next_apex_mps: 21.4, next_apex_exit: true }),
+    "EXIT 48 m · 77 km/h",
+  );
+  assert.equal(apexCueText({ next_apex_m: 1800, next_apex_mps: 20 }), "APEX 1.8 km · 72 km/h");
+});
 
 test("track-day status makes course validity and rider mode explicit", () => {
   assert.equal(

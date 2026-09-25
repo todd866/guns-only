@@ -90,8 +90,8 @@ public sealed class OkanaganFireMissionTests
 
         Assert.Equal(OkanaganFireMission.TrainingDrop.X, circuits.DropAimWorldM.X);
         Assert.Equal(OkanaganFireMission.TrainingDrop.Z, circuits.DropAimWorldM.Z);
-        Assert.Equal(OkanaganGeo.LakeSurfaceElevationM, circuits.DropAimWorldM.Y);
-        Assert.True(OkanaganGeo.IsOverCentralLake(circuits.DropAimWorldM));
+        Assert.Equal(OkanaganFireMission.TrainingDrop.Y, circuits.DropAimWorldM.Y);
+        Assert.False(OkanaganGeo.IsOverCentralLake(circuits.DropAimWorldM));
         Assert.Equal(OkanaganGeo.ToWorld(49.850, -119.655, 810.0), attack.DropAimWorldM);
         Assert.False(OkanaganGeo.IsOverCentralLake(attack.DropAimWorldM));
     }
@@ -103,6 +103,33 @@ public sealed class OkanaganFireMissionTests
             .Snapshot().DropCreditKg);
         Assert.Equal(0.0, OkanaganFireMission.Create(OkanaganSortieType.WaterCircuits)
             .Snapshot().DropCreditKg);
+    }
+
+    [Fact]
+    public void BoucherieWindMatchesTheAuthoredWorldFire()
+    {
+        using Stream world = typeof(OkanaganFireGrid).Assembly.GetManifestResourceStream(
+            "GunsOnly.Sim.Data.OkanaganCentral.world.json")!;
+        using var document = System.Text.Json.JsonDocument.Parse(world);
+        var fire = document.RootElement.GetProperty("fire");
+        Assert.Equal(OkanaganFireGrid.AuthoredWindFromDeg, fire.GetProperty("windFromDeg").GetDouble());
+        Assert.Equal(OkanaganFireGrid.AuthoredWindSpeedMps, fire.GetProperty("windSpeedMps").GetDouble());
+    }
+
+    [Fact]
+    public void BoucherieFlankIsOpenGrassOnTheWindwardSideAndTimberDownwind()
+    {
+        var fire = new OkanaganFireGrid();
+        Vec3D centre = OkanaganGeo.ToWorld(49.850, -119.655, 0);
+        Vec3D windTo = new(Math.Sin(25.0 * Math.PI / 180.0), 0, Math.Cos(25.0 * Math.PI / 180.0));
+        var cells = fire.ActiveCells(400);
+        Assert.Contains(cells, cell => cell.FuelType == "O1");
+        Assert.Contains(cells, cell => cell.FuelType == "C7");
+        Assert.All(cells, cell =>
+        {
+            double along = (cell.X - centre.X) * windTo.X + (cell.Z - centre.Z) * windTo.Z;
+            Assert.Equal(along < 0 ? "O1" : "C7", cell.FuelType);
+        });
     }
 
     [Fact]
@@ -251,11 +278,11 @@ public sealed class OkanaganFireMissionTests
             OkanaganFireMission.ScoopTouchdown,
             OkanaganFireMission.ScoopExit,
             OkanaganFireMission.CircuitDownwind,
-            OkanaganFireMission.TrainingDrop,
             OkanaganFireMission.LakeArrival,
             OkanaganFireMission.LoadedLiftoff,
         }, point => Assert.True(OkanaganGeo.IsOverCentralLake(point),
             $"authored water-circuit point {point} left Okanagan Lake"));
+        Assert.False(OkanaganGeo.IsOverCentralLake(OkanaganFireMission.TrainingDrop));
         Assert.False(OkanaganGeo.IsOverCentralLake(OkanaganFireMission.RtbCrossing));
         Assert.InRange(HorizontalDistance(
             OkanaganFireMission.AirportDeparture,
@@ -301,6 +328,172 @@ public sealed class OkanaganFireMissionTests
             Assert.True(call.Length <= 54,
                 $"{sortie}/{phase} radio has {call.Length} characters: {call}");
         }
+    }
+
+    [Fact]
+    public void TrainingCircuitCountsOnlyAReleaseThatCoversTheShoreMark()
+    {
+        Assert.Equal(0, TrainingCyclesAfterRelease(OkanaganFireMission.CircuitDownwind));
+        Assert.Equal(1, TrainingCyclesAfterRelease(OkanaganFireMission.TrainingDrop));
+        Assert.False(OkanaganGeo.IsOverCentralLake(OkanaganFireMission.TrainingDrop));
+        Assert.Equal(OkanaganCdem.SampleSurfaceHeightM(OkanaganFireMission.TrainingDrop),
+            OkanaganFireMission.Create(OkanaganSortieType.WaterCircuits).Snapshot().DropAimWorldM.Y, 1);
+    }
+
+    static int TrainingCyclesAfterRelease(Vec3D at)
+    {
+        var mission = OkanaganFireMission.Create(OkanaganSortieType.WaterCircuits);
+        double fuel = mission.Snapshot().Aircraft.FuelKg;
+        Observe(mission, OkanaganFireMission.RunwayDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.AirportDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, 0, FireBossSurfaceMode.Water);
+        double load = mission.Snapshot().ScoopTargetWaterKg;
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, load, FireBossSurfaceMode.Water);
+        Observe(mission, OkanaganFireMission.CircuitDownwind, fuel, load);
+        Assert.Equal(OkanaganMissionPhase.Downwind, mission.Phase);
+        double drop = mission.Snapshot().DropTargetWaterKg;
+        Observe(mission, at, fuel, load - drop, released: drop);
+        return mission.CompletedCycles;
+    }
+
+    [Fact]
+    public void AirAttackHoldDumpsWaterWithoutCreditingItUntilTheLineIsClear()
+    {
+        Vec3D flank = FlankReleasePoint();
+        OkanaganFireMission held = ReachLargeForceHold();
+        double fuel = held.Snapshot().Aircraft.FuelKg;
+        double load = held.Snapshot().Aircraft.WaterLoadKg;
+        Observe(held, flank, fuel, 0, released: load);
+        Assert.Equal(load, held.WaterReleasedKg, 1);
+        Assert.Equal(0, held.EffectiveDrops);
+        Assert.Equal(0, held.Snapshot().EffectiveWaterKg);
+
+        OkanaganFireMission cleared = ReachLargeForceHold();
+        Vec3D hold = cleared.Snapshot().Route[0].PositionWorldM;
+        int dwellTicks = (int)(13 / FireBossDynamics.FixedDeltaSeconds);
+        for (int tick = 0; tick < dwellTicks; tick++)
+            Observe(cleared, hold, fuel, load);
+        Assert.Equal(OkanaganMissionPhase.Ingress, cleared.Phase);
+        Observe(cleared, OkanaganGeo.ToWorld(49.850, -119.655, 900), fuel, load);
+        Assert.Equal(OkanaganMissionPhase.Drop, cleared.Phase);
+        Observe(cleared, flank, fuel, 0, released: load);
+        Assert.Equal(1, cleared.EffectiveDrops);
+        Assert.True(cleared.Snapshot().EffectiveWaterKg > 0);
+    }
+
+    static Vec3D FlankReleasePoint()
+    {
+        var cells = new OkanaganFireGrid().ActiveCells(400);
+        var boundary = cells.First(cell => cell.FuelType == "O1"
+            && cells.Any(other => other.FuelType == "C7" && Flat(cell, other) <= 200));
+        return new Vec3D(boundary.X, 900, boundary.Z);
+    }
+
+    static OkanaganFireMission ReachLargeForceHold()
+    {
+        var mission = OkanaganFireMission.Create(OkanaganSortieType.LargeForceEmployment);
+        double fuel = mission.Snapshot().Aircraft.FuelKg;
+        Observe(mission, OkanaganFireMission.RunwayDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.AirportDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, 0, FireBossSurfaceMode.Water);
+        double load = mission.Snapshot().ScoopTargetWaterKg;
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, load, FireBossSurfaceMode.Water);
+        Observe(mission, OkanaganFireMission.LoadedLiftoff with { Y = 800 }, fuel, load);
+        Assert.Equal(OkanaganMissionPhase.Hold, mission.Phase);
+        return mission;
+    }
+
+    [Fact]
+    public void ADropEntirelyInOneFuelDoesNotCountUntilItCrossesIntoTheOther()
+    {
+        var cells = new OkanaganFireGrid().ActiveCells(400);
+        var grass = IsolatedHotCell(cells, "O1", "C7");
+        var timber = IsolatedHotCell(cells, "C7", "O1");
+        var boundary = cells.First(cell => cell.FuelType == "O1"
+            && cells.Any(other => other.FuelType == "C7" && Flat(cell, other) <= 200));
+        Vec3D crossing = new((grass.X + boundary.X) / 2.0, 900, (grass.Z + boundary.Z) / 2.0);
+        // The crossing aim has to sit on the flank, not out in the pure grass.
+        crossing = new(boundary.X, 900, boundary.Z);
+
+        Assert.Equal(0, DropsAfterRelease(new(grass.X, 900, grass.Z)));
+        Assert.Equal(0, DropsAfterRelease(new(timber.X, 900, timber.Z)));
+        Assert.Equal(1, DropsAfterRelease(crossing));
+        Assert.True(Flat(grass, timber) > OkanaganFireGrid.DropFootprintRadiusM);
+        Assert.Equal(0, DropsAfterSplitRelease(
+            new(grass.X, 900, grass.Z), new(timber.X, 900, timber.Z)));
+    }
+
+    [Fact]
+    public void TrainingMarkRequiresTheCompletionFractionOnTheMark()
+    {
+        var mission = OkanaganFireMission.Create(OkanaganSortieType.WaterCircuits);
+        double fuel = mission.Snapshot().Aircraft.FuelKg;
+        Observe(mission, OkanaganFireMission.RunwayDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.AirportDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, 0, FireBossSurfaceMode.Water);
+        double load = mission.Snapshot().ScoopTargetWaterKg;
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, load, FireBossSurfaceMode.Water);
+        Observe(mission, OkanaganFireMission.CircuitDownwind, fuel, load);
+        double drop = mission.Snapshot().DropTargetWaterKg;
+        double sip = Math.Min(40.0, drop * 0.05);
+        Observe(mission, OkanaganFireMission.TrainingDrop, fuel, load - sip, released: sip);
+        Observe(mission, OkanaganFireMission.CircuitDownwind, fuel, 0, released: drop - sip);
+        Assert.Equal(0, mission.CompletedCycles);
+    }
+
+    static OkanaganFireCellSnapshot IsolatedHotCell(
+        IReadOnlyList<OkanaganFireCellSnapshot> cells, string fuel, string other) =>
+        cells.Where(cell => cell.FuelType == fuel && cell.Intensity > 0.2)
+            .OrderByDescending(cell => cells.Where(candidate => candidate.FuelType == other)
+                .Min(candidate => Flat(cell, candidate)))
+            .First();
+
+    static int DropsAfterSplitRelease(Vec3D first, Vec3D second)
+    {
+        var mission = OkanaganFireMission.Create(OkanaganSortieType.FireAttack);
+        double fuel = mission.Snapshot().Aircraft.FuelKg;
+        Observe(mission, OkanaganFireMission.RunwayDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.AirportDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, 0, FireBossSurfaceMode.Water);
+        double load = mission.Snapshot().ScoopTargetWaterKg;
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, load, FireBossSurfaceMode.Water);
+        Observe(mission, OkanaganFireMission.ScoopExit with { Y = 800 }, fuel, load);
+        Observe(mission, OkanaganGeo.ToWorld(49.850, -119.655, 900), fuel, load);
+        Assert.Equal(OkanaganMissionPhase.Drop, mission.Phase);
+        double half = load * 0.5;
+        Observe(mission, first, fuel, load - half, released: half);
+        Observe(mission, second, fuel, 0, released: load - half);
+        return mission.EffectiveDrops;
+    }
+
+    static int DropsAfterRelease(Vec3D at)
+    {
+        var mission = OkanaganFireMission.Create(OkanaganSortieType.FireAttack);
+        double fuel = mission.Snapshot().Aircraft.FuelKg;
+        Observe(mission, OkanaganFireMission.RunwayDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.AirportDeparture, fuel, 0);
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, 0, FireBossSurfaceMode.Water);
+        double load = mission.Snapshot().ScoopTargetWaterKg;
+        Observe(mission, OkanaganFireMission.ScoopTouchdown, fuel, load, FireBossSurfaceMode.Water);
+        Observe(mission, OkanaganFireMission.ScoopExit with { Y = 800 }, fuel, load);
+        Observe(mission, OkanaganGeo.ToWorld(49.850, -119.655, 900), fuel, load);
+        Assert.Equal(OkanaganMissionPhase.Drop, mission.Phase);
+        Observe(mission, at, fuel, 0, released: load);
+        return mission.EffectiveDrops;
+    }
+
+    static void Observe(OkanaganFireMission mission, Vec3D position, double fuel, double water,
+        FireBossSurfaceMode surface = FireBossSurfaceMode.Airborne, double released = 0) =>
+        mission.ObserveFlight(mission.Snapshot().Aircraft with {
+            PositionWorldM = position, SurfaceMode = surface, WaterLoadKg = water, FuelKg = fuel,
+            GrossMassKg = FireBossDynamics.EmptyOperatingMassKg + fuel + water,
+            WaterReleasedThisTickKg = released,
+        });
+
+    static double Flat(OkanaganFireCellSnapshot a, OkanaganFireCellSnapshot b)
+    {
+        double dx = a.X - b.X, dz = a.Z - b.Z;
+        return Math.Sqrt(dx * dx + dz * dz);
     }
 
     static double HeadingDeg(in Vec3D from, in Vec3D to)

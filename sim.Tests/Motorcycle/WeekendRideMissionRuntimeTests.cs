@@ -16,8 +16,9 @@ public sealed class WeekendRideMissionRuntimeTests
         Assert.Equal(WeekendRidePhase.Ready, runtime.Phase);
         Assert.Equal(runtime.Circuit.StartFinishCentre, runtime.GridPosition);
         Assert.Equal(runtime.GridPosition, runtime.Bike.State.PositionWorldM);
-        Assert.True(runtime.GridPosition.X > 1_000.0,
-            "StartFinishCentre sits at alongM=-1380, i.e. the eastern threshold.");
+        double westernmostX = runtime.Circuit.Centreline.Min(point => point.X);
+        Assert.True(runtime.GridPosition.X > westernmostX + 40.0,
+            "The grid is the east straight of the club loop, not the 10,000 ft threshold.");
         Assert.InRange(
             runtime.GridPosition.Y,
             RapierLaunchSite.OperatingSurfaceElevationM - 0.01,
@@ -377,6 +378,120 @@ public sealed class WeekendRideMissionRuntimeTests
         Assert.True(snap.ViewAttitude.IsFinite);
         Assert.InRange(snap.PitchReflexAuthority, 0.0, 1.0);
         Assert.InRange(snap.LeanHoldAuthority, 0.0, 1.0);
+    }
+
+    [Fact]
+    public void SustainedThrottleReachesTheFirstCornerInsideFifteenSeconds()
+    {
+        var runtime = WeekendRideMissionRuntime.CreateDefault();
+        double cornerM = DistanceAlongCentrelineUntilHeading(
+            runtime.Circuit, 0.4);
+        Assert.InRange(cornerM, 120.0, 450.0);
+        runtime.Begin();
+        IReadOnlyList<Vec3D> centreline = runtime.Circuit.Centreline;
+        int uniquePointCount = centreline.Count - 1;
+        double peakSpeedMps = 0.0;
+        for (int i = 0; i < 120 * 15; i++)
+        {
+            Vec3D position = runtime.Bike.State.PositionWorldM;
+            double targetM = runtime.ProgressM + 40.0;
+            double walkedM = 0.0;
+            Vec3D target = centreline[1];
+            for (int index = 1; index < uniquePointCount; index++)
+            {
+                walkedM += HorizontalDistance(centreline[index - 1], centreline[index]);
+                target = centreline[index];
+                if (walkedM >= targetM) break;
+            }
+            double headingErrorRad = WrapPi(Math.Atan2(
+                target.X - position.X, target.Z - position.Z)
+                - runtime.Bike.Observation.YawRad);
+            double speedMps = runtime.Bike.Telemetry.SpeedMps;
+            if (runtime.ProgressM < cornerM * 0.6)
+                peakSpeedMps = Math.Max(peakSpeedMps, speedMps);
+            bool cornering = Math.Abs(headingErrorRad) > 0.06 && speedMps > 24.0;
+            double steer = Math.Clamp(headingErrorRad * 0.55, -0.7, 0.7);
+            runtime.StepFixed(new MotorcycleRiderIntent(
+                cornering ? 0.25 : 1.0,
+                cornering ? 0.45 : 0.0,
+                steer, 0.0, 0.0, 0, 1.0, MotorcycleClutchMode.Auto),
+                MotorcycleControlMode.Assisted);
+        }
+
+        double headingChange = Math.Abs(Math.IEEERemainder(
+            runtime.Bike.Observation.YawRad - runtime.GridHeadingRad,
+            2.0 * Math.PI));
+        Assert.True(runtime.IsOnTrack, $"off track for {runtime.OffTrackSeconds:F1}s");
+        Assert.True(
+            runtime.ProgressM > cornerM,
+            $"circuit progress {runtime.ProgressM:F0} m, first 0.4 rad corner is at {cornerM:F0} m");
+        Assert.True(peakSpeedMps > runtime.NextApex.SteadySpeedMps + 8.0,
+            $"straight peak {peakSpeedMps:F1} m/s never cleared the corner speed");
+        Assert.True(
+            headingChange > 0.4,
+            $"heading changed {headingChange:F2} rad from the grid; a straight line is not the corner");
+        Assert.Equal(WeekendRidePhase.Active, runtime.Phase);
+    }
+
+    [Fact]
+    public void PitInBelowThePostedSpeedIsTheOnlyWorldEventThatFinishes()
+    {
+        var ridden = WeekendRideMissionRuntime.CreateDefault();
+        ridden.Begin();
+        foreach (Vec3D point in ridden.Circuit.Centreline)
+            Assert.False(ridden.PitLane.Contains(point), $"centreline entered the pit at {point}");
+        ScoreOneLap(ridden);
+        Assert.Equal(WeekendRidePhase.Active, ridden.Phase);
+        Assert.True(ridden.SessionSeconds > 0.0);
+
+        ridden.DebugForceTipOver();
+        ridden.StepFixed(SteadyThrottle);
+        Assert.Equal(WeekendRidePhase.Active, ridden.Phase);
+
+        Vec3D pit = new(
+            ridden.PitLane.Centre.X,
+            RapierLaunchSite.OperatingSurfaceElevationM,
+            ridden.PitLane.Centre.Z);
+        ridden.Bike.ResetTo(pit, ridden.GridHeadingRad);
+        ridden.Bike.DebugSetGroundSpeed(WeekendRideMissionRuntime.PitLaneSpeedLimitMps + 8.0);
+        ridden.StepFixed(SteadyThrottle with { Throttle = 1.0 });
+        Assert.Equal(WeekendRidePhase.Active, ridden.Phase);
+        Assert.True(ridden.Bike.Telemetry.SpeedMps > WeekendRideMissionRuntime.PitLaneSpeedLimitMps);
+
+        ridden.Bike.ResetTo(pit, ridden.GridHeadingRad);
+        double sessionAtPit = ridden.SessionSeconds;
+        ridden.StepFixed(SteadyThrottle with { Throttle = 0.0 });
+        Assert.Equal(WeekendRidePhase.Finished, ridden.Phase);
+        ridden.StepFixed(SteadyThrottle);
+        Assert.Equal(sessionAtPit + PlayerVehicleContract.FixedDeltaSeconds, ridden.SessionSeconds);
+
+        var paused = WeekendRideMissionRuntime.CreateDefault();
+        paused.Begin();
+        paused.Pause();
+        paused.Finish();
+        Assert.Equal(WeekendRidePhase.Finished, paused.Phase);
+    }
+
+    static double DistanceAlongCentrelineUntilHeading(PaintedCircuit circuit, double changeRad)
+    {
+        IReadOnlyList<Vec3D> points = circuit.Centreline;
+        Vec3D initial = points[1] - points[0];
+        double initialLength = Math.Sqrt(initial.X * initial.X + initial.Z * initial.Z);
+        double travelledM = 0.0;
+        for (int index = 1; index < points.Count - 1; index++)
+        {
+            Vec3D step = points[index] - points[index - 1];
+            double stepLength = Math.Sqrt(step.X * step.X + step.Z * step.Z);
+            travelledM += stepLength;
+            Vec3D tangent = points[index + 1] - points[index];
+            double tangentLength = Math.Sqrt(tangent.X * tangent.X + tangent.Z * tangent.Z);
+            double dot = (initial.X * tangent.X + initial.Z * tangent.Z)
+                / (initialLength * tangentLength);
+            if (Math.Acos(Math.Clamp(dot, -1.0, 1.0)) > changeRad)
+                return travelledM;
+        }
+
+        return double.PositiveInfinity;
     }
 
     static void ScoreOneLap(WeekendRideMissionRuntime runtime)

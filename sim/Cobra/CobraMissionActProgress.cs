@@ -15,6 +15,8 @@ public static class CobraMissionActProgress
     public const double EngageBridgeRadiusM = 1_100.0;
     public const double RtbPadCompleteRadiusM = 70.0;
     public const double RtbPadCompleteClearanceM = 12.0;
+    // Same rotor-clearance surrogate as the Camp Ember departure route, not a surveyed attack altitude.
+    public const double GunPitCueClearanceM = CampEmberOperations.DepartureRouteClearanceM;
 
     public static CobraMissionAct Next(
         CobraMissionAct current,
@@ -78,10 +80,17 @@ public static class CobraMissionActProgress
         in Vec3D fobCentreWorldM,
         double fobPathAltitudeM,
         Vec3D? aircraftWorldM = null,
-        ITerrainSurface? terrain = null)
+        ITerrainSurface? terrain = null,
+        IReadOnlyList<ContestedSite>? sites = null)
     {
         if (act is CobraMissionAct.Rtb or CobraMissionAct.Complete)
             return CampEmberOperations.BuildArrivalGates(aircraftWorldM);
+
+        // Once Iron Bell is friendly the job is the next hostile gun pit. The gorge polyline
+        // stops at the bridge, so Engage/Hold used to keep that bridge gate (and the renderer
+        // then hid every gate). Read owner and position only — never the control readout.
+        if (act is CobraMissionAct.Engage or CobraMissionAct.Hold && sites is not null)
+            return BuildNextGunPitGates(sites, aircraftWorldM, terrain);
 
         IReadOnlyList<CobraCanyonRoutePoint> points = route.Points;
         int bridgeIndex = FindBridgePointIndex(points);
@@ -209,6 +218,118 @@ public static class CobraMissionActProgress
             bestIndex = index;
         }
         return bestIndex;
+    }
+
+    const string IronBellLandmarkId = "landmark.cobra-canyon.iron-bell-bridge.v1";
+
+    /// <summary>
+    /// Short world-space chain from the aircraft to the next hostile contested site, in the
+    /// authority's site order (Cau Song Ma, then Phu Rieng, then Dat Do). The last gate sits on
+    /// that site so the active cue is inside its capture radius.
+    /// </summary>
+    static IReadOnlyList<CobraPathGate> BuildNextGunPitGates(
+        IReadOnlyList<ContestedSite> sites,
+        Vec3D? aircraftWorldM,
+        ITerrainSurface? terrain)
+    {
+        ContestedSite? bridge = null;
+        foreach (ContestedSite site in sites) {
+            if (string.Equals(site.LandmarkId, IronBellLandmarkId, StringComparison.Ordinal))
+                bridge = site;
+        }
+        if (bridge is null
+            || bridge.Owner != GroundSiteOwner.Friendly
+            || aircraftWorldM is not { } from)
+            return Array.Empty<CobraPathGate>();
+
+        ContestedSite? next = null;
+        foreach (ContestedSite site in sites) {
+            if (site.Owner != GroundSiteOwner.Hostile) continue;
+            if (string.Equals(
+                site.LandmarkId,
+                "landmark.cobra-canyon.camp-ember.v1",
+                StringComparison.Ordinal))
+                continue;
+            next = site;
+            break;
+        }
+        if (next is null)
+            return Array.Empty<CobraPathGate>();
+
+        const int count = 4;
+        var positions = new Vec3D[count];
+        Vec3D target = next.PositionWorldM with { Y = next.PositionWorldM.Y + 30.0 };
+        for (int i = 0; i < count; i++) {
+            double t = (i + 1.0) / count;
+            positions[i] = new Vec3D(
+                from.X + (target.X - from.X) * t,
+                from.Y + (target.Y - from.Y) * t,
+                from.Z + (target.Z - from.Z) * t);
+        }
+        if (terrain is not null) {
+            Vec3D previous = from;
+            for (int i = 0; i < count; i++) {
+                double floorM = SegmentClearanceFloor(terrain, previous, positions[i]);
+                // The aircraft is not a cue. Raising only the first gate to the ridge
+                // top still lets the chord from a lower aircraft cut the ridge, so the
+                // first gate is lifted until that whole segment clears.
+                if (i == 0)
+                    floorM = Math.Max(floorM, ChordClearanceGateUpM(terrain, previous, positions[i]));
+                positions[i] = positions[i] with { Y = Math.Max(positions[i].Y, floorM) };
+                if (i > 0)
+                    positions[i - 1] = positions[i - 1] with {
+                        Y = Math.Max(positions[i - 1].Y, floorM)
+                    };
+                previous = positions[i];
+            }
+        }
+        var gates = new CobraPathGate[count];
+        for (int i = 0; i < count; i++) {
+            bool last = i == count - 1;
+            gates[i] = new CobraPathGate(
+                positions[i].X,
+                positions[i].Y,
+                positions[i].Z,
+                last ? next.CaptureRadiusM : 80.0,
+                last);
+        }
+        return gates;
+    }
+
+    static double SegmentClearanceFloor(ITerrainSurface terrain, in Vec3D from, in Vec3D to)
+    {
+        double distanceM = HorizontalDistanceM(from, to);
+        int samples = Math.Max(1, (int)Math.Ceiling(distanceM / 100.0));
+        double floorM = double.NegativeInfinity;
+        for (int i = 0; i <= samples; i++) {
+            double t = (double)i / samples;
+            double eastM = from.X + (to.X - from.X) * t;
+            double northM = from.Z + (to.Z - from.Z) * t;
+            if (!terrain.TryHeightM(eastM, northM, out double heightM)) continue;
+            floorM = Math.Max(floorM, heightM + GunPitCueClearanceM);
+        }
+        return floorM;
+    }
+
+    /// <summary>
+    /// Gate altitude that keeps the straight chord from <paramref name="from"/> above
+    /// every sampled surface plus <see cref="GunPitCueClearanceM"/>. Later segments
+    /// raise both cues to the same floor, so their chord is already level and clear.
+    /// </summary>
+    static double ChordClearanceGateUpM(ITerrainSurface terrain, in Vec3D from, in Vec3D to)
+    {
+        double distanceM = HorizontalDistanceM(from, to);
+        int samples = Math.Max(1, (int)Math.Ceiling(distanceM / 100.0));
+        double requiredUpM = double.NegativeInfinity;
+        for (int i = 1; i <= samples; i++) {
+            double t = (double)i / samples;
+            double eastM = from.X + (to.X - from.X) * t;
+            double northM = from.Z + (to.Z - from.Z) * t;
+            if (!terrain.TryHeightM(eastM, northM, out double heightM)) continue;
+            double neededM = heightM + GunPitCueClearanceM;
+            requiredUpM = Math.Max(requiredUpM, from.Y + (neededM - from.Y) / t);
+        }
+        return requiredUpM;
     }
 
     static int FindBridgePointIndex(IReadOnlyList<CobraCanyonRoutePoint> points)
