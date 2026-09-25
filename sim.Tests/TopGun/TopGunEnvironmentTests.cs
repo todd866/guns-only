@@ -1,6 +1,7 @@
 using System.Text.Json;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Sim.Recovery;
 using GunsOnly.Web;
 
 namespace GunsOnly.Sim.Tests.TopGun;
@@ -109,5 +110,44 @@ public sealed class TopGunEnvironmentTests
         Assert.False(root.GetProperty("multiplayer_terrain_shared").GetBoolean());
         Assert.Equal(0.0, root.GetProperty("terrain_placement_east_m").GetDouble());
         Assert.Equal(0.0, root.GetProperty("terrain_placement_north_m").GetDouble());
+    }
+
+    [Fact]
+    public void MergeAndCaseIInitialShareTheCarriersSurveyedWater()
+    {
+        ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
+            UkraineTerrainTruth.Load());
+        BeatSetup beat = Beats.TopGunAcm(TopGunSeat.F14A);
+        Carrier carrier = Assert.IsType<Carrier>(beat.Carrier);
+        var initial = ConventionalCarrierRecoveryDirector.BuildSchedule(carrier, 78.0)[0];
+
+        AssertWaterPad(terrain, beat.Player.Position, 768.0, "Tomcat spawn");
+        AssertWaterPad(terrain, beat.Bandit.Position, 768.0, "MiG spawn");
+        AssertWaterPad(terrain, initial.Position, 768.0, "Case I initial");
+
+        double shipRangeM = Horizontal(beat.Player.Position, carrier.Position);
+        Assert.InRange(shipRangeM, 6.0 * 1852.0, 8.0 * 1852.0);
+        Vec3D nose = new(Math.Sin(beat.Player.Chi), 0.0, Math.Cos(beat.Player.Chi));
+        Vec3D toShip = carrier.Position - beat.Player.Position;
+        Assert.True(nose.Dot(toShip) > 0.0, "the ship must sit in front of the Tomcat's nose");
+        Assert.True(Horizontal(beat.Player.Position, initial.Position) < 8.0 * 1852.0);
+    }
+
+    static void AssertWaterPad(ITerrainSurface terrain, Vec3D point, double halfM, string label)
+    {
+        for (double east = -halfM; east <= halfM; east += 512.0)
+        for (double north = -halfM; north <= halfM; north += 512.0) {
+            Assert.True(terrain.TrySample(point.X + east, point.Z + north, out TerrainSample sample),
+                label);
+            Assert.True(sample.Kind == TerrainSurfaceKind.Water,
+                $"{label} land at {point.X + east:F0},{point.Z + north:F0} h={sample.HeightM:F0}");
+        }
+    }
+
+    static double Horizontal(Vec3D a, Vec3D b)
+    {
+        double east = a.X - b.X;
+        double north = a.Z - b.Z;
+        return Math.Sqrt(east * east + north * north);
     }
 }

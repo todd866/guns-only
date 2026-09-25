@@ -3669,7 +3669,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "Two MiG-28s · guns and Sidewinders · Case I trap",
      configuration: "F-14A · M61 + AIM-9 · anime-1986 presentation · production programme",
      brief: "Two Ace merges against MiG-28 aggressors, then the boat. Guns and heaters, then the taught Case I pattern: initial, break, downwind, approach turn and groove. Knock it off early if you need the trap before the second jet.",
-     controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target\nNavigation opens after a splash with the carrier RTB choice",
+     controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target\nG gear · U hook · [ ] flaps — you lower them, or the pass is a bolter\nconfigurationPractice=1 lets the pattern set gear, hook and flaps",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -3763,6 +3763,9 @@ function stageTopGunOnBridge() {
     && isTopGunBeatStaged();
   const restarted = sameSeat && bridge.RestartSortie?.(0);
   if (!restarted) {
+    const practice = new URLSearchParams(window.location.search)
+      .get("configurationPractice") === "1";
+    bridge.SetTopGunConfigurationPractice?.(practice);
     bridge.StartTopGun(selectedTopGunSeat);
     restoreDirectorState();
   }

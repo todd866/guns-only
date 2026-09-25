@@ -25,6 +25,7 @@ export const CONTROL_BINDINGS = Object.freeze([
   Object.freeze({ action: "wingSweepForward", label: "Wing sweep forward", defaultCode: "Comma", gkey: 21 }),
   Object.freeze({ action: "wingSweepAft", label: "Wing sweep aft", defaultCode: "Period", gkey: 22 }),
   Object.freeze({ action: "wingSweepAuto", label: "Wing sweep auto", defaultCode: "Slash", gkey: 23 }),
+  Object.freeze({ action: "hookToggle", label: "Hook toggle", defaultCode: "KeyU", gkey: 24 }),
 ]);
 
 const RESERVED_CODES = new Set([

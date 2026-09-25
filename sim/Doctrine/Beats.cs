@@ -1670,14 +1670,19 @@ public static class Beats {
     /// hands a live fight to relief if the pilot leaves early.
     /// </summary>
     public static BeatSetup TopGunAcm(TopGunSeat playerSeat) {
-        // 10,000 ft co-altitude staging — same band as ModernVisualMerge, suitable for guns ACM.
+        // 10,000 ft co-altitude staging, suitable for guns ACM.
         const double AltitudeM = 3048.0;
-        // ~4.9 nm opening split along the merge axis (9 km): inside the brief's 3–8 nm class and
-        // copied from ModernVisualMerge spawn geometry so the run-in timing feels familiar.
-        const double PlayerX = 1280.0;
-        const double BanditX = 1520.0;
-        const double PlayerZ = -4500.0;
-        const double BanditZ = 4500.0;
+        // The merge sits on the same surveyed eastern-sea cell as the ship, 7 nm astern of it
+        // on the base recovery course, so the deck is in front of the Tomcat and the 3 nm
+        // initial is inside an 8 nm run. Opening split stays the 9 km / ~4.9 nm head-on.
+        // North and east of the surveyed hull at (30464, 0). That point's sea runs more than
+        // 190 km north, but 7 nm south of it is the coast, which is what the merge was sitting on.
+        const double CarrierEastM = 38_464.0;
+        const double CarrierNorthM = 20_000.0;
+        const double PlayerX = CarrierEastM;
+        const double PlayerZ = CarrierNorthM - 7.0 * 1852.0;
+        const double BanditX = CarrierEastM + 240.0;
+        const double BanditZ = PlayerZ + 9_000.0;
 
         bool playerIsTomcat = playerSeat == TopGunSeat.F14A;
         AircraftCapability playerCapability = playerIsTomcat
@@ -1702,7 +1707,7 @@ public static class Beats {
         // remains water for more than 190 km north, so a 12 m/s ship cannot steam off its collision
         // surface during an ACM sortie and recovery.
         var carrier = new GunsOnly.Sim.Carrier(
-            deckCentre: new Vec3D(30_464.0, 20.0, 0.0),
+            deckCentre: new Vec3D(CarrierEastM, 20.0, CarrierNorthM),
             headingRad: 0.0,
             speedMps: 12.0,
             deckAltM: 20.0,

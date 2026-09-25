@@ -6,7 +6,8 @@ public enum GKey {
     GearToggle, FlapUp, FlapDown, EmergencyGearRelease, GearHornCutout,
     ConfirmGearExtensionFailure, InspectGearDownlocks, AutoGcasOverride,
     // Append-only bridge ABI: the browser dispatches these ordinals directly.
-    WingSweepForward, WingSweepAft, WingSweepAuto
+    WingSweepForward, WingSweepAft, WingSweepAuto,
+    HookToggle
 }
 public enum KeyPhase { Idle, Held, DoubleHeld }
 

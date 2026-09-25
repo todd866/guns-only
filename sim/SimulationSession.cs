@@ -401,8 +401,10 @@ public sealed partial class SimulationSession {
     double _waveOffUntilMs = double.NegativeInfinity;
     FlightConfigurationTarget _configurationTarget = FlightConfigurationTarget.Combat;
     bool _configurationAutomationEnabled;
+    bool _carrierConfigurationPractice;
     bool _manualGearConfiguration;
     bool _manualFlapConfiguration;
+    bool _manualHookConfiguration;
     bool _configurationWasReady = true;
     double _configurationReadyCueUntilMs = double.NegativeInfinity;
 
@@ -1126,6 +1128,24 @@ public sealed partial class SimulationSession {
     public bool WaveOffActive => _carrier is not null && _simTimeMs < _waveOffUntilMs;
     public FlightConfigurationTarget ConfigurationTarget => _configurationTarget;
     public bool ConfigurationAutomationEnabled => _configurationAutomationEnabled;
+
+    /// <summary>
+    /// Top Gun leaves gear, flaps and the hook to the pilot. This turns the existing pattern
+    /// automation back on for a practice pass without changing the production default.
+    /// </summary>
+    public void SetCarrierConfigurationPractice(bool enabled) {
+        _carrierConfigurationPractice = enabled;
+        if (!TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)) return;
+        bool maintenanceRecovery = _beat.MaintenanceScenario
+            == MaintenanceScenarioKind.F86EmergencyGearRecovery;
+        _configurationAutomationEnabled = enabled
+            && PlayerSystemsSimulated
+            && _carrier is not null
+            && !maintenanceRecovery;
+        if (_configurationAutomationEnabled)
+            ApplyAutomaticConfigurationCommands();
+    }
+
     public bool AutomaticGearSelection => _configurationAutomationEnabled
         && !_manualGearConfiguration;
     public bool AutomaticFlapSelection => _configurationAutomationEnabled
@@ -2021,6 +2041,11 @@ public sealed partial class SimulationSession {
             else
                 _systems.CommandGear(selected);
         }
+        if (key == GKey.HookToggle && newPress) {
+            if (_configurationAutomationEnabled) _manualHookConfiguration = true;
+            _systems.CommandHook(_systems.HookDown
+                ? TailhookHandle.Up : TailhookHandle.Down);
+        }
         if (key is GKey.FlapUp or GKey.FlapDown) {
             if (newPress && _configurationAutomationEnabled) _manualFlapConfiguration = true;
             RefreshFlapLeverFromHeldInput();
@@ -2227,7 +2252,7 @@ public sealed partial class SimulationSession {
         SetPlayerGunTargetPadlockRollAssist(selected);
 
     static bool IsPlayerSystemsAction(GKey key) => key is
-        GKey.GearToggle or GKey.FlapUp or GKey.FlapDown
+        GKey.GearToggle or GKey.FlapUp or GKey.FlapDown or GKey.HookToggle
         or GKey.EmergencyGearRelease or GKey.GearHornCutout
         or GKey.ConfirmGearExtensionFailure or GKey.InspectGearDownlocks;
 
@@ -3755,7 +3780,9 @@ public sealed partial class SimulationSession {
             : null;
         _droneRaidTargetIndex = 0;
         _configurationAutomationEnabled = PlayerSystemsSimulated
-            && _carrier is not null && !maintenanceRecovery;
+            && _carrier is not null && !maintenanceRecovery
+            && (!TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
+                || _carrierConfigurationPractice);
         // Circuits starts clean (Combat). Carrier approach beats stage Recovery.
         _configurationTarget = _configurationAutomationEnabled
             ? (stagesOnCarrierApproach
@@ -3764,6 +3791,7 @@ public sealed partial class SimulationSession {
             : FlightConfigurationTarget.Combat;
         _manualGearConfiguration = false;
         _manualFlapConfiguration = false;
+        _manualHookConfiguration = false;
         _configurationWasReady = ConfigurationReady;
         _configurationReadyCueUntilMs = double.NegativeInfinity;
         if (_carrier is not null) {
@@ -4666,11 +4694,8 @@ public sealed partial class SimulationSession {
         profile: PlayerSystemsProfile,
         initialGear: onApproach ? LandingGearHandle.Down : LandingGearHandle.Up,
         initialFlapDegrees: onApproach ? PlayerSystemsProfile.FullFlapDegrees : 0.0,
-        // Every current beat starts with an already-running airborne jet. Prime the normal system
-        // to that steady state instead of flashing a fictitious pump failure during the first
-        // numerical time constant. The maintenance beat deliberately starts unpressurised because
-        // its utility-pump failure is injected at staging.
-        initialUtilityHydraulicPressureFraction: prechargeUtilityHydraulics ? 1.0 : 0.0);
+        initialUtilityHydraulicPressureFraction: prechargeUtilityHydraulics ? 1.0 : 0.0,
+        initialHook: onApproach ? TailhookHandle.Down : TailhookHandle.Up);
 
     AircraftState WithCurrentFuelMass(in AircraftState state) {
         double fuelFreeMass = PlayerFuelFreeMassKgWithStores();
@@ -4806,6 +4831,7 @@ public sealed partial class SimulationSession {
         _configurationTarget = target;
         _manualGearConfiguration = false;
         _manualFlapConfiguration = false;
+        _manualHookConfiguration = false;
         _configurationReadyCueUntilMs = double.NegativeInfinity;
         _configurationWasReady = ConfigurationReady;
         ApplyAutomaticConfigurationCommands();
@@ -4822,6 +4848,10 @@ public sealed partial class SimulationSession {
                 : _configurationTarget == FlightConfigurationTarget.Recovery
                     ? WingFlapLever.Down : WingFlapLever.Up;
             _systems.SetFlapLever(lever);
+        }
+        if (!_manualHookConfiguration) {
+            _systems.CommandHook(_configurationTarget == FlightConfigurationTarget.Recovery
+                ? TailhookHandle.Down : TailhookHandle.Up);
         }
     }
 
@@ -7570,6 +7600,24 @@ public sealed partial class SimulationSession {
             && _carrier.DeckSinkRateMps(_player.State) > 0.0;
         Carrier.SolidCollision solid = _carrier.SweptSolidCollision(
             previousPlayerState.Position, _player.State.Position);
+        bool caseIConfigured = _systems.HookDown
+            && _systems.AllGearDownAndLocked
+            && Math.Min(_systems.LeftFlapDegrees, _systems.RightFlapDegrees)
+                >= _systems.FullFlapDegrees - FlapTargetToleranceDeg;
+        bool unconfiguredCaseIBolter = TopGunFightRuntime.IsTopGunMission(
+                _beat.MissionIdentity.Id)
+            && !caseIConfigured
+            && solid == Carrier.SolidCollision.FlightDeck
+            && topDeckContact
+            && contact is Carrier.Recovery.Trap or Carrier.Recovery.Bolter;
+        if (unconfiguredCaseIBolter && contact == Carrier.Recovery.Trap) {
+            touchdown = touchdown with {
+                Recovery = Carrier.Recovery.Bolter,
+                Hook = Carrier.HookOutcome.MissedWires,
+                Wire = 0,
+            };
+            contact = Carrier.Recovery.Bolter;
+        }
 
         // The recorded result must be the ENGAGEMENT, not the arrival. A strip recovery now makes
         // contact as RollingOut and only takes the wire a kilometre later, so latching the first
@@ -7599,7 +7647,8 @@ public sealed partial class SimulationSession {
             && !_carrier.WithinDeckFootprint(_player.State.Position);
         if (naturalSurfaceOwnsContact && RegisterPlayerNaturalSurfaceImpact()) return;
 
-        if (solid != Carrier.SolidCollision.None && !validRecoveryContact) {
+        if (solid != Carrier.SolidCollision.None && !validRecoveryContact
+            && !unconfiguredCaseIBolter) {
             _attemptHadSetback = true;
             ImpactSurface surface = SurfaceFor(solid);
             Vec3D surfaceVelocity = _carrier.DeckVelocityWorld

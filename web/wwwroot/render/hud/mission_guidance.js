@@ -216,20 +216,9 @@ export function flightMissionGuidance(state = {}, {
       });
     }
 
-    if (rtbAvailable) {
-      const engagement = Math.max(1,
-        Math.trunc(finiteNumber(state?.engagement_number) ?? 1));
-      return cue({
-        id: "top-gun-continue",
-        phase: "decision",
-        objective: "CONTINUE OR RECOVER",
-        status: `ENGAGEMENT ${engagement} · BANDIT LIVE`,
-        primaryAction: action("CONTINUE THE FIGHT"),
-        secondaryAction: action("RTB TO CARRIER", { control: "rtb" }),
-        compactText: "CONTINUE FIGHT · RTB AVAILABLE",
-      });
-    }
-
+    // Handoff phase Available means the pilot may knock it off. It is not an invitation
+    // to leave while the bandit is still the job. RTB copy waits for the replacement
+    // window or an already-latched return.
     if (state?.aim9_in_flight === true) {
       return cue({
         id: "top-gun-fox-two-in-flight",
