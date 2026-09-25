@@ -44,7 +44,45 @@ export function apexCueText(state = {}) {
     : `${Math.round(distanceM)} m`;
   const speedKmh = Math.round(speedMps * 3.6);
   const where = state.next_apex_exit ? "EXIT" : "APEX";
+  if (state.show_apex_speed === false) return `${where} ${distance}`;
   return `${where} ${distance} · ${speedKmh} km/h`;
+}
+
+/** The apex line, or the pit/stop line that replaces it. Tone is caution only for a real brake cue. */
+export function apexCuePresentation(state = {}) {
+  const speed = Math.hypot(state.vx ?? 0, state.vy ?? 0, state.vz ?? 0);
+  if (state.in_pit && state.pit_entry_legal && speed <= 0.5) {
+    return Object.freeze({ text: "STOPPED", tone: "normal" });
+  }
+  if (state.in_pit && !state.pit_entry_legal) {
+    return Object.freeze({ text: "PIT SPEED", tone: "caution" });
+  }
+  if (state.pit_open) {
+    return Object.freeze({ text: "PIT · 60 km/h", tone: "caution" });
+  }
+  const text = apexCueText(state);
+  const distanceM = Number(state.next_apex_m);
+  const apexMps = Number(state.next_apex_mps);
+  const braking = text !== ""
+    && state.next_apex_exit !== true
+    && Number.isFinite(distanceM) && distanceM < 150
+    && Number.isFinite(apexMps) && speed > apexMps;
+  return Object.freeze({ text, tone: braking ? "caution" : "normal" });
+}
+
+/** Cool-down replaces the running lap clock. The apex card stays until the pit cue. */
+export function lapFlyerText(state = {}, lapClock = "") {
+  if (state.session_leg === "cooldown" && !state.pit_open && !state.in_pit) {
+    return "CHECKER · BRING IT IN";
+  }
+  return lapClock;
+}
+
+/** One horizon tick. Positive miss (target to the right) moves the tick right. No numeric label. */
+export function lookAheadTick(state = {}, width = 0) {
+  const miss = Number(state.look_ahead_lateral_m);
+  const pixels = Number.isFinite(miss) ? Math.max(-80, Math.min(80, miss * 4)) : 0;
+  return Object.freeze({ x: width * 0.5 + pixels, label: "" });
 }
 
 export function trackDayStatusLine(state = {}) {
@@ -147,7 +185,7 @@ export class HelmetHud {
     ctx.clearRect(0, 0, w, h);
 
     const layers = weekendHudLayerVisibility(state);
-    this.drawHorizonReticle(ctx, w, h);
+    this.drawHorizonReticle(ctx, w, h, state);
     this.drawSpeedBlock(ctx, w, h, state);
     this.drawRpmGear(ctx, w, h, state);
     this.drawLeanBlock(ctx, w, h, state);
@@ -173,7 +211,9 @@ export class HelmetHud {
       deltaSeconds: state.delta_s,
       lapValid: state.lap_valid !== false,
     });
-    const apex = apexCueText(state);
+    const apexCue = apexCuePresentation(state);
+    const apex = apexCue.text;
+    const flyer = lapFlyerText(state, readout.lap);
     const x = w * 0.72;
     const y = h * 0.12;
     ctx.save();
@@ -189,8 +229,10 @@ export class HelmetHud {
     ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
     ctx.fillText("LAP", x, y - 8);
     ctx.fillStyle = readout.invalid ? "#c98a6a" : "#e9ede2";
-    ctx.font = "700 22px ui-monospace, SFMono-Regular, Menlo, monospace";
-    ctx.fillText(readout.lap, x, y + 14);
+    ctx.font = flyer.startsWith("CHECKER")
+      ? "700 13px ui-monospace, SFMono-Regular, Menlo, monospace"
+      : "700 22px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.fillText(flyer, x, y + 14);
     if (readout.invalid) {
       ctx.fillStyle = "#c98a6a";
       ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, monospace";
@@ -203,7 +245,7 @@ export class HelmetHud {
     ctx.fillStyle = "#c7b78c";
     ctx.fillText(`BEST ${readout.best}`, x, y + 46);
     if (apex) {
-      ctx.fillStyle = "#d7e2cf";
+      ctx.fillStyle = apexCue.tone === "caution" ? "#d7b15a" : "#d7e2cf";
       ctx.font = "600 12px ui-monospace, SFMono-Regular, Menlo, monospace";
       ctx.fillText(apex, x, y + (readout.delta ? 88 : 64));
     }
@@ -218,9 +260,10 @@ export class HelmetHud {
     ctx.restore();
   }
 
-  drawHorizonReticle(ctx, w, h) {
+  drawHorizonReticle(ctx, w, h, state = {}) {
     const cx = w * 0.5;
     const cy = h * 0.52;
+    const tick = lookAheadTick(state, w);
     ctx.save();
     ctx.strokeStyle = "rgba(230, 236, 217, 0.42)";
     ctx.lineWidth = 1;
@@ -233,6 +276,11 @@ export class HelmetHud {
     ctx.lineTo(cx, cy - 3);
     ctx.moveTo(cx, cy + 3);
     ctx.lineTo(cx, cy + 10);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(215, 177, 90, 0.9)";
+    ctx.beginPath();
+    ctx.moveTo(tick.x, cy - 16);
+    ctx.lineTo(tick.x, cy - 6);
     ctx.stroke();
     ctx.restore();
   }

@@ -63,7 +63,31 @@ export function loadRideBest(storage, circuit = null) {
     ? parsed.bestSectorSeconds.map((value) => finitePositive(value))
     : [];
 
-  return { bestLapSeconds, splitProfile, bestSectorSeconds };
+  return {
+    bestLapSeconds,
+    splitProfile,
+    bestSectorSeconds,
+    broughtIn: parsed.broughtIn === true,
+  };
+}
+
+/** Device evidence for the apex card and the reflex ramp. A missing record is the first visit. */
+export function rideRampFromRecord(record) {
+  const hasLap = Number(record?.bestLapSeconds) > 0;
+  const broughtIn = record?.broughtIn === true;
+  if (!hasLap) {
+    return Object.freeze({
+      hasMatchingCleanLap: false, broughtIn: false, showApexSpeed: true, reflexGain: 1,
+    });
+  }
+  if (!broughtIn) {
+    return Object.freeze({
+      hasMatchingCleanLap: true, broughtIn: false, showApexSpeed: false, reflexGain: 1,
+    });
+  }
+  return Object.freeze({
+    hasMatchingCleanLap: true, broughtIn: true, showApexSpeed: false, reflexGain: 0.5,
+  });
 }
 
 /** @returns {boolean} true when the record was written. */
@@ -81,6 +105,7 @@ export function saveRideBest(storage, record, circuit = null) {
         : [],
       circuitId: circuit?.circuitId ?? null,
       circuitLengthM: Number(circuit?.circuitLengthM) || null,
+      broughtIn: record?.broughtIn === true,
     }));
     return true;
   } catch {

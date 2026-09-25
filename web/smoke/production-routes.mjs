@@ -176,7 +176,7 @@ export const PRODUCTION_ROUTES = Object.freeze([
       }));
       assert.equal(route.status, "READY · REVIEW SESSION BRIEF");
       assert.equal(route.briefVisible, true, "Weekend Ride Ready brief is not visible");
-      assert.equal(route.title, "Bank a clean lap");
+      assert.equal(route.title, "Two laps, then bring it in");
       assert.equal(route.phase, "paused", "Weekend Ride authority is running behind Ready");
       assert.equal(route.aircraftId, "vehicle.yzf-r1.track-day.v1");
     },

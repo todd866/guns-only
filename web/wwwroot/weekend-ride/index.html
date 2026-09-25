@@ -8,7 +8,7 @@
   <base href="/">
   <title>Guns Only · YZF-R1 Weekend Ride</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/weekend-ride/styles.css?v=370">
+  <link rel="stylesheet" href="/weekend-ride/styles.css?v=371">
 </head>
 <body>
   <header class="topbar">
@@ -47,15 +47,15 @@
       aria-describedby="ride-brief-summary" hidden>
       <div class="mission-card mission-card--brief">
         <span class="mission-kicker">RAPIER AIRFIELD · TRACK-DAY BRIEF</span>
-        <h2 id="ride-brief-title">Bank a clean lap</h2>
-        <p id="ride-brief-summary" class="mission-summary">Complete one clean lap inside the paint.</p>
+        <h2 id="ride-brief-title">Two laps, then bring it in</h2>
+        <p id="ride-brief-summary" class="mission-summary">Sighting laps are done. Two timed laps, the checker, one cool-down, stop in the box.</p>
         <p class="device-advisory device-advisory--brief">This ride requires a keyboard or gamepad. Rotate to landscape before launch.</p>
         <dl class="mission-brief-facts" aria-label="Ride assignment">
-          <div><dt>Objective</dt><dd>One clean lap</dd></div>
-          <div><dt>Timing</dt><dd>Four sectors</dd></div>
-          <div><dt>Finish</dt><dd>Pause · End ride</dd></div>
+          <div><dt>Laps</dt><dd>Two, then cool-down</dd></div>
+          <div><dt>First corner</dt><dd>a few hundred metres</dd></div>
+          <div><dt>Finish</dt><dd>stop in the box</dd></div>
         </dl>
-        <p class="mission-correction"><strong>FIRST REP</strong><span>Bank a clean reference before chasing time.</span></p>
+        <p id="ride-brief-record" class="mission-correction" hidden><strong>Record</strong><span></span></p>
         <div class="mission-actions">
           <button id="ride-brief-start" class="mission-action mission-action--primary" type="button">Start</button>
           <a id="ride-brief-return" class="mission-action" href="/?program=weekend-ride&amp;menu=1">Aircraft</a>
@@ -112,7 +112,7 @@
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=370", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=371", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -142,7 +142,7 @@
         const script = document.createElement("script");
         // Loader from site root + <base href="/"> so boot resources resolve to /_framework/*,
         // not /weekend-ride/_framework/* (Medevac pattern).
-        script.src = "/_framework/blazor.webassembly.js?v=370";
+        script.src = "/_framework/blazor.webassembly.js?v=371";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load motorcycle runtime.")), {
@@ -151,10 +151,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=370"
+        "/render/release/quarantine_gate.js?v=371"
       );
       const access = renderExperienceGate({ experienceId: "weekend-ride" });
-      if (access.allowed) await import("/weekend-ride/main.js?v=370");
+      if (access.allowed) await import("/weekend-ride/main.js?v=371");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");

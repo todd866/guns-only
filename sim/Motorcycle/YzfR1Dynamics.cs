@@ -46,6 +46,11 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
     const double TouchdownRateRetention = 0.25;
     enum WheelLiftState { Grounded, FrontLifted, RearLifted }
     const double LeanHoldRollDampingBoost = 0.40;
+    /// <summary>
+    /// Mission ramp on the lean-hold damper. 1 is the full provisional reflex; 0.5 is the
+    /// brought-in rung. Raw mode never reaches this path.
+    /// </summary>
+    public double LeanHoldGainScale { get; set; } = 1.0;
     // Provisional low-order coupling: body shift can tighten a turn, but cannot replace the bars.
     const double RiderBodyShiftSteeringFraction = 0.50;
     const double RiderBodyShiftFullAuthoritySpeedMps = 8.0;
@@ -563,7 +568,8 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         double rollRestoringTorqueNm = RollRestoringStiffnessNmPerRad
             * (targetLeanRad - _leanRad);
         double rollDampingScale = 1.0
-            + LeanHoldRollDampingBoost * assistScale * reflex.LeanHoldAuthority;
+            + LeanHoldRollDampingBoost * assistScale * reflex.LeanHoldAuthority
+            * Math.Clamp(LeanHoldGainScale, 0.0, 1.0);
         double rollDampingTorqueNm = RollDampingNmPerRadPerSec
             * rollDampingScale
             * _leanRateRadPerSec;

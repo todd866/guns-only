@@ -10,6 +10,12 @@ public enum WeekendRidePhase
     Finished
 }
 
+public enum WeekendRideSessionLeg
+{
+    Flying,
+    Cooldown
+}
+
 /// <summary>
 /// Headless mission authority for the Rapier strip weekend motorcycle ride. Owns lifecycle,
 /// painted-circuit scoring, lap timing, and grid reset after tip-over.
@@ -40,6 +46,12 @@ public sealed class WeekendRideMissionRuntime
     double _tipRecoveryFlashSeconds;
     bool _lapTimingActive;
     bool _isOnTrack = true;
+    bool _pitOccupancyLatched;
+    bool _pitWindowLatched;
+    bool _pitEntryLegal;
+    double _stoppedHoldSeconds;
+    bool _hasMatchingCleanLap;
+    bool _broughtInBefore;
 
     WeekendRideMissionRuntime(
         YzfR1Dynamics bike,
@@ -71,6 +83,8 @@ public sealed class WeekendRideMissionRuntime
 
     /// <summary>Fastest lap ridden clean this session, or null.</summary>
     public double? BestLapSeconds => _lapTiming.BestLapSeconds;
+    public int CleanFlyingLaps => _lapTiming.CleanFlyingLaps;
+    public double LastCleanFlyingLapSeconds => _lapTiming.LastCleanFlyingLapSeconds;
 
     /// <summary>False once the lap in progress has been spoilt off-track or by a tip-over.</summary>
     public bool CurrentLapValid => _lapTiming.CurrentLapValid;
@@ -88,6 +102,18 @@ public sealed class WeekendRideMissionRuntime
     public double? DeltaToBestSeconds =>
         _lapTiming.DeltaToBestSeconds(_lapProgressM, Circuit.CircuitLengthM);
     public int LapCount => _circuitQueryState.LapIndex;
+    public WeekendRideSessionLeg SessionLeg { get; private set; } = WeekendRideSessionLeg.Flying;
+    public bool PitOpen { get; private set; }
+    public double LookAheadLateralM { get; private set; }
+    public bool InPit { get; private set; }
+    public bool PitEntryLegal => _pitEntryLegal && _pitOccupancyLatched;
+    public bool LegalStop { get; private set; }
+    public bool CameInEarly { get; private set; }
+    public bool HadHotPitEntry { get; private set; }
+    public int TipCount { get; private set; }
+    public bool ShowApexSpeed { get; private set; } = true;
+    /// <summary>1 until a matching clean lap and a legal stop are both on the device; then 0.5.</summary>
+    public double ReflexGain { get; private set; } = 1.0;
     /// <summary>
     /// Session-cumulative seconds outside the painted circuit. Grid recovery abandons the
     /// current lap but never erases this debrief evidence; only a new mission begins at zero.
@@ -113,7 +139,21 @@ public sealed class WeekendRideMissionRuntime
             throw new InvalidOperationException("A finished weekend ride cannot restart.");
 
         ResetMissionState();
+        ApplyRamp(_hasMatchingCleanLap, _broughtInBefore);
         Phase = WeekendRidePhase.Active;
+    }
+
+    /// <summary>
+    /// Device evidence for the reflex ramp. No matching lap: full apex card and full gains.
+    /// A lap without a legal stop: distance only, full gains. Both: distance only, half gain.
+    /// </summary>
+    public void ApplyRamp(bool hasMatchingCleanLap, bool broughtIn)
+    {
+        _hasMatchingCleanLap = hasMatchingCleanLap;
+        _broughtInBefore = broughtIn;
+        ShowApexSpeed = !hasMatchingCleanLap;
+        ReflexGain = hasMatchingCleanLap && broughtIn ? 0.5 : 1.0;
+        Bike.LeanHoldGainScale = ReflexGain;
     }
 
     public void Pause()
@@ -151,8 +191,20 @@ public sealed class WeekendRideMissionRuntime
             Bike.State.PositionWorldM,
             ref _circuitQueryState);
         _isOnTrack = circuitSample.OnTrack;
-        if (!circuitSample.OnTrack)
+        double remainingToLineM = Math.Max(0.0, Circuit.CircuitLengthM - circuitSample.ProgressM);
+        // The box sits past the stripe. Once the cool-down is inside 120 m on the way in,
+        // the window stays open across the line so the arrival is not slammed shut.
+        // Progress near 0 at the start of the cool-down is a full lap remaining, not an arrival.
+        if (SessionLeg == WeekendRideSessionLeg.Cooldown
+            && remainingToLineM <= 120.0
+            && circuitSample.ProgressM > 120.0)
+            _pitWindowLatched = true;
+        PitOpen = SessionLeg == WeekendRideSessionLeg.Cooldown && _pitWindowLatched;
+        bool spoilOffPaint = !circuitSample.OnTrack && !PitOpen;
+        if (spoilOffPaint)
             _offTrackSeconds += FixedDeltaSeconds;
+        if (PitOpen && !circuitSample.OnTrack)
+            circuitSample = circuitSample with { OnTrack = true };
 
         if (!_lapTimingActive
             && circuitSample.OnTrack
@@ -161,28 +213,83 @@ public sealed class WeekendRideMissionRuntime
         // The lap now survives the finish line: RideLapTiming keeps it, judges whether it was
         // clean, and remembers the best. It owns the elapsed clock; the legacy field mirrors
         // it so existing readers of LapTimeSeconds keep working unchanged.
+        bool flyingLap = SessionLeg == WeekendRideSessionLeg.Flying;
         _lapTiming.Advance(
             circuitSample,
             _lapTimingActive,
             Bike.Telemetry.IsTippedOver,
             FixedDeltaSeconds,
-            Circuit.CircuitLengthM);
+            Circuit.CircuitLengthM,
+            countsAsRecord: flyingLap);
+        if (circuitSample.LapIndex >= 2)
+            SessionLeg = WeekendRideSessionLeg.Cooldown;
         _lapProgressM = circuitSample.ProgressM;
         _currentLapElapsedSeconds = _lapTiming.CurrentLapSeconds;
 
         if (Bike.Telemetry.IsTippedOver)
         {
+            TipCount++;
             _tipRecoveryFlashSeconds = 1.5;
             ResetToGrid();
         }
         else if (_tipRecoveryFlashSeconds > 0.0)
             _tipRecoveryFlashSeconds = Math.Max(0.0, _tipRecoveryFlashSeconds - FixedDeltaSeconds);
 
-        // Pit-in is the only world event that ends the session. Esc still calls Finish()
-        // from the pause menu; crossing the line, leaving the paint, and tipping do not.
-        if (PitLane.Contains(Bike.State.PositionWorldM)
-            && Bike.Telemetry.SpeedMps <= PitLaneSpeedLimitMps)
+        UpdateLookAhead();
+        JudgePitStop();
+    }
+
+    void JudgePitStop()
+    {
+        bool inPit = PitLane.Contains(Bike.State.PositionWorldM);
+        InPit = inPit;
+        if (!inPit)
+        {
+            _pitOccupancyLatched = false;
+            _pitEntryLegal = false;
+            _stoppedHoldSeconds = 0.0;
+            return;
+        }
+
+        if (!_pitOccupancyLatched)
+        {
+            _pitOccupancyLatched = true;
+            _pitEntryLegal = Bike.Telemetry.SpeedMps <= PitLaneSpeedLimitMps;
+            if (!_pitEntryLegal)
+                HadHotPitEntry = true;
+            if (SessionLeg == WeekendRideSessionLeg.Flying)
+                CameInEarly = true;
+        }
+
+        if (_pitEntryLegal && Bike.Telemetry.SpeedMps <= LapTimingStartSpeedMps)
+            _stoppedHoldSeconds += FixedDeltaSeconds;
+        else
+            _stoppedHoldSeconds = 0.0;
+
+        // The box sits beside the stripe. After the checker, a stop is the cool-down
+        // only once that lap has armed the pit window. An immediate turn-in is not it.
+        if (_pitEntryLegal && _stoppedHoldSeconds >= 0.5 - 1e-9
+            && (SessionLeg != WeekendRideSessionLeg.Cooldown || PitOpen))
+        {
+            LegalStop = true;
             Finish();
+        }
+    }
+
+    void UpdateLookAhead()
+    {
+        double speed = Math.Abs(Bike.Telemetry.SpeedMps);
+        double lookM = Math.Max(12.0, speed * 0.8);
+        Vec3D target = PitOpen
+            ? PitLane.Centre
+            : Circuit.PointAhead(_lapProgressM, lookM);
+        double yaw = Bike.Observation.YawRad;
+        double forwardX = Math.Sin(yaw);
+        double forwardZ = Math.Cos(yaw);
+        double rightX = forwardZ;
+        double rightZ = -forwardX;
+        Vec3D delta = target - Bike.State.PositionWorldM;
+        LookAheadLateralM = delta.X * rightX + delta.Z * rightZ;
     }
 
     public void StepFixed(
@@ -204,7 +311,9 @@ public sealed class WeekendRideMissionRuntime
             telemetry.WheelieBalance,
             telemetry.StoppieBalance,
             telemetry.IsSliding);
-        MotorcyclePilotCommand command = _riderController.Step(intent, feedback, controlMode);
+        double reflexGain = controlMode == MotorcycleControlMode.Raw ? 0.0 : ReflexGain;
+        MotorcyclePilotCommand command = _riderController.Step(
+            intent, feedback, controlMode, reflexGain);
         StepFixed(command);
     }
 
@@ -212,7 +321,11 @@ public sealed class WeekendRideMissionRuntime
     {
         Bike.ResetTo(GridPosition, _gridHeadingRad);
         _riderController.Reset();
+        // A tip abandons the lap in progress. Laps already crossed stay crossed, or the
+        // checker and the debrief would forget the session the rider had already ridden.
+        int completedLaps = _circuitQueryState.LapIndex;
         _circuitQueryState = default;
+        _circuitQueryState.LapIndex = completedLaps;
         // A recovery drops the lap in progress but never the best or the history: you lose the
         // lap you crashed on, not the session. Off-track time is session evidence too and must
         // survive the recovery so the debrief cannot claim a clean ride after a reset.
@@ -220,6 +333,8 @@ public sealed class WeekendRideMissionRuntime
         _currentLapElapsedSeconds = 0.0;
         _lapTimingActive = false;
         _isOnTrack = true;
+        _pitWindowLatched = false;
+        PitOpen = false;
     }
 
     public void DebugForceTipOver() => Bike.DebugForceTipOver();
@@ -286,7 +401,20 @@ public sealed class WeekendRideMissionRuntime
             _sessionSeconds,
             NextApex.DistanceM,
             NextApex.SteadySpeedMps,
-            NextApex.ReportingExit);
+            NextApex.ReportingExit,
+            SessionLeg,
+            PitOpen,
+            LookAheadLateralM,
+            InPit,
+            PitEntryLegal,
+            LegalStop,
+            CameInEarly,
+            HadHotPitEntry,
+            TipCount,
+            ShowApexSpeed,
+            ReflexGain,
+            CleanFlyingLaps,
+            LastCleanFlyingLapSeconds);
     }
 
     public CircuitApexReference NextApex => Circuit.NextApex(_lapProgressM);
@@ -302,6 +430,18 @@ public sealed class WeekendRideMissionRuntime
         _tipRecoveryFlashSeconds = 0.0;
         _lapTimingActive = false;
         _isOnTrack = true;
+        _pitOccupancyLatched = false;
+        _pitWindowLatched = false;
+        _pitEntryLegal = false;
+        _stoppedHoldSeconds = 0.0;
+        SessionLeg = WeekendRideSessionLeg.Flying;
+        PitOpen = false;
+        LookAheadLateralM = 0.0;
+        InPit = false;
+        LegalStop = false;
+        CameInEarly = false;
+        HadHotPitEntry = false;
+        TipCount = 0;
         _riderController.Reset();
         Bike.ResetTo(GridPosition, _gridHeadingRad);
     }

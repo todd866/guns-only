@@ -98,7 +98,8 @@ public sealed class MotorcycleRiderController
     public MotorcyclePilotCommand Step(
         in MotorcycleRiderIntent intent,
         in MotorcycleRiderFeedback feedback,
-        MotorcycleControlMode mode)
+        MotorcycleControlMode mode,
+        double reflexGain = 1.0)
     {
         Validate(intent, feedback, mode);
         if (mode == MotorcycleControlMode.Raw)
@@ -195,14 +196,15 @@ public sealed class MotorcycleRiderController
             + WheelieAllowedDeliberateRad * deliberateWheelie;
         double wheelieAheadRad = feedback.PitchRad
             + Math.Max(0.0, pitchRateEstimateRadPerSec) * PitchGovernorLookaheadSeconds;
+        double governorGain = PitchGovernorGain * Math.Clamp(reflexGain, 0.0, 1.0);
         double wheelieGovernorScale = Math.Clamp(
-            1.0 - PitchGovernorGain * Math.Max(0.0, wheelieAheadRad - allowedWheelieRad),
+            1.0 - governorGain * Math.Max(0.0, wheelieAheadRad - allowedWheelieRad),
             0.0,
             1.0);
         double stoppieAheadRad = -(feedback.PitchRad
             + Math.Min(0.0, pitchRateEstimateRadPerSec) * PitchGovernorLookaheadSeconds);
         double stoppieGovernorScale = Math.Clamp(
-            1.0 - PitchGovernorGain * Math.Max(0.0, stoppieAheadRad - StoppieAllowedRad),
+            1.0 - governorGain * Math.Max(0.0, stoppieAheadRad - StoppieAllowedRad),
             0.0,
             1.0);
 

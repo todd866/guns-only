@@ -88,5 +88,11 @@ public sealed class MotorcycleSnapshotProjectionTests
         Assert.True(root.GetProperty("next_apex_mps").GetDouble() > 0.0);
         Assert.True(root.TryGetProperty("progress_m", out _));
         Assert.True(root.GetProperty("session_s").GetDouble() > 0.0);
+        Assert.True(root.TryGetProperty("look_ahead_lateral_m", out JsonElement lookAhead));
+        Assert.Equal(JsonValueKind.Number, lookAhead.ValueKind);
+        Assert.Equal("flying", root.GetProperty("session_leg").GetString());
+        Assert.True(root.TryGetProperty("pit_open", out _));
+        Assert.True(root.TryGetProperty("in_pit", out _));
+        Assert.True(root.TryGetProperty("pit_entry_legal", out _));
     }
 }

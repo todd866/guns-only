@@ -41,6 +41,12 @@ public sealed class RideLapTiming
     /// <summary>Fastest CLEAN lap, or null until one is ridden.</summary>
     public double? BestLapSeconds { get; private set; }
 
+    /// <summary>Clean flying laps closed this session. The cool-down cannot increment it.</summary>
+    public int CleanFlyingLaps { get; private set; }
+
+    /// <summary>Most recent clean flying lap. Zero until one is closed.</summary>
+    public double LastCleanFlyingLapSeconds { get; private set; }
+
     /// <summary>False once the lap in progress has been spoilt; resets at the line.</summary>
     public bool CurrentLapValid => _currentLapValid;
 
@@ -84,7 +90,8 @@ public sealed class RideLapTiming
         bool timingActive,
         bool tippedOver,
         double dtSeconds,
-        double lapLengthM = 0.0)
+        double lapLengthM = 0.0,
+        bool countsAsRecord = true)
     {
         if (!double.IsFinite(dtSeconds) || dtSeconds < 0.0)
             throw new ArgumentOutOfRangeException(nameof(dtSeconds));
@@ -139,7 +146,9 @@ public sealed class RideLapTiming
         // is a real lap time, but its sector times are not real sector times and must never
         // become records.
         bool everySectorClosed = _sectorIndex == SectorCount - 1;
-        if (_currentLapValid && everySectorClosed)
+        // A cool-down lap is timed and shown. It is not a flying lap, so it cannot
+        // become the record or rewrite the split profile the next flyer chases.
+        if (_currentLapValid && everySectorClosed && countsAsRecord)
         {
             for (int sector = 0; sector < SectorCount; sector++)
             {
@@ -150,8 +159,10 @@ public sealed class RideLapTiming
                     _bestSectorSeconds[sector] = sectorSeconds;
             }
         }
-        if (_currentLapValid)
+        if (_currentLapValid && countsAsRecord)
         {
+            CleanFlyingLaps++;
+            LastCleanFlyingLapSeconds = lapSeconds;
             if (BestLapSeconds is null || lapSeconds < BestLapSeconds.Value)
             {
                 BestLapSeconds = lapSeconds;
