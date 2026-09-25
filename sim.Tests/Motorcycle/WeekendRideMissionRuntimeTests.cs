@@ -388,19 +388,48 @@ public sealed class WeekendRideMissionRuntimeTests
             runtime.Circuit, 0.4);
         Assert.InRange(cornerM, 120.0, 450.0);
         runtime.Begin();
-        Vec3D start = runtime.Bike.State.PositionWorldM;
-        var wideOpen = new MotorcycleRiderIntent(
-            1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0, MotorcycleClutchMode.Auto);
+        IReadOnlyList<Vec3D> centreline = runtime.Circuit.Centreline;
+        int uniquePointCount = centreline.Count - 1;
+        double peakSpeedMps = 0.0;
         for (int i = 0; i < 120 * 15; i++)
-            runtime.StepFixed(wideOpen, MotorcycleControlMode.Assisted);
+        {
+            Vec3D position = runtime.Bike.State.PositionWorldM;
+            double targetM = runtime.ProgressM + 40.0;
+            double walkedM = 0.0;
+            Vec3D target = centreline[1];
+            for (int index = 1; index < uniquePointCount; index++)
+            {
+                walkedM += HorizontalDistance(centreline[index - 1], centreline[index]);
+                target = centreline[index];
+                if (walkedM >= targetM) break;
+            }
+            double headingErrorRad = WrapPi(Math.Atan2(
+                target.X - position.X, target.Z - position.Z)
+                - runtime.Bike.Observation.YawRad);
+            double speedMps = runtime.Bike.Telemetry.SpeedMps;
+            if (runtime.ProgressM < cornerM * 0.6)
+                peakSpeedMps = Math.Max(peakSpeedMps, speedMps);
+            bool cornering = Math.Abs(headingErrorRad) > 0.06 && speedMps > 24.0;
+            double steer = Math.Clamp(headingErrorRad * 0.55, -0.7, 0.7);
+            runtime.StepFixed(new MotorcycleRiderIntent(
+                cornering ? 0.25 : 1.0,
+                cornering ? 0.45 : 0.0,
+                steer, 0.0, 0.0, 0, 1.0, MotorcycleClutchMode.Auto),
+                MotorcycleControlMode.Assisted);
+        }
 
-        double travelledM = HorizontalDistance(start, runtime.Bike.State.PositionWorldM);
+        double headingChange = Math.Abs(Math.IEEERemainder(
+            runtime.Bike.Observation.YawRad - runtime.GridHeadingRad,
+            2.0 * Math.PI));
+        Assert.True(runtime.IsOnTrack, $"off track for {runtime.OffTrackSeconds:F1}s");
         Assert.True(
-            travelledM > cornerM,
-            $"travelled {travelledM:F0} m in 15 s, first 0.4 rad heading change is at {cornerM:F0} m");
+            runtime.ProgressM > cornerM,
+            $"circuit progress {runtime.ProgressM:F0} m, first 0.4 rad corner is at {cornerM:F0} m");
+        Assert.True(peakSpeedMps > runtime.NextApex.SteadySpeedMps + 8.0,
+            $"straight peak {peakSpeedMps:F1} m/s never cleared the corner speed");
         Assert.True(
-            runtime.Bike.Telemetry.SpeedMps > runtime.NextApex.SteadySpeedMps + 8.0,
-            "the straight's speed must clear the hairpin's steady speed");
+            headingChange > 0.4,
+            $"heading changed {headingChange:F2} rad from the grid; a straight line is not the corner");
         Assert.Equal(WeekendRidePhase.Active, runtime.Phase);
     }
 
