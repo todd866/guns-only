@@ -310,6 +310,12 @@ public sealed class PaintedCircuitTests
         Assert.False(atGrid.ReportingExit);
         Assert.InRange(atGrid.DistanceM, 120.0, 500.0);
         Assert.InRange(atGrid.SteadySpeedMps, 12.0, 28.0);
+        double slideLimitMps = Math.Sqrt(
+            YzfR1Definition.TirePeakFrictionCoefficient * 9.80665 * atGrid.RadiusM);
+        Assert.Equal(
+            slideLimitMps * Math.Sqrt(PaintedCircuit.ApexFrictionUse),
+            atGrid.SteadySpeedMps,
+            precision: 6);
         Assert.True(
             atGrid.SteadySpeedMps < 40.0,
             "hairpin steady speed must sit well below a straight's terminal speed");

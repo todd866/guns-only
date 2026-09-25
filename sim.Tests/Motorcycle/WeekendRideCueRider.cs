@@ -63,7 +63,9 @@ public sealed class WeekendRideCueRider
         double steerGain = pitApproach ? 0.8 : commit ? 1.6 : 0.55;
         double steerCap = pitApproach ? 0.45 : commit ? 0.75 : 0.55;
         double steerTarget = Math.Clamp(headingError * steerGain, -steerCap, steerCap);
-        double cornerMps = Math.Max(11.0, decision.ApexMps * 0.55);
+        // The displayed apex speed is the target. A private fraction of it, or a brake
+        // that starts at 280 m, would make the helmet cue a number the rider does not ride.
+        double cornerMps = Math.Max(0.0, decision.ApexMps);
 
         double speedTarget = 32.0;
         if (decision.PitOpen && !decision.InPit)
@@ -81,8 +83,6 @@ public sealed class WeekendRideCueRider
             speedTarget = cornerMps;
         else if (decision.Exit)
             speedTarget = Math.Max(cornerMps, 18.0);
-        else if (!decision.Exit && decision.ApexM < 280.0)
-            speedTarget = 22.0;
 
         double throttleTarget = decision.SpeedMps < speedTarget - 1.0 ? 1.0 : 0.0;
         double brakeDivisor = now.InPit ? 40.0 : 8.0;

@@ -23,7 +23,7 @@ export function rideCueIntent(decision, now = decision) {
   const steerGain = pitApproach ? 0.8 : commit ? 1.6 : 0.55;
   const steerCap = pitApproach ? 0.45 : commit ? 0.75 : 0.55;
   let steerTarget = Math.min(steerCap, Math.max(-steerCap, headingError * steerGain));
-  const cornerMps = Math.max(11, decision.apexMps * 0.55);
+  const cornerMps = Math.max(0, decision.apexMps);
 
   let speedTarget = 32;
   if (decision.pitOpen && !decision.inPit) speedTarget = 12;
@@ -31,7 +31,6 @@ export function rideCueIntent(decision, now = decision) {
   else if (!decision.exit && decision.apexM < 150) speedTarget = cornerMps;
   else if (decision.exit && Math.abs(decision.look) > 3) speedTarget = cornerMps;
   else if (decision.exit) speedTarget = Math.max(cornerMps, 18);
-  else if (!decision.exit && decision.apexM < 280) speedTarget = 22;
 
   if (now.inPit) steerTarget = 0;
 

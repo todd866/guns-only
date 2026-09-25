@@ -13,6 +13,15 @@ public sealed class WeekendRideCueRiderTests
         AssertPass(result);
         Assert.True(result.OpeningStraightFasterThanHairpin);
         Assert.True(result.FlyingLapsStayedOnTrack);
+        Assert.Equal(0, result.TipCount);
+        Assert.Equal(0.0, result.OffTrackSeconds);
+        Assert.True(result.CleanFlyingLaps >= 2, $"clean flying laps {result.CleanFlyingLaps}");
+        Assert.True(
+            result.ApexSamples >= 2,
+            $"apex samples {result.ApexSamples}");
+        Assert.True(
+            result.ApexSpeedWithinCue,
+            $"apex speed missed the displayed cue by {result.WorstApexMissMps:F1} m/s");
     }
 
     [Fact]
@@ -55,6 +64,11 @@ public sealed class WeekendRideCueRiderTests
         bool flyingClean = true;
         bool sawCooldown = false;
         bool opened = false;
+        int apexSamples = 0;
+        double worstApexMissMps = 0.0;
+        bool approaching = false;
+        double approachCueMps = 0.0;
+        double approachSpeedMps = 0.0;
         for (int tick = 0; tick < MaxTicks && runtime.Phase == WeekendRidePhase.Active; tick++)
         {
             if (runtime.SessionLeg == WeekendRideSessionLeg.Flying)
@@ -67,6 +81,22 @@ public sealed class WeekendRideCueRiderTests
                 }
                 if (opened && !runtime.IsOnTrack)
                     flyingClean = false;
+
+                CircuitApexReference apex = runtime.NextApex;
+                if (!apex.ReportingExit && apex.DistanceM < 20.0 && apex.SteadySpeedMps > 1.0)
+                {
+                    approaching = true;
+                    approachCueMps = apex.SteadySpeedMps;
+                    approachSpeedMps = runtime.Bike.Telemetry.SpeedMps;
+                }
+                else if (approaching)
+                {
+                    approaching = false;
+                    apexSamples++;
+                    worstApexMissMps = Math.Max(
+                        worstApexMissMps,
+                        Math.Abs(approachSpeedMps - approachCueMps));
+                }
             }
             else
                 sawCooldown = true;
@@ -87,6 +117,11 @@ public sealed class WeekendRideCueRiderTests
             runtime.CameInEarly,
             runtime.HadHotPitEntry,
             runtime.CleanFlyingLaps,
+            runtime.TipCount,
+            runtime.OffTrackSeconds,
+            apexSamples,
+            worstApexMissMps <= 4.0,
+            worstApexMissMps,
             $"phase {runtime.Phase} laps {runtime.LapCount} leg {runtime.SessionLeg} "
             + $"t {runtime.SessionSeconds:F0}s progress {runtime.ProgressM:F0} "
             + $"inPit {runtime.InPit} legalStop {runtime.LegalStop} "
@@ -107,5 +142,10 @@ public sealed class WeekendRideCueRiderTests
         bool CameInEarly,
         bool HadHotPitEntry,
         int CleanFlyingLaps,
+        int TipCount,
+        double OffTrackSeconds,
+        int ApexSamples,
+        bool ApexSpeedWithinCue,
+        double WorstApexMissMps,
         string Failure);
 }

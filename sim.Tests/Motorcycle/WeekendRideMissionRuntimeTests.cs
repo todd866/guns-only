@@ -506,6 +506,77 @@ public sealed class WeekendRideMissionRuntimeTests
     }
 
     [Fact]
+    public void ATipRestoresOnTrackButTheLapCountersKeepIt()
+    {
+        var runtime = WeekendRideMissionRuntime.CreateDefault();
+        runtime.Begin();
+        runtime.DebugForceTipOver();
+        bool onTrackBeforeTheStep = runtime.IsOnTrack;
+        runtime.StepFixed(SteadyThrottle);
+        Assert.True(onTrackBeforeTheStep);
+        Assert.True(runtime.IsOnTrack);
+        Assert.Equal(1, runtime.TipCount);
+        Assert.Equal(0, runtime.CleanFlyingLaps);
+        Assert.Equal(0.0, runtime.OffTrackSeconds);
+    }
+
+    [Fact]
+    public void ImmediatePostCheckerPitEntryDoesNotFinish()
+    {
+        var runtime = WeekendRideMissionRuntime.CreateDefault();
+        runtime.Begin();
+        ScoreOneLap(runtime);
+        ScoreOneLap(runtime);
+        Assert.Equal(WeekendRideSessionLeg.Cooldown, runtime.SessionLeg);
+        Assert.False(runtime.PitOpen, "the checker itself is not the pit window");
+        Assert.Equal(WeekendRidePhase.Active, runtime.Phase);
+
+        Vec3D pit = new(
+            runtime.PitLane.Centre.X,
+            RapierLaunchSite.OperatingSurfaceElevationM,
+            runtime.PitLane.Centre.Z);
+        runtime.Bike.ResetTo(pit, runtime.GridHeadingRad);
+        runtime.Bike.DebugSetGroundSpeed(2.0);
+        runtime.StepFixed(SteadyThrottle with { Throttle = 0.0, Brake = 0.0 });
+        Assert.True(runtime.InPit);
+        Assert.True(runtime.PitEntryLegal);
+        Assert.False(runtime.CameInEarly);
+        for (int tick = 0; tick < 80 && runtime.Phase == WeekendRidePhase.Active; tick++)
+        {
+            runtime.Bike.DebugSetGroundSpeed(0.0);
+            runtime.StepFixed(SteadyThrottle with { Throttle = 0.0, Brake = 1.0 });
+        }
+
+        Assert.Equal(WeekendRidePhase.Active, runtime.Phase);
+        Assert.False(runtime.LegalStop);
+
+        runtime.Bike.ResetTo(runtime.GridPosition, runtime.GridHeadingRad);
+        runtime.StepFixed(SteadyThrottle with { Throttle = 0.0, Brake = 1.0 });
+        Assert.False(runtime.InPit);
+
+        double length = runtime.Circuit.CircuitLengthM;
+        Vec3D nearLine = runtime.Circuit.PointAhead(length - 40.0, 0.0);
+        runtime.Bike.ResetTo(nearLine, runtime.GridHeadingRad);
+        runtime.Bike.DebugSetGroundSpeed(8.0);
+        runtime.StepFixed(SteadyThrottle with { Throttle = 0.0, Brake = 0.2 });
+        Assert.True(runtime.PitOpen, $"progress {runtime.ProgressM:F0} of {length:F0}");
+
+        runtime.Bike.ResetTo(pit, runtime.GridHeadingRad);
+        runtime.Bike.DebugSetGroundSpeed(2.0);
+        runtime.StepFixed(SteadyThrottle with { Throttle = 0.0, Brake = 0.0 });
+        Assert.True(runtime.PitEntryLegal);
+        for (int tick = 0; tick < 80 && runtime.Phase == WeekendRidePhase.Active; tick++)
+        {
+            runtime.Bike.DebugSetGroundSpeed(0.0);
+            runtime.StepFixed(SteadyThrottle with { Throttle = 0.0, Brake = 1.0 });
+        }
+
+        Assert.Equal(WeekendRidePhase.Finished, runtime.Phase);
+        Assert.True(runtime.LegalStop);
+        Assert.False(runtime.CameInEarly);
+    }
+
+    [Fact]
     public void TwoCleanLapsSetABestAndTheCooldownLapDoesNot()
     {
         var runtime = WeekendRideMissionRuntime.CreateDefault();

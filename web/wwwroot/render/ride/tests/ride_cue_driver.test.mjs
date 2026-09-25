@@ -2,6 +2,36 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createRideCueDriver, rideCueIntent } from "../ride_cue_driver.js";
 
+test("brakes toward the displayed apex speed inside 150 m and not before", () => {
+  const early = rideCueIntent({
+    speed: 30,
+    apexM: 200,
+    apexMps: 20,
+    exit: false,
+    pitOpen: false,
+    look: 0,
+    inPit: false,
+    legal: false,
+    onTrack: true,
+  });
+  assert.equal(early.brakeTarget, 0);
+  assert.equal(early.throttleTarget, 1);
+
+  const atCue = rideCueIntent({
+    speed: 16,
+    apexM: 100,
+    apexMps: 20,
+    exit: false,
+    pitOpen: false,
+    look: 0,
+    inPit: false,
+    legal: false,
+    onTrack: true,
+  });
+  assert.equal(atCue.brakeTarget, 0);
+  assert.equal(atCue.throttleTarget, 1);
+});
+
 test("a late apex cue steers toward the look and brakes inside 150 m", () => {
   const intent = rideCueIntent({
     speed: 32,

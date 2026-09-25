@@ -266,7 +266,10 @@ public sealed class WeekendRideMissionRuntime
         else
             _stoppedHoldSeconds = 0.0;
 
-        if (_pitEntryLegal && _stoppedHoldSeconds >= 0.5 - 1e-9)
+        // The box sits beside the stripe. After the checker, a stop is the cool-down
+        // only once that lap has armed the pit window. An immediate turn-in is not it.
+        if (_pitEntryLegal && _stoppedHoldSeconds >= 0.5 - 1e-9
+            && (SessionLeg != WeekendRideSessionLeg.Cooldown || PitOpen))
         {
             LegalStop = true;
             Finish();

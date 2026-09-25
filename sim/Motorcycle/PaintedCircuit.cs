@@ -2,7 +2,7 @@ namespace GunsOnly.Sim.Motorcycle;
 
 /// <summary>
 /// Braking reference read off the centreline. Steady speed is the level-turn
-/// limit sqrt(μ g r), not a painted board the bike ignores.
+/// limit sqrt(μ g r) with a friction margin, not a painted board the bike ignores.
 /// </summary>
 public readonly record struct CircuitApexReference(
     double DistanceM,
@@ -265,16 +265,28 @@ public sealed class PaintedCircuit
     }
 
     /// <summary>
+    /// <summary>
+    /// Fraction of peak tyre friction published as the apex board.
+    /// Peak μ is the slide limit (surrogate 1.20). Braking to that limit inside
+    /// the 150 m cue runs this line off the paint. The board uses 0.36 of peak,
+    /// a speed factor of 0.60, and leaves the rest of the friction circle for
+    /// path error. Epistemic: provisional margin on a surrogate μ, not a measured
+    /// lap. μ source: docs/vehicles/yamaha-yzf-r1/00-sources.md.
+    /// </summary>
+    public const double ApexFrictionUse = 0.36;
+
+    /// <summary>
     /// Distance to the next hairpin apex, and the steady speed sqrt(μ g r) that radius
     /// can hold. μ is <see cref="YzfR1Definition.TirePeakFrictionCoefficient"/> (surrogate
-    /// 1.20, docs/vehicles/yamaha-yzf-r1/00-sources.md). g is standard gravity 9.80665.
+    /// 1.20, docs/vehicles/yamaha-yzf-r1/00-sources.md) times <see cref="ApexFrictionUse"/>.
+    /// g is standard gravity 9.80665.
     /// Once progress has passed the apex and not yet the exit, the distance is the exit
     /// of this corner rather than the apex already under the bike.
     /// </summary>
     public CircuitApexReference NextApex(double progressM)
     {
         const double gravityMps2 = 9.80665;
-        double mu = YzfR1Definition.TirePeakFrictionCoefficient;
+        double mu = YzfR1Definition.TirePeakFrictionCoefficient * ApexFrictionUse;
         if (_apexes.Length == 0 || CircuitLengthM <= 1.0)
         {
             return new CircuitApexReference(0.0, HairpinRadiusM,
