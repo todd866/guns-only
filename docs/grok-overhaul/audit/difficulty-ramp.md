@@ -225,7 +225,7 @@ Skip rule, so a skilled player is not sentenced to a Competent lead for an hour:
 - Stored rung 3 → open at rung 3.
 - No storage, or storage that fails to parse → rung 0. Never Ace.
 
-In the same sortie, a kill promotes the *next* spawn immediately. They do not need to reload. Two clean kills in one session are enough to see the pair. That is the skip. There is still no menu.
+In the same sortie, a gun kill promotes the next spawn immediately. They do not need to reload. The F-22 sortie stays two engagements, and landing ends it. Two gun kills in one sortie open the next sortie on the pair. That is the skip. There is still no menu.
 
 Logbook stays a record. It must not become a second writer of the rung. One blob, one reader.
 
