@@ -2071,8 +2071,31 @@ function loadDirectorState() {
   } catch { return ""; }
 }
 
+function rampMissionActive(state) {
+  return selectedProgramNodeId === "first-merge"
+    || state?.mission_id === "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1"
+    || state?.mission_id === "mission.modern.visual-merge.first-run-valley.v1";
+}
+
+let directorObservationKey = "";
+
+function persistDirectorObservation(state) {
+  if (!rampMissionActive(state)) return;
+  const key = [
+    state?.engagement_number,
+    state?.kill_count,
+    state?.difficulty_rung,
+    state?.session_phase,
+  ].join("|");
+  if (key === directorObservationKey) return;
+  const hadPrior = directorObservationKey !== "";
+  directorObservationKey = key;
+  if (hadPrior) saveDirectorState();
+}
+
 function saveDirectorState() {
   try {
+    if (!rampMissionActive(latestState)) return;
     const state = bridge?.ExportDirectorState?.();
     if (state) globalThis.localStorage?.setItem(DIRECTOR_STATE_STORAGE, state);
   } catch { /* persistence must never be able to disturb a sortie */ }
@@ -2709,6 +2732,7 @@ async function reloadCurrentBuild() {
 // page becomes hidden gives it the best available head start without reintroducing keepalive's
 // 64 KB cap. The single-flight guard makes duplicate lifecycle events harmless.
 window.addEventListener("pagehide", () => {
+  saveDirectorState();
   if (arenaClient?.activeMatch) {
     void arenaClient.completeFromState(latestState || {}, { earlyAbandon: true });
   }
@@ -2721,7 +2745,10 @@ window.addEventListener("beforeunload", () => {
   recorder.flush({ force: true });
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) recorder.flush({ force: true });
+  if (document.hidden) {
+    saveDirectorState();
+    recorder.flush({ force: true });
+  }
   else if (!document.hidden) void resolveBuildIdentity();
 });
 installDisposedPageRestore();
@@ -3583,7 +3610,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Guns Only",
     sortie: "F-22A vs escalating opposition · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
-    brief: "You start at the merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going. The director watches how you actually flew and answers in kind.",
+    brief: "You start close to one aircraft holding a line. Track it, then hit it with the gun. Two gun kills open the next sortie on a pair. Landing ends this one.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · H controls",
   }),
   "okanagan-fireboss": Object.freeze({
@@ -3774,7 +3801,6 @@ function stageTopGunOnBridge() {
     const practice = new URLSearchParams(window.location.search)
       .get("configurationPractice") === "1";
     bridge.SetTopGunConfigurationPractice?.(practice);
-    armDirectorRestore();
     bridge.StartTopGun(selectedTopGunSeat);
   }
   stagedMissionAuthority = desiredAuthority;
@@ -5039,8 +5065,8 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     readyReplay.hidden = true;
     readyKicker.textContent = "Kestrel Gorge · guided first sortie";
     readyTitle.textContent = "Enter the valley";
-    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out gate, Fire launches two heat-seeking missiles one at a time; once both are away, the same control becomes the gun. Splash the pair, then recover to the runway.";
-    readySortie.textContent = "Follow valley → pop out → two heaters → guns → splash the pair → recover";
+    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out, Fire launches two heat-seeking missiles one at a time; once both are away, the same control becomes the gun. Join the aircraft ahead and hit it with the gun, then recover to the runway.";
+    readySortie.textContent = "Follow valley → pop out → two heaters → guns → recover";
     readyConfig.textContent = `F-22A · two AIM-9 surrogates · 480 gun rounds · ${fireBinding} changes with the mission`;
     if (readyControls) readyControls.textContent = mobileControls
       ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · FOX 2 launches missiles, then becomes GUNS\nThe objective strip always shows the next action"
@@ -5240,7 +5266,8 @@ function enterReady({
         && bridge.RestartSortie?.(selectedBeat);
       if (!sameSortie) {
         // StartBeat resets the director, then applies an armed blob before the opening spawn.
-        armDirectorRestore();
+        // Only the F-22 ramp reads that blob. Other beats keep their authored opening.
+        if (selectedProgramNodeId === "first-merge") armDirectorRestore();
         bridge.StartBeat(selectedBeat);
       }
       stagedMissionAuthority = desiredAuthority;
@@ -11807,7 +11834,7 @@ async function boot() {
     firstRunAutostartPending = true;
     autoLaunchPending = false;
   } else {
-    armDirectorRestore();
+    if (selectedProgramNodeId === "first-merge") armDirectorRestore();
     bridge.StartBeat(selectedBeat);
     stagedMissionAuthority = selectedProductionMissionAuthority();
     if (isTopGunProgram()
@@ -12000,6 +12027,7 @@ async function boot() {
       });
       recorder.observeFramePhase("snap", performance.now() - afterSim);
       latestState = state;
+      persistDirectorObservation(state);
       if (state.session_phase === "FINISHED") finishLogbookAttempt(state);
       if (practiceCue) {
         const exercise = practiceExercise(state.practice_exercise);
