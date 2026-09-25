@@ -77,8 +77,29 @@ public sealed class FightDirector {
     // Consecutive engagements — boss fights included, because this is pacing and not the skill
     // estimate — won quickly and without conceding a hit.
     int _walkoverStreak;
+    int _rung;
+    int _kills;
+    int _hits;
+    int _hitlessDefeats;
+    double? _timeToFirstHitSeconds;
 
     public DirectorPhase Phase => _phase;
+    /// Demonstrated rung. 0 is the cold open. Spawn reads it; nothing counter-picks mid-fight.
+    public int Rung => _rung;
+    public int Kills => _kills;
+    public int Hits => _hits;
+    public int HitlessDefeatStreak => _hitlessDefeats;
+    public double? TimeToFirstHitSeconds => _timeToFirstHitSeconds;
+
+    /// Pitch-assist scale for the current rung. Rung 0 is the full F-22 law, rung 1 halves
+    /// gain and max correction, rung 2 and above turn the assist off. Touch widening is applied
+    /// by the session on top of this scale through rung 1.
+    public readonly record struct PitchAssistScale(double GainScale, double CorrectionScale, bool Active);
+    public PitchAssistScale PitchAssist => _rung switch {
+        0 => new(1.0, 1.0, true),
+        1 => new(0.5, 0.5, true),
+        _ => new(0.0, 0.0, false),
+    };
     /// How many consecutive fights the player has won quickly and untouched. Exposed for debrief
     /// and telemetry; it explains an aggressive ladder jump rather than causing one.
     public int WalkoverStreak => _walkoverStreak;
@@ -88,7 +109,11 @@ public sealed class FightDirector {
     /// player's death into their next life instead of resetting with the sortie.
     public bool HasHistory => _anyObserved || _phase != DirectorPhase.Calm;
 
-    public void Observe(in EngagementReport report) {
+    public void Observe(in EngagementReport report, bool advanceRamp = true) {
+        // advanceRamp is the F-22 ladder only. Other beats still teach the learner
+        // and the boss phase; they must not climb a rung or fade their own gun law.
+        if (advanceRamp && report.EligibleForLearning)
+            ApplyRamp(in report);
         _learner.Observe(in report);
         _lastOpponent = report.OpponentSkill;
 
@@ -131,25 +156,14 @@ public sealed class FightDirector {
     }
 
     public SpawnSpec NextSpawn(int engagementNumber) {
-        if (!_anyObserved && _phase == DirectorPhase.Calm)
-            // The very first fight a cold visitor ever sees is a 1v2 that OPENS co-operative.
-            // Tier is untouched — it is still the hardest opening in the game, and now they are
-            // outnumbered as well. The scaffolding is entirely behavioural: both ships fly
-            // BanditTactic.Present until the player holds a gun position, then they turn together.
-            //
-            // This is a spawn-boundary decision reading only _anyObserved and _phase, which the
-            // director already commits at exactly this point, so nothing counter-picks mid-fight.
-            // A returning player has _anyObserved true and never sees it.
-            return WithDoctrine(BanditSkillProfile.ForEngagement(engagementNumber),
-                engagementNumber, boss: false, "warm-up ladder")
-                with { Sparring = engagementNumber <= 1, FormationSize = engagementNumber <= 1 ? 2 : 1 };
-
-        if (_phase == DirectorPhase.Release)
+        // Boss and the release that follows it are unchanged, and they are only available once
+        // the stored rung is the earned pair. A cold visitor never meets them.
+        if (_rung >= 3 && _phase == DirectorPhase.Release)
             return WithDoctrine(_releaseTier, engagementNumber, boss: false,
                 FormattableString.Invariant(
                     $"release: {_releaseRemaining} confidence fight(s) after the boss"));
 
-        if (_phase == DirectorPhase.Boss || BossTriggerHolds()) {
+        if (_rung >= 3 && (_phase == DirectorPhase.Boss || BossTriggerHolds())) {
             _phase = DirectorPhase.Boss;
             // Spike flavour targets the weakest concept: an energy-sloppy player meets the
             // 15 G machine (it executes rate-fighters and dies to energy discipline); everyone
@@ -166,51 +180,89 @@ public sealed class FightDirector {
                     $"boss: {_learner.WinStreak}-win streak, {(int)_learner.SecondsSinceLastDefeat}s unbeaten"));
         }
 
-        _phase = DirectorPhase.Build;
-        PilotSkill target = BandTier(_learner.Bands.Overall);
-        // Easing a player who is genuinely losing comes FIRST and is unconditional: a loss streak
-        // resets the walkover streak anyway, so these two can never contend.
-        if (_learner.LossStreak >= 2) {
-            PilotSkill eased = OneTierBelow(target);
-            PilotSkill spawn = OneStepToward(_lastOpponent, eased);
-            return WithDoctrine(spawn, engagementNumber, boss: false,
-                FormattableString.Invariant(
-                    $"ease: {_learner.LossStreak} straight losses"));
+        if (_anyObserved && _phase == DirectorPhase.Calm)
+            _phase = DirectorPhase.Build;
+        return RungSpec(engagementNumber);
+    }
+
+    SpawnSpec RungSpec(int engagementNumber) {
+        int rung = System.Math.Clamp(_rung, 0, 3);
+        (PilotSkill skill, BanditMount mount, int formation, bool sparring, string reason) =
+            rung switch {
+                0 => (PilotSkill.Competent, BanditMount.Baseline, 1, true,
+                    "rung 0: unproven"),
+                1 => (PilotSkill.Veteran, BanditMount.Baseline, 1, false,
+                    "rung 1: has a hit"),
+                2 => (PilotSkill.Ace, BanditMount.Baseline, 1, false,
+                    "rung 2: has a kill"),
+                _ => (PilotSkill.Ace, BanditMount.Uprated, 2, false,
+                    "rung 3: earned pair"),
+            };
+        return WithDoctrine(skill, engagementNumber, boss: false, reason) with {
+            Mount = mount,
+            FormationSize = formation,
+            Sparring = sparring,
+        };
+    }
+
+    void ApplyRamp(in EngagementReport report) {
+        int before = _rung;
+        bool hit = report.HitsScored > 0;
+        // A missile, a terrain impact, or a maneuver kill can end the fight as a victory
+        // with no round on the target. Those do not climb the gun ramp.
+        bool gunKill = report.GunKills > 0;
+        if (hit) _hits += report.HitsScored;
+        if (gunKill) _kills += report.GunKills;
+        if (_timeToFirstHitSeconds is null
+            && double.IsFinite(report.TimeToFirstHitSeconds)
+            && report.TimeToFirstHitSeconds >= 0.0)
+            _timeToFirstHitSeconds = report.TimeToFirstHitSeconds;
+
+        if (report.Outcome == SortieOutcome.Defeat && !hit)
+            _hitlessDefeats++;
+        else
+            _hitlessDefeats = 0;
+
+        if (hit && _rung < 1) _rung = 1;
+        if (gunKill && _rung < 2) _rung = 2;
+        bool walkover = gunKill
+            && report.HitsTaken == 0
+            && report.SolutionSecondsConceded <= WalkoverSolutionSecondsConceded;
+        if (_kills >= 2 || (before >= 2 && walkover))
+            _rung = System.Math.Max(_rung, 3);
+
+        if (_hitlessDefeats >= 2) {
+            _rung = System.Math.Max(0, _rung - 1);
+            _hitlessDefeats = 0;
         }
+    }
 
-        if (_walkoverStreak >= WalkoversToPressTheCeiling) target = PilotSkill.Ace;
-        if (_walkoverStreak >= WalkoversToCommitToBand)
-            return WithDoctrine(NeverEasierAfterAWin(target), engagementNumber, boss: false,
-                FormattableString.Invariant(
-                    $"press: {_walkoverStreak} straight untouched walkovers"));
-
-        PilotSkill build = NeverEasierAfterAWin(OneStepToward(_lastOpponent, target));
-        return WithDoctrine(build, engagementNumber, boss: false,
-            FormattableString.Invariant(
-                $"build: overall {_learner.Bands.Overall}"));
+    void ApplyReturningSkip() {
+        if (_rung >= 3) _rung = 3;
+        else if (_kills >= 1 && _rung < 2) _rung = 2;
     }
 
     /// <summary>
-    /// A compact, versioned snapshot of the pacing estimate — everything NextSpawn reads, and
-    /// nothing else. Deterministic and human-readable so a stored value can be inspected.
-    ///
-    /// This exists because the gauntlet cold-started at the 2.4 G Novice warm-up on every page
-    /// load: a pilot who had fought their way to walking over Aces was handed an opponent capped
-    /// at 2.4 G (against their 8-12) every time they reloaded, and a short sortie meant the
-    /// warm-up was the ONLY opponent they ever met.
+    /// Versioned snapshot of everything NextSpawn reads. v2 stores the rung and the boss
+    /// bookkeeping a rung-3 pilot already had. A v1 blob migrates to rung 0: it has no hits
+    /// or kills, and absence must not open at Ace.
     /// </summary>
     public string ExportState() {
         LearnerBands bands = _learner.Bands;
         var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        string ttf = _timeToFirstHitSeconds is double seconds
+            ? seconds.ToString("F3", invariant) : "-";
         return string.Join('|', new[] {
-            "v1",
-            ((int)bands.Gunnery).ToString(invariant),
-            ((int)bands.Energy).ToString(invariant),
-            ((int)bands.DefensiveBfm).ToString(invariant),
+            "v2",
+            _rung.ToString(invariant),
+            _kills.ToString(invariant),
+            _hits.ToString(invariant),
+            _hitlessDefeats.ToString(invariant),
+            ttf,
+            ((int)_phase).ToString(invariant),
             _learner.WinStreak.ToString(invariant),
             _learner.LossStreak.ToString(invariant),
             _learner.SecondsSinceLastDefeat.ToString("F1", invariant),
-            ((int)_phase).ToString(invariant),
             _walkoverStreak.ToString(invariant),
             _engagementsSinceBoss.ToString(invariant),
             ((int)_lastOpponent).ToString(invariant),
@@ -218,47 +270,129 @@ public sealed class FightDirector {
             _releaseRemaining.ToString(invariant),
             ((int)_releaseTier).ToString(invariant),
             _anyObserved ? "1" : "0",
+            ((int)bands.Gunnery).ToString(invariant),
+            ((int)bands.Energy).ToString(invariant),
+            ((int)bands.DefensiveBfm).ToString(invariant),
         });
     }
 
     /// <summary>Restore a snapshot. Returns false and changes NOTHING on anything malformed or
-    /// from another version — a corrupt stored value must open a normal cold sortie, never a
-    /// half-applied one.</summary>
+    /// from an unknown version. A corrupt value stays where it was; a cold director is rung 0.</summary>
     public bool TryImportState(string? state) {
         if (string.IsNullOrWhiteSpace(state)) return false;
         string[] parts = state.Split('|');
-        if (parts.Length != 15 || parts[0] != "v1") return false;
-        var numbers = new int[13];
-        for (int i = 0; i < 13; i++) {
-            int index = i < 5 ? i + 1 : i + 2;
-            if (!int.TryParse(parts[index], System.Globalization.NumberStyles.Integer,
-                System.Globalization.CultureInfo.InvariantCulture, out numbers[i])) return false;
-        }
-        if (!double.TryParse(parts[6], System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out double unbeaten)
-            || !double.IsFinite(unbeaten) || unbeaten < 0.0) return false;
+        if (parts.Length == 15 && parts[0] == "v1")
+            return TryImportV1(parts);
+        if (parts.Length == 20 && parts[0] == "v2")
+            return TryImportV2(parts);
+        return false;
+    }
 
-        static bool InBand(int value) => value is >= 0 and <= (int)SkillBand.Dominant;
-        static bool InSkill(int value) => value is >= 0 and <= (int)PilotSkill.Machine;
-        if (!InBand(numbers[0]) || !InBand(numbers[1]) || !InBand(numbers[2])) return false;
-        if (numbers[3] < 0 || numbers[4] < 0 || numbers[6] < 0 || numbers[7] < 0
-            || numbers[9] < 0) return false;
-        if (numbers[5] is < 0 or > (int)DirectorPhase.Release) return false;
-        if (!InSkill(numbers[8]) || !InSkill(numbers[10])) return false;
-
-        _learner.RestoreEstimate(
-            new LearnerBands((SkillBand)numbers[0], (SkillBand)numbers[1],
-                (SkillBand)numbers[2]),
-            numbers[3], numbers[4], unbeaten);
-        _phase = (DirectorPhase)numbers[5];
-        _walkoverStreak = numbers[6];
-        _engagementsSinceBoss = numbers[7];
-        _lastOpponent = (PilotSkill)numbers[8];
-        _releaseRemaining = numbers[9];
-        _lastOrdinaryOpponent = (PilotSkill)numbers[10];
-        _releaseTier = (PilotSkill)numbers[11];
-        _anyObserved = numbers[12] != 0;
+    bool TryImportV1(string[] parts) {
+        if (!TryReadBossFields(
+            gunnery: parts[1], energy: parts[2], defensive: parts[3],
+            win: parts[4], loss: parts[5], unbeatenText: parts[6],
+            phase: parts[7], walkover: parts[8], sinceBoss: parts[9],
+            lastOpponent: parts[10], lastOrdinary: parts[11],
+            releaseRemaining: parts[12], releaseTier: parts[13],
+            observed: parts[14],
+            out BossFields boss)) return false;
+        AssignBoss(boss);
+        _rung = 0;
+        _kills = 0;
+        _hits = 0;
+        _hitlessDefeats = 0;
+        _timeToFirstHitSeconds = null;
         return true;
+    }
+
+    bool TryImportV2(string[] parts) {
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        if (!int.TryParse(parts[1], out int rung) || rung is < 0 or > 3) return false;
+        if (!int.TryParse(parts[2], out int kills) || kills < 0) return false;
+        if (!int.TryParse(parts[3], out int hits) || hits < 0) return false;
+        if (!int.TryParse(parts[4], out int hitless) || hitless < 0) return false;
+        double? ttf = null;
+        if (parts[5] != "-") {
+            if (!double.TryParse(parts[5], System.Globalization.NumberStyles.Float,
+                invariant, out double seconds)
+                || !double.IsFinite(seconds) || seconds < 0.0) return false;
+            ttf = seconds;
+        }
+        if (!TryReadBossFields(
+            gunnery: parts[17], energy: parts[18], defensive: parts[19],
+            win: parts[7], loss: parts[8], unbeatenText: parts[9],
+            phase: parts[6], walkover: parts[10], sinceBoss: parts[11],
+            lastOpponent: parts[12], lastOrdinary: parts[13],
+            releaseRemaining: parts[14], releaseTier: parts[15],
+            observed: parts[16],
+            out BossFields boss)) return false;
+        AssignBoss(boss);
+        _rung = rung;
+        _kills = kills;
+        _hits = hits;
+        _hitlessDefeats = hitless;
+        _timeToFirstHitSeconds = ttf;
+        ApplyReturningSkip();
+        return true;
+    }
+
+    readonly record struct BossFields(
+        LearnerBands Bands, int WinStreak, int LossStreak, double Unbeaten,
+        DirectorPhase Phase, int Walkover, int SinceBoss,
+        PilotSkill LastOpponent, PilotSkill LastOrdinary,
+        int ReleaseRemaining, PilotSkill ReleaseTier, bool Observed);
+
+    static bool TryReadBossFields(
+        string gunnery, string energy, string defensive,
+        string win, string loss, string unbeatenText,
+        string phase, string walkover, string sinceBoss,
+        string lastOpponent, string lastOrdinary,
+        string releaseRemaining, string releaseTier, string observed,
+        out BossFields fields) {
+        fields = default;
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        if (!int.TryParse(gunnery, out int g) || !int.TryParse(energy, out int e)
+            || !int.TryParse(defensive, out int d)) return false;
+        if (!int.TryParse(win, out int winStreak) || !int.TryParse(loss, out int lossStreak))
+            return false;
+        if (!double.TryParse(unbeatenText, System.Globalization.NumberStyles.Float,
+            invariant, out double unbeaten) || !double.IsFinite(unbeaten) || unbeaten < 0.0)
+            return false;
+        if (!int.TryParse(phase, out int phaseValue)
+            || phaseValue is < 0 or > (int)DirectorPhase.Release) return false;
+        if (!int.TryParse(walkover, out int walkovers) || walkovers < 0) return false;
+        if (!int.TryParse(sinceBoss, out int since) || since < 0) return false;
+        if (!int.TryParse(lastOpponent, out int last) || !InSkill(last)) return false;
+        if (!int.TryParse(lastOrdinary, out int ordinary) || !InSkill(ordinary)) return false;
+        if (!int.TryParse(releaseRemaining, out int release) || release < 0) return false;
+        if (!int.TryParse(releaseTier, out int releaseSkill) || !InSkill(releaseSkill))
+            return false;
+        if (observed is not ("0" or "1")) return false;
+        if (!InBand(g) || !InBand(e) || !InBand(d)) return false;
+        if (winStreak < 0 || lossStreak < 0) return false;
+        fields = new BossFields(
+            new LearnerBands((SkillBand)g, (SkillBand)e, (SkillBand)d),
+            winStreak, lossStreak, unbeaten,
+            (DirectorPhase)phaseValue, walkovers, since,
+            (PilotSkill)last, (PilotSkill)ordinary,
+            release, (PilotSkill)releaseSkill, observed == "1");
+        return true;
+    }
+
+    static bool InBand(int value) => value is >= 0 and <= (int)SkillBand.Dominant;
+    static bool InSkill(int value) => value is >= 0 and <= (int)PilotSkill.Machine;
+
+    void AssignBoss(BossFields boss) {
+        _learner.RestoreEstimate(boss.Bands, boss.WinStreak, boss.LossStreak, boss.Unbeaten);
+        _phase = boss.Phase;
+        _walkoverStreak = boss.Walkover;
+        _engagementsSinceBoss = boss.SinceBoss;
+        _lastOpponent = boss.LastOpponent;
+        _lastOrdinaryOpponent = boss.LastOrdinary;
+        _releaseRemaining = boss.ReleaseRemaining;
+        _releaseTier = boss.ReleaseTier;
+        _anyObserved = boss.Observed;
     }
 
     public void Reset() {
@@ -271,6 +405,11 @@ public sealed class FightDirector {
         _releaseRemaining = 0;
         _releaseTier = PilotSkill.Novice;
         _walkoverStreak = 0;
+        _rung = 0;
+        _kills = 0;
+        _hits = 0;
+        _hitlessDefeats = 0;
+        _timeToFirstHitSeconds = null;
     }
 
     bool BossTriggerHolds() =>
@@ -335,29 +474,10 @@ public sealed class FightDirector {
         return (BanditMount)System.Math.Clamp(level, 0, (int)BanditMount.Uprated);
     }
 
-    static PilotSkill BandTier(SkillBand overall) => overall switch {
-        SkillBand.Struggling => PilotSkill.Novice,
-        SkillBand.Steady => PilotSkill.Competent,
-        SkillBand.Sharp => PilotSkill.Veteran,
-        _ => PilotSkill.Ace,
-    };
-
     static PilotSkill OneTierBelow(PilotSkill tier) =>
         tier == PilotSkill.Novice ? PilotSkill.Novice : tier - 1;
 
     static PilotSkill TwoTiersBelow(PilotSkill tier) =>
         OneTierBelow(OneTierBelow(tier));
 
-    /// Winning never makes the game easier. The band estimator starts at Steady and climbs one
-    /// step per fight, so it LAGS a pilot who is already beating the ceiling — and now that the
-    /// gauntlet opens at the ceiling, following the estimate downward would walk a winning pilot
-    /// straight back down the ladder they just proved they are above. The ladder comes down when
-    /// the player is beaten (the LossStreak ease branch above), not while they are winning.
-    PilotSkill NeverEasierAfterAWin(PilotSkill candidate) =>
-        _learner.WinStreak > 0 && candidate < _lastOpponent ? _lastOpponent : candidate;
-
-    static PilotSkill OneStepToward(PilotSkill from, PilotSkill target) =>
-        target > from ? from + 1
-        : target < from ? from - 1
-        : from;
 }

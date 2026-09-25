@@ -107,9 +107,9 @@ public class EngagementReportTests {
         EngagementReport second = session.EngagementReports[1];
         Assert.Equal(SortieOutcome.Defeat, second.Outcome);
         Assert.Equal(2, second.EngagementNumber);
-        // The FightDirector stages successors from observed performance: a fast clean first kill
-        // reads as Sharp, so the follow-up steps one tier past the Competent fixture opponent.
-        Assert.Equal(PilotSkill.Veteran, second.OpponentSkill);
+        // This fixture is not the front door, so a kill does not climb the ramp. The successor
+        // stays the authored Competent opponent.
+        Assert.Equal(PilotSkill.Competent, second.OpponentSkill);
         Assert.Equal(0, second.ShotsTotal);
         Assert.True(second.HitsTaken >= 1,
             $"successor defeat must be earned by hits, saw {second.HitsTaken}");

@@ -28,15 +28,17 @@ public class FightDirectorSessionTests {
 
         var reference = new FightDirector();
         reference.Observe(session.EngagementReports[0]);
-        SpawnSpec expected = reference.NextSpawn(2);
 
         SpawnSpec actual = Assert.IsType<SpawnSpec>(session.LastDirectorSpawn);
-        Assert.Equal(expected, actual);
+        // This fixture is not the front door. The ramp must not retune it: the successor stays
+        // the authored Competent ship, while the director still records the kill.
+        Assert.Equal("authored successor", actual.Reason);
+        Assert.Equal(PilotSkill.Competent, actual.Skill);
+        var probe = new FightDirector();
+        Assert.True(probe.TryImportState(reference.ExportState()));
+        Assert.NotEqual(probe.NextSpawn(2), actual);
         var successor = Assert.IsType<ReactiveBandit>(session.Bandit);
-        Assert.Equal(expected.Skill, successor.Skill);
-        // A clean fast first kill reads as Sharp gunnery/defence: the director must already be
-        // adapting (one step up from the Competent fixture opponent), not replaying the ladder.
-        Assert.Equal(PilotSkill.Veteran, successor.Skill);
+        Assert.Equal(actual.Skill, successor.Skill);
         Assert.False(string.IsNullOrWhiteSpace(actual.Reason));
         Assert.Equal(reference.Phase, session.DirectorPhase);
 
@@ -52,10 +54,8 @@ public class FightDirectorSessionTests {
 
     [Fact]
     public void RestartPreservesDirectorMemoryButStartBeatResetsIt() {
-        // Pacing memory must survive the pilot: dying is precisely the moment the director's
-        // next decision matters, so Restart (fly again) keeps the learner state and consults
-        // the director for the OPENING spawn of the new life. Staging a new beat is a new
-        // learner context and resets it.
+        // Restart keeps the director object, and StartBeat clears it. Only the F-22 ramp
+        // reads that memory into the opening spawn. This fixture must stay authored.
         var session = new SimulationSession();
         session.StartBeat(EngagementReportTests.ContinuousDuel);
         session.Begin();
@@ -68,16 +68,13 @@ public class FightDirectorSessionTests {
         session.Restart();
 
         Assert.Empty(session.EngagementReports);   // per-sortie evidence clears
-        var reference = new FightDirector();
-        reference.Observe(in firstLifeReport);
-        SpawnSpec expectedOpening = reference.NextSpawn(1);
-        SpawnSpec actualOpening = Assert.IsType<SpawnSpec>(session.LastDirectorSpawn);
-        Assert.Equal(expectedOpening, actualOpening);
-        Assert.Equal(reference.Phase, session.DirectorPhase);
-        Assert.NotEqual(DirectorPhase.Calm, session.DirectorPhase);
-        session.Begin();
-        var openingBandit = Assert.IsType<ReactiveBandit>(session.Bandit);
-        Assert.Equal(expectedOpening.Skill, openingBandit.Skill);
+        // This fixture is not the F-22 ramp. The director still holds the fight,
+        // and the opening stays the authored one. Phase stays Calm until something
+        // actually asks NextSpawn, which this beat does not.
+        Assert.NotEqual(new FightDirector().ExportState(), session.ExportDirectorState());
+        Assert.Equal(DirectorPhase.Calm, session.DirectorPhase);
+        Assert.Null(session.LastDirectorSpawn);
+        Assert.Equal(SortieOutcome.Victory, firstLifeReport.Outcome);
 
         session.StartBeat(EngagementReportTests.ContinuousDuel);
 

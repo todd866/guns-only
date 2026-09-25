@@ -32,7 +32,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=369";
+} from "./render/hud/contact_visibility.js?v=370";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import { patternEnergyWord } from "./render/hud/approach_energy.js";
 import {
@@ -72,15 +72,15 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=369";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=370";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=369";
+} from "./render/mission/rapier_high_mach_instruments.js?v=370";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
-} from "./render/hud/limits_panel.js?v=369";
+} from "./render/hud/limits_panel.js?v=370";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   fillLegibleHudText,
@@ -110,7 +110,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=369";
+} from "./render/audio/flight_audio.js?v=370";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -239,8 +239,18 @@ function selectedOpponentIsAlive(state) {
   return selectedAlive && state.fight !== "Splash";
 }
 
+function insideRoundLife(state) {
+  const velocity = Number(state?.gun_muzzle_velocity_mps);
+  const life = Number(state?.gun_max_flight_s);
+  if (!Number.isFinite(velocity) || !Number.isFinite(life) || velocity <= 0 || life <= 0)
+    return true;
+  const range = Number(state?.range_m);
+  if (!Number.isFinite(range)) return true;
+  return range <= velocity * life;
+}
+
 function hasGunSolution(state) {
-  return state.gun_solution === true;
+  return state.gun_solution === true && insideRoundLife(state);
 }
 
 function isFightHudActive(state) {
@@ -1138,7 +1148,7 @@ class CombatHud {
     this.drawGunFunnel(frame, anchor);
 
     let rawPipperVisible = false;
-    if (state.lead_valid === true && leadPipper) {
+    if (state.lead_valid === true && leadPipper && insideRoundLife(state)) {
       const leadProjection = this.project(leadPipper, camera, this.projectionA);
       if (!leadProjection.behind && Number.isFinite(leadProjection.x)
         && Number.isFinite(leadProjection.y)) {

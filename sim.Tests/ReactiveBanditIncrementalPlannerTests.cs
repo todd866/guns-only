@@ -664,7 +664,9 @@ public sealed class ReactiveBanditIncrementalPlannerTests {
         Assert.Equal(1, merge.AiWorkload.PlansStarted);
         Assert.Equal(0, merge.AiWorkload.PlansCompleted);
         Assert.Equal(1, merge.AiWorkload.CandidateEvaluations);
-        Assert.Equal(25, merge.AiWorkload.ForecastSteps);
+        // Cold front door is Competent (100-tick horizon). Balanced pressure covers that
+        // horizon in 17 steps; the retired Ace opening was 25.
+        Assert.Equal(17, merge.AiWorkload.ForecastSteps);
     }
 
     [Fact]

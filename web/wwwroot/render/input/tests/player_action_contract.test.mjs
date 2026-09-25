@@ -798,8 +798,8 @@ test("the shared mission-flow shell keeps one hierarchy across ready, pause, and
     /readyRestart\.textContent = selectedPracticeExercise \? "Restart practice" : finished \? "Repeat sortie" : "Restart sortie"/,
     "repeat-current must not share the primary programme-advance label");
   assert.match(appSource,
-    /once both are away, the same control becomes the gun[\s\S]*?Follow valley → pop out → two heaters → guns → splash the pair → recover/,
-    "first-run copy must describe the Fire transition and end the sortie after the pair");
+    /once both are away, the same control becomes the gun[\s\S]*?Follow valley → pop out → two heaters → guns → recover/,
+    "first-run copy must describe the Fire transition and recover after the gun");
   assert.doesNotMatch(appSource, /after both splashes|splash two targets → guns/,
     "a missile outcome must not be presented as the Fire authority switch");
   assert.match(appSource, /readyReturn\.textContent = "Aircraft"/,

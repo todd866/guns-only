@@ -21,6 +21,7 @@ public sealed class NeutralMergeBandit :
     /// neutral pass ends, instead of snapping straight into a fight they cannot win. Mutable for
     /// exactly one transition: EndPresentation latches it false when the pair graduates.
     bool _presenting;
+    bool _endPresentOnProximity = true;
 
     /// Before the merge gate this is the briefed intent; after it, the live fight owns the answer.
     public bool Presenting => _fight?.Presenting ?? _presenting;
@@ -45,6 +46,8 @@ public sealed class NeutralMergeBandit :
     double _previousRangeM = double.NaN;
     double _minimumRangeM = double.PositiveInfinity;
     double _openingSeconds;
+    double _presentHeldSeconds;
+    double _presentProximitySeconds;
     FormationDirective _formationDirective;
 
     public NeutralMergeBandit(AircraftState initial, AircraftParams parameters,
@@ -52,8 +55,10 @@ public sealed class NeutralMergeBandit :
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
         BanditSkillProfile? profile = null,
         int? doctrineIndex = null,
-        bool presenting = false) {
+        bool presenting = false,
+        bool endPresentOnProximity = true) {
         _presenting = presenting;
+        _endPresentOnProximity = endPresentOnProximity;
         _parameters = parameters;
         _skill = skill;
         _profile = profile ?? BanditSkillProfile.For(skill);
@@ -174,6 +179,7 @@ public sealed class NeutralMergeBandit :
 
         _mergeSim.Step(ReciprocalPassCommand(), dt);
         T += dt;
+        UpdateAuthoredPresent(player, dt);
 
         double rangeM = Geometry.Range(player, _mergeSim.State);
         _minimumRangeM = Math.Min(_minimumRangeM, rangeM);
@@ -205,6 +211,27 @@ public sealed class NeutralMergeBandit :
         _fight?.UpdateTerrain(terrain);
     }
 
+    /// The reactive pilot owns this timer after the merge gate. Before that gate the
+    /// authored pass is what the session steps, so rung 0 has to graduate here too.
+    /// Pop-out used to call EndPresentation and skip the two-second hold.
+    void UpdateAuthoredPresent(in ActorObservation player, double dt) {
+        if (!_presenting) return;
+        double range = Geometry.Range(player, _mergeSim.State);
+        double angleOff = Geometry.AngleOff(player, _mergeSim.State);
+        bool tracking = range <= ReactiveBandit.PresentFunnelRangeM
+            && angleOff <= ReactiveBandit.PresentFunnelAngleRad;
+        _presentHeldSeconds = tracking ? _presentHeldSeconds + dt : 0.0;
+        if (_presentHeldSeconds >= ReactiveBandit.PresentHoldSeconds) {
+            _presenting = false;
+            return;
+        }
+        if (!_endPresentOnProximity) return;
+        bool near = range <= ReactiveBandit.PresentProximityRangeM;
+        _presentProximitySeconds = near ? _presentProximitySeconds + dt : 0.0;
+        if (_presentProximitySeconds >= ReactiveBandit.PresentProximitySeconds)
+            _presenting = false;
+    }
+
     PilotCommand ReciprocalPassCommand() => new(
         GDemand: 1.0,
         BankTarget: _mergeSim.State.Bank,
@@ -216,7 +243,8 @@ public sealed class NeutralMergeBandit :
         var fight = new ReactiveBandit(
             _mergeSim.State, _parameters, _skill, _terrain,
             profile: _profile, doctrineIndex: _doctrineIndex,
-            presenting: _presenting) {
+            presenting: _presenting,
+            endPresentOnProximity: _endPresentOnProximity) {
             Wind = _wind,
             Atmosphere = _atmosphere
         };

@@ -50,18 +50,20 @@ public class ReactiveBanditTests {
             "the new fighter must spawn outside the immediate gun envelope");
     }
 
-    // The opening fight is now the hardest one and the ladder eases on DEFEAT rather than ramping
-    // up from a warm-up. The old 2.40 G Novice opener could not turn with the player at all.
     [Theory]
-    [InlineData(1, PilotSkill.Ace)]
+    [InlineData(0, PilotSkill.Competent)]
+    [InlineData(1, PilotSkill.Veteran)]
     [InlineData(2, PilotSkill.Ace)]
     [InlineData(3, PilotSkill.Ace)]
-    [InlineData(4, PilotSkill.Ace)]
-    [InlineData(5, PilotSkill.Ace)]
-    public void ForEngagementOpensAtTheCeilingRatherThanRampingUp(int engagement, PilotSkill expected) {
-        Assert.Equal(expected, BanditSkillProfile.ForEngagement(engagement));
-        // Pure function of the int: repeated calls agree.
-        Assert.Equal(expected, BanditSkillProfile.ForEngagement(engagement));
+    public void ForRungMapsTheEarnedLadder(int rung, PilotSkill expected) {
+        Assert.Equal(expected, BanditSkillProfile.ForRung(rung));
+        Assert.Equal(expected, BanditSkillProfile.ForRung(rung));
+    }
+
+    [Fact]
+    public void ForEngagementWithoutADirectorIsTheColdFloor() {
+        Assert.Equal(PilotSkill.Competent, BanditSkillProfile.ForEngagement(1));
+        Assert.Equal(PilotSkill.Competent, BanditSkillProfile.ForEngagement(1));
     }
 
     [Fact]
@@ -78,11 +80,11 @@ public class ReactiveBanditTests {
 
     // Without a director decision the interim curve applies, and it now opens at the ceiling.
     [Theory]
-    [InlineData(1, PilotSkill.Ace)]
-    [InlineData(2, PilotSkill.Ace)]
-    [InlineData(3, PilotSkill.Ace)]
-    [InlineData(4, PilotSkill.Ace)]
-    public void FlagshipContinuousSuccessorOpensAtTheCeiling(int engagement, PilotSkill expected) {
+    [InlineData(1, PilotSkill.Competent)]
+    [InlineData(2, PilotSkill.Competent)]
+    [InlineData(3, PilotSkill.Competent)]
+    [InlineData(4, PilotSkill.Competent)]
+    public void FlagshipSuccessorWithoutADirectorStaysOnTheColdFloor(int engagement, PilotSkill expected) {
         var player = State(0.0, 5486.4, 0.0, 300.0);
         var successor = Assert.IsType<ReactiveBandit>(
             Beats.ModernVisualMerge().CreateNextBandit(player, engagement));
@@ -92,12 +94,12 @@ public class ReactiveBanditTests {
     // Every rung of the interim curve is now the Ace, so the uprated airframe comes with it from
     // the opening merge.
     [Theory]
-    [InlineData(1, true)]
-    [InlineData(2, true)]
-    [InlineData(3, true)]
-    [InlineData(4, true)]
-    [InlineData(5, true)]
-    public void FlagshipAirframeEscalationFieldsTheUpratedJetFromTheOpeningMerge(
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(3, false)]
+    [InlineData(4, false)]
+    [InlineData(5, false)]
+    public void FlagshipAirframeWithoutADirectorStaysOnTheBaselineJet(
         int engagement, bool expectsSu35) {
         BeatSetup beat = Beats.ModernVisualMerge();
         var player = State(0.0, 3048.0, 0.0, 300.0);
@@ -137,9 +139,9 @@ public class ReactiveBanditTests {
     [Fact]
     public void FlagshipOpeningNeutralMergeIsBriefedAtTheCeilingAndHandsOffToIt() {
         var beat = Beats.ModernVisualMerge();
-        Assert.Equal(PilotSkill.Ace, beat.BanditSkill);
+        Assert.Equal(PilotSkill.Competent, beat.BanditSkill);
         var merge = Assert.IsType<NeutralMergeBandit>(beat.CreateBandit());
-        Assert.Equal(PilotSkill.Ace, merge.BriefedSkill);
+        Assert.Equal(PilotSkill.Competent, merge.BriefedSkill);
 
         // Fly the production merge geometry until the neutral pass completes and the fight is handed
         // to the reactive pilot; the tier the opener actually fields must be the briefed one. The
@@ -152,7 +154,7 @@ public class ReactiveBanditTests {
             playerSim.Step(straight, Dt);
         }
         Assert.True(merge.FirstPassComplete, "production merge geometry must complete its neutral pass");
-        Assert.Equal(PilotSkill.Ace, merge.FightSkill);
+        Assert.Equal(PilotSkill.Competent, merge.FightSkill);
     }
 
     [Fact]

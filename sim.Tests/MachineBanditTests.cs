@@ -155,7 +155,8 @@ public class MachineBanditTests {
                 ShotsTotal: 4, ShotsInWindow: 4,
                 Overshoots: 3,                    // repeatedly overshot (vs Veteran+ below)
                 MinimumEnergyKias: 120.0,         // deep energy hole every fight
-                GcasActivations: 0);
+                GcasActivations: 0,
+                GunKills: 1);
             director.Observe(in report);
         }
 
@@ -180,7 +181,8 @@ public class MachineBanditTests {
                 ShotsTotal: 4, ShotsInWindow: 4,
                 Overshoots: 0,
                 MinimumEnergyKias: 340.0,
-                GcasActivations: 0);
+                GcasActivations: 0,
+                GunKills: 1);
             director.Observe(in report);
         }
 

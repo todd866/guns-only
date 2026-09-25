@@ -1,9 +1,9 @@
 # Current product and verification status
 
 Updated: 2026-09-10
-Production: Build 368, revision `ce85930c46841cefdc5793e469f645b9f0a02ad4`.
-Next candidate: Build 369, not deployed — the F-22 sortie is finite and ends in a recovered landing on a runway inside the visible world, flown as an overhead (initial, break, reciprocal downwind, perch with three greens, descending 180 to a 3° final) with only approved radio clips; the 480 rounds are real. Fire Boss Initial Attack and Large Force start on the scoop approach, a drop must wet the grass-to-timber flank in one footprint, the Air Attack hold withholds credit, and the training drop is on the shore mark. Top Gun merges over water near the boat, says ENGAGE until a jet is down, and the pilot owns hook, gear and flaps (gear-up on deck is a crash). Cobra steers to the next gun pit over terrain, rearms as a pad action, and calls fire from real masking. Weekend Ride is a club lap with a corner inside 15 s, an apex card, a pit-in ending and an honest debrief.
-Build 368 shipped the hero front door, the clear first-person F-22 view, the phosphor HUD and flight audio. Build 364 shipped the readable F-22 sight and pattern energy, and the Okanagan chart, drop call, fire, lake and timber.
+Production: Build 369, revision `a0bdd579da342c97151f368e898ad85a491f4e99`.
+Next candidate: Build 370, not deployed — the F-22 difficulty ramp: a new pilot opens on one Competent Su-27S a kilometre ahead that holds a steady line until tracked for two seconds; a gun hit earns a Veteran, a gun kill an Ace, two gun kills the Ace pair in uprated Su-35S jets on the next sortie. Pitch assist fades by rung, progress is saved on the device, the gun cue does not claim a solution beyond round life, and no other aircraft's opponent or assist is touched.
+Build 369 shipped the finite F-22 sortie flown home through an overhead, the Fire Boss scoop start and flank, Top Gun's pilot-owned Case I, Cobra's gun-pit path and pad rearm, and the club-lap Weekend Ride. Build 368 shipped the hero front door, the clear first-person F-22 view, the phosphor HUD and flight audio. Build 364 shipped the readable F-22 sight and pattern energy, and the Okanagan chart, drop call, fire, lake and timber.
 Build 362 shipped — four named Fire Boss defence missions begin loaded and airborne near the incident, then finish after a useful drop and safe escape. Full-physics flights reach the first useful drop in 96–107 seconds and finish in 146–173 seconds. See [mission pacing and flight evidence](audits/2026-09-10-okanagan-airborne-missions.md). Audio now uses a 24-second recorded Air Tractor-family engine bed, cockpit-informed broad EQ, live power response and rendered-audio regression checks. The source is an OA-1K exterior recording, an authored cabin surrogate, not a Fire Boss cockpit capture. See [recorded audio audit](audits/2026-09-10-fireboss-recorded-audio.md).
 Build 360 shipped default optional Fire Boss automatic pitch trim, a visible next-waypoint director and named north-up map, improved runway/shoreline/forest detail, and background-only hardware browser QA. See [assistance and navigation audit](audits/2026-09-10-okanagan-assist-navigation.md).
 Build 359 shipped the Fire Boss elevator/trim, surface-to-flight continuity, drag and cockpit-coordinate corrections, feasible water loads, and fuel-return/Apex escape guidance. Independent response checks, actual browser input evidence and full route regressions have distinct acceptance scopes. See [Fire Boss handling audit](audits/2026-09-10-fireboss-handling.md).
@@ -130,8 +130,8 @@ drop voices follow published water rates; and AIM-9 launch, radio-priority ducki
 safety-warning arbiter make the important event audible without relying on limiter overload.
 All candidate audio acceptance is silent (`?audioQa=silent`).
 
-Production: Build 368, revision `ce85930c46841cefdc5793e469f645b9f0a02ad4`.
-Next candidate: Build 369, not deployed — the F-22 sortie is finite and ends in a recovered landing on a runway inside the visible world, flown as an overhead (initial, break, reciprocal downwind, perch with three greens, descending 180 to a 3° final) with only approved radio clips; the 480 rounds are real. Fire Boss Initial Attack and Large Force start on the scoop approach, a drop must wet the grass-to-timber flank in one footprint, the Air Attack hold withholds credit, and the training drop is on the shore mark. Top Gun merges over water near the boat, says ENGAGE until a jet is down, and the pilot owns hook, gear and flaps (gear-up on deck is a crash). Cobra steers to the next gun pit over terrain, rearms as a pad action, and calls fire from real masking. Weekend Ride is a club lap with a corner inside 15 s, an apex card, a pit-in ending and an honest debrief.
+Production: Build 369, revision `a0bdd579da342c97151f368e898ad85a491f4e99`.
+Next candidate: Build 370, not deployed — the F-22 difficulty ramp: a new pilot opens on one Competent Su-27S a kilometre ahead that holds a steady line until tracked for two seconds; a gun hit earns a Veteran, a gun kill an Ace, two gun kills the Ace pair in uprated Su-35S jets on the next sortie. Pitch assist fades by rung, progress is saved on the device, the gun cue does not claim a solution beyond round life, and no other aircraft's opponent or assist is touched.
 player journey and Top Gun bolter retry), 349 (mission-AI suite honesty), 350
 (conventional F-22 recovery), 351 (finite billed sorties, presenting Ace, Cobra pad combat)
 and 352 (Fire Boss sky chevrons, HUD hopper/cue, readable west-side fire)
@@ -353,7 +353,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 368, revision `ce85930c46841cefdc5793e469f645b9f0a02ad4`. Local gate
+- Live production is Build 369, revision `a0bdd579da342c97151f368e898ad85a491f4e99`. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.

@@ -338,7 +338,8 @@ public sealed class ReactiveBandit :
         PilotSkill skill = PilotSkill.Competent,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
         int engagementNumber = 1, BanditSkillProfile? profile = null,
-        int? doctrineIndex = null, bool presenting = false) {
+        int? doctrineIndex = null, bool presenting = false,
+        bool endPresentOnProximity = true) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         Skill = skill;
@@ -363,6 +364,7 @@ public sealed class ReactiveBandit :
         // (WingmanSpawnStride), and a one-tick separation still lands both inside a single rendered
         // frame at 60 fps, where the sim advances about two ticks per frame.
         Presenting = presenting;
+        _endPresentOnProximity = endPresentOnProximity;
         if (presenting) Tactic = BanditTactic.Present;
         _lookaheadHoldTicks = (engagementNumber - 1) * 5 % LookaheadDecisionCadenceTicks;
         _parameters = parameters;
@@ -405,7 +407,8 @@ public sealed class ReactiveBandit :
         double speedMps = 180.0, PilotSkill skill = PilotSkill.Competent,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
         BanditSkillProfile? profile = null, int? doctrineIndex = null,
-        bool presenting = false, AircraftState? wingLead = null) {
+        bool presenting = false, AircraftState? wingLead = null,
+        bool endPresentOnProximity = true) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         if (!double.IsFinite(speedMps) || speedMps <= 0.0)
@@ -501,7 +504,7 @@ public sealed class ReactiveBandit :
         var initial = new AircraftState(position, speedMps, gamma, chi, 0.0, parameters.MassKg);
         return new ReactiveBandit(
             initial, parameters, skill, terrain, engagementNumber, profile,
-            doctrineIndex, presenting);
+            doctrineIndex, presenting, endPresentOnProximity);
     }
 
     static double SurfaceHeightM(GunsOnly.Sim.Environment.ITerrainSurface? terrain,
@@ -710,16 +713,17 @@ public sealed class ReactiveBandit :
     /// the bandit's own gun with WalkoverSolutionSecondsConceded = 0.75; this is the player-side
     /// equivalent with margin. It is the primary tuning knob for the whole introduction.
     public const double PresentHoldSeconds = 2.0;
+    public const double PresentFunnelRangeM = 900.0;      // gun_funnel.js EFFECTIVE_CEILING_M
+    public const double PresentFunnelAngleRad = 0.2094;   // 12 deg, matching CameraSolver.GunWindow
+    public const double PresentProximityRangeM = 1500.0;
     /// Visitors often find the bandit and never hold the 12-degree gun funnel, so a purely
     /// tracking-gated present lasted the whole sortie and the Ace never fired. Four seconds
     /// inside this range is "you are in the fight"; the pair turns even without a gun solution.
     public const double PresentProximitySeconds = 4.0;
-    const double PresentFunnelRangeM = 900.0;      // gun_funnel.js EFFECTIVE_CEILING_M
-    const double PresentFunnelAngleRad = 0.2094;   // 12 deg, matching CameraSolver.GunWindow
-    const double PresentProximityRangeM = 1500.0;
 
     /// True while this bandit is deliberately setting the player up rather than fighting them.
     public bool Presenting { get; private set; }
+    bool _endPresentOnProximity = true;
     double _presentHeldSeconds;
     double _presentProximitySeconds;
     public PilotCommand LastCommand { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
@@ -1866,6 +1870,7 @@ public sealed class ReactiveBandit :
             Presenting = false;
             return;
         }
+        if (!_endPresentOnProximity) return;
         bool near = range <= PresentProximityRangeM;
         _presentProximitySeconds = near ? _presentProximitySeconds + dt : 0.0;
         if (_presentProximitySeconds >= PresentProximitySeconds) Presenting = false;

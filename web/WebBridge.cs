@@ -99,6 +99,11 @@ public static partial class WebBridge {
     public static bool ImportDirectorState(string state) =>
         Session.TryImportDirectorState(state);
 
+    /// <summary>Apply a stored rung after StartBeat's reset and before the opening spawn.</summary>
+    [JSExport]
+    public static void ArmDirectorStateForNextStage(string state) =>
+        Session.ArmDirectorStateForNextStage(state);
+
     [JSExport]
     public static bool RestartSortie(int index) {
         if (index != Session.BeatIndex) return false;

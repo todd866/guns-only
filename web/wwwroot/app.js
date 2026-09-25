@@ -1,9 +1,14 @@
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
+import {
+  createDirectorPersistence,
+  rampMissionActive as directorRampMissionActive,
+  routeRestoresDirector,
+} from "./render/progression/difficulty_ramp_persist.js";
 import { practiceExercise, practiceResult } from "./render/onboarding/practice.js";
 import { installDisposedPageRestore } from "./render/onboarding/disposed_page_restore.js";
 import { createPilotNotebook } from "./render/onboarding/pilot_notebook.js";
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=369";
+import { createHud } from "./hud.js?v=370";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -27,8 +32,8 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
   visualMergeDebriefPresentation,
-} from "./render/debrief/sortie_result.js?v=369";
-import { sortieGradeBoard } from "./render/shell/sortie_grade.js?v=369";
+} from "./render/debrief/sortie_result.js?v=370";
+import { sortieGradeBoard } from "./render/shell/sortie_grade.js?v=370";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -51,11 +56,11 @@ import {
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
   touchFireVisibleLabel,
-} from "./render/onboarding/first_run_valley.js?v=369";
+} from "./render/onboarding/first_run_valley.js?v=370";
 import {
   dialogTabDestination,
   renderedDialogControl,
-} from "./render/onboarding/modal_focus.js?v=369";
+} from "./render/onboarding/modal_focus.js?v=370";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -98,8 +103,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=369";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=369";
+} from "./render/release/release_identity.js?v=370";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=370";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -112,7 +117,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=369";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=370";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -121,10 +126,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=369";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=370";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=369";
+} from "./render/nav/carrier_sortie_touch_control.js?v=370";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -208,7 +213,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=369";
+} from "./render/telemetry/ai_frame_pressure.js?v=370";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -218,15 +223,15 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=369";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=369";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=369";
-import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=369";
+} from "./render/telemetry/telemetry_batch.js?v=370";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=370";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=370";
+import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=370";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=369";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=369";
+} from "./render/shell/boot_watchdog.js?v=370";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=370";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -235,7 +240,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=369";
+} from "./render/settings/player_settings.js?v=370";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -282,14 +287,14 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=369";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=369";
+} from "./render/scene/scene_builders.js?v=370";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=370";
 import {
   cueInterfaceSound,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=369";
+} from "./render/audio/flight_audio.js?v=370";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -2060,25 +2065,35 @@ function resetAdaptiveAiBudget({ recordInitial = false } = {}) {
 //
 // The payload is opaque to this layer and self-validating on the far side: anything malformed is
 // rejected wholesale and the sortie opens cold, so a corrupt value can never half-apply.
-const DIRECTOR_STATE_STORAGE = "guns-only.fight-director.v1";
+function rampMissionActive(state) {
+  const source = state === undefined ? latestState : state;
+  return directorRampMissionActive({
+    programId: selectedProgramNodeId,
+    missionId: source?.mission_id ?? "",
+  });
+}
 
-function loadDirectorState() {
-  try { return globalThis.localStorage?.getItem(DIRECTOR_STATE_STORAGE) || ""; }
-  catch { return ""; }
+const directorPersistence = createDirectorPersistence({
+  storage: globalThis.localStorage,
+  exportState: () => bridge?.ExportDirectorState?.() ?? "",
+  armState: (blob) => bridge?.ArmDirectorStateForNextStage?.(blob),
+  missionActive: (state) => rampMissionActive(state),
+});
+
+function persistDirectorObservation(state) {
+  directorPersistence.persistObservation(state);
 }
 
 function saveDirectorState() {
-  try {
-    const state = bridge?.ExportDirectorState?.();
-    if (state) globalThis.localStorage?.setItem(DIRECTOR_STATE_STORAGE, state);
-  } catch { /* persistence must never be able to disturb a sortie */ }
+  directorPersistence.save();
+}
+
+function armDirectorRestore() {
+  directorPersistence.restore();
 }
 
 function restoreDirectorState() {
-  try {
-    const saved = loadDirectorState();
-    if (saved) bridge?.ImportDirectorState?.(saved);
-  } catch { /* a bad stored value opens a normal cold sortie */ }
+  armDirectorRestore();
 }
 
 // Renderer/scene counters for the 0.2 Hz perf row. Frame deltas say a stall HAPPENED; these say
@@ -2701,6 +2716,7 @@ async function reloadCurrentBuild() {
 // page becomes hidden gives it the best available head start without reintroducing keepalive's
 // 64 KB cap. The single-flight guard makes duplicate lifecycle events harmless.
 window.addEventListener("pagehide", () => {
+  saveDirectorState();
   if (arenaClient?.activeMatch) {
     void arenaClient.completeFromState(latestState || {}, { earlyAbandon: true });
   }
@@ -2713,6 +2729,7 @@ window.addEventListener("beforeunload", () => {
   recorder.flush({ force: true });
 });
 document.addEventListener("visibilitychange", () => {
+  if (document.hidden) saveDirectorState();
   if (document.hidden) recorder.flush({ force: true });
   else if (!document.hidden) void resolveBuildIdentity();
 });
@@ -3571,11 +3588,11 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     controls: "Arrows fly · W/S power · O returns to ship when the route calls RTB\nSpace G limiter · H controls",
   }),
   "first-merge": Object.freeze({
-    kicker: "2030s Ukraine · F-22A · endless",
+    kicker: "2030s Ukraine · F-22A · two engagements",
     title: "Guns Only",
-    sortie: "F-22A vs escalating opposition · guns only · opening 1v2 guns hot",
+    sortie: "F-22A vs escalating opposition · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
-    brief: "You start at the merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going. The director watches how you actually flew and answers in kind.",
+    brief: "You start close to one aircraft holding a line. Track it, then hit it with the gun. Two gun kills open the next sortie on a pair. Landing ends this one.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · H controls",
   }),
   "okanagan-fireboss": Object.freeze({
@@ -3767,7 +3784,6 @@ function stageTopGunOnBridge() {
       .get("configurationPractice") === "1";
     bridge.SetTopGunConfigurationPractice?.(practice);
     bridge.StartTopGun(selectedTopGunSeat);
-    restoreDirectorState();
   }
   stagedMissionAuthority = desiredAuthority;
   return true;
@@ -5031,8 +5047,8 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     readyReplay.hidden = true;
     readyKicker.textContent = "Kestrel Gorge · guided first sortie";
     readyTitle.textContent = "Enter the valley";
-    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out gate, Fire launches two heat-seeking missiles one at a time; once both are away, the same control becomes the gun. Splash the pair, then recover to the runway.";
-    readySortie.textContent = "Follow valley → pop out → two heaters → guns → splash the pair → recover";
+    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out, Fire launches two heat-seeking missiles one at a time; once both are away, the same control becomes the gun. Join the aircraft ahead and hit it with the gun, then recover to the runway.";
+    readySortie.textContent = "Follow valley → pop out → two heaters → guns → recover";
     readyConfig.textContent = `F-22A · two AIM-9 surrogates · 480 gun rounds · ${fireBinding} changes with the mission`;
     if (readyControls) readyControls.textContent = mobileControls
       ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · FOX 2 launches missiles, then becomes GUNS\nThe objective strip always shows the next action"
@@ -5212,6 +5228,7 @@ function enterReady({
         top_gun_seat: topGunSeatLabel(selectedTopGunSeat),
       });
     } else if (forceFirstRunValley || shouldStageFirstRunValley()) {
+      if (routeRestoresDirector({ valley: true })) armDirectorRestore();
       bridge.StartFirstRunValley();
       stagedMissionAuthority = firstRunValleyMissionAuthority();
       firstRunAutostartPending = true;
@@ -5230,10 +5247,10 @@ function enterReady({
       const sameSortie = sameMissionAuthority(stagedMissionAuthority, desiredAuthority)
         && bridge.RestartSortie?.(selectedBeat);
       if (!sameSortie) {
+        // StartBeat resets the director, then applies an armed blob before the opening spawn.
+        // Only the F-22 ramp reads that blob. Other beats keep their authored opening.
+        if (routeRestoresDirector({ programId: selectedProgramNodeId })) armDirectorRestore();
         bridge.StartBeat(selectedBeat);
-        // StartBeat resets the director by design (picking a mission is not a respawn), so the
-        // persisted estimate has to be reapplied AFTER it.
-        restoreDirectorState();
       }
       stagedMissionAuthority = desiredAuthority;
       recorder.event("lifecycle", "sortie_staged", {
@@ -11793,11 +11810,13 @@ async function boot() {
   // on-ramp. A blocked Top Gun deep link never becomes selected, and even an acknowledged preview
   // crosses StartTopGun only after this harmless default exists behind the Ready interlock.
   if (shouldStageFirstRunValley()) {
+    if (routeRestoresDirector({ valley: true })) armDirectorRestore();
     bridge.StartFirstRunValley();
     stagedMissionAuthority = firstRunValleyMissionAuthority();
     firstRunAutostartPending = true;
     autoLaunchPending = false;
   } else {
+    if (routeRestoresDirector({ programId: selectedProgramNodeId })) armDirectorRestore();
     bridge.StartBeat(selectedBeat);
     stagedMissionAuthority = selectedProductionMissionAuthority();
     if (isTopGunProgram()
@@ -11990,6 +12009,7 @@ async function boot() {
       });
       recorder.observeFramePhase("snap", performance.now() - afterSim);
       latestState = state;
+      persistDirectorObservation(state);
       if (state.session_phase === "FINISHED") finishLogbookAttempt(state);
       if (practiceCue) {
         const exercise = practiceExercise(state.practice_exercise);
@@ -12129,7 +12149,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=369")
+    navigator.serviceWorker.register("service-worker.js?v=370")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

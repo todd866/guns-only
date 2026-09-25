@@ -5,7 +5,7 @@ namespace GunsOnly.Sim.Tests;
 public class FormationCoordinationSessionTests {
     [Fact]
     public void OpeningPairSplitsPressureAndBracketRolesOnFirstTick() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
 
         Assert.Single(session.Wingmen);
@@ -24,8 +24,8 @@ public class FormationCoordinationSessionTests {
 
     [Fact]
     public void IdenticalSessionsKeepRolesAircraftAndDelayedPictureBitIdentical() {
-        var first = new SimulationSession(7);
-        var second = new SimulationSession(7);
+        var first = FrontDoorRampFixtures.EarnedPairSession();
+        var second = FrontDoorRampFixtures.EarnedPairSession();
         first.Begin();
         second.Begin();
 
@@ -68,7 +68,7 @@ public class FormationCoordinationSessionTests {
 
     [Fact]
     public void LeaderPromotionCollapsesTheSurvivorToIndependent() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         session.StepFixed();
         IBandit survivor = Assert.Single(session.Wingmen).Bandit;
@@ -87,7 +87,7 @@ public class FormationCoordinationSessionTests {
 
     [Fact]
     public void WingmanDeathCollapsesTheLeaderToIndependent() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         session.StepFixed();
         IBandit leader = session.Bandit;
@@ -109,7 +109,7 @@ public class FormationCoordinationSessionTests {
 
     [Fact]
     public void PlayerDestructionClearsThePairOnTheTerminalTransition() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         session.StepFixed();
 
@@ -144,7 +144,7 @@ public class FormationCoordinationSessionTests {
     // comparable; the separate health flag is what has to stay quiet through a healthy cycle.
     [Fact]
     public void ProductionTickCadenceCyclesTheBehaviourWindowWithoutRaisingTheHealthFlag() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         session.Begin();
         bool observedFallbackWindow = false;
         bool observedRadioRefresh = false;
@@ -184,7 +184,7 @@ public class FormationCoordinationSessionTests {
 
     [Fact]
     public void CoordinatedOpeningStillCompletesTheNeutralMerge() {
-        var session = new SimulationSession(7);
+        var session = FrontDoorRampFixtures.EarnedPairSession();
         var merge = Assert.IsType<NeutralMergeBandit>(session.Bandit);
         var support = Assert.IsType<ReactiveBandit>(
             Assert.Single(session.Wingmen).Bandit);

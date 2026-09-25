@@ -630,11 +630,29 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
                 : BanditAir;
             AircraftState mergeInitial = ReferenceEquals(mergeAir, BanditAir)
                 ? authoredBandit : authoredBandit with { Mass = mergeAir.MassKg };
+            bool presenting = spec?.Sparring == true
+                || (FirstRunValley is not null && spec is null);
+            // Rung 0's 1,000 m rule lives in SpawnForMerge for replacements. The menu
+            // opening used the authored ~9 km reciprocal instead. The valley keeps its
+            // surveyed park, one kilometre past the pop-out.
+            if (presenting && FirstRunValley is null) {
+                // Keep the authored lateral offset so the pass is a merge, not a
+                // collision, and pull the along-track split in to 1,000 m.
+                var forward = new Vec3D(Math.Sin(Player.Chi), 0.0, Math.Cos(Player.Chi));
+                Vec3D delta = mergeInitial.Position - Player.Position;
+                double along = delta.X * forward.X + delta.Z * forward.Z;
+                Vec3D lateral = delta - forward * along;
+                mergeInitial = mergeInitial with {
+                    Position = Player.Position + forward * 1_000.0 + lateral
+                };
+            }
             return new NeutralMergeBandit(
                 mergeInitial, mergeAir, mergeSkill, terrain,
                 profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
                 doctrineIndex: spec?.DoctrineIndex,
-                presenting: spec?.Sparring == true || FirstRunValley is not null);
+                presenting: spec?.Sparring == true
+                    || (FirstRunValley is not null && spec is null),
+                endPresentOnProximity: spec?.Sparring != true);
         }
         if (!UsesReactiveBandit)
             return new RailBandit(authoredBandit, BanditAir, BanditTimeline);
@@ -716,7 +734,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
             doctrineIndex: spec?.DoctrineIndex,
             presenting: spec?.Sparring == true,
-            wingLead: wingLead);
+            wingLead: wingLead,
+            endPresentOnProximity: spec?.Sparring != true);
     }
 }
 
@@ -1611,16 +1630,15 @@ public static class Beats {
             // 1,800 lb above EMERGENCY FUEL; it is deliberately below 4,000 lb Bingo, which remains
             // the action threshold for turning home rather than the desired fuel at touchdown.
             RecoveryPlan: F22NorthRecovery(),
-            // The opening fight is Ace (ForEngagement is the ceiling from engagement 1). Continuous
-            // successors stay on that same function at CreateNextBandit; easing is the director's
-            // job on evidence, not a scripted Novice→Ace ramp.
-            BanditSkill: BanditSkillProfile.ForEngagement(1));
+            // Cold floor when no director spec is passed. The live opening is FightDirector
+            // rung 0 (Competent, one ship, Present). Ace and the pair are later rungs.
+            BanditSkill: BanditSkillProfile.ForRung(0));
     }
 
     /// <summary>
-    /// First-visit Kestrel Gorge: a finite first sortie. Pop-out onto a parked opening pair,
-    /// two AIM-9s on Fire, then guns. Splashing the pair ends the fight and hands the aircraft
-    /// to recovery. Returning visits keep beat 7's endless gym.
+    /// First-visit Kestrel Gorge: a finite first sortie. Pop-out onto one parked aircraft,
+    /// two AIM-9s on Fire, then guns. Splashing that aircraft and landing ends the sortie.
+    /// Returning visits fly beat 7: two engagements, then the landing.
     /// </summary>
     public static BeatSetup ModernVisualMergeFirstRun() {
         BeatSetup merge = ModernVisualMerge();

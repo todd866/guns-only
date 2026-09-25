@@ -23,7 +23,10 @@ public readonly record struct EngagementReport(
     int Overshoots,
     double MinimumEnergyKias,
     int GcasActivations,
-    EngagementEndReason EndReason = EngagementEndReason.CombatResult) {
+    EngagementEndReason EndReason = EngagementEndReason.CombatResult,
+    int HitsScored = 0,
+    double TimeToFirstHitSeconds = double.NaN,
+    int GunKills = 0) {
     public bool EligibleForLearning =>
         EndReason == EngagementEndReason.CombatResult;
 }
