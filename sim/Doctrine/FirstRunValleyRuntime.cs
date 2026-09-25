@@ -14,7 +14,9 @@ public sealed class FirstRunValleyRuntime {
     public const double ValleyEastM = 0.0;
     public const double PlayerNorthM = -19_200.0;
     public const double PopOutNorthM = -1_200.0;
-    public const double BanditNorthM = 600.0;
+    /// Parked one kilometre beyond the pop-out, the same visual range as a rung-0 merge.
+    /// The previous 600 m northing left 1,800 m of empty air after the gate.
+    public const double BanditNorthM = PopOutNorthM + 1_000.0;
     public const double SpawnAltitudeM = 310.0;
     public const double RouteCalibratedAirspeedKts = 420.0;
     public const int DefaultAim9Rounds = 2;

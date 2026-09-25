@@ -175,6 +175,10 @@ public sealed class GunKill {
         : System.Math.Clamp((double)HitCount / _hitsToKill, 0.0, 1.0);
     public double TargetHealth => 1.0 - KillProgress;
     public bool TargetAlive => SelectedDamage.Outcome == FightOutcome.Flying;
+    /// Rounds reached the defeat count. ApplyExternalDestruction sets Splash without
+    /// those hits, and that splash is not a gun kill.
+    public bool SplashedByGunfire =>
+        Outcome == FightOutcome.Splash && HitCount >= _hitsToKill;
     // Compatibility aliases for the current flat web projection. The kernel itself now uses the
     // generic target names because the same physical gun model can be owned by either combatant.
     public double BanditHealth => TargetHealth;

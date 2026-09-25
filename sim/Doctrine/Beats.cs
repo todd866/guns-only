@@ -630,6 +630,22 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
                 : BanditAir;
             AircraftState mergeInitial = ReferenceEquals(mergeAir, BanditAir)
                 ? authoredBandit : authoredBandit with { Mass = mergeAir.MassKg };
+            bool presenting = spec?.Sparring == true
+                || (FirstRunValley is not null && spec is null);
+            // Rung 0's 1,000 m rule lives in SpawnForMerge for replacements. The menu
+            // opening used the authored ~9 km reciprocal instead. The valley keeps its
+            // surveyed park, one kilometre past the pop-out.
+            if (presenting && FirstRunValley is null) {
+                // Keep the authored lateral offset so the pass is a merge, not a
+                // collision, and pull the along-track split in to 1,000 m.
+                var forward = new Vec3D(Math.Sin(Player.Chi), 0.0, Math.Cos(Player.Chi));
+                Vec3D delta = mergeInitial.Position - Player.Position;
+                double along = delta.X * forward.X + delta.Z * forward.Z;
+                Vec3D lateral = delta - forward * along;
+                mergeInitial = mergeInitial with {
+                    Position = Player.Position + forward * 1_000.0 + lateral
+                };
+            }
             return new NeutralMergeBandit(
                 mergeInitial, mergeAir, mergeSkill, terrain,
                 profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,

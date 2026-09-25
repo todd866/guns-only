@@ -85,7 +85,7 @@ public class FormationCombatTests {
         for (int engagement = 1; engagement <= 2; engagement++) {
             EngagementReport kill = new(
                 engagement, PilotSkill.Competent, false, SortieOutcome.Victory,
-                30.0, 1.5, 0, 4, 4, 0, 340.0, 0, HitsScored: 1);
+                30.0, 1.5, 0, 4, 4, 0, 340.0, 0, HitsScored: 1, GunKills: 1);
             director.Observe(in kill);
         }
         SpawnSpec pair = director.NextSpawn(3);

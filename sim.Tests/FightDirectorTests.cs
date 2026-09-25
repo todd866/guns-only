@@ -20,7 +20,8 @@ public class FightDirectorTests {
             ShotsInWindow: 4,
             Overshoots: 0,
             MinimumEnergyKias: 340.0,
-            GcasActivations: 0);
+            GcasActivations: 0,
+            GunKills: outcome == SortieOutcome.Victory ? 1 : 0);
 
     static EngagementReport WeakReport(
         int engagementNumber,

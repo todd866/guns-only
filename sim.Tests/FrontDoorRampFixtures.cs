@@ -9,7 +9,8 @@ static class FrontDoorRampFixtures {
         for (int engagement = 1; engagement <= 2; engagement++) {
             EngagementReport kill = new(
                 engagement, PilotSkill.Competent, false, SortieOutcome.Victory,
-                30.0, 0.0, 0, 4, 4, 0, 340.0, 0);
+                30.0, 0.0, 0, 4, 4, 0, 340.0, 0,
+                GunKills: 1);
             director.Observe(in kill);
         }
         return director.ExportState();

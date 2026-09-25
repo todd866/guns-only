@@ -25,7 +25,8 @@ public readonly record struct EngagementReport(
     int GcasActivations,
     EngagementEndReason EndReason = EngagementEndReason.CombatResult,
     int HitsScored = 0,
-    double TimeToFirstHitSeconds = double.NaN) {
+    double TimeToFirstHitSeconds = double.NaN,
+    int GunKills = 0) {
     public bool EligibleForLearning =>
         EndReason == EngagementEndReason.CombatResult;
 }

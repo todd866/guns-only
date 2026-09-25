@@ -1004,8 +1004,12 @@ public sealed partial class SimulationSession {
         || beat.MissionIdentity.Id
             == "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1";
 
-    void ApplyArmedDirectorState() {
+    void ApplyArmedDirectorState(BeatSetup beat) {
         if (_directorStateForNextStage is null) return;
+        if (!UsesDifficultyRamp(beat)) {
+            _directorStateForNextStage = null;
+            return;
+        }
         _fightDirector.TryImportState(_directorStateForNextStage);
         _directorStateForNextStage = null;
     }
@@ -1293,8 +1297,9 @@ public sealed partial class SimulationSession {
         _deckConfiguration = deckConfiguration;
         _beatFactory = () => Beats.BuiltIn(index, deckConfiguration);
         _fightDirector.Reset();
-        ApplyArmedDirectorState();
-        StageBeat(_beatFactory());
+        BeatSetup builtIn = _beatFactory();
+        ApplyArmedDirectorState(builtIn);
+        StageBeat(builtIn);
     }
 
     /// <summary>Stage a built-in beat under an explicit thermodynamic/wind profile.</summary>
@@ -1342,8 +1347,8 @@ public sealed partial class SimulationSession {
         _prechargeSystemsOnStage = false;
         _beatFactory = beatFactory;
         _fightDirector.Reset();
-        ApplyArmedDirectorState();
         BeatSetup setup = beatFactory();
+        ApplyArmedDirectorState(setup);
         if (setup.FirstRunValley is not null
             && _terrainSurface is not null
             && _terrainSurface is not FirstRunValleyTerrainSurface)
@@ -2672,9 +2677,6 @@ public sealed partial class SimulationSession {
         if (!_firstRunValleyRuntime.ObservePlayer(_player.State)) return;
         if (double.IsNaN(_weaponsHotAtSeconds))
             _weaponsHotAtSeconds = TimeSeconds;
-        _bandit.EndPresentation();
-        foreach (Wingman wingman in _wingmen)
-            wingman.Bandit.EndPresentation();
         if (_firstRunValleyRuntime.ConsumePopOutAnnouncement())
             ShowTransition("WEAPONS HOT · FOX TWO", 2200.0);
     }
@@ -3892,8 +3894,7 @@ public sealed partial class SimulationSession {
             && (_beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit);
         // The rung table is the F-22 front door. Other continuous fixtures keep their authored
         // skill and a cold pair capped by their own formation ceiling.
-        SpawnSpec? openingSpawn = directorCanStage
-            && (difficultyRamp || _fightDirector.HasHistory)
+        SpawnSpec? openingSpawn = directorCanStage && difficultyRamp
             ? _fightDirector.NextSpawn(1)
             : null;
         ClearWingmen();
@@ -5904,6 +5905,9 @@ public sealed partial class SimulationSession {
             return;
         if (_beat.FirstRunValley is null && !ReplacementBudgetExhausted)
             return;
+        // The kill that fills the cap is a combat result. Requesting RTB first
+        // quarantines it as a handoff, and the rung never sees the second gun kill.
+        CompleteEngagementIfEnded();
         TryRequestReturnToBase(MissionRtbReason.PilotKnockItOff);
     }
 
@@ -6377,6 +6381,9 @@ public sealed partial class SimulationSession {
         if (_beat.ContinuousCombat is null
             || _beat.FirstRunValley is not null
             || ReplacementBudgetExhausted) {
+            // The cap still has to record the kill that filled it. Otherwise two gun
+            // kills never reach rung 3, and the next sortie cannot open on the pair.
+            CompleteEngagementIfEnded();
             _nextOpponentSpawnAtMs = double.NegativeInfinity;
             return false;
         }
@@ -6587,7 +6594,9 @@ public sealed partial class SimulationSession {
             endReason,
             HitsScored: Math.Max(0,
                 _sortiePlayerHits - _engagementCounters.PlayerHitsScoredAtStart),
-            TimeToFirstHitSeconds: _engagementCounters.TimeToFirstHitSeconds);
+            TimeToFirstHitSeconds: _engagementCounters.TimeToFirstHitSeconds,
+            GunKills: outcome == SortieOutcome.Victory && _gunKill.SplashedByGunfire
+                ? 1 : 0);
 
     void DetachCurrentOpponent(AircraftTerminalState terminalState,
         ImpactSurface impactSurface) {

@@ -206,9 +206,11 @@ public sealed class FightDirector {
     void ApplyRamp(in EngagementReport report) {
         int before = _rung;
         bool hit = report.HitsScored > 0;
-        bool kill = report.Outcome == SortieOutcome.Victory;
+        // A missile, a terrain impact, or a maneuver kill can end the fight as a victory
+        // with no round on the target. Those do not climb the gun ramp.
+        bool gunKill = report.GunKills > 0;
         if (hit) _hits += report.HitsScored;
-        if (kill) _kills++;
+        if (gunKill) _kills += report.GunKills;
         if (_timeToFirstHitSeconds is null
             && double.IsFinite(report.TimeToFirstHitSeconds)
             && report.TimeToFirstHitSeconds >= 0.0)
@@ -220,8 +222,8 @@ public sealed class FightDirector {
             _hitlessDefeats = 0;
 
         if (hit && _rung < 1) _rung = 1;
-        if (kill && _rung < 2) _rung = 2;
-        bool walkover = kill
+        if (gunKill && _rung < 2) _rung = 2;
+        bool walkover = gunKill
             && report.HitsTaken == 0
             && report.SolutionSecondsConceded <= WalkoverSolutionSecondsConceded;
         if (_kills >= 2 || (before >= 2 && walkover))

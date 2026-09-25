@@ -12,7 +12,8 @@ public class DifficultyRampTests {
         int hitsScored = 0,
         int hitsTaken = 0,
         double solutionSeconds = 0.0,
-        double timeToFirstHit = double.NaN) => new(
+        double timeToFirstHit = double.NaN,
+        int gunKills = 0) => new(
             number,
             PilotSkill.Competent,
             OpponentWasBoss: false,
@@ -26,7 +27,8 @@ public class DifficultyRampTests {
             MinimumEnergyKias: 340.0,
             GcasActivations: 0,
             HitsScored: hitsScored,
-            TimeToFirstHitSeconds: timeToFirstHit);
+            TimeToFirstHitSeconds: timeToFirstHit,
+            GunKills: gunKills);
 
     static void Observe(FightDirector director, EngagementReport report) =>
         director.Observe(in report);
@@ -55,7 +57,7 @@ public class DifficultyRampTests {
         Assert.Equal(1, veteran.FormationSize);
 
         EngagementReport kill = Report(2, SortieOutcome.Victory, hitsScored: 1, hitsTaken: 1,
-            solutionSeconds: 2.0);
+            solutionSeconds: 2.0, gunKills: 1);
         director.Observe(in kill);
         SpawnSpec ace = director.NextSpawn(3);
         Assert.Equal(PilotSkill.Ace, ace.Skill);
@@ -63,7 +65,7 @@ public class DifficultyRampTests {
         Assert.Equal(1, ace.FormationSize);
 
         EngagementReport second = Report(3, SortieOutcome.Victory, hitsScored: 1, hitsTaken: 1,
-            solutionSeconds: 2.0);
+            solutionSeconds: 2.0, gunKills: 1);
         director.Observe(in second);
         SpawnSpec pair = director.NextSpawn(4);
         Assert.Equal(3, director.Rung);
@@ -77,10 +79,10 @@ public class DifficultyRampTests {
     public void AWalkoverOnTheEarnedAceAlsoFieldsThePair() {
         var director = new FightDirector();
         EngagementReport kill = Report(1, SortieOutcome.Victory, hitsScored: 1, hitsTaken: 1,
-            solutionSeconds: 2.0);
+            solutionSeconds: 2.0, gunKills: 1);
         director.Observe(in kill);
         Assert.Equal(2, director.Rung);
-        EngagementReport walkover = Report(2, SortieOutcome.Victory, hitsScored: 1);
+        EngagementReport walkover = Report(2, SortieOutcome.Victory, hitsScored: 1, gunKills: 1);
         director.Observe(in walkover);
         SpawnSpec pair = director.NextSpawn(3);
         Assert.Equal(3, director.Rung);
@@ -91,9 +93,9 @@ public class DifficultyRampTests {
     [Fact]
     public void TwoHitlessDefeatsDropOneRungAndAHitDoesNot() {
         var director = new FightDirector();
-        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 2));
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 2, gunKills: 1));
         Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, hitsTaken: 1,
-            solutionSeconds: 2.0));
+            solutionSeconds: 2.0, gunKills: 1));
         Assert.Equal(3, director.Rung);
 
         Observe(director, Report(3, SortieOutcome.Defeat, hitsScored: 1, hitsTaken: 3));
@@ -122,7 +124,7 @@ public class DifficultyRampTests {
     public void AStoredKillOpensAtRungTwoEvenOnTheFirstEngagement() {
         var director = new FightDirector();
         Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1,
-            timeToFirstHit: 12.5));
+            timeToFirstHit: 12.5, gunKills: 1));
         string blob = director.ExportState();
         var restored = new FightDirector();
         Assert.True(restored.TryImportState(blob));
@@ -136,8 +138,8 @@ public class DifficultyRampTests {
     [Fact]
     public void AStoredRungThreeOpensOnThePair() {
         var director = new FightDirector();
-        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1));
-        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1));
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
         var restored = new FightDirector();
         Assert.True(restored.TryImportState(director.ExportState()));
         SpawnSpec opening = restored.NextSpawn(1);
@@ -149,7 +151,7 @@ public class DifficultyRampTests {
     [Fact]
     public void ACorruptBlobDoesNotChangeStateAndALegacyBlobOpensAtRungZero() {
         var director = new FightDirector();
-        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1));
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
         string intact = director.ExportState();
         Assert.False(director.TryImportState("v2|nope"));
         Assert.False(director.TryImportState("v9|3|1|1|0|-|0|0|0|0|0|0|0|0|0|0|0|1|1|1"));
@@ -175,7 +177,7 @@ public class DifficultyRampTests {
         Assert.Equal(1.75, FlightModel.F22APublicDataSurrogate.GunneryPitchAssistMaxCorrectionG
             * director.PitchAssist.CorrectionScale, 3);
 
-        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1));
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
         Assert.False(director.PitchAssist.Active);
         Assert.Equal(0.0, director.PitchAssist.CorrectionScale);
 
@@ -255,8 +257,8 @@ public class DifficultyRampTests {
 
         var earned = new SimulationSession();
         var director = new FightDirector();
-        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1));
-        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1));
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
         earned.ArmDirectorStateForNextStage(director.ExportState());
         earned.StartBeat(() => Beats.ModernVisualMerge());
         Assert.True(earned.PlayerAutoGcasCapability.Available);
@@ -268,21 +270,127 @@ public class DifficultyRampTests {
         SnapshotProjection.BuildState(
             session, Carrier.DeckConfiguration.Axial, 0.0, 0.0, false, null);
 
+    static double SlantRangeM(Vec3D a, Vec3D b) {
+        double dx = a.X - b.X, dy = a.Y - b.Y, dz = a.Z - b.Z;
+        return Math.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
     [Fact]
     public void TheLiveOpeningSpawnIsTheUnprovenRungIncludingARestoredValley() {
+        // Production menu Fly is StartBeat(7), the built-in visual merge, not a hand-built bandit.
         var session = new SimulationSession();
-        session.StartBeat(() => Beats.ModernVisualMerge());
+        session.StartBeat(7);
         Assert.Equal(0, session.DifficultyRung);
-        Assert.Equal(PilotSkill.Competent, ((NeutralMergeBandit)session.Bandit).Skill);
+        var opening = Assert.IsType<NeutralMergeBandit>(session.Bandit);
+        Assert.Equal(PilotSkill.Competent, opening.Skill);
+        Assert.True(opening.Presenting);
+        Assert.InRange(
+            SlantRangeM(session.Player.State.Position, opening.State.Position),
+            700.0, 1_200.0);
         Assert.Contains("\"difficulty_rung\":0", SnapshotOf(session));
 
         var valley = new SimulationSession();
         var director = new FightDirector();
-        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1));
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
         valley.ArmDirectorStateForNextStage(director.ExportState());
         valley.StartBeat(() => Beats.ModernVisualMergeFirstRun());
         Assert.Equal(2, valley.DifficultyRung);
         Assert.Equal(PilotSkill.Ace, ((NeutralMergeBandit)valley.Bandit).Skill);
+        double pastTheGateM = valley.Bandit.State.Position.Z
+            - FirstRunValleyRuntime.PopOutNorthM;
+        Assert.InRange(pastTheGateM, 700.0, 1_200.0);
+    }
+
+    [Fact]
+    public void AVictoryWithoutAGunKillDoesNotPromote() {
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Victory));
+        Assert.Equal(0, director.Rung);
+        Assert.Equal(0, director.Kills);
+        SpawnSpec next = director.NextSpawn(2);
+        Assert.Equal(PilotSkill.Competent, next.Skill);
+        Assert.True(next.Sparring);
+    }
+
+    [Fact]
+    public void TwoGunKillsOpenTheNextSortieOnThePairAndThisSortieStaysFinite() {
+        var session = new SimulationSession();
+        session.StartBeat(CloseGunFight);
+        session.Begin();
+        session.FeedKey(GKey.Trigger, true);
+        for (int i = 0; i < 40 * AircraftSim.TickHz && session.KillCount < 2; i++) {
+            if (session.OpponentPresent
+                && session.Bandit.State.Position.Z - session.Player.State.Position.Z > 400.0) {
+                AircraftState bandit = session.Bandit.State;
+                session.Player.AdoptExternalKinematics(bandit with {
+                    Position = bandit.Position + new Vec3D(0, 0, -140),
+                    Speed = bandit.Speed + 20,
+                    Chi = 0,
+                });
+            }
+            session.StepFixed();
+        }
+        session.FeedKey(GKey.Trigger, false);
+        Assert.Equal(2, session.KillCount);
+        Assert.Equal(2, session.EngagementNumber);
+        Assert.Equal(0, session.LiveOpponentCount);
+        Assert.False(session.OpponentReplacementPending);
+        Assert.Equal(3, session.DifficultyRung);
+
+        var next = new SimulationSession();
+        next.ArmDirectorStateForNextStage(session.ExportDirectorState());
+        next.StartBeat(7);
+        Assert.Equal(3, next.DifficultyRung);
+        Assert.Single(next.Wingmen);
+        Assert.Equal(PilotSkill.Ace, ((NeutralMergeBandit)next.Bandit).Skill);
+    }
+
+    static BeatSetup CloseGunFight() {
+        BeatSetup source = Beats.ModernVisualMerge();
+        AircraftState Close(double z, double speed, double chi, double mass) => new(
+            new Vec3D(0.0, 5486.4, z), speed, 0.0, chi, 0.0, mass);
+        return source with {
+            Player = Close(0.0, 300.0, 0.0, source.PlayerAir.MassKg),
+            Bandit = Close(160.0, 285.0, 0.0, source.BanditAir.MassKg),
+            UsesNeutralMergeBandit = false,
+            UsesReactiveBandit = false,
+            VisualMergeEvaluation = null,
+            Combat = source.CombatRules with { OpponentHitsToDefeat = 1 },
+            ContinuousCombat = source.ContinuousCombat! with {
+                ReplacementDelaySeconds = 0.2,
+                MaximumFormationSize = 1,
+            },
+        };
+    }
+
+    [Fact]
+    public void RestartOnTheF22BeatKeepsTheEarnedPair() {
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
+        var session = new SimulationSession();
+        session.ArmDirectorStateForNextStage(director.ExportState());
+        session.StartBeat(7);
+        Assert.Equal(3, session.DifficultyRung);
+        session.Restart();
+        Assert.Equal(3, session.DifficultyRung);
+        Assert.Single(session.Wingmen);
+        Assert.Equal(PilotSkill.Ace, ((NeutralMergeBandit)session.Bandit).Skill);
+    }
+
+    [Fact]
+    public void AnArmedF22HistoryDoesNotRestageTopGun() {
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Defeat));
+        Assert.True(director.HasHistory);
+        var session = new SimulationSession();
+        session.ArmDirectorStateForNextStage(director.ExportState());
+        session.StartBeat(() => Beats.TopGunAcm(TopGunSeat.F14A));
+        var bandit = Assert.IsType<NeutralMergeBandit>(session.Bandit);
+        Assert.Equal(PilotSkill.Ace, bandit.Skill);
+        Assert.False(bandit.Presenting);
+        Assert.True(SlantRangeM(session.Player.State.Position, bandit.State.Position) > 5_000.0);
+        Assert.Empty(session.Wingmen);
     }
 
     [Fact]

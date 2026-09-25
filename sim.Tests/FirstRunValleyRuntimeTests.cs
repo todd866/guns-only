@@ -97,9 +97,28 @@ public sealed class FirstRunValleySessionTests {
         var session = Stage(armed);
         session.StepFixed();
         Assert.False(session.FirstRunWeaponsCold);
-        Assert.False(session.Bandit.Presenting,
-            "weapons-hot still left the lead presenting, so it would not fire");
+        Assert.True(session.Bandit.Presenting,
+            "pop-out must leave the lead presenting until the tracking hold");
         Assert.Empty(session.Wingmen);
+        double pastTheGateM = session.Bandit.State.Position.Z
+            - FirstRunValleyRuntime.PopOutNorthM;
+        Assert.InRange(pastTheGateM, 700.0, 1_200.0);
+
+        void HoldAft(double aftM, int ticks) {
+            for (int i = 0; i < ticks; i++) {
+                AircraftState leadNow = session.Bandit.State;
+                session.Player.AdoptExternalKinematics(leadNow with {
+                    Position = leadNow.Position + new Vec3D(0.0, 0.0, -aftM),
+                    Chi = 0.0,
+                });
+                session.StepFixed();
+            }
+        }
+        HoldAft(1_200.0, (int)(10.0 * AircraftSim.TickHz));
+        Assert.True(session.Bandit.Presenting,
+            "ten seconds outside the gun funnel must not end Present");
+        HoldAft(500.0, (int)(2.5 * AircraftSim.TickHz));
+        Assert.False(session.Bandit.Presenting);
     }
 
     [Fact]
