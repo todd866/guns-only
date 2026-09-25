@@ -45,7 +45,7 @@ public sealed class PaintedCircuit
     readonly Vec3D[] _centreline;
     readonly double[] _segmentLengthM;
     readonly double[] _cumulativeLengthM;
-    readonly double[] _sectorGateProgressM;
+    double[] _sectorGateProgressM;
     readonly ApexMarker[] _apexes;
     readonly Vec3D _runwayOrigin;
     readonly Vec3D _runwayForward;
@@ -73,7 +73,6 @@ public sealed class PaintedCircuit
         StartFinishCentre = startFinishCentre;
         StartFinishSegmentIndex = startFinishSegmentIndex;
         _sectorGateProgressM = sectorGateProgressM;
-        SectorGateProgressM = sectorGateProgressM;
 
         _segmentLengthM = new double[centreline.Length - 1];
         _cumulativeLengthM = new double[centreline.Length];
@@ -88,6 +87,69 @@ public sealed class PaintedCircuit
 
         CircuitLengthM = totalLengthM;
         _apexes = FindHairpinApexes();
+        ApplyHairpinSectorGates();
+    }
+
+    /// <summary>
+    /// Opening straight, first hairpin, return straight, second hairpin. Nearby radius
+    /// wiggles are one corner. The exit gate stays between the two apexes so a rider
+    /// can close the sectors in order.
+    /// </summary>
+    void ApplyHairpinSectorGates()
+    {
+        if (_apexes.Length < 2 || CircuitLengthM <= 1.0)
+            return;
+
+        var merged = new List<ApexMarker>();
+        foreach (ApexMarker apex in _apexes.OrderBy(marker => marker.ProgressM))
+        {
+            if (merged.Count > 0 && apex.ProgressM - merged[^1].ProgressM < 80.0)
+            {
+                if (apex.RadiusM < merged[^1].RadiusM)
+                    merged[^1] = apex;
+                continue;
+            }
+
+            merged.Add(apex);
+        }
+
+        if (merged.Count < 2)
+            return;
+
+        ApexMarker first = merged[0];
+        ApexMarker second = merged[1];
+        double exitM = first.ExitProgressM;
+        if (exitM <= first.ProgressM || exitM >= second.ProgressM)
+            exitM = (first.ProgressM + second.ProgressM) * 0.5;
+        _sectorGateProgressM =
+        [
+            first.ProgressM / CircuitLengthM,
+            exitM / CircuitLengthM,
+            second.ProgressM / CircuitLengthM,
+        ];
+    }
+
+    /// <summary>
+    /// Centreline point <paramref name="distanceM"/> ahead of <paramref name="progressM"/>,
+    /// wrapping the lap. Used for the signed look-ahead tick.
+    /// </summary>
+    public Vec3D PointAhead(double progressM, double distanceM)
+    {
+        double target = WrapProgress(progressM + Math.Max(0.0, distanceM));
+        int unique = _centreline.Length - 1;
+        for (int index = 0; index < unique; index++)
+        {
+            if (_cumulativeLengthM[index + 1] + 1e-6 < target)
+                continue;
+            double span = _segmentLengthM[index];
+            double t = span > 1e-6
+                ? (target - _cumulativeLengthM[index]) / span
+                : 0.0;
+            t = Math.Clamp(t, 0.0, 1.0);
+            return _centreline[index] + (_centreline[index + 1] - _centreline[index]) * t;
+        }
+
+        return _centreline[0];
     }
 
     readonly record struct ApexMarker(double ProgressM, double RadiusM, double ExitProgressM);
@@ -99,7 +161,7 @@ public sealed class PaintedCircuit
     public double BoundingWidthM { get; }
     public Vec3D StartFinishCentre { get; }
     public int StartFinishSegmentIndex { get; }
-    public IReadOnlyList<double> SectorGateProgressM { get; }
+    public IReadOnlyList<double> SectorGateProgressM => _sectorGateProgressM;
 
     public static PaintedCircuit RapierStripWeekend(
         double headingRad = -Math.PI / 2.0,

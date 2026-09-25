@@ -53,7 +53,20 @@ public readonly record struct WeekendRideSnapshot(
     double SessionSeconds = 0.0,
     double NextApexDistanceM = 0.0,
     double NextApexSteadySpeedMps = 0.0,
-    bool NextApexIsExit = false)
+    bool NextApexIsExit = false,
+    WeekendRideSessionLeg SessionLeg = WeekendRideSessionLeg.Flying,
+    bool PitOpen = false,
+    double LookAheadLateralM = 0.0,
+    bool InPit = false,
+    bool PitEntryLegal = false,
+    bool LegalStop = false,
+    bool CameInEarly = false,
+    bool HadHotPitEntry = false,
+    int TipCount = 0,
+    bool ShowApexSpeed = true,
+    double ReflexGain = 1.0,
+    int CleanFlyingLaps = 0,
+    double LastCleanFlyingLapSeconds = 0.0)
 {
     /// <summary>
     /// Roll about the forward axis extracted from the head-stabilized view attitude.

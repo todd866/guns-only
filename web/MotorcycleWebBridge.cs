@@ -124,6 +124,11 @@ public static partial class MotorcycleWebBridge
     public static bool SeedBestLap(double bestLapSeconds, double[] splitProfile) =>
         RequireRuntime().SeedBestLap(bestLapSeconds, splitProfile ?? []);
 
+    /// <summary>Applies the device ramp: clean-lap evidence and whether a session was parked.</summary>
+    [JSExport]
+    public static void ApplyRamp(bool hasMatchingCleanLap, bool broughtIn) =>
+        RequireRuntime().ApplyRamp(hasMatchingCleanLap, broughtIn);
+
     /// <summary>The best lap's split profile, for the page to persist.</summary>
     [JSExport]
     public static double[] GetBestSplitProfile() =>

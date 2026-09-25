@@ -171,6 +171,32 @@ public sealed class PaintedCircuitTests
     }
 
     [Fact]
+    public void SectorGatesSitOnTheHairpinsNotOnEqualLengths()
+    {
+        var circuit = PaintedCircuit.RapierStripWeekend();
+        IReadOnlyList<double> gates = circuit.SectorGateProgressM;
+        Assert.Equal(3, gates.Count);
+        Assert.True(gates[0] > 0.05 && gates[0] < 0.45, $"first apex fraction {gates[0]:F3}");
+        Assert.True(gates[1] > gates[0], "first-hairpin exit follows its apex");
+        Assert.True(gates[2] > gates[1] && gates[2] < 0.98,
+            $"gates {gates[0]:F3} {gates[1]:F3} {gates[2]:F3}");
+        Assert.NotEqual(0.25, gates[0], 3);
+        Assert.NotEqual(0.50, gates[1], 3);
+        Assert.NotEqual(0.75, gates[2], 3);
+
+        var state = new PaintedCircuitQueryState();
+        var closed = new List<int>();
+        foreach (Vec3D point in circuit.Centreline)
+        {
+            PaintedCircuitQueryResult sample = circuit.Query(point, ref state);
+            if (sample.SectorCrossed >= 0)
+                closed.Add(sample.SectorCrossed);
+        }
+
+        Assert.Equal(new[] { 0, 1, 2 }, closed);
+    }
+
+    [Fact]
     public void CentrelineIsSampledWithContinuousFiniteCurvature()
     {
         var circuit = PaintedCircuit.RapierStripWeekend();
