@@ -8,7 +8,7 @@ const runtimePath = new URL("../../../../../sim/Cobra/CobraMissionRuntime.cs", i
 test("Cobra bridge transports authority-owned turnaround input and snapshot truth", async () => {
   const bridge = await readFile(bridgePath, "utf8");
   assert.match(bridge, /public static void SetTurnaroundAction\(bool held\)/);
-  assert.match(bridge, /runtime\.Advance\(_controlLatch\.Command, _turnaroundActionHeld\)/);
+  assert.match(bridge, /runtime\.Advance\(_controlLatch\.Command, _turnaroundActionHeld, _engagementConsent\)/);
   assert.match(bridge, /turnaround = new \{/);
   for (const field of [
     "phase", "sequence", "action", "hold_progress",

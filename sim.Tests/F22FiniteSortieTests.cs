@@ -129,53 +129,38 @@ public class F22FiniteSortieTests {
     }
 
     [Fact]
-    public void OverheadSpeaksOncePerLegAndInitialDoesNotSkipTheBreak() {
+    public void OverheadSpeaksOnlyApprovedClipsInTheRealExchange() {
+        // Pilot "initial", tower "left break approved", pilot "base, three greens" once locked.
+        // The break and final legs are silent: every spoken line is an owner-approved recording.
         var director = new MissionRadioDirector();
         double clock = 0;
         director.Step(Overhead(clock, ""));
         var heard = new List<string>();
         foreach (string gate in new[] { "initial", "break", "perch", "final" }) {
-            clock += 3;
-            MissionRadioTransmission tx = director.Step(Overhead(clock, gate));
-            for (int i = 0; i < 8 && tx.Id != ExpectedId(gate); i++) {
+            for (int i = 0; i < 10; i++) {
                 clock += 1;
-                tx = director.Step(Overhead(clock, gate));
+                MissionRadioTransmission tx = director.Step(Overhead(clock, gate, gearDown: gate is "perch" or "final"));
+                if (!string.IsNullOrEmpty(tx.Id) && (heard.Count == 0 || heard[^1] != tx.Id))
+                    heard.Add(tx.Id);
             }
-            Assert.Equal(ExpectedId(gate), tx.Id);
-            heard.Add(tx.Text);
-            clock += 4;
-            director.Step(Overhead(clock, gate));
         }
-        Assert.Equal(
-            ["Ghost One One, initial.", "Ghost One One, breaking.",
-             "Ghost One One, gear down.", "Ghost One One, final."],
-            heard);
-        Assert.DoesNotContain("breaking", heard[0]);
+        Assert.Equal(["pilot-initial", "tower-break-approved", "pilot-base"], heard);
     }
 
     [Fact]
-    public void OverheadDoesNotCallGearDownWhileTheGearIsUp() {
+    public void OverheadDoesNotReportThreeGreensWhileTheGearIsUp() {
         var director = new MissionRadioDirector();
         director.Step(Overhead(0, ""));
         for (int i = 0; i < 6; i++) {
             MissionRadioTransmission tx = director.Step(Overhead(3 + i, "perch", gearDown: false));
-            Assert.NotEqual("f22-perch", tx.Id);
-            Assert.DoesNotContain("gear down", tx.Text, StringComparison.OrdinalIgnoreCase);
+            Assert.NotEqual("pilot-base", tx.Id);
+            Assert.DoesNotContain("three greens", tx.Text ?? "", StringComparison.OrdinalIgnoreCase);
         }
         MissionRadioTransmission locked = director.Step(Overhead(12, "perch", gearDown: true));
-        for (int i = 0; i < 8 && locked.Id != "f22-perch"; i++)
+        for (int i = 0; i < 8 && locked.Id != "pilot-base"; i++)
             locked = director.Step(Overhead(13 + i, "perch", gearDown: true));
-        Assert.Equal("f22-perch", locked.Id);
-        Assert.Contains("gear down", locked.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("pilot-base", locked.Id);
     }
-
-    static string ExpectedId(string gate) => gate switch {
-        "initial" => "f22-initial",
-        "break" => "f22-break",
-        "perch" => "f22-perch",
-        "final" => "f22-final",
-        _ => throw new ArgumentOutOfRangeException(nameof(gate)),
-    };
 
     static MissionRadioState Overhead(double time, string gate, bool? gearDown = null) => new(
         TimeSeconds: time,

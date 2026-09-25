@@ -33,7 +33,7 @@ test("Cobra bridge stages every route with the collective fully down", () => {
 test("Cobra bridge latches a same-tick grounded command across stale browser frames", () => {
   assert.match(bridge, /static CobraAirframeSwapControlLatch _controlLatch = new\(\);/);
   assert.match(bridge,
-    /while \([\s\S]*?int airframeSwapsBeforeTick = runtime\.AirframeSwaps;[\s\S]*?runtime\.Advance\(_controlLatch\.Command, _turnaroundActionHeld\);[\s\S]*?_controlLatch\.ObserveAuthoritySwap\(runtime\.AirframeSwaps\);/,
+    /while \([\s\S]*?int airframeSwapsBeforeTick = runtime\.AirframeSwaps;[\s\S]*?runtime\.Advance\(_controlLatch\.Command, _turnaroundActionHeld, _engagementConsent\);[\s\S]*?_controlLatch\.ObserveAuthoritySwap\(runtime\.AirframeSwaps\);/,
     "every fixed tick must observe a swap before the catch-up loop can advance its spare");
   assert.match(bridge,
     /public static bool AcknowledgeAirframeSwap\(int swapGeneration\)[\s\S]*?_controlLatch\.AcknowledgeAuthoritySwap\(swapGeneration\)/,
