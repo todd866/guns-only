@@ -57,7 +57,8 @@ public class MissionRadioCatalogContractTests {
         bool joker = false,
         bool bingo = false,
         IReadOnlyList<SessionEvent>? events = null,
-        string checklistCall = "") => new(
+        string checklistCall = "",
+        string overheadGate = "") => new(
             TimeSeconds: timeSeconds,
             MissionActive: true,
             RapierMissionAvailable: true,
@@ -85,7 +86,8 @@ public class MissionRadioCatalogContractTests {
             Joker: joker,
             Bingo: bingo,
             Events: events ?? NoEvents,
-            ChecklistCompletedCall: checklistCall);
+            ChecklistCompletedCall: checklistCall,
+            ConventionalOverheadGate: overheadGate);
 
     /// Pump at radio cadence. Large jumps deliberately expire stale calls now.
     static void Drain(
@@ -314,6 +316,13 @@ public class MissionRadioCatalogContractTests {
             t, pattern: false, checklistCall: "LAUNCH_GEAR_UP"));
         Drain(checklistDirector, heard, ref clock, t => State(
             t, pattern: false, checklistCall: "RECOVERY_GEAR_DOWN"));
+
+        var overheadDirector = new MissionRadioDirector();
+        clock = 0.0;
+        overheadDirector.Step(State(clock, pattern: false, leg: ""));
+        foreach (string gate in new[] { "initial", "break", "perch", "final" })
+            Drain(overheadDirector, heard, ref clock, t => State(
+                t, pattern: false, leg: "", overheadGate: gate));
 
         Assert.NotEmpty(heard);
         var offCatalog = new List<string>();

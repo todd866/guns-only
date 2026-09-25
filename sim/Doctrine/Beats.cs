@@ -53,7 +53,9 @@ public sealed record CombatConfig(
         PlayerHitsToDefeat: 3,
         OpponentHitsToDefeat: 3,
         PlayerGun: GunProfiles.M61A2PublicDataSurrogate,
-        OpponentGun: GunProfiles.GSh301PublicDataSurrogate);
+        OpponentGun: GunProfiles.GSh301PublicDataSurrogate,
+        // USAF fact sheet: the F-22 carries 480 rounds of 20 mm. The magazine is that number.
+        PlayerInfiniteAmmo: false);
     /// Top Gun 1v1 DACT: symmetric 480-round M61 magazines on both sides (Tomcat canonical;
     /// MiG-28 fiction carries the same public-data gun surrogate until a dedicated F-5
     /// installation profile lands).
@@ -1474,6 +1476,42 @@ public static class Beats {
     }
 
     /// <summary>
+    /// Southwest slab kept for the Kestrel first-run recovery only. Natural terrain under the
+    /// pavement spans 104.896..106.511 m; the 106.75 m slab is 0.24..1.85 m of fill.
+    /// </summary>
+    static RecoveryPlan F22SouthwestRecovery() => new(
+        "recovery.f22a.soniachne-west-runway.v1",
+        "Soniachne west recovery runway",
+        new Vec3D(-61_652.0, 106.75, -56_576.0),
+        requiredLandingReserveLb: 3_000.0,
+        conventionalRunway: new ConventionalRunwayGeometry(
+            thresholdPosition: new Vec3D(-61_952.0, 106.75, -56_576.0),
+            landingHeadingRad: Math.PI / 2.0,
+            lengthM: 3_000.0,
+            widthM: 45.0));
+
+    /// <summary>
+    /// North runway for the visual-merge sortie. Heading 015°, threshold (600, 77.50, 19400).
+    /// Aim point is 300 m down the pavement. See <see cref="ModernVisualMerge"/> for the survey.
+    /// </summary>
+    static RecoveryPlan F22NorthRecovery() {
+        const double headingRad = 15.0 * Math.PI / 180.0;
+        const double elevationM = 77.50;
+        var threshold = new Vec3D(600.0, elevationM, 19_400.0);
+        Vec3D forward = new(Math.Sin(headingRad), 0.0, Math.Cos(headingRad));
+        return new RecoveryPlan(
+            "recovery.f22a.soniachne-north-runway.v1",
+            "Soniachne north recovery runway",
+            threshold + forward * 300.0,
+            requiredLandingReserveLb: 3_000.0,
+            conventionalRunway: new ConventionalRunwayGeometry(
+                thresholdPosition: threshold,
+                landingHeadingRad: headingRad,
+                lengthM: 3_000.0,
+                widthM: 45.0));
+    }
+
+    /// <summary>
     /// Straightforward guns-only dogfight between public-data airframe surrogates. The scenario
     /// begins at 18,000 ft in an offset reciprocal visual merge after both packages have reached
     /// the merge without a BVR result. Guns are safe through the first pass; there is no radar,
@@ -1558,31 +1596,21 @@ public static class Beats {
             // choreographed merge, but against a pair the opening pass is already a fight.
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(HoldFireThroughFirstPass: false),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
-            ContinuousCombat: new ContinuousCombatConfig(),
-            // Fictional runway inside the shared theatre, roughly 44 NM southwest of the merge.
-            // The old (-55 km, -55 km) strip crossed a 37 m atlas rise and was visibly buried once
-            // simulation terrain and presentation began sharing one authority. The eastbound site
-            // below was surveyed from the same 256 m atlas records: natural terrain under the full
-            // 3,000 x 45 m pavement spans 104.896..106.511 m. A 106.75 m constructed slab therefore
-            // stays above the DEM with 0.24..1.85 m of bounded fill rather than flattening the
-            // surrounding terrain. The 3,000 lb
-            // exercise reserve sits 900 lb above declared MIN FUEL and
+            // Two billed merges, then the overhead is the ending. O and Bingo still knock it
+            // off early; that recovery is a discontinue, not a completed job.
+            ContinuousCombat: new ContinuousCombatConfig(MaximumEngagements: 2),
+            // Fictional runway inside the shared theatre's 48 km stream, about 13 NM north of
+            // the merge so the pavement is in the same picture as the terrain. Surveyed from the
+            // same atlas records as the buried southwest strip it replaces: a 015° centreline
+            // from (600 m, 19 400 m). At 25 m samples the DEM under the 3,000 × 45 m pavement
+            // spans 74.230..77.178 m. A 77.50 m slab stays above that DEM with 0.32..3.27 m of
+            // fill. Flank relief 2.5 km off the centreline is about 98 m, so the site is a
+            // runway in terrain, not a graded plain. Epistemic: provisional site, atlas-measured
+            // heights. Not a real airfield and not an F-22 landing-distance requirement.
+            // The 3,000 lb exercise reserve sits 900 lb above declared MIN FUEL and
             // 1,800 lb above EMERGENCY FUEL; it is deliberately below 4,000 lb Bingo, which remains
             // the action threshold for turning home rather than the desired fuel at touchdown.
-            RecoveryPlan: new RecoveryPlan(
-                "recovery.f22a.soniachne-west-runway.v1",
-                "Soniachne west recovery runway",
-                new Vec3D(-61_652.0, 106.75, -56_576.0),
-                requiredLandingReserveLb: 3_000.0,
-                // Threshold centre is 300 m west of the touchdown aim. Heading +pi/2 is +east in
-                // the simulation frame, so the full 3,000 m rollout stays inside the regional
-                // theatre. These dimensions match a substantial fast-jet runway without claiming
-                // a real site or an exact F-22 landing-performance requirement.
-                conventionalRunway: new ConventionalRunwayGeometry(
-                    thresholdPosition: new Vec3D(-61_952.0, 106.75, -56_576.0),
-                    landingHeadingRad: Math.PI / 2.0,
-                    lengthM: 3_000.0,
-                    widthM: 45.0)),
+            RecoveryPlan: F22NorthRecovery(),
             // The opening fight is Ace (ForEngagement is the ceiling from engagement 1). Continuous
             // successors stay on that same function at CreateNextBandit; easing is the director's
             // job on evidence, not a scripted Novice→Ace ramp.
@@ -1629,7 +1657,10 @@ public static class Beats {
                 MissionContentFamily.ModernPublicDataSurrogate,
                 PublicDataSurrogate: true,
                 RulesOfEngagement: "HEATERS_THEN_GUNS_FREE",
-                Era: "MODERN_PUBLIC_DATA_EXERCISE")
+                Era: "MODERN_PUBLIC_DATA_EXERCISE"),
+            // The valley sortie keeps the surveyed southwest slab. The north runway belongs to
+            // the visual-merge fight; moving this home would retarget a different mission.
+            RecoveryPlan = F22SouthwestRecovery()
         };
     }
 

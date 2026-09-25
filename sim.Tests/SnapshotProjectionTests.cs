@@ -391,35 +391,33 @@ public class SnapshotProjectionTests {
             Assert.Equal(JsonValueKind.Number, recoveryClosure.ValueKind);
         }
         if (beatIndex is 7 or 9) {
-            Assert.Equal("recovery.f22a.soniachne-west-runway.v1",
+            Assert.Equal("recovery.f22a.soniachne-north-runway.v1",
                 root.GetProperty("recovery_id").GetString());
-            Assert.Equal("Soniachne west recovery runway",
+            Assert.Equal("Soniachne north recovery runway",
                 root.GetProperty("recovery_display_name").GetString());
-            Assert.Equal(-61_952.0,
+            Assert.Equal(600.0,
                 root.GetProperty("runway_threshold_x").GetDouble());
-            Assert.Equal(106.75,
+            Assert.Equal(77.50,
                 root.GetProperty("runway_threshold_y").GetDouble());
-            Assert.Equal(-56_576.0,
+            Assert.Equal(19_400.0,
                 root.GetProperty("runway_threshold_z").GetDouble());
-            Assert.Equal(90.0,
-                root.GetProperty("runway_heading_deg").GetDouble());
+            Assert.Equal(15.0,
+                root.GetProperty("runway_heading_deg").GetDouble(), precision: 3);
             Assert.Equal(3_000.0,
                 root.GetProperty("runway_length_m").GetDouble());
             Assert.Equal(45.0,
                 root.GetProperty("runway_width_m").GetDouble());
-            Assert.Equal(-61_652.0,
-                root.GetProperty("runway_touchdown_x").GetDouble());
-            Assert.Equal(106.75,
+            Assert.InRange(root.GetProperty("runway_touchdown_x").GetDouble(), 670.0, 690.0);
+            Assert.Equal(77.50,
                 root.GetProperty("runway_touchdown_y").GetDouble());
-            Assert.Equal(-56_576.0,
-                root.GetProperty("runway_touchdown_z").GetDouble());
-            Assert.True(recoveryClosure.GetDouble() < 0.0,
-                "the opening northbound F-22 is outbound from its southwest runway");
-            Assert.Equal(JsonValueKind.Null, recoveryEta.ValueKind);
-            Assert.Equal(JsonValueKind.Null, fuelToHome.ValueKind);
-            Assert.Equal(JsonValueKind.Null, fuelOnArrival.ValueKind);
+            Assert.InRange(root.GetProperty("runway_touchdown_z").GetDouble(), 19_680.0, 19_700.0);
+            Assert.True(recoveryClosure.GetDouble() > 0.0,
+                "the opening northbound F-22 is closing on the runway ahead");
+            Assert.Equal(JsonValueKind.Number, recoveryEta.ValueKind);
+            Assert.Equal(JsonValueKind.Number, fuelToHome.ValueKind);
+            Assert.Equal(JsonValueKind.Number, fuelOnArrival.ValueKind);
             Assert.Equal(3000.0, reserveTarget.GetDouble());
-            Assert.Equal(JsonValueKind.Null, reserveMargin.ValueKind);
+            Assert.Equal(JsonValueKind.Number, reserveMargin.ValueKind);
         } else if (beatIndex is 10 or 12) {
             Assert.Equal("recovery.rapier.eastern-dispersed-strip.v1",
                 root.GetProperty("recovery_id").GetString());
@@ -535,7 +533,7 @@ public class SnapshotProjectionTests {
     }
 
     [Fact]
-    public void VoluntaryHandoffActivatesF22SteeringWithoutInventingOutboundEta() {
+    public void VoluntaryHandoffActivatesF22SteeringTowardTheRunwayAhead() {
         var session = new SimulationSession(7, Carrier.DeckConfiguration.Angled,
             KoreaWeatherPresets.ForBeat(7));
         session.Begin();
@@ -567,14 +565,14 @@ public class SnapshotProjectionTests {
         Assert.True(root.GetProperty("player_rtb_active").GetBoolean());
         Assert.True(root.GetProperty("rtb_steer").GetBoolean());
         Assert.True(root.GetProperty("recovery_point_known").GetBoolean());
-        Assert.True(root.GetProperty("rtb_closure_kts").GetDouble() < 0.0);
-        Assert.Equal(JsonValueKind.Null,
+        Assert.True(root.GetProperty("rtb_closure_kts").GetDouble() > 0.0);
+        Assert.Equal(JsonValueKind.Number,
             root.GetProperty("rtb_eta_min").ValueKind);
-        Assert.Equal(JsonValueKind.Null,
+        Assert.Equal(JsonValueKind.Number,
             root.GetProperty("fuel_to_home_estimate_lb").ValueKind);
-        Assert.Equal(JsonValueKind.Null,
+        Assert.Equal(JsonValueKind.Number,
             root.GetProperty("fuel_on_arrival_estimate_lb").ValueKind);
-        Assert.Equal(JsonValueKind.Null,
+        Assert.Equal(JsonValueKind.Number,
             root.GetProperty("fuel_reserve_margin_lb").ValueKind);
     }
 

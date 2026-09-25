@@ -88,6 +88,42 @@
       "direction": "Arrival report; no phrase boundary after the callsign. Information focus is initial. Routine falling contour."
     },
     {
+      "id": "f22-initial",
+      "role": "pilot",
+      "text": "Ghost One One, initial.",
+      "target_duration_s": [0.75, 1.05],
+      "speed": 1.4,
+      "description": "F-22 overhead initial, one call",
+      "direction": "Initial call on the extended centreline."
+    },
+    {
+      "id": "f22-break",
+      "role": "pilot",
+      "text": "Ghost One One, breaking.",
+      "target_duration_s": [0.7, 1.0],
+      "speed": 1.4,
+      "description": "F-22 overhead break, one call",
+      "direction": "Break call at the numbers."
+    },
+    {
+      "id": "f22-perch",
+      "role": "pilot",
+      "text": "Ghost One One, gear down.",
+      "target_duration_s": [0.8, 1.1],
+      "speed": 1.4,
+      "description": "F-22 overhead perch, gear call",
+      "direction": "Gear call abeam."
+    },
+    {
+      "id": "f22-final",
+      "role": "pilot",
+      "text": "Ghost One One, final.",
+      "target_duration_s": [0.7, 1.0],
+      "speed": 1.4,
+      "description": "F-22 overhead final, one call",
+      "direction": "Final call on the 3 degree line."
+    },
+    {
       "id": "tower-break-approved",
       "role": "tower",
       "text": "Ghost One One, left break approved.",
