@@ -134,6 +134,45 @@ public class CobraMissionActTests
     }
 
     [Fact]
+    public void EngagePathPointsAtTheNextHostileGunPitAfterIronBellFlips()
+    {
+        CobraCanyonDefinition definition = CobraCanyonDefinition.Create();
+        CobraCanyonRouteDefinition route = definition.Route(CobraCanyonRouteChoice.RiverGorge);
+        var war = new CobraGroundWarRuntime(definition, definition.CreateTerrainSurface(), seed: 7);
+        ContestedSite ironBell = war.Sites.Single(site =>
+            site.LandmarkId == "landmark.cobra-canyon.iron-bell-bridge.v1");
+        ContestedSite plantation = war.Sites.Single(site =>
+            site.LandmarkId == "landmark.cobra-canyon.plantation-water-tower.v1");
+        ironBell.SetInitialOwner(GroundSiteOwner.Friendly);
+        Assert.Equal(GroundSiteOwner.Hostile, plantation.Owner);
+
+        Vec3D aircraft = new(ironBell.PositionWorldM.X, ironBell.PositionWorldM.Y + 40.0, ironBell.PositionWorldM.Z);
+        IReadOnlyList<CobraPathGate> gates = CobraMissionActProgress.BuildPathGates(
+            CobraMissionAct.Engage,
+            route,
+            Fob,
+            fobPathAltitudeM: 232.0,
+            aircraftWorldM: aircraft,
+            terrain: definition.CreateTerrainSurface(),
+            sites: war.Sites);
+
+        CobraPathGate active = Assert.Single(gates, gate => gate.Active);
+        double toPlantation = Horizontal(active.EastM, active.NorthM, plantation.PositionWorldM);
+        double toBridge = Horizontal(active.EastM, active.NorthM, ironBell.PositionWorldM);
+        Assert.True(toPlantation <= plantation.CaptureRadiusM,
+            $"active gate is {toPlantation:F0} m from Phu Rieng, outside {plantation.CaptureRadiusM:F0} m");
+        Assert.True(toBridge > ironBell.CaptureRadiusM,
+            "the active gate must leave the bridge once Iron Bell is friendly");
+    }
+
+    static double Horizontal(double eastM, double northM, in Vec3D site)
+    {
+        double de = eastM - site.X;
+        double dn = northM - site.Z;
+        return Math.Sqrt(de * de + dn * dn);
+    }
+
+    [Fact]
     public void PathGatesHighlightBridgeDuringEngage()
     {
         CobraCanyonRouteDefinition route = CobraCanyonDefinition.Create()

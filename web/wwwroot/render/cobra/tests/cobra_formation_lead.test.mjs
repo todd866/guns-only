@@ -52,12 +52,35 @@ test("formation calls explain the turn and the DShK dogleg", () => {
   const dogleg = cobraFormationRadio(authority(), { x_m: 0, z_m: 340 });
   assert.equal(takeoff.text, "Dash 2, lift. Follow Lead.");
   assert.equal(turn.text, "Turning. Stay with me.");
-  assert.equal(dogleg.text, "DShK ahead. Ridge masks us.");
+  assert.notEqual(dogleg.text, "DShK ahead. Ridge masks us.");
   assert.equal(cobraFormationRadio(authority("ingress"), { x_m: 0, z_m: 0 }).text,
     "Iron Bell ahead. Stay low.");
   assert.equal(cobraFormationRadio(authority("engage"), { x_m: 0, z_m: 0 }).text,
     "Bridge fight. Lead breaking.");
   assert.equal(cobraFormationRadio(authority("rtb"), { x_m: 0, z_m: 0 }), null);
+});
+
+test("the DShK mask call follows the masking assessment, and taking fire follows the burst", () => {
+  const pose = { x_m: 0, z_m: 340 };
+  const exposed = authority();
+  exposed.masking = { state: "exposed" };
+  exposed.battle_damage = { receiving_fire: false, acquisition_progress: 0.4 };
+  assert.notEqual(cobraFormationRadio(exposed, pose)?.text, "DShK ahead. Ridge masks us.");
+
+  const masked = authority();
+  masked.masking = { state: "masked" };
+  masked.battle_damage = { receiving_fire: false, acquisition_progress: 0.4 };
+  assert.equal(cobraFormationRadio(masked, pose).text, "DShK ahead. Ridge masks us.");
+
+  const fired = authority("engage");
+  fired.battle_damage = { receiving_fire: true, acquisition_progress: 1 };
+  fired.masking = { state: "exposed" };
+  assert.equal(cobraFormationRadio(fired, pose).text, "Taking fire.");
+
+  const presenter = createCobraFormationRadioPresenter({ holdSeconds: 3.2 });
+  const call = cobraFormationRadio(masked, pose);
+  assert.equal(presenter.update(call, 1).text, call.text);
+  assert.equal(presenter.update(call, 4.2), null);
 });
 
 test("formation calls are one-shot transmissions, not permanent state banners", () => {

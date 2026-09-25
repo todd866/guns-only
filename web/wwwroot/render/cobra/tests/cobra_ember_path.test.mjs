@@ -73,19 +73,23 @@ test("a transient empty route frame retains shared-path ownership", () => {
     .approach_guidance_active, false);
 });
 
-test("combat acts suppress stale bridge gates so the objective path owns guidance", () => {
+test("engage and hold draw the next gun-pit chain the kernel publishes", () => {
   for (const mission_act of ["engage", "hold"]) {
     const state = emberPathGuidanceState({
       mission_act,
       path_gates: [
-        { east_m: 10, up_m: 140, north_m: 20, active: true },
-        { east_m: 30, up_m: 145, north_m: 40, active: false },
+        { east_m: 10, up_m: 140, north_m: 20, active: false },
+        { east_m: 300, up_m: 80, north_m: -3920, active: true },
       ],
     });
-    assert.equal(state.approach_guidance_active, false);
-    assert.equal(state.approach_gate_count, 0);
-    assert.deepEqual(state.approach_gates, []);
+    assert.equal(state.approach_guidance_active, true, mission_act);
+    assert.equal(state.approach_gates.find((gate) => gate.active).east_m, 300);
+    assert.equal(state.approach_gates.find((gate) => gate.active).north_m, -3920);
   }
+  assert.deepEqual(
+    emberPathGuidanceState({ mission_act: "engage", path_gates: [] }).approach_gates,
+    [],
+  );
 });
 
 test("pad-centred gates stay dark while ownship is still on Camp Ember", () => {

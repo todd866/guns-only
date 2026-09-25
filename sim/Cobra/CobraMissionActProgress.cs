@@ -78,10 +78,17 @@ public static class CobraMissionActProgress
         in Vec3D fobCentreWorldM,
         double fobPathAltitudeM,
         Vec3D? aircraftWorldM = null,
-        ITerrainSurface? terrain = null)
+        ITerrainSurface? terrain = null,
+        IReadOnlyList<ContestedSite>? sites = null)
     {
         if (act is CobraMissionAct.Rtb or CobraMissionAct.Complete)
             return CampEmberOperations.BuildArrivalGates(aircraftWorldM);
+
+        // Once Iron Bell is friendly the job is the next hostile gun pit. The gorge polyline
+        // stops at the bridge, so Engage/Hold used to keep that bridge gate (and the renderer
+        // then hid every gate). Read owner and position only — never the control readout.
+        if (act is CobraMissionAct.Engage or CobraMissionAct.Hold && sites is not null)
+            return BuildNextGunPitGates(sites, aircraftWorldM);
 
         IReadOnlyList<CobraCanyonRoutePoint> points = route.Points;
         int bridgeIndex = FindBridgePointIndex(points);
@@ -209,6 +216,56 @@ public static class CobraMissionActProgress
             bestIndex = index;
         }
         return bestIndex;
+    }
+
+    const string IronBellLandmarkId = "landmark.cobra-canyon.iron-bell-bridge.v1";
+
+    /// <summary>
+    /// Short world-space chain from the aircraft to the next hostile contested site, in the
+    /// authority's site order (Cau Song Ma, then Phu Rieng, then Dat Do). The last gate sits on
+    /// that site so the active cue is inside its capture radius.
+    /// </summary>
+    static IReadOnlyList<CobraPathGate> BuildNextGunPitGates(
+        IReadOnlyList<ContestedSite> sites,
+        Vec3D? aircraftWorldM)
+    {
+        ContestedSite? bridge = null;
+        foreach (ContestedSite site in sites) {
+            if (string.Equals(site.LandmarkId, IronBellLandmarkId, StringComparison.Ordinal))
+                bridge = site;
+        }
+        if (bridge is null
+            || bridge.Owner != GroundSiteOwner.Friendly
+            || aircraftWorldM is not { } from)
+            return Array.Empty<CobraPathGate>();
+
+        ContestedSite? next = null;
+        foreach (ContestedSite site in sites) {
+            if (site.Owner != GroundSiteOwner.Hostile) continue;
+            if (string.Equals(
+                site.LandmarkId,
+                "landmark.cobra-canyon.camp-ember.v1",
+                StringComparison.Ordinal))
+                continue;
+            next = site;
+            break;
+        }
+        if (next is null)
+            return Array.Empty<CobraPathGate>();
+
+        const int count = 4;
+        var gates = new CobraPathGate[count];
+        for (int i = 0; i < count; i++) {
+            double t = (i + 1.0) / count;
+            bool last = i == count - 1;
+            gates[i] = new CobraPathGate(
+                from.X + (next.PositionWorldM.X - from.X) * t,
+                from.Y + ((next.PositionWorldM.Y + 30.0) - from.Y) * t,
+                from.Z + (next.PositionWorldM.Z - from.Z) * t,
+                last ? next.CaptureRadiusM : 80.0,
+                last);
+        }
+        return gates;
     }
 
     static int FindBridgePointIndex(IReadOnlyList<CobraCanyonRoutePoint> points)

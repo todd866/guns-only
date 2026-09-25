@@ -398,6 +398,52 @@ public class CobraGroundWarRuntimeTests
     }
 
     [Fact]
+    public void CampEmberRearmIsAPadDwellNotAVolumeEnter()
+    {
+        var magazine = new CobraTurretMagazine(capacityRounds: 900, fireRateRoundsPerSecond: 9_000.0);
+        var war = new CobraGroundWarRuntime(
+            CobraCanyonDefinition.Create(), new FlatTerrain(), seed: 11, magazine);
+        GroundUnit hostile = war.LivingUnits()
+            .First(unit => unit.Faction == GroundFaction.Hostile);
+        while (!war.Magazine.IsDry)
+            war.ApplyAuthorizedFire(hostile.Id, 1.0);
+
+        ContestedSite camp = war.Sites.First(site => site.Id == "site.camp-ember.v1");
+        Vec3D onPad = new(camp.PositionWorldM.X, camp.PositionWorldM.Y + 2.0, camp.PositionWorldM.Z);
+        const double collectiveDown = 0.0;
+        const bool consentReleased = false;
+        double frame = PlayerVehicleContract.FixedDeltaSeconds;
+
+        Assert.False(war.TryResupplyAtFob(onPad, frame, collectiveDown, consentReleased));
+        Assert.Equal(0, war.Magazine.RoundsRemaining);
+        Assert.Equal(0, war.Debrief.FobRearmCount);
+
+        long tickBefore = war.AuthorityTick;
+        war.Advance(frame);
+        Assert.True(war.AuthorityTick > tickBefore);
+
+        Assert.False(war.TryResupplyAtFob(
+            onPad,
+            CobraGroundWarRuntime.FobRearmDwellSeconds - (2.0 * frame),
+            collectiveDown,
+            consentReleased));
+        Assert.True(war.TryResupplyAtFob(onPad, frame, collectiveDown, consentReleased));
+        Assert.Equal(900, war.Magazine.RoundsRemaining);
+        Assert.Equal(1, war.Debrief.FobRearmCount);
+
+        Vec3D hover = new(onPad.X, camp.PositionWorldM.Y + 10.0, onPad.Z);
+        magazine = new CobraTurretMagazine(capacityRounds: 900, fireRateRoundsPerSecond: 9_000.0);
+        war = new CobraGroundWarRuntime(
+            CobraCanyonDefinition.Create(), new FlatTerrain(), seed: 11, magazine);
+        hostile = war.LivingUnits().First(unit => unit.Faction == GroundFaction.Hostile);
+        while (!war.Magazine.IsDry)
+            war.ApplyAuthorizedFire(hostile.Id, 1.0);
+        Assert.False(war.TryResupplyAtFob(
+            hover, CobraGroundWarRuntime.FobRearmDwellSeconds, collectiveDown, consentReleased));
+        Assert.Equal(0, war.Magazine.RoundsRemaining);
+    }
+
+    [Fact]
     public void CampEmberPadRearmsADryMagazine()
     {
         var magazine = new CobraTurretMagazine(capacityRounds: 50, fireRateRoundsPerSecond: 100.0);
@@ -414,7 +460,8 @@ public class CobraGroundWarRuntimeTests
             camp.PositionWorldM.X,
             camp.PositionWorldM.Y + 2.0,
             camp.PositionWorldM.Z);
-        Assert.True(war.TryResupplyAtFob(onPad));
+        Assert.True(war.TryResupplyAtFob(
+            onPad, CobraGroundWarRuntime.FobRearmDwellSeconds, collective: 0.0, gunnerConsent: false));
         Assert.Equal(war.Magazine.CapacityRounds, war.Magazine.RoundsRemaining);
         Assert.Equal(1, war.Debrief.FobRearmCount);
     }
@@ -616,7 +663,7 @@ public class CobraGroundWarRuntimeTests
 
         for (int tick = 0; tick < ticks && war.MissionOutcome == HoldTheBridgeOutcome.Pending; tick++) {
             if (war.Magazine.IsBingo)
-                war.TryResupplyAtFob(pad);
+                war.TryResupplyAtFob(pad, CobraGroundWarRuntime.FobRearmDwellSeconds);
             GroundUnit? target = war.LivingUnits()
                 .Where(unit => unit.Faction == GroundFaction.Hostile)
                 .OrderByDescending(unit => unit.IsFortified)
@@ -915,7 +962,8 @@ public class CobraGroundWarRuntimeTests
                 .OrderBy(unit => unit.Id, StringComparer.Ordinal)
                 .FirstOrDefault();
             if (mark is not null) {
-                if (war.Magazine.IsBingo) war.TryResupplyAtFob(padWorldM);
+                if (war.Magazine.IsBingo)
+                    war.TryResupplyAtFob(padWorldM, CobraGroundWarRuntime.FobRearmDwellSeconds);
                 war.ApplyAuthorizedFire(mark.Id, stepSeconds);
             }
             war.Advance(stepSeconds);

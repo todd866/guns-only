@@ -107,6 +107,11 @@ public sealed class CobraGroundWarRuntime
     /// </summary>
     public const double StartingTickets = 300.0;
     public const double TicketBleedPerSecondPerPoint = 0.5;
+    /// <summary>
+    /// Gameplay pad dwell before rounds come back. Guns safe and collective down for this long
+    /// while the fight keeps running. Not a TM 55-1520-221-10 checklist time (epistemic: gameplay).
+    /// </summary>
+    public const double FobRearmDwellSeconds = 3.0;
     // Control is now a derived READOUT only (HUD label, telemetry, debrief peaks). These
     // thresholds survive because the bridge and the lab HUD publish them to colour that readout;
     // nothing in this file gates an outcome on them any more.
@@ -157,6 +162,7 @@ public sealed class CobraGroundWarRuntime
     int _fobRearmCount;
     int _roundsExpended;
     long _authorityTick;
+    double _fobRearmDwellSeconds;
     double _friendlyTickets = StartingTickets;
     double _hostileTickets = StartingTickets;
     HoldTheBridgeOutcome _missionOutcome = HoldTheBridgeOutcome.Pending;
@@ -378,15 +384,32 @@ public sealed class CobraGroundWarRuntime
             cobraPositionWorldM.X, cobraPositionWorldM.Z, out TerrainSample fobSurface)
         && _fob.Contains(cobraPositionWorldM, fobSurface.HeightM);
 
-    public bool TryResupplyAtFob(in Vec3D cobraPositionWorldM)
+    public bool TryResupplyAtFob(
+        in Vec3D cobraPositionWorldM,
+        double deltaSeconds = 0.0,
+        double collective = 0.0,
+        bool gunnerConsent = false)
     {
-        if (!_terrain.TrySample(cobraPositionWorldM.X, cobraPositionWorldM.Z, out TerrainSample surface))
+        if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        if (!double.IsFinite(collective))
+            throw new ArgumentOutOfRangeException(nameof(collective));
+
+        bool onPad = _terrain.TrySample(
+                cobraPositionWorldM.X, cobraPositionWorldM.Z, out TerrainSample surface)
+            && _fob.Contains(cobraPositionWorldM, surface.HeightM);
+        bool gunsSafe = !gunnerConsent
+            && collective <= global::GunsOnly.Sim.Cobra.CobraTurnaroundRuntime.MaximumShutdownCollective;
+        if (!onPad || !gunsSafe || _magazine.RoundsRemaining >= _magazine.CapacityRounds) {
+            _fobRearmDwellSeconds = 0.0;
             return false;
-        if (!_fob.Contains(cobraPositionWorldM, surface.HeightM))
-            return false;
-        if (_magazine.RoundsRemaining >= _magazine.CapacityRounds)
+        }
+
+        _fobRearmDwellSeconds += deltaSeconds;
+        if (_fobRearmDwellSeconds + 1e-12 < FobRearmDwellSeconds)
             return false;
 
+        _fobRearmDwellSeconds = 0.0;
         _magazine.Rearm();
         _fobRearmCount++;
         PushEvent("fob-rearm", null, "site.camp-ember.v1", GroundFaction.Friendly, cobraPositionWorldM);

@@ -102,6 +102,12 @@ export function cobraFormationLeadPose(authorityState, playerPose, spacingM = CO
 /** A concise R/T call tied to what the pilot is physically doing, not a timed tutorial card. */
 export function cobraFormationRadio(authorityState, playerPose) {
   const act = String(authorityState?.mission_act ?? "").toLowerCase();
+  const masked = String(authorityState?.masking?.state ?? "").toLowerCase() === "masked";
+  if (authorityState?.battle_damage?.receiving_fire === true) return {
+    sequence: 7,
+    speaker: "EMBER LEAD",
+    text: "Taking fire.",
+  };
   if (act === "engage") return {
     sequence: 6,
     speaker: "EMBER LEAD",
@@ -128,7 +134,7 @@ export function cobraFormationRadio(authorityState, playerPose) {
     speaker: "EMBER LEAD",
     text: "Turning. Stay with me.",
   };
-  if (rangeM < 520) return {
+  if (rangeM < 520 && masked) return {
     sequence: 3,
     speaker: "EMBER LEAD",
     text: "DShK ahead. Ridge masks us.",
