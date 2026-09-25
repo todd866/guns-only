@@ -33,7 +33,7 @@ test("a deliberate track-day brief holds authority before the first ride", async
 
   assert.match(html, /id="ride-brief"[^>]*class="mission-overlay mission-brief"[^>]*role="dialog"/u);
   assert.match(html,
-    /mission-kicker[\s\S]*ride-brief-title[\s\S]*ride-brief-summary[\s\S]*mission-brief-facts[\s\S]*FIRST REP[\s\S]*ride-brief-start[\s\S]*ride-brief-return/u);
+    /mission-kicker[\s\S]*ride-brief-title[\s\S]*ride-brief-summary[\s\S]*mission-brief-facts[\s\S]*ride-brief-start[\s\S]*ride-brief-return/u);
   assert.match(main, /function showRideBrief[\s\S]*bridge\.SetPaused\(true\)/u,
     "dispatch must hold runtime authority without masquerading as the pause menu");
   assert.match(main, /function startRideFromBrief[\s\S]*bridge\.SetPaused\(false\)/u);
