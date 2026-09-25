@@ -58,3 +58,7 @@ Audit items 1–4 from `docs/grok-overhaul/audit/fireboss.md`. Item 5 (a fire th
 - After raising the drop gate: that flight theory, `TrainingCircuitCountsOnlyAReleaseThatCoversTheShoreMark`, `BoucherieWindMatchesTheAuthoredWorldFire`, and `WaterCircuitKeepsItsDescentAndLoadedTakeoffOverMappedWater` — 8 passed.
 - `BoucherieWindMatchesTheAuthoredWorldFire` again after the assertion-order warning — 1 passed.
 - Headless shots on port 8941, `ANGLE Metal Renderer: Apple M5`. No `bin/check`.
+
+## Review fixes
+
+A pass is no longer credited because grass and timber were each wet somewhere. Water released on consecutive ticks stays one footprint while each step remains inside `DropFootprintRadiusM` (185 m). A gap or a jump starts another footprint. Boucherie counts only when one footprint wets both O1 and C7. The training mark counts only the mass released inside that same radius of the shore mark, and the circuit completes only when that mass reaches the existing 0.85 load fraction. `Separate` coverage is `DropsAfterSplitRelease` inside `ADropEntirelyInOneFuelDoesNotCountUntilItCrossesIntoTheOther`. `TrainingMarkRequiresTheCompletionFractionOnTheMark`.
