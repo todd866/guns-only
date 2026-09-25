@@ -931,11 +931,13 @@ test("the published Okanagan route exposes training and mapped defence sorties w
     await page.waitForFunction(() => window.__gunsOnlyOkanagan.getState()?.sortie === "large-force-employment"
       && window.__gunsOnlyOkanagan.getTelemetry().length > 0);
     const state = await page.evaluate(() => window.__gunsOnlyOkanagan.getState());
-    assert.equal(state.phase, "depart");
-    assert.ok(state.route.length >= 2, `departure path missing: ${JSON.stringify(state)}`);
+    // Large Force starts on the scoop approach (Build 369): the ferry from Runway 16 was dead time,
+    // and the first job is the load. The first gate is the lake descent, not the hill crossing.
+    assert.equal(state.phase, "join-scoop");
+    assert.ok(state.route.length >= 2, `scoop path missing: ${JSON.stringify(state)}`);
     assert.ok(state.traffic.length >= 2, `large-force traffic missing: ${JSON.stringify(state)}`);
     const telemetry = await page.evaluate(() => window.__gunsOnlyOkanagan.getLastTelemetry());
-    assert.equal(telemetry.active_gate, "departure");
+    assert.equal(telemetry.active_gate, "scoop-entry");
     assert.ok(Number.isFinite(telemetry.terrain_clearance_m));
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => document.querySelector("#pause-menu")?.classList.contains("visible"));
