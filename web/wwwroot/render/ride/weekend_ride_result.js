@@ -36,52 +36,58 @@ export function weekendRideResult(state, { recordAtStartSeconds = null } = {}) {
   const currentLapSeconds = finitePositive(state?.lap_time_s);
   const offTrackSeconds = Math.max(0, Number(state?.off_track_s) || 0);
   const currentLapClean = state?.lap_valid !== false;
-  const improvedRecord = recordSeconds !== null
-    && (startingRecordSeconds === null || recordSeconds < startingRecordSeconds - 1e-6);
-
-  let title = "RIDE COMPLETE";
-  let verdict = "SESSION BANKED";
-  if (improvedRecord) {
-    title = "PERSONAL BEST";
-    verdict = "CLEAN LAP BANKED";
-  } else if (laps > 0) {
-    verdict = "LAPS RECORDED";
-  } else if ((currentLapSeconds !== null && !currentLapClean)
-    || (laps === 0 && offTrackSeconds > 0)) {
-    verdict = "NO CLEAN LAP";
-  }
-
-  const lapWord = laps === 1 ? "lap" : "laps";
-  let summary = "No timed lap.";
-  if (improvedRecord)
-    summary = `New record · ${formatLapTime(recordSeconds)}.`;
-  else if (laps > 0 && recordSeconds !== null)
-    summary = `${laps} ${lapWord} · record ${formatLapTime(recordSeconds)}.`;
-  else if (offTrackSeconds > 0)
-    summary = `No clean lap · ${offTrackSeconds.toFixed(1)} s off track.`;
-  else if (currentLapSeconds !== null && !currentLapClean)
-    summary = "No clean lap · open lap invalid.";
-  else if (currentLapSeconds !== null)
-    summary = `Open lap · ${formatLapTime(currentLapSeconds)}.`;
-
+  const legalStop = state?.legal_stop === true;
+  const cameInEarly = state?.came_in_early === true;
+  const hotPit = state?.hot_pit_entry === true;
+  const tips = wholeCount(state?.tip_count);
+  const cleanLapSeconds = finitePositive(state?.clean_lap_s);
+  const cleanFlyingLaps = wholeCount(state?.clean_flying_laps);
+  const hasCleanFlyingLap = cleanFlyingLaps > 0 && cleanLapSeconds !== null;
+  const improvedRecord = hasCleanFlyingLap && recordSeconds !== null
+    && startingRecordSeconds !== null
+    && recordSeconds < startingRecordSeconds - 1e-6;
   const nextApexM = finiteNonNegative(state?.next_apex_m);
-  const seededDeltaSeconds = startingRecordSeconds !== null && lastLapSeconds !== null
-    ? lastLapSeconds - startingRecordSeconds
-    : null;
+  const gridSentence = tips > 0 ? " The bike went back to the grid once." : "";
+  const gridQuit = tips > 0 ? " The bike went back to the grid." : "";
 
-  let correction = "Next · bank one clean lap.";
-  if (offTrackSeconds > 0)
-    correction = "Next · brake earlier. Stay inside the paint.";
-  else if (currentLapSeconds !== null && !currentLapClean)
-    correction = "Next · reset and bank a clean lap.";
-  else if (improvedRecord)
+  let title = "STILL ON TRACK";
+  let verdict = "STILL OUT";
+  let summary = "Still on track.";
+  let correction = "Next · the session ends in the box.";
+
+  if (!legalStop) {
+    if (tips > 0) {
+      summary = `Still on track.${gridQuit}`;
+      correction = "Next · bring it in.";
+    } else if (nextApexM !== null) {
+      summary = `Still on track. ${stoppedBeforeHairpin(nextApexM)}`;
+    }
+  } else if (cameInEarly) {
+    title = "CAME IN EARLY";
+    verdict = "IN THE BOX";
+    summary = `In the box on lap ${Math.max(laps, 1)}. The checker was still out.`;
+    correction = "Next · take both laps, then bring it in.";
+  } else if (hotPit) {
+    title = "IN THE BOX";
+    verdict = "PIT SPEED";
+    summary = "In the box. One pit entry was over 60 km/h.";
+    correction = "Next · be at 60 before the box, then stop.";
+  } else if (!hasCleanFlyingLap) {
+    title = "IN THE BOX";
+    verdict = "NO CLEAN LAP";
+    summary = `In the box. No clean lap. ${offTrackSeconds.toFixed(1)} s off the paint.${tips > 0 ? " The bike went back to the grid." : ""}`;
+    correction = "Next · both hairpins inside the paint, then the box.";
+  } else if (improvedRecord) {
+    title = "PERSONAL BEST";
+    verdict = "NEW RECORD";
+    summary = `In the box. New record · ${formatLapTime(recordSeconds)}.`;
+    correction = "Next · the corner speed comes off the card.";
+  } else {
+    title = "RIDE COMPLETE";
+    verdict = "IN THE BOX";
+    summary = `In the box. Clean lap ${formatLapTime(cleanLapSeconds)}.${gridSentence}`;
     correction = "Next · repeat it clean.";
-  else if (seededDeltaSeconds !== null && seededDeltaSeconds > 0.05)
-    correction = `Next · ${seededDeltaSeconds.toFixed(1)} s off the record.`;
-  else if (laps === 0 && nextApexM !== null)
-    correction = stoppedBeforeHairpin(nextApexM);
-  else if (laps > 0)
-    correction = "Next · protect the line, then chase time.";
+  }
 
   const sectorValues = Array.isArray(state?.best_sector_s)
     ? state.best_sector_s.slice(0, 4).map((value) => formatLapTime(value))

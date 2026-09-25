@@ -176,7 +176,7 @@ test("standalone routes require their Ready brief and paused or cold authority",
   await weekend.verify(pageReturning({
     status: "READY · REVIEW SESSION BRIEF",
     briefVisible: true,
-    title: "Bank a clean lap",
+    title: "Two laps, then bring it in",
     phase: "paused",
     aircraftId: "vehicle.yzf-r1.track-day.v1",
   }));
@@ -201,7 +201,7 @@ test("standalone routes require their Ready brief and paused or cold authority",
   await assert.rejects(() => weekend.verify(pageReturning({
     status: "READY · REVIEW SESSION BRIEF",
     briefVisible: true,
-    title: "Bank a clean lap",
+    title: "Two laps, then bring it in",
     phase: "active",
     aircraftId: "vehicle.yzf-r1.track-day.v1",
   })), /authority is running behind Ready/);

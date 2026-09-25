@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  apexCuePresentation,
   apexCueText,
   formatLapTime,
+  lapFlyerText,
+  lookAheadTick,
   minimapDotPlacement,
   trackDayStatusLine,
   weekendHudLayerVisibility,
@@ -17,6 +20,50 @@ test("the helmet lap card reads the kernel apex cue", () => {
     "EXIT 48 m · 77 km/h",
   );
   assert.equal(apexCueText({ next_apex_m: 1800, next_apex_mps: 20 }), "APEX 1.8 km · 72 km/h");
+  assert.equal(
+    apexCueText({ next_apex_m: 420, next_apex_mps: 21.4, show_apex_speed: false }),
+    "APEX 420 m",
+  );
+});
+
+test("the apex line turns caution when the bike is fast inside 150 m", () => {
+  const braking = apexCuePresentation({
+    next_apex_m: 80,
+    next_apex_mps: 20,
+    vx: 30,
+    vy: 0,
+    vz: 0,
+  });
+  assert.equal(braking.text, "APEX 80 m · 72 km/h");
+  assert.equal(braking.tone, "caution");
+  assert.doesNotMatch(braking.text, /BRAKE/);
+  const exit = apexCuePresentation({
+    next_apex_m: 40,
+    next_apex_mps: 20,
+    next_apex_exit: true,
+    vx: 30,
+  });
+  assert.equal(exit.tone, "normal");
+});
+
+test("checker, pit and stop replace the flyer without a second lecture", () => {
+  assert.equal(lapFlyerText({ session_leg: "cooldown" }, "0:12.00"), "CHECKER · BRING IT IN");
+  assert.equal(apexCuePresentation({ pit_open: true, vx: 10 }).text, "PIT · 60 km/h");
+  assert.equal(apexCuePresentation({
+    in_pit: true, pit_entry_legal: false, vx: 5,
+  }).text, "PIT SPEED");
+  assert.equal(apexCuePresentation({
+    in_pit: true, pit_entry_legal: true, vx: 0.1,
+  }).text, "STOPPED");
+});
+
+test("the look-ahead tick flips with the miss and does not print metres", () => {
+  const right = lookAheadTick({ look_ahead_lateral_m: 4 }, 1000);
+  const left = lookAheadTick({ look_ahead_lateral_m: -4 }, 1000);
+  assert.equal(right.label, "");
+  assert.equal(left.label, "");
+  assert.ok(right.x > 500);
+  assert.ok(left.x < 500);
 });
 
 test("track-day status makes course validity and rider mode explicit", () => {

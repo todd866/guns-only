@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   RIDE_BEST_STORAGE_KEY,
   loadRideBest,
+  rideRampFromRecord,
   saveRideBest,
 } from "../ride_best_lap_store.js";
 
@@ -29,6 +30,7 @@ test("a saved best round-trips", () => {
   const loaded = loadRideBest(storage);
 
   assert.equal(loaded.bestLapSeconds, RECORD.bestLapSeconds);
+  assert.equal(loaded.broughtIn, false);
   assert.deepEqual(loaded.splitProfile, RECORD.splitProfile);
   assert.deepEqual(loaded.bestSectorSeconds, RECORD.bestSectorSeconds);
   assert.ok(storage.map.has(RIDE_BEST_STORAGE_KEY));
@@ -93,4 +95,21 @@ test("a record with a non-finite time is refused rather than stored", () => {
 
   assert.equal(saveRideBest(storage, { ...RECORD, bestLapSeconds: Number.NaN }), false);
   assert.equal(storage.map.size, 0);
+});
+
+test("the ramp is full card, then distance, then half gain", () => {
+  assert.deepEqual(rideRampFromRecord(null), {
+    hasMatchingCleanLap: false, broughtIn: false, showApexSpeed: true, reflexGain: 1,
+  });
+  assert.equal(rideRampFromRecord({ ...RECORD, broughtIn: false }).showApexSpeed, false);
+  assert.equal(rideRampFromRecord({ ...RECORD, broughtIn: false }).reflexGain, 1);
+  const parked = rideRampFromRecord({ ...RECORD, broughtIn: true });
+  assert.equal(parked.showApexSpeed, false);
+  assert.equal(parked.reflexGain, 0.5);
+});
+
+test("a legal stop is stored beside the lap on the same key", () => {
+  const storage = memoryStorage();
+  assert.equal(saveRideBest(storage, { ...RECORD, broughtIn: true }), true);
+  assert.equal(loadRideBest(storage).broughtIn, true);
 });

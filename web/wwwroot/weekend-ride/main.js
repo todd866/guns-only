@@ -7,9 +7,12 @@ import * as THREE from "../vendor/three.module.js";
 import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=370";
 import {
   loadRideBest,
+  rideRampFromRecord,
   saveRideBest,
 } from "../render/ride/ride_best_lap_store.js?v=370";
 import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=370";
+import { formatLapTime } from "../render/ride/ride_timing_readout.js?v=370";
+import { createRideCueDriver } from "../render/ride/ride_cue_driver.js?v=370";
 import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=370";
 import {
   dominantSignedAxis,
@@ -65,6 +68,7 @@ const pauseButton = document.querySelector("#pause-button");
 const soundButton = document.querySelector("#sound-button");
 const rideBrief = document.querySelector("#ride-brief");
 const rideBriefStart = document.querySelector("#ride-brief-start");
+const rideBriefRecord = document.querySelector("#ride-brief-record");
 const pauseMenu = document.querySelector("#pause-menu");
 const pauseResume = document.querySelector("#pause-resume");
 const pauseEnd = document.querySelector("#pause-end");
@@ -323,13 +327,34 @@ function persistBestLapIfImproved(state) {
   if (persistedBestSeconds !== null && best >= persistedBestSeconds) return;
   const profile = bridge?.GetBestSplitProfile?.();
   if (!profile || profile.length === 0) return;
+  const existing = loadRideBest(safeLocalStorage(), rideCircuitIdentity);
   if (saveRideBest(safeLocalStorage(), {
     bestLapSeconds: best,
     splitProfile: Array.from(profile),
     bestSectorSeconds: Array.from(state.best_sector_s ?? []),
+    broughtIn: existing?.broughtIn === true || state.legal_stop === true,
   }, rideCircuitIdentity)) {
     persistedBestSeconds = best;
   }
+}
+
+function paintRideRecord(record) {
+  if (!rideBriefRecord) return;
+  const seconds = Number(record?.bestLapSeconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    rideBriefRecord.hidden = true;
+    return;
+  }
+  rideBriefRecord.hidden = false;
+  const span = rideBriefRecord.querySelector("span");
+  if (span) span.textContent = formatLapTime(seconds);
+}
+
+function persistBroughtIn(state) {
+  if (state?.legal_stop !== true) return;
+  const existing = loadRideBest(safeLocalStorage(), rideCircuitIdentity);
+  if (!existing || existing.broughtIn) return;
+  saveRideBest(safeLocalStorage(), { ...existing, broughtIn: true }, rideCircuitIdentity);
 }
 let snapshot = null;
 let playerSettings = loadPlayerSettings(safeLocalStorage());
@@ -469,6 +494,7 @@ function showRideBrief({ focus = true } = {}) {
   pauseButton.textContent = "Pause";
   setMissionBackgroundInert(true);
   suspendFlightAudio("weekend-ride-dispatch");
+  paintRideRecord(loadRideBest(safeLocalStorage(), rideCircuitIdentity));
   setStatus("READY · REVIEW SESSION BRIEF", "ready");
   if (focus) queueMicrotask(() => rideBriefStart?.focus({ preventScroll: true }));
   return true;
@@ -564,6 +590,7 @@ function endRide() {
   bridge.EndRide();
   const state = refreshSnapshot();
   persistBestLapIfImproved(state);
+  persistBroughtIn(state);
   return showRideResult(state);
 }
 
@@ -669,8 +696,16 @@ function axisValue(positiveCode, negativeCode) {
   return (keys.has(positiveCode) ? 1 : 0) + (keys.has(negativeCode) ? -1 : 0);
 }
 
-function sendControls() {
+const cueRiderEnabled = new URLSearchParams(location.search).get("cueRider") === "1";
+const cueDriver = createRideCueDriver();
+
+function sendControls(deltaSeconds = 1 / 60) {
   if (!bridge || dispatchOpen || onboarding?.isOpen() === true || paused || terminal) return;
+  if (cueRiderEnabled && snapshot) {
+    const command = cueDriver.step(snapshot, deltaSeconds);
+    bridge.SetControls(command.throttle, command.brake, command.steer, 0, 0, 1);
+    return;
+  }
   const gamepad = Array.from(navigator.getGamepads?.() ?? [])
     .find((candidate) => candidate?.connected);
   const analog = gamepadRiderAxes(gamepad);
@@ -733,7 +768,7 @@ function animate(timeMs) {
   lastTimeMs = timeMs;
   if (!bridge) return;
 
-  sendControls();
+  sendControls(deltaSeconds);
   const teachingOpen = onboarding?.isOpen() === true;
   if (!dispatchOpen && !teachingOpen && !paused && !terminal) bridge.Advance(deltaSeconds);
   const state = refreshSnapshot();
@@ -749,6 +784,7 @@ function animate(timeMs) {
   renderer.render(scene, camera);
   helmetHud.draw(state);
   persistBestLapIfImproved(state);
+  persistBroughtIn(state);
   onboarding?.advanceNudges(onboardingNudgeState(state), deltaSeconds);
   recordRideTelemetry(timeMs, state, rawFrameMs);
 
@@ -937,6 +973,8 @@ async function boot() {
     // Chase your real record, not just today's: a best carried over from a previous session
     // seeds the sim so the delta compares against it. A refused seed simply means no best.
     const storedBest = loadRideBest(safeLocalStorage(), rideCircuitIdentity);
+    const ramp = rideRampFromRecord(storedBest);
+    bridge.ApplyRamp(ramp.hasMatchingCleanLap, ramp.broughtIn);
     if (storedBest && bridge.SeedBestLap(
       storedBest.bestLapSeconds, storedBest.splitProfile)) {
       // Record what is already on disk, or the first frames would rewrite the same best —
