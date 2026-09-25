@@ -28,6 +28,7 @@ import {
   sortieResultCopy,
   visualMergeDebriefPresentation,
 } from "./render/debrief/sortie_result.js?v=366";
+import { sortieGradeBoard } from "./render/shell/sortie_grade.js?v=366";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -523,6 +524,12 @@ const targetStickHelp = document.querySelector("#target-stick-help");
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
 const readyScreen = document.querySelector("#ready-screen");
+const sortieGrade = document.querySelector("#sortie-grade");
+const sortieGradeLetter = document.querySelector("#sortie-grade-letter");
+const sortieGradeKills = document.querySelector("#sortie-grade-kills");
+const sortieGradeAccuracy = document.querySelector("#sortie-grade-accuracy");
+const sortieGradeG = document.querySelector("#sortie-grade-g");
+const sortieGradeTime = document.querySelector("#sortie-grade-time");
 const readyKicker = document.querySelector("#ready-kicker");
 const readyTitle = document.querySelector("#ready-title");
 const readyBrief = document.querySelector("#ready-brief");
@@ -4479,8 +4486,10 @@ function renderCampaignProgress() {
             ? "coming-soon"
             : "available",
     );
-    if (selected) button.setAttribute("aria-current", "step");
-    else button.removeAttribute("aria-current");
+    if (selected) {
+      button.setAttribute("aria-current", "step");
+      readyScreen.dataset.hero = button.dataset.aircraft || "f22";
+    } else button.removeAttribute("aria-current");
   }
   for (const status of readyProgramStatuses) {
     const nodeId = status.dataset.programStatus;
@@ -4661,6 +4670,21 @@ function renderTopGunPresentationTheme(state = latestState) {
   }));
 }
 
+function paintSortieGrade(state) {
+  if (!sortieGrade) return;
+  if (!state) {
+    sortieGrade.hidden = true;
+    return;
+  }
+  const board = sortieGradeBoard(state);
+  sortieGrade.hidden = false;
+  if (sortieGradeLetter) sortieGradeLetter.textContent = board.letter;
+  if (sortieGradeKills) sortieGradeKills.textContent = board.kills;
+  if (sortieGradeAccuracy) sortieGradeAccuracy.textContent = board.accuracy;
+  if (sortieGradeG) sortieGradeG.textContent = board.g;
+  if (sortieGradeTime) sortieGradeTime.textContent = board.time;
+}
+
 function renderPauseUi(state = latestState) {
   const ready = pauseReasons.has("ready");
   const finished = pauseReasons.has("finished");
@@ -4689,6 +4713,7 @@ function renderPauseUi(state = latestState) {
   const practiceReady = ready && !!selectedPracticeExercise;
   readyScreen.dataset.mode = (firstRunReady || practiceReady)
     ? "intro" : ready ? "program" : finished ? "debrief" : "pause";
+  paintSortieGrade(finished && !practiceReady ? state : null);
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
   const casevacReady = ready && selectedBeat === 13;
   readyScreen.dataset.casevacReady = String(casevacReady);
