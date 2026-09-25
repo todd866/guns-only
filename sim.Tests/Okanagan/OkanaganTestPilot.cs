@@ -132,7 +132,7 @@ internal sealed class OkanaganTestPilot(double initialElevatorTrim)
         // seconds short of the aim and the load straddles it rather than landing 100 m early.
         bool drop = phase == OkanaganMissionPhase.Drop && HorizontalDistance(position, state.DropAimWorldM) < 110
             || phase == OkanaganMissionPhase.Downwind && aircraft.WaterLoadKg > 300
-                && (gate.Id == "training-drop" && distance <= gate.RadiusM + 250 || state.ActiveGateIndex >= 2);
+                && HorizontalDistance(position, state.DropAimWorldM) <= OkanaganFireGrid.DropFootprintRadiusM;
         // Follow the player's recovery-load advice only over the actual central lake. This
         // jettison earns no work completion; the flight tests still require the incident drop.
         drop |= OkanaganFireMission.NeedsRecoveryLoadRelease(phase, aircraft)

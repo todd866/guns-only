@@ -17,14 +17,18 @@ public readonly record struct OkanaganFireCellSnapshot(
 /// </summary>
 public sealed class OkanaganFireGrid
 {
+    public const double DropFootprintRadiusM = 185.0;
     public const int Columns = 44;
     public const int Rows = 44;
     public const double CellSizeM = 140.0;
     readonly Cell[,] _cells = new Cell[Columns, Rows];
     readonly Vec3D _centre;
     readonly OkanaganIncident? _incident;
-    readonly Vec3D _windTo = new(Math.Sin(25.0 * Math.PI / 180.0), 0.0,
-        Math.Cos(25.0 * Math.PI / 180.0));
+    // okanagan-central.world.json fire.windFromDeg / windSpeedMps. Exercise wind, not a forecast.
+    // 205° is the direction the wind comes from; spread uses the blow-toward vector.
+    public const double AuthoredWindFromDeg = 205.0;
+    public const double AuthoredWindSpeedMps = 8.5;
+    readonly Vec3D _windTo;
     double _accumulator;
 
     struct Cell
@@ -41,13 +45,19 @@ public sealed class OkanaganFireGrid
     {
         _incident = incident;
         _centre = incident?.Ignition ?? OkanaganGeo.ToWorld(49.850, -119.655, 0.0);
+        double towardRad = (AuthoredWindFromDeg - 180.0) * Math.PI / 180.0;
+        _windTo = new Vec3D(Math.Sin(towardRad), 0.0, Math.Cos(towardRad)) * AuthoredWindSpeedMps;
         for (int column = 0; column < Columns; column++)
         for (int row = 0; row < Rows; row++)
         {
             Vec3D position = CellPosition(column, row);
             uint hash = Hash((uint)(column * 73856093 ^ row * 19349663));
             double noise = (hash & 0xffff) / 65535.0;
-            string fuelType = noise < 0.58 ? "C7" : noise < 0.82 ? "O1" : "M1";
+            // Grass (O-1) on the windward side, timber (C-7) downwind, so a load has to
+            // cross the flank. Defence incidents keep their own run/timber assignment.
+            double alongWindM = (position.X - _centre.X) * Math.Sin(towardRad)
+                + (position.Z - _centre.Z) * Math.Cos(towardRad);
+            string fuelType = alongWindM < 0.0 ? "O1" : "C7";
             if (incident != null) fuelType = incident.IsRun(position) ? "O1" : "C3";
             double fuel = fuelType switch { "C7" => 0.92, "O1" => 0.72, _ => 0.82 };
             if (OkanaganGeo.IsOverCentralLake(position)) fuel = 0;
@@ -75,6 +85,8 @@ public sealed class OkanaganFireGrid
 
     public double TotalIntensity { get; private set; }
     public double EffectiveWaterKg { get; private set; }
+    public bool LastStrikeHitGrass { get; private set; }
+    public bool LastStrikeHitTimber { get; private set; }
     public double BurnedAreaHa { get; private set; }
     public int PopulationExposed { get; private set; }
 
@@ -105,9 +117,11 @@ public sealed class OkanaganFireGrid
 
     public double ApplyWater(in Vec3D position, double waterKg)
     {
+        LastStrikeHitGrass = false;
+        LastStrikeHitTimber = false;
         if (waterKg <= 0.0 || !double.IsFinite(waterKg)) return 0.0;
         double effective = 0.0;
-        const double radiusM = 185.0;
+        const double radiusM = DropFootprintRadiusM;
         int centreColumn = (int)Math.Round((position.X - _centre.X) / CellSizeM + (Columns - 1) / 2.0);
         int centreRow = (int)Math.Round((position.Z - _centre.Z) / CellSizeM + (Rows - 1) / 2.0);
         for (int column = centreColumn - 2; column <= centreColumn + 2; column++)
@@ -121,6 +135,8 @@ public sealed class OkanaganFireGrid
             if (distance > radiusM) continue;
             double weight = Math.Max(0.0, 1.0 - distance / radiusM);
             ref Cell cell = ref _cells[column, row];
+            if (cell.FuelType == "O1") LastStrikeHitGrass = true;
+            else if (cell.FuelType == "C7") LastStrikeHitTimber = true;
             double before = cell.Heat;
             double dose = waterKg * weight / 430.0;
             cell.Wetness = Math.Min(1.0, cell.Wetness + dose * 0.30);
@@ -187,7 +203,10 @@ public sealed class OkanaganFireGrid
                 ref Cell target = ref _cells[targetColumn, targetRow];
                 if (target.Fuel <= 0.08 || target.Wetness >= 0.72) continue;
                 Vec3D direction = new Vec3D(dx, 0.0, dz).Normalized();
-                double windFactor = 0.55 + Math.Max(0.0, direction.Dot(_windTo)) * 1.75;
+                // The 1.75 peak is the previous game factor, recovered at the authored 8.5 m/s.
+                // A stronger wind increases the downwind term; a unit vector cannot.
+                double windFactor = 0.55 + Math.Max(0.0, direction.Dot(_windTo))
+                    * (1.75 / AuthoredWindSpeedMps);
                 double slope = (target.ElevationM - cell.ElevationM) / (CellSizeM * Math.Sqrt(dx * dx + dz * dz));
                 double slopeFactor = Math.Clamp(1.0 + slope * 4.0, 0.35, 2.2);
                 double fuelFactor = target.FuelType switch { "O1" => 1.35, "C7" => 1.0, _ => 0.78 };

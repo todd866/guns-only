@@ -157,6 +157,19 @@ public sealed class FireBossDynamics
             FireBossSurfaceMode.Airborne, fuelKg);
     }
 
+    /// <summary>
+    /// Player Initial Attack and Large Force join. The retired OnScoopApproach point is the
+    /// old southern lane and stays a dynamics fixture. This one is south of the live north
+    /// scoop entry, over the lake, already flying, so the first gate is the descent.
+    /// </summary>
+    public static FireBossDynamics AtNorthScoopApproach(double fuelKg)
+    {
+        Vec3D position = OkanaganGeo.ToWorld(49.898, -119.516, 420.0);
+        var aircraft = new FireBossDynamics(position, 47.0, -2.0 * Math.PI / 180.0, 0.0,
+            FireBossSurfaceMode.Airborne, fuelKg) { _hasFlown = true };
+        return aircraft;
+    }
+
     public static FireBossDynamics OnKelownaFinal(double fuelKg = 320.0)
     {
         Vec3D position = OkanaganGeo.ToWorld(49.9730, -119.3812, 480.0);
