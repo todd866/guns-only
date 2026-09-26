@@ -60,7 +60,7 @@ export function weekendRideResult(state, { recordAtStartSeconds = null } = {}) {
       summary = `Still on track.${gridQuit}`;
       correction = "Next · bring it in.";
     } else if (nextApexM !== null) {
-      summary = `Still on track. ${stoppedBeforeHairpin(nextApexM)}`;
+      summary = stoppedBeforeHairpin(nextApexM);
     }
   } else if (cameInEarly) {
     title = "CAME IN EARLY";
@@ -101,8 +101,8 @@ export function weekendRideResult(state, { recordAtStartSeconds = null } = {}) {
     correction,
     metrics: Object.freeze([
       Object.freeze({ label: "LAPS", value: String(laps) }),
-      Object.freeze({ label: "LAST", value: formatLapTime(lastLapSeconds) }),
-      Object.freeze({ label: "RECORD", value: formatLapTime(recordSeconds) }),
+      Object.freeze({ label: "LAST", value: formatLapTime(lastLapSeconds), visible: lastLapSeconds !== null }),
+      Object.freeze({ label: "RECORD", value: formatLapTime(recordSeconds), visible: recordSeconds !== null }),
       Object.freeze({
         label: "OPEN LAP",
         value: currentLapSeconds === null ? "NOT TIMED" : currentLapClean ? "CLEAN" : "INVALID",
@@ -111,6 +111,7 @@ export function weekendRideResult(state, { recordAtStartSeconds = null } = {}) {
       Object.freeze({ label: "OFF TRACK", value: `${offTrackSeconds.toFixed(1)} s` }),
     ]),
     sectors: Object.freeze(sectorValues),
+    hasSectorEvidence: sectorValues.some((value) => value !== BLANK_LAP_TIME),
     improvedRecord,
   });
 }

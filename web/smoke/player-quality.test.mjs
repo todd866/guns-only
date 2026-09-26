@@ -26,12 +26,15 @@ test("published practice owns staging, real input, pause, restart and the local 
       if (exercise === "gunnery") {
         await page.keyboard.down("f");
         try {
-          await page.waitForFunction(() => globalThis.__gunsState?.sortie_rounds_fired > 0, null, { timeout: 30_000 });
+          await page.waitForFunction(() => globalThis.__gunsState?.practice_completed === true,
+            null, { timeout: 30_000 });
         } finally { await page.keyboard.up("f"); }
       }
-      // Success can stop a gun pass before Escape. Both paths must retain practice authority.
+      // Gunnery completed through physical hits; valley/recovery use the paused restart path.
+      // Both paths must retain practice authority.
       if (await page.evaluate(() => globalThis.__gunsState?.session_phase === "ACTIVE")) await page.keyboard.press("Escape");
-      await page.locator("#ready-restart").click();
+      // Completed practice has one Repeat practice action; paused practice keeps Restart.
+      await page.locator('#ready-screen[data-mode="debrief"] #ready-start, #ready-screen[data-mode="pause"] #ready-restart').click();
       await page.waitForFunction((id) => globalThis.__gunsState?.practice_exercise === id
         && globalThis.__gunsState?.session_phase === "ACTIVE", exercise, { timeout: 90_000 });
       await page.keyboard.press("Escape");

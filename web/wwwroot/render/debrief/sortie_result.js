@@ -1,3 +1,5 @@
+import { f22SortieResult } from "./f22_sortie_result.js";
+
 function token(value) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
@@ -523,6 +525,12 @@ function casevacResultCopy(state) {
  */
 export function sortieResultCopy(state) {
   if (state?.casevac_mission === true) return casevacResultCopy(state);
+
+  const f22 = f22SortieResult(state, {
+    handoff: combatHandoffPresentation(state),
+    loss: carrierLossPresentation(state),
+  });
+  if (f22) return withSortieLessons(f22, state);
 
   if (state?.drone_raid_evaluation === true) {
     const score = Number.isFinite(Number(state.drone_raid_score))

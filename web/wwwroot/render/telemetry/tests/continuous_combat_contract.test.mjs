@@ -55,11 +55,11 @@ test("authoritative state and events expose every replacement edge", () => {
     "a detached wreck impact must use its recorded event position, not the live target slot");
 });
 
-test("mission brief and splash cue explain the continuous resource problem", () => {
+test("mission brief and splash cue explain the finite sortie's shared resources", () => {
   assert.match(appSource,
-    /Continuous visual merges[\s\S]*?480 rounds across all fights/);
+    /Two gun engagements · return to the runway[\s\S]*?480 rounds across all fights/);
   assert.match(appSource,
-    /Fuel, ammunition, ownship damage, and kill count persist/);
+    /Two engagements share your fuel, ammunition and damage/);
   assert.match(hudSource,
     /opponent_replacement_pending[\s\S]*?engagement_number[\s\S]*?\+ 1[\s\S]*?BANDIT \$\{nextEngagement\} IN/);
 });

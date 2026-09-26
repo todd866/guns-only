@@ -251,7 +251,7 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["incident-replay-play", /incidentReplayPlay\?\.addEventListener\("click"/],
     ["incident-replay-event-jump", /incidentReplayEventJump\?\.addEventListener\("click"/],
     ["incident-replay-skip", /incidentReplaySkip\?\.addEventListener\("click", skipIncidentReplay\)/],
-    ["ready-practice", /querySelector\("#ready-practice"\)\?\.addEventListener\("click", \(\) => pilotNotebook\.show\("practice"\)\)/],
+    ["ready-practice", /readyPractice\?\.addEventListener\("click", \(\) => \{[\s\S]*?stagePracticeExercise\(exercise\)[\s\S]*?pilotNotebook\.show\("practice"\)/],
     ["ready-logbook", /querySelector\("#ready-logbook"\)\?\.addEventListener\("click", \(\) => pilotNotebook\.show\(\)\)/],
     ["ready-start", /readyStart\.addEventListener\("click"/],
     ["ready-replay", /readyReplay\?\.addEventListener\("click"/],
@@ -752,11 +752,11 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     /\.sortie-choice\[data-aircraft\] > \.sortie-contract\s*\{[\s\S]*?display:\s*block/,
     "the mission contract must override the legacy phone rule that hid every small label");
   assert.match(indexSource,
-    /@media \(max-width: 620px\) and \(orientation: portrait\)[\s\S]*?\.sortie-contract\s*\{[\s\S]*?max-height:\s*2\.5em/,
-    "portrait posters must reserve two compact lines for the contract instead of colliding with the aircraft name");
+    /@media \(max-width: 620px\) and \(orientation: portrait\)[\s\S]*?\.sortie-contract\s*\{[\s\S]*?font-size:\s*9px[\s\S]*?letter-spacing:\s*\.035em/,
+    "portrait posters must keep the contract compact and legible beneath the aircraft name");
   assert.match(indexSource,
-    /@media \(max-height: 500px\) and \(orientation: landscape\)[\s\S]*?\.sortie-contract\s*\{[\s\S]*?text-overflow:\s*ellipsis/,
-    "short landscape posters must keep a compact single-line mission contract");
+    /@media \(max-height: 500px\) and \(orientation: landscape\)[\s\S]*?\.sortie-contract\s*\{[\s\S]*?font-size:\s*9px[\s\S]*?white-space:\s*normal/,
+    "short landscape posters must keep a compact readable mission contract");
   assert.match(indexSource,
     /#ready-screen\[data-mode="program"\] #ready-start\s*\{[\s\S]*?font:\s*750 11px/,
     "the final launch gesture must visibly name the selected mission instead of drawing only a chevron");
@@ -798,8 +798,8 @@ test("the shared mission-flow shell keeps one hierarchy across ready, pause, and
     /readyRestart\.textContent = selectedPracticeExercise \? "Restart practice" : finished \? "Repeat sortie" : "Restart sortie"/,
     "repeat-current must not share the primary programme-advance label");
   assert.match(appSource,
-    /once both are away, the same control becomes the gun[\s\S]*?Follow valley → pop out → two heaters → guns → recover/,
-    "first-run copy must describe the Fire transition and recover after the gun");
+    /Follow the valley north\. Weapons unlock at the exit: launch your two missiles, then track the aircraft ahead and hit it with the gun\./,
+    "first-run copy must describe the missile-to-gun transition and recovery lesson");
   assert.doesNotMatch(appSource, /after both splashes|splash two targets → guns/,
     "a missile outcome must not be presented as the Fire authority switch");
   assert.match(appSource, /readyReturn\.textContent = "Aircraft"/,

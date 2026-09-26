@@ -406,16 +406,28 @@ public class DifficultyRampTests {
         var session = new SimulationSession();
         session.StartBeat(CloseGunFight);
         session.Begin();
+        session.SetTouchControlModality(true);
+        double coldGain = session.GunneryPitchAssistAir().GunneryPitchAssistGainPerSecond;
+        SpawnSpec? secondSpawn = null;
+        bool secondPresenting = true;
+        double assistGainAtSecondSpawn = double.NaN;
         session.FeedKey(GKey.Trigger, true);
         for (int i = 0; i < 40 * AircraftSim.TickHz && session.KillCount < 2; i++) {
-            if (session.OpponentPresent
-                && session.Bandit.State.Position.Z - session.Player.State.Position.Z > 400.0) {
-                AircraftState bandit = session.Bandit.State;
-                session.Player.AdoptExternalKinematics(bandit with {
-                    Position = bandit.Position + new Vec3D(0, 0, -140),
-                    Speed = bandit.Speed + 20,
-                    Chi = 0,
-                });
+            if (session.EngagementNumber == 2 && session.OpponentPresent && secondSpawn is null) {
+                secondSpawn = session.LastDirectorSpawn;
+                secondPresenting = session.Bandit.Presenting;
+                assistGainAtSecondSpawn =
+                    session.GunneryPitchAssistAir().GunneryPitchAssistGainPerSecond;
+            }
+            if (session.OpponentPresent) {
+                AircraftState target = session.SelectedOpponentState;
+                if (Geometry.Range(session.Player.State, target) > 220.0) {
+                    session.Player.AdoptExternalKinematics(target with {
+                        Position = target.Position + new Vec3D(0, 0, -140),
+                        Speed = target.Speed + 20,
+                        Chi = 0,
+                    });
+                }
             }
             session.StepFixed();
         }
@@ -425,6 +437,13 @@ public class DifficultyRampTests {
         Assert.Equal(0, session.LiveOpponentCount);
         Assert.False(session.OpponentReplacementPending);
         Assert.Equal(3, session.DifficultyRung);
+        Assert.NotNull(secondSpawn);
+        Assert.Equal(PilotSkill.Competent, secondSpawn.Value.Skill);
+        Assert.Equal(BanditMount.Baseline, secondSpawn.Value.Mount);
+        Assert.Equal(1, secondSpawn.Value.FormationSize);
+        Assert.False(secondSpawn.Value.Sparring);
+        Assert.False(secondPresenting);
+        Assert.Equal(coldGain, assistGainAtSecondSpawn, 6);
 
         var next = new SimulationSession();
         next.ArmDirectorStateForNextStage(session.ExportDirectorState());
@@ -432,6 +451,65 @@ public class DifficultyRampTests {
         Assert.Equal(3, next.DifficultyRung);
         Assert.Single(next.Wingmen);
         Assert.Equal(PilotSkill.Ace, ((NeutralMergeBandit)next.Bandit).Skill);
+    }
+
+    [Fact]
+    public void EarnedPairDifficultyHoldsAcrossTwoFormationEngagementsBeforeRtb() {
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
+
+        var session = new SimulationSession();
+        session.ArmDirectorStateForNextStage(director.ExportState());
+        session.StartBeat(ClosePairGunFight);
+        Assert.Equal(3, session.DifficultyRung);
+        Assert.IsType<RailBandit>(session.Bandit);
+        Assert.Equal(2, session.LiveOpponentCount);
+
+        session.Begin();
+        session.FeedKey(GKey.Trigger, true);
+        SpawnSpec? secondSpawn = null;
+        int secondLiveCount = 0;
+        for (int i = 0; i < 100 * AircraftSim.TickHz && session.KillCount < 4; i++) {
+            if (session.EngagementNumber == 2 && secondSpawn is null) {
+                secondSpawn = session.LastDirectorSpawn;
+                secondLiveCount = session.LiveOpponentCount;
+            }
+            int liveWingmanSlot = 0;
+            for (int wingmanIndex = 0; wingmanIndex < session.Wingmen.Count; wingmanIndex++) {
+                if (!session.Wingmen[wingmanIndex].StillFighting) continue;
+                liveWingmanSlot = wingmanIndex + 1;
+                break;
+            }
+            session.SetPlayerGunTargetSlot(liveWingmanSlot > 0 ? liveWingmanSlot : 0);
+            if (session.OpponentPresent) {
+                AircraftState target = session.SelectedOpponentState;
+                if (Geometry.Range(session.Player.State, target) > 220.0) {
+                    session.Player.AdoptExternalKinematics(target with {
+                        Position = target.Position + new Vec3D(0, 0, -140),
+                        Speed = target.Speed + 20,
+                        Chi = 0,
+                    });
+                }
+            }
+            session.StepFixed();
+        }
+        session.FeedKey(GKey.Trigger, false);
+
+        Assert.Equal(4, session.KillCount);
+        Assert.Equal(2, session.EngagementNumber);
+        Assert.NotNull(secondSpawn);
+        Assert.Equal(PilotSkill.Ace, secondSpawn.Value.Skill);
+        Assert.Equal(BanditMount.Uprated, secondSpawn.Value.Mount);
+        Assert.Equal(2, secondSpawn.Value.FormationSize);
+        Assert.False(secondSpawn.Value.Sparring);
+        Assert.Equal(2, secondLiveCount);
+        Assert.Equal(0, session.LiveOpponentCount);
+        Assert.False(session.OpponentReplacementPending);
+
+        for (int i = 0; i < 4 * AircraftSim.TickHz && !session.PlayerRtbActive; i++)
+            session.StepFixed();
+        Assert.True(session.PlayerRtbActive);
     }
 
     static BeatSetup CloseGunFight() {
@@ -451,6 +529,13 @@ public class DifficultyRampTests {
             },
         };
     }
+
+    static BeatSetup ClosePairGunFight() => CloseGunFight() with {
+        UsesNeutralMergeBandit = false,
+        ContinuousCombat = CloseGunFight().ContinuousCombat! with {
+            MaximumFormationSize = 2,
+        },
+    };
 
     [Fact]
     public void RestartOnTheF22BeatKeepsTheEarnedPair() {
