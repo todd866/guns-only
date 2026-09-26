@@ -999,9 +999,19 @@ public sealed partial class SimulationSession {
 
     string? _directorStateForNextStage;
 
+    // Freeze the F-22's opening contract for the whole sortie. A kill may still teach the
+    // director and raise the persisted rung, but the second fight belongs to the same lesson:
+    // it must not suddenly become an Ace or lose the pilot's sight aid mid-sortie.
+    SpawnSpec? _sortieOpeningSpawn;
+    FightDirector.PitchAssistScale? _sortiePitchAssist;
+    int? _sortiePitchAssistRung;
+
     static bool UsesDifficultyRamp(BeatSetup beat) =>
         beat.FirstRunValley is not null
-        || beat.MissionIdentity.Id
+        || IsVisualMergeSortie(beat);
+
+    static bool IsVisualMergeSortie(BeatSetup beat) =>
+        beat.MissionIdentity.Id
             == "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1";
 
     void ApplyArmedDirectorState(BeatSetup beat) {
@@ -3897,6 +3907,17 @@ public sealed partial class SimulationSession {
         SpawnSpec? openingSpawn = directorCanStage && difficultyRamp
             ? _fightDirector.NextSpawn(1)
             : null;
+        // Visual-merge is a bounded two-fight lesson. Snapshot the opening spawn and assist law
+        // before combat starts; CompleteEngagementIfEnded may advance the director after fight 1.
+        _sortieOpeningSpawn = IsVisualMergeSortie(_beat)
+            ? openingSpawn ?? _fightDirector.NextSpawn(1)
+            : null;
+        _sortiePitchAssist = IsVisualMergeSortie(_beat)
+            ? _fightDirector.PitchAssist
+            : null;
+        _sortiePitchAssistRung = IsVisualMergeSortie(_beat)
+            ? _fightDirector.Rung
+            : null;
         ClearWingmen();
         _retiredOpponentGuns.Clear();
         if (stagesOpponent) {
@@ -6392,7 +6413,9 @@ public sealed partial class SimulationSession {
         CompleteEngagementIfEnded();
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
         SpawnSpec directorSpawn = UsesDifficultyRamp(_beat)
-            ? _fightDirector.NextSpawn(nextEngagement)
+            ? _sortieOpeningSpawn is { } held
+                ? held with { Sparring = false }
+                : _fightDirector.NextSpawn(nextEngagement)
             : new SpawnSpec(
                 _beat.BanditSkill, 0, false, "authored successor",
                 FormationSize: 2);
@@ -7181,7 +7204,9 @@ public sealed partial class SimulationSession {
             return _beat.PlayerAir;
         }
 
-        FightDirector.PitchAssistScale assistScale = _fightDirector.PitchAssist;
+        FightDirector.PitchAssistScale assistScale =
+            _sortiePitchAssist ?? _fightDirector.PitchAssist;
+        int assistRung = _sortiePitchAssistRung ?? _fightDirector.Rung;
         AircraftParams assistAir = _beat.PlayerAir with {
             GunneryPitchAssistGainPerSecond =
                 _beat.PlayerAir.GunneryPitchAssistGainPerSecond * assistScale.GainScale,
@@ -7196,7 +7221,7 @@ public sealed partial class SimulationSession {
         }
         if (_touchControlModality
             && !CardTwelveRequiresPilotGunTrigger
-            && _fightDirector.Rung <= 1)
+            && assistRung <= 1)
             return WidenGunneryAssistForTouch(assistAir);
         return assistAir;
     }

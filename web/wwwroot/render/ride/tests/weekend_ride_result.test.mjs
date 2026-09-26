@@ -26,6 +26,9 @@ test("a legal stop that beats the stored record is a personal best", () => {
     "2", "1:24.21", "1:22.45",
   ]);
   assert.deepEqual(result.sectors, ["0:20.10", "0:20.20", "0:20.30", "0:21.85"]);
+  assert.equal(result.metrics.find(({ label }) => label === "LAST").visible, true);
+  assert.equal(result.metrics.find(({ label }) => label === "RECORD").visible, true);
+  assert.equal(result.hasSectorEvidence, true);
 });
 
 test("a legal stop with a clean lap that misses the stored record is not a personal best", () => {
@@ -67,6 +70,9 @@ test("an invalid open lap and off-track evidence remain explicit", () => {
   });
   assert.equal(result.metrics.find(({ label }) => label === "OFF TRACK").value, "7.3 s");
   assert.deepEqual(result.sectors, ["—:——", "—:——", "—:——", "—:——"]);
+  assert.equal(result.metrics.find(({ label }) => label === "LAST").visible, false);
+  assert.equal(result.metrics.find(({ label }) => label === "RECORD").visible, false);
+  assert.equal(result.hasSectorEvidence, false);
 });
 
 test("ending before motion degrades to an honest empty session", () => {
@@ -116,7 +122,7 @@ test("a quit before the hairpin says how far the apex still was", () => {
   });
 
   assert.equal(result.title, "STILL ON TRACK");
-  assert.equal(result.summary, "Still on track. Stopped ~2.6 km before the hairpin.");
+  assert.equal(result.summary, "Stopped ~2.6 km before the hairpin.");
   assert.equal(result.correction, "Next · the session ends in the box.");
 });
 
@@ -129,7 +135,7 @@ test("a nearer apex is stated in metres from the same progress field", () => {
     next_apex_m: 340,
   });
 
-  assert.equal(result.summary, "Still on track. Stopped ~340 m before the hairpin.");
+  assert.equal(result.summary, "Stopped ~340 m before the hairpin.");
 });
 
 test("a legal stop with no clean flying lap names the paint", () => {
@@ -174,7 +180,7 @@ test("a hot pit entry is named only after a later legal stop", () => {
     next_apex_m: 400,
   });
   assert.equal(quit.title, "STILL ON TRACK");
-  assert.equal(quit.summary, "Still on track. Stopped ~400 m before the hairpin.");
+  assert.equal(quit.summary, "Stopped ~400 m before the hairpin.");
 });
 
 test("quitting after a tip does not claim a parked bike", () => {

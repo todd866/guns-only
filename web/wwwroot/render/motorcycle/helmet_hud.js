@@ -214,14 +214,18 @@ export class HelmetHud {
     const apexCue = apexCuePresentation(state);
     const apex = apexCue.text;
     const flyer = lapFlyerText(state, readout.lap);
-    const x = w * 0.72;
-    const y = h * 0.12;
+    // Anchor to the same top margin as the map, leaving a full card-width gap.
+    // The old proportional x overlapped the map at ordinary laptop widths.
+    const mapSize = Math.min(132, w * 0.18);
+    const cardWidth = 220;
+    const x = Math.max(18, w - mapSize - cardWidth - 30) + 10;
+    const y = 40;
     ctx.save();
     ctx.fillStyle = "rgba(8, 16, 13, 0.72)";
     ctx.strokeStyle = "rgba(196, 210, 171, 0.28)";
     ctx.lineWidth = 1;
     const cardHeight = (readout.delta ? 96 : 76) + (apex ? 18 : 0);
-    roundRect(ctx, x - 10, y - 22, 188, cardHeight, 6);
+    roundRect(ctx, x - 10, y - 22, cardWidth, cardHeight, 6);
     ctx.fill();
     ctx.stroke();
 
@@ -288,7 +292,9 @@ export class HelmetHud {
   drawSpeedBlock(ctx, w, h, state) {
     const kmh = speedKmh(state);
     const x = w * 0.08;
-    const y = h * 0.78;
+    // On a narrow helmet view the speed and RPM cards share horizontal space.
+    // Reserve the RPM card's top edge plus a gap instead of letting them overlap.
+    const y = w < 600 ? Math.min(h * 0.78, h * 0.86 - 82) : h * 0.78;
     ctx.save();
     ctx.fillStyle = "rgba(8, 16, 13, 0.72)";
     ctx.strokeStyle = "rgba(196, 210, 171, 0.28)";

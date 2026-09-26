@@ -8,7 +8,7 @@ import { practiceExercise, practiceResult } from "./render/onboarding/practice.j
 import { installDisposedPageRestore } from "./render/onboarding/disposed_page_restore.js";
 import { createPilotNotebook } from "./render/onboarding/pilot_notebook.js";
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=371";
+import { createHud } from "./hud.js?v=372";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -32,8 +32,8 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
   visualMergeDebriefPresentation,
-} from "./render/debrief/sortie_result.js?v=371";
-import { sortieGradeBoard } from "./render/shell/sortie_grade.js?v=371";
+} from "./render/debrief/sortie_result.js?v=372";
+import { sortieGradeBoard } from "./render/shell/sortie_grade.js?v=372";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -56,11 +56,11 @@ import {
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
   touchFireVisibleLabel,
-} from "./render/onboarding/first_run_valley.js?v=371";
+} from "./render/onboarding/first_run_valley.js?v=372";
 import {
   dialogTabDestination,
   renderedDialogControl,
-} from "./render/onboarding/modal_focus.js?v=371";
+} from "./render/onboarding/modal_focus.js?v=372";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -103,8 +103,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=371";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=371";
+} from "./render/release/release_identity.js?v=372";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=372";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -117,7 +117,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=371";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=372";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -126,10 +126,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=371";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=372";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=371";
+} from "./render/nav/carrier_sortie_touch_control.js?v=372";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -213,7 +213,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=371";
+} from "./render/telemetry/ai_frame_pressure.js?v=372";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -223,15 +223,15 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=371";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=371";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=371";
-import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=371";
+} from "./render/telemetry/telemetry_batch.js?v=372";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=372";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=372";
+import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=372";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=371";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=371";
+} from "./render/shell/boot_watchdog.js?v=372";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=372";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -240,7 +240,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=371";
+} from "./render/settings/player_settings.js?v=372";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -287,14 +287,14 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=371";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=371";
+} from "./render/scene/scene_builders.js?v=372";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=372";
 import {
   cueInterfaceSound,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=371";
+} from "./render/audio/flight_audio.js?v=372";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -543,6 +543,7 @@ const readyConfig = document.querySelector("#ready-config");
 const readySortieLabel = document.querySelector("#ready-sortie-label");
 const readyConfigLabel = document.querySelector("#ready-config-label");
 const readyControls = document.querySelector("#ready-controls");
+const readyPractice = document.querySelector("#ready-practice");
 const readyDeckConfig = document.querySelector("#ready-deck-config");
 const readyDeckButtons = [...document.querySelectorAll("[data-deck-configuration]")];
 const readyTopGunPicker = document.querySelector('[data-program-node="top-gun"]');
@@ -2834,9 +2835,13 @@ const pilotLogbook = createPilotLogbook({ storage: logbookStorage });
 const practiceCue = document.querySelector("#practice-cue");
 function finishLogbookAttempt(state = latestState, abandoned = false) {
   if (!pilotLogbook.pending) return null;
-  const correction = practiceResult(state)?.correction
-    || visualMergeDebriefPresentation(state)?.correction
-    || sortieResultCopy(state)?.correction || "Review the final exchange before your next attempt.";
+  const result = sortieResultCopy(state);
+  const visualMerge = result?.f22Sortie ? null : visualMergeDebriefPresentation(state);
+  const correction = result?.safetyCorrection
+    || practiceResult(state)?.correction
+    || visualMerge?.correction
+    || result?.correction
+    || "Review the final exchange before your next attempt.";
   return pilotLogbook.finish(snapshotAttemptResult(state, { abandoned, correction }));
 }
 let campaignProfile = loadCampaignProfile();
@@ -3550,10 +3555,10 @@ const MISSION_BRIEFS = Object.freeze({
     activity: "dogfight",
     kicker: "2030s Ukraine theatre · mission 07",
     title: "F-22A vs Su-27S",
-    sortie: "Continuous visual merges · public-data surrogates · guns only",
+    sortie: "Two gun engagements · return to the runway",
     configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
-    card: "Splash successive Su-27 surrogates; each replacement enters through a fresh neutral merge.",
-    brief: "Every splash stages another offset merge. Fuel, ammunition, ownship damage, and kill count persist, so mind your bursts. Fight for the rear quarter and keep your energy \u2014 9 G is there, but so is your vision.",
+    card: "Complete two gun engagements, then land and stop on the runway.",
+    brief: "Two engagements share your fuel, ammunition and damage. Use short bursts, then follow the recovery cues home. Land and stop to complete the sortie.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · G gear · Esc → Call It A Day button · Space G limiter · K Auto-GCAS paddle",
   },
   8: {
@@ -3590,9 +3595,9 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "first-merge": Object.freeze({
     kicker: "2030s Ukraine · F-22A · two engagements",
     title: "Guns Only",
-    sortie: "F-22A vs escalating opposition · guns only",
+    sortie: "Two gun engagements · land and stop",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
-    brief: "You start close to one aircraft holding a line. Track it, then hit it with the gun. Two gun kills open the next sortie on a pair. Landing ends this one.",
+    brief: "Complete two gun engagements, then follow the recovery cues to a runway stop. Your opponent level and aiming assistance stay steady for this sortie. Gun hits and kills earn a harder next sortie.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · H controls",
   }),
   "okanagan-fireboss": Object.freeze({
@@ -4774,7 +4779,7 @@ function renderPauseUi(state = latestState) {
   const practiceReady = ready && !!selectedPracticeExercise;
   readyScreen.dataset.mode = (firstRunReady || practiceReady)
     ? "intro" : ready ? "program" : finished ? "debrief" : "pause";
-  paintSortieGrade(finished && !practiceReady ? state : null);
+  paintSortieGrade(finished && !selectedPracticeExercise ? state : null);
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
   const casevacReady = ready && selectedBeat === 13;
   readyScreen.dataset.casevacReady = String(casevacReady);
@@ -4825,7 +4830,7 @@ function renderPauseUi(state = latestState) {
   if (readyMenuTitle) {
     readyMenuTitle.textContent = selectedPracticeExercise && finished ? "Practice result" : practiceReady ? "Practice one skill" : firstRunReady
       ? "Your first sortie" : ready
-        ? "Pick an aircraft" : finished ? "Sortie complete" : "Flight paused";
+        ? "Pick an aircraft" : finished ? "Sortie debrief" : "Flight paused";
   }
   if (readyMenuHelp) {
     readyMenuHelp.textContent = (practiceReady ? "One objective, then review and repeat." : firstRunReady
@@ -4867,6 +4872,14 @@ function renderPauseUi(state = latestState) {
     String(!showScreen || richCasevacDebrief || settingsPaused),
   );
   if (readySettings) readySettings.hidden = !showScreen;
+  if (readyPractice) {
+    const exerciseId = finished && !selectedPracticeExercise
+      ? sortieResultCopy(state)?.practiceExercise : "";
+    readyPractice.dataset.exercise = exerciseId || "";
+    readyPractice.textContent = exerciseId === "recovery" ? "Practise landing"
+      : exerciseId === "gunnery" ? "Practise guns"
+      : exerciseId === "valley" ? "Practise valley" : "Practice";
+  }
   if (readyIntroReplay) {
     readyIntroReplay.hidden = !!selectedPracticeExercise || !(firstRunReady
       || (ready && selectedProgramNodeId === "first-merge"));
@@ -4874,7 +4887,7 @@ function renderPauseUi(state = latestState) {
       ? "Choose another mission" : "Replay valley intro";
   }
   if (readyRestart) {
-    readyRestart.hidden = ready;
+    readyRestart.hidden = ready || (finished && !!selectedPracticeExercise);
     // The primary finished action may advance the programme before it launches. This utility
     // repeats the sortie which just ended, so giving both controls the old "Fly again" label hid
     // a real navigation decision from the pilot.
@@ -4906,7 +4919,8 @@ function renderPauseUi(state = latestState) {
     const practiceControls = mobileControls
       ? "Left stick power/yaw · right stick pitch/roll · GUNS fires · Pause opens controls"
       : `${key("pull")}/${key("push")} pitch · ${key("rollLeft")}/${key("rollRight")} roll · ${key("powerUp")}/${key("powerDown")} power · ${key("fire")} fire · ${key("gearToggle")} gear · H controls · Esc pause`;
-    if (readyControls) readyControls.textContent = finished ? result?.correction || exercise.correction
+    if (readyControls) readyControls.textContent = finished
+      ? sortieResultCopy(state)?.safetyCorrection || result?.correction || exercise.correction
       : `${exercise.cue}\n${practiceControls}`;
     readyStart.textContent = finished ? "Repeat practice" : "Start practice";
     readyHint.textContent = "Practice results are saved locally and do not count as a full sortie.";
@@ -4922,7 +4936,7 @@ function renderPauseUi(state = latestState) {
     // Top Gun already owns two explicit result axes: combat custody and physical carrier pass.
     // Do not let the generic visual-merge card relabel those axes as Outcome/Evidence or append a
     // third coaching paragraph after the combined carrier debrief.
-    const visualMerge = carrierHandoff ? null : visualMergeEvidence;
+    const visualMerge = carrierHandoff || result.f22Sortie ? null : visualMergeEvidence;
     const resultFacts = Array.isArray(result.facts)
       ? result.facts.filter((fact) => typeof fact === "string" && fact.trim())
       : [];
@@ -5042,17 +5056,19 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
   } else if (firstRunReady) {
     const fireBinding = controlCodeLabel(playerSettings.bindings.fire);
     const rtbBinding = controlCodeLabel(playerSettings.bindings.knockItOff);
-    if (readySortieLabel) readySortieLabel.textContent = "Flight path";
-    if (readyConfigLabel) readyConfigLabel.textContent = "Weapons";
+    if (readySortieLabel) readySortieLabel.textContent = "Finish";
+    if (readyConfigLabel) readyConfigLabel.textContent = "Fire";
     readyReplay.hidden = true;
-    readyKicker.textContent = "Kestrel Gorge · guided first sortie";
+    readyKicker.textContent = "Kestrel Gorge · F-22A";
     readyTitle.textContent = "Enter the valley";
-    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out, Fire launches two heat-seeking missiles one at a time; once both are away, the same control becomes the gun. Join the aircraft ahead and hit it with the gun, then recover to the runway.";
-    readySortie.textContent = "Follow valley → pop out → two heaters → guns → recover";
-    readyConfig.textContent = `F-22A · two AIM-9 surrogates · 480 gun rounds · ${fireBinding} changes with the mission`;
+    readyBrief.textContent = "Follow the valley north. Weapons unlock at the exit: launch your two missiles, then track the aircraft ahead and hit it with the gun.";
+    readySortie.textContent = "Return to the runway, land and stop.";
+    readyConfig.textContent = mobileControls
+      ? "FOX 2 launches two missiles, one at a time, then becomes GUNS."
+      : `${fireBinding} launches two missiles, one at a time, then fires guns.`;
     if (readyControls) readyControls.textContent = mobileControls
-      ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · FOX 2 launches missiles, then becomes GUNS\nThe objective strip always shows the next action"
-      : `ARROWS fly · W/S power · ${fireBinding} launches two missiles, then fires guns\nThe objective strip always shows the next action · ${rtbBinding} calls RTB when you are ready`;
+      ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll"
+      : `ARROWS fly · W/S power · ${rtbBinding} return to base · H controls`;
     readyStart.textContent = "Enter valley";
     readyHint.textContent = background
       ? "Return to the game to enter the valley"
@@ -6004,18 +6020,25 @@ readyReplay?.addEventListener("click", () => {
   resetFrameClock();
 });
 
+function stagePracticeExercise(id) {
+  if (!practiceExercise(id)) return;
+  dismissFirstRunValleyAutostart();
+  selectCampaignNode("first-merge", { focus: false });
+  selectedPracticeExercise = id;
+  enterReady({ resetBridge: true });
+}
+
 pilotNotebook = createPilotNotebook({
   logbook: pilotLogbook,
   onOpen() { clearFlightInput(); setPauseReason("notebook", true); },
   onClose() { setPauseReason("notebook", false); },
-  onPractice(id) {
-    dismissFirstRunValleyAutostart();
-    selectCampaignNode("first-merge", { focus: false });
-    selectedPracticeExercise = id;
-    enterReady({ resetBridge: true });
-  },
+  onPractice: stagePracticeExercise,
 });
-document.querySelector("#ready-practice")?.addEventListener("click", () => pilotNotebook.show("practice"));
+readyPractice?.addEventListener("click", () => {
+  const exercise = readyPractice.dataset.exercise;
+  if (exercise) stagePracticeExercise(exercise);
+  else pilotNotebook.show("practice");
+});
 document.querySelector("#ready-logbook")?.addEventListener("click", () => pilotNotebook.show());
 readySettings?.addEventListener("click", openSettings);
 readyIntroReplay?.addEventListener("click", () => {
@@ -12149,7 +12172,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=371")
+    navigator.serviceWorker.register("service-worker.js?v=372")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

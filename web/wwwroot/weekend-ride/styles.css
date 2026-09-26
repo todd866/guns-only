@@ -293,7 +293,7 @@ body[data-dispatch="true"] #controls-onboarding-nudge { display: none !important
 
 .mission-metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   margin: 22px 0 0;
   border: solid var(--line);
   border-width: 1px 0 0 1px;
@@ -382,3 +382,6 @@ body[data-input="touch"] aside { display: none; }
   .mission-card > .mission-correction { margin-top: 12px; padding: 9px 11px; }
   .mission-actions { margin-top: 12px; }
 }
+
+/* Empty evidence rows do not occupy the early-abandon card. */
+.mission-metrics > [hidden], .mission-sectors[hidden] { display: none; }

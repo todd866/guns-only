@@ -93,5 +93,7 @@ test("the guns-only ready brief does not promise an opening ace pair or an endle
   assert.doesNotMatch(app, /opening wave is a pair of Aces/);
   assert.doesNotMatch(app, /Splash the pair/);
   assert.doesNotMatch(app, /F-22A · endless/);
-  assert.match(app, /Two gun kills open the next sortie on a pair\. Landing ends this one\./);
+  assert.match(app, /Complete two gun engagements, then follow the recovery cues to a runway stop\./);
+  assert.match(app, /Your opponent level and aiming assistance stay steady for this sortie\./);
+  assert.match(app, /Gun hits and kills earn a harder next sortie\./);
 });

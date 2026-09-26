@@ -740,7 +740,7 @@ test("carrier debrief keeps physical outcome, full-pass trend, and touchdown fac
     /const carrierHandoff = carrierQualification && result\.handoff === true;/,
     "a combined carrier/handoff result needs an explicit two-axis presentation branch");
   assert.match(app,
-    /const visualMerge = carrierHandoff \? null : visualMergeEvidence;/,
+    /const visualMerge = carrierHandoff \|\| result\.f22Sortie \? null : visualMergeEvidence;/,
     "generic merge coaching must not overwrite Top Gun's combat and carrier axes");
   assert.match(app,
     /readySortieLabel\.textContent = carrierHandoff[\s\S]*?"Carrier recovery"[\s\S]*?carrierQualification \? "Physical outcome"[\s\S]*?readyConfigLabel\.textContent = carrierHandoff[\s\S]*?"Combat \+ full pass"[\s\S]*?"Full-pass assessment"/,

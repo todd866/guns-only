@@ -3061,10 +3061,14 @@
 
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
       position: relative;
-      display: block;
+      display: flex;
       width: 100%;
       min-height: 0;
-      padding: 0;
+      padding: 12px;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: stretch;
+      gap: 5px;
       /* Square, because the paintings are square and a letterbox would crop the aeroplane. */
       aspect-ratio: 1;
       border: 1px solid rgba(253, 246, 230, .14);
@@ -3149,6 +3153,7 @@
 
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number,
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+      position: relative;
       z-index: 2;
       width: auto;
       height: auto;
@@ -3167,6 +3172,7 @@
     #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] > *,
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover > *,
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:focus-visible > * {
+      position: relative;
       z-index: 2;
       width: auto;
       height: auto;
@@ -3179,14 +3185,14 @@
     }
 
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
-      inset: auto 12px 58px;
+      inset: auto;
       color: #9bf2b9;
       font: 750 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
       letter-spacing: .13em;
     }
 
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
-      inset: auto 12px 31px;
+      inset: auto;
       color: #fff9ed;
       font: 500 20px/1 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
       letter-spacing: .01em;
@@ -3194,12 +3200,18 @@
     }
 
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
-      display: block;
-      inset: auto 12px 11px;
+      display: none;
+      inset: auto;
       color: rgba(253, 246, 230, .76);
       font: 650 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
       letter-spacing: .07em;
       text-transform: uppercase;
+    }
+
+    #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-contract,
+    #ready-screen[data-mode="program"] .sortie-choice:hover .sortie-contract,
+    #ready-screen[data-mode="program"] .sortie-choice:focus-visible .sortie-contract {
+      display: block;
     }
 
     /* Go. The authored Fly label is visible: different programmes have different commitments,
@@ -3282,29 +3294,25 @@
         touch-action: pan-x pinch-zoom;
       }
       #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
-        inset: auto 10px 72px;
+        inset: auto;
         font-size: 8px;
       }
       #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
-        inset: auto 10px 46px;
+        inset: auto;
         font-size: 17px;
       }
       #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
-        inset: auto 10px 10px;
-        max-height: 2.5em;
-        overflow: hidden;
-        font-size: 7px;
+        inset: auto;
+        font-size: 9px;
         letter-spacing: .035em;
       }
     }
 
     @media (max-height: 500px) and (orientation: landscape) {
-      .touch-mode #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
-        overflow: hidden;
-        font-size: 7px;
+      #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+        font-size: 9px;
         letter-spacing: .025em;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        white-space: normal;
       }
     }
 
@@ -3490,7 +3498,7 @@
 
     /* ---------------------------------------------------------------------------------------
        SHARED MISSION-FLOW SURFACES
-       Build 371's picker, first-sortie brief, pause and result are one journey. This final layer
+       Build 372's picker, first-sortie brief, pause and result are one journey. This final layer
        gives those modes the same type scale, spacing, action hierarchy and responsive rules.
        It intentionally does not reach into any in-flight HUD or standalone mission route.
        --------------------------------------------------------------------------------------- */
@@ -3740,7 +3748,7 @@
       }
     }
 
-    /* This rule comes after the pictorial-picker override on purpose. Build 371's earlier
+    /* This rule comes after the pictorial-picker override on purpose. Build 372's earlier
        two-column rule was valid in isolation but lost the cascade to a later display:block,
        leaving Fly below a tall poster grid on phone-shaped landscape screens. */
     @media (max-height: 500px) and (orientation: landscape) {
@@ -4007,37 +4015,6 @@
       text-align: center;
     }
 
-    .valley-steps {
-      display: none;
-      margin: 0 0 var(--flow-space-4);
-      padding: 0;
-      list-style: none;
-    }
-
-    #ready-screen[data-mode="intro"] .valley-steps {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 8px;
-      max-width: var(--flow-reading-width);
-    }
-
-    #ready-screen[data-mode="intro"] .valley-steps li {
-      display: grid;
-      gap: 4px;
-      min-height: 64px;
-      padding: 8px;
-      border-top: 2px solid #e4b85a;
-      color: var(--flow-ink);
-      background: rgba(7, 9, 13, .45);
-      font: 500 13px/1.1 var(--flow-font-display);
-    }
-
-    #ready-screen[data-mode="intro"] .valley-steps b {
-      color: #f0cf8b;
-      font: 750 9px/1 var(--flow-font-data);
-      letter-spacing: .12em;
-    }
-
     #ready-screen[data-mode="intro"] .ready-card {
       width: min(1080px, 100%);
       border: 0;
@@ -4056,10 +4033,8 @@
     }
 
     #ready-screen[data-mode="intro"] #ready-brief {
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
+      display: block;
+      overflow: visible;
     }
 
     :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-start:focus-visible,
@@ -4069,8 +4044,34 @@
     }
 
     #ready-screen[data-mode="intro"] #ready-title {
-      font-size: clamp(48px, 7vw, 84px);
+      font-size: clamp(36px, 5vw, 54px);
       letter-spacing: -0.03em;
+    }
+
+    /* Keep the launch alongside the reading column, including enlarged text. The brief may
+       scroll inside the card, but reading its last line must not be required to find Enter. */
+    @media (min-width: 900px) {
+      #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-card {
+        width: min(1080px, 100%);
+      }
+      #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-briefing {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(260px, .72fr);
+        grid-auto-flow: dense;
+        gap: 12px 32px;
+        align-items: start;
+      }
+      #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) :is(#ready-kicker, #ready-title, #ready-brief, .ready-facts, #sortie-grade) {
+        grid-column: 1;
+        margin: 0;
+      }
+      #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) :is(.ready-controls, #ready-start,
+        #ready-replay, #ready-handoff, .ready-secondary-actions, #ready-hint, #ready-build-row) {
+        grid-column: 2;
+        width: 100%;
+        margin: 0;
+      }
+      #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-facts { grid-template-columns: 1fr; }
     }
 
     #ready-screen[data-mode="pause"] .ready-menu-header,
@@ -4089,7 +4090,7 @@
     }
 
     #ready-screen[data-mode="debrief"] #ready-title {
-      font-size: clamp(40px, 6vw, 72px);
+      font-size: clamp(36px, 5vw, 54px);
       letter-spacing: -0.03em;
     }
 
@@ -4166,7 +4167,6 @@
     @media (max-width: 520px) {
       .sortie-grade { grid-template-columns: 1fr; }
       .sortie-grade-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      #ready-screen[data-mode="intro"] .valley-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
 
     @keyframes boot-pulse {
@@ -4490,7 +4490,7 @@
               <button type="button" class="sortie-choice" data-aircraft="f22" data-program-node="first-merge" aria-pressed="true">
                 <span class="sortie-number">GUNS ONLY <b data-program-status="first-merge"></b></span>
                 <strong>F-22A</strong>
-                <small class="sortie-contract">Continuous ACM · RTB on command</small>
+                <small class="sortie-contract">Two engagements · land</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="preview" hidden>
@@ -4518,7 +4518,7 @@
               <button type="button" class="sortie-choice" data-aircraft="bike" data-program-node="weekend-ride" aria-pressed="false">
                 <span class="sortie-number">WEEKEND RIDE <b data-program-status="weekend-ride"></b></span>
                 <strong>YZF-R1</strong>
-                <small class="sortie-contract">Open lapping · End ride when ready</small>
+                <small class="sortie-contract">Two laps · cool down · pit stop</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="civilian" data-selected="false" data-program-state="available">
@@ -4570,18 +4570,11 @@
         </section>
 
         <section class="ready-briefing" aria-label="Selected sortie briefing">
-          <div id="ready-kicker">Raptor programme · qualification 01</div>
-          <h2 id="ready-title">First Merge</h2>
-          <p id="ready-brief">You are already at the visual merge. Survive the first pass, fight into the rear quarter, and splash one Su-27 surrogate.</p>
-          <ol class="valley-steps" aria-hidden="true">
-            <li><b>01</b>Valley</li>
-            <li><b>02</b>Pop</li>
-            <li><b>03</b>Heaters</li>
-            <li><b>04</b>Guns</li>
-            <li><b>05</b>Recover</li>
-          </ol>
+          <div id="ready-kicker">F-22A · two engagements</div>
+          <h2 id="ready-title">Guns Only</h2>
+          <p id="ready-brief">Complete two gun engagements, then return to the runway, land and stop.</p>
           <div class="ready-facts" aria-label="Mission details">
-            <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">F-22A vs Su-27S · guns only · opening 1v2 guns hot</span></div>
+            <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">Two gun engagements · land and stop</span></div>
             <div class="ready-fact"><small id="ready-config-label">Configuration</small><span id="ready-config">F-22 public-data surrogate · 480 rounds · Auto-GCAS armed</span></div>
           </div>
           <section id="sortie-grade" class="sortie-grade" hidden aria-label="Sortie results">
@@ -4615,7 +4608,7 @@
             </div>
           </details>
           <p id="ready-controls" class="ready-controls">Arrows fly · W/S power · F guns · V padlock · Tab target
-Splash one bandit to qualify · H controls · R restarts</p>
+Two engagements, then recover · H controls · R restarts</p>
           <div id="ready-route-notice" class="ready-route-notice" role="status" hidden></div>
           <button id="ready-start" type="button">Fly First Merge</button>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
@@ -4645,10 +4638,10 @@ Splash one bandit to qualify · H controls · R restarts</p>
             default; the phone-width media query and app.js's dismissed-flag check control it.
           -->
           <button id="ready-laptop-hint" type="button">
-            <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
+            <span aria-hidden="true">⌨</span> Best on a laptop with a keyboard or gamepad.
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 371 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 372 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -4769,7 +4762,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=371", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=372", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -4865,11 +4858,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=371");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=371", {
+      await loadClassicScript("./multiplayer-config.js?v=372");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=372", {
         autostart: "false",
       });
-      await import("./app.js?v=371");
+      await import("./app.js?v=372");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -4882,8 +4875,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=371"),
-            import("./render/shell/boot_fallback.js?v=371"),
+            import("./render/shell/inapp_browser.js?v=372"),
+            import("./render/shell/boot_fallback.js?v=372"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,

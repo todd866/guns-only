@@ -105,13 +105,13 @@ test("first run is a deliberate Ready interlock and Fire visibly names its live 
     /"first-merge": Object\.freeze\(\{[\s\S]*?\n  \}\),/,
   )?.[0] ?? "";
   assert.match(firstMergeBrief,
-    /sortie: "F-22A vs escalating opposition · guns only"/,
+    /sortie: "Two gun engagements · land and stop"/,
     "the programme brief names the fight without claiming an opening pair");
   assert.doesNotMatch(firstMergeBrief, /first pass safe/i,
-    "the production 1v2 opens guns-free and must not advertise a safe pass");
+    "the combat sortie must not advertise a safe pass");
   assert.match(index,
-    /id="ready-sortie">F-22A vs Su-27S · guns only · opening 1v2 guns hot</,
-    "the static Ready fallback must match the live guns-hot 1v2 contract");
+    /id="ready-sortie">Two gun engagements · land and stop</,
+    "the static Ready fallback must match the finite sortie contract");
   assert.match(app, /touchFireAriaLabel/);
   assert.match(app, /touchFireButton\.textContent = touchFireVisibleLabel\(state\)/,
     "the same F control must visibly transition from FOX 2 to GUNS with authority");

@@ -1,15 +1,16 @@
 # Current product and verification status
 
-Updated: 2026-09-10
-Production: Build 370, revision `56cb78a655bade653453fea3969bb5d80dbcb306`.
-Next candidate: Build 371, not deployed — Weekend Ride is a track-day session with an ending: two timed laps, the chequered flag, a cool-down lap that must be ridden, then pit entry under the 60 km/h limit and a stop in the box. The helmet card's apex speed comes from the corner's geometry and tyre grip, and a cue-only test rider that follows it completes the session on paint.
+Updated: 2026-09-26
+Production: Build 371, revision `0e8ea60a8159b2da6ba9f246c334c3bc1ae35493`.
+Next candidate: Build 372, not deployed — holds F-22 opponent level and aiming assistance steady within each sortie while earning the next one; adds recovery-aware debriefs and direct practice suggestions; simplifies the briefing and fixes poster/Ride HUD overlap. Verification and limitations: [player-loop audit](audits/2026-09-26-player-loop.md).
+Build 371 shipped Weekend Ride's two timed laps, cool-down lap, legal pit entry and stop.
 Build 370 shipped the F-22 difficulty ramp: one Competent Su-27S a kilometre ahead for a new pilot, a Veteran after a gun hit, an Ace after a gun kill, the Ace pair after two. Build 369 shipped the finite F-22 sortie flown home through an overhead, the Fire Boss scoop start and flank, Top Gun's pilot-owned Case I, Cobra's gun-pit path and pad rearm, and the club-lap Weekend Ride. Build 368 shipped the hero front door, the clear first-person F-22 view, the phosphor HUD and flight audio. Build 364 shipped the readable F-22 sight and pattern energy, and the Okanagan chart, drop call, fire, lake and timber.
 Build 362 shipped — four named Fire Boss defence missions begin loaded and airborne near the incident, then finish after a useful drop and safe escape. Full-physics flights reach the first useful drop in 96–107 seconds and finish in 146–173 seconds. See [mission pacing and flight evidence](audits/2026-09-10-okanagan-airborne-missions.md). Audio now uses a 24-second recorded Air Tractor-family engine bed, cockpit-informed broad EQ, live power response and rendered-audio regression checks. The source is an OA-1K exterior recording, an authored cabin surrogate, not a Fire Boss cockpit capture. See [recorded audio audit](audits/2026-09-10-fireboss-recorded-audio.md).
 Build 360 shipped default optional Fire Boss automatic pitch trim, a visible next-waypoint director and named north-up map, improved runway/shoreline/forest detail, and background-only hardware browser QA. See [assistance and navigation audit](audits/2026-09-10-okanagan-assist-navigation.md).
 Build 359 shipped the Fire Boss elevator/trim, surface-to-flight continuity, drag and cockpit-coordinate corrections, feasible water loads, and fuel-return/Apex escape guidance. Independent response checks, actual browser input evidence and full route regressions have distinct acceptance scopes. See [Fire Boss handling audit](audits/2026-09-10-fireboss-handling.md).
 Build 358 shipped the Hermeus-inspired finish and geometry refinements on the actual Rapier model and its picker rendering. See [Rapier appearance record](airframes/rapier-v2/11-hermeus-visual-direction.md).
 Build 357 shipped the generated F-22 and Cobra picker artwork, limestone slopes, forest canopy and close foliage, plus the landscape picker fix. Build 356 shipped the Fire Boss defence and recovery corrections. See [scenery and defence audit](audits/2026-09-05-peachland-scenery.md) and [flight-validation record](audits/2026-09-06-okanagan-flight-validation.md).
-F-22 Guns Only remains an open-ended fight rather than a scored mission.
+F-22 Guns Only is a finite sortie: complete two engagements, then physically land and stop. Returning before the combat objective can recover the aircraft without earning mission victory.
 Call It A Day or Bingo enters one typed, immediate ceasefire/RTB transition and publishes a
 terrain-aware left-hand runway pattern. Floating chevrons carry the energy lesson without another
 panel: green is on-speed, yellow is too fast and red is too slow. The browser cannot invent a
@@ -130,9 +131,7 @@ drop voices follow published water rates; and AIM-9 launch, radio-priority ducki
 safety-warning arbiter make the important event audible without relying on limiter overload.
 All candidate audio acceptance is silent (`?audioQa=silent`).
 
-Production: Build 370, revision `56cb78a655bade653453fea3969bb5d80dbcb306`.
-Next candidate: Build 371, not deployed — Weekend Ride is a track-day session with an ending: two timed laps, the chequered flag, a cool-down lap that must be ridden, then pit entry under the 60 km/h limit and a stop in the box. The helmet card's apex speed comes from the corner's geometry and tyre grip, and a cue-only test rider that follows it completes the session on paint.
-player journey and Top Gun bolter retry), 349 (mission-AI suite honesty), 350
+Builds 347 (first-run player journey and Top Gun bolter retry), 349 (mission-AI suite honesty), 350
 (conventional F-22 recovery), 351 (finite billed sorties, presenting Ace, Cobra pad combat)
 and 352 (Fire Boss sky chevrons, HUD hopper/cue, readable west-side fire)
 shipped after the 2026-08-24 pin; treat that date as historical.
@@ -353,7 +352,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 370, revision `56cb78a655bade653453fea3969bb5d80dbcb306`. Local gate
+- Live production is Build 371, revision `0e8ea60a8159b2da6ba9f246c334c3bc1ae35493`. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.

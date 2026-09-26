@@ -19,8 +19,8 @@ test("the laptop recommendation card exists with truthful copy", () => {
     /id="ready-laptop-hint"[\s\S]{0,400}(laptop|desktop)[\s\S]{0,400}(keyboard)/i,
     "the card must explain the laptop/desktop recommendation and mention the keyboard");
   assert.match(indexSource,
-    /id="ready-laptop-hint"[\s\S]{0,400}(flight controls|tactical map|instrument)/i,
-    "the copy must cite the concrete reasons: flight controls, tactical map, instruments");
+    /id="ready-laptop-hint"[\s\S]{0,400}keyboard or gamepad/i,
+    "the compact recommendation must name both supported physical control options");
 });
 
 test("the card is phone-width only and never shows at desktop widths", () => {
