@@ -1,16 +1,26 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 const appUrl = new URL("../../../app.js", import.meta.url);
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
-const sessionUrl = new URL("../../../../../sim/SimulationSession.cs", import.meta.url);
+const sessionDir = new URL("../../../../../sim/", import.meta.url);
+// SimulationSession is a partial class. Contract scans read every slice, not one file.
+const readSimulationSessionSource = async () => {
+  const names = (await readdir(sessionDir))
+    .filter((name) => /^SimulationSession.*\.cs$/.test(name))
+    .sort();
+  const parts = await Promise.all(
+    names.map((name) => readFile(new URL(name, sessionDir), "utf8")),
+  );
+  return parts.join("\n");
+};
 
 test("measured frame pressure reaches the kernel before the next simulation advance", async () => {
   const [app, bridge, session] = await Promise.all([
     readFile(appUrl, "utf8"),
     readFile(bridgeUrl, "utf8"),
-    readFile(sessionUrl, "utf8"),
+    readSimulationSessionSource(),
   ]);
 
   assert.match(app, /new AdaptiveAiWorkBudget\(\)/);

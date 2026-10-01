@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
@@ -9,14 +9,24 @@ const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.u
 const readBridgeContract = () =>
   Promise.all([readFile(bridgeUrl, "utf8"), readFile(projectionUrl, "utf8")])
     .then((parts) => parts.join("\n"));
-const sessionUrl = new URL("../../../../../sim/SimulationSession.cs", import.meta.url);
+const sessionDir = new URL("../../../../../sim/", import.meta.url);
 const beatsUrl = new URL("../../../../../sim/Doctrine/Beats.cs", import.meta.url);
+// SimulationSession is a partial class. Contract scans read every slice, not one file.
+const readSimulationSessionSource = async () => {
+  const names = (await readdir(sessionDir))
+    .filter((name) => /^SimulationSession.*\.cs$/.test(name))
+    .sort();
+  const parts = await Promise.all(
+    names.map((name) => readFile(new URL(name, sessionDir), "utf8")),
+  );
+  return parts.join("\n");
+};
 const appUrl = new URL("../../../app.js", import.meta.url);
 const hudUrl = new URL("../../../hud.js", import.meta.url);
 
 const [bridgeSource, sessionSource, beatsSource, appSource, hudSource] = await Promise.all([
   readBridgeContract(),
-  readFile(sessionUrl, "utf8"),
+  readSimulationSessionSource(),
   readFile(beatsUrl, "utf8"),
   readFile(appUrl, "utf8"),
   readFile(hudUrl, "utf8"),

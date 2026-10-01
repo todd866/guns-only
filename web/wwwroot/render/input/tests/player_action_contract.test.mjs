@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -9,6 +9,21 @@ import { CONTROL_BINDINGS } from "../../settings/player_settings.js";
 import { CARRIER_SORTIE_TOUCH_RTB_ACTION_TOKEN } from "../../nav/carrier_sortie_route_presentation.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../");
+
+// SimulationSession is a partial class. Contract scans read every slice, not one file.
+async function readRepoSource(relativePath) {
+  if (relativePath !== "sim/SimulationSession.cs") {
+    return readFile(path.join(ROOT, relativePath), "utf8");
+  }
+  const dir = path.join(ROOT, "sim");
+  const names = (await readdir(dir))
+    .filter((name) => /^SimulationSession.*\.cs$/.test(name))
+    .sort();
+  const parts = await Promise.all(
+    names.map((name) => readFile(path.join(dir, name), "utf8")),
+  );
+  return parts.join("\n");
+}
 
 const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
   sessionSource, webBridgeSource, progressionSource, projectionSource,
@@ -25,7 +40,7 @@ const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
   "web/wwwroot/render/input/player_gun_target.js",
   "web/wwwroot/render/top-gun/mission_authority.js",
   "web/wwwroot/render/debrief/sortie_result.js",
-].map((relativePath) => readFile(path.join(ROOT, relativePath), "utf8")));
+].map((relativePath) => readRepoSource(relativePath)));
 
 // The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
 // SnapshotProjection; action observables are scanned across both so a field is found wherever it lives.
