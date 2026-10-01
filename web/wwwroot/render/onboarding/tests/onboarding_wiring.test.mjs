@@ -10,8 +10,8 @@ async function source(path) {
 
 test("cobra lets its brief own first-run teaching and keeps the shared controls reference", async () => {
   const main = await source("cobra-lab/main.js");
-  assert.match(main, /render\/onboarding\/first_run_controls\.js\?v=\d+/);
-  assert.match(main, /render\/onboarding\/controls_content\.js\?v=\d+/);
+  assert.match(main, /render\/onboarding\/first_run_controls\.js\?v=__RELEASE_BUILD__/);
+  assert.match(main, /render\/onboarding\/controls_content\.js\?v=__RELEASE_BUILD__/);
   assert.match(main, /COBRA_ONBOARDING_CONTENT/);
   assert.match(main, /markFirstRunSeen\(safeLocalStorage\(\), COBRA_ONBOARDING_CONTENT\.modeId\)/,
     "the explicit brief Start action acknowledges the controls lesson");
@@ -33,7 +33,7 @@ test("cobra feeds the nudge scheduler from authority truth every frame", async (
 
 test("weekend ride wires the shared overlay with ride content and a standstill nudge", async () => {
   const main = await source("weekend-ride/main.js");
-  assert.match(main, /render\/onboarding\/first_run_controls\.js\?v=\d+/);
+  assert.match(main, /render\/onboarding\/first_run_controls\.js\?v=__RELEASE_BUILD__/);
   assert.match(main, /WEEKEND_RIDE_ONBOARDING_CONTENT/);
   assert.match(main, /maybeShowFirstRun/);
   assert.match(main, /advanceNudges/);

@@ -8,6 +8,8 @@
 // from: the authority snapshot (window.__gunsOnlyCobraAuthority) and the SAME production model
 // function main.js hands the painter, imported here from the published bundle.
 
+import { RELEASE_BUILD } from "../wwwroot/render/release/release_identity.js";
+
 export const COBRA_ROUTE = "cobra-lab/index.html?audioQa=silent";
 
 export const COBRA_CHROMIUM_ARGS = Object.freeze([
@@ -32,9 +34,9 @@ export async function waitForCobraAuthority(page, timeoutMs) {
 
 /** One read of everything the play HUD is drawing from, through the production model function. */
 export function readCobraHud(page) {
-  return page.evaluate(async () => {
+  return page.evaluate(async (build) => {
     const { cobraRotorcraftHudModel } =
-      await import("/render/cobra/cobra_rotorcraft_hud.js?v=372");
+      await import(`/render/cobra/cobra_rotorcraft_hud.js?v=${build}`);
     const state = window.__gunsOnlyCobraAuthority ?? null;
     const canvas = document.querySelector("#hud-canvas");
     return {
@@ -52,7 +54,7 @@ export function readCobraHud(page) {
       tick: state?.vehicle?.tick ?? -1,
       canvas: canvas ? { width: canvas.width, height: canvas.height } : null,
     };
-  });
+  }, RELEASE_BUILD);
 }
 
 /**

@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { RELEASE_BUILD } from "../../release/release_identity.js";
-
 const appUrl = new URL("../../../app.js", import.meta.url);
 const sceneBuildersUrl = new URL("../../scene/scene_builders.js", import.meta.url);
 const hudUrl = new URL("../../../hud.js", import.meta.url);
@@ -349,7 +347,7 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
     "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
-    new RegExp(`import \\{[\\s\\S]*createDecisionSupportSea[\\s\\S]*\\} from "\\.\\/render\\/scene\\/scene_builders\\.js\\?v=${RELEASE_BUILD}"`),
+    new RegExp(`import \\{[\\s\\S]*createDecisionSupportSea[\\s\\S]*\\} from "\\.\\/render\\/scene\\/scene_builders\\.js\\?v=__RELEASE_BUILD__"`),
     "the active ocean builder must be sourced from the scene builder module");
   assert.match(source, /createDecisionSupportSea\(\)/,
     "production must instantiate the decision-support sea");

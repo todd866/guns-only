@@ -1,28 +1,28 @@
 import {
   COBRA_STRUCTURE_SURFACES,
   createCobraStructureMaterial,
-} from "./cobra_structure_material.js?v=372";
+} from "./cobra_structure_material.js?v=__RELEASE_BUILD__";
 import {
   applyCobraCanyonCampEmberApron,
   COBRA_CANYON_CAMP_EMBER_APRON,
   smoothstep,
   sampleCobraCanyonTerrain,
   sampleCobraCanyonTerrainBeforeCampEmberApron,
-} from "./cobra_canyon_plan.js?v=372";
+} from "./cobra_canyon_plan.js?v=__RELEASE_BUILD__";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=372";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=372";
-import { createCobraCanopyField } from "./cobra_canyon_canopy.js?v=372";
+} from "./cobra_canyon_asset_kit.js?v=__RELEASE_BUILD__";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=__RELEASE_BUILD__";
+import { createCobraCanopyField } from "./cobra_canyon_canopy.js?v=__RELEASE_BUILD__";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=372";
+} from "./cobra_canyon_terrain_material.js?v=__RELEASE_BUILD__";
 import {
   CAMP_EMBER_DRAWN_RECESS_M,
   createCampEmberFirebase,
-} from "./cobra_camp_ember_firebase.js?v=372";
+} from "./cobra_camp_ember_firebase.js?v=__RELEASE_BUILD__";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 

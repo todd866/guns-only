@@ -8,8 +8,6 @@ import {
   topGunCarrierDebriefCopy,
   visualMergeDebriefPresentation,
 } from "../sortie_result.js";
-import { RELEASE_BUILD } from "../../release/release_identity.js";
-
 function wordCount(value) {
   return String(value || "").trim().split(/\s+/).filter(Boolean).length;
 }
@@ -719,7 +717,7 @@ test("app consumes the pure evidence-based debrief module", async () => {
   const app = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
 
   assert.match(app,
-    new RegExp(`import \\{[\\s\\S]*?combatHandoffPresentation,[\\s\\S]*?sortieResultCopy,[\\s\\S]*?visualMergeDebriefPresentation,[\\s\\S]*?} from "\\.\\/render\\/debrief\\/sortie_result\\.js\\?v=${RELEASE_BUILD}";`));
+    new RegExp(`import \\{[\\s\\S]*?combatHandoffPresentation,[\\s\\S]*?sortieResultCopy,[\\s\\S]*?visualMergeDebriefPresentation,[\\s\\S]*?} from "\\.\\/render\\/debrief\\/sortie_result\\.js\\?v=__RELEASE_BUILD__";`));
   assert.doesNotMatch(app, /function sortieResultCopy\(/);
   assert.doesNotMatch(app, /function visualMergeDebriefPresentation\(/);
   assert.doesNotMatch(app, /The opponent's gun solution was decisive\. The loss was/);

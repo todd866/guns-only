@@ -1,7 +1,26 @@
 // Public, read-only release provenance. The browser uses this to detect a stale static shell and
 // telemetry uses it to distinguish deployments which share the same human-facing release number.
+//
+// The numeric build lives only in render/release/release_identity.js. Publish replaces the
+// placeholder below so the deployed function does not read another file; until then, Node tests
+// read that one source.
 
-const RELEASE_BUILD = "372";
+const { readFileSync } = require("node:fs");
+const path = require("node:path");
+
+const RELEASE_BUILD_PLACEHOLDER = "__RELEASE_BUILD__";
+
+function releaseBuildFromIdentityFile() {
+  const identityPath = path.join(__dirname, "../render/release/release_identity.js");
+  const source = readFileSync(identityPath, "utf8");
+  const match = source.match(/export const RELEASE_BUILD = "(\d+)";/);
+  if (!match) throw new Error("release identity has no numeric RELEASE_BUILD");
+  return match[1];
+}
+
+const RELEASE_BUILD = /^\d+$/.test(RELEASE_BUILD_PLACEHOLDER)
+  ? RELEASE_BUILD_PLACEHOLDER
+  : releaseBuildFromIdentityFile();
 
 function safeToken(value, maximumLength) {
   const token = String(value || "").trim();

@@ -4,47 +4,47 @@ const pilotLogbook = createBrowserPilotLogbook();
 installDisposedPageRestore();
 window.addEventListener("pagehide", () => pilotLogbook.finish({ outcome: "Left before completion" }));
 import * as THREE from "../vendor/three.module.js";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=372";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=__RELEASE_BUILD__";
 import {
   loadRideBest,
   rideRampFromRecord,
   saveRideBest,
-} from "../render/ride/ride_best_lap_store.js?v=372";
-import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=372";
-import { formatLapTime } from "../render/ride/ride_timing_readout.js?v=372";
-import { createRideCueDriver } from "../render/ride/ride_cue_driver.js?v=372";
-import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=372";
+} from "../render/ride/ride_best_lap_store.js?v=__RELEASE_BUILD__";
+import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=__RELEASE_BUILD__";
+import { formatLapTime } from "../render/ride/ride_timing_readout.js?v=__RELEASE_BUILD__";
+import { createRideCueDriver } from "../render/ride/ride_cue_driver.js?v=__RELEASE_BUILD__";
+import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=__RELEASE_BUILD__";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=372";
+} from "../render/motorcycle/rider_input.js?v=__RELEASE_BUILD__";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=372";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=372";
+} from "../render/motorcycle/track_day_presentation.js?v=__RELEASE_BUILD__";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=__RELEASE_BUILD__";
 import {
   advanceLowSpeedLens,
   lowSpeedLensTarget,
   neutralLowSpeedLens,
-} from "../render/camera/low_speed_lens.js?v=372";
+} from "../render/camera/low_speed_lens.js?v=__RELEASE_BUILD__";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=372";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=372";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=372";
+} from "../render/visual/shadow_stabilizer.js?v=__RELEASE_BUILD__";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=__RELEASE_BUILD__";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=__RELEASE_BUILD__";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=372";
+} from "../render/audio/flight_audio.js?v=__RELEASE_BUILD__";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=372";
-import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=372";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=372";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=372";
+} from "../render/settings/player_settings.js?v=__RELEASE_BUILD__";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=__RELEASE_BUILD__";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=__RELEASE_BUILD__";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=__RELEASE_BUILD__";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;

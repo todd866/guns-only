@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "playwright";
 import { serveStatic } from "../wwwroot/render/hud/tests/harness/static_server.mjs";
+import { RELEASE_BUILD } from "../wwwroot/render/release/release_identity.js";
 import {
   COBRA_CHROMIUM_ARGS,
   COBRA_ROUTE,
@@ -189,16 +190,16 @@ test.skip("the published Cobra route flies to Iron Bell before running the AH-1G
           engaged.ammo,
           { timeout: scaled(120000) },
         );
-        held = await page.evaluate(async () => {
+        held = await page.evaluate(async (build) => {
           const { cobraRotorcraftHudModel } =
-            await import("/render/cobra/cobra_rotorcraft_hud.js?v=372");
+            await import(`/render/cobra/cobra_rotorcraft_hud.js?v=${build}`);
           const state = window.__smokeFiringSnapshot;
           return {
             model: cobraRotorcraftHudModel(state),
             gunner: state.gunner,
             ammo: state.ground_war.ammo_remaining,
           };
-        });
+        }, RELEASE_BUILD);
       } finally {
         await page.keyboard.up("f");
       }

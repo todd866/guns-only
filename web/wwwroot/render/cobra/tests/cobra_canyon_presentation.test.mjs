@@ -23,7 +23,6 @@ import {
   campEmberFirebaseParts,
 } from "../cobra_camp_ember_firebase.js";
 import { COBRA_CANYON_VISUAL_PROFILE } from "../cobra_canyon_visual_profile.js";
-import { RELEASE_BUILD } from "../../release/release_identity.js";
 
 const world = JSON.parse(await readFile(new URL(
   "../../../content/packs/cobra-vietnam/environment/cobra-canyon.world.json",
@@ -38,7 +37,7 @@ const QUALITY_TIERS = Object.freeze(["mobile", "balanced", "desktop"]);
 
 test("presentation shares the Build 238 planner module", () => {
   assert.match(presentationSource,
-    new RegExp(`from "\\.\\/cobra_canyon_plan\\.js\\?v=${RELEASE_BUILD}"`));
+    new RegExp(`from "\\.\\/cobra_canyon_plan\\.js\\?v=__RELEASE_BUILD__"`));
   assert.doesNotMatch(presentationSource,
     /from "\.\/cobra_canyon_plan\.js"/);
 });

@@ -32,7 +32,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=372";
+} from "./render/hud/contact_visibility.js?v=__RELEASE_BUILD__";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import { patternEnergyWord } from "./render/hud/approach_energy.js";
 import {
@@ -72,15 +72,15 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=372";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=__RELEASE_BUILD__";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=372";
+} from "./render/mission/rapier_high_mach_instruments.js?v=__RELEASE_BUILD__";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
-} from "./render/hud/limits_panel.js?v=372";
+} from "./render/hud/limits_panel.js?v=__RELEASE_BUILD__";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   fillLegibleHudText,
@@ -110,7 +110,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=372";
+} from "./render/audio/flight_audio.js?v=__RELEASE_BUILD__";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";

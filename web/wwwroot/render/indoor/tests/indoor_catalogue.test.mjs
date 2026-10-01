@@ -55,7 +55,7 @@ test("Indoor entrypoint advertises its complete control and mission contract", (
   }
   assert.match(indoor, /Fictional systems and facility/);
   assert.match(indoor,
-    /await globalThis\.__gunsPrebootReady;[\s\S]*?renderExperienceGate\(\{ experienceId: "indoor" \}\)[\s\S]*?await import\("\.\/game\.js\?v=\d+"\)/,
+    /await globalThis\.__gunsPrebootReady;[\s\S]*?renderExperienceGate\(\{ experienceId: "indoor" \}\)[\s\S]*?await import\("\.\/game\.js\?v=__RELEASE_BUILD__"\)/,
     "the quarantined route must require an explicit preview acknowledgement before loading");
 });
 

@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { RELEASE_QUERY_TOKEN } from "../../../../../tools/release/stamp-release.mjs";
 import {
   buildInfoUrl,
   createReleaseIdentity,
@@ -21,6 +22,18 @@ function git(args) {
     cwd: REPOSITORY_ROOT,
     encoding: "utf8",
   });
+}
+
+function asPublished(source) {
+  return source.replaceAll(RELEASE_QUERY_TOKEN, RELEASE_BUILD);
+}
+
+function laterCommit(left, right) {
+  if (!left) return right;
+  if (!right || left === right) return left;
+  if (git(["merge-base", "--is-ancestor", left, right]).status === 0) return right;
+  if (git(["merge-base", "--is-ancestor", right, left]).status === 0) return left;
+  return left;
 }
 
 function responseRecorder() {
@@ -177,8 +190,8 @@ test("local release scripts and GitHub verification require the same Node 24 run
 });
 
 test("shell, browser module, service worker, and deployment endpoint share one release number", async () => {
-  const [index, app, hud, serviceWorker, deployScript, sceneBuilders, airframeBuilder,
-    airframePrimitives] = await Promise.all([
+  const [indexSource, appSource, hudSource, serviceWorkerSource, deployScript, sceneBuildersSource,
+    airframeBuilderSource, airframePrimitivesSource] = await Promise.all([
     readFile(new URL("index.html", WEB_ROOT), "utf8"),
     readFile(new URL("app.js", WEB_ROOT), "utf8"),
     readFile(new URL("hud.js", WEB_ROOT), "utf8"),
@@ -188,6 +201,24 @@ test("shell, browser module, service worker, and deployment endpoint share one r
     readFile(new URL("render/scene/airframe_from_definition.js", WEB_ROOT), "utf8"),
     readFile(new URL("render/scene/airframe_primitives.js", WEB_ROOT), "utf8"),
   ]);
+  for (const [label, source] of [
+    ["index", indexSource],
+    ["app", appSource],
+    ["hud", hudSource],
+    ["service worker", serviceWorkerSource],
+    ["scene builders", sceneBuildersSource],
+  ]) {
+    assert.doesNotMatch(source, /\?v=\d+/, `${label} must not hard-code a numeric cache buster`);
+  }
+  assert.match(indexSource, new RegExp(`Build ${RELEASE_QUERY_TOKEN} · verifying`));
+  assert.match(serviceWorkerSource, new RegExp(`const RELEASE_BUILD = "${RELEASE_QUERY_TOKEN}"`));
+  const index = asPublished(indexSource);
+  const app = asPublished(appSource);
+  const hud = asPublished(hudSource);
+  const serviceWorker = asPublished(serviceWorkerSource);
+  const sceneBuilders = asPublished(sceneBuildersSource);
+  const airframeBuilder = asPublished(airframeBuilderSource);
+  const airframePrimitives = asPublished(airframePrimitivesSource);
   const entrypoint = index.match(/await import\("\.\/app\.js\?v=([^"]+)"\)/);
   const blazorLoader = index.match(
     /loadClassicScript\("\.\/_framework\/blazor\.webassembly\.js\?v=([^"]+)"/,
@@ -331,12 +362,16 @@ test("shell, browser module, service worker, and deployment endpoint share one r
 });
 
 test("every published sub-application shares the release-qualified service worker", async () => {
-  const [indoorIndex, indoorApp, medevacIndex, medevacApp] = await Promise.all([
+  const subAppSources = await Promise.all([
     readFile(new URL("../../../indoor/index.html", import.meta.url), "utf8"),
     readFile(new URL("../../../indoor/game.js", import.meta.url), "utf8"),
     readFile(new URL("../../../medevac/index.html", import.meta.url), "utf8"),
     readFile(new URL("../../../medevac/app.js", import.meta.url), "utf8"),
   ]);
+  for (const source of subAppSources) {
+    assert.doesNotMatch(source, /\?v=\d+/, "sub-app source must not hard-code a numeric cache buster");
+  }
+  const [indoorIndex, indoorApp, medevacIndex, medevacApp] = subAppSources.map(asPublished);
   for (const [label, source] of [
     ["indoor HTML", indoorIndex],
     ["indoor app", indoorApp],
@@ -402,12 +437,13 @@ test("environment lab immutable module keys use the numeric release identity", a
     readFile(new URL("../../../environment-lab/index.html", import.meta.url), "utf8"),
     readFile(new URL("../../../environment-lab/main.js", import.meta.url), "utf8"),
   ]);
-  assert.match(environmentIndex,
-    new RegExp(`\\./main\\.js\\?v=${RELEASE_BUILD}`));
-  assert.match(environmentApp,
-    new RegExp(`tactical_clouds\\.js\\?v=${RELEASE_BUILD}`));
-  assert.doesNotMatch(`${environmentIndex}\n${environmentApp}`, /\?v=[A-Za-z]/,
-    "semantic v= keys become falsely immutable in the service worker cache");
+  const environmentRaw = `${environmentIndex}\n${environmentApp}`;
+  assert.doesNotMatch(environmentRaw, /\?v=\d+/);
+  assert.doesNotMatch(environmentRaw.replaceAll(`?v=${RELEASE_QUERY_TOKEN}`, ""), /\?v=/,
+    "only the publish placeholder may occupy v=; semantic keys become falsely immutable");
+  const publishedEnvironment = asPublished(environmentRaw);
+  assert.match(publishedEnvironment, new RegExp(`\\./main\\.js\\?v=${RELEASE_BUILD}`));
+  assert.match(publishedEnvironment, new RegExp(`tactical_clouds\\.js\\?v=${RELEASE_BUILD}`));
 });
 
 test("a committed production runtime change cannot silently reuse this build", (context) => {
@@ -418,8 +454,12 @@ test("a committed production runtime change cannot silently reuse this build", (
   }
 
   // During release preparation the bump may still be unstaged or staged. Require every dirty
-  // production runtime change to advance index.html in the same worktree; otherwise a normal
-  // pre-commit run could bless another same-number deployment before history exists to catch it.
+  // production runtime change to advance the single release identity in the same worktree.
+  // Touching index.html also counts while that edit is uncommitted, because the stable
+  // placeholder lives there; history below still rejects a committed runtime change that
+  // does not introduce a new RELEASE_BUILD.
+  const identityPath = "web/wwwroot/render/release/release_identity.js";
+  const indexPath = "web/wwwroot/index.html";
   const dirtyStatus = git([
     "status", "--porcelain=v1", "--untracked-files=all", "--", "web/wwwroot",
   ]).stdout.trimEnd();
@@ -429,21 +469,29 @@ test("a committed production runtime change cannot silently reuse this build", (
   }).filter((path) => path.startsWith("web/wwwroot/")
     && !path.includes("/tests/")
     && !/\.test\.(?:js|mjs)$/.test(path));
-  const dirtyIndex = dirtyRuntimePaths.includes("web/wwwroot/index.html");
-  const dirtyWithoutIndex = dirtyRuntimePaths.filter((path) => path !== "web/wwwroot/index.html");
-  assert.ok(dirtyIndex || dirtyWithoutIndex.length === 0,
-    `production runtime changed without advancing index.html: ${dirtyWithoutIndex.join(", ")}`);
+  const dirtyMarker = dirtyRuntimePaths.includes(identityPath)
+    || dirtyRuntimePaths.includes(indexPath);
+  const dirtyWithoutMarker = dirtyRuntimePaths.filter(
+    (path) => path !== identityPath && path !== indexPath,
+  );
+  assert.ok(dirtyMarker || dirtyWithoutMarker.length === 0,
+    `production runtime changed without advancing ${identityPath}: ${dirtyWithoutMarker.join(", ")}`);
 
-  // Once committed, the introduction commit becomes the boundary: every later production-file
-  // change must introduce a new build query, or this test fails in CI.
-  const unstaged = git(["diff", "--quiet", "--", "web/wwwroot/index.html"]);
-  const staged = git(["diff", "--cached", "--quiet", "--", "web/wwwroot/index.html"]);
+  const unstaged = git(["diff", "--quiet", "--", identityPath]);
+  const staged = git(["diff", "--cached", "--quiet", "--", identityPath]);
   if (unstaged.status === 1 || staged.status === 1) return;
 
-  const introduced = git([
-    "log", "-1", "--format=%H", `-Sapp.js?v=${RELEASE_BUILD}`,
-    "--", "web/wwwroot/index.html",
+  const identityIntroduced = git([
+    "log", "-1", "--format=%H",
+    `-Sexport const RELEASE_BUILD = "${RELEASE_BUILD}"`,
+    "--", identityPath,
   ]).stdout.trim();
+  const tokenIntroduced = git([
+    "log", "-1", "--format=%H",
+    `-Sapp.js?v=${RELEASE_QUERY_TOKEN}`,
+    "--", indexPath,
+  ]).stdout.trim();
+  const introduced = laterCommit(identityIntroduced, tokenIntroduced);
   assert.ok(introduced, `Build ${RELEASE_BUILD} must have an introduction commit`);
   const laterRuntimeChanges = git([
     "log", "--format=%H", `${introduced}..HEAD`, "--", "web/wwwroot",
@@ -453,7 +501,7 @@ test("a committed production runtime change cannot silently reuse this build", (
   assert.equal(
     laterRuntimeChanges,
     "",
-    `Build ${RELEASE_BUILD} was reused after production files changed; advance RELEASE_BUILD and app.js?v together`,
+    `Build ${RELEASE_BUILD} was reused after production files changed; advance RELEASE_BUILD in ${identityPath}`,
   );
 });
 

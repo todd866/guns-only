@@ -16,15 +16,14 @@ const DEFAULT_REPOSITORY_ROOT = path.resolve(TOOL_ROOT, "../..");
 const RELEASE_IDENTITY = "web/wwwroot/render/release/release_identity.js";
 const BUILD_INFO = "web/wwwroot/api/build-info.js";
 const SERVICE_WORKER = "web/wwwroot/service-worker.js";
-const SAMPLE_BED = "web/wwwroot/render/audio/sample_bed.js";
 const INDEX = "web/wwwroot/index.html";
-const BUILD_CONSTANTS = new Map([
-  [RELEASE_IDENTITY, "RELEASE_BUILD"],
-  [BUILD_INFO, "RELEASE_BUILD"],
-  [SERVICE_WORKER, "RELEASE_BUILD"],
-  [SAMPLE_BED, "SAMPLE_BED_BUILD"],
-]);
+const STATUS = "docs/STATUS.md";
+// Source keeps this placeholder. Publish rewrites it to the numeric build so browsers and the
+// service worker never mix releases, without storing that number in every module.
+export const RELEASE_QUERY_TOKEN = "__RELEASE_BUILD__";
+const STAMPED_FILES = Object.freeze([RELEASE_IDENTITY, STATUS]);
 const SOURCE_EXTENSIONS = new Set([".html", ".js", ".mjs"]);
+const PUBLISHED_EXTENSIONS = new Set([".css", ".html", ".js", ".mjs"]);
 const SKIPPED_DIRECTORIES = new Set([
   "_framework",
   "art",
@@ -43,28 +42,30 @@ const DEFAULT_FILE_SYSTEM = Object.freeze({
   writeFile,
 });
 
+export function materializeReleaseSource(source, build) {
+  return source.replaceAll(RELEASE_QUERY_TOKEN, String(build));
+}
+
+function candidateLine(build) {
+  return `Next candidate: Build ${build}`;
+}
+
 export function stampSource(relativePath, source, currentBuild, nextBuild) {
-  // Runtime cache keys are one release identity. Normalising every numeric key
-  // also repairs a stale sub-app reference instead of carrying it into the next
-  // release simply because it predates the current build.
-  let result = source.replace(/\?v=\d+/g, `?v=${nextBuild}`);
-  const buildConstant = BUILD_CONSTANTS.get(relativePath);
-  if (buildConstant) {
-    result = result.replace(
-      new RegExp(`(${buildConstant}\\s*=\\s*")${currentBuild}(";)`),
-      `$1${nextBuild}$2`,
-    );
+  if (relativePath === RELEASE_IDENTITY) {
+    const pattern = new RegExp(`(export const RELEASE_BUILD = ")${currentBuild}(";)`);
+    if (!pattern.test(source)) {
+      throw new Error(`${RELEASE_IDENTITY} does not contain RELEASE_BUILD ${currentBuild}`);
+    }
+    return source.replace(pattern, `$1${nextBuild}$2`);
   }
-  if (relativePath === INDEX) {
-    result = result
-      .replaceAll(`Build ${currentBuild}`, `Build ${nextBuild}`)
-      .replaceAll(`BUILD ${currentBuild}`, `BUILD ${nextBuild}`)
-      .replace(
-        new RegExp(`(const releaseBuild\\s*=\\s*")${currentBuild}(";)`),
-        `$1${nextBuild}$2`,
-      );
+  if (relativePath === STATUS) {
+    const current = candidateLine(currentBuild);
+    if (!source.includes(current)) {
+      throw new Error(`${STATUS} has no "${current}" line`);
+    }
+    return source.replaceAll(current, candidateLine(nextBuild));
   }
-  return result;
+  return source;
 }
 
 async function sourceFiles(root, relativeDirectory, fileSystem, { includeTests = false } = {}) {
@@ -91,8 +92,8 @@ async function sourceFiles(root, relativeDirectory, fileSystem, { includeTests =
 }
 
 async function releaseSourceFiles(root, fileSystem) {
-  // Stamp the whole release surface, including smoke *tests* that pin ?v= (Build 266 missed
-  // cobra-crew-chain.test.mjs because .test. files were skipped). wwwroot tests stay excluded.
+  // Smoke tests that import a published module must not pin a numeric ?v= either. wwwroot tests
+  // stay excluded: they assert against the placeholder and may mention sample URLs.
   return [
     ...await sourceFiles(root, "web/wwwroot", fileSystem),
     ...await sourceFiles(root, "web/smoke", fileSystem, { includeTests: true }),
@@ -109,15 +110,10 @@ function verifyReleaseSources(sources, releaseFiles) {
   const identity = sources.get(RELEASE_IDENTITY);
   if (identity === undefined) throw new Error(`${RELEASE_IDENTITY} was not read`);
   const releaseBuild = releaseBuildFromIdentity(identity);
-  for (const [relative, buildConstant] of BUILD_CONSTANTS) {
-    const source = sources.get(relative);
-    if (source === undefined) throw new Error(`${relative} was not read`);
-    const match = source.match(new RegExp(
-      `(?:const|export const) ${buildConstant} = "(\\d+)";`,
-    ));
-    if (!match || Number(match[1]) !== releaseBuild) {
-      throw new Error(`${relative} does not match release Build ${releaseBuild}`);
-    }
+  const status = sources.get(STATUS);
+  if (status === undefined) throw new Error(`${STATUS} was not read`);
+  if (!status.includes(candidateLine(releaseBuild))) {
+    throw new Error(`${STATUS} does not name candidate Build ${releaseBuild}`);
   }
 
   const mismatches = [];
@@ -125,13 +121,36 @@ function verifyReleaseSources(sources, releaseFiles) {
     const source = sources.get(relative);
     if (source === undefined) throw new Error(`${relative} was not read`);
     for (const match of source.matchAll(/\?v=(\d+)/g)) {
-      if (Number(match[1]) !== releaseBuild) {
-        mismatches.push(`${relative}: ?v=${match[1]}`);
-      }
+      mismatches.push(`${relative}: hard-coded release query ?v=${match[1]}`);
+    }
+    if (relative !== RELEASE_IDENTITY) {
+      const duplicate = source.match(
+        /(?:export\s+)?const\s+(?:RELEASE_BUILD|SAMPLE_BED_BUILD)\s*=\s*"(\d+)"/,
+      );
+      if (duplicate) mismatches.push(`${relative}: hard-coded ${duplicate[0]}`);
     }
   }
+
+  const index = sources.get(INDEX);
+  if (index === undefined) throw new Error(`${INDEX} was not read`);
+  if (!index.includes(`Build ${RELEASE_QUERY_TOKEN} · verifying`)) {
+    mismatches.push(`${INDEX}: ready-build placeholder missing`);
+  }
+  if (!index.includes(`./app.js?v=${RELEASE_QUERY_TOKEN}`)) {
+    mismatches.push(`${INDEX}: app entry placeholder missing`);
+  }
+  const worker = sources.get(SERVICE_WORKER);
+  if (!worker?.includes(`const RELEASE_BUILD = "${RELEASE_QUERY_TOKEN}"`)) {
+    mismatches.push(`${SERVICE_WORKER}: release placeholder missing`);
+  }
+  const buildInfo = sources.get(BUILD_INFO);
+  if (!buildInfo?.includes(`"${RELEASE_QUERY_TOKEN}"`)) {
+    mismatches.push(`${BUILD_INFO}: release placeholder missing`);
+  }
   if (mismatches.length > 0) {
-    throw new Error(`mixed release queries for Build ${releaseBuild}:\n${mismatches.join("\n")}`);
+    throw new Error(
+      `release stamp is not singular for Build ${releaseBuild}:\n${mismatches.join("\n")}`,
+    );
   }
   return Object.freeze({ releaseBuild, checkedFiles: releaseFiles.length });
 }
@@ -143,7 +162,10 @@ export async function verifyReleaseStamps(
   const releaseFiles = await releaseSourceFiles(root, fileSystem);
   const requiredFiles = new Set([
     ...releaseFiles,
-    ...BUILD_CONSTANTS.keys(),
+    ...STAMPED_FILES,
+    INDEX,
+    SERVICE_WORKER,
+    BUILD_INFO,
   ]);
   const sources = new Map();
   for (const relative of [...requiredFiles].sort()) {
@@ -187,13 +209,9 @@ export async function stampRelease({
   fileSystem = DEFAULT_FILE_SYSTEM,
 } = {}) {
   const releaseFiles = await releaseSourceFiles(root, fileSystem);
-  const candidates = new Set([
-    ...releaseFiles,
-    ...BUILD_CONSTANTS.keys(),
-    INDEX,
-  ]);
+  const required = [...new Set([...releaseFiles, ...STAMPED_FILES])].sort();
   const preflight = [];
-  for (const relative of [...candidates].sort()) {
+  for (const relative of required) {
     const absolute = path.join(root, relative);
     const fileStat = await fileSystem.stat(absolute);
     const beforeBytes = await fileSystem.readFile(absolute);
@@ -217,7 +235,9 @@ export async function stampRelease({
   const prospectiveSources = new Map();
   const changes = [];
   for (const entry of preflight) {
-    const after = stampSource(entry.relative, entry.before, currentBuild, next);
+    const after = STAMPED_FILES.includes(entry.relative)
+      ? stampSource(entry.relative, entry.before, currentBuild, next)
+      : entry.before;
     prospectiveSources.set(entry.relative, after);
     if (after === entry.before) continue;
     changed.push(entry.relative);
@@ -226,8 +246,8 @@ export async function stampRelease({
   if (changed.length === 0) throw new Error("release stamp changed no files");
 
   // Validate the complete next-build graph before creating even a temporary
-  // file. A malformed canonical source or stale query therefore cannot leave a
-  // partially stamped checkout.
+  // file. A malformed canonical source or a hard-coded query therefore cannot
+  // leave a partially stamped checkout.
   verifyReleaseSources(prospectiveSources, releaseFiles);
   if (dryRun) {
     return Object.freeze({ currentBuild, nextBuild: next, changed: Object.freeze(changed) });
@@ -296,6 +316,56 @@ export async function stampRelease({
     );
   }
   return Object.freeze({ currentBuild, nextBuild: next, changed: Object.freeze(changed) });
+}
+
+async function publishedTextFiles(wwwroot, fileSystem) {
+  const files = [];
+  async function visit(directory) {
+    const entries = await fileSystem.readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIPPED_DIRECTORIES.has(entry.name)) await visit(absolute);
+        continue;
+      }
+      if (entry.isFile() && PUBLISHED_EXTENSIONS.has(path.extname(entry.name))) {
+        files.push(absolute);
+      }
+    }
+  }
+  await visit(wwwroot);
+  return files;
+}
+
+export async function applyPublishedReleaseQueries(
+  wwwroot,
+  { fileSystem = DEFAULT_FILE_SYSTEM } = {},
+) {
+  const identityPath = path.join(wwwroot, "render/release/release_identity.js");
+  const releaseBuild = releaseBuildFromIdentity(await fileSystem.readFile(identityPath, "utf8"));
+  const build = String(releaseBuild);
+  let rewritten = 0;
+  for (const absolute of await publishedTextFiles(wwwroot, fileSystem)) {
+    const before = await fileSystem.readFile(absolute, "utf8");
+    if (!before.includes(RELEASE_QUERY_TOKEN)) continue;
+    await fileSystem.writeFile(absolute, materializeReleaseSource(before, build));
+    rewritten += 1;
+  }
+
+  const indexPath = path.join(wwwroot, "index.html");
+  const index = await fileSystem.readFile(indexPath, "utf8");
+  const workerPath = path.join(wwwroot, "service-worker.js");
+  const worker = await fileSystem.readFile(workerPath, "utf8");
+  if (index.includes(RELEASE_QUERY_TOKEN) || worker.includes(RELEASE_QUERY_TOKEN)) {
+    throw new Error("published release placeholder survived materialization");
+  }
+  if (!index.includes(`./app.js?v=${build}`)) {
+    throw new Error(`published index is missing app.js?v=${build}`);
+  }
+  if (!worker.includes(`const RELEASE_BUILD = "${build}";`)) {
+    throw new Error(`published service worker is missing RELEASE_BUILD ${build}`);
+  }
+  return Object.freeze({ releaseBuild, rewritten });
 }
 
 async function main() {

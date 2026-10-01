@@ -177,7 +177,7 @@ test("play stages zero while the continuously-running lab retains provider hover
 
 test("Hold the Bridge wires Ready before every authority advance without swallowing keys", async () => {
   const main = await readFile(new URL("cobra-lab/main.js", root), "utf8");
-  assert.match(main, /render\/cobra\/cobra_sortie_ready\.js\?v=\d+/);
+  assert.match(main, /render\/cobra\/cobra_sortie_ready\.js\?v=__RELEASE_BUILD__/);
   assert.match(main, /createCobraSortieReadyInterlock/);
   assert.match(main,
     /createCobraSortieReadyInterlock\(\{[\s\S]{0,80}?ready: !PLAY_MODE \|\| BATTLE_REVIEW_MODE,[\s\S]{0,30}?\}\)/,

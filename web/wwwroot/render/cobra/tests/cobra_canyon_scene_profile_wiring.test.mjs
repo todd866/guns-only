@@ -203,7 +203,7 @@ test("the canyon sky has no azimuth branch cut across the upper field of view", 
 test("cobra lab scene constants consume the shared visual profile", async () => {
   const main = await source("cobra-lab/main.js");
   assert.match(main, /COBRA_CANYON_VISUAL_PROFILE/);
-  assert.match(main, /cobra_canyon_visual_profile\.js\?v=\d+/);
+  assert.match(main, /cobra_canyon_visual_profile\.js\?v=__RELEASE_BUILD__/);
   assert.match(
     main,
     /renderer\.toneMappingExposure = COBRA_CANYON_VISUAL_PROFILE\.toneMappingExposure/,
@@ -241,7 +241,7 @@ test("mobile quality bypasses procedural cloud noise in the fragment hot path", 
 
 test("the basin and river surfaces run the shared painted recipe, per fragment", async () => {
   const presentation = await source("render/cobra/cobra_canyon_presentation.js");
-  assert.match(presentation, /cobra_canyon_terrain_material\.js\?v=\d+/);
+  assert.match(presentation, /cobra_canyon_terrain_material\.js\?v=__RELEASE_BUILD__/);
   assert.match(presentation, /createCobraCanyonBasinMaterial/);
   assert.match(presentation, /createCobraCanyonRiverMaterial/);
   // Baked BASIN/RIVER vertex colour was the Build 264 monotone's mechanism at this spacing.

@@ -114,7 +114,7 @@ test("Weekend Ride owns one shared audio lifecycle from gesture through debrief"
   ]);
 
   assert.match(main,
-    /import \{[\s\S]*?armFlightAudio,[\s\S]*?setFlightAudioEnabled,[\s\S]*?suspendFlightAudio,[\s\S]*?updateFlightAudio,[\s\S]*?\} from "\.\.\/render\/audio\/flight_audio\.js\?v=\d+"/u,
+    /import \{[\s\S]*?armFlightAudio,[\s\S]*?setFlightAudioEnabled,[\s\S]*?suspendFlightAudio,[\s\S]*?updateFlightAudio,[\s\S]*?\} from "\.\.\/render\/audio\/flight_audio\.js\?v=__RELEASE_BUILD__"/u,
     "the ride must use the shared audio graph through a release-stamped import");
   assert.match(main, /audio_profile_id = "audio\.yzf-r1\.crossplane\.v1"/u);
   assert.match(main, /updateFlightAudio\(state, \{[\s\S]*?muted: dispatchOpen \|\| teachingOpen \|\| paused \|\| terminal \|\| !playerSettings\.audio/u);
@@ -164,7 +164,7 @@ test("Weekend Ride widens its rectilinear helmet lens only at low speed", async 
   const main = await source("weekend-ride/main.js");
 
   assert.match(main,
-    /advanceLowSpeedLens,[\s\S]*lowSpeedLensTarget,[\s\S]*neutralLowSpeedLens,[\s\S]*low_speed_lens\.js\?v=\d+/u);
+    /advanceLowSpeedLens,[\s\S]*lowSpeedLensTarget,[\s\S]*neutralLowSpeedLens,[\s\S]*low_speed_lens\.js\?v=__RELEASE_BUILD__/u);
   assert.match(main, /wideFovDeg: 74,[\s\S]*cruiseFovDeg: 68,[\s\S]*cruiseSpeedMps: 34/u);
   assert.match(main,
     /rideLens = advanceLowSpeedLens\([\s\S]*lowSpeedLensTarget\(speedMps, WEEKEND_LOW_SPEED_LENS\)[\s\S]*camera\.fov = rideLens\.fovDeg;[\s\S]*camera\.updateProjectionMatrix\(\)/u);

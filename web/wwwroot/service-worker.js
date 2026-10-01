@@ -12,9 +12,9 @@
 // are then available offline; large terrain pages remain subject to the browser's storage budget.
 //
 // The cache name carries the release build, so shipping a new build orphans the old cache and
-// activate() deletes it. That reuses the existing stamp ritual rather than inventing a second
-// versioning scheme — see web/wwwroot/render/release/release_identity.js.
-const RELEASE_BUILD = "372";
+// activate() deletes it. Source keeps a placeholder; publish writes the number from
+// web/wwwroot/render/release/release_identity.js so this bucket matches the URLs the shell requests.
+const RELEASE_BUILD = "__RELEASE_BUILD__";
 const CACHE = `guns-only-${RELEASE_BUILD}`;
 
 // Never cached: telemetry and the multiplayer room are live services, and a cached reply would be

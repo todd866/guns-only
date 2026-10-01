@@ -44,7 +44,7 @@ export async function treeHash(root) {
 export async function publishedIdentity(wwwroot, sourceRevision) {
   if (!SHA.test(sourceRevision || "")) throw new Error("A full 40-character source revision is required");
   const buildSource = await readFile(path.join(wwwroot, "api/build-info.js"), "utf8");
-  const build = buildSource.match(/const RELEASE_BUILD = "(\d+)";/)?.[1];
+  const build = buildSource.match(/const RELEASE_BUILD(?:_PLACEHOLDER)? = "(\d+)";/)?.[1];
   if (!build) throw new Error("Published build identity missing");
   return { sourceRevision, build,
     artifactSha256: await treeHash(wwwroot),

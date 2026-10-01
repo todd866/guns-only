@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RELEASE_BUILD } from "../../release/release_identity.js";
 import {
   addSemanticSocket as sceneSocket,
   createLoftGeometry as sceneLoft,
@@ -14,7 +13,7 @@ const {
   createLoftGeometry: sharedLoft,
   createPlanformGeometry: sharedPlanform,
   makeMaterial: sharedMaterial,
-} = await import(`../airframe_primitives.js?v=${RELEASE_BUILD}`);
+} = await import(`../airframe_primitives.js?v=__RELEASE_BUILD__`);
 
 test("scene and definition-driven airframes use one shared primitive implementation", () => {
   assert.equal(sceneSocket, sharedSocket);

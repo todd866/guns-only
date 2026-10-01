@@ -2,12 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { RELEASE_BUILD } from "../../release/release_identity.js";
-
 const root = new URL("../../../", import.meta.url);
 const source = (path) => readFile(new URL(path, root), "utf8");
 const versionedSettingsImport = new RegExp(
-  String.raw`import \{[^}]*\bloadPlayerSettings,\s*\bsavePlayerSettings,[^}]*\} from "\.\.\/render\/settings\/player_settings\.js\?v=${RELEASE_BUILD}"`,
+  String.raw`import \{[^}]*\bloadPlayerSettings,\s*\bsavePlayerSettings,[^}]*\} from "\.\.\/render\/settings\/player_settings\.js\?v=__RELEASE_BUILD__"`,
   "u",
 );
 
