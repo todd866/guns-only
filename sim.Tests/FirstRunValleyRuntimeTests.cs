@@ -114,11 +114,15 @@ public sealed class FirstRunValleySessionTests {
                 session.StepFixed();
             }
         }
-        HoldAft(1_200.0, (int)(10.0 * AircraftSim.TickHz));
+        // Doctrine changed 2026-10-01 (owner: rung 0 was "boring"): the present is a short
+        // introduction, not a lesson that lasts until the player tracks. Outside proximity it
+        // persists briefly; four seconds inside 1.5 km ends it, and PresentMaximumSeconds caps it.
+        HoldAft(2_500.0, (int)(3.0 * AircraftSim.TickHz));
         Assert.True(session.Bandit.Presenting,
-            "ten seconds outside the gun funnel must not end Present");
-        HoldAft(500.0, (int)(2.5 * AircraftSim.TickHz));
-        Assert.False(session.Bandit.Presenting);
+            "three seconds well outside proximity must not end Present");
+        HoldAft(1_200.0, (int)((ReactiveBandit.PresentProximitySeconds + 0.5) * AircraftSim.TickHz));
+        Assert.False(session.Bandit.Presenting,
+            "four seconds inside 1.5 km is 'you are in the fight'");
     }
 
     [Fact]

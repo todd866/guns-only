@@ -22,6 +22,9 @@ public sealed class NeutralMergeBandit :
     /// exactly one transition: EndPresentation latches it false when the pair graduates.
     bool _presenting;
     bool _endPresentOnProximity = true;
+    double _presentElapsedSeconds;
+    /// A head-on pass from the staged 9 km closes in well under 20 s; past this the merge was missed.
+    public const double MaximumAuthoredPassSeconds = 30.0;
 
     /// Before the merge gate this is the briefed intent; after it, the live fight owns the answer.
     public bool Presenting => _fight?.Presenting ?? _presenting;
@@ -179,7 +182,16 @@ public sealed class NeutralMergeBandit :
 
         _mergeSim.Step(ReciprocalPassCommand(), dt);
         T += dt;
+        bool wasPresenting = _presenting;
         UpdateAuthoredPresent(player, dt);
+        // THE AUTHORED PASS MUST END IN A FIGHT. It only handed over once the player had been
+        // inside the merge gate and the range opened, so a player who never came within 900 m
+        // met a non-firing jet flying a straight line for as long as they cared to watch (review
+        // finding, 2026-10-01). A finished present, or a missed merge, starts the fight now.
+        if ((wasPresenting && !_presenting) || T >= MaximumAuthoredPassSeconds) {
+            BeginFight(player.ContactIdentity);
+            return;
+        }
 
         double rangeM = Geometry.Range(player, _mergeSim.State);
         _minimumRangeM = Math.Min(_minimumRangeM, rangeM);
@@ -216,6 +228,11 @@ public sealed class NeutralMergeBandit :
     /// Pop-out used to call EndPresentation and skip the two-second hold.
     void UpdateAuthoredPresent(in ActorObservation player, double dt) {
         if (!_presenting) return;
+        _presentElapsedSeconds += dt;
+        if (_presentElapsedSeconds >= ReactiveBandit.PresentMaximumSeconds) {
+            _presenting = false;
+            return;
+        }
         double range = Geometry.Range(player, _mergeSim.State);
         double angleOff = Geometry.AngleOff(player, _mergeSim.State);
         bool tracking = range <= ReactiveBandit.PresentFunnelRangeM
@@ -246,7 +263,8 @@ public sealed class NeutralMergeBandit :
             presenting: _presenting,
             endPresentOnProximity: _endPresentOnProximity) {
             Wind = _wind,
-            Atmosphere = _atmosphere
+            Atmosphere = _atmosphere,
+            PresentElapsedSeconds = _presentElapsedSeconds,
         };
         if (_lookaheadCadencePhase is int phase)
             fight.ConfigureLookaheadCadencePhase(phase);

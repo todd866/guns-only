@@ -260,6 +260,24 @@ public sealed class ReactiveBandit :
     double _lowAttackRecommitAt = double.NegativeInfinity;
     double _fireBurstUntil = double.NegativeInfinity;
     double _nextFireBurstAt = double.NegativeInfinity;
+    double _nextPressureBurstAt = double.NegativeInfinity;
+    bool _pressureBurstActive;
+    int _pressureBurstsFired;
+
+    /// PRESSURE BURSTS for a tier with solution discipline. Holding fire until the 1.25 deg
+    /// solution made the Ace a silent shape for most of a fight and then a single lethal pass —
+    /// "mostly passive, then it kills me" (owner, 2026-10-01). A real pilot with the nose on you
+    /// takes the snapshot even when the solution is poor: it usually misses, and it tells you that
+    /// you are being shot at. Short, spaced and budgeted so the solution shots keep their ammo:
+    /// ten 0.2 s bursts is ~50 of the Su-27's 150 rounds.
+    public const double PressureBurstSeconds = 0.2;
+    public const double PressureBurstIntervalSeconds = 3.0;
+    public const int PressureBurstLimit = 10;
+    public int PressureBurstsFired => _pressureBurstsFired;
+    /// Off for actors that stand in for a player (the gunnery funnel's reference aircraft).
+    public bool PressureBurstsEnabled { get; init; } = true;
+    /// True while the trigger is down for a pressure burst rather than a solution shot.
+    public bool PressureBurstActive => _pressureBurstActive && T < _fireBurstUntil;
     bool _terrainRecoveryActive;
 
     // Lookahead decision cache. Rolling a small candidate set forward over the horizon every
@@ -720,12 +738,19 @@ public sealed class ReactiveBandit :
     /// tracking-gated present lasted the whole sortie and the Ace never fired. Four seconds
     /// inside this range is "you are in the fight"; the pair turns even without a gun solution.
     public const double PresentProximitySeconds = 4.0;
+    /// THE PRESENT IS AN INTRODUCTION, NOT A SORTIE. Owner, 2026-10-01: "it's mostly passive and
+    /// then occasionally it gets aggressive and kills me but it's just boring." The Build 371
+    /// production flight that prompted it was 70 s of a rung-0 Competent presenting, zero rounds,
+    /// then the owner quit. Whatever the player does, the bandit turns in after this long.
+    public const double PresentMaximumSeconds = 12.0;
 
     /// True while this bandit is deliberately setting the player up rather than fighting them.
     public bool Presenting { get; private set; }
     bool _endPresentOnProximity = true;
     double _presentHeldSeconds;
     double _presentProximitySeconds;
+    /// Present time already spent before this controller took over (the authored merge pass).
+    internal double PresentElapsedSeconds;
     public PilotCommand LastCommand { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
     public PilotCommand AppliedCommand => LastCommand;
     public BanditDecisionTrace DecisionTrace { get; private set; }
@@ -863,7 +888,19 @@ public sealed class ReactiveBandit :
                 || BanditFireControl.RequiredLeadAngleRad(State, player)
                     <= EffectiveLeadFireConeRad)
             && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad);
-        if (!onSolution && !onBody) return false;
+        if (!onSolution && !onBody) {
+            if (_pressureBurstActive && T < _fireBurstUntil
+                && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad))
+                return true;
+            _pressureBurstActive = false;
+            if (!PressureShotAvailable(player)) return false;
+            _pressureBurstActive = true;
+            _pressureBurstsFired++;
+            _fireBurstUntil = T + PressureBurstSeconds;
+            _nextPressureBurstAt = T + PressureBurstIntervalSeconds;
+            return true;
+        }
+        _pressureBurstActive = false;
 
         // Start the burst when a usable opportunity actually appears. The historical absolute
         // engagement clock discarded short post-merge windows whenever they happened to arrive
@@ -877,6 +914,16 @@ public sealed class ReactiveBandit :
         }
         return T < _fireBurstUntil;
     }
+
+    /// Only tiers that otherwise hold for the solution need pressure bursts; the body-gate tiers
+    /// already throw tracers. A stalking boss keeps its deliberate silence until it commits.
+    bool PressureShotAvailable(in ActorObservation player) =>
+        PressureBurstsEnabled
+        && !_profile.FiresOnBodyGate
+        && !(_profile.IsBoss && !BossCommitted)
+        && _pressureBurstsFired < PressureBurstLimit
+        && T >= _nextPressureBurstAt
+        && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad);
 
     /// A committed boss shoots with the standard Ace gate; a stalking boss holds its raised
     /// quality bar. Every other tier reads its profile cone unchanged.
@@ -1862,6 +1909,11 @@ public sealed class ReactiveBandit :
     /// no wall clock, no randomness, so replays reproduce and FightDirector never counter-picks.
     /// Setting Presenting false is one-way; nothing sets it true again.
     void UpdatePresentWithdrawal(in ActorObservation player, double dt) {
+        PresentElapsedSeconds += dt;
+        if (PresentElapsedSeconds >= PresentMaximumSeconds) {
+            Presenting = false;
+            return;
+        }
         double range = Geometry.Range(player, State);
         double angleOff = Geometry.AngleOff(player, State);
         bool tracking = range <= PresentFunnelRangeM && angleOff <= PresentFunnelAngleRad;
@@ -2252,8 +2304,36 @@ public sealed class ReactiveBandit :
 
         // Throttle schedule mirrors the acquire law's energy management so lookahead never
         // manufactures thrust the airframe cannot deliver.
-        double fastThrottle = System.Math.Min(_maximumThrottle, 1.05);
-        double cruiseThrottle = System.Math.Min(_maximumThrottle, 0.84);
+        //
+        // OUTSIDE GUN RANGE, A CHASE IS A FULL-BURNER CHASE. Capping "fast" at 1.05 held the Su-27
+        // near military power, so behind an F-22 it sat on the six at 1.7 km, 277 m/s against
+        // 330 m/s, closing at 3 m/s for four minutes (BanditPressureReport, 2026-10-01): the
+        // owner's "mostly passive". Inside the gun band the old schedule stands — that is where
+        // throttle management buys the turn.
+        Vec3D lineOfSight = range > 1e-6 ? (player.Position - State.Position) * (1.0 / range) : State.ForwardDir();
+        double closureMps = -(player.VelocityVector() - State.VelocityVector()).Dot(lineOfSight);
+        // Only while the chase is not already closing: burner on a closing pass overshoots the
+        // merge and opens the next gap (measured: Ace passive share 25% -> 55% when unconditional).
+        // Never while hunting a low target: burner into a valley runner overran it (min range 86 m,
+        // LowBlockHuntingTests seed 1). The low-attack plan owns that geometry.
+        bool stalled = lowAttackPlan is null
+            && range > ChaseRangeM && closureMps < ChaseClosureMps;
+        // Sustained, not transient: every post-merge separation briefly looks like this, and
+        // burner there cost the Ace its solution discipline (36% -> 18% on-solution). The
+        // stand-off this exists for lasted minutes.
+        _chaseStallSeconds = stalled
+            ? _chaseStallSeconds + System.Math.Max(0.0, T - _chaseStallCheckedAt)
+            : 0.0;
+        _chaseStallCheckedAt = T;
+        bool chasing = _chaseStallSeconds >= ChaseStallSeconds;
+        double fastThrottle = chasing
+            ? _maximumThrottle
+            : System.Math.Min(_maximumThrottle, 1.05);
+        // And no candidate cruises out there: the planner's habitual pick behind a turning target
+        // is candidate 1 (4 G on the lead), which at 0.84 throttle was the whole stand-off.
+        double cruiseThrottle = chasing
+            ? _maximumThrottle
+            : System.Math.Min(_maximumThrottle, 0.84);
         double maxG = AvailableAcquireG(safetyReserve: false);
 
         // Full 3D pursuit uses the UNCLAMPED lift-vector-on-target roll: the bank that places the
@@ -2629,6 +2709,18 @@ public sealed class ReactiveBandit :
     /// every intervening grid cell rather than skipping over a ridge.
     // Full preserves the established 30 Hz forecast. Pressure levels cover the same horizon with
     // progressively coarser throwaway integration; authoritative flight remains fixed at 120 Hz.
+    /// Outer edge of the band in which closing is no longer the job (the trigger envelope's 900 m).
+    const double GunBandOuterM = 900.0;
+    /// The chase terms start here, not at the gun band: the stand-off they break sat at 1.7-2 km,
+    /// and applying them from 900 m moved the Ace's endgame out to 788 m median trigger range and
+    /// cost it conversions (GunConversionContractTests, 2026-10-01).
+    const double ChaseRangeM = 900.0;
+    /// Below this closure the bandit is not catching the player and lights the burner.
+    const double ChaseClosureMps = 30.0;
+    const double ChaseStallSeconds = 3.0;
+    double _chaseStallSeconds;
+    double _chaseStallCheckedAt;
+
     double ScoreCandidate(
         in PilotCommand command,
         in AircraftState own,
@@ -2863,6 +2955,10 @@ public sealed class ReactiveBandit :
         // Range management: pull the fight INTO firing range rather than zooming away or overshooting
         // through the merge. Distance from the band centre is penalised both long and short.
         score -= 0.004 * System.Math.Abs(termRange - idealRangeM);
+        // A closure-distance and closure-rate reward outside gun range was tried here
+        // (2026-10-01). Weight sweeps from 0.03 to 0.5 never moved the 1.7 km stand-off — it was
+        // throttle-limited (see the chase throttle in LookaheadCommand) — and the terms cost the
+        // Ace's solution discipline (GunConversionContractTests 36% -> 13% on-solution). Removed.
         // Speed (kinetic-energy) retention only -- NOT raw altitude, which would reward an endless
         // zoom climb out of the fight. Vertical maneuvers still emerge when they improve the angle.
         score += 0.010 * _profile.EnergyRetentionWeight

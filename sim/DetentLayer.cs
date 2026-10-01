@@ -6,6 +6,12 @@ public enum ValleyVariant { DoctrineDeep, PhysicsOnly }
 public sealed class DetentLayer {
     public ValleyVariant Variant = ValleyVariant.DoctrineDeep;
     public PilotCommand Command { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
+    /// <summary>
+    /// Test-only: a scripted pilot's demand replaces the stick-derived command at the one place the
+    /// stick becomes a command, so every downstream layer (assists, physiology, Auto-GCAS, the
+    /// flight model) still runs exactly as it does for a human. Null in production.
+    /// </summary>
+    internal PilotCommand? ScriptedPilotOverride;
     public double StickyOffsetG { get; private set; }
     public DemandTier Tier { get; private set; } = DemandTier.Baseline;
     /// <summary>Raw stick-forward intent for aids that must yield before filtered G settles.</summary>
@@ -725,6 +731,7 @@ public sealed class DetentLayer {
             CommandedAlphaRad: commandedAlpha,
             SasRollControl: 0.0,
             DirectLateralControl: true);
+        if (ScriptedPilotOverride is { } scripted) Command = scripted;
     }
 
     double OverridePullAlpha(in AircraftState s, in AircraftParams p) {

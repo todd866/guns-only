@@ -2,7 +2,7 @@
 
 Updated: 2026-10-01.
 Production: Build 371, revision `0e8ea60a8159b2da6ba9f246c334c3bc1ae35493`.
-Next candidate: Build 372, not deployed — holds F-22 opponent level and aiming assistance steady within each sortie while earning the next one; adds recovery-aware debriefs and direct practice suggestions; simplifies the briefing and fixes poster/Ride HUD overlap. Limits: [player-loop audit](audits/2026-09-26-player-loop.md).
+Next candidate: Build 373, not deployed — the F-22 bandit fights: the rung-0 present ends (12 s cap, proximity latch restored, a finished present starts the fight), the chase uses afterburner after a sustained stall, and solution-disciplined tiers throw budgeted pressure bursts ([PR #111](https://github.com/todd866/guns-only/pull/111), `sim.Tests/BanditPressureReport.cs`). Carries the undeployed Build 372 player loop: sortie-steady opponent level and aim assist, recovery-aware debriefs, practice suggestions, briefing and HUD-overlap fixes ([player-loop audit](audits/2026-09-26-player-loop.md)).
 Live production is Build 371, revision `0e8ea60a8159b2da6ba9f246c334c3bc1ae35493`. This checkout stamps `RELEASE_BUILD` 372 in `web/wwwroot/render/release/release_identity.js`.
 Build-by-build narrative, moved verbatim: [status narrative through Build 372](history/status-narrative-through-build-372.md).
 
@@ -44,6 +44,8 @@ Mission-hosted routes are `/?program=<id>`. A null mission defaults to `/<id>/` 
 Armstrong cable-strike is not a catalog experience. Its promotion gate is `tools/content/armstrong-promotion-gate.mjs` (status `eligible`, `ineligible`, or `unsafe`). Do not describe it as preview, quarantined, or production from this page.
 
 ## Known open defects
+
+- F-22 bandit pressure (2026-10-01): against the climbing `Cohort` pilot profile, rung 0 is still ~90% passive and the rung-3 pair ~70-80% passive (`BanditPressureReport`, 4 seeds). The scripted pilot never slows to turn; a human flight is the acceptance test.
 
 - Build 372 does not claim a human-tested full F-22 combat-to-landing flight. The full release gate was not rerun after the final logbook correction and practice-smoke change. Wider handling, difficulty tuning, cross-mission progression, and fresh human acceptance stay open. [Player-loop audit](audits/2026-09-26-player-loop.md).
 - Fire Boss `handlingEvidence` stays unverified and control-direction evidence stays unverified. Automated checks do not claim a new owner flight or OEM fidelity. [Handling](audits/2026-09-10-fireboss-handling.md), [assist and navigation](audits/2026-09-10-okanagan-assist-navigation.md).
