@@ -112,8 +112,11 @@ function verifyReleaseSources(sources, releaseFiles) {
   const releaseBuild = releaseBuildFromIdentity(identity);
   const status = sources.get(STATUS);
   if (status === undefined) throw new Error(`${STATUS} was not read`);
-  if (!status.includes(candidateLine(releaseBuild))) {
-    throw new Error(`${STATUS} does not name candidate Build ${releaseBuild}`);
+  // Either the stamped build is the queued candidate, or it has shipped and STATUS records it as
+  // production (product_truth.test.mjs allows "Next candidate: none queued" in that state).
+  const shipped = new RegExp(`^Production: Build ${releaseBuild},`, "m").test(status);
+  if (!status.includes(candidateLine(releaseBuild)) && !shipped) {
+    throw new Error(`${STATUS} names neither candidate nor production Build ${releaseBuild}`);
   }
 
   const mismatches = [];
