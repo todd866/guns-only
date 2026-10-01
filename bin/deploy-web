@@ -335,6 +335,12 @@ require_file content/packs/ukraine-modern/environment/terrain-atlas/rapier-range
 if [ "${GUNS_DEPLOY_SKIP_FRAME_GATE:-0}" = "1" ]; then
     echo "deploy-web: WARNING frame gate skipped by GUNS_DEPLOY_SKIP_FRAME_GATE=1" >&2
 else
+    # The harness drives Playwright from web/smoke's locked toolchain; a fresh deploy worktree has
+    # no node_modules (first Build 373 attempt failed closed on exactly that).
+    if [ ! -d "$repo_dir/web/smoke/node_modules/playwright" ]; then
+        echo "deploy-web: installing the locked browser toolchain for the frame gate"
+        (cd "$repo_dir/web/smoke" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null)
+    fi
     echo "deploy-web: flying the hardware frame gate on the publish artifact (~3 min, headless)"
     frame_log="$publish_dir/frame-gate.log"
     if ! node "$repo_dir/tools/perf/flight_frame_harness.mjs" --wwwroot "$deploy_root" >"$frame_log" 2>&1; then
