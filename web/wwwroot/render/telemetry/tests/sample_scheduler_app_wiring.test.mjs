@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 const appUrl = new URL("../../../app.js", import.meta.url);
-const sessionUrl = new URL("../../../../../sim/SimulationSession.cs", import.meta.url);
+const sessionDir = new URL("../../../../../sim/", import.meta.url);
+// SimulationSession is a partial class. Contract scans read every slice, not one file.
+const readSimulationSessionSource = async () => {
+  const names = (await readdir(sessionDir))
+    .filter((name) => /^SimulationSession.*\.cs$/.test(name))
+    .sort();
+  const parts = await Promise.all(
+    names.map((name) => readFile(new URL(name, sessionDir), "utf8")),
+  );
+  return parts.join("\n");
+};
 const bridgeUrl = new URL("../../../../WebBridge.cs", import.meta.url);
 const projectionUrl = new URL("../../../../SnapshotProjection.cs", import.meta.url);
 // The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
@@ -30,7 +40,7 @@ test("the browser recorder uses elapsed ticks and persists cadence/gap evidence"
 
 test("Auto-GCAS transitions survive between render snapshots as exact authority events", async () => {
   const [session, bridge] = await Promise.all([
-    readFile(sessionUrl, "utf8"),
+    readSimulationSessionSource(),
     readBridgeContract(),
   ]);
 
