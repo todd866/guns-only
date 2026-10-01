@@ -1,9 +1,10 @@
 # Current product status
 
 Updated: 2026-10-01.
-Production: Build 371, revision `0e8ea60a8159b2da6ba9f246c334c3bc1ae35493`.
-Next candidate: Build 373, not deployed — the F-22 bandit fights: the rung-0 present ends (12 s cap, proximity latch restored, a finished present starts the fight), the chase uses afterburner after a sustained stall, and solution-disciplined tiers throw budgeted pressure bursts ([PR #111](https://github.com/todd866/guns-only/pull/111), `sim.Tests/BanditPressureReport.cs`). Carries the undeployed Build 372 player loop: sortie-steady opponent level and aim assist, recovery-aware debriefs, practice suggestions, briefing and HUD-overlap fixes ([player-loop audit](audits/2026-09-26-player-loop.md)).
-Live production is Build 371, revision `0e8ea60a8159b2da6ba9f246c334c3bc1ae35493`. This checkout stamps `RELEASE_BUILD` 372 in `web/wwwroot/render/release/release_identity.js`.
+Production: Build 373, revision `67877aeaaa090b5ebf4fb69816a2c56a064cb7fd`.
+Next candidate: none queued.
+Shipped 2026-10-01: Build 373 — the F-22 bandit fights: the rung-0 present ends (12 s cap, proximity latch restored, a finished present starts the fight), the chase uses afterburner after a sustained stall, and solution-disciplined tiers throw budgeted pressure bursts ([PR #111](https://github.com/todd866/guns-only/pull/111), `sim.Tests/BanditPressureReport.cs`). Carries the undeployed Build 372 player loop: sortie-steady opponent level and aim assist, recovery-aware debriefs, practice suggestions, briefing and HUD-overlap fixes ([player-loop audit](audits/2026-09-26-player-loop.md)).
+Live production is Build 373, revision `67877aeaaa090b5ebf4fb69816a2c56a064cb7fd`. This checkout stamps `RELEASE_BUILD` 373 in `web/wwwroot/render/release/release_identity.js`.
 Build-by-build narrative, moved verbatim: [status narrative through Build 372](history/status-narrative-through-build-372.md).
 
 ## Focus
