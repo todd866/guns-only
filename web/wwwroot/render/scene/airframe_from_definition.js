@@ -6,17 +6,17 @@ import {
   createLoftGeometry,
   createPlanformGeometry,
   makeMaterial,
-} from "./airframe_primitives.js?v=372";
+} from "./airframe_primitives.js?v=__RELEASE_BUILD__";
 import {
   adaptShapeFirstAirframeDefinition,
   isShapeFirstAirframeDefinition,
-} from "./shape_first_airframe_adapter.js?v=372";
-import { createShapeFirstWingGeometry } from "./shape_first_wing_geometry.js?v=372";
+} from "./shape_first_airframe_adapter.js?v=__RELEASE_BUILD__";
+import { createShapeFirstWingGeometry } from "./shape_first_wing_geometry.js?v=__RELEASE_BUILD__";
 import {
   createRapierMaterials,
   createRapierInlet,
   createRapierExhaust,
-} from "./rapier_airframe_finish.js?v=372";
+} from "./rapier_airframe_finish.js?v=__RELEASE_BUILD__";
 
 function parseColor(value, fallback = 0x808080) {
   if (typeof value === "number" && Number.isFinite(value)) return value;

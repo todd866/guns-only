@@ -270,6 +270,17 @@ test -f "$publish_dir/wwwroot/multiplayer-config.js"
 test -f "$publish_dir/wwwroot/api/telemetry.js"
 test -f "$publish_dir/wwwroot/api/build-info.js"
 test -f "$publish_dir/wwwroot/api/telemetry-admin.js"
+release_build=$(node -e 'const fs=require("node:fs"); const source=fs.readFileSync("web/wwwroot/render/release/release_identity.js","utf8"); const match=source.match(/export const RELEASE_BUILD = "(\\d+)";/); if (!match) process.exit(1); process.stdout.write(match[1]);')
+grep -q "app.js?v=${release_build}" "$publish_dir/wwwroot/index.html"
+grep -q "const RELEASE_BUILD = \"${release_build}\";" "$publish_dir/wwwroot/service-worker.js"
+placeholder=$(find "$publish_dir/wwwroot" -type f \( -name '*.html' -o -name '*.js' -o -name '*.mjs' \) \
+  -not -path '*/content/*' -not -path '*/_framework/*' -print0 \
+  | xargs -0 grep -l '__RELEASE_BUILD__' || true)
+if [ -n "$placeholder" ]; then
+  echo "published wwwroot still contains the release placeholder:" >&2
+  printf '%s\n' "$placeholder" >&2
+  exit 1
+fi
 test -z "$(find "$publish_dir/wwwroot" -type f \( -name '*.test.js' -o -name '*.test.mjs' \) -print -quit)"
 test ! -d "$publish_dir/wwwroot/render/presence/tests"
 test ! -d "$publish_dir/wwwroot/render/telemetry/tests"

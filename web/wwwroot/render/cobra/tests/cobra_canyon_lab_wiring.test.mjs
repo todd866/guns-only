@@ -93,9 +93,9 @@ test("Cobra Canyon loads Blazor from the site-root framework path", async () => 
     source("cobra-lab/main.js"),
   ]);
   assert.match(html, /<base href="\/">/);
-  assert.match(html, /script\.src = "\/_framework\/blazor\.webassembly\.js\?v=\d+"/);
+  assert.match(html, /script\.src = "\/_framework\/blazor\.webassembly\.js\?v=__RELEASE_BUILD__"/);
   assert.doesNotMatch(html, /script\.src = "\.\.\/_framework\/blazor\.webassembly\.js/);
-  assert.match(html, /import\("\/cobra-lab\/main\.js\?v=\d+"\)/);
+  assert.match(html, /import\("\/cobra-lab\/main\.js\?v=__RELEASE_BUILD__"\)/);
   assert.match(main, /loadBootResource/);
   assert.match(main, /return `\/_framework\/\$\{name\}`/);
 });

@@ -561,7 +561,7 @@ test("Hold the Bridge mounts the production HUD with rotorcraft extras", async (
   assert.doesNotMatch(html, /id="hud-rotor"/);
   // One engine: the REAL production HUD plus authority-backed Cobra instruments on the same
   // combiner, not a fork or a stale DOM strip.
-  assert.match(main, /from "\.\.\/hud\.js\?v=\d+"/);
+  assert.match(main, /from "\.\.\/hud\.js\?v=__RELEASE_BUILD__"/);
   assert.match(main, /createHud/);
   assert.match(main, /cobraHudState/);
   assert.match(main, /cobraRotorcraftHudModel/);

@@ -18,6 +18,15 @@ cd .worktrees/prod-deploy-NNN && bin/deploy-web --prod
 `bin/worktree-prep` takes any trailing `git worktree add` arguments (`-b`, `--detach`, a ref) when
 the path does not exist yet, and re-hydrates in place when it does.
 
+## The build number
+
+`web/wwwroot/render/release/release_identity.js` is the only tracked copy of the release build.
+`bin/stamp-release --next <n>` advances that constant and the `Next candidate` line in
+`docs/STATUS.md`. Cache-busting queries in source are the placeholder `__RELEASE_BUILD__`.
+`dotnet publish` rewrites that placeholder to the numeric build in the published `wwwroot`,
+which is what browsers and the service worker cache. A hard-coded `?v=<digits>` in tracked
+release source fails `bin/stamp-release --check`.
+
 ## Preflight: everything cheap, first, together
 
 `bin/deploy-web` decides every precondition that does not require a build *before it builds

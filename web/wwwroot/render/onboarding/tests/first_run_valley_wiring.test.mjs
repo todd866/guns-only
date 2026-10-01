@@ -20,7 +20,7 @@ test("WebBridge exports StartFirstRunValley as a factory overlay, not a new Buil
 
 test("the F-22 shell stages the valley once, without bolting on first_run_controls", async () => {
   const app = await source("app.js");
-  assert.match(app, /render\/onboarding\/first_run_valley\.js\?v=\d+/);
+  assert.match(app, /render\/onboarding\/first_run_valley\.js\?v=__RELEASE_BUILD__/);
   assert.match(app, /shouldAutoStartFirstRunValley/);
   assert.match(app, /firstRunValleyPending/);
   assert.match(app, /markFirstRunValleySeen/);

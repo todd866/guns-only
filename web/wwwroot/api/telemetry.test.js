@@ -451,7 +451,7 @@ test("recorder losslessly encodes retained 20 Hz samples and batches uploads eve
   assert.match(app,
     /window\.addEventListener\("pagehide", \(\) => \{[\s\S]*?recorder\.flush\(\{ force: true \}\)[\s\S]*?\}\);/);
   assert.match(app, /document\.hidden\) recorder\.flush\(\{ force: true \}\)/);
-  // The shell must cache-bust application changes, but unrelated UI work legitimately advances
-  // the revision. Pinning yesterday's exact integer makes a healthy deploy fail this cost guard.
-  assert.match(index, /app\.js\?v=[1-9]\d*/);
+  // The shell cache-busts the application entry. Publish writes the numeric build, so this
+  // guard must keep the placeholder rather than pin yesterday's integer.
+  assert.match(index, /app\.js\?v=__RELEASE_BUILD__/);
 });

@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
+import { RELEASE_QUERY_TOKEN } from "../../../../../tools/release/stamp-release.mjs";
 import { RELEASE_BUILD } from "../release_identity.js";
 
 const workerUrl = new URL("../../../service-worker.js", import.meta.url);
 
 async function workerHarness({ fetchImpl, fetchResponse, match, put, storageEstimate, now } = {}) {
-  const source = await readFile(workerUrl, "utf8");
+  const source = (await readFile(workerUrl, "utf8")).replaceAll(RELEASE_QUERY_TOKEN, RELEASE_BUILD);
   const listeners = new Map();
   const puts = [];
   const networkRequests = [];

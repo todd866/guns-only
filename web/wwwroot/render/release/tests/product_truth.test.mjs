@@ -65,11 +65,11 @@ test("the browser and installed-app descriptions match the six production experi
   for (const [label, html] of [["cobra-lab", cobraLab], ["weekend-ride", weekendRide], ["okanagan", okanagan]]) {
     assert.match(html, /<base href="\/">/,
       `${label} needs a site-root document base for Blazor boot resources`);
-    assert.match(html, /script\.src = "\/_framework\/blazor\.webassembly\.js\?v=\d+"/,
+    assert.match(html, /script\.src = "\/_framework\/blazor\.webassembly\.js\?v=__RELEASE_BUILD__"/,
       `${label} must load Blazor from the site root`);
     assert.doesNotMatch(html, /script\.src = "\.\.\/_framework\/blazor\.webassembly\.js/,
       `${label} must not use a document-relative framework path`);
-    assert.match(html, new RegExp(`import\\("/${label}/main\\.js\\?v=\\d+"\\)`),
+    assert.match(html, new RegExp(`import\\("/${label}/main\\.js\\?v=__RELEASE_BUILD__"\\)`),
       `${label} main entry must stay absolute once <base href="/"> is set`);
   }
 });

@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 
 import { experienceById } from "../../progression/campaign_progression.js";
 import { experienceAccess } from "../quarantine_gate.js";
-import { RELEASE_BUILD } from "../release_identity.js";
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -50,16 +49,16 @@ test("Cobra Lab gates before loading its Build-versioned runtime", () => {
     /<script\b[^>]*\bsrc=["']\.\/main\.js(?:\?[^"']*)?["']/i,
     "the browser parser must not start the lab before quarantine is assessed");
   assert.match(entrypoint,
-    new RegExp(`quarantine_gate\\.js\\?v=${RELEASE_BUILD}`));
+    new RegExp(`quarantine_gate\\.js\\?v=__RELEASE_BUILD__`));
   assert.match(entrypoint,
     new RegExp(
       `await globalThis\\.__gunsPrebootReady;[\\s\\S]*?`
       + `renderExperienceGate\\(\\{ experienceId: "cobra-lab" \\}\\)[\\s\\S]*?`
-      + `if \\(access\\.allowed\\) await import\\("/cobra-lab/main\\.js\\?v=${RELEASE_BUILD}"\\)`,
+      + `if \\(access\\.allowed\\) await import\\("/cobra-lab/main\\.js\\?v=__RELEASE_BUILD__"\\)`,
     ),
     "only an acknowledged preview may request the world runtime");
   assert.match(entrypoint,
-    new RegExp(`/cobra-lab/styles\\.css\\?v=${RELEASE_BUILD}`));
+    new RegExp(`/cobra-lab/styles\\.css\\?v=__RELEASE_BUILD__`));
 });
 
 test("Cobra Lab stamps route modules while sharing one canonical Three.js instance", () => {
@@ -67,17 +66,17 @@ test("Cobra Lab stamps route modules while sharing one canonical Three.js instan
     "../render/cobra/cobra_canyon_plan.js",
     "../render/cobra/cobra_canyon_presentation.js",
   ]) {
-    assert.equal(runtime.includes(`${modulePath}?v=${RELEASE_BUILD}`), true,
+    assert.equal(runtime.includes(`${modulePath}?v=__RELEASE_BUILD__`), true,
       `${modulePath} must carry the candidate Build stamp`);
     assert.equal(runtime.includes(`from "${modulePath}"`), false,
       `${modulePath} must not remain as an unversioned direct import`);
   }
   assert.equal(runtime.includes('from "../vendor/three.module.js"'), true,
     "standalone routes must share the shell's canonical Three.js module identity");
-  assert.equal(runtime.includes(`../vendor/three.module.js?v=${RELEASE_BUILD}`), false,
+  assert.equal(runtime.includes(`../vendor/three.module.js?v=__RELEASE_BUILD__`), false,
     "a query-stamped Three.js URL would instantiate a second engine copy");
   assert.equal(
-    presentation.includes(`from "./cobra_canyon_plan.js?v=${RELEASE_BUILD}"`),
+    presentation.includes(`from "./cobra_canyon_plan.js?v=__RELEASE_BUILD__"`),
     true,
     "the presentation module must not fetch a second unversioned planner instance",
   );

@@ -49,7 +49,7 @@ test("authority phase truth decides whether flight controls are locked", () => {
 
 test("production page transports action, locks controls and safes weapons during servicing", async () => {
   const main = await readFile(new URL("cobra-lab/main.js", root), "utf8");
-  assert.match(main, /render\/cobra\/cobra_turnaround\.js\?v=\d+/);
+  assert.match(main, /render\/cobra\/cobra_turnaround\.js\?v=__RELEASE_BUILD__/);
   assert.match(main,
     /const turnaroundActionHeld = windowFocused\s*&& cobraTurnaroundActionHeld\(/,
     "an out-of-focus gamepad hold must not advance a cockpit procedure");

@@ -61,4 +61,12 @@
     <Content Update="wwwroot/present/rapier-design/**/*" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/lib/**" CopyToPublishDirectory="Never" />
   </ItemGroup>
+  <Target Name="ApplyPublishedReleaseQueries" AfterTargets="Publish">
+    <!-- Tracked source keeps the __RELEASE_BUILD__ placeholder. Rewrite only the published
+         wwwroot so every shipped URL carries the numeric build from release_identity.js. -->
+    <PropertyGroup>
+      <_PublishedWwwroot>$([System.IO.Path]::Combine($(PublishDir), 'wwwroot'))</_PublishedWwwroot>
+    </PropertyGroup>
+    <Exec Command="node &quot;$(MSBuildThisFileDirectory)..\tools\release\apply-release-queries.mjs&quot; --wwwroot &quot;$(_PublishedWwwroot)&quot;" />
+  </Target>
 </Project>

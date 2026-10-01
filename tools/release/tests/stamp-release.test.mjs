@@ -5,6 +5,9 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  RELEASE_QUERY_TOKEN,
+  applyPublishedReleaseQueries,
+  materializeReleaseSource,
   releaseBuildFromIdentity,
   stampRelease,
   stampSource,
@@ -12,23 +15,21 @@ import {
 } from "../stamp-release.mjs";
 
 const FIXTURE_FILES = Object.freeze({
+  "docs/STATUS.md": "Next candidate: Build 237, not deployed — example.\n",
   "web/smoke/node_modules/playwright/index.js": 'const thirdParty = "/asset.js?v=1";\n',
-  "web/smoke/smoke.mjs": 'const app = "/app.js?v=237";\n',
-  "web/wwwroot/api/build-info.js": 'const RELEASE_BUILD = "237";\n',
-  "web/wwwroot/app.js": 'import "./hud.js?v=237";\n',
-  "web/wwwroot/render/audio/sample_bed.js": 'export const SAMPLE_BED_BUILD = "237";\n',
+  "web/smoke/smoke.mjs": `const app = "/app.js?v=${RELEASE_QUERY_TOKEN}";\n`,
+  "web/wwwroot/api/build-info.js": `const RELEASE_BUILD_PLACEHOLDER = "${RELEASE_QUERY_TOKEN}";\n`,
+  "web/wwwroot/app.js": `import "./hud.js?v=${RELEASE_QUERY_TOKEN}";\n`,
   "web/wwwroot/index.html": [
-    "Build 237 · verifying",
-    'const releaseBuild = "237";',
-    '<script src="./app.js?v=237"></script>',
+    "Build 237 · historical comment that must not move",
+    `<output id="ready-build" data-state="checking">Build ${RELEASE_QUERY_TOKEN} · verifying</output>`,
+    `<script type="module">await import("./app.js?v=${RELEASE_QUERY_TOKEN}");</script>`,
     "",
   ].join("\n"),
+  "web/wwwroot/render/audio/sample_bed.js":
+    `import { RELEASE_BUILD as SAMPLE_BED_BUILD } from "../release/release_identity.js?v=${RELEASE_QUERY_TOKEN}";\n`,
   "web/wwwroot/render/release/release_identity.js": 'export const RELEASE_BUILD = "237";\n',
-  "web/wwwroot/service-worker.js": [
-    'const RELEASE_BUILD = "237";',
-    'const APP = "./app.js?v=237";',
-    "",
-  ].join("\n"),
+  "web/wwwroot/service-worker.js": `const RELEASE_BUILD = "${RELEASE_QUERY_TOKEN}";\n`,
 });
 
 async function releaseFixture(t) {
@@ -68,19 +69,21 @@ async function transactionArtifacts(root) {
   return artifacts;
 }
 
-test("stampSource advances cache queries without rewriting unrelated numbers", () => {
+test("publish materialization rewrites the placeholder and leaves unrelated numbers alone", () => {
   const source = [
     "color: rgba(255, 237, 196, .94);",
-    'import "./module.js?v=237";',
-    'navigator.serviceWorker.register("service-worker.js?v=169");',
+    `import "./module.js?v=${RELEASE_QUERY_TOKEN}";`,
+    "Build 237 · historical comment that must not move",
+    `navigator.serviceWorker.register("service-worker.js?v=${RELEASE_QUERY_TOKEN}");`,
   ].join("\n");
-  const stamped = stampSource("web/wwwroot/app.js", source, 237, 238);
-  assert.match(stamped, /rgba\(255, 237, 196/);
-  assert.doesNotMatch(stamped, /\?v=237/);
-  assert.equal([...stamped.matchAll(/\?v=238/g)].length, 2);
+  const published = materializeReleaseSource(source, 238);
+  assert.match(published, /rgba\(255, 237, 196/);
+  assert.match(published, /Build 237 · historical/);
+  assert.doesNotMatch(published, new RegExp(RELEASE_QUERY_TOKEN));
+  assert.equal([...published.matchAll(/\?v=238/g)].length, 2);
 });
 
-test("canonical constants and visible shell identity advance together", () => {
+test("stamp advances only the identity constant and the status candidate line", () => {
   assert.equal(stampSource(
     "web/wwwroot/render/release/release_identity.js",
     'export const RELEASE_BUILD = "237";',
@@ -88,35 +91,30 @@ test("canonical constants and visible shell identity advance together", () => {
     238,
   ), 'export const RELEASE_BUILD = "238";');
   assert.equal(stampSource(
-    "web/wwwroot/render/audio/sample_bed.js",
-    'export const SAMPLE_BED_BUILD = "237";',
+    "docs/STATUS.md",
+    "Next candidate: Build 237, not deployed — example.\n",
     237,
     238,
-  ), 'export const SAMPLE_BED_BUILD = "238";');
-  const index = stampSource("web/wwwroot/index.html", [
-    "Build 237 · verifying",
-    "A network-fresh Build 237 document",
-    'const releaseBuild = "237";',
-    '<script src="./app.js?v=237"></script>',
-  ].join("\n"), 237, 238);
-  assert.doesNotMatch(index, /Build 237|\?v=237|releaseBuild = "237"/);
-  assert.match(index, /Build 238 · verifying/);
-  assert.match(index, /releaseBuild = "238"/);
-
-  const standalone = stampSource(
-    "web/wwwroot/indoor/index.html",
-    'const releaseBuild = new URL("../service-worker.js?v=237", location.href)',
-    237,
-    238,
-  );
-  assert.match(standalone, /service-worker\.js\?v=238/,
-    "standalone preboot controller comparisons must advance with stamped URLs");
+  ), "Next candidate: Build 238, not deployed — example.\n");
+  const app = `import "./hud.js?v=${RELEASE_QUERY_TOKEN}";\n`;
+  assert.equal(stampSource("web/wwwroot/app.js", app, 237, 238), app);
 });
 
 test("releaseBuildFromIdentity rejects missing or nonnumeric identity", () => {
   assert.equal(releaseBuildFromIdentity('export const RELEASE_BUILD = "237";'), 237);
   assert.throws(() => releaseBuildFromIdentity('export const RELEASE_BUILD = "dev";'),
     /no numeric RELEASE_BUILD/);
+});
+
+test("a source file with a hard-coded numeric cache buster fails verification", async (t) => {
+  const root = await releaseFixture(t);
+  await fs.writeFile(path.join(root, "web/wwwroot/app.js"), 'import "./hud.js?v=237";\n');
+
+  await assert.rejects(
+    verifyReleaseStamps(root),
+    /hard-coded release query/,
+    "a query that matches the current build is still a second copy of the number",
+  );
 });
 
 test("dry run validates the prospective graph without mutating or staging files", async (t) => {
@@ -127,7 +125,10 @@ test("dry run validates the prospective graph without mutating or staging files"
 
   assert.equal(result.currentBuild, 237);
   assert.equal(result.nextBuild, 238);
-  assert.ok(result.changed.length > 0);
+  assert.deepEqual([...result.changed], [
+    "docs/STATUS.md",
+    "web/wwwroot/render/release/release_identity.js",
+  ]);
   await assertFixtureUnchanged(root, before);
   assert.deepEqual(await transactionArtifacts(root), []);
 });
@@ -136,15 +137,51 @@ test("successful transaction commits a coherent graph and removes rollback files
   const root = await releaseFixture(t);
   const dependency = "web/smoke/node_modules/playwright/index.js";
   const dependencyBefore = await fs.readFile(path.join(root, dependency));
+  const appBefore = await fs.readFile(path.join(root, "web/wwwroot/app.js"), "utf8");
 
   const result = await stampRelease({ root, nextBuild: 238 });
 
   assert.equal(result.currentBuild, 237);
   assert.equal(result.nextBuild, 238);
+  assert.deepEqual([...result.changed], [
+    "docs/STATUS.md",
+    "web/wwwroot/render/release/release_identity.js",
+  ]);
   assert.ok(!result.changed.includes(dependency), "installed dependencies are outside release truth");
   assert.deepEqual(await fs.readFile(path.join(root, dependency)), dependencyBefore);
+  assert.equal(await fs.readFile(path.join(root, "web/wwwroot/app.js"), "utf8"), appBefore);
+  assert.match(
+    await fs.readFile(path.join(root, "web/wwwroot/index.html"), "utf8"),
+    /Build 237 · historical comment that must not move/,
+  );
   assert.equal((await verifyReleaseStamps(root)).releaseBuild, 238);
   assert.deepEqual(await transactionArtifacts(root), []);
+});
+
+test("publish applies the single build id and is safe to repeat", async (t) => {
+  const root = await releaseFixture(t);
+  const wwwroot = path.join(root, "web/wwwroot");
+
+  const first = await applyPublishedReleaseQueries(wwwroot);
+  const index = await fs.readFile(path.join(wwwroot, "index.html"), "utf8");
+  const worker = await fs.readFile(path.join(wwwroot, "service-worker.js"), "utf8");
+  const identity = await fs.readFile(
+    path.join(wwwroot, "render/release/release_identity.js"),
+    "utf8",
+  );
+
+  assert.equal(first.releaseBuild, 237);
+  assert.ok(first.rewritten > 0);
+  assert.match(index, /Build 237 · historical comment that must not move/);
+  assert.match(index, /Build 237 · verifying/);
+  assert.match(index, /\.\/app\.js\?v=237/);
+  assert.doesNotMatch(index, new RegExp(RELEASE_QUERY_TOKEN));
+  assert.match(worker, /const RELEASE_BUILD = "237";/);
+  assert.equal(identity, 'export const RELEASE_BUILD = "237";\n');
+
+  const second = await applyPublishedReleaseQueries(wwwroot);
+  assert.equal(second.rewritten, 0);
+  assert.equal(second.releaseBuild, 237);
 });
 
 test("preflight read failure leaves every source byte-identical and creates no temp files", async (t) => {
@@ -174,13 +211,12 @@ test("preflight read failure leaves every source byte-identical and creates no t
 
 test("prospective validation failure occurs before staging and preserves originals", async (t) => {
   const root = await releaseFixture(t);
-  const buildInfo = path.join(root, "web/wwwroot/api/build-info.js");
-  await fs.writeFile(buildInfo, 'const RELEASE_BUILD = "236";\n');
+  await fs.writeFile(path.join(root, "web/wwwroot/app.js"), 'import "./hud.js?v=236";\n');
   const before = await snapshotFixture(root);
 
   await assert.rejects(
     stampRelease({ root, nextBuild: 238 }),
-    /build-info\.js does not match release Build 238/,
+    /hard-coded release query/,
   );
   await assertFixtureUnchanged(root, before);
   assert.deepEqual(await transactionArtifacts(root), []);
