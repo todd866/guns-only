@@ -70,6 +70,16 @@ the live route smokes, and automatic rollback on failure all run exactly as befo
 `GUNS_DEPLOY_FULL_GATE=1 bin/deploy-web --prod` restores the local re-gate for the paranoid case
 (a toolchain change, or a suspicion that CI and this machine disagree).
 
+## The hardware frame gate (2026-10-01)
+
+CI cannot measure frame rate: its browsers are SwiftShader. `bin/deploy-web` therefore flies
+`tools/perf/flight_frame_harness.mjs` against the exact publish artifact on the deploying machine's
+real GPU, headless, before anything ships, and refuses to deploy if the 60 fps contract
+(`tools/perf/README.md`) fails or the run did not report `Render mode: hardware-GPU`. It adds about
+three minutes. `GUNS_DEPLOY_SKIP_FRAME_GATE=1` skips it with a warning; use that only for an
+emergency rollback, never to get a regression out. First recorded run (Apple M5, Build 372 +
+practice-smoke fix): 59.95 / 59.98 fps, p95 17.3 ms, budget misses 0.06% / 0.03%.
+
 ## The merge-commit problem
 
 `gh pr merge --merge` lands a **new** commit. Verify ran on the PR head; the merge commit that
