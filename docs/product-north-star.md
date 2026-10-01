@@ -1,7 +1,15 @@
 # Product north star: Cohort, a world in which you can learn anything
 
 Date: 2026-07-28  
-Status: owner direction; use for future planning
+Status: long-arc vision retained; parked as of 2026-10-01 (see Current focus)
+
+## Current focus (2026-10-01)
+
+Owner direction, 2026-10-01: F-22 Guns Only is the core product. Every other mode — Cobra, Top Gun,
+Rapier, Fire Boss/Okanagan, Weekend Ride, medevac/CASEVAC, the indoor drone, and arena multiplayer —
+is frozen: kept live where it already ships, with no new feature work. The long-arc MMORPG and
+paediatrics vision in the rest of this document is parked. It stays here so that later world is
+not forgotten. It is not current implementation scope. The live ledger is [STATUS](STATUS.md).
 
 ## Product identity
 

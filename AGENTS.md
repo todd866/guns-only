@@ -67,13 +67,16 @@ that is the signal to split the fixture, not to pick a winner.
 
 ## 5. Beware constants calibrated to one aircraft.
 
-`SimulationSession.UpdateGoldenPath` passes `stabiliseSpeedMps: 90.0` for every airframe. That is
-the Rapier's clean stall speed (90.7 m/s). Applied elsewhere it is 1.47x stall for the Sabre,
-1.54x for the Panther, and **3.5x for GliderStrike**. It reads as a generic recovery constant and
-is not one.
-
-A "shared" system tuned against a single aircraft will fight the second aircraft that arrives.
+A shared system tuned against a single aircraft will fight the second aircraft that arrives.
 When you find one, say so in the code rather than retuning it for your own airframe.
+
+`SimulationSession.UpdateGoldenPath` used to pass `stabiliseSpeedMps: 90.0` for every airframe —
+the Rapier's clean stall speed, worn as a generic recovery constant. That instance is fixed.
+The call now passes the flying airframe's own approach speed, `stabiliseSpeedMps: approachMps`
+(`sim/SimulationSession.cs:4377`). `approachMps` comes from `PlayerApproachTrueAirspeedMps`
+(`sim/SimulationSession.cs:4332`), which uses live mass and that airframe's polar. The historical
+90 m/s coupling, and why a clean-stall formula was the wrong replacement, is recorded in
+`docs/approach-to-land-golden-path.md`.
 
 ## 6. The gate serialises, so expect to queue.
 
@@ -83,9 +86,13 @@ work around the lock.
 
 ## 7. Nobody deploys unilaterally.
 
-`main` has sat **53 commits ahead of `origin/main`**. A `bin/deploy-web --prod` therefore does not
-ship "your change" — it ships every other agent's unpushed work, including whatever is half-landed
-right now. Confirm with the human before pushing or deploying, however green your own work is.
+A `bin/deploy-web --prod` does not ship "your change". It ships the branch you deploy, including
+other agents' committed and half-landed work. The old claim that `main` sat 53 commits ahead of
+`origin/main` is stale. On 2026-10-01 this checkout's local `main`
+(`8e9d28cddf3e4c61011b6a9e5528beab94d499cb`) was 0 commits ahead of the fetched `origin/main`
+(`2eca3c9501dd9df0e658e7159770f58bad36f698`) and 2 behind it. Recount before trusting an
+ahead/behind figure. Confirm with the human before pushing or deploying, however green your own
+work is.
 
 ## 8. Land the epistemics with the number.
 
