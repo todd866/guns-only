@@ -327,6 +327,29 @@ require_file api/telemetry.js
 require_file vercel.json
 require_file content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json
 
+# THE 60 FPS CONTRACT IS A SHIP GATE, NOT A README. tools/perf/flight_frame_harness.mjs has carried
+# the contract (59 FPS, p95 18.5 ms, p99 22 ms, <=3% over budget) since Build 2xx, and nothing ran
+# it: CI runners have no GPU, so SwiftShader is all they can measure. Deploys run on the owner's
+# machine, which has one. Fly the exact artifact about to ship, headless, on the real GPU, and
+# refuse to ship a frame-rate regression. A software-renderer result is not a pass.
+if [ "${GUNS_DEPLOY_SKIP_FRAME_GATE:-0}" = "1" ]; then
+    echo "deploy-web: WARNING frame gate skipped by GUNS_DEPLOY_SKIP_FRAME_GATE=1" >&2
+else
+    echo "deploy-web: flying the hardware frame gate on the publish artifact (~3 min, headless)"
+    frame_log="$publish_dir/frame-gate.log"
+    if ! node "$repo_dir/tools/perf/flight_frame_harness.mjs" --wwwroot "$deploy_root" >"$frame_log" 2>&1; then
+        tail -25 "$frame_log" >&2
+        echo "deploy-web: hardware frame gate FAILED; refusing to deploy" >&2
+        exit 1
+    fi
+    if ! grep -q '^Render mode: hardware-GPU' "$frame_log"; then
+        grep -E '^(Renderer|Render mode)' "$frame_log" >&2
+        echo "deploy-web: frame gate did not run on a hardware GPU; refusing to treat it as a pass" >&2
+        exit 1
+    fi
+    grep -E '^(Renderer|high-altitude control|low-level terrain|FRAME GATE)' "$frame_log"
+fi
+
 if [ -n "$(find "$deploy_root" -type f \( -name '*.test.js' -o -name '*.test.mjs' \) -print -quit)" ] \
     || [ -d "$deploy_root/render/telemetry/tests" ] \
     || [ -e "$deploy_root/render/audio/preview" ] \
