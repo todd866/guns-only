@@ -652,7 +652,7 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
                 doctrineIndex: spec?.DoctrineIndex,
                 presenting: spec?.Sparring == true
                     || (FirstRunValley is not null && spec is null),
-                endPresentOnProximity: spec?.Sparring != true);
+                endPresentOnProximity: true);
         }
         if (!UsesReactiveBandit)
             return new RailBandit(authoredBandit, BanditAir, BanditTimeline);
@@ -735,7 +735,7 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             doctrineIndex: spec?.DoctrineIndex,
             presenting: spec?.Sparring == true,
             wingLead: wingLead,
-            endPresentOnProximity: spec?.Sparring != true);
+            endPresentOnProximity: true);
     }
 }
 

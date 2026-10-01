@@ -31,11 +31,15 @@ public readonly record struct GunConversionFunnelResult(
     int EngagementsWithHits = 0,
     /// Engagements the bandit actually WON — 3 hits defeats a ship (CombatConfig.ModernVisualMerge).
     /// This is the doctrinal target: "ACE must be able to kill the player".
-    int Kills = 0) {
+    int Kills = 0,
+    /// Rounds spent on budgeted pressure bursts (2026-10-01): deliberate snapshots, not solution
+    /// shots, so the efficiency metric judges the remainder.
+    int PressureRounds = 0) {
 
     public double TriggerConversion =>
         EligibleSeconds > 0.0 ? TriggerSeconds / EligibleSeconds : 0.0;
-    public double HitsPerRound => RoundsFired > 0 ? (double)Hits / RoundsFired : 0.0;
+    public double HitsPerRound => RoundsFired - PressureRounds > 0
+        ? (double)Hits / (RoundsFired - PressureRounds) : 0.0;
     /// Fraction of trigger-down time where the ballistic lead error was inside the angle the
     /// effective hit radius subtends at that range — "rounds that SHOULD have hit". This is the
     /// rung between "trigger down in range" and "hits": if it is near zero the failure is the aim
@@ -57,7 +61,7 @@ public readonly record struct GunConversionFunnelResult(
         + $"eligible={EligibleSeconds,5:F1}s (maxWin={MaxContinuousEligibleSeconds,4:F2}s) "
         + $"blockedByRecovery={EligibleBlockedByRecoverySeconds,4:F1}s  "
         + $"trigger={TriggerSeconds,5:F1}s conv={TriggerConversion,5:P0}  "
-        + $"rounds={RoundsFired,4} hits={Hits,3} h/r={HitsPerRound,5:P0}  "
+        + $"rounds={RoundsFired,4} (pressure {PressureRounds}) hits={Hits,3} h/r={HitsPerRound,5:P0}  "
         + $"bodyErr p10/med={TenthPercentileInRangeBodyErrorDeg,6:F1}/"
         + $"{MedianInRangeBodyErrorDeg,6:F1}deg  leadErr p10/med="
         + $"{TenthPercentileInRangeLeadErrorDeg,6:F1}/{MedianInRangeLeadErrorDeg,6:F1}deg";
@@ -102,6 +106,7 @@ public static class GunConversionFunnel {
         var triggerRangesM = new List<double>();
         var triggerSubtenseDeg = new List<double>();
         double onSolutionTrigger = 0.0;
+        int pressureRounds = 0;
         // Range-bucketed in-range lead error: is the aim-point failure uniform, or does the
         // solution actually tighten when the bandit presses in? The gun's required precision is
         // atan(8 m / range) — 0.57 deg at 800 m but 1.53 deg at 300 m — so the answer decides
@@ -116,8 +121,9 @@ public static class GunConversionFunnel {
             AircraftParams referenceAir = FlightModel.F22APublicDataSurrogate;
             AircraftParams enemyParams =
                 enemyAir ?? FlightModel.Su27SPublicDataSurrogate;
+            // The reference stands in for the player: no pressure bursts of its own.
             var reference = new ReactiveBandit(
-                scenario.ReferenceStart, referenceAir, referenceTier);
+                scenario.ReferenceStart, referenceAir, referenceTier) { PressureBurstsEnabled = false };
             var enemy = new ReactiveBandit(
                 scenario.EnemyStart, enemyParams, enemyTier, profile: profile);
             CombatConfig combat = CombatConfig.ModernVisualMerge;
@@ -193,7 +199,11 @@ public static class GunConversionFunnel {
                 bool enemyTrigger = firstPassOpened
                     && enemyGun.TargetAlive
                     && enemy.WantsToFire(referenceObservation);
-                if (enemyTrigger) {
+                // Pressure bursts are deliberate, budgeted snapshots off the solution (2026-10-01);
+                // the discipline metrics below judge the SOLUTION trigger, so they are excluded.
+                bool pressureTrigger = enemyTrigger
+                    && enemy is ReactiveBandit { PressureBurstActive: true };
+                if (enemyTrigger && !pressureTrigger) {
                     trigger += Dt;
                     // What was the gun ACTUALLY pointed at, relative to what the shot needed?
                     // The requirement is geometric and range-dependent: the effective hit radius
@@ -210,7 +220,9 @@ public static class GunConversionFunnel {
                 }
 
                 referenceGun.Step(referenceTrigger, referenceState, enemyState, Dt);
+                int roundsBeforeStep = enemyGun.RoundsFired;
                 enemyGun.Step(enemyTrigger, enemyState, referenceState, Dt);
+                if (pressureTrigger) pressureRounds += enemyGun.RoundsFired - roundsBeforeStep;
 
                 if (referenceGun.Outcome == FightOutcome.Splash
                     || enemyGun.Outcome == FightOutcome.Splash) break;
@@ -243,7 +255,8 @@ public static class GunConversionFunnel {
             Percentile(triggerSubtenseDeg, 0.50),
             onSolutionTrigger,
             engagementsWithHits,
-            kills);
+            kills,
+            pressureRounds);
     }
 
     /// Upper edges, metres, of the range buckets the lead error is profiled over.
