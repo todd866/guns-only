@@ -24,11 +24,17 @@ test("published practice owns staging, real input, pause, restart and the local 
       await page.locator("#ready-start").click();
       await page.waitForFunction(() => globalThis.__gunsState?.session_phase === "ACTIVE", null, { timeout: 90_000 });
       if (exercise === "gunnery") {
+        // Budget the pass in simulated time, not wall time: a loaded SwiftShader runner can run
+        // the 120 Hz kernel well below real time, and a 30 s wall-clock wait failed on CI while
+        // the same commit passed on its PR run. Thirty simulated seconds is generous for two hits.
+        const startTick = await page.evaluate(() => globalThis.__gunsState.tick);
         await page.keyboard.down("f");
         try {
-          await page.waitForFunction(() => globalThis.__gunsState?.practice_completed === true,
-            null, { timeout: 30_000 });
+          await page.waitForFunction((start) => globalThis.__gunsState?.practice_completed === true
+            || globalThis.__gunsState?.tick - start >= 30 * 120, startTick, { timeout: 240_000 });
         } finally { await page.keyboard.up("f"); }
+        assert.equal(await page.evaluate(() => globalThis.__gunsState.practice_completed), true,
+          "two physical hits within 30 simulated seconds of holding Fire");
       }
       // Gunnery completed through physical hits; valley/recovery use the paused restart path.
       // Both paths must retain practice authority.
