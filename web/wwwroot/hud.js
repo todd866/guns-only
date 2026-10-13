@@ -6155,6 +6155,18 @@ class CombatHud {
       // The existing layout already has room. At 390 px wide the tapes sit at x = 48 and
       // x = 342 with a 35 px half-width, leaving the pitch ladder its middle 224 px.
       const mobileTapeInset = this.getLayout().tapeInset;
+      if (this._debug) {
+        const tapeLayout = this.getLayout();
+        const half = tapeLayout.tapeHeight / 2;
+        const cy = tapeLayout.instrumentCenterY;
+        this._debug.tapes = [mobileTapeInset, this.width - mobileTapeInset].map((x, index) => ({
+          id: index === 0 ? "speed-tape" : "altitude-tape",
+          left: x - tapeLayout.tapeHalfWidth,
+          right: x + tapeLayout.tapeHalfWidth,
+          top: cy - half,
+          bottom: cy + half,
+        }));
+      }
       this.drawVerticalTape({
         value: spd,
         displayValue: display.indicatedDigits,

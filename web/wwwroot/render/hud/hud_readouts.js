@@ -183,6 +183,14 @@ export function mobileTacticalReadout(state = {}, display = {}, {
     optional: false,
   });
   if (energyToken) combatParts.push({ text: energyToken, optional: false });
+  else {
+    combatParts.push({
+      text: headingDeg === null
+        ? "H---"
+        : `H${String(Math.round(((headingDeg % 360) + 360) % 360)).padStart(3, "0")}`,
+      optional: false,
+    });
+  }
   if (actualG !== null && Math.abs(actualG) >= 2.5) {
     combatParts.push({ text: `${actualG.toFixed(1)}G`, optional: false });
   }
