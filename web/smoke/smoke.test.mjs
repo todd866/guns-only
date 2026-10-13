@@ -13,6 +13,57 @@ import {
   waitForCobraAuthority,
 } from "./cobra_authority.mjs";
 import { RELEASE_BUILD } from "../wwwroot/render/release/release_identity.js";
+import { occupiedAreaCollisions } from "../wwwroot/render/hud/occupied_area.js";
+
+// OCCUPIED-AREA CONTRACT (render/hud/occupied_area.js). Viewport containment alone passed while
+// the practice paragraph covered FIRE, the objective plate covered PADLOCK and the padlock plate
+// covered the airspeed readout. These helpers intersect the DOM touch controls with the canvas
+// HUD's own debug rectangles so that class of overlap fails the gate.
+async function touchControlRects(page) {
+  return page.evaluate(() => {
+    const visible = (element) => element && !element.closest("[hidden]")
+      && getComputedStyle(element).display !== "none"
+      && getComputedStyle(element).visibility !== "hidden";
+    return [...document.querySelectorAll(
+      "#touch-controls .touch-control, #fallback-stick, #target-stick, #pause-button",
+    )].filter(visible).map((element) => {
+      const box = element.getBoundingClientRect();
+      return { id: element.id || element.dataset.pulseKey || element.className,
+        left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+    }).filter((rect) => rect.right - rect.left >= 1 && rect.bottom - rect.top >= 1);
+  });
+}
+
+function hudPlateRects(hud) {
+  const plates = [];
+  const box = (id, rect) => {
+    if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.width)) return;
+    plates.push({ id, left: rect.x, top: rect.y,
+      right: rect.x + rect.width, bottom: rect.y + rect.height });
+  };
+  box("tactical-rail", hud?.mobileTactical);
+  box("mission-guidance", hud?.missionGuidance);
+  box("target-data-line", hud?.targetDataLine);
+  for (const tape of hud?.tapes ?? []) plates.push(tape);
+  return plates;
+}
+
+function assertNoControlOverlap(label, controls, hud) {
+  const collisions = occupiedAreaCollisions(hudPlateRects(hud), controls);
+  assert.deepEqual(collisions, [],
+    `${label}: HUD plates overlap touch controls: ${JSON.stringify(collisions)}`);
+  const pairs = [];
+  for (let i = 0; i < controls.length; i += 1) {
+    for (let j = i + 1; j < controls.length; j += 1) {
+      const a = controls[i];
+      const b = controls[j];
+      if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) {
+        pairs.push([a.id, b.id]);
+      }
+    }
+  }
+  assert.deepEqual(pairs, [], `${label}: touch controls overlap each other`);
+}
 
 // Boots the PUBLISHED web app (its wwwroot passed via SMOKE_WWWROOT) in headless Chromium and
 // requires it to reach a running flight kernel. Blazor loads the WASM sim, then app.js constructs
@@ -1487,7 +1538,7 @@ test("the published Medevac route resolves route hold, selective relay, and dive
   }
 });
 
-test("a fresh human or automated visit briefs the valley and remains replayable", async () => {
+test("a fresh visit opens the wordless F-22 picker and the valley stays an opt-in replay", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
   const site = await serveStatic(WWWROOT);
@@ -1499,24 +1550,49 @@ test("a fresh human or automated visit briefs the valley and remains replayable"
     const page = await browser.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}?audioQa=silent`, {
-      waitUntil: "load",
-      timeout: scaled(60000),
-    });
-    await page.waitForFunction(() =>
-      document.querySelector("#ready-screen")?.classList.contains("visible") === true
-        && document.querySelector("#ready-screen")?.dataset.mode === "intro"
-        && document.querySelector("#ready-start")?.disabled === false
-        && document.querySelector("#ready-start")?.textContent?.trim() === "Enter valley"
-        && document.activeElement?.id === "ready-start",
-    undefined, { polling: scaled(100), timeout: scaled(45000) });
+    // Fresh storage, both public doors: the root and the shared first-merge link. Neither may
+    // detour through Kestrel Gorge; one tap launches the rung-0 gun lesson.
+    for (const search of ["?audioQa=silent", "?program=first-merge&audioQa=silent"]) {
+      await page.goto(`${site.url}${search}`, {
+        waitUntil: "load",
+        timeout: scaled(60000),
+      });
+      await page.evaluate(() => localStorage.clear());
+      await page.reload({ waitUntil: "load", timeout: scaled(60000) });
+      await page.waitForFunction(() =>
+        document.querySelector("#ready-screen")?.classList.contains("visible") === true
+          && document.querySelector("#ready-screen")?.dataset.mode === "program"
+          && document.querySelector("#ready-start")?.disabled === false
+          && typeof globalThis.__gunsState?.mission_definition_id === "string"
+          && globalThis.__gunsState.mission_definition_id !== "",
+      undefined, { polling: scaled(100), timeout: scaled(45000) });
+      const door = await page.evaluate(() => ({
+        start: document.querySelector("#ready-start")?.textContent?.trim() ?? "",
+        missionId: globalThis.__gunsState?.mission_definition_id ?? "",
+        selected: document.querySelector('[data-program-node="first-merge"]')
+          ?.getAttribute("aria-pressed") === "true",
+        replay: document.querySelector("#ready-intro-replay")?.textContent?.trim() ?? "",
+      }));
+      assert.equal(door.start, "Fly Guns Only", `${search}: fresh visit must offer the F-22 sortie`);
+      assert.equal(door.missionId,
+        "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+        `${search}: fresh visit staged the valley instead of the gun lesson`);
+      assert.equal(door.selected, true, `${search}: the F-22 must be the selected aircraft`);
+      assert.equal(door.replay, "Replay valley intro");
+      await page.waitForTimeout(scaled(1000));
+      assert.equal(await page.evaluate(() =>
+        document.querySelector("#ready-screen")?.dataset.mode), "program",
+      `${search}: the picker must not be replaced by the valley brief after boot`);
+    }
 
-    assert.equal(await page.locator("#ready-start").innerText(), "Enter valley");
-    assert.equal(await page.evaluate(() => document.activeElement?.id), "ready-start");
-    await page.waitForTimeout(scaled(1000));
-    assert.equal(await page.evaluate(() =>
-      document.querySelector("#ready-screen")?.dataset.mode), "intro",
-    "first-run authority must remain Ready until a deliberate pilot action");
+    // The valley is still one deliberate tap away, and leaving it does not make it sticky.
+    await page.locator("#ready-intro-replay").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#ready-screen")?.dataset.mode === "intro"
+        && document.querySelector("#ready-start")?.textContent?.trim() === "Enter valley",
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
+      "the visible replay action must not make the intro sticky for Fly again");
 
     await page.locator("#ready-settings").click();
     await page.waitForFunction(() =>
@@ -1525,7 +1601,6 @@ test("a fresh human or automated visit briefs the valley and remains replayable"
     assert.equal(await page.evaluate(() =>
       document.querySelector("#ready-screen")?.dataset.mode), "intro",
     "Settings must not relabel staged valley authority as the aircraft programme");
-    assert.equal(await page.locator("#ready-selector").isHidden(), true);
     await page.locator("#settings-close").click();
 
     await page.locator("#ready-intro-replay").click();
@@ -1533,16 +1608,11 @@ test("a fresh human or automated visit briefs the valley and remains replayable"
       document.querySelector("#ready-screen")?.dataset.mode === "program",
     undefined, { polling: scaled(100), timeout: scaled(20000) });
     assert.equal(await page.locator("#ready-intro-replay").innerText(), "Replay valley intro");
-    assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
-      "choosing another mission must not make a later reload restage the intro");
 
     await page.locator("#ready-intro-replay").click();
     await page.waitForFunction(() =>
       document.querySelector("#ready-screen")?.dataset.mode === "intro",
     undefined, { polling: scaled(100), timeout: scaled(20000) });
-    assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
-      "the visible replay action must not make the intro sticky for Fly again");
-
     await page.locator("#ready-start").click();
     await page.waitForFunction(() =>
       globalThis.__gunsState?.session_phase === "ACTIVE"
@@ -1558,14 +1628,14 @@ test("a fresh human or automated visit briefs the valley and remains replayable"
       diagnostics: globalThis.__gunsAssets?.diagnostics?.().firstRunValley ?? null,
     }));
     assert.equal(valley.weaponsCold, true,
-      "the active ingress must begin with the weapons-cold lesson intact");
+      "the replayed ingress must begin with the weapons-cold lesson intact");
     assert.equal(valley.available, true);
     assert.equal(valley.diagnostics?.authorityMatched, true);
     assert.equal(valley.diagnostics?.drawCount, 1);
     assert.ok(valley.diagnostics?.triangleCount > 0,
-      "the active first-run sortie must render its authority-matched gorge");
+      "the replayed valley sortie must render its authority-matched gorge");
     assert.deepEqual(pageErrors, [],
-      `uncaught first-run page errors:\n${pageErrors.join("\n")}`);
+      `uncaught first-visit page errors:\n${pageErrors.join("\n")}`);
   } finally {
     await browser.close();
     await site.close();
@@ -2602,8 +2672,9 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           const stick = rect("#fallback-stick");
           const targetStick = rect("#target-stick");
           const throttle = rect("#touch-throttle-controls");
-          const throttleRocker = rect("#touch-throttle-rocker");
-          const actions = rect(".touch-right");
+          const throttleLever = rect("#touch-throttle-lever");
+          const fire = rect("#touch-fire");
+          const actions = rect(".touch-actions");
           const anca = rect("[data-anca-panel]");
           const waveOff = document.querySelector("#touch-wave-off");
           waveOff.hidden = false;
@@ -2643,18 +2714,23 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             fallbackDirectionButtons: document.querySelectorAll(
               '#fallback-stick [data-hold-key^="Arrow"]',
             ).length,
-            throttleRocker,
-            throttleRockerTouchAction: getComputedStyle(
-              document.querySelector("#touch-throttle-rocker"),
+            throttleLever,
+            throttleLeverVisible: visible(document.querySelector("#touch-throttle-lever")),
+            throttleRockerVisible: visible(document.querySelector("#touch-throttle-rocker")),
+            throttleLeverTouchAction: getComputedStyle(
+              document.querySelector("#touch-throttle-lever"),
             ).touchAction,
-            throttleRockerKnob: rect("#touch-throttle-rocker-knob"),
+            fire,
+            actions,
+            htmlClass: document.documentElement.className,
             ordinaryPowerButtons: document.querySelectorAll(
               '#touch-throttle-controls [data-hold-key="KeyS"], '
                 + '#touch-throttle-controls [data-hold-key="KeyW"]:not(#touch-wave-off)',
             ).length,
-            stickOverlapsThrottle: overlaps(stick, throttle),
-            stickOverlapsThrottleWithWaveOff: overlaps(stick, throttleWithWaveOff),
-            stickOverlapsActions: overlaps(stick, actions),
+            fireOverlapsThrottle: overlaps(fire, throttle),
+            fireOverlapsActions: overlaps(fire, actions),
+            throttleOverlapsActions: overlaps(throttle, actions),
+            throttleWithWaveOff,
             targetStickOverlapsActions: overlaps(targetStick, actions),
             pause: rect("#pause-button"),
             tilt: rect("#tilt-status"),
@@ -2674,12 +2750,14 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           };
         });
 
-        // Landscape carries explicit target, padlock, and FIRE controls clear of both flight
-        // sticks. The dedicated trigger must remain discoverable and usable in every orientation.
+        // PHONE FIGHTER LAYOUT (render/input/touch_fighter_layout.css). The right thumb flies; the
+        // left thumb owns FIRE (resting corner), a persistent throttle lever, and the compact
+        // LIMIT / PADLOCK / TARGET row. The spring-centred THR/YAW stick only returns through the
+        // explicit Settings > Touch rudder stick option.
         assert.deepEqual(phoneState.direct,
-          ["touch-throttle-rocker", "touch-limit-override", "touch-target-cycle", "pulse:KeyV",
-            "touch-fire"],
+          ["touch-limit-override", "touch-target-cycle", "pulse:KeyV", "touch-fire"],
           `${viewport.width}x${viewport.height}: ${JSON.stringify(phoneState.controlState)}`);
+        assert.match(phoneState.htmlClass, /\btouch-fighter\b/);
         assert.match(phoneState.tiltText, /TILT|STICK/);
         assert.equal(phoneState.ancaVisible, false,
           `${viewport.width}x${viewport.height}: quiet ANCA chip still clutters touch flight`);
@@ -2688,39 +2766,40 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         assert.equal(phoneState.flapDownHidden, true);
         assert.equal(phoneState.waveOffHidden, true);
         assert.equal(phoneState.hasLiveRestart, false);
-        assert.equal(phoneState.stickVisible, true);
-        assert.equal(phoneState.stickTouchAction, "none");
+        assert.equal(phoneState.stickVisible, false,
+          `${viewport.width}x${viewport.height}: THR/YAW stick shown without the rudder option`);
         assert.equal(phoneState.targetStickVisible, true);
         assert.equal(phoneState.targetStickTouchAction, "none");
         assert.equal(phoneState.targetStickLabel, "Right stick: pitch and roll");
         assert.equal(phoneState.fallbackDirectionButtons, 0);
         assert.equal(phoneState.ordinaryPowerButtons, 0);
-        assert.equal(phoneState.throttleRockerTouchAction, "none");
-        assert.equal(phoneState.stickOverlapsThrottle, false);
-        assert.equal(phoneState.stickOverlapsThrottleWithWaveOff, false);
-        assert.equal(phoneState.stickOverlapsActions, false);
-        assert.equal(phoneState.targetStickOverlapsActions, false);
-        assert.equal(Math.round(phoneState.stick.width), viewport.width <= 700 ? 104 : 112);
-        assert.equal(Math.round(phoneState.stick.height), viewport.width <= 700 ? 104 : 112);
-        assert.ok(phoneState.stickKnob.width >= 44 && phoneState.stickKnob.height >= 44);
-        assert.equal(Math.round(phoneState.targetStick.width),
+        assert.equal(phoneState.throttleLeverVisible, true);
+        assert.equal(phoneState.throttleRockerVisible, false);
+        assert.equal(phoneState.throttleLeverTouchAction, "none");
+        assert.equal(Math.round(phoneState.throttleLever.width), viewport.width <= 700 ? 48 : 52);
+        assert.equal(Math.round(phoneState.throttleLever.height),
           viewport.width <= 700 ? 104 : 112);
+        assert.equal(phoneState.fireOverlapsThrottle, false);
+        assert.equal(phoneState.fireOverlapsActions, false);
+        assert.equal(phoneState.throttleOverlapsActions, false);
+        assert.equal(phoneState.targetStickOverlapsActions, false);
+        // FIRE sits under the LEFT thumb, left of the lever; the flight stick owns the right corner.
+        assert.ok(phoneState.fire.width >= 44 && phoneState.fire.height >= 44);
+        assert.ok(phoneState.fire.left >= 0 && phoneState.fire.right <= phoneState.throttleLever.left,
+          `${viewport.width}x${viewport.height}: FIRE is not at the left thumb`);
+        assert.ok(phoneState.throttleLever.right <= phoneState.actions.left);
+        assert.ok(phoneState.actions.right < phoneState.targetStick.left);
+        assert.equal(Math.round(phoneState.targetStick.width), viewport.width <= 700 ? 104 : 112);
         assert.equal(Math.round(phoneState.targetStick.height),
           viewport.width <= 700 ? 104 : 112);
         assert.ok(phoneState.targetStickKnob.width >= 44
           && phoneState.targetStickKnob.height >= 44);
-        assert.equal(Math.round(phoneState.throttleRocker.width), viewport.width <= 700 ? 48 : 52);
-        assert.equal(Math.round(phoneState.throttleRocker.height), viewport.width <= 700 ? 104 : 112);
-        assert.ok(phoneState.throttleRocker.width >= 44);
-        assert.ok(phoneState.throttleRocker.height / 2 >= 44);
-        assert.ok(phoneState.throttleRocker.left >= 0
-          && phoneState.throttleRocker.right <= phoneState.viewport.width);
-        assert.ok(Math.abs(phoneState.throttleRocker.bottom - phoneState.stick.bottom) < 1);
-        assert.ok(phoneState.throttleRockerKnob.height >= 44);
-        assert.ok(phoneState.stick.left >= 0
-          && phoneState.stick.right < phoneState.viewport.width * 0.25);
+        assert.ok(phoneState.throttleLever.left >= 0
+          && phoneState.throttleLever.right <= phoneState.viewport.width);
         assert.ok(phoneState.targetStick.right <= phoneState.viewport.width
           && phoneState.targetStick.left > phoneState.viewport.width * 0.75);
+        // One bottom row in landscape: every left-thumb control shares the bottom band.
+        assert.ok(Math.abs(phoneState.throttleLever.bottom - phoneState.actions.bottom) < 1);
         const chromeTargets = [phoneState.pause];
         if (phoneState.tiltVisible) chromeTargets.push(phoneState.tilt);
         for (const target of chromeTargets) {
@@ -2750,9 +2829,13 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         const mobileRows = Object.fromEntries(
           phoneState.hud.mobileTactical.drawnRows.map((row) => [row.key, row.text]),
         );
-        assert.match(mobileRows.actual,
-          /M.*(?:KCAS|KIAS).*(?:COR|H\d{3}).*(?:\d(?:\.\d)?K|FL).*?(?:V\/S|↑|↓)/);
-        assert.match(mobileRows.context, /GUN\d+/);
+        // ONE combat row: Mach, energy, V/S, gun, fuel. Airspeed and altitude live on the tapes.
+        assert.deepEqual(Object.keys(mobileRows), ["combat"],
+          `${viewport.width}x${viewport.height}: phone rail is not one row`);
+        assert.match(mobileRows.combat, /^M\.?\d.*(?:COR|AUTO|H\d{3}).*GUN\d+.*F\d/);
+        assert.doesNotMatch(mobileRows.combat, /KCAS|KIAS|NM\/MIN/);
+        assertNoControlOverlap(`${viewport.width}x${viewport.height}`,
+          await touchControlRects(page), phoneState.hud);
         assert.ok(phoneState.hud.mobileTactical.drawnRows.every(
           (row) => !row.text.includes("…"),
         ), `${viewport.width}x${viewport.height}: tactical truth was ellipsized`);
@@ -2809,43 +2892,24 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         assert.ok(engagedStick.x > 0 && engagedStick.y > 0);
         assert.ok(engagedStick.roll > 0.2);
 
-        // The two thumbs are independent. Releasing throttle/yaw used to call the shared
-        // roll/pitch neutraliser and silently cancel a right-stick turn that was still held.
-        const powerStick = page.locator("#fallback-stick");
-        const powerStickBox = await powerStick.boundingBox();
-        assert.ok(powerStickBox,
-          `${viewport.width}x${viewport.height}: throttle/yaw stick has no box`);
-        const powerCentre = {
-          x: powerStickBox.x + powerStickBox.width / 2,
-          y: powerStickBox.y + powerStickBox.height / 2,
-        };
+        // The two thumbs are independent. Releasing the left-hand power control used to call the
+        // shared roll/pitch neutraliser and silently cancel a right-stick turn still held.
+        const leverLocator = page.locator("#touch-throttle-lever");
+        const leverBox = await leverLocator.boundingBox();
+        assert.ok(leverBox, `${viewport.width}x${viewport.height}: throttle lever has no box`);
+        const leverCentre = { x: leverBox.x + leverBox.width / 2, y: leverBox.y + leverBox.height / 2 };
         const powerPointerId = 48;
-        await powerStick.dispatchEvent("pointerdown", {
-          pointerId: powerPointerId,
-          pointerType: "touch",
-          isPrimary: false,
-          button: 0,
-          buttons: 1,
-          clientX: powerCentre.x,
-          clientY: powerCentre.y,
+        await leverLocator.dispatchEvent("pointerdown", {
+          pointerId: powerPointerId, pointerType: "touch", isPrimary: false,
+          button: 0, buttons: 1, clientX: leverCentre.x, clientY: leverCentre.y,
         });
-        await powerStick.dispatchEvent("pointermove", {
-          pointerId: powerPointerId,
-          pointerType: "touch",
-          isPrimary: false,
-          button: -1,
-          buttons: 1,
-          clientX: powerCentre.x - powerStickBox.width * 0.2,
-          clientY: powerCentre.y,
+        await leverLocator.dispatchEvent("pointermove", {
+          pointerId: powerPointerId, pointerType: "touch", isPrimary: false,
+          button: -1, buttons: 1, clientX: leverCentre.x, clientY: leverCentre.y - 12,
         });
-        await powerStick.dispatchEvent("pointerup", {
-          pointerId: powerPointerId,
-          pointerType: "touch",
-          isPrimary: false,
-          button: 0,
-          buttons: 0,
-          clientX: powerCentre.x - powerStickBox.width * 0.2,
-          clientY: powerCentre.y,
+        await leverLocator.dispatchEvent("pointerup", {
+          pointerId: powerPointerId, pointerType: "touch", isPrimary: false,
+          button: 0, buttons: 0, clientX: leverCentre.x, clientY: leverCentre.y - 12,
         });
         await page.waitForFunction(() =>
           Number(globalThis.__gunsState?.requested_roll_control) > 0.2,
@@ -2954,160 +3018,72 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         await page.waitForFunction(() => globalThis.__gunsState?.gun_firing !== true,
           undefined, { timeout: scaled(20000) });
 
-        const throttleRocker = page.locator("#touch-throttle-rocker");
-        const throttleBox = await throttleRocker.boundingBox();
-        assert.ok(throttleBox, `${viewport.width}x${viewport.height}: throttle rocker has no box`);
+        // THE THROTTLE LEVER is persistent and absolute: a touch picks up the current value (a
+        // tap is never a power change), a drag moves it relative to the touch point, a second
+        // pointer cannot steal it, and release holds the setting.
+        const throttleLever = page.locator("#touch-throttle-lever");
+        const throttleBox = await throttleLever.boundingBox();
+        assert.ok(throttleBox, `${viewport.width}x${viewport.height}: throttle lever has no box`);
         const throttleCentre = {
           x: throttleBox.x + throttleBox.width / 2,
           y: throttleBox.y + throttleBox.height / 2,
         };
-        const baselineThrottle = await page.evaluate(() => Number(
-          globalThis.__gunsState?.requested_throttle,
-        ));
-        const throttlePointerId = 61;
-        await throttleRocker.dispatchEvent("pointerdown", {
-          pointerId: throttlePointerId,
-          pointerType: "touch",
-          isPrimary: true,
-          button: 0,
-          buttons: 1,
-          clientX: throttleCentre.x,
-          clientY: throttleCentre.y,
-        });
-        await throttleRocker.dispatchEvent("pointerdown", {
-          pointerId: throttlePointerId + 1,
-          pointerType: "touch",
-          isPrimary: false,
-          button: 0,
-          buttons: 1,
-          clientX: throttleCentre.x,
-          clientY: throttleCentre.y - throttleBox.height * 0.44,
-        });
-        const secondPointerRejected = await page.evaluate(() => {
-          const element = document.querySelector("#touch-throttle-rocker");
-          return {
-            active: element.dataset.active,
-            direction: element.dataset.direction,
-            y: Number.parseFloat(element.style.getPropertyValue("--throttle-y")),
-          };
-        });
-        assert.deepEqual(secondPointerRejected, { active: "true", direction: "neutral", y: 0 });
-        await throttleRocker.dispatchEvent("pointerup", {
-          pointerId: throttlePointerId + 1,
-          pointerType: "touch",
-          isPrimary: false,
-          button: 0,
-          buttons: 0,
-          clientX: throttleCentre.x,
-          clientY: throttleCentre.y - throttleBox.height * 0.44,
-        });
-
-        await throttleRocker.dispatchEvent("pointermove", {
-          pointerId: throttlePointerId,
-          pointerType: "touch",
-          isPrimary: true,
-          button: -1,
-          buttons: 1,
-          clientX: throttleCentre.x,
-          clientY: throttleCentre.y + throttleBox.height * 0.44,
-        });
-        await page.waitForFunction((initialThrottle) =>
-          Number(globalThis.__gunsState?.requested_throttle) < initialThrottle - 0.025,
-        baselineThrottle, { timeout: scaled(20000) });
-        const decreasedThrottle = await page.evaluate(() => {
-          const element = document.querySelector("#touch-throttle-rocker");
+        const readLever = () => page.evaluate(() => {
+          const element = document.querySelector("#touch-throttle-lever");
           return {
             value: Number(globalThis.__gunsState?.requested_throttle),
             active: element.dataset.active,
-            direction: element.dataset.direction,
-            y: Number.parseFloat(element.style.getPropertyValue("--throttle-y")),
+            knob: Number.parseFloat(element.style.getPropertyValue("--lever-knob")),
+            now: Number(element.getAttribute("aria-valuenow")),
           };
         });
-        assert.equal(decreasedThrottle.active, "true");
-        assert.equal(decreasedThrottle.direction, "down");
-        assert.ok(decreasedThrottle.y > 0);
+        const throttlePointerId = 61;
+        const leverEvent = (type, pointerId, y, isPrimary = true) =>
+          throttleLever.dispatchEvent(type, {
+            pointerId, pointerType: "touch", isPrimary,
+            button: type === "pointermove" ? -1 : 0,
+            buttons: type === "pointerup" || type === "pointercancel" ? 0 : 1,
+            clientX: throttleCentre.x, clientY: y,
+          });
+        const beforeTouch = await readLever();
+        await leverEvent("pointerdown", throttlePointerId, throttleCentre.y);
+        await page.waitForTimeout(250);
+        const pickedUp = await readLever();
+        assert.equal(pickedUp.active, "true");
+        assert.ok(Math.abs(pickedUp.value - beforeTouch.value) <= 0.02,
+          `${viewport.width}x${viewport.height}: touching the lever changed power: `
+            + JSON.stringify({ beforeTouch, pickedUp }));
+        // A second pointer is ignored while the first owns the lever.
+        await leverEvent("pointerdown", throttlePointerId + 1, throttleBox.y + 4, false);
+        await leverEvent("pointermove", throttlePointerId + 1, throttleBox.y + 2, false);
+        await leverEvent("pointerup", throttlePointerId + 1, throttleBox.y + 2, false);
+        await page.waitForTimeout(250);
+        const afterSecond = await readLever();
+        assert.ok(Math.abs(afterSecond.value - pickedUp.value) <= 0.02,
+          `${viewport.width}x${viewport.height}: a second pointer moved the lever`);
 
-        await throttleRocker.dispatchEvent("pointermove", {
-          pointerId: throttlePointerId,
-          pointerType: "touch",
-          isPrimary: true,
-          button: -1,
-          buttons: 1,
-          clientX: throttleCentre.x,
-          clientY: throttleCentre.y,
-        });
+        await leverEvent("pointermove", throttlePointerId, throttleCentre.y - throttleBox.height * 0.4);
+        await page.waitForFunction((initial) =>
+          Number(globalThis.__gunsState?.requested_throttle) > initial + 0.1,
+        pickedUp.value, { timeout: scaled(20000) });
+        const raised = await readLever();
+        assert.ok(raised.knob > pickedUp.knob, "lever knob did not follow the power increase");
+        await leverEvent("pointermove", throttlePointerId, throttleCentre.y + throttleBox.height * 0.1);
+        await page.waitForFunction((high) =>
+          Number(globalThis.__gunsState?.requested_throttle) < high - 0.1,
+        raised.value, { timeout: scaled(20000) });
+        await leverEvent(viewport.width <= 700 ? "pointercancel" : "pointerup", throttlePointerId,
+          throttleCentre.y + throttleBox.height * 0.1);
         await page.waitForFunction(() =>
-          document.querySelector("#touch-throttle-rocker")?.dataset.direction === "neutral");
-        const neutralThrottle = await page.evaluate(() => Number(
-          globalThis.__gunsState?.requested_throttle,
-        ));
+          document.querySelector("#touch-throttle-lever")?.dataset.active === "false");
+        const releasedThrottle = await readLever();
         await page.waitForTimeout(350);
-        const steadyThrottle = await page.evaluate(() => Number(
-          globalThis.__gunsState?.requested_throttle,
-        ));
-        assert.ok(Math.abs(steadyThrottle - neutralThrottle) <= 0.02,
-          `${viewport.width}x${viewport.height}: centring the rocker did not stop throttle motion`);
-
-        await throttleRocker.dispatchEvent("pointermove", {
-          pointerId: throttlePointerId,
-          pointerType: "touch",
-          isPrimary: true,
-          button: -1,
-          buttons: 1,
-          clientX: throttleCentre.x,
-          clientY: throttleCentre.y - throttleBox.height * 0.44,
-        });
-        const increasedThrottleHandle = await page.waitForFunction((initialThrottle) => {
-          const value = Number(globalThis.__gunsState?.requested_throttle);
-          if (!(value > initialThrottle + 0.025)) return false;
-          const element = document.querySelector("#touch-throttle-rocker");
-          return {
-            value,
-            direction: element.dataset.direction,
-            y: Number.parseFloat(element.style.getPropertyValue("--throttle-y")),
-          };
-        }, steadyThrottle, { timeout: scaled(20000) });
-        // Capture the exact animation frame which satisfied the motion predicate. A separate
-        // evaluate() can race the flight automation on slower CI runners and observe a later
-        // throttle value even though the rocker already proved it moved upward.
-        const increasedThrottle = await increasedThrottleHandle.jsonValue();
-        await increasedThrottleHandle.dispose();
-        assert.equal(increasedThrottle.direction, "up");
-        assert.ok(increasedThrottle.y < 0);
-        assert.ok(increasedThrottle.value > steadyThrottle + 0.025,
-          `${viewport.width}x${viewport.height}: upward rocker motion did not increase throttle`);
-
-        await throttleRocker.dispatchEvent(viewport.width <= 700 ? "pointercancel" : "pointerup", {
-          pointerId: throttlePointerId,
-          pointerType: "touch",
-          isPrimary: true,
-          button: 0,
-          buttons: 0,
-          clientX: throttleCentre.x,
-          clientY: throttleCentre.y - throttleBox.height * 0.44,
-        });
-        await page.waitForFunction(() => {
-          const element = document.querySelector("#touch-throttle-rocker");
-          return element?.dataset.active === "false"
-            && element.dataset.direction === "neutral"
-            && Number.parseFloat(element.style.getPropertyValue("--throttle-y")) === 0;
-        });
-        const releasedThrottle = await page.evaluate(() => ({
-          value: Number(globalThis.__gunsState?.requested_throttle),
-          phase: globalThis.__gunsState?.session_phase,
-          terminal: globalThis.__gunsState?.player_terminal_state,
-        }));
-        await page.waitForTimeout(350);
-        const settledThrottle = await page.evaluate(() => ({
-          value: Number(globalThis.__gunsState?.requested_throttle),
-          phase: globalThis.__gunsState?.session_phase,
-          terminal: globalThis.__gunsState?.player_terminal_state,
-        }));
+        const settledThrottle = await readLever();
         assert.ok(Math.abs(settledThrottle.value - releasedThrottle.value) <= 0.02,
-          `${viewport.width}x${viewport.height}: release did not stop throttle motion: `
+          `${viewport.width}x${viewport.height}: release did not hold the lever: `
             + `${JSON.stringify({ releasedThrottle, settledThrottle })}`);
         assert.ok(settledThrottle.value > 0,
-          `${viewport.width}x${viewport.height}: rocker release reset the selected throttle`);
+          `${viewport.width}x${viewport.height}: lever release reset the selected throttle`);
 
         await page.locator("#pause-button").click();
         await page.locator("#ready-settings").click();
@@ -3234,9 +3210,10 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     const portraitRows = Object.fromEntries(
       portraitHud.mobileTactical.drawnRows.map((row) => [row.key, row.text]),
     );
-    assert.match(portraitRows.actual,
-      /AUTO COR.*M.*(?:KCAS|KIAS).*(?:\d(?:\.\d)?K|FL).*?(?:V\/S|↑|↓)|M.*(?:KCAS|KIAS).*AUTO COR.*(?:\d(?:\.\d)?K|FL).*?(?:V\/S|↑|↓)/);
-    assert.match(portraitRows.context, /GUN\d+/);
+    assert.deepEqual(Object.keys(portraitRows), ["combat"], "portrait rail is not one row");
+    assert.match(portraitRows.combat, /^M\.?\d.*(?:COR|AUTO|H\d{3}).*GUN\d+.*F\d/);
+    assert.doesNotMatch(portraitRows.combat, /KCAS|KIAS|NM\/MIN/);
+    assertNoControlOverlap("390x844", await touchControlRects(page), portraitHud);
     assert.ok(portraitHud.mobileTactical.drawnRows.every(
       (row) => !row.text.includes("…"),
     ), "portrait tactical truth was ellipsized");
@@ -3255,9 +3232,17 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
         const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
         return { hit: el === top || el.contains(top), top: top?.id || top?.tagName || null };
       };
-      return { left: reachOf("#fallback-stick"), right: reachOf("#target-stick") };
+      return {
+        lever: reachOf("#touch-throttle-lever"),
+        fire: reachOf("#touch-fire"),
+        limit: reachOf("#touch-limit-override"),
+        right: reachOf("#target-stick"),
+      };
     });
-    assert.ok(reach.left.hit, `left stick unreachable — touches land on "${reach.left.top}"`);
+    assert.ok(reach.lever.hit, `throttle lever unreachable — touches land on "${reach.lever.top}"`);
+    assert.ok(reach.fire.hit, `FIRE unreachable — touches land on "${reach.fire.top}"`);
+    // Portrait used to hide LIMIT entirely (index.html portrait-assist rules).
+    assert.ok(reach.limit.hit, `LIMIT unreachable in portrait — touches land on "${reach.limit.top}"`);
     assert.ok(reach.right.hit, `right stick unreachable — touches land on "${reach.right.top}"`);
 
     // Full-left roll through the platform touch pipeline (CDP synthesises real touch events).

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as THREE from "../../../vendor/three.module.js";
+import {
+  UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES,
+} from "../../environment/soft_world_atmosphere.js";
 
 import {
   CONVENTIONAL_AIRBASE_VISUAL_PROFILE,
@@ -22,6 +26,85 @@ function runwayState(overrides = {}) {
     ...overrides,
   };
 }
+
+function atmosphereFixture() {
+  return Object.fromEntries(UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES
+    .map((name) => [name, { value: name.includes("Color") ? new THREE.Color() : 0 }]));
+}
+
+function compiledShader(material) {
+  const type = material.isPointsMaterial ? "points"
+    : material.isMeshBasicMaterial ? "basic" : "standard";
+  const shader = { ...THREE.ShaderLib[type], uniforms: {} };
+  material.onBeforeCompile(shader);
+  return shader;
+}
+
+test("all conventional runway surfaces and light fields share live terrain haze without double fog", () => {
+  const runway = createConventionalRunwayPresentation();
+  const atmosphere = atmosphereFixture();
+  updateConventionalRunwayPresentation(runway, runwayState(), atmosphere);
+  const materialTypes = new Set();
+  runway.group.traverse((object) => {
+    if (!object.material) return;
+    const material = object.material;
+    materialTypes.add(material.type);
+    assert.equal(material.fog, false, object.name);
+    assert.equal(material.toneMapped, true, `${object.name}: same haze output transform as terrain`);
+    const shader = compiledShader(material);
+    for (const name of UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES) {
+      assert.equal(shader.uniforms[name], atmosphere[name], `${object.name}: ${name}`);
+    }
+    assert.match(shader.vertexShader, /runwayRadialM - 12000\.0/, object.name);
+    assert.match(shader.vertexShader, /vSoftWorldFogDistance = length\(mvPosition.xyz\)/);
+    assert.match(shader.fragmentShader, /uFogDensity \* uAtmosphereDensityScale/);
+    assert.match(shader.fragmentShader, /uWorldEdgeM \* 0.72/);
+    assert.match(shader.fragmentShader, /outgoingLight = mix\(/);
+    assert.match(material.customProgramCacheKey(), /terrain-curvature-v1\|ukraine-soft-world-fog-v1$/);
+    const version = material.version;
+    updateConventionalRunwayPresentation(runway, runwayState(), atmosphere);
+    assert.equal(material.version, version, "steady frames do not recompile runway shaders");
+    atmosphere.uFogDensity.value = 0.00007;
+    assert.equal(shader.uniforms.uFogDensity.value, 0.00007, "weather remains live");
+  });
+  assert.deepEqual([...materialTypes].sort(),
+    ["MeshBasicMaterial", "MeshStandardMaterial", "PointsMaterial"]);
+});
+
+test("runway fog follows replacement terrain and restores scene fog in terrain-free modes", () => {
+  const runway = createConventionalRunwayPresentation();
+  const materials = new Map();
+  runway.group.traverse(({ material }) => {
+    if (material) materials.set(material, {
+      compile: material.onBeforeCompile, key: material.customProgramCacheKey(), fog: material.fog,
+      toneMapped: material.toneMapped,
+    });
+  });
+  const first = atmosphereFixture();
+  const second = atmosphereFixture();
+  updateConventionalRunwayPresentation(runway, runwayState(), first);
+  updateConventionalRunwayPresentation(runway, runwayState(), second);
+  for (const material of materials.keys()) {
+    const shader = compiledShader(material);
+    assert.equal(shader.uniforms.uFogColor, second.uFogColor);
+    assert.notEqual(shader.uniforms.uFogColor, first.uFogColor);
+    assert.equal(shader.fragmentShader.match(/float softWorldFogDensity =/g).length, 1);
+  }
+  updateConventionalRunwayPresentation(runway, runwayState());
+  for (const [material, original] of materials) {
+    assert.equal(material.onBeforeCompile, original.compile);
+    assert.equal(material.customProgramCacheKey(), original.key);
+    assert.equal(material.fog, original.fog);
+    assert.equal(material.toneMapped, original.toneMapped);
+    assert.equal(material.userData.ukraineSoftWorldFog, undefined);
+    assert.doesNotMatch(compiledShader(material).fragmentShader, /softWorldFogDensity/);
+  }
+  updateConventionalRunwayPresentation(runway, runwayState(), second);
+  assert.equal(compiledShader(runway.surface.material).uniforms.uFogColor, second.uFogColor);
+  updateConventionalRunwayPresentation(runway, runwayState(), { uFogColor: second.uFogColor });
+  assert.equal(runway.surface.material.fog, true, "incomplete atmosphere retains scene fog");
+  assert.doesNotMatch(compiledShader(runway.surface.material).fragmentShader, /softWorldFogDensity/);
+});
 
 test("conventional runway remains hidden until an authoritative finite strip is available", () => {
   const runway = createConventionalRunwayPresentation();

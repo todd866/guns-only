@@ -19,7 +19,9 @@
 .pilot-notebook header button { margin: 0; }
 .pilot-notebook footer { display: flex; flex-wrap: wrap; gap: .75rem; }
 #practice-cue { position: fixed; left: 50%; bottom: max(1rem, env(safe-area-inset-bottom));
-  transform: translateX(-50%); max-width: min(34rem, 90vw); padding: .5rem .8rem;
-  background: rgb(10 18 14 / .9); border: 1px solid #b8cba3; border-radius: .25rem;
-  color: #f3f4df; font: 600 clamp(.8rem, 2vw, 1rem)/1.4 system-ui, sans-serif;
+  transform: translateX(-50%); box-sizing: border-box; max-width: min(34rem, calc(100vw - 32px));
+  padding: 4px 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  background: rgb(2 12 18 / .78); border: 1px solid rgb(77 255 136 / .42); border-radius: 4px;
+  color: #d9ffe5; font: 750 11px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .06em; text-transform: uppercase;
   text-align: center; pointer-events: none; z-index: 15; }

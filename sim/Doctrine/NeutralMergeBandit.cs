@@ -2,6 +2,16 @@ using GunsOnly.Sim.Turbulence;
 
 namespace GunsOnly.Sim.Doctrine;
 
+/// How the co-operative opening is flown before the reactive pilot takes over.
+public enum OpeningPresentation {
+    /// The briefed offset reciprocal pass (earned rungs, the valley park, the authored 9 km merge).
+    Reciprocal,
+    /// Rung 0's first gun lesson: a same-heading lead ahead of the player, wings level at a held
+    /// speed a little below the player's, so the closure is low and the contact stays in the
+    /// forward view inside gun range. See docs/grok-overhaul/design/f22-opening.md.
+    Lead,
+}
+
 /// <summary>
 /// Holds the opponent to the briefed reciprocal flight path through one offset neutral pass, then
 /// hands the same physical state to the ordinary reactive BFM pilot. This is scenario geometry,
@@ -21,11 +31,26 @@ public sealed class NeutralMergeBandit :
     /// neutral pass ends, instead of snapping straight into a fight they cannot win. Mutable for
     /// exactly one transition: EndPresentation latches it false when the pair graduates.
     bool _presenting;
+    bool _presentationHandoffPending;
     bool _endPresentOnProximity = true;
     double _presentElapsedSeconds;
     /// A head-on pass from the staged 9 km closes in well under 20 s; past this the merge was missed.
     public const double MaximumAuthoredPassSeconds = 30.0;
 
+    /// LEAD PRESENTATION LATCHES. The reciprocal latches (2 s inside the 12-degree/900 m funnel,
+    /// 4 s inside 1.5 km) mean "you have reached the merge". A lead staged 650 m ahead starts
+    /// inside both, so they would end the lesson two seconds after launch whatever the player did
+    /// (measured: the bandit broke before a delayed-input pilot had settled the sight). The lead
+    /// keeps the same three exits with the meaning restated for trail geometry:
+    ///  * tracking - two burst lengths with the nose genuinely on him (3 degrees, inside 900 m);
+    ///  * proximity - four seconds closer than a safe gun range (an overrun is "in the fight");
+    ///  * the 12 s cap (ReactiveBandit.PresentMaximumSeconds), whatever the player does.
+    /// A physical hit also ends it: the session calls EndPresentation on the first scored round.
+    public const double LeadTrackingAngleRad = 3.0 * Math.PI / 180.0;
+    public const double LeadProximityRangeM = 300.0;
+    readonly OpeningPresentation _presentation;
+    readonly double _leadSpeedMps;
+    readonly double _leadBankRad;
     /// Before the merge gate this is the briefed intent; after it, the live fight owns the answer.
     public bool Presenting => _fight?.Presenting ?? _presenting;
 
@@ -33,6 +58,9 @@ public sealed class NeutralMergeBandit :
     /// the run-in (so BeginFight stages a fighting bandit), and the inner call covers a fight
     /// already begun.
     public void EndPresentation() {
+        // Remember an external exit across the tick boundary. An earned-rung opponent born
+        // non-presenting still owns its reciprocal pass until the normal merge gate.
+        if (_presenting && _fight is null) _presentationHandoffPending = true;
         _presenting = false;
         _fight?.EndPresentation();
     }
@@ -59,7 +87,16 @@ public sealed class NeutralMergeBandit :
         BanditSkillProfile? profile = null,
         int? doctrineIndex = null,
         bool presenting = false,
-        bool endPresentOnProximity = true) {
+        bool endPresentOnProximity = true,
+        OpeningPresentation presentation = OpeningPresentation.Reciprocal,
+        double leadBankRad = 0.0) {
+        if (!double.IsFinite(leadBankRad) || System.Math.Abs(leadBankRad) > 1.0)
+            throw new System.ArgumentOutOfRangeException(nameof(leadBankRad));
+        _leadBankRad = leadBankRad;
+        if (!System.Enum.IsDefined(presentation))
+            throw new System.ArgumentOutOfRangeException(nameof(presentation));
+        _presentation = presentation;
+        _leadSpeedMps = initial.Speed;
         _presenting = presenting;
         _endPresentOnProximity = endPresentOnProximity;
         _parameters = parameters;
@@ -105,6 +142,7 @@ public sealed class NeutralMergeBandit :
     }
     public double T { get; private set; }
     public bool FirstPassComplete => _fight is not null;
+    public OpeningPresentation Presentation => _presentation;
     /// The pilot tier this merge is briefed to hand its post-pass dogfight to, and (once the pass
     /// completes) the tier actually flying. Null before the handoff, mirroring FirstPassComplete —
     /// an honest inspection seam for verifying the flagship opener fields the intended tier.
@@ -174,9 +212,18 @@ public sealed class NeutralMergeBandit :
     public void Step(in ActorObservation player, double dt) {
         if (!double.IsFinite(dt) || dt <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(dt));
+        if (_presentationHandoffPending) {
+            _presentationHandoffPending = false;
+            BeginFight(player.ContactIdentity);
+        }
         if (_fight is not null) {
             _fight.Step(player, dt);
             T += dt;
+            return;
+        }
+
+        if (_presentation == OpeningPresentation.Lead) {
+            StepLead(player, dt);
             return;
         }
 
@@ -247,6 +294,60 @@ public sealed class NeutralMergeBandit :
         _presentProximitySeconds = near ? _presentProximitySeconds + dt : 0.0;
         if (_presentProximitySeconds >= ReactiveBandit.PresentProximitySeconds)
             _presenting = false;
+    }
+
+    /// The lead holds its line until the present ends by any exit (including an external
+    /// EndPresentation from a hit), then the same physical state becomes the reactive fighter.
+    /// There is no merge gate: nobody passes anybody.
+    void StepLead(in ActorObservation player, double dt) {
+        if (!_presenting) {
+            BeginFight(player.ContactIdentity);
+            _fight!.Step(player, dt);
+            T += dt;
+            return;
+        }
+        _mergeSim.Step(LeadCommand(), dt);
+        T += dt;
+        UpdateLeadPresent(player, dt);
+        if (!_presenting) BeginFight(player.ContactIdentity);
+    }
+
+    void UpdateLeadPresent(in ActorObservation player, double dt) {
+        _presentElapsedSeconds += dt;
+        if (_presentElapsedSeconds >= ReactiveBandit.PresentMaximumSeconds) {
+            _presenting = false;
+            return;
+        }
+        double range = Geometry.Range(player, _mergeSim.State);
+        if (!_endPresentOnProximity) return;
+        bool near = range <= LeadProximityRangeM;
+        _presentProximitySeconds = near ? _presentProximitySeconds + dt : 0.0;
+        if (_presentProximitySeconds >= ReactiveBandit.PresentProximitySeconds)
+            _presenting = false;
+    }
+
+    /// The session judges the lesson using the player's authoritative gun boresight. Contact
+    /// observations deliberately omit body attitude; their flight path cannot prove nose tracking.
+    /// Only the resulting lesson predicate crosses into this authored controller, not AI truth.
+    internal void ObserveLeadTracking(bool tracking, double dt) {
+        if (_presentation != OpeningPresentation.Lead || !Presenting || _fight is not null) return;
+        _presentHeldSeconds = tracking ? _presentHeldSeconds + dt : 0.0;
+        if (_presentHeldSeconds >= ReactiveBandit.PresentHoldSeconds) EndPresentation();
+    }
+
+    /// A constant, level, gentle turn (or wings level when the bank is zero) with power on a simple
+    /// speed hold to the staged speed. A real pilot command into the same AircraftSim the fight
+    /// uses: no kinematic rail, no speed teleport. It does not react to the player at all.
+    PilotCommand LeadCommand() {
+        AircraftState own = _mergeSim.State;
+        double trim = DetentLayer.LevelFlightTrimThrottle(own, _parameters,
+            _mergeSim.AirspeedMps, AirframeAerodynamicState.Clean, _atmosphere)
+            / Math.Max(0.5, Math.Cos(_leadBankRad));
+        double throttle = Math.Clamp(
+            trim + 0.08 * (_leadSpeedMps - own.Speed),
+            0.0, Math.Min(1.0, _parameters.MaxThrustFraction));
+        double g = 1.0 / Math.Cos(_leadBankRad);
+        return new PilotCommand(GDemand: g, BankTarget: _leadBankRad, Throttle: throttle, Rudder: 0.0);
     }
 
     PilotCommand ReciprocalPassCommand() => new(

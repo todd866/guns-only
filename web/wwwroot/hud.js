@@ -23,7 +23,7 @@ import {
   missionGuidanceLayout,
   topGunControlQuicklookPresentation,
 } from "./render/hud/mission_guidance.js";
-import { targetDataLineOwner } from "./render/hud/target_data_line.js";
+import { targetDataLineOwner, targetDataLinePlacement } from "./render/hud/target_data_line.js";
 import {
   ContactRangeTracker,
   contactRangeIdentity,
@@ -56,6 +56,7 @@ import {
 } from "./render/hud/hud_stabilizer.js";
 import { AoAIndexerQualifier, DisplayCueQualifier } from "./render/hud/stable_cues.js";
 import { fighterHudLayout } from "./render/hud/fighter_layout.js";
+import { clearBottomFor, normaliseOccupiedRects } from "./render/hud/occupied_area.js";
 import { fireBossCueLayout } from "./render/hud/fireboss_cue_layout.js";
 import {
   gunFunnelProfile,
@@ -82,6 +83,7 @@ import {
   navigationRateReadout,
 } from "./render/hud/limits_panel.js?v=__RELEASE_BUILD__";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
+import { fitCombatRow } from "./render/hud/combat_row.js";
 import { highAlphaRecoveryPresentation } from "./render/hud/high_alpha_recovery.js";
 import {
   fillLegibleHudText,
@@ -125,6 +127,12 @@ const MODE_CUE_SECONDS = 1.5;
 const GUN_HEAT_AMBER_THRESHOLD = 0.7;
 const GUN_HEAT_DISPLAY_THRESHOLD = 0.05;
 const GUN_OVERHEAT_FLASH_HZ = 2;
+
+/** AUTO only while the assisted corner hold owns the lever; older snapshots fall back. */
+function autoThrottleOwnsLever(state) {
+  return typeof state?.auto_throttle === "boolean"
+    ? state.auto_throttle : state?.assisted_flight === true;
+}
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -499,6 +507,17 @@ class CombatHud {
     if (this.touchMode) this.legendVisible = false;
   }
 
+  /// Rectangles (CSS px, viewport space) the DOM touch controls currently occupy. Low canvas
+  /// plates and the tapes place themselves clear of these; see render/hud/occupied_area.js.
+  setOccupiedRects(rects) {
+    this.occupiedRects = normaliseOccupiedRects(rects);
+  }
+
+  /// Lowest y a plate spanning [left, right] can use without covering a touch control.
+  clearBottomFor(left, right, fallbackBottom) {
+    return clearBottomFor(this.occupiedRects ?? [], left, right, fallbackBottom);
+  }
+
   setPresentationProfile(profile) {
     this.presentationProfile = String(profile || "standard");
     if (this.presentationProfile !== "standard") this.legendVisible = false;
@@ -676,6 +695,7 @@ class CombatHud {
       touchMode: this.touchMode,
       compactMobile: this.usesMobileTacticalProfile(),
       safeInsets: this.safeInsets,
+      occupiedRects: this.touchMode ? this.occupiedRects ?? [] : [],
     });
   }
 
@@ -1167,6 +1187,13 @@ class CombatHud {
     const pipperAlpha = this._leadPipperEnvelope.update(rawPipperVisible, frame.dt);
     const pipperVisible = pipperAlpha > 0.01
       && Number.isFinite(this._lastLeadPipperX) && Number.isFinite(this._lastLeadPipperY);
+    // Where the drawn pipper sits and whether the drawn cue reads as a solution: the
+    // first-merge receipt's HUD-only pilot steers by exactly these pixels.
+    if (this._debug) {
+      this._debug.leadPipper = pipperVisible
+        ? { x: this._lastLeadPipperX, y: this._lastLeadPipperY, solution, cue: cue ?? null }
+        : { x: null, y: null, solution, cue: cue ?? null };
+    }
 
     if (pipperVisible) {
       const pipperX = this._lastLeadPipperX;
@@ -1381,10 +1408,34 @@ class CombatHud {
     ctx.font = `${mobileTactical ? "800 10px" : "600 9px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     const textWidth = ctx.measureText(dataLine).width;
     const textHeight = mobileTactical ? 17 : 14;
-    const rightX = projection.x + size + 8;
-    const useRight = rightX + textWidth + 8 <= safe.right;
-    const textX = useRight ? rightX : projection.x - size - 8 - textWidth;
-    const textY = clamp(projection.y - textHeight / 2, safe.top, safe.bottom - textHeight);
+    const layout = this.getLayout();
+    // Clamp against the TAPES as well as targetSafe: on a phone targetSafe is only the safe-area
+    // inset, which let the left fallback print the range across the airspeed box.
+    const placement = targetDataLinePlacement({
+      projection,
+      size,
+      textWidth,
+      textHeight,
+      safe,
+      gutterLeft: layout.tapeInset + layout.tapeHalfWidth + 6,
+      gutterRight: this.width - layout.tapeInset - layout.tapeHalfWidth - 6,
+      avoid: [
+        ...(this._lastPadlockInsetRect ? [this._lastPadlockInsetRect] : []),
+        ...(this.touchMode ? this.occupiedRects ?? [] : []),
+      ],
+    });
+    if (!placement) return;
+    const { x: textX, y: textY } = placement;
+    // Share the per-frame contact-label registry so the "TARGET 1 · SELECTED" caption steps
+    // clear when the line has had to go below the bracket.
+    this._contactLabelSlots?.push({
+      left: textX - 4, right: textX + textWidth + 4, top: textY, bottom: textY + textHeight,
+    });
+    if (this._debug) {
+      this._debug.targetDataLine = {
+        x: textX - 4, y: textY, width: textWidth + 8, height: textHeight, text: dataLine,
+      };
+    }
     ctx.fillStyle = mobileTactical ? "rgba(1, 8, 12, 0.78)" : "rgba(1, 8, 12, 0.68)";
     ctx.fillRect(textX - 4, textY, textWidth + 8, textHeight);
     ctx.textAlign = "left";
@@ -1945,9 +1996,17 @@ class CombatHud {
       ? `${sixPrefix}TGT 1 · ${primaryNumbers}`
       : `${sixPrefix}TARGET 1 · ${primaryNumbers}`;
     ctx.font = `${mobileTactical ? "800 10px" : "600 9px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
+    // Keep the caption between the TAPES, not just inside the locator ring: at the right edge of
+    // a phone it used to print "TGT 1 · 0.34NM · 767KT CLOSING" across the altitude value box.
+    const tapeLayout = this.getLayout();
+    const captionLeft = Math.max(locatorLeft,
+      tapeLayout.tapeInset + tapeLayout.tapeHalfWidth + 6);
+    const captionRight = Math.min(locatorRight,
+      this.width - tapeLayout.tapeInset - tapeLayout.tapeHalfWidth - 6);
+    const labelText = this.fitText(fullLabel, Math.max(60, captionRight - captionLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
-    const labelX = clamp(x - (dx / length) * 34, locatorLeft + labelWidth * 0.5 + 5, locatorRight - labelWidth * 0.5 - 5);
+    const labelX = clamp(x - (dx / length) * 34, captionLeft + labelWidth * 0.5 + 5,
+      Math.max(captionLeft + labelWidth * 0.5 + 5, captionRight - labelWidth * 0.5 - 5));
     const labelHeight = mobileTactical ? 17 : 14;
     // This locator label is centred on labelY and carries its own backing plate, so it cannot go
     // through placeContactLabel unchanged — but it must still share the same per-frame registry,
@@ -2592,6 +2651,8 @@ class CombatHud {
   drawVerticalTape({
     value,
     displayValue = value,
+    instrumentId = null,
+    unit = "",
     x,
     step,
     decimals = 0,
@@ -2757,8 +2818,26 @@ class CombatHud {
     ctx.fillStyle = GREEN;
     ctx.font = this.hudFont(13, 700);
     ctx.textAlign = "center";
-    ctx.fillText(displayValueValid ? `${displayValue.toFixed(decimals)}${suffix}` : "---",
-      x, centerY + 0.5);
+    const valueText = displayValueValid ? `${displayValue.toFixed(decimals)}${suffix}` : "---";
+    ctx.fillText(valueText, x, centerY + 0.5);
+    const valueWidth = ctx.measureText(valueText).width;
+    if (unit) {
+      ctx.save();
+      ctx.font = this.hudFont(8, 800);
+      ctx.textBaseline = "middle";
+      this.fillEssentialHudText(unit, x, centerY - halfHeight - 12);
+      ctx.restore();
+    }
+    // Record the actual value paint, not just the layout's proposed tape rectangle.
+    if (this._debug && instrumentId) {
+      (this._debug.tapeReadouts ??= []).push({
+        id: instrumentId, text: valueText, unit,
+        left: Math.min(x - 37, x - valueWidth / 2),
+        right: Math.max(x + 37, x + valueWidth / 2),
+        top: centerY - halfHeight - (unit ? 18 : 0),
+        bottom: centerY + halfHeight,
+      });
+    }
 
     // Trend caret: a vertical line from the current value to where the value is heading (value +
     // trend over the lookahead), clamped to the tape. Amber, so accel/decel reads at a glance.
@@ -2827,7 +2906,7 @@ class CombatHud {
     ctx.fillText(speedSecondaryText, speedX, readoutY);
     // Assisted flight (portrait): the throttle is holding corner velocity; say so where the
     // pilot's speed attention already lives. Guarded on field presence for older snapshots.
-    if (state.assisted_flight === true) {
+    if (autoThrottleOwnsLever(state)) {
       const bias = Number(state.assisted_speed_bias_kts) || 0;
       ctx.fillStyle = AMBER;
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -2846,7 +2925,7 @@ class CombatHud {
     const altitude = Number.isFinite(display.altitudeDigits)
       ? Math.round(display.altitudeDigits) : Math.round(Number(state.alt_ft) || 0);
     const bias = Number(state.assisted_speed_bias_kts) || 0;
-    const auto = state.assisted_flight === true
+    const auto = autoThrottleOwnsLever(state)
       ? (bias === 0 ? "AUTO CORNER" : `AUTO COR${bias > 0 ? "+" : ""}${bias}`)
       : "MANUAL";
     const top = this.safeInsets.top + 18;
@@ -2859,7 +2938,7 @@ class CombatHud {
     ctx.fillStyle = "rgba(2, 10, 16, 0.68)";
     roundedRect(ctx, (this.width - width) / 2, top - 10, width, 20, 5);
     ctx.fill();
-    ctx.fillStyle = state.assisted_flight === true ? AMBER : GREEN;
+    ctx.fillStyle = autoThrottleOwnsLever(state) ? AMBER : GREEN;
     ctx.fillText(text, this.width / 2, top);
     ctx.restore();
   }
@@ -2920,16 +2999,36 @@ class CombatHud {
     }
     if (condensed) directiveText = directiveText.replaceAll(" · ", "·");
 
-    const rows = [
-      {
-        key: "actual",
-        text: highAlpha.active
-          ? `${tactical.actualText}${condensed ? "·" : " · "}${highAlpha.symbol}`
-          : tactical.actualText,
-        color: highAlpha.active ? AMBER : GREEN,
-      },
-    ];
-    if (tactical.contextText) {
+    const ctx = this.ctx;
+    const largeText = document.documentElement.classList.contains("large-interface-text");
+    const fontSize = largeText ? 11 : 10;
+    const phone = this.width < 520;
+    const leftReserve = phone ? 70 : 14;
+    const availableWidth = Math.max(150,
+      this.width - this.safeInsets.left - this.safeInsets.right - leftReserve - 14);
+
+    // The gun fighter's rail is ONE combat row (Mach · energy · G · V/S · gun · fuel). Rapier and
+    // carrier recovery keep their multi-row rail: they are frozen modes with their own directives.
+    const combatRail = !guidance && !carrierRoute && state.rapier_mission_available !== true;
+    const rows = [];
+    if (combatRail) {
+      ctx.save();
+      ctx.font = `800 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      const fitted = fitCombatRow(tactical.combatParts, availableWidth - 16,
+        (text) => ctx.measureText(text).width);
+      ctx.restore();
+      rows.push({
+        key: "combat",
+        text: fitted.text,
+        reservedText: fitted.reservedText,
+        reservedWidth: fitted.reservedWidth,
+        color: tactical.weapon.level === "warning" ? RED
+          : tactical.weapon.level === "caution" ? AMBER : GREEN,
+      });
+    } else {
+      rows.push({ key: "actual", text: tactical.actualText, color: GREEN });
+    }
+    if (!combatRail && tactical.contextText) {
       rows.push({
         key: "context",
         text: tactical.contextText,
@@ -2938,7 +3037,10 @@ class CombatHud {
             : GREEN_DIM,
       });
     }
-    const navigationRates = navigationRateReadout(state);
+    // Navigation economy is an RTB-phase datum, not a merge datum: on the fighter rail it appears
+    // only once the pilot is going home or fuel needs watching.
+    const navigationRates = !combatRail || state.player_rtb_active === true
+      || tactical.fuelAttention ? navigationRateReadout(state) : null;
     if (navigationRates) {
       rows.push({
         key: "navigation",
@@ -2955,19 +3057,12 @@ class CombatHud {
       });
     }
 
-    const ctx = this.ctx;
-    const largeText = document.documentElement.classList.contains("large-interface-text");
-    const fontSize = largeText ? 11 : 10;
     const rowPitch = fontSize + 7;
     const height = 10 + rows.length * rowPitch;
-    const phone = this.width < 520;
-    const leftReserve = phone ? 70 : 14;
-    const availableWidth = Math.max(150,
-      this.width - this.safeInsets.left - this.safeInsets.right - leftReserve - 14);
     ctx.save();
     ctx.font = `800 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     const measuredWidth = rows.reduce((maximum, row) =>
-      Math.max(maximum, ctx.measureText(row.text).width), 0) + 22;
+      Math.max(maximum, ctx.measureText(row.text).width + (row.reservedWidth || 0)), 0) + 22;
     const width = Math.min(availableWidth, Math.max(176, measuredWidth));
     const x = phone
       ? this.width - this.safeInsets.right - width - 10
@@ -2984,11 +3079,21 @@ class CombatHud {
     const drawnRows = [];
     rows.forEach((row, index) => {
       ctx.fillStyle = row.color;
-      ctx.font = `${row.key === "actual" ? "800" : "750"} ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-      const drawnText = this.fitText(row.text, width - 16);
-      drawnRows.push({ key: row.key, text: drawnText });
-      ctx.fillText(drawnText,
-        x + width / 2, y + 8 + index * rowPitch);
+      ctx.font = `${row.key === "actual" || row.key === "combat" ? "800" : "750"} ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      const textWidth = width - 16 - (row.reservedWidth || 0);
+      const drawnText = this.fitText(row.text, textWidth);
+      const rowY = y + 8 + index * rowPitch;
+      drawnRows.push({ key: row.key,
+        text: [drawnText, row.reservedText].filter(Boolean).join("·"),
+        reservedText: row.reservedText || "", textWidth });
+      ctx.fillText(drawnText, x + 8 + textWidth / 2, rowY);
+      if (row.reservedText) {
+        // Reserved before fitting anything else; never pass the recovery cue to fitText.
+        ctx.fillStyle = AMBER;
+        ctx.textAlign = "right";
+        ctx.fillText(row.reservedText, x + width - 8, rowY);
+        ctx.textAlign = "center";
+      }
     });
     ctx.restore();
 
@@ -3059,7 +3164,12 @@ class CombatHud {
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    this.fillEssentialHudText(overrideSelected ? "G · OVR" : "G", x, y - 20);
+    // The centre-stick cue owns the middle of this row. OVR is optional here (the LIMIT
+    // control and X marker also carry it); shed it before it can touch the reserved cue.
+    const cueLeft = x + width * 0.52 - ctx.measureText(highAlpha.symbol).width / 2 - 6;
+    const label = overrideSelected && (!highAlpha.active
+      || x + ctx.measureText("G · OVR").width <= cueLeft) ? "G · OVR" : "G";
+    this.fillEssentialHudText(label, x, y - 20);
     ctx.textAlign = "right";
     ctx.fillStyle = tierColor;
     ctx.fillText((Number(state.g_actual) || 0).toFixed(1), x + width, y - 20);
@@ -4084,6 +4194,7 @@ class CombatHud {
   }
 
   drawPadlockSa(frame, systems = null, noseAnchor = null) {
+    this._padlockDirectiveBottom = null;
     if (!frame.padlock) {
       this._carrierPatternCue.reset();
       this._padlockLiftCaptured = false;
@@ -4176,23 +4287,30 @@ class CombatHud {
         target: frame.padlockTarget,
       };
     }
+    // On a phone the mode plate sat on top of the tactical rail (Mach/corner hidden under
+    // "TARGET 1 · SELECTED · PADLOCK"). Selection is already printed at the bracket and the TARGET
+    // control; padlock state now lives on the pressed PADLOCK control (ACQ / TRK / LOOK).
+    if (!this.touchMode) {
+      padlockCtx.save();
+      padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      const titleWidth = padlockCtx.measureText(modeTitle).width;
+      padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      const statusWidth = padlockCtx.measureText(modeStatus).width;
+      const modeWidth = Math.min(this.width - 28, Math.max(titleWidth, statusWidth) + 20);
+      const modeX = (this.width - modeWidth) / 2;
+      const modeY = Math.max(this.safeInsets.top + 3, this.getLayout().heading.top - 30);
+      this.glassPanel(modeX, modeY, modeWidth, 28, frame.manualLookActive ? AMBER : GREEN_DIM);
+      padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN;
+      padlockCtx.textAlign = "center";
+      padlockCtx.textBaseline = "middle";
+      padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      padlockCtx.fillText(this.fitText(modeTitle, modeWidth - 12), this.width / 2, modeY + 9);
+      padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN_DIM;
+      padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      padlockCtx.fillText(this.fitText(modeStatus, modeWidth - 12), this.width / 2, modeY + 20);
+      padlockCtx.restore();
+    }
     padlockCtx.save();
-    padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const titleWidth = padlockCtx.measureText(modeTitle).width;
-    padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const statusWidth = padlockCtx.measureText(modeStatus).width;
-    const modeWidth = Math.min(this.width - 28, Math.max(titleWidth, statusWidth) + 20);
-    const modeX = (this.width - modeWidth) / 2;
-    const modeY = Math.max(this.safeInsets.top + 3, this.getLayout().heading.top - 30);
-    this.glassPanel(modeX, modeY, modeWidth, 28, frame.manualLookActive ? AMBER : GREEN_DIM);
-    padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN;
-    padlockCtx.textAlign = "center";
-    padlockCtx.textBaseline = "middle";
-    padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    padlockCtx.fillText(this.fitText(modeTitle, modeWidth - 12), this.width / 2, modeY + 9);
-    padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN_DIM;
-    padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    padlockCtx.fillText(this.fitText(modeStatus, modeWidth - 12), this.width / 2, modeY + 20);
 
     // Combat padlock always owns its director and locator, including near the forward-view
     // threshold. Recovery-platform padlock needs this compact SA only when the pilot deliberately
@@ -4272,6 +4390,7 @@ class CombatHud {
         const directiveWidth = Math.min(right - left,
           Math.max(94, padlockCtx.measureText(text).width + 24));
         const directiveY = Math.max(top + 2, this.annunciationBottom(frame.state));
+        this._padlockDirectiveBottom = directiveY + 24;
         this.glassPanel(centreX - directiveWidth / 2, directiveY,
           directiveWidth, 24, accent);
         padlockCtx.fillStyle = accent;
@@ -4640,6 +4759,12 @@ class CombatHud {
     const radius = clamp(Math.min(right - left, bottom - top) * 0.16, 50, 66);
     const cx = centreX;
     const cy = clamp(centreY0(top, bottom), top + radius + 30, bottom - radius - 34);
+    // Published for the selected-contact data line, which must not print across this inset
+    // (consumed on the next frame; the data line is drawn before padlock SA).
+    this._padlockInsetRect = {
+      left: cx - radius - 48, right: cx + radius + 48,
+      top: cy - radius - 22, bottom: cy + radius + 30,
+    };
     function centreY0(topPx, bottomPx) {
       // Low, never centre. An instrument parked over the middle of the screen covers the thing
       // the pilot is actually looking at -- the target and the horizon beyond it -- which is the
@@ -4695,7 +4820,10 @@ class CombatHud {
       ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(aftLabel, cx, cy - radius - 14);
+      // Below an ACQUIRING / STEERING directive when one is up; on a short landscape screen the
+      // two used to print on the same line.
+      const aftY = Math.max(cy - radius - 14, (this._padlockDirectiveBottom ?? -Infinity) + 9);
+      ctx.fillText(aftLabel, cx, Math.min(aftY, cy - radius - 4));
     }
 
     // Conventional attitude ball. A strong sky/earth split is deliberately used here rather than
@@ -5229,12 +5357,22 @@ class CombatHud {
     const ctx = this.ctx;
     const accent = cue.level === "warning" ? RED
       : cue.level === "caution" ? AMBER : GREEN;
-    const geometry = missionGuidanceLayout({
+    const provisional = missionGuidanceLayout({
       width: this.width,
       height: this.height,
       touchMode: this.touchMode,
       safeInsets: this.safeInsets,
       secondaryBottom: this.getLayout().secondaryBottom,
+    });
+    // Sit above whichever touch control shares the plate's span (the occupied-area contract),
+    // not merely above a fixed bottom strip.
+    const geometry = missionGuidanceLayout({
+      width: this.width,
+      height: this.height,
+      touchMode: this.touchMode,
+      safeInsets: this.safeInsets,
+      secondaryBottom: this.clearBottomFor(provisional.x, provisional.x + provisional.width,
+        provisional.bottom),
     });
     const actionOptions = {
       touchMode: this.touchMode,
@@ -6077,9 +6215,23 @@ class CombatHud {
       // The existing layout already has room. At 390 px wide the tapes sit at x = 48 and
       // x = 342 with a 35 px half-width, leaving the pitch ladder its middle 224 px.
       const mobileTapeInset = this.getLayout().tapeInset;
+      if (this._debug) {
+        const tapeLayout = this.getLayout();
+        const half = tapeLayout.tapeHeight / 2;
+        const cy = tapeLayout.instrumentCenterY;
+        this._debug.tapes = [mobileTapeInset, this.width - mobileTapeInset].map((x, index) => ({
+          id: index === 0 ? "speed-tape" : "altitude-tape",
+          left: x - tapeLayout.tapeHalfWidth,
+          right: x + tapeLayout.tapeHalfWidth,
+          top: cy - half,
+          bottom: cy + half,
+        }));
+      }
       this.drawVerticalTape({
         value: spd,
         displayValue: display.indicatedDigits,
+        instrumentId: "speed-tape",
+        unit: airdataReadout(frame.state).speedUnit,
         x: mobileTapeInset,
         floor: 0,
         step: 20,
@@ -6091,14 +6243,20 @@ class CombatHud {
       this.drawVerticalTape({
         value: display.altitudeFt,
         displayValue: display.altitudeDigits,
+        instrumentId: "altitude-tape",
+        unit: "ALT FT",
         x: this.width - mobileTapeInset,
         floor: 0,
         step: frame.state.alt_ft > 10000 ? 1000 : 500,
         decimals: 0,
       });
       // The phone gets the power rail too. It was desktop-only, which left the one control the
-      // pilot holds for the entire sortie with no feedback at all.
-      this.drawThrottle(frame.state);
+      // pilot holds for the entire sortie with no feedback at all. Where the fighter's throttle
+      // lever is on screen it IS the power readout (position, MIL stop, value), so the rail would
+      // only say the same thing twice.
+      const leverOnScreen = (this.occupiedRects ?? [])
+        .some((rect) => rect.id === "touch-throttle-lever");
+      if (!leverOnScreen) this.drawThrottle(frame.state);
       this.drawMobileTacticalState(frame, display, { combatPresentationSuppressed });
       this.drawF14WingSweep(frame.state);
     } else {
@@ -6158,6 +6316,8 @@ class CombatHud {
       globalThis.__HUD_GEOMETRY = this._debug;
       this._debug = null;
     }
+    this._lastPadlockInsetRect = frame.padlock ? this._padlockInsetRect ?? null : null;
+    this._padlockInsetRect = null;
     this.commitFrame();
   }
 }

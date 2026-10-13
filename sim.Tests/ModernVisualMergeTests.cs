@@ -405,8 +405,13 @@ public class ModernVisualMergeTests {
         }
 
         Assert.True(bandit.FirstPassComplete);
-        Assert.True(powerImmediatelyBeforeHandoff > 0.95);
-        Assert.Equal(powerImmediatelyBeforeHandoff, bandit.ThrustFraction, 12);
+        // Rung 0's lead flies a speed hold, not the reciprocal pass's full power; what is pinned
+        // is that the fighter inherits whatever the engine was actually doing.
+        Assert.Equal(OpeningPresentation.Lead, bandit.Presentation);
+        Assert.InRange(powerImmediatelyBeforeHandoff, 0.05, 1.0);
+        // The lead's engine is still spooling on its speed hold, so the handoff tick itself may
+        // move it by one tick of spool; a reset to idle or to full would be ~0.1-0.8.
+        Assert.InRange(Math.Abs(bandit.ThrustFraction - powerImmediatelyBeforeHandoff), 0.0, 0.001);
 
         double handoffPower = bandit.ThrustFraction;
         session.StepFixed();

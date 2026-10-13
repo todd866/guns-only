@@ -481,6 +481,17 @@ public sealed partial class SimulationSession {
         if (_firstRunValleyRuntime?.ParkOpponents == true) return;
         if (_opponentTerminalState == AircraftTerminalState.SimulationBounded) return;
         _bandit.Step(observation, dt);
+        if (_bandit is NeutralMergeBandit { Presentation: OpeningPresentation.Lead,
+                Presenting: true, FirstPassComplete: false } lead) {
+            // Both aircraft have now integrated this tick. Judge the authored lesson against
+            // the body/gun axis, without adding player attitude to the opponent's observation.
+            Vec3D toLead = lead.State.Position - _player.State.Position;
+            bool tracking = PrimaryOpponentAlive && PlayerWeaponsAuthorized
+                && toLead.Length <= ReactiveBandit.PresentFunnelRangeM
+                && _player.BodyForward.Dot(toLead.Normalized())
+                    >= Math.Cos(NeutralMergeBandit.LeadTrackingAngleRad);
+            lead.ObserveLeadTracking(tracking, dt);
+        }
     }
 
     void ConfigureAdaptiveAiPlanning() {
@@ -1021,6 +1032,7 @@ public sealed partial class SimulationSession {
 
     bool ReplacementBudgetExhausted =>
         _beat.FirstRunValley is not null
+        || (_bfmLessonIndex >= 0 && BfmLesson.Get(_bfmLessonIndex).Defensive)
         || (_beat.ContinuousCombat is { MaximumEngagements: > 0 } combat
             && _engagementNumber >= combat.MaximumEngagements);
 
@@ -1180,7 +1192,8 @@ public sealed partial class SimulationSession {
         CompleteEngagementIfEnded();
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
         SpawnSpec directorSpawn = UsesDifficultyRamp(_beat)
-            ? _sortieOpeningSpawn is { } held
+            ? _fightDirector.BfmEnabled ? _fightDirector.NextSpawn(nextEngagement)
+                : _sortieOpeningSpawn is { } held
                 ? held with { Sparring = false }
                 : _fightDirector.NextSpawn(nextEngagement)
             : new SpawnSpec(
@@ -1239,6 +1252,7 @@ public sealed partial class SimulationSession {
     }
 
     void StartEngagementCounters(PilotSkill opponentSkill, bool opponentWasBoss) {
+        StartBfmLesson();
         _directorHitsCreditedThisEngagement = 0;
         _engagementCounters = new EngagementCounters {
             Active = true,
@@ -1287,6 +1301,7 @@ public sealed partial class SimulationSession {
         EngagementReport report = BuildEngagementReport(
             outcome, EngagementEndReason.CombatResult);
         _engagementReports.Add(report);
+        ObserveBfmResult(in report);
         // Only the F-22 ramp (visual merge and the valley) moves rungs. Other
         // beats still record the fight for the learner, without fading their assist.
         // Hits already credited live (CreditDirectorHits) are not counted a second time.

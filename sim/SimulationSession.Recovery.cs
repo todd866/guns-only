@@ -414,6 +414,7 @@ public sealed partial class SimulationSession {
         // briefly re-enable the generic approach-energy text during rollout.
         if (f22ConventionalRtb
             && ConventionalRunwayPhase != RunwayRecoveryPhase.Airborne) {
+            _configurationTarget = FlightConfigurationTarget.Recovery;
             if (_conventionalCarrierRecovery.Active)
                 _conventionalCarrierRecovery.Reset();
             _conventionalRunwayPatternRecovery.Reset();
@@ -475,6 +476,14 @@ public sealed partial class SimulationSession {
                 touchdownReferenceHeightM: _conventionalRunwayRecovery.ReferenceHeightM,
                 atmosphere: RecoveryAtmosphere,
                 terrain: _terrainSurface);
+            // The authored gate owns the expected configuration: clean ingress/break,
+            // gear from the perch through touchdown, clean again after a missed approach.
+            // This is guidance and the gear-warning input, not carrier-style automation;
+            // changing phase must never move the pilot's gear/flap handles.
+            _configurationTarget = _approachGuidance.Gates.Count > 0
+                && _approachGuidance.Gates[0].DirtyConfig
+                    ? FlightConfigurationTarget.Recovery
+                    : FlightConfigurationTarget.Combat;
             return;
         }
         if (_conventionalRunwayPatternRecovery.Active)
@@ -898,11 +907,11 @@ public sealed partial class SimulationSession {
             }
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
-            UpdatePilotLateralCommitment(_detents.Command.RollControl);
+            UpdatePilotLateralCommitment(_detents.PilotRollIntent);
             PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
             PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
             PilotCommand padlockAssistedCommand = ApplyPlayerGunTargetPadlockRollAssist(
-                effectiveCommand, _detents.Command.RollControl);
+                effectiveCommand, _detents.PilotRollIntent);
             PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
             PreparePlayerForPoweredTick();
             _player.Step(flightCommand, FixedDeltaSeconds);

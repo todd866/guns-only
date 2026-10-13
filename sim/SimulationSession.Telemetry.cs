@@ -334,6 +334,10 @@ public sealed partial class SimulationSession {
             (int rounds, int hits) = BankGun(_gunKill);
             _sortiePlayerRoundsFired += rounds;
             _sortiePlayerHits += hits;
+            // A physical hit is the clearest demonstrated gun position there is: the present is
+            // over and the contact fights. Without this a hit on the rung-0 lead left a straight,
+            // non-manoeuvring target to finish off for the rest of the twelve-second present.
+            if (hits > 0 && _bandit.Presenting) _bandit.EndPresentation();
         }
         if (_opponentGun is not null)
             _sortieOpponentRoundsFired += BankGun(_opponentGun).Rounds;

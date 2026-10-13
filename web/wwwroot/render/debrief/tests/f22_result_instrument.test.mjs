@@ -75,6 +75,41 @@ test("a correction row appears only when there is a correction or a practice", a
   assert.equal(model.opponent.changed, false);
 });
 
+test("BFM lesson reuses the opponent row and uses the kernel correction", async () => {
+  const state = {
+    ...(await fixture("f22_combat_complete.json")),
+    sortie_opponent_skill: "VETERAN", sortie_opponent_count: 1,
+    bfm_lesson: "D1", bfm_next_lesson: "D1", bfm_lesson_outcome: "failed",
+    bfm_lesson_criterion: "survive 12 s and force an overshoot",
+    bfm_correction: "Break into him",
+  };
+  const model = f22ResultInstrument(state, {
+    phase: "final", correction: "Track the lead", practiceExercise: "gunnery",
+  });
+  assert.equal(model.opponent.value, "D1 × → D1");
+  assert.match(model.opponent.label, /Criterion: survive 12 s and force an overshoot/);
+  assert.match(model.opponent.label, /Next lesson: D1/);
+  assert.deepEqual({ ...model.correction }, {
+    text: "Break into him", practiceExercise: "", practiceLabel: "",
+  });
+  assert.deepEqual({ ...model.lesson }, {
+    id: "D1", next: "D1", outcome: "failed",
+    criterion: "survive 12 s and force an overshoot",
+  });
+});
+
+test("a passed BFM lesson shows the next lesson and suppresses generic correction", async () => {
+  const model = f22ResultInstrument({
+    ...(await fixture("f22_combat_complete.json")),
+    sortie_opponent_skill: "COMPETENT", sortie_opponent_count: 1,
+    bfm_lesson: "O1", bfm_next_lesson: "D1", bfm_lesson_outcome: "passed",
+    bfm_lesson_criterion: "physical gun kill", bfm_correction: "ignored on pass",
+  }, { correction: "Track the lead", practiceExercise: "gunnery" });
+  assert.equal(model.opponent.value, "O1 ✓ → D1");
+  assert.equal(model.correction, null);
+  assert.equal(model.lesson.outcome, "passed");
+});
+
 test("unknown values render as a dash, never a fabricated number", () => {
   assert.equal(formatAttemptClock(null), "—");
   assert.equal(formatAttemptClock(Number.NaN), "—");

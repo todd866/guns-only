@@ -63,7 +63,7 @@ public static partial class WebBridge {
 
     [JSExport]
     public static bool StartPractice(int exercise) {
-        if (exercise < 1 || exercise > 3) return false;
+        if (exercise < 1 || exercise > 4) return false;
         var kind = (GunsOnly.Sim.Training.PracticeExercise)exercise;
         bool valley = kind == GunsOnly.Sim.Training.PracticeExercise.Valley;
         var environment = valley ? Ukraine2030sTheatre.FirstRunMountainValley

@@ -1,3 +1,4 @@
+import { highAlphaRecoveryPresentation } from "./high_alpha_recovery.js";
 import { recoveryPlatformAvailable } from "./carrier_sa.js";
 import { flightMissionGuidance } from "./mission_guidance.js";
 
@@ -77,7 +78,10 @@ export function mobileTacticalReadout(state = {}, display = {}, {
     ? Math.round(indicatedKts - cornerKts)
     : null;
   const actualG = finiteNumber(state.g_actual);
-  const assistedFlight = state.assisted_flight === true;
+  // AUTO means the corner hold owns the lever NOW. Older snapshots without auto_throttle fall
+  // back to the assisted contract flag.
+  const assistedFlight = typeof state.auto_throttle === "boolean"
+    ? state.auto_throttle : state.assisted_flight === true;
   const assistedSpeedBiasKts = Math.round(
     finiteNumber(state.assisted_speed_bias_kts) ?? 0,
   );
@@ -146,6 +150,9 @@ export function mobileTacticalReadout(state = {}, display = {}, {
   const bvrContact = fightActive
     && range.rangeNm !== null
     && range.rangeNm * 1852 > tallyRangeM;
+  // The fighter's contact locator already owns range/closure. Reserve its one-row header for
+  // flight, weapon and fuel readings; keep BVR details in the frozen modes' context row only.
+  const combatWeaponParts = [...weaponParts];
   if (bvrContact) {
     weaponParts.push(`T${Math.max(1, Math.floor(targetNumber))} ${range.compactText}`);
     weaponParts.push(closure.trend === "closing"
@@ -157,9 +164,11 @@ export function mobileTacticalReadout(state = {}, display = {}, {
 
   const fuel = fuelReadout(state);
   if (fuel.consumesFuel && fuel.fuelLb !== null) {
-    weaponParts.push(fuel.statusText
+    const fuelText = fuel.statusText
       ? `${fuel.statusText}${compactMagnitude(fuel.fuelLb)}`
-      : `F${compactMagnitude(fuel.fuelLb)}`);
+      : `F${compactMagnitude(fuel.fuelLb)}`;
+    weaponParts.push(fuelText);
+    combatWeaponParts.push(fuelText);
   }
 
   const ammoLevel = ammo !== null && ammo <= 0 ? "warning"
@@ -172,9 +181,46 @@ export function mobileTacticalReadout(state = {}, display = {}, {
     ? "warning"
     : combatCaution || fuel.joker || fuel.bingo ? "caution" : "normal";
 
+  // ONE COMBAT ROW for the phone fighter. Airspeed and altitude are already on the tapes beside
+  // the gunsight, so the row carries only what the tapes do not: Mach, the energy cue, G once it
+  // matters, vertical speed, and the weapon/fuel state. Optional readings shed in order:
+  // Mach, manual energy, G, temperature, normal fuel. Keep one row without losing flight truth.
+  const highAlpha = highAlphaRecoveryPresentation(state);
+  const combatParts = [];
+  if (compressionFactor > 1) combatParts.push({ text: `×${compressionFactor}`, optional: false });
+  combatParts.push({
+    text: mach === null ? "M---" : `M${Math.max(0, mach).toFixed(2).replace(/^0/, "")}`,
+    optional: true,
+  });
+  // Automation ownership is essential even during recovery. Manual corner/Mach advice can go.
+  if (energyToken) combatParts.push({ text: energyToken, optional: !assistedFlight });
+  else {
+    combatParts.push({
+      text: headingDeg === null
+        ? "H---"
+        : `H${String(Math.round(((headingDeg % 360) + 360) % 360)).padStart(3, "0")}`,
+      optional: state.heli_flight_path !== true,
+    });
+  }
+  if (actualG !== null && Math.abs(actualG) >= 2.5) {
+    combatParts.push({ text: `${actualG.toFixed(1)}G`, optional: true });
+  }
+  // The tapes carry speed/altitude, but no vertical-speed number. Never shed this reading,
+  // ammunition or a latched OVERHEAT to make room for secondary Mach/G/temperature/fuel data.
+  combatParts.push({ text: compactVerticalSpeed(verticalFpm, { condensed }), optional: false });
+  for (const text of combatWeaponParts) combatParts.push({
+    text,
+    optional: /^T\d+%$/.test(text) || /^F[\d.]+K?$/.test(text),
+  });
+  if (highAlpha.active) combatParts.push({
+    text: highAlpha.symbol, optional: false, reserved: true,
+  });
+
   return Object.freeze({
     actualText: actualParts.join(separator),
     contextText: weaponParts.join(separator),
+    combatParts: Object.freeze(combatParts.map((part) => Object.freeze(part))),
+    fuelAttention: fuel.joker || fuel.bingo || fuel.minimumFuel || fuel.emergencyFuel,
     actual: Object.freeze({
       mach,
       indicatedKts,

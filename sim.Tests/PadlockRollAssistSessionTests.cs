@@ -144,6 +144,7 @@ public class PadlockRollAssistSessionTests {
         session.StepFixed();
 
         PilotCommand applied = session.Player.LastAppliedCommand;
+        // Linear analog command still owns the axis outright; SAS yields to pilot intent.
         Assert.Equal(-0.29, applied.RollControl, 12);
         Assert.True(applied.RollControl + applied.SasRollControl < 0.0);
         Assert.InRange(System.Math.Abs(applied.SasRollControl), 0.0, 0.002);

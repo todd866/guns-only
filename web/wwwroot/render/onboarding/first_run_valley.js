@@ -26,21 +26,19 @@ export function markFirstRunValleySeen(storage) {
 }
 
 /**
- * First pending visit stages the valley Ready card for both humans and browser tests.
- * Tests that need the catalogue use the same explicit ?menu=1 door as players.
- * ?menu=1 keeps the picker, including over a QA replay query.
+ * Kestrel Gorge is an opt-in replay, never the front door (2026-10-13 opening package,
+ * docs/grok-overhaul/design/f22-opening.md). A fresh visit -- root or ?program=first-merge -- lands
+ * on the wordless picker with the F-22 selected, one tap from the rung-0 gun lesson. Only the
+ * explicit replay seam (?firstRun=1, which the "Replay valley intro" button writes) stages the
+ * valley Ready card; ?menu=1 still wins over it. `firstRunPending` is accepted for callers but no
+ * longer decides anything: the unseen flag is a record, not a detour.
  */
 export function shouldAutoStartFirstRunValley({
-  firstRunPending,
-  programQuery = null,
   menuQuery = null,
   firstRunQuery = null,
 } = {}) {
   if (String(menuQuery ?? "") === "1") return false;
-  if (String(firstRunQuery ?? "") === "1") return true;
-  const program = String(programQuery ?? "").trim();
-  if (program !== "" && program !== "first-merge") return false;
-  return firstRunPending === true;
+  return String(firstRunQuery ?? "") === "1";
 }
 
 /** Aria names heaters only on this beat while they remain. */

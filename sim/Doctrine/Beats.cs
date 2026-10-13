@@ -613,12 +613,72 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     /// their full-coverage-suit/pressure-breathing surrogate explicitly below.
     public PilotPhysiologyProfile PlayerPilotPhysiology => PlayerPhysiologyProfile
         ?? PilotPhysiologyProfile.KoreaFastJetReference;
+    /// Rung-0 lead geometry, relative to the staged player. Along-track inside the 900 m gun
+    /// envelope with room to close; offsets small enough that the contact starts within a few
+    /// degrees of the nose (in the forward view in portrait's 33-degree horizontal field) but
+    /// not on it; a closure (12 m/s, ~23 kt) that still closes when the assisted corner-speed
+    /// hold bleeds the player a few knots, and after twelve seconds of present is still well
+    /// outside minimum range. Surrogate tuning values, iterated against the delayed-input
+    /// HUD pilot in FirstMergeOpeningAcceptanceTests; not doctrine numbers.
+    public const double RungZeroLeadAlongM = 650.0;
+    public const double RungZeroLeadLateralM = 45.0;
+    public const double RungZeroLeadVerticalM = 25.0;
+    public const double RungZeroLeadClosureMps = 12.0;
+    /// The same 15-degree "readable, under 2 G" turn ReactiveBandit.PresentCommand flies: a
+    /// constant 0.7 deg/s heading change the player has to track, not a parked target. Swept
+    /// 0/10/15/20/25/30/45 against the HUD pilot: wings level was a free kill in every seed;
+    /// 15-25 left honest misses while most seeds still hit.
+    public const double RungZeroLeadBankDeg = 15.0;
+
+    /// Positive bank turns toward +chi, i.e. toward (cos chi, 0, -sin chi). The lead turns AWAY
+    /// from the player's side so the line of sight drifts slowly and the player has to turn with
+    /// him: a tracking task, not a parked target.
+    public static double RungZeroLeadBankRad(in AircraftState player, in AircraftState lead) {
+        var positiveTurn = new Vec3D(Math.Cos(player.Chi), 0.0, -Math.Sin(player.Chi));
+        double side = (lead.Position - player.Position).Dot(positiveTurn);
+        return Math.Sign(side == 0.0 ? 1.0 : side) * RungZeroLeadBankDeg * Math.PI / 180.0;
+    }
+
+    public static AircraftState RungZeroLeadState(in AircraftState player, in AircraftState authored) {
+        var forward = new Vec3D(Math.Sin(player.Chi), 0.0, Math.Cos(player.Chi));
+        // The authored offset decides the side, so the lead sits where the merge would have.
+        Vec3D delta = authored.Position - player.Position;
+        double along = delta.X * forward.X + delta.Z * forward.Z;
+        Vec3D lateral = delta - forward * along;
+        lateral = new Vec3D(lateral.X, 0.0, lateral.Z);
+        double lateralLength = lateral.Length;
+        Vec3D side = lateralLength > 1e-6
+            ? lateral * (1.0 / lateralLength)
+            : new Vec3D(forward.Z, 0.0, -forward.X);
+        return authored with {
+            Position = player.Position + forward * RungZeroLeadAlongM
+                + side * RungZeroLeadLateralM
+                + new Vec3D(0.0, RungZeroLeadVerticalM, 0.0),
+            Chi = player.Chi,
+            Gamma = 0.0,
+            Bank = 0.0,
+            Speed = Math.Max(1.0, player.Speed - RungZeroLeadClosureMps),
+        };
+    }
+
     public IBandit CreateBandit(
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
         SpawnSpec? spec = null) {
         if (InitialOpponent is not { } authoredBandit)
             throw new InvalidOperationException(
                 "This mission does not define an opponent actor.");
+        if (spec is { LessonIndex: >= 1 and <= 5 } lessonSpawn) {
+            AircraftParams lessonAir = BanditAirForMount(lessonSpawn.Skill, lessonSpawn.Mount);
+            BfmLesson lesson = BfmLesson.Get(lessonSpawn.LessonIndex);
+            AircraftState lessonInitial = lesson.Start(Player, lessonAir, terrain);
+            if (!lesson.Defensive)
+                return new NeutralMergeBandit(lessonInitial, lessonAir, lessonSpawn.Skill, terrain,
+                    doctrineIndex: lessonSpawn.DoctrineIndex, presenting: true,
+                    endPresentOnProximity: true, presentation: OpeningPresentation.Lead,
+                    leadBankRad: (lesson.Index == 2 ? 20 : 25) * Math.PI / 180);
+            return new ReactiveBandit(lessonInitial, lessonAir, lessonSpawn.Skill, terrain,
+                doctrineIndex: lessonSpawn.DoctrineIndex);
+        }
         if (UsesNeutralMergeBandit) {
             // A director-staged opening must change the whole actor, not just the skill label.
             // Keep the authored no-spec opening byte-for-byte compatible, while a persisted
@@ -632,27 +692,26 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
                 ? authoredBandit : authoredBandit with { Mass = mergeAir.MassKg };
             bool presenting = spec?.Sparring == true
                 || (FirstRunValley is not null && spec is null);
-            // Rung 0's 1,000 m rule lives in SpawnForMerge for replacements. The menu
-            // opening used the authored ~9 km reciprocal instead. The valley keeps its
-            // surveyed park, one kilometre past the pop-out.
+            // Rung 0's opening is a LEAD, not a merge (docs/grok-overhaul/design/f22-opening.md).
+            // The reciprocal 1,000 m pass closed at ~790 kt and was off the nose in two seconds:
+            // nobody learned the gun from it. The lead sits ahead on the player's heading, a
+            // little high and to the authored side, flying slightly slower, so the closure is low
+            // and he stays inside gun range in the forward view. Earned rungs and every
+            // replacement keep the reciprocal merge (SpawnForMerge). The valley keeps its park.
+            OpeningPresentation presentation = OpeningPresentation.Reciprocal;
             if (presenting && FirstRunValley is null) {
-                // Keep the authored lateral offset so the pass is a merge, not a
-                // collision, and pull the along-track split in to 1,000 m.
-                var forward = new Vec3D(Math.Sin(Player.Chi), 0.0, Math.Cos(Player.Chi));
-                Vec3D delta = mergeInitial.Position - Player.Position;
-                double along = delta.X * forward.X + delta.Z * forward.Z;
-                Vec3D lateral = delta - forward * along;
-                mergeInitial = mergeInitial with {
-                    Position = Player.Position + forward * 1_000.0 + lateral
-                };
+                presentation = OpeningPresentation.Lead;
+                mergeInitial = RungZeroLeadState(Player, mergeInitial);
             }
             return new NeutralMergeBandit(
                 mergeInitial, mergeAir, mergeSkill, terrain,
                 profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
                 doctrineIndex: spec?.DoctrineIndex,
-                presenting: spec?.Sparring == true
-                    || (FirstRunValley is not null && spec is null),
-                endPresentOnProximity: true);
+                presenting: presenting,
+                endPresentOnProximity: true,
+                presentation: presentation,
+                leadBankRad: presentation == OpeningPresentation.Lead
+                    ? RungZeroLeadBankRad(Player, mergeInitial) : 0.0);
         }
         if (!UsesReactiveBandit)
             return new RailBandit(authoredBandit, BanditAir, BanditTimeline);
@@ -710,6 +769,10 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     public IBandit CreateNextBandit(in AircraftState player, int engagementNumber,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null, SpawnSpec? spec = null,
         AircraftState? wingLead = null) {
+        if (spec is { LessonIndex: >= 0 and <= 5 } lessonSpawn && wingLead is null) {
+            // Stage a NEW opponent only; the live player never changes position or energy.
+            return (this with { Player = player }).CreateBandit(terrain, lessonSpawn);
+        }
         // Without a director decision the interim per-engagement ladder still applies (the
         // director's own cold start reproduces it, so the two paths cannot diverge silently).
         PilotSkill skill = spec?.Skill ?? BanditSkillProfile.ForEngagement(engagementNumber);

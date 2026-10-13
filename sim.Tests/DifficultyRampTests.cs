@@ -277,7 +277,7 @@ public class DifficultyRampTests {
     }
 
     [Fact]
-    public void MenuFlyAndTheValleyOpenPresentAtAboutAKilometre() {
+    public void MenuFlyOpensTheRungZeroLeadAndTheValleyStillParksAtAKilometre() {
         // ?menu=1 skips the valley and Fly calls WebBridge.StartBeat: weather for the
         // beat, the angled deck the bridge is constructed with, then built-in 7.
         var session = new SimulationSession();
@@ -290,9 +290,15 @@ public class DifficultyRampTests {
         var opening = Assert.IsType<NeutralMergeBandit>(session.Bandit);
         Assert.Equal(PilotSkill.Competent, opening.Skill);
         Assert.True(opening.Presenting);
+        // Rung 0 opens on the low-closure lead inside gun range, not the 1 km reciprocal pass
+        // (docs/grok-overhaul/design/f22-opening.md).
+        Assert.Equal(OpeningPresentation.Lead, opening.Presentation);
         Assert.InRange(
             SlantRangeM(session.Player.State.Position, opening.State.Position),
-            900.0, 1_100.0);
+            600.0, 700.0);
+        Assert.InRange(
+            session.Player.State.Speed - opening.State.Speed,
+            BeatSetup.RungZeroLeadClosureMps - 0.5, BeatSetup.RungZeroLeadClosureMps + 0.5);
         Assert.Contains("\"difficulty_rung\":0", SnapshotOf(session));
 
         // The valley door is WebBridge.StartFirstRunValley: the first-run factory and

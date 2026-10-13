@@ -549,6 +549,8 @@ public sealed partial class SimulationSession {
     public long BanditSpawnSequence => _banditSpawnSequence;
     public long CarrierSpawnSequence => _carrier is null ? 0 : _carrierSpawnSequence;
     public bool AssistedFlight => _assistedFlight;
+    /// The assisted corner-speed hold currently owns the throttle lever (not merely the contract).
+    public bool AssistedAutoThrottleActive => _assistedFlight && _detents.AutoThrottleOwnsLever;
     public int AssistedSpeedBiasKts => _assistedSpeedBiasIndex * 30;
     public bool TransitionCueActive => _catapult.IsActive || _simTimeMs < _transitionCueUntilMs;
     public string TransitionCue => TransitionCueActive ? _transitionCue : "";
@@ -1154,7 +1156,8 @@ public sealed partial class SimulationSession {
             && !patternOnly
             && _beat.ContinuousCombat is null;
         _systems = CreatePlayerSystems(
-            onApproach: stagesOnCarrierApproach,
+            onApproach: stagesOnCarrierApproach
+                || _beat.Practice == GunsOnly.Sim.Training.PracticeExercise.ShortFinal,
             prechargeUtilityHydraulics: _prechargeSystemsOnStage && !maintenanceRecovery);
         _maintenanceScenario = maintenanceRecovery
             ? new F86EmergencyGearRecoveryScenario(_systems)
@@ -1170,8 +1173,11 @@ public sealed partial class SimulationSession {
             && _carrier is not null && !maintenanceRecovery
             && (!TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
                 || _carrierConfigurationPractice);
+        // Short final stages dirty even though its gear remains pilot-controlled.
         // Circuits starts clean (Combat). Carrier approach beats stage Recovery.
-        _configurationTarget = _configurationAutomationEnabled
+        _configurationTarget = _beat.Practice == GunsOnly.Sim.Training.PracticeExercise.ShortFinal
+            ? FlightConfigurationTarget.Recovery
+            : _configurationAutomationEnabled
             ? (stagesOnCarrierApproach
                 ? FlightConfigurationTarget.Recovery
                 : FlightConfigurationTarget.Combat)
@@ -1247,6 +1253,9 @@ public sealed partial class SimulationSession {
         // fields a skill-driven continuous-combat opponent, the OPENING spawn is a director
         // decision too — a boss loss last life opens this life in RELEASE, not back at the ramp.
         bool difficultyRamp = UsesDifficultyRamp(_beat);
+        if (IsVisualMergeSortie(_beat) && _beat.Practice == PracticeExercise.None
+            && !_arenaHandicapActive && (_beat.UsesNeutralMergeBandit || _beat.UsesReactiveBandit))
+            _fightDirector.EnableBfmLadder();
         bool directorCanStage = stagesOpponent
             && _beat.ContinuousCombat is not null
             && (_beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit);
@@ -1672,8 +1681,11 @@ public sealed partial class SimulationSession {
             Wind = _carrier is { IsMaritime: true }
                 ? _burble
                 : _weatherProfile?.Wind
-                    ?? new TurbulenceField(intensityMps: 1.2, outerScaleM: 130.0,
-                        intermittency: 0.5, seed: 0xB0A7),
+                    // The established-final lesson authors a calm, on-speed start. An explicit
+                    // weather profile still wins; other starts retain their existing gust field.
+                    ?? (_beat.Practice == GunsOnly.Sim.Training.PracticeExercise.ShortFinal
+                        ? null : new TurbulenceField(intensityMps: 1.2, outerScaleM: 130.0,
+                            intermittency: 0.5, seed: 0xB0A7)),
             EngineFuelAvailable = _fuel.HasFuel,
             AerodynamicConfiguration = PlayerAerodynamicConfiguration
         };
@@ -2211,11 +2223,11 @@ public sealed partial class SimulationSession {
         AircraftState previousPlayerState = _player.State;
         AircraftState previousOpponentState = _bandit.State;
         PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
-        UpdatePilotLateralCommitment(_detents.Command.RollControl);
+        UpdatePilotLateralCommitment(_detents.PilotRollIntent);
         PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
         PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
         PilotCommand padlockAssistedCommand = ApplyPlayerGunTargetPadlockRollAssist(
-            effectiveCommand, _detents.Command.RollControl);
+            effectiveCommand, _detents.PilotRollIntent);
         PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
         bool formationSweep = (_triggerDown || _rapierFormationSweepRequested)
             && ExecuteRapierFormationSweep();
@@ -2311,6 +2323,9 @@ public sealed partial class SimulationSession {
             return;
         }
 
+        // Training success is committed only after this tick's damage and surface contacts.
+        // Otherwise a fatal contact on the qualifying tick can persist a passing bookmark.
+        ObserveDefensiveLesson();
         UpdateSelectedTargetClosure();
         _simTimeMs += FixedDeltaSeconds * 1000.0;
     }

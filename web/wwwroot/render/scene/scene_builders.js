@@ -4,6 +4,8 @@ import {
   TERRAIN_EARTH_RADIUS_M,
 } from "../environment/korea_terrain.js";
 import {
+  addUkraineSoftWorldFog,
+  UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES,
   UKRAINE_SOFT_WORLD_FOG_HEX,
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
@@ -1662,8 +1664,44 @@ export function createConventionalRunwayPresentation() {
   };
 }
 
-export function updateConventionalRunwayPresentation(runway, state) {
+// Terrain can be replaced (or absent) when switching missions. Preserve the original curved
+// material hooks so the runway shares the current terrain's live uniforms, never a disposed
+// theatre's atmosphere, and retains ordinary scene fog in modes without terrain.
+function updateConventionalRunwayAtmosphere(runway, atmosphereUniforms) {
+  if (!UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES.every((name) => atmosphereUniforms?.[name])) {
+    atmosphereUniforms = null;
+  }
+  if ((runway.atmosphereUniforms ?? null) === atmosphereUniforms) return;
+  if (!runway.sceneFogMaterials) {
+    runway.sceneFogMaterials = new Map();
+    runway.group.traverse((object) => {
+      const material = object.material;
+      if (!material || runway.sceneFogMaterials.has(material)) return;
+      runway.sceneFogMaterials.set(material, {
+        onBeforeCompile: material.onBeforeCompile,
+        customProgramCacheKey: material.customProgramCacheKey,
+        fog: material.fog,
+        toneMapped: material.toneMapped,
+      });
+    });
+  }
+  for (const [material, original] of runway.sceneFogMaterials) {
+    Object.assign(material, original);
+    delete material.userData.ukraineSoftWorldFog;
+    if (atmosphereUniforms) {
+      addUkraineSoftWorldFog(material, atmosphereUniforms);
+      // Light sprites and unlit paint must resolve the shared haze through the same output
+      // transform as terrain; otherwise their far-field wash remains a different colour.
+      material.toneMapped = true;
+    }
+    material.needsUpdate = true;
+  }
+  runway.atmosphereUniforms = atmosphereUniforms;
+}
+
+export function updateConventionalRunwayPresentation(runway, state, atmosphereUniforms = null) {
   if (!runway?.group) return;
+  updateConventionalRunwayAtmosphere(runway, atmosphereUniforms);
   const thresholdX = state?.runway_threshold_x;
   const thresholdY = state?.runway_threshold_y;
   const thresholdZ = state?.runway_threshold_z;

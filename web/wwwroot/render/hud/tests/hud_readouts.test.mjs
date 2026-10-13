@@ -347,6 +347,26 @@ test("mobile tactical rail replaces low-value heading with corner, G, and assist
   assert.equal(assisted.energy.token, "AUTO COR+30");
   assert.match(assisted.actualText, /AUTO COR\+30/);
   assert.doesNotMatch(assisted.actualText, /H005/);
+
+  // One assisted contract per device: a landscape pilot who takes the thumb throttle flies manual
+  // power inside it, and the readout must stop claiming AUTO.
+  const tookTheLever = mobileTacticalReadout({
+    speed_kts: 315,
+    corner_speed_kias: 315,
+    alt_ft: 8000,
+    vertical_speed_fpm: 0,
+    heading_deg: 5,
+    mach: 0.66,
+    assisted_flight: true,
+    auto_throttle: false,
+    assisted_speed_bias_kts: 30,
+    ammo: 480,
+  }, {}, { fightActive: true });
+  assert.doesNotMatch(tookTheLever.actualText, /AUTO/);
+  assert.equal(mobileTacticalReadout({
+    speed_kts: 315, corner_speed_kias: 315, alt_ft: 8000, mach: 0.66,
+    assisted_flight: true, auto_throttle: true, assisted_speed_bias_kts: 0, ammo: 480,
+  }, {}, { fightActive: true }).energy.token, "AUTO COR");
 });
 
 test("visual merge weapon safety stays visible only while it changes a pilot decision", () => {
@@ -866,6 +886,21 @@ test("dirty free-flight configuration surfaces until physically clean without fl
   assert.deepEqual(recoveryTargetBeforeApproachLaw.warnings, [],
     "recovery intent must prevent a false cleanup demand before the groove law engages");
 
+  const conventionalFinal = systemsReadout({
+    carrier: false,
+    mode: "FREE",
+    configuration_target: "RECOVERY",
+    configuration_automatic: false,
+    has_flaps: false,
+    gear_handle: "DOWN",
+    gear_nose_indication: "DOWN_LOCKED",
+    gear_left_indication: "DOWN_LOCKED",
+    gear_right_indication: "DOWN_LOCKED",
+  });
+  assert.equal(conventionalFinal.configurationActionable, false);
+  assert.deepEqual(conventionalFinal.warnings, [],
+    "pilot-controlled conventional final must not ask for gear cleanup");
+
   const clean = systemsReadout({
     mode: "FREE",
     gear_handle: "UP",
@@ -1067,4 +1102,44 @@ test("production HUD gates recovery guidance on the shared platform contract", a
     "wind-over-deck remains maritime-only");
   assert.match(source, /maritime[\s\S]*?`BRC [\s\S]*?: `FINAL COURSE /,
     "BRC remains maritime while a fixed strip receives a neutral final course");
+});
+
+test("the phone fighter's ONE combat row omits what the tapes already show", () => {
+  const readout = mobileTacticalReadout({
+    calibrated_airspeed_kts: 354,
+    corner_speed_kcas: 346,
+    alt_ft: 10000,
+    vertical_speed_fpm: 0,
+    heading_deg: 12,
+    mach: 0.634,
+    g_actual: 4.4,
+    ammo: 480,
+    fuel_lb: 12000,
+  }, {}, { fightActive: true });
+  const text = readout.combatParts.map((part) => part.text).join(" · ");
+  assert.equal(text, "M.63 · COR+8 · 4.4G · V/S 0 · GUN480 · F12K");
+  assert.doesNotMatch(text, /KCAS|354|10K/);
+  // Vertical speed and ammunition survive before secondary advice and normal fuel.
+  assert.deepEqual(readout.combatParts.filter((part) => part.optional).map((part) => part.text),
+    ["M.63", "COR+8", "4.4G", "F12K"]);
+});
+
+test("without an energy cue the combat row keeps heading for orientation", () => {
+  const readout = mobileTacticalReadout({
+    calibrated_airspeed_kts: 300, alt_ft: 3000, heading_deg: 87.4, mach: 0.5, fuel_lb: 9000,
+  });
+  assert.equal(readout.combatParts.map((part) => part.text).join(" · "),
+    "M.50 · H087 · V/S --- · F9K");
+  assert.equal(readout.fuelAttention, false);
+});
+
+test("BVR contact details cannot consume the fighter header's weapon and fuel space", () => {
+  const readout = mobileTacticalReadout({
+    mach: 0.634, assisted_flight: true, g_actual: 4.4, vertical_speed_fpm: 2000,
+    ammo: 400, gun_heat: 0.3, range_m: 37040, closure_kts: 600, fuel_lb: 12000,
+  }, {}, { fightActive: true });
+  assert.equal(readout.combatParts.map((part) => part.text).join("·"),
+    "M.63·AUTO COR·4.4G·↑2K·GUN400·T30%·F12K");
+  // Rapier/carrier context rows retain the original contact details and order.
+  assert.equal(readout.contextText, "GUN400 · T30% · T1 20NM · CLOS600 · F12K");
 });
