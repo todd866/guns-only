@@ -120,7 +120,10 @@ public sealed class F14ControlTests
 
         detents.Tick(keys, 0.0, state, parameters, Advice, Dt);
 
-        double expectedFirstTick = 1.0 + (target - 1.0) * (Dt / 0.07);
+        // The F-22 keyboard stick travel (a8) starts a fresh pull at its onset fraction; the
+        // shared 70 ms filter is unchanged.
+        double onset = parameters.KeyboardStickOnsetFraction;
+        double expectedFirstTick = 1.0 + (target - 1.0) * onset * (Dt / 0.07);
         Assert.Equal(expectedFirstTick, detents.Command.GDemand, 10);
         Assert.True(detents.Command.GDemand < target);
         Assert.False(parameters.InstantMaxPerformanceKeyboardPull);

@@ -127,7 +127,10 @@ public class PadlockRollAssistSessionTests {
         session.FeedKey(GKey.RollLeft, true);
         session.StepFixed();
 
-        Assert.Equal(-1.0, session.Player.LastAppliedCommand.RollControl, 12);
+        // The F-22 key starts at its stick-travel onset (a8) and walks out to full aileron; it
+        // still owns the whole axis on the first tick.
+        Assert.Equal(-FlightModel.F22APublicDataSurrogate.KeyboardStickOnsetFraction,
+            session.Player.LastAppliedCommand.RollControl, 2);
         Assert.Equal(0.0, session.Player.LastAppliedCommand.SasRollControl, 12);
         Assert.False(session.BanditPadlockRollAssist.Active);
         Assert.True(session.BanditPadlockRollAssist.Captured);
