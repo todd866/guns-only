@@ -182,6 +182,8 @@ public static class ProductionCombatDuel {
             combat.OpponentGunProfile,
             targetGeometry: combat.OpponentTargetGeometry);
 
+        if (useTargetGeometry) enemy.ConfigureGunTracking(combat.OpponentGunProfile);
+
         double minimumRangeM = Geometry.Range(reference.State, enemy.State);
         double previousRangeM = minimumRangeM;
         double openingSeconds = 0.0;
