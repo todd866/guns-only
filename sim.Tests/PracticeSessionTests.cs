@@ -59,8 +59,13 @@ public sealed class PracticeSessionTests {
         session.StartBeat(() => beat);
         Assert.Equal(PracticeStatus.Ready, session.Practice!.Status);
         session.Begin();
+        Vec3D positionBeforeCompletion = session.Player.State.Position;
         session.StepFixed();
         Assert.Equal(PracticeStatus.Completed, session.Practice.Status);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+        for (int i = 0; i < 2 * (int)AircraftSim.TickHz; i++)
+            session.StepFixed();
+        Assert.NotEqual(positionBeforeCompletion, session.Player.State.Position);
         Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
         Assert.Equal(SortieOutcome.Discontinued, session.Outcome);
         Assert.Equal(0, session.KillCount);
@@ -172,6 +177,49 @@ public sealed class PracticeSessionTests {
     }
 
     [Fact]
+    public void GunneryCompletionHoldsTheLiveFlightBeforeResultAndFreezesDuration() {
+        var practice = new PracticeRuntime(PracticeExercise.Gunnery);
+        practice.Begin(40.0);
+        practice.Observe(1.0, false, false, 2, false, false);
+        Assert.Equal(PracticeStatus.Completed, practice.Status);
+        Assert.Equal(1.0, practice.ElapsedSeconds);
+        Assert.False(practice.ResultReady);
+
+        practice.Observe(2.0, false, false, 4, false, false);
+        Assert.Equal(PracticeStatus.Completed, practice.Status);
+        Assert.Equal(1.0, practice.ElapsedSeconds);
+        Assert.False(practice.ResultReady);
+        practice.Observe(2.5, false, false, 4, false, false);
+        Assert.True(practice.ResultReady);
+    }
+
+    [Fact]
+    public void GunneryCompletionDelayDoesNotHideAPhysicalLoss() {
+        var practice = new PracticeRuntime(PracticeExercise.Gunnery);
+        practice.Begin();
+        practice.Observe(1.0, false, false, 2, false, false);
+        practice.Observe(1.1, true, false, 2, false, false);
+        Assert.Equal(PracticeStatus.Lost, practice.Status);
+        Assert.Equal(1.1, practice.ElapsedSeconds);
+    }
+
+    [Fact]
+    public void APhysicalPracticeKillDuringTheHoldCannotTrainTheCombatDirector() {
+        var session = new SimulationSession();
+        session.StartBeat(() => PracticeBeats.Create(PracticeExercise.Gunnery));
+        session.Begin();
+        string directorBefore = session.ExportDirectorState();
+        session.FeedKey(GKey.Trigger, true);
+        for (int i = 0; i < 1000 && session.Lifecycle == SimulationSession.LifecycleState.Active; i++)
+            session.StepFixed();
+        Assert.True(session.SortiePlayerHits >= 3);
+        Assert.True(session.KillCount >= 1);
+        Assert.Equal(PracticeStatus.Completed, session.Practice!.Status);
+        Assert.Equal(SortieOutcome.Discontinued, session.Outcome);
+        Assert.Equal(directorBefore, session.ExportDirectorState());
+    }
+
+    [Fact]
     public void HotFrameInvalidatesColdPracticeStatusAtBeginAndRemovesItOnNormalRestage() {
         var session = new SimulationSession();
         session.StartBeat(() => PracticeBeats.Create(PracticeExercise.Gunnery));
@@ -181,6 +229,10 @@ public sealed class PracticeSessionTests {
         session.Begin();
         SnapshotHotFrame.Fill(buffer, session, 0, 0, false);
         Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > ready[SnapshotHotFrame.ColdVersionIndex]);
+        double elapsedAtFirstFrame = session.Practice!.ElapsedSeconds;
+        session.StepFixed(12);
+        SnapshotHotFrame.Fill(buffer, session, 0, 0, false);
+        Assert.True(session.Practice.ElapsedSeconds > elapsedAtFirstFrame);
         using var active = JsonDocument.Parse(SnapshotProjection.BuildState(session,
             Carrier.DeckConfiguration.Angled, 0, 0, false, null));
         Assert.Equal("gunnery", active.RootElement.GetProperty("practice_exercise").GetString());

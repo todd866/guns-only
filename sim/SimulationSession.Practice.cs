@@ -11,7 +11,12 @@ public sealed partial class SimulationSession {
 
     void BeginPractice() {
         Practice?.Begin(TimeSeconds);
-        if (Practice is not null) ShowTransition("PRACTICE · ONE OBJECTIVE", 1800);
+        if (Practice is not null) {
+            // The live completion hold can include further physical hits or a kill. Training
+            // never submits a combat engagement to the learner or advances the sortie ramp.
+            _engagementCounters.Active = false;
+            ShowTransition("PRACTICE · ONE OBJECTIVE", 1800);
+        }
         if (Practice?.Exercise != PracticeExercise.Recovery) return;
         // Training starts in the recovery procedure with no combat actor or relief fiction.
         // Physical touchdown and full stop still belong to the ordinary runway model.
@@ -34,7 +39,8 @@ public sealed partial class SimulationSession {
         // A damaged aircraft retains the normal physical terminal sequence. Only a live,
         // accomplished or timed-out exercise can terminate here, with no sortie-victory claim.
         if (Lifecycle != LifecycleState.Active
-            || practice.Status is not (PracticeStatus.Completed or PracticeStatus.TimeLimit))
+            || practice.Status is not (PracticeStatus.Completed or PracticeStatus.TimeLimit)
+            || (practice.Status == PracticeStatus.Completed && !practice.ResultReady))
             return;
         _outcome = _pendingOutcome = SortieOutcome.Discontinued;
         EmitEvent(SessionEventType.SortieFinished, CombatRole.None, CombatRole.None,
