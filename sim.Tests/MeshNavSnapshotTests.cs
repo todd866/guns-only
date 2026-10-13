@@ -56,13 +56,14 @@ public sealed class MeshNavSnapshotTests {
     }
 
     [Fact]
-    public void HotFrameLayoutIncludesMeshCarrierApproachAim9AndAssistDiagnosticsAtVersion34() {
+    public void HotFrameLayoutIncludesMeshCarrierApproachAim9AndAssistDiagnosticsAndGunGimbalAtVersion35() {
         string layoutJson = SnapshotHotFrame.LayoutJson();
         using JsonDocument document = JsonDocument.Parse(layoutJson);
         JsonElement root = document.RootElement;
-        Assert.Equal(34, root.GetProperty("layout_version").GetInt32());
+        Assert.Equal(35, root.GetProperty("layout_version").GetInt32());
         // Version 33 publishes the ungated lead solution beside the weapons-authorized flag;
         // version 34 adds conventional-pattern and physical-runway recovery transport.
+        // Version 35 adds the physical gun mount and authoritative fire/impact diagnostics.
         Assert.Contains("lead_solution_valid", layoutJson, StringComparison.Ordinal);
         Assert.Contains(
             "mesh_fuel_to_dest_lb",
@@ -105,6 +106,25 @@ public sealed class MeshNavSnapshotTests {
             "nullable", "nullable", "nullable", "nullable", "nullable"
         }, aim9Slots.Select(slot =>
             slot.GetProperty("kind").GetString()).ToArray());
+        JsonElement[] gunSlots = core.GetProperty("slots").EnumerateArray()
+            .Where(slot => new[] {
+                "gun_gimbal_mounted", "gun_gimbal_tracking", "gun_fire_inhibited",
+                "gun_gimbal_cone_deg", "gun_gimbal_deg",
+                "gun_barrel_x", "gun_barrel_y", "gun_barrel_z",
+                "gun_impact_x", "gun_impact_y", "gun_impact_z"
+            }.Contains(slot.GetProperty("name").GetString())).ToArray();
+        Assert.Equal(new[] {
+            "gun_gimbal_mounted", "gun_gimbal_tracking", "gun_fire_inhibited",
+            "gun_gimbal_cone_deg", "gun_gimbal_deg",
+            "gun_barrel_x", "gun_barrel_y", "gun_barrel_z",
+            "gun_impact_x", "gun_impact_y", "gun_impact_z"
+        }, gunSlots.Select(slot => slot.GetProperty("name").GetString()));
+        Assert.Equal(new[] {
+            "boolean", "boolean", "boolean", "number", "number",
+            "number", "number", "number", "number", "number", "number"
+        }, gunSlots.Select(slot => slot.GetProperty("kind").GetString()));
+        Assert.Equal(Enumerable.Range(gunSlots[0].GetProperty("index").GetInt32(), gunSlots.Length),
+            gunSlots.Select(slot => slot.GetProperty("index").GetInt32()));
         int firstAim9Index = aim9Slots[0].GetProperty("index").GetInt32();
         Assert.Equal(
             Enumerable.Range(firstAim9Index, aim9Slots.Length),
