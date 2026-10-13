@@ -88,6 +88,17 @@ public sealed class DetentLayer {
         return e == 0.0 ? x : (1.0 - e) * x + e * x * x * x;
     }
 
+    /// <summary>
+    /// The pilot's lateral stick BEFORE centre shaping (scaled by the same aileron authority as
+    /// Command.RollControl). Assist arbitration (padlock roll SAS, lateral commitment) measures
+    /// "how deliberate is the pilot" in stick travel, so it reads this rather than the shaped
+    /// aileron command. Identical to Command.RollControl on airframes without centre expo.
+    /// </summary>
+    public double PilotRollIntent => Command.RollControl == _shapedRollForIntent
+        ? _pilotRollIntent : Command.RollControl;
+    double _pilotRollIntent;
+    double _shapedRollForIntent = double.NaN;
+
     public void ClearAnalogRollControl() {
         _analogRollControl = 0.0;
         _analogRollControlActive = false;
@@ -598,10 +609,15 @@ public sealed class DetentLayer {
         int tapDirection = rollDirection == 0 && _pendingRollTapPulses.Count > 0
             ? _pendingRollTapPulses.Dequeue() : 0;
         int effectiveRollDirection = rollDirection != 0 ? rollDirection : tapDirection;
+        double unshapedRollControl = effectiveRollDirection != 0
+            ? effectiveRollDirection
+            : _analogRollControlActive ? _analogRollControl : 0.0;
         double requestedRollControl = effectiveRollDirection != 0
             ? effectiveRollDirection
             : _analogRollControlActive
                 ? ShapeAnalogRoll(_analogRollControl, p.AnalogRollCentreExpo) : 0.0;
+        _pilotRollIntent = unshapedRollControl * aileronAuthority;
+        _shapedRollForIntent = requestedRollControl * aileronAuthority;
         if (HasBodyAttitude(s)) {
             double bodyBank = BodyBank(s);
             // Capture the aircraft's ACTUAL bank on entry to the fight. _bankTarget used to start at

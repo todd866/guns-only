@@ -895,11 +895,11 @@ public sealed partial class SimulationSession {
             }
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
-            UpdatePilotLateralCommitment(_detents.Command.RollControl);
+            UpdatePilotLateralCommitment(_detents.PilotRollIntent);
             PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
             PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
             PilotCommand padlockAssistedCommand = ApplyPlayerGunTargetPadlockRollAssist(
-                effectiveCommand, _detents.Command.RollControl);
+                effectiveCommand, _detents.PilotRollIntent);
             PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
             PreparePlayerForPoweredTick();
             _player.Step(flightCommand, FixedDeltaSeconds);
