@@ -167,9 +167,8 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     readBridgeContract(),
     readFile(webProjectUrl, "utf8"),
   ]);
-  assert.ok(webProject.includes(
-    `Condition="'$(EmbedKoreaTerrainTruth)' != 'false'"`,
-  ), "production must embed terrain truth unless a constrained build explicitly opts out");
+  assert.ok(!webProject.includes('LogicalName="GunsOnly.Web.Data.KoreaCentralFront.truth"'),
+    "unused frozen Korea truth must remain outside the mandatory WASM assembly");
   assert.ok(webProject.includes(
     `Condition="'$(EmbedUkraineTerrainTruth)' != 'false'"`,
   ), "production must embed the selected Ukraine truth unless a constrained build opts out");

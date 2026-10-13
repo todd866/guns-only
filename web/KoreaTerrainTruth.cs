@@ -8,9 +8,9 @@ namespace GunsOnly.Web;
 internal static class KoreaTerrainTruth {
     const string ResourceName = "GunsOnly.Web.Data.KoreaCentralFront.truth";
 
-    /// Returns null only when a constrained build explicitly sets EmbedKoreaTerrainTruth=false.
-    /// Production includes the grid so physics and presentation share the same terrain substrate;
-    /// an opted-out build deliberately falls back to sea level.
+    // Native regression fixtures still embed this historical grid. Current browser beats,
+    // including Panther, select Ukraine truth; the legacy grid ships only as a static pack
+    // asset, outside mandatory WASM. Any future browser consumer must load it explicitly.
     public static ITerrainSurface? Load() =>
         PackedTerrainTruth.Load(ResourceName, "Korea central-front");
 }
