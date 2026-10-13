@@ -1,6 +1,6 @@
 namespace GunsOnly.Sim.Training;
 
-public enum PracticeExercise { None, Valley, Gunnery, Recovery }
+public enum PracticeExercise { None, Valley, Gunnery, Recovery, ShortFinal }
 public enum PracticeStatus { Ready, Active, Completed, Lost, TimeLimit, Ended }
 
 /// A bounded training attempt. These are exercise results, never campaign victories or aircraft
@@ -49,7 +49,7 @@ public sealed class PracticeRuntime(PracticeExercise exercise) {
         bool accomplished = Exercise switch {
             PracticeExercise.Valley => valleyPassed,
             PracticeExercise.Gunnery => gunHits >= 2,
-            PracticeExercise.Recovery => physicallyRecovered,
+            PracticeExercise.Recovery or PracticeExercise.ShortFinal => physicallyRecovered,
             _ => false,
         };
         if (accomplished) {

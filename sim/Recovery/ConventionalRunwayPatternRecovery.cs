@@ -39,6 +39,14 @@ public sealed class ConventionalRunwayPatternRecoveryDirector {
     public bool Active => _active;
     public int ActiveIndex => _activeIndex;
 
+    /// Staging seam for an authored established-final exercise. This only selects cues;
+    /// it neither moves the aircraft nor grants touchdown or recovery credit.
+    public void StartOnFinal() {
+        Reset();
+        _active = true;
+        _activeIndex = 7;
+    }
+
     public void Reset() {
         _active = false;
         _activeIndex = InitialIndex;

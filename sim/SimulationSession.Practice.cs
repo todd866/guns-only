@@ -17,7 +17,9 @@ public sealed partial class SimulationSession {
             _engagementCounters.Active = false;
             ShowTransition("PRACTICE · ONE OBJECTIVE", 1800);
         }
-        if (Practice?.Exercise != PracticeExercise.Recovery) return;
+        if (Practice?.Exercise == PracticeExercise.ShortFinal)
+            _conventionalRunwayPatternRecovery.StartOnFinal();
+        if (Practice?.Exercise is not (PracticeExercise.Recovery or PracticeExercise.ShortFinal)) return;
         // Training starts in the recovery procedure with no combat actor or relief fiction.
         // Physical touchdown and full stop still belong to the ordinary runway model.
         _returnToBaseReason = MissionRtbReason.PilotKnockItOff;

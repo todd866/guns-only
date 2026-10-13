@@ -1154,7 +1154,8 @@ public sealed partial class SimulationSession {
             && !patternOnly
             && _beat.ContinuousCombat is null;
         _systems = CreatePlayerSystems(
-            onApproach: stagesOnCarrierApproach,
+            onApproach: stagesOnCarrierApproach
+                || _beat.Practice == GunsOnly.Sim.Training.PracticeExercise.ShortFinal,
             prechargeUtilityHydraulics: _prechargeSystemsOnStage && !maintenanceRecovery);
         _maintenanceScenario = maintenanceRecovery
             ? new F86EmergencyGearRecoveryScenario(_systems)
@@ -1672,8 +1673,11 @@ public sealed partial class SimulationSession {
             Wind = _carrier is { IsMaritime: true }
                 ? _burble
                 : _weatherProfile?.Wind
-                    ?? new TurbulenceField(intensityMps: 1.2, outerScaleM: 130.0,
-                        intermittency: 0.5, seed: 0xB0A7),
+                    // The established-final lesson authors a calm, on-speed start. An explicit
+                    // weather profile still wins; other starts retain their existing gust field.
+                    ?? (_beat.Practice == GunsOnly.Sim.Training.PracticeExercise.ShortFinal
+                        ? null : new TurbulenceField(intensityMps: 1.2, outerScaleM: 130.0,
+                            intermittency: 0.5, seed: 0xB0A7)),
             EngineFuelAvailable = _fuel.HasFuel,
             AerodynamicConfiguration = PlayerAerodynamicConfiguration
         };

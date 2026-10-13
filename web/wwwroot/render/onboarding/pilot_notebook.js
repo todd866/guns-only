@@ -36,11 +36,21 @@ export function createPilotNotebook({ logbook, onPractice, onOpen, onClose }) {
     if (mode === "practice") {
       element("p", "Short F-22 exercises using the full flight model. Each has its own result; all aircraft remain available.", body);
       for (const exercise of PRACTICE_EXERCISES) {
+        if (exercise.compact) {
+          // A second recovery start shares the existing control row, without another card.
+          const choose = element("button", exercise.title, body.lastElementChild.querySelector("footer"));
+          choose.type = "button";
+          choose.title = `${exercise.brief} · ${exercise.limit}`;
+          choose.setAttribute("aria-label", `Brief: ${exercise.title}. ${choose.title}`);
+          choose.addEventListener("click", () => { dialog.close(); onPractice(exercise.id); });
+          continue;
+        }
         const card = element("article", "", body);
         element("h3", exercise.title, card);
         element("p", exercise.brief, card);
         element("small", `${exercise.limit} · repeat as often as you like`, card);
-        const choose = element("button", `Brief: ${exercise.title}`, card);
+        const actions = exercise.id === "recovery" ? element("footer", "", card) : card;
+        const choose = element("button", `Brief: ${exercise.title}`, actions);
         choose.type = "button";
         choose.addEventListener("click", () => { dialog.close(); onPractice(exercise.id); });
       }
