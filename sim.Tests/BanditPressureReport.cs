@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
@@ -37,7 +38,11 @@ public sealed class BanditPressureReport {
         double PassiveShare, double LongestPassiveS, double FirstThreatS, double FirstRoundS,
         int OpponentRounds, int HitsTaken, int MaxHitsIn5S, int PlayerKills, int PlayerHits,
         double FiringShare, string End, string Tactics, double MedianRangeM, double GunRangeShare,
-        double MedianPlayerAltM = double.NaN, double MedianBanditAltM = double.NaN);
+        double MedianPlayerAltM = double.NaN, double MedianBanditAltM = double.NaN,
+        double TerminalSeconds = 0.0, double FirstNearPassS = double.NaN,
+        double FirstHitS = double.NaN, double LongestCredibleGapS = double.NaN,
+        int Near25M = 0, int Near50M = 0, int Near100M = 0,
+        double WallMicrosecondsPerLiveTick = double.NaN);
 
     /// One rung's director state, built the same way production earns it.
     public static string? RungState(int rung) {
@@ -149,8 +154,12 @@ public sealed class BanditPressureReport {
         var pilot = new ScriptedPlayer(profile);
 
         int ticks = (int)Math.Ceiling(seconds / Dt);
-        int samples = 0, passive = 0, firing = 0, run = 0, longest = 0;
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        int samples = 0, passive = 0, firing = 0, run = 0, longest = 0,
+            credibleRun = 0, longestCredible = 0;
         double firstThreat = double.NaN, firstRound = double.NaN;
+        double firstNearPass = double.NaN, firstHit = double.NaN;
+        int near25 = 0, near50 = 0, near100 = 0;
         var hitTimes = new List<double>();
         var tactics = new Dictionary<string, int>();
         var ranges = new List<double>();
@@ -161,12 +170,15 @@ public sealed class BanditPressureReport {
         int lastTick = 0;
         for (int tick = 0; tick < ticks; tick++) {
             lastTick = tick;
-            if (session.Lifecycle != SimulationSession.LifecycleState.Active) break;
+            // Combat exposure ends at player defeat. The terminal fall remains useful evidence,
+            // but must not inflate passive time or hide a shooter-qualified attack.
+            if (session.Lifecycle != SimulationSession.LifecycleState.Active || !session.PlayerAlive) break;
             pilot.Drive(session);
             session.Advance(Dt);
             double t = (tick + 1) * Dt;
             if (session.PlayerHitsTaken > lastHits) {
                 for (int h = lastHits; h < session.PlayerHitsTaken; h++) hitTimes.Add(t);
+                if (double.IsNaN(firstHit)) firstHit = t;
                 lastHits = session.PlayerHitsTaken;
             }
             if (double.IsNaN(firstRound) && session.SortieOpponentRoundsFired > 0) firstRound = t;
@@ -200,12 +212,44 @@ public sealed class BanditPressureReport {
                 tactics[tactic] = tactics.GetValueOrDefault(tactic) + 1;
                 if (Trace is not null && tick % 600 == 0)
                     Trace($"   t={t,5:F0} range={rangeNow,6:F0} altP={p.Position.Y,6:F0} altB={b.Position.Y,6:F0} tac={tactic,-8} spdP={p.Speed,4:F0} spdB={b.Speed,4:F0} rounds={session.SortieOpponentRoundsFired}");
-                threat = (Geometry.Range(p, b) < ThreatRangeM && nose < ThreatNoseRad
-                          && !session.Bandit.Presenting)
-                    || session.OpponentTriggerDown;
+                // Pressure is the union of every living shooter. A wingman attack therefore
+                // counts even while the primary is repositioning or has been promoted away.
+                threat = session.Wingmen.Any(w => w.StillFighting &&
+                    ((Geometry.Range(p, w.Bandit.State) < ThreatRangeM
+                        && BanditFireControl.NoseErrorRad(w.Bandit.State,
+                            ActorObservation.Capture(p, tick)) < ThreatNoseRad
+                        && !w.Bandit.Presenting) || w.TriggerDown));
+                threat |= session.PrimaryOpponentAlive &&
+                    ((rangeNow < ThreatRangeM && nose < ThreatNoseRad
+                        && !session.Bandit.Presenting) || session.OpponentTriggerDown);
+
+                bool credible = false;
+                foreach (var round in session.FormationOpponentRoundsInFlight) {
+                    double distance = SweptDistance(round, p, Dt);
+                    if (distance <= 100.0) {
+                        near100++;
+                        if (double.IsNaN(firstNearPass)) firstNearPass = t;
+                    }
+                    if (distance <= 50.0) near50++;
+                    if (distance <= 25.0) near25++;
+                    credible |= distance <= 100.0;
+                }
+                // A credible attack is a living opponent inside the gun envelope with its nose
+                // there, firing, or an actual round passing in the 100 m band. This is deliberately
+                // narrower than the old 2.5 km / 35 degree threat predicate.
+                credible |= session.FormationOpponentGunFiring;
+                if (session.PrimaryOpponentAlive && rangeNow >= 120.0 && rangeNow <= 900.0
+                    && nose <= 12.0 * Math.PI / 180.0)
+                    credible = credible || session.OpponentTriggerDown;
+                if (credible) {
+                    credibleRun = 0;
+                } else {
+                    credibleRun++;
+                    longestCredible = Math.Max(longestCredible, credibleRun);
+                }
             }
             formation = Math.Max(formation, (session.OpponentPresent ? 1 : 0) + session.Wingmen.Count);
-            if (session.OpponentTriggerDown) firing++;
+            if (session.FormationOpponentGunFiring) firing++;
             if (threat) {
                 if (double.IsNaN(firstThreat)) firstThreat = t;
                 run = 0;
@@ -219,11 +263,13 @@ public sealed class BanditPressureReport {
         int maxIn5 = 0;
         for (int i = 0; i < hitTimes.Count; i++)
             maxIn5 = Math.Max(maxIn5, hitTimes.Count(h => h >= hitTimes[i] && h < hitTimes[i] + 5.0));
-        string end = session.Lifecycle == SimulationSession.LifecycleState.Active
-            ? "time" : session.PlayerAlive ? "ended-alive" : session.PlayerTerminalState.ToString();
+        double liveSeconds = (lastTick + 1) * Dt;
+        double terminalSeconds = Math.Max(0.0, session.TimeSeconds - liveSeconds);
+        string end = !session.PlayerAlive ? session.PlayerTerminalState.ToString()
+            : session.Lifecycle == SimulationSession.LifecycleState.Active ? "time" : "ended-alive";
         return new PressureResult(
             $"rung {rung} vs {profile.Name}{(durable ? " (durable)" : "")}", skill, formation,
-            (lastTick + 1) * Dt,
+            liveSeconds,
             samples == 0 ? 1.0 : (double)passive / samples, longest * 12 * Dt,
             firstThreat, firstRound, session.SortieOpponentRoundsFired, session.PlayerHitsTaken,
             maxIn5, session.KillCount, session.SortiePlayerHits,
@@ -232,7 +278,17 @@ public sealed class BanditPressureReport {
                 .Select(kv => $"{kv.Key}:{100.0 * kv.Value / Math.Max(1, samples):F0}%")),
             ranges.Count == 0 ? double.NaN : ranges.OrderBy(x => x).ElementAt(ranges.Count / 2),
             samples == 0 ? 0.0 : (double)inGunRange / samples,
-            Median(playerAlt), Median(banditAlt));
+            Median(playerAlt), Median(banditAlt), terminalSeconds, firstNearPass, firstHit,
+            longestCredible * 12 * Dt, near25, near50, near100,
+            stopwatch.Elapsed.TotalMilliseconds * 1000.0 / Math.Max(1, lastTick + 1));
+    }
+
+    static double SweptDistance(in GunRound round, in AircraftState target, double dt) {
+        Vec3D relativePosition = round.Position - target.Position;
+        Vec3D relativeVelocity = round.Velocity - target.VelocityVector();
+        double vv = relativeVelocity.Dot(relativeVelocity);
+        double u = vv <= 1e-12 ? 0.0 : Math.Clamp(-relativePosition.Dot(relativeVelocity) / vv, 0.0, dt);
+        return (relativePosition + relativeVelocity * u).Length;
     }
 
     static readonly List<double> DebugBanditNose = new(), DebugPlayerNose = new(), DebugClosure = new();
@@ -262,12 +318,41 @@ public sealed class BanditPressureReport {
             .Select(seed => Fly(rung, PilotProfile.Competent, 120.0, durable: false, seed)).ToList();
         string detail = string.Join("; ", runs.Select(r =>
             $"first {r.FirstRoundS:F0}s rounds {r.OpponentRounds} passive {r.PassiveShare:P0}"));
-        double earliest = runs.Where(r => !double.IsNaN(r.FirstRoundS))
-            .Select(r => r.FirstRoundS).DefaultIfEmpty(double.PositiveInfinity).Min();
-        Assert.True(earliest <= firstRoundWithinS,
-            $"rung {rung}: no fight drew a round within {firstRoundWithinS:F0} s ({detail})");
+        Assert.All(runs, run => Assert.True(!double.IsNaN(run.FirstRoundS)
+            && run.FirstRoundS <= firstRoundWithinS,
+            $"rung {rung}: every seed must draw a round within {firstRoundWithinS:F0} s ({detail})"));
         Assert.True(runs.Sum(r => r.OpponentRounds) >= minimumRounds,
             $"rung {rung}: only {runs.Sum(r => r.OpponentRounds)} rounds across 3 fights ({detail})");
+    }
+
+    /// Separate from the pressure pilot: this pilot fires only when the authoritative ballistic
+    /// solver says the fixed gun axis is on the lead solution. It guards the measurement harness
+    /// against mistaking a trigger edge or geometric cone for a physical hit.
+    [Fact]
+    public void GunOpportunityPilotScoresPhysicalHitOnFrozenTarget() {
+        AircraftState own = new(new Vec3D(0.0, 3000.0, 0.0), 0.0, 0.0, 0.0, 0.0,
+            FlightModel.Sabre.MassKg);
+        AircraftState frozen = new(new Vec3D(0.0, 2997.0, 500.0), 0.0, 0.0, 0.0, 0.0,
+            FlightModel.Sabre.MassKg);
+        GunProfile profile = GunProfiles.SixM3FiftyCal;
+        GunBallisticSolution opportunity = GunKill.EvaluateBallisticLead(
+            own, frozen, profile, profile.EffectiveHitRadiusM);
+        Assert.True(opportunity.HasLeadSolution, "frozen target must have a finite ballistic solution");
+
+        var gun = new GunKill(ammo: 40, hitsToKill: 1, profile: profile);
+        bool fired = false;
+        for (int tick = 0; tick < 240 && !gun.SplashedByGunfire; tick++) {
+            opportunity = GunKill.EvaluateBallisticLead(
+                own, frozen, profile, profile.EffectiveHitRadiusM);
+            bool trigger = opportunity.BodyAxisOnSolution;
+            fired |= trigger;
+            gun.Step(trigger, own, frozen, Dt);
+        }
+
+        Assert.True(fired, "the gun-opportunity pilot never reached the ballistic firing solution");
+        Assert.True(gun.RoundsFired > 0);
+        Assert.True(gun.SplashedByGunfire,
+            $"ballistic opportunity fired {gun.RoundsFired} rounds but scored {gun.HitCount} hit(s)");
     }
 
     public static readonly PilotProfile[] Pilots = { PilotProfile.Cohort, PilotProfile.Competent };
@@ -288,9 +373,11 @@ public sealed class BanditPressureReport {
     public void ReportPressureAcrossTheRamp() {
         if (System.Environment.GetEnvironmentVariable("PRESSURE_REPORT") != "1") return;
         _output.WriteLine("label                              skill      f   secs  passive  longestP  1stThreat  1stRound  rounds  hitsTaken  max5s  kills  myHits  firing  end");
-        if (System.Environment.GetEnvironmentVariable("PRESSURE_TRACE") == "1") Trace = _output.WriteLine;
-        int seeds = int.TryParse(System.Environment.GetEnvironmentVariable("PRESSURE_SEEDS"), out int n) ? n : 1;
-        foreach (var (rung, pilot) in Cases()) {
+        Trace = System.Environment.GetEnvironmentVariable("PRESSURE_TRACE") == "1"
+            ? _output.WriteLine : null;
+        try {
+            int seeds = int.TryParse(System.Environment.GetEnvironmentVariable("PRESSURE_SEEDS"), out int n) ? n : 1;
+            foreach (var (rung, pilot) in Cases()) {
             var runs = Enumerable.Range(0, seeds).Select(seed => Fly(rung, pilot, 240.0, durable: false, seed)).ToList();
             if (seeds > 1) {
                 _output.WriteLine($"SUMMARY rung {rung} vs {pilot.Name} x{seeds}: passive {runs.Average(x => x.PassiveShare):P0}"
@@ -300,15 +387,23 @@ public sealed class BanditPressureReport {
                     + $" | shot down {runs.Count(x => x.HitsTaken >= 3)} | max5s {runs.Max(x => x.MaxHitsIn5S)}"
                     + $" | inside900 {runs.Average(x => x.GunRangeShare):P0} | mean secs {runs.Average(x => x.Seconds):F0}");
             }
-            foreach (PressureResult r in runs) {
+                foreach (PressureResult r in runs) {
             _output.WriteLine(
                 $"{r.Label,-34} {r.Skill,-9} {r.Formation,2} {r.Seconds,6:F0}  {r.PassiveShare,6:P0}  {r.LongestPassiveS,7:F0}s"
                 + $"  {r.FirstThreatS,8:F0}s  {r.FirstRoundS,7:F0}s  {r.OpponentRounds,6}  {r.HitsTaken,9}  {r.MaxHitsIn5S,5}"
                 + $"  {r.PlayerKills,5}  {r.PlayerHits,6}  {r.FiringShare,6:P0}  {r.End}");
                 _output.WriteLine($"      tactics {r.Tactics} | median range {r.MedianRangeM:F0} m | inside 900 m {r.GunRangeShare:P0} | alt player {r.MedianPlayerAltM:F0} bandit {r.MedianBanditAltM:F0}");
+                }
+                _output.WriteLine($"      diag banditNose p50 {Median(DebugBanditNose):F0} deg | playerNose p50 {Median(DebugPlayerNose):F0} deg | closure p50 {Median(DebugClosure):F0} m/s | speed p {Median(DebugSpeeds.Select(x=>x.P).ToList()):F0} b {Median(DebugSpeeds.Select(x=>x.B).ToList()):F0}");
+                _output.WriteLine($"      diag bandit cmd throttle p50 {Median(DebugThrottle):F2} G p50 {Median(DebugG):F1}");
+                DebugThrottle.Clear(); DebugG.Clear();
+                DebugBanditNose.Clear(); DebugPlayerNose.Clear(); DebugClosure.Clear(); DebugSpeeds.Clear();
             }
-            _output.WriteLine($"      diag banditNose p50 {Median(DebugBanditNose):F0} deg | playerNose p50 {Median(DebugPlayerNose):F0} deg | closure p50 {Median(DebugClosure):F0} m/s | speed p {Median(DebugSpeeds.Select(x=>x.P).ToList()):F0} b {Median(DebugSpeeds.Select(x=>x.B).ToList()):F0}");
-            _output.WriteLine($"      diag bandit cmd throttle p50 {Median(DebugThrottle):F2} G p50 {Median(DebugG):F1}");
+        }
+        finally {
+            // xUnit's output helper is scoped to this invocation. Never retain it for the next
+            // test, and clear diagnostics even when a seed throws during a pressure sweep.
+            Trace = null;
             DebugThrottle.Clear(); DebugG.Clear();
             DebugBanditNose.Clear(); DebugPlayerNose.Clear(); DebugClosure.Clear(); DebugSpeeds.Clear();
         }
