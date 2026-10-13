@@ -26,6 +26,8 @@ public sealed class ShortFinalPracticeTests(ITestOutputHelper output) {
             + (runway.TouchdownAimAlongM - frame.along) * Math.Tan(Math.PI / 60), frame.height, 6);
         Assert.Equal(-Math.PI / 60, session.Player.State.Gamma, 6);
         Assert.True(session.PlayerSystems.AllGearDownAndLocked);
+        Assert.Equal(FlightConfigurationTarget.Recovery, session.ConfigurationTarget);
+        Assert.False(session.ConfigurationAutomationEnabled);
         Assert.False(session.OpponentPresent);
         double vref = SortieSchedule.ApproachTrueAirspeedMps(session.Player.State.Mass,
             FlightModel.F22APublicDataSurrogate, AirframeSystemsProfile.ModernConventionalGearSurrogate,
@@ -34,6 +36,7 @@ public sealed class ShortFinalPracticeTests(ITestOutputHelper output) {
         session.Begin();
         Assert.Equal(ApproachPatternLeg.Final, session.ApproachGuidancePlan.ActivePatternLeg);
         Assert.Equal("final", session.ApproachGuidancePlan.Gates[0].Id);
+        Assert.Equal(FlightConfigurationTarget.Recovery, session.ConfigurationTarget);
         Assert.Equal(180, session.Practice!.TimeLimitSeconds);
         Assert.Equal(PracticeStatus.Active, session.Practice.Status);
         Assert.False(session.ConventionalRtbRecoveryCompleted);
@@ -56,6 +59,7 @@ public sealed class ShortFinalPracticeTests(ITestOutputHelper output) {
             && session.TimeSeconds < 181) {
             FlyPilot(session, ref integral);
             session.StepFixed(12);
+            Assert.Equal(FlightConfigurationTarget.Recovery, session.ConfigurationTarget);
             if (session.ConventionalRunwayPhase == RunwayRecoveryPhase.Rollout) {
                 Assert.Equal(PracticeStatus.Active, session.Practice!.Status);
                 Assert.True(session.RunwayTouchdown.Contact && session.RunwayTouchdown.Survivable);
@@ -72,6 +76,27 @@ public sealed class ShortFinalPracticeTests(ITestOutputHelper output) {
         Assert.True(runway.ContainsPavement(session.Player.State.Position));
         Assert.Equal(0, session.Player.State.Speed, 6);
         Assert.Equal(SortieOutcome.Discontinued, session.Outcome);
+    }
+
+    [Fact]
+    public void MissedApproachTargetsCleanIngressWithoutRetractingTheGear() {
+        var session = Stage();
+        session.Begin();
+        var runway = session.ConventionalRunwayRecovery!.Runway;
+        // Controlled missed-approach fixture, not evidence of a flown landing.
+        session.Player.AdoptExternalKinematics(session.Player.State with {
+            Position = runway.SurfacePoint(runway.TouchdownAimAlongM + 400)
+                + new Vec3D(0, 100, 0),
+            Gamma = 0,
+        });
+        session.StepFixed(30);
+        Assert.Equal(ApproachPatternLeg.PatternEntry, session.ApproachGuidancePlan.ActivePatternLeg);
+        Assert.Equal(FlightConfigurationTarget.Combat, session.ConfigurationTarget);
+        Assert.Equal(LandingGearHandle.Down, session.PlayerSystems.GearHandle);
+        Assert.False(session.ConfigurationAutomationEnabled);
+        session.Restart();
+        session.Begin();
+        Assert.Equal(FlightConfigurationTarget.Recovery, session.ConfigurationTarget);
     }
 
     // Test-only pilot observes position/airspeed and sends the same analog controls as a

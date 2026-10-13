@@ -1171,8 +1171,11 @@ public sealed partial class SimulationSession {
             && _carrier is not null && !maintenanceRecovery
             && (!TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
                 || _carrierConfigurationPractice);
+        // Short final stages dirty even though its gear remains pilot-controlled.
         // Circuits starts clean (Combat). Carrier approach beats stage Recovery.
-        _configurationTarget = _configurationAutomationEnabled
+        _configurationTarget = _beat.Practice == GunsOnly.Sim.Training.PracticeExercise.ShortFinal
+            ? FlightConfigurationTarget.Recovery
+            : _configurationAutomationEnabled
             ? (stagesOnCarrierApproach
                 ? FlightConfigurationTarget.Recovery
                 : FlightConfigurationTarget.Combat)

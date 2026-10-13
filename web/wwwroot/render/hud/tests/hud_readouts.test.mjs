@@ -866,6 +866,21 @@ test("dirty free-flight configuration surfaces until physically clean without fl
   assert.deepEqual(recoveryTargetBeforeApproachLaw.warnings, [],
     "recovery intent must prevent a false cleanup demand before the groove law engages");
 
+  const conventionalFinal = systemsReadout({
+    carrier: false,
+    mode: "FREE",
+    configuration_target: "RECOVERY",
+    configuration_automatic: false,
+    has_flaps: false,
+    gear_handle: "DOWN",
+    gear_nose_indication: "DOWN_LOCKED",
+    gear_left_indication: "DOWN_LOCKED",
+    gear_right_indication: "DOWN_LOCKED",
+  });
+  assert.equal(conventionalFinal.configurationActionable, false);
+  assert.deepEqual(conventionalFinal.warnings, [],
+    "pilot-controlled conventional final must not ask for gear cleanup");
+
   const clean = systemsReadout({
     mode: "FREE",
     gear_handle: "UP",

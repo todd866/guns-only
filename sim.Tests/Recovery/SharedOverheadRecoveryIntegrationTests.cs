@@ -25,6 +25,7 @@ public sealed class SharedOverheadRecoveryIntegrationTests {
         session.StepFixed();
         Assert.False(session.PlayerRtbActive);
         Assert.False(session.ConventionalRtbPatternGuidanceActive);
+        Assert.Equal(FlightConfigurationTarget.Combat, session.ConfigurationTarget);
     }
 
     [Fact]
@@ -56,6 +57,7 @@ public sealed class SharedOverheadRecoveryIntegrationTests {
         Assert.True(session.PlayerRtbActive);
         session.StepFixed();
         Assert.True(session.ConventionalRtbPatternGuidanceActive);
+        Assert.Equal(FlightConfigurationTarget.Combat, session.ConfigurationTarget);
         var recovery = Assert.IsType<ConventionalRunwayRecoveryModel>(
             session.ConventionalRunwayRecovery);
         double approachCalibratedMps = SortieSchedule.ApproachCalibratedAirspeedMps(
@@ -95,6 +97,10 @@ public sealed class SharedOverheadRecoveryIntegrationTests {
             }
             Assert.True(advanced,
                 $"{session.Beat.Name} did not capture {gate.Id}; guidance stayed on '{seen}'");
+            Assert.Equal(next.Dirty ? FlightConfigurationTarget.Recovery
+                : FlightConfigurationTarget.Combat, session.ConfigurationTarget);
+            Assert.False(session.ConfigurationAutomationEnabled);
+            Assert.Equal(LandingGearHandle.Up, session.PlayerSystems.GearHandle);
         }
 
         session.FeedKey(GKey.GearToggle, true);
@@ -127,6 +133,7 @@ public sealed class SharedOverheadRecoveryIntegrationTests {
             session.StepFixed();
 
         Assert.Equal(RunwayRecoveryPhase.Recovered, recovery.Phase);
+        Assert.Equal(FlightConfigurationTarget.Recovery, session.ConfigurationTarget);
         Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
         Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
     }
