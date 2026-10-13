@@ -54,6 +54,9 @@ export const DEFAULT_PLAYER_SETTINGS = Object.freeze({
   hudBrightness: 0.84,
   legendSeen: false,
   autoGcas: true,
+  // Phone fighter layout: the left thumb gets FIRE and a throttle lever by default. On, the
+  // spring-centred THR/YAW stick returns to the left corner for pilots who want touch rudder.
+  touchRudderStick: false,
   bindings: Object.freeze(defaultBindings()),
 });
 
@@ -94,6 +97,7 @@ export function normalisePlayerSettings(value = {}) {
       finite(value?.hudBrightness, DEFAULT_PLAYER_SETTINGS.hudBrightness))),
     legendSeen: bool(value?.legendSeen, DEFAULT_PLAYER_SETTINGS.legendSeen),
     autoGcas: bool(value?.autoGcas, DEFAULT_PLAYER_SETTINGS.autoGcas),
+    touchRudderStick: bool(value?.touchRudderStick, DEFAULT_PLAYER_SETTINGS.touchRudderStick),
     bindings: Object.freeze(bindings),
   });
 }

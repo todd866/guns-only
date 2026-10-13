@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   CONTROL_BINDINGS,
+  DEFAULT_PLAYER_SETTINGS,
   controlCodeLabel,
   keyboardMapForSettings,
   loadPlayerSettings,
@@ -88,4 +89,11 @@ test("first visit inherits reduced motion while an explicit saved choice always 
     false, "an explicit opt-out must not be overwritten by the OS default");
   assert.equal(loadPlayerSettings(storageWith({ reducedMotion: true }), noReduce).reducedMotion,
     true, "an explicit opt-in must remain durable when the OS default differs");
+});
+
+test("touch rudder stick is an explicit opt-in that survives normalisation", () => {
+  assert.equal(DEFAULT_PLAYER_SETTINGS.touchRudderStick, false);
+  assert.equal(normalisePlayerSettings({}).touchRudderStick, false);
+  assert.equal(normalisePlayerSettings({ touchRudderStick: true }).touchRudderStick, true);
+  assert.equal(normalisePlayerSettings({ touchRudderStick: "yes" }).touchRudderStick, false);
 });
