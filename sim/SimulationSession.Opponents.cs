@@ -501,10 +501,15 @@ public sealed partial class SimulationSession {
     }
 
     void ConfigureAdaptiveAiPlanning() {
+        bool physicalTracking = IsVisualMergeSortie(_beat)
+            && !_arenaHandicapActive && _beat.FirstRunValley is null
+            && _beat.CombatRules.OpponentTargetGeometry is not null;
+        _bandit.ConfigureGunTracking(physicalTracking ? _opponentGun.Profile : null);
         if (_bandit is IAdaptiveAiPlanner primary)
             primary.ConfigureAiPlanning(
                 _aiComputeLevel, _incrementalAiPlanningEnabled);
         foreach (Wingman wingman in _wingmen) {
+            wingman.Bandit.ConfigureGunTracking(physicalTracking ? wingman.Gun.Profile : null);
             if (wingman.Bandit is IAdaptiveAiPlanner support)
                 support.ConfigureAiPlanning(
                     _aiComputeLevel, _incrementalAiPlanningEnabled);

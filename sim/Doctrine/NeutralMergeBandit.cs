@@ -206,6 +206,13 @@ public sealed class NeutralMergeBandit :
         _fight?.ConfigureLookaheadCadencePhase(phase);
     }
 
+    GunProfile? _trackingGun;
+    internal GunProfile? TrackingGun => _trackingGun;
+    public void ConfigureGunTracking(GunProfile? profile) {
+        _trackingGun = profile;
+        _fight?.ConfigureGunTracking(profile);
+    }
+
     public bool WantsToFire(in ActorObservation player) =>
         _fight?.WantsToFire(player) ?? false;
 
@@ -367,6 +374,7 @@ public sealed class NeutralMergeBandit :
             Atmosphere = _atmosphere,
             PresentElapsedSeconds = _presentElapsedSeconds,
         };
+        fight.ConfigureGunTracking(_trackingGun);
         if (_lookaheadCadencePhase is int phase)
             fight.ConfigureLookaheadCadencePhase(phase);
         // Preserve the physical wing configuration on the exact tick that opens the merge gate.

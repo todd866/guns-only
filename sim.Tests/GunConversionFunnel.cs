@@ -96,7 +96,7 @@ public static class GunConversionFunnel {
         double maximumSecondsPerEngagement = 45.0,
         AircraftParams? enemyAir = null,
         BanditSkillProfile? enemyProfile = null,
-        bool useTargetGeometry = true) {
+        bool useTargetGeometry = true, Action<string>? report = null) {
         BanditSkillProfile profile = enemyProfile ?? BanditSkillProfile.For(enemyTier);
         double flown = 0.0, inRange = 0.0, coarse = 0.0, body = 0.0, lead = 0.0;
         double eligible = 0.0, blocked = 0.0, trigger = 0.0, maxContinuous = 0.0;
@@ -138,6 +138,8 @@ public static class GunConversionFunnel {
                 combat.OpponentAmmo, combat.PlayerHitsToDefeat,
                 combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile,
                 targetGeometry: combat.OpponentTargetGeometry);
+
+            if (useTargetGeometry) enemy.ConfigureGunTracking(combat.OpponentGunProfile);
 
             double minimumRangeM = Geometry.Range(reference.State, enemy.State);
             double previousRangeM = minimumRangeM;
@@ -237,6 +239,7 @@ public static class GunConversionFunnel {
             }
 
             rounds += enemyGun.RoundsFired;
+            report?.Invoke($"e={engagement} enemy rounds={enemyGun.RoundsFired} hits={enemyGun.HitCount} reference hits={referenceGun.HitCount} time={enemy.T:F2} range={Geometry.Range(enemy.State, reference.State):F0}");
             hits += enemyGun.HitCount;
             if (enemyGun.HitCount > 0) engagementsWithHits++;
             if (enemyGun.Outcome == FightOutcome.Splash) kills++;
