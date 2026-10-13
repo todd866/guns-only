@@ -723,16 +723,19 @@ test("live F-22 combat padlock compresses only camera roll after the physical lo
   );
 });
 
-test("modern surrogate mission stays an explicit abstract visual contact without Korea asset fetches", async () => {
+test("modern surrogate mission stays procedural without Korea asset fetches", async () => {
   const [appSource, bridgeSource] = await Promise.all([
     readFile(appUrl, "utf8"),
     readBridgeContract(),
   ]);
-  for (const presentationId of [
-    "presentation.vehicle.f22a.public-data-surrogate.v1",
-    "presentation.vehicle.su27s.public-data-surrogate.v1",
+  for (const [presentationId, factory] of [
+    ["presentation.vehicle.f22a.public-data-surrogate.v1", "createDrone"],
+    // The opponent is the dimensionally correct Su-27 silhouette; the unseen player keeps the
+    // abstract body.
+    ["presentation.vehicle.su27s.public-data-surrogate.v1", "createSu27"],
   ]) {
-    assert.match(appSource, new RegExp(`\\["${presentationId.replaceAll(".", "\\.")}", createDrone\\]`),
+    assert.match(appSource,
+      new RegExp(`\\["${presentationId.replaceAll(".", "\\.")}", ${factory}\\]`),
       `${presentationId} needs an immediately visible compatibility contact`);
     assert.ok(appSource.includes(`"${presentationId}",`),
       `${presentationId} must be excluded from pack registry resolution`);
