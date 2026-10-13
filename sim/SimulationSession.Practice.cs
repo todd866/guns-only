@@ -5,14 +5,20 @@ namespace GunsOnly.Sim;
 
 public sealed partial class SimulationSession {
     public PracticeRuntime? Practice { get; private set; }
+    double _shortFinalStartedAtSeconds;
 
     void StagePractice() => Practice = _beat.Practice == PracticeExercise.None
         ? null : new PracticeRuntime(_beat.Practice);
 
     void BeginPractice() {
         Practice?.Begin();
+        // Isolated until the shared attempt-clock change lands; never reset the world clock.
+        if (Practice?.Exercise == PracticeExercise.ShortFinal) {
+            _shortFinalStartedAtSeconds = TimeSeconds;
+            _conventionalRunwayPatternRecovery.StartOnFinal();
+        }
         if (Practice is not null) ShowTransition("PRACTICE · ONE OBJECTIVE", 1800);
-        if (Practice?.Exercise != PracticeExercise.Recovery) return;
+        if (Practice?.Exercise is not (PracticeExercise.Recovery or PracticeExercise.ShortFinal)) return;
         // Training starts in the recovery procedure with no combat actor or relief fiction.
         // Physical touchdown and full stop still belong to the ordinary runway model.
         _returnToBaseReason = MissionRtbReason.PilotKnockItOff;
@@ -23,7 +29,8 @@ public sealed partial class SimulationSession {
 
     void ObservePractice() {
         if (Practice is not { } practice) return;
-        practice.Observe(TimeSeconds,
+        practice.Observe(practice.Exercise == PracticeExercise.ShortFinal
+                ? TimeSeconds - _shortFinalStartedAtSeconds : TimeSeconds,
             _playerTerminalState != AircraftTerminalState.Flying,
             _firstRunValleyRuntime?.WeaponsCold == false,
             SortiePlayerHits,

@@ -12,6 +12,8 @@ public static class PracticeBeats {
                 Name = "Practice · Kestrel valley", Practice = exercise,
             };
         BeatSetup source = Beats.ModernVisualMerge();
+        if (exercise == PracticeExercise.ShortFinal)
+            return ShortFinalPractice.Create(source);
         if (exercise == PracticeExercise.Gunnery) {
             // An explicitly unarmed, scripted target flies ahead of the player. Two physical
             // hits close the exercise; aiming at a marker or merely pressing Fire does not.
