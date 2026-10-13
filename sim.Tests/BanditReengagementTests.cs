@@ -33,6 +33,132 @@ public sealed class BanditReengagementTests {
         }
     }
 
+    [Theory]
+    [InlineData(96.0, 0.5)]
+    [InlineData(96.0, 0.8)]
+    [InlineData(110.0, 0.5)]
+    [InlineData(110.0, 0.8)]
+    public void SlowRampRecoveryUnloadsInsteadOfSustainingTheZoom(double speed, double gamma) {
+        (double Exit, double Peak, double MinimumSpeed, double Gamma) Fly(bool enabled) {
+            var bandit = new ReactiveBandit(State(0, 9500, 0, speed, gamma: gamma),
+                BanditAir, PilotSkill.Competent) { AttackReengagementEnabled = enabled };
+            var player = State(0, 8000, 3000, 250);
+            double peak = 9500, minimum = speed;
+            for (int tick = 0; tick < 30 * AircraftSim.TickHz; tick++) {
+                bandit.Step(ActorObservation.Capture(player, tick), Dt);
+                peak = Math.Max(peak, bandit.State.Position.Y);
+                minimum = Math.Min(minimum, bandit.State.Speed);
+                if (bandit.Tactic != BanditTactic.Energy)
+                    return (tick * Dt, peak, minimum, bandit.State.Gamma);
+                if (enabled) {
+                    Assert.InRange(bandit.LastCommand.GDemand, -0.2, 1.1);
+                    Assert.InRange(Math.Abs(bandit.LastCommand.BankTarget), 0, 0.65);
+                    Assert.False(bandit.LastCommand.EnvelopeOverride);
+                }
+            }
+            throw new Xunit.Sdk.XunitException("energy recovery did not finish in 30 seconds");
+        }
+        var legacy = Fly(false);
+        var recovery = Fly(true);
+        Assert.True(recovery.Exit < legacy.Exit * 0.8, $"exit {recovery.Exit:F2} vs {legacy.Exit:F2}");
+        Assert.True(recovery.Peak < legacy.Peak - 100, $"peak {recovery.Peak:F0} vs {legacy.Peak:F0}");
+        Assert.True(recovery.MinimumSpeed > speed * 0.95, $"minimum speed {recovery.MinimumSpeed:F1}");
+        Assert.True(recovery.Gamma < 0, "recovery recommitted while still zooming");
+    }
+
+    [Theory]
+    [InlineData(false, 700.0)]
+    [InlineData(false, 900.0)]
+    [InlineData(false, 2000.0)]
+    [InlineData(true, 2000.0)]
+    public void PursuitForecastSavesWorkWithoutChangingPresentOrGunRange(bool presenting, double range) {
+        ReactiveBandit Create(bool enabled) => new(State(0, 4000, 0, 250),
+            BanditAir, PilotSkill.Competent, presenting: presenting) {
+            AttackReengagementEnabled = enabled
+        };
+        var ordinary = Create(false);
+        var ramp = Create(true);
+        var target = ActorObservation.Capture(State(range * 0.5, 4000, range, 250), 0);
+        ordinary.Step(target, Dt);
+        ramp.Step(target, Dt);
+        Assert.Equal(ordinary.AiWorkload.PlansStarted, ramp.AiWorkload.PlansStarted);
+        Assert.Equal(ordinary.AiWorkload.CandidateEvaluations, ramp.AiWorkload.CandidateEvaluations);
+        Assert.True(ramp.AiWorkload.PlansCompleted > 0);
+        if (!presenting && range > 900)
+            Assert.True(ramp.AiWorkload.ForecastSteps < ordinary.AiWorkload.ForecastSteps * 0.6);
+        else {
+            Assert.Equal(ordinary.AiWorkload.ForecastSteps, ramp.AiWorkload.ForecastSteps);
+            Assert.Equal(ordinary.LastCommand, ramp.LastCommand);
+        }
+    }
+
+    [Theory]
+    [InlineData(AiComputeLevel.Full)]
+    [InlineData(AiComputeLevel.Balanced)]
+    [InlineData(AiComputeLevel.Constrained)]
+    [InlineData(AiComputeLevel.Emergency)]
+    public void ForecastFidelityIsFrozenAcrossRangeCrossing(AiComputeLevel level) {
+        var bandit = new ReactiveBandit(State(0, 4000, 0, 250), BanditAir,
+            PilotSkill.Competent) { AttackReengagementEnabled = true };
+        bandit.ConfigureAiPlanning(level, incremental: true);
+        bandit.Step(ActorObservation.Capture(State(100, 4000, 2000, 250), 0), Dt);
+        var first = bandit.AiWorkload;
+        Assert.True(first.CandidateEvaluations > 0);
+        Assert.Equal(0, first.PlansCompleted);
+        // Same contact moves into gun range while the first frozen plan is pending.
+        // Off-axis geometry avoids the separate fine-track override.
+        bandit.Step(ActorObservation.Capture(State(600, 4000, 300, 250), 1), Dt);
+        var next = bandit.AiWorkload - first;
+        Assert.Equal(0, next.PlansStarted);
+        Assert.True(next.CandidateEvaluations > 0);
+        Assert.Equal(first.ForecastSteps / first.CandidateEvaluations,
+            next.ForecastSteps / next.CandidateEvaluations);
+    }
+
+    [Fact]
+    public void LowClearanceEnergyRecoveryRetainsTheExistingSafetyCommand() {
+        var initial = State(0, 1000, 0, 100, gamma: 0.5);
+        var ordinary = new ReactiveBandit(initial, BanditAir, PilotSkill.Competent);
+        var ramp = new ReactiveBandit(initial, BanditAir, PilotSkill.Competent) {
+            AttackReengagementEnabled = true
+        };
+        for (int tick = 0; tick < 120; tick++) {
+            var target = ActorObservation.Capture(State(0, 1500, 3000, 250), tick);
+            ordinary.Step(target, Dt);
+            ramp.Step(target, Dt);
+            Assert.Equal(ordinary.LastCommand, ramp.LastCommand);
+            Assert.Equal(ordinary.State, ramp.State);
+        }
+    }
+
+    [Fact]
+    public void RisingTerrainPreemptsTheRampEnergyUnload() {
+        var bandit = new ReactiveBandit(State(400, 3800, 0, 100, chi: Math.PI / 2),
+            BanditAir, PilotSkill.Competent, new RidgeAhead()) {
+            AttackReengagementEnabled = true
+        };
+        bandit.Step(ActorObservation.Capture(State(4000, 4500, 0, 250), 0), Dt);
+        Assert.Equal("terrain-recovery", bandit.AttackStatus);
+        Assert.InRange(bandit.LastCommand.GDemand, 1.0, BanditSkillProfile.For(PilotSkill.Competent).MaxAcquireG);
+        Assert.Equal(0, bandit.AiWorkload.PlansStarted);
+    }
+
+    [Theory]
+    [InlineData(PilotSkill.Competent, 0.30)]
+    [InlineData(PilotSkill.Veteran, 1.609)]
+    [InlineData(PilotSkill.Ace, 1.609)]
+    public void EarlierTurnBleedIsLimitedToTheCompetentRampPilot(PilotSkill skill, double throttle) {
+        var bandit = new ReactiveBandit(State(0, 4000, 0, 250), BanditAir, skill) {
+            AttackReengagementEnabled = true
+        };
+        var target = State(0, 4000, -5000, 300, chi: Math.PI);
+        bandit.Step(ActorObservation.Capture(target, 0), Dt);
+        Assert.Equal("intercept", bandit.AttackStatus);
+        Assert.Equal(throttle, bandit.LastCommand.Throttle, 6);
+        Assert.InRange(bandit.LastCommand.GDemand, -0.2, BanditSkillProfile.For(skill).MaxAcquireG);
+        Assert.False(bandit.LastCommand.EnvelopeOverride);
+    }
+
     [Fact]
     public void LongRangeReengagementKeepsThePathFloorClearanceGate() {
         // The ridge is in the 900 m look-ahead slice. A re-engage command must resolve its floor

@@ -52,6 +52,24 @@ public sealed partial class ReactiveBandit {
             flatSpeed * (System.Math.Sin(endChi) - System.Math.Sin(player.Chi)) / rate);
     }
 
+    // Use earlier speed bleed for the 4.8-G Competent pilot's reversal.
+    // Higher tiers retain their established throttle schedule; early bleed starved Veteran's
+    // attack opportunities in the same three-seed early-fire contract.
+    double AttackTurnSpeedMps => Skill == PilotSkill.Competent ? _lowSpeedMps : _highSpeedMps;
+
+    PilotCommand AttackEnergyRecoveryCommand(in ActorObservation player) {
+        var own = State;
+        // A slow aircraft cannot pull its way out of a zoom. Unload first; steer toward
+        // the fight in a shallow descending turn once the flight path reaches the horizon.
+        // This is pilot intent through the normal G/roll actuators, not a pose correction.
+        double bank = own.Gamma > 0.09 ? 0.0 : LimitedBankTo(player.Position, 0.65);
+        const double recoveryGamma = -0.15; // surrogate pilot target, not an airframe limit
+        double verticalG = System.Math.Cos(own.Gamma)
+            + (recoveryGamma - own.Gamma) * own.Speed / (2.0 * FlightModel.G0);
+        double g = verticalG / System.Math.Cos(bank);
+        return new PilotCommand(System.Math.Clamp(g, -0.20, 1.1), bank, _maximumThrottle, 0.0);
+    }
+
     PilotCommand AttackInterceptCommand(in ActorObservation player) {
         var own = State;
         double range = Geometry.Range(own, player);
@@ -86,7 +104,7 @@ public sealed partial class ReactiveBandit {
         double bankLimit = slice ? 2.0 : 1.30;
         bank = System.Math.Clamp(bank, -bankLimit, bankLimit);
         double g = lift.Dot(right) * System.Math.Sin(bank) + lift.Dot(up) * System.Math.Cos(bank);
-        double throttle = own.Speed > _highSpeedMps && angle > CornerTurnNoseOffRad
+        double throttle = own.Speed > AttackTurnSpeedMps && angle > CornerTurnNoseOffRad
             ? System.Math.Min(_maximumThrottle, CornerTurnThrottle) : _maximumThrottle;
         return new PilotCommand(System.Math.Clamp(g, -0.20, System.Math.Max(-0.20, maxG)), bank, throttle, 0.0);
     }

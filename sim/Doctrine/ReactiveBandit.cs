@@ -1826,6 +1826,9 @@ public sealed partial class ReactiveBandit :
             return new PilotCommand(1.85, LimitedBankTo(climb, 0.65),
                 _maximumThrottle, 0.0);
         }
+        if (AttackReengagementEnabled && own.Speed < _energyExitMps
+            && own.Position.Y - hereFloor > 1500.0)
+            return AttackEnergyRecoveryCommand(player);
         // THE EXTENSION IS AIMED AT THE PLAYER, NOSE-LOW -- NOT STRAIGHT AHEAD. Straight ahead
         // (own forward + 1200 m) points AWAY from a player behind the bandit, so once the nose was
         // level the "energy rebuild" flew the range open nose-cold -- traced opening to 4 km, and
@@ -2300,6 +2303,15 @@ public sealed partial class ReactiveBandit :
         _lookaheadPlanPredictionSubstepTicks = _incrementalAiPlanning
             ? PredictionSubstepTicks(_computeLevel)
             : PredictionSubstepTicks(AiComputeLevel.Full);
+        // Use the existing Constrained forecast for distant single-ramp pursuit. Retain normal
+        // fidelity near gun range, including one horizon of current-speed head-on closure; presentation and
+        // terrain-certified attacks are unchanged. Freeze the choice for a pending rollout.
+        double gunApproachRangeM = BanditFireControl.MaximumRangeM
+            + (State.Speed + player.Speed) * _profile.LookaheadHorizonTicks / AircraftSim.TickHz;
+        if (AttackReengagementEnabled && !Presenting && lowAttackPlan is null
+            && Geometry.Range(State, player) > gunApproachRangeM)
+            _lookaheadPlanPredictionSubstepTicks = System.Math.Max(
+                _lookaheadPlanPredictionSubstepTicks, PredictionSubstepTicks(AiComputeLevel.Constrained));
         _lookaheadPlanUsesLowAttack = lowAttackPlan.HasValue;
         _lookaheadPlanContactIdentity = player.ContactIdentity;
         _lookaheadContextBound = true;
@@ -2370,7 +2382,7 @@ public sealed partial class ReactiveBandit :
         // that beats the burner candidates.
         double noseOffRad = System.Math.Acos(System.Math.Clamp(
             State.ForwardDir().Dot(lineOfSight), -1.0, 1.0));
-        double pullThrottle = AttackReengagementEnabled && State.Speed > _highSpeedMps
+        double pullThrottle = AttackReengagementEnabled && State.Speed > AttackTurnSpeedMps
             && noseOffRad > CornerTurnNoseOffRad
             ? System.Math.Min(_maximumThrottle, CornerTurnThrottle)
             : fastThrottle;
