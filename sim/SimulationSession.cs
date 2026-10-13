@@ -1320,12 +1320,14 @@ public sealed partial class SimulationSession {
                     ? GunHeatConfig.PlayerInfiniteAmmo
                     : null;
             _gunKill = new GunKill(combat.PlayerAmmo, combat.OpponentHitsToDefeat,
-                playerTargetHitRadiusM, combat.PlayerGunProfile, playerGunHeat);
+                playerTargetHitRadiusM, combat.PlayerGunProfile, playerGunHeat,
+                targetGeometry: _arenaHandicapActive ? null : combat.PlayerTargetGeometry);
             RegisterFormationGunTargets();
             _gunKill.SelectTarget(_selectedPlayerGunTargetId);
             _opponentGun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
                 combat.OpponentGunProfile.EffectiveHitRadiusM,
-                combat.OpponentGunProfile);
+                combat.OpponentGunProfile,
+                targetGeometry: _arenaHandicapActive ? null : combat.OpponentTargetGeometry);
             _visualMergeEvaluation?.Step(_player.State, _bandit.State,
                 _player.AtmosphereModel, 0.0, _player.AirspeedMps);
         } else {

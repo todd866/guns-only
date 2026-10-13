@@ -113,7 +113,7 @@ public sealed class GunKill {
 
     public GunKill(int ammo = DefaultAmmo, int hitsToKill = DefaultHitsToKill,
         double hitRadiusM = DefaultHitRadiusM, GunProfile? profile = null,
-        GunHeatConfig? heatConfig = null) {
+        GunHeatConfig? heatConfig = null, AirframeHitGeometry? targetGeometry = null) {
         if (ammo < 0) throw new System.ArgumentOutOfRangeException(nameof(ammo));
         if (hitsToKill <= 0) throw new System.ArgumentOutOfRangeException(nameof(hitsToKill));
         _profile = profile ?? GunProfiles.SixM3FiftyCal;
@@ -144,11 +144,14 @@ public sealed class GunKill {
         _hitsToKill = hitsToKill;
         _hitRadiusM = selectedHitRadius;
         _heatConfig = heatConfig;
+        TargetGeometry = targetGeometry;
         _targetDamage.Add(LegacyTargetId, new TargetDamageState());
     }
 
     public IReadOnlyList<GunRound> RoundsInFlight => _rounds;
     public GunProfile Profile => _profile;
+    /// Null preserves the legacy sphere for frozen modes and compatibility callers.
+    public AirframeHitGeometry? TargetGeometry { get; internal set; }
     public GunHeatConfig? HeatConfig => _heatConfig;
     public bool HasInfiniteAmmo => _heatConfig is not null;
     public int AmmoRemaining { get; private set; }
@@ -330,7 +333,7 @@ public sealed class GunKill {
             throw new ArgumentOutOfRangeException(
                 nameof(selectedTargetId), "The selected target is not in the transfer set.");
 
-        var next = new GunKill(ammo, _hitsToKill, hitRadiusM, profile);
+        var next = new GunKill(ammo, _hitsToKill, hitRadiusM, profile, targetGeometry: TargetGeometry);
         next._targetDamage.Clear();
         foreach (long targetId in targetIds) {
             TargetDamageState source = _targetDamage[targetId];
@@ -346,7 +349,7 @@ public sealed class GunKill {
 
     GunKill CreateReplacementTarget(bool preserveRoundsInFlight) {
         var next = new GunKill(
-            AmmoRemaining, _hitsToKill, _hitRadiusM, _profile, _heatConfig) {
+            AmmoRemaining, _hitsToKill, _hitRadiusM, _profile, _heatConfig, TargetGeometry) {
             RoundsFired = RoundsFired,
             InheritedRoundsFired = RoundsFired,
             _triggerWasHeld = _triggerWasHeld,
@@ -544,15 +547,20 @@ public sealed class GunKill {
                 Vec3D targetEnd = targetStart + targetVelocity * dt;
 
                 // Continuous intersection between the round chord and this target's moving chord.
-                // At 120 Hz the gravity/chord deviation is under 0.1 mm. Resolve the sphere
+                // At 120 Hz the gravity/chord deviation is under 0.1 mm. Resolve the solid
                 // ENTRY time rather than the time of closest approach so two intersected aircraft
                 // cannot be ordered by their centres after the round has already touched one.
                 Vec3D relativeStart = round.Position - targetStart;
                 Vec3D relativeDelta = (nextPosition - targetEnd) - relativeStart;
                 double hitRadiusM = target.Id == round.AimTargetId
                     ? round.EffectiveHitRadiusM : _hitRadiusM;
-                if (!TrySweptSphereEntryFraction(
-                        relativeStart, relativeDelta, hitRadiusM, out double fraction))
+                double fraction;
+                bool intersects = TargetGeometry is { } geometry
+                    ? geometry.TryEntry(target.State, relativeStart, relativeDelta,
+                        elapsedAtStart, dt, out fraction)
+                    : TrySweptSphereEntryFraction(
+                        relativeStart, relativeDelta, hitRadiusM, out fraction);
+                if (!intersects)
                     continue;
                 if (fraction < hitFraction - 1e-12
                     || (System.Math.Abs(fraction - hitFraction) <= 1e-12

@@ -425,6 +425,10 @@ public sealed partial class SimulationSession {
         _arenaHandicapProfile = profile;
         _arenaHandicapSkill = skillLabel;
         _arenaHandicapActive = true;
+        // Handicap can arrive after staging. Switch only collision shape; preserve every round,
+        // damage ledger, magazine and cadence in the frozen arena lane.
+        if (_gunKill is not null) _gunKill.TargetGeometry = null;
+        if (_opponentGun is not null) _opponentGun.TargetGeometry = null;
         // StartBeat may have already staged a 1v2 before the matchmaker reply arrived. Multiplayer
         // is always 1v1 — drop any wingmen when the handicap lands.
         ClearWingmen();
@@ -434,6 +438,8 @@ public sealed partial class SimulationSession {
     public void ClearArenaHandicap() {
         _arenaHandicapProfile = null;
         _arenaHandicapActive = false;
+        if (_gunKill is not null) _gunKill.TargetGeometry = _beat.CombatRules.PlayerTargetGeometry;
+        if (_opponentGun is not null) _opponentGun.TargetGeometry = _beat.CombatRules.OpponentTargetGeometry;
         _arenaHandicapSkill = PilotSkill.Competent;
     }
 
@@ -617,7 +623,8 @@ public sealed partial class SimulationSession {
             wing.Wind = _player.Wind;
             wing.Atmosphere = _player.AtmosphereModel;
             var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
-                combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
+                combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile,
+                targetGeometry: _arenaHandicapActive ? null : combat.OpponentTargetGeometry);
             _wingmen.Add(new Wingman(
                 wing, gun, spec.Skill, AllocateOpponentGunTargetId()));
         }
@@ -663,7 +670,8 @@ public sealed partial class SimulationSession {
             aircraft.Atmosphere = _player.AtmosphereModel;
             var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
                 combat.OpponentGunProfile.EffectiveHitRadiusM,
-                combat.OpponentGunProfile);
+                combat.OpponentGunProfile,
+                targetGeometry: _arenaHandicapActive ? null : combat.OpponentTargetGeometry);
             _wingmen.Add(new Wingman(
                 aircraft, gun, _beat.BanditSkill, AllocateOpponentGunTargetId()));
         }
