@@ -1,3 +1,4 @@
+import { controlQuicklookEntries } from "./render/hud/control_quicklook.js";
 import * as THREE from "./vendor/three.module.js";
 import {
   airdataReadout,
@@ -2355,11 +2356,17 @@ class CombatHud {
       ctx.fillStyle = leakers > 0 ? AMBER : GREEN;
       ctx.fillText(this.fitText(cue, width - 20), x + 10, y + 49);
     } else if (!raid && kills > 0) {
-      const x = this.safeInsets.left + 18;
-      const y = this.safeInsets.top + 17;
+      // Share the pause control's row instead of stacking on top of it: the fixed 17 px slot
+      // overlapped the ESC · PAUSE button (top 38 px) by two pixels at every desktop size.
+      const pause = typeof document !== "undefined" ? document.getElementById("pause-button") : null;
+      const pauseRect = pause && !pause.hidden ? pause.getBoundingClientRect() : null;
+      const besidePause = pauseRect && pauseRect.width > 0;
+      const x = besidePause ? pauseRect.right + 8 : this.safeInsets.left + 18;
+      const y = besidePause ? pauseRect.top + (pauseRect.height - 23) / 2 : this.safeInsets.top + 17;
       ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       const tally = `KILLS ${String(kills).padStart(2, "0")}`;
       const tallyWidth = ctx.measureText(tally).width + 18;
+      if (this._debug) this._debug.killTally = { x, y, width: tallyWidth, height: 23 };
       this.glassPanel(x, y, tallyWidth, 23, GREEN);
       ctx.fillStyle = GREEN;
       ctx.textAlign = "center";
@@ -4291,23 +4298,21 @@ class CombatHud {
     // "TARGET 1 · SELECTED · PADLOCK"). Selection is already printed at the bracket and the TARGET
     // control; padlock state now lives on the pressed PADLOCK control (ACQ / TRK / LOOK).
     if (!this.touchMode) {
+      // One row: mode, which target, track state and the way out. "SELECTED" is already printed
+      // at the bracket, and the old two-row plate crowded the OWN HDG label under it (a8).
+      const plate = `${isCombatPadlock || isBanditPadlock ? "PADLOCK · " : ""}${modeTitle
+        .replace(" · SELECTED · PADLOCK", "")} · ${modeStatus}`;
+      if (this._debug?.padlockMode) this._debug.padlockMode.drawn = plate;
       padlockCtx.save();
       padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      const titleWidth = padlockCtx.measureText(modeTitle).width;
-      padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      const statusWidth = padlockCtx.measureText(modeStatus).width;
-      const modeWidth = Math.min(this.width - 28, Math.max(titleWidth, statusWidth) + 20);
+      const modeWidth = Math.min(this.width - 28, padlockCtx.measureText(plate).width + 20);
       const modeX = (this.width - modeWidth) / 2;
       const modeY = Math.max(this.safeInsets.top + 3, this.getLayout().heading.top - 30);
-      this.glassPanel(modeX, modeY, modeWidth, 28, frame.manualLookActive ? AMBER : GREEN_DIM);
+      this.glassPanel(modeX, modeY, modeWidth, 18, frame.manualLookActive ? AMBER : GREEN_DIM);
       padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN;
       padlockCtx.textAlign = "center";
       padlockCtx.textBaseline = "middle";
-      padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      padlockCtx.fillText(this.fitText(modeTitle, modeWidth - 12), this.width / 2, modeY + 9);
-      padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN_DIM;
-      padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      padlockCtx.fillText(this.fitText(modeStatus, modeWidth - 12), this.width / 2, modeY + 20);
+      padlockCtx.fillText(this.fitText(plate, modeWidth - 12), this.width / 2, modeY + 9.5);
       padlockCtx.restore();
     }
     padlockCtx.save();
@@ -5478,7 +5483,9 @@ class CombatHud {
     if (this.showLegendHint !== true || this.legendVisible || this.touchMode) return;
     const ctx = this.ctx;
     ctx.save();
-    const text = "H \u00B7 CONTROLS";
+    // FIRE is the one control a new (often young) pilot must find unaided; the chip names it
+    // beside the way into the full key card (a8, owner 2026-10-13).
+    const text = `${controlBindingLabel(this.controlBindings?.fire, "KeyF")} \u00B7 FIRE   H \u00B7 CONTROLS`;
     ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const width = ctx.measureText(text).width + 18;
     const x = this.width - this.safeInsets.right - width - 12;
@@ -5937,81 +5944,72 @@ class CombatHud {
   drawLegend(frame) {
     if (!this.legendVisible || this.touchMode || document.documentElement.classList.contains("touch-mode")) return;
     const ctx = this.ctx;
-    const panelWidth = Math.min(930, this.width - 34);
-    const compact = this.width < 760;
-    const gcasAvailable = frame.state.auto_gcas_available === true;
-    const f14WingSweep = frame.state.top_gun_seat === "F-14A";
-    const panelHeight = (compact ? (gcasAvailable ? 256 : 229) : (gcasAvailable ? 222 : 191))
-      + (f14WingSweep ? (compact ? 27 : 31) : 0);
+    const state = frame.state ?? {};
+    const phaseMission = String(hudPhasePresentation(state)?.mission ?? "");
+    const topGun = topGunControlQuicklookPresentation(state, {
+      fireBinding: controlBindingLabel(this.controlBindings?.fire, "KeyF"),
+      rtbBinding: controlBindingLabel(this.controlBindings?.knockItOff, "KeyO"),
+    });
+    const mode = topGun ? "topgun"
+      : state.mission_definition_id === "mission.modern.visual-merge.first-run-valley.v1" ? "valley"
+        : phaseMission.startsWith("rapier") ? "rapier" : "f22";
+    const entries = controlQuicklookEntries({
+      bindings: this.controlBindings ?? {},
+      mode,
+      gcasAvailable: state.auto_gcas_available === true,
+      f14WingSweep: state.top_gun_seat === "F-14A",
+      foxTwo: topGun?.foxTwo ?? null,
+    });
+    // Key card: [CAP] ACTION cells in fixed columns, primary controls first and bright.
+    const columns = this.width < 760 ? 2 : 3;
+    const cellWidth = Math.min(210, (this.width - 60) / columns);
+    const rowHeight = 26;
+    const rows = Math.ceil(entries.length / columns);
+    const panelWidth = cellWidth * columns + 24;
+    const panelHeight = rows * rowHeight + 20;
     const x = (this.width - panelWidth) / 2;
     const y = (this.height - panelHeight) / 2;
+    if (this._debug) this._debug.controlQuicklook = { x, y, width: panelWidth, height: panelHeight,
+      cells: entries.map((e) => `${e.caps.join(" ")} ${e.action}`) };
 
+    ctx.save();
     ctx.fillStyle = "rgba(0, 7, 12, 0.22)";
     ctx.fillRect(0, 0, this.width, this.height);
     roundedRect(ctx, x, y, panelWidth, panelHeight, 8);
-    ctx.fillStyle = "rgba(3, 13, 20, 0.79)";
+    ctx.fillStyle = "rgba(3, 13, 20, 0.84)";
     ctx.fill();
     ctx.strokeStyle = "rgba(77, 255, 136, 0.23)";
     ctx.lineWidth = 1;
     ctx.stroke();
-
-    ctx.fillStyle = GREEN;
-    ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("CONTROL QUICKLOOK", this.width / 2, y + 23);
-
-    const binding = (action, fallback) => controlBindingLabel(this.controlBindings?.[action], fallback);
-    const firstRunValley = frame.state.mission_definition_id
-      === "mission.modern.visual-merge.first-run-valley.v1";
-    const fireBinding = binding("fire", "KeyF");
-    const topGunQuicklook = topGunControlQuicklookPresentation(frame.state, {
-      fireBinding,
-      rtbBinding: binding("knockItOff", "KeyO"),
+    const capFont = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    entries.forEach((entry, index) => {
+      // Column-major fill keeps the primary controls together down the first column.
+      const column = Math.floor(index / rows);
+      const row = index % rows;
+      const cx = x + 12 + column * cellWidth;
+      const cy = y + 10 + row * rowHeight + rowHeight / 2;
+      const ink = entry.primary ? GREEN : "rgba(207, 244, 222, 0.62)";
+      let capX = cx;
+      ctx.font = capFont;
+      for (const label of entry.caps) {
+        const w = Math.max(20, ctx.measureText(label).width + 10);
+        roundedRect(ctx, capX, cy - 9, w, 18, 3);
+        ctx.fillStyle = entry.primary ? "rgba(77, 255, 136, 0.14)" : "rgba(207, 244, 222, 0.06)";
+        ctx.fill();
+        ctx.strokeStyle = entry.primary ? "rgba(77, 255, 136, 0.55)" : "rgba(207, 244, 222, 0.25)";
+        ctx.stroke();
+        ctx.fillStyle = ink;
+        ctx.textAlign = "center";
+        ctx.fillText(label, capX + w / 2, cy + 0.5);
+        capX += w + 4;
+      }
+      ctx.textAlign = "left";
+      ctx.font = `${entry.primary ? 800 : 700} 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.fillStyle = ink;
+      ctx.fillText(this.fitText(entry.action, cellWidth - (capX - cx) - 10), capX + 4, cy + 0.5);
     });
-    const fireQuicklook = topGunQuicklook?.weapons ?? (firstRunValley
-      ? `${fireBinding}  FOX TWO → GUNS`
-      : `${fireBinding}  GUNS`);
-    const restartOrRtbQuicklook = topGunQuicklook?.returnToCarrier ?? "R  RESTART";
-
-    const wideLines = [
-      `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
-      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("hookToggle", "KeyU")}  HOOK   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${fireQuicklook}   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
-      `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   ${restartOrRtbQuicklook}   ·   M  SOUND   ·   \`  SYNC MARK   ·   H  HIDE`,
-      "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF",
-      topGunQuicklook
-        ? `TOP GUN · ${topGunQuicklook.weapons} · ${topGunQuicklook.returnToCarrier}`
-        : firstRunValley
-        ? `FIRST RUN · FOLLOW VALLEY · ${fireBinding} FIRES TWO HEATERS, THEN GUNS`
-        : "P  RAPIER MISSION AUTOMATION   ·   Z  SHORT-RANGE MISSILE",
-    ];
-    const compactLines = [
-      `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL`,
-      `${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
-      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
-      `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${fireQuicklook}   ·   M  SOUND`,
-      `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   ${restartOrRtbQuicklook}   ·   \`  SYNC MARK   ·   H  HIDE`,
-      "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF",
-    ];
-    if (topGunQuicklook) {
-      compactLines.push(`TOP GUN · ${topGunQuicklook.weapons} · ${topGunQuicklook.returnToCarrier}`);
-    } else if (firstRunValley) {
-      compactLines.push(`FOLLOW VALLEY · ${fireBinding}: TWO HEATERS → GUNS`);
-    }
-    if (f14WingSweep) {
-      wideLines.push(`${binding("wingSweepForward", "Comma")} / ${binding("wingSweepAft", "Period")}  WING SWEEP FORWARD / AFT   ·   ${binding("wingSweepAuto", "Slash")}  WING SWEEP AUTO`);
-      compactLines.push(`${binding("wingSweepForward", "Comma")} / ${binding("wingSweepAft", "Period")}  WING SWEEP FORWARD / AFT   ·   ${binding("wingSweepAuto", "Slash")}  AUTO`);
-    }
-    if (gcasAvailable) {
-      wideLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE AN ACTIVE FLY-UP)`);
-      compactLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE FLY-UP)`);
-    }
-    const lines = compact ? compactLines : wideLines;
-    const lineHeight = compact ? 27 : 31;
-    const startY = y + (compact ? 59 : 61);
-    ctx.fillStyle = "rgba(207, 244, 222, 0.68)";
-    ctx.font = `${compact ? 8 : 10}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    lines.forEach((line, index) => ctx.fillText(line, this.width / 2, startY + index * lineHeight));
+    ctx.restore();
   }
 
   draw(frame) {
