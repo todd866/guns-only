@@ -283,6 +283,11 @@ function insideRoundLife(state) {
   return range <= velocity * life;
 }
 
+function gunReleaseReady(state) {
+  if (state.gun_gimbal_mounted === true && state.gun_fire_inhibited === true) return false;
+  return !(state.gun_gimbal_cone_deg > 0) || state.gun_gimbal_tracking === true;
+}
+
 function hasGunSolution(state) {
   return state.gun_solution === true && insideRoundLife(state);
 }
@@ -1144,9 +1149,7 @@ class CombatHud {
     }
     this._lastHudHits = hits;
     const hitFlash = now < this._hitFlashUntil;
-    const solution = state.gun_gimbal_cone_deg > 0
-      ? state.gun_gimbal_tracking === true && frame.visualGunSolution === true
-      : frame.visualGunSolution === true;
+    const solution = gunReleaseReady(state) && frame.visualGunSolution === true;
     const ctx = this.ctx;
     const overheated = state.gun_overheat === true;
     const cue = gunCue(state, hitFlash, solution);
@@ -6087,6 +6090,8 @@ class CombatHud {
         ? "solution" : "no-solution" },
       frame.dt,
     )?.key === "solution";
+    // A physical interlock overrides the display qualifier's release dwell immediately.
+    frame.visualGunSolution &&= gunReleaseReady(frame.state);
 
     // Harness-only geometry contract (assertions.mjs): populated when window.__HUD_DEBUG__ is
     // set, a single falsy test per frame otherwise.

@@ -44,7 +44,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 34;
+    public const int LayoutVersion = 35;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -499,6 +499,7 @@ internal static class SnapshotHotFrame {
         Num("lead_x", 3); Num("lead_y", 3); Num("lead_z", 3);
         Bool("gun_gimbal_mounted");
         Bool("gun_gimbal_tracking");
+        Bool("gun_fire_inhibited");
         Num("gun_gimbal_cone_deg", 3);
         Num("gun_gimbal_deg", 3);
         Num("gun_barrel_x", 5);
@@ -1656,6 +1657,7 @@ internal static class SnapshotHotFrame {
         w.Num("lead_z", opponentPresent ? gunKill!.LeadPipper.Z : 0.0, 3);
         w.Bool("gun_gimbal_mounted", gunKill?.HasGimbal == true);
         w.Bool("gun_gimbal_tracking", gunKill?.GimbalTracking == true);
+        w.Bool("gun_fire_inhibited", gunKill?.GimbalFireInhibited == true);
         w.Num("gun_gimbal_cone_deg", (gunKill?.GimbalConeHalfAngleRad ?? 0) * 180 / Math.PI, 3);
         w.Num("gun_gimbal_deg", (gunKill?.GimbalOffsetRad ?? 0) * 180 / Math.PI, 3);
         w.Num("gun_barrel_x", (gunKill?.BarrelDirection(s).X ?? 0), 5);

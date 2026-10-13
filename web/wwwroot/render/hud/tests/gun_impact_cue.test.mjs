@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { gunImpactCueInput } from "../../../hud.js";
+import { createHud, gunImpactCueInput } from "../../../hud.js";
 
 test("gimbal impact cue selects the authoritative intercept and mirrors sim Z", () => {
   const cue = gunImpactCueInput({
@@ -48,3 +48,29 @@ test("assist none retains the physical mounted-barrel impact without implying ac
   assert.deepEqual(cue.point, {x: 0, y: 3000, z: -550});
   assert.equal(cue.coneDeg, 0);
 });
+
+for (const cone of [0, 6, 12]) {
+  test(`mounted gun at ${cone} degrees never announces SHOOT while inhibited`, () => {
+    const words = [];
+    const ctx = { save() {}, restore() {}, strokeText() {},
+      fillText(text) { words.push(text); } };
+    const canvas = { getContext: () => ctx };
+    const previousDocument = globalThis.document;
+    globalThis.document = { createElement: () => canvas };
+    try {
+      const hud = createHud(canvas);
+      hud.width = 1280; hud.height = 720;
+      const state = { opponent_alive: true, gun_solution: true,
+        gun_gimbal_mounted: true, gun_gimbal_cone_deg: cone,
+        gun_gimbal_tracking: true, gun_fire_inhibited: false };
+      const frame = { state, visualGunSolution: true, now: 1 };
+      hud.drawGunSight(frame, null);
+      assert.ok(words.includes("SHOOT"), "clear, aligned barrel is ready");
+      words.length = 0;
+      state.gun_fire_inhibited = true;
+      // Keep the qualified solution true: inhibition must win immediately, even in release hold.
+      hud.drawGunSight(frame, null);
+      assert.ok(!words.includes("SHOOT"), "an interlocked gun must not invite release");
+    } finally { globalThis.document = previousDocument; }
+  });
+}

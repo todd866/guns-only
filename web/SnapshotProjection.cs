@@ -862,6 +862,7 @@ internal static class SnapshotProjection {
             + $"\"lead_x\":{(opponentPresent ? _gunKill!.LeadPipper.X : 0.0):F3},\"lead_y\":{(opponentPresent ? _gunKill!.LeadPipper.Y : 0.0):F3},\"lead_z\":{(opponentPresent ? _gunKill!.LeadPipper.Z : 0.0):F3},"
             + $"\"gun_gimbal_mounted\":{(_gunKill?.HasGimbal == true ? "true" : "false")},"
             + $"\"gun_gimbal_tracking\":{(_gunKill?.GimbalTracking == true ? "true" : "false")},"
+            + $"\"gun_fire_inhibited\":{(_gunKill?.GimbalFireInhibited == true ? "true" : "false")},"
             + $"\"gun_gimbal_cone_deg\":{(_gunKill?.GimbalConeHalfAngleRad ?? 0) * 180 / Math.PI:F3},"
             + $"\"gun_gimbal_deg\":{(_gunKill?.GimbalOffsetRad ?? 0) * 180 / Math.PI:F3},"
             + $"\"gun_barrel_x\":{(_gunKill?.BarrelDirection(s).X ?? 0):F5},"
