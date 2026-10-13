@@ -133,8 +133,9 @@ test("high-alpha cue is reserved in the 390px large-text combat row and desktop 
         };
         try {
           if (desktop) {
-            ctx.clearRect(0, 0, 390, 844);
-            reviewHud.drawGTape(reviewFrame.state);
+            reviewHud.setTouchMode(false);
+            reviewHud.setPresentationProfile("standard");
+            reviewHud.draw(reviewFrame);
           } else reviewHud.draw(reviewFrame);
         } finally { ctx.fillText = fillText; }
         return { draws, rail: __HUD_GEOMETRY.mobileTactical };
