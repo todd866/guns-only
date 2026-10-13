@@ -21,6 +21,20 @@ const SKILL_NAMES = Object.freeze({
   NOVICE: "Novice", COMPETENT: "Competent", VETERAN: "Veteran", ACE: "Ace", MACHINE: "Machine",
 });
 
+const BFM_LESSONS = new Set(["O1", "D1", "O2", "D2", "O3", "D3", "N", "A2"]);
+const BFM_OUTCOME_SYMBOL = Object.freeze({ open: "–", passed: "✓", failed: "×" });
+const BFM_OUTCOME_WORD = Object.freeze({ open: "open", passed: "passed", failed: "failed" });
+
+function bfmLessonValue(value) {
+  const lesson = token(value);
+  return BFM_LESSONS.has(lesson) ? lesson : "";
+}
+
+function bfmOutcomeValue(value) {
+  const outcome = String(value ?? "").trim().toLowerCase();
+  return Object.hasOwn(BFM_OUTCOME_SYMBOL, outcome) ? outcome : "open";
+}
+
 // Mirrors sim/Doctrine/FightDirector.cs ApplyRamp. Tooltip text only; the kernel decides.
 const NEXT_MILESTONE = Object.freeze([
   "One gun hit earns a Veteran opponent.",
@@ -125,6 +139,12 @@ export function f22ResultInstrument(state, {
   const next = opponentLabel(state.earned_opponent_skill, state.earned_opponent_count);
   const sortieRung = count(state.sortie_rung);
   const earnedRung = count(state.difficulty_rung);
+  const bfmLesson = bfmLessonValue(state.bfm_lesson);
+  const bfmNextLesson = bfmLessonValue(state.bfm_next_lesson);
+  const bfmActive = !!bfmLesson;
+  const bfmOutcome = bfmOutcomeValue(state.bfm_lesson_outcome);
+  const bfmCriterion = String(state.bfm_lesson_criterion ?? "").trim();
+  const bfmCorrection = String(state.bfm_correction ?? "").trim();
 
   const recoveryDetail = [RECOVERY_WORDS[recovery]];
   const fuel = Number(state.fuel_lb);
@@ -137,11 +157,20 @@ export function f22ResultInstrument(state, {
   const nowWords = opponentWords(state.sortie_opponent_skill, state.sortie_opponent_count);
   const nextWords = opponentWords(state.earned_opponent_skill, state.earned_opponent_count);
   const opponentDetail = [];
-  if (nowWords) opponentDetail.push(`This sortie: ${nowWords}${token(state.sortie_opponent_mount) === "UPRATED" ? ", uprated" : ""}.`);
-  if (nextWords) opponentDetail.push(`Next sortie: ${nextWords}${token(state.earned_opponent_mount) === "UPRATED" ? ", uprated" : ""}.`);
-  if (earnedRung !== null) opponentDetail.push(NEXT_MILESTONE[Math.min(3, earnedRung)]);
-  if (earnedRung !== null && sortieRung !== null && earnedRung < sortieRung)
-    opponentDetail.push("Two hitless losses step the opponent down one level.");
+  if (bfmActive) {
+    const opponent = opponentWords(state.bfm_opponent_skill, state.bfm_opponent_count)
+      || nowWords || "opponent unavailable";
+    opponentDetail.push(`Lesson ${bfmLesson} ${BFM_OUTCOME_WORD[bfmOutcome]}.`);
+    opponentDetail.push(`Opponent: ${opponent}.`);
+    opponentDetail.push(`Criterion: ${bfmCriterion || "kernel criterion unavailable"}.`);
+    opponentDetail.push(`Next lesson: ${bfmNextLesson || "none"}.`);
+  } else {
+    if (nowWords) opponentDetail.push(`This sortie: ${nowWords}${token(state.sortie_opponent_mount) === "UPRATED" ? ", uprated" : ""}.`);
+    if (nextWords) opponentDetail.push(`Next sortie: ${nextWords}${token(state.earned_opponent_mount) === "UPRATED" ? ", uprated" : ""}.`);
+    if (earnedRung !== null) opponentDetail.push(NEXT_MILESTONE[Math.min(3, earnedRung)]);
+    if (earnedRung !== null && sortieRung !== null && earnedRung < sortieRung)
+      opponentDetail.push("Two hitless losses step the opponent down one level.");
+  }
 
   const recoverAvailable = phase === "combat"
     && combat === "complete"
@@ -169,17 +198,31 @@ export function f22ResultInstrument(state, {
       clockLabel: clock === "—" ? "Attempt time unavailable" : `Attempt time ${clock}`,
     }),
     opponent: Object.freeze({
-      value: now && next ? `${now} → ${now === next ? "same" : next}` : now || next || "—",
-      changed: !!(now && next && now !== next),
+      value: bfmActive
+        ? `${bfmLesson} ${BFM_OUTCOME_SYMBOL[bfmOutcome]} → ${bfmNextLesson || "—"}`
+        : now && next ? `${now} → ${now === next ? "same" : next}` : now || next || "—",
+      changed: bfmActive
+        ? !!(bfmNextLesson && bfmNextLesson !== bfmLesson)
+        : !!(now && next && now !== next),
       label: opponentDetail.join(" "),
     }),
-    correction: correction || practiceExercise
+    correction: bfmActive
+      ? (bfmOutcome === "failed" && bfmCorrection
+        ? Object.freeze({ text: bfmCorrection, practiceExercise: "", practiceLabel: "" })
+        : null)
+      : correction || practiceExercise
       ? Object.freeze({
         text: correction || "",
         practiceExercise: practiceExercise || "",
         practiceLabel: practiceLabel || "Practice",
       })
       : null,
+    lesson: bfmActive ? Object.freeze({
+      id: bfmLesson,
+      next: bfmNextLesson,
+      outcome: bfmOutcome,
+      criterion: bfmCriterion,
+    }) : null,
     actions: Object.freeze({ again: true, recover: recoverAvailable }),
   });
 }
@@ -218,6 +261,8 @@ export function paintF22ResultInstrument(root, model) {
   const clock = $("f22-clock");
   setText(clock, model.gun.clock);
   setLabel(clock, model.gun.clockLabel);
+  setText($("f22-row-opponent")?.querySelector(".f22-tag"), model.lesson ? "BFM" : "OPP");
+  setLabel($("f22-opponent-info"), model.lesson ? "Lesson and next lesson" : "Opponent and next milestone");
   const opponent = $("f22-opponent");
   setText(opponent, model.opponent.value);
   setLabel(opponent, model.opponent.label);
