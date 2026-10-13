@@ -28,8 +28,10 @@ public sealed class BfmSpawnSafetyTests {
     [Fact]
     public void NullTerrainProtectsLowClimbingSuccessorAndPreservesFlightVector() {
         AircraftState player = Player();
-        Vec3D offset = player.ForwardDir() * 600 - new Vec3D(20, -10, 0);
-        AircraftState successor = BfmLesson.Get(1).Start(player, FlightModel.Sabre);
+        BfmLesson d1 = BfmLesson.Get(1);
+        // Player heading is north (chi 0), so the authored right/up offsets are +X/+Y.
+        Vec3D offset = player.ForwardDir() * -d1.AlongM - new Vec3D(d1.LateralM, d1.VerticalM, 0);
+        AircraftState successor = d1.Start(player, FlightModel.Sabre);
         Assert.True(successor.Position.Y >= 600.0 - 1e-9);
         Assert.Equal(Math.Asin(offset.Y / offset.Length), successor.Gamma, 12);
         Assert.Equal(Math.Atan2(offset.X, offset.Z), successor.Chi, 12);

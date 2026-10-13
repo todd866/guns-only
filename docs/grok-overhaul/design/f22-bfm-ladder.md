@@ -14,11 +14,11 @@ only a new opponent is staged. Never reposition a living aircraft.
 | Set | Position; heading; ΔV | Opponent | Demonstrate |
 |---|---|---|---|
 | O1 | +650/+45/+25; same; −12 m/s | Competent Su-27 | Gun kill |
-| D1 | −600/+20/−10; nose at player; +35 m/s | Veteran Su-27 | Defeat attack; survive 12 s |
+| D1 | −900/+150/−10; nose at player; +30 m/s | Veteran Su-27 | Defeat attack; survive 12 s |
 | O2 | +700/+60/+30; 5° angle-off; −6 m/s | Veteran Su-27 | Gun kill |
 | D2 | −800/+150/+60; nose at player; +20 m/s | Ace Su-27 | Force overshoot; survive 20 s |
 | O3 | +750/+75/+40; 10° angle-off; equal TAS | Ace Su-27 | Gun kill |
-| D3 | −1100/+400/+100; nose at player; +8 m/s | Ace Su-35 | Reverse to gun solution; survive 30 s |
+| D3 | −900/+150/+60; nose at player; +25 m/s | Veteran Su-27 | Reverse to gun solution; survive 30 s |
 | N | Existing reciprocal merge; aircraft corner speeds | Ace Su-27 | Gun kill |
 | A2 | Existing pair merge; aircraft corner speeds | Ace Su-35 pair | Defeat pair; ceiling |
 
@@ -38,8 +38,30 @@ Defensive proof first requires a rear attack within 120–900 m, attacker nose w
 Retain close-combat proof through separation; require survival to the minimum time
 and no opponent solution in the final three seconds. Running straight away cannot
 qualify. A defensive gun kill also passes. D1 should kill passive pilots within
-about 20 s and reward a delayed break in most seeds. Reduced geometric advantage,
-higher skill and stronger defensive objectives require measured validation.
+about 20 s and reward a delayed break in most seeds.
+
+Measured 13 Oct 2026 (`BFM_SWEEP=1`, `BfmLadderSweepReport`, 8 seeds, 220–280 ms
+delayed stick/throttle/trigger pilots; pass = the session's own BFM outcome; 60 s cap,
+N 90 s). Pass counts, median time to pass / to death:
+
+| Lesson | Passive | Taught move | Wrong move |
+|---|---|---|---|
+| O1 | 0/8 | 8/8, 2.7 s | pure pursuit 8/8, 2.6 s |
+| D1 | 0/8, dead 8/8 at 9.0 s | break 8/8, 12.0 s | extend 0/8 (survives) |
+| O2 | 0/8 | 8/8, 3.1 s | 8/8, 3.0 s |
+| D2 | 0/8, dead 8/8 at 11.7 s | break + idle overshoot 7/8, 20.0 s | extend 0/8 |
+| O3 | 0/8, dead 8/8 at 27.9 s | 8/8, 5.1 s | 8/8, 6.8 s |
+| D3 | 0/8, dead 8/8 at 10.0 s | overshoot + reverse 1/8, 13.0 s | extend 0/8 |
+| N | 0/8 | 0/8 in 90 s | 0/8 |
+
+D1 was −600/+20/+35 (Veteran): the shot opened at t=0 from dead six, and the same
+break passed 2–5/8 depending only on stick speed, below D2's 7/8. D3 was −1100/+400/+8
+(Ace Su-35): it slashed past at 100–140° crossing angle and no reversal pilot ever
+reached a gun solution (0/8, also with an Ace Su-27 at the new geometry). Offensive
+pass rate does not fall for this pilot (only time and rounds rise); the gentler HUD
+pilot in `LaterOffensivePairsReduceConversionForTheSameDelayedPilots` gives 8/3/0.
+Neither the harness pilot nor any other automated pilot has gunned a free-manoeuvring
+Ace here, so N and D3 learnability for humans remain unmeasured.
 
 ## Sorties and persistence
 
