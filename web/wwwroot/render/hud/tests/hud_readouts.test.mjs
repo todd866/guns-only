@@ -1119,9 +1119,9 @@ test("the phone fighter's ONE combat row omits what the tapes already show", () 
   const text = readout.combatParts.map((part) => part.text).join(" · ");
   assert.equal(text, "M.63 · COR+8 · 4.4G · V/S 0 · GUN480 · F12K");
   assert.doesNotMatch(text, /KCAS|354|10K/);
-  // Only vertical speed may be dropped to fit; Mach, energy, G and the weapon/fuel state may not.
+  // Vertical speed and ammunition survive before secondary advice and normal fuel.
   assert.deepEqual(readout.combatParts.filter((part) => part.optional).map((part) => part.text),
-    ["V/S 0"]);
+    ["M.63", "COR+8", "4.4G", "F12K"]);
 });
 
 test("without an energy cue the combat row keeps heading for orientation", () => {

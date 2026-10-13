@@ -893,34 +893,53 @@ function assertMobileTacticalHierarchy(data) {
   const drawnRows = Object.fromEntries(
     (rail.drawnRows ?? []).map((row) => [row.key, row.text]),
   );
-  const actualDrawn = drawnRows.actual ?? "";
-  const contextDrawn = drawnRows.context ?? "";
+  const actualDrawn = drawnRows.combat ?? drawnRows.actual ?? "";
+  const contextDrawn = drawnRows.combat ?? drawnRows.context ?? "";
   const directiveDrawn = drawnRows.directive ?? "";
   const helicopter = data.state?.heli_flight_path === true;
   check(name, "mobile rail paints every critical row without ellipsis",
     rail.drawnRows?.length > 0
       && rail.drawnRows.every((row) => !row.text.includes("…")),
     JSON.stringify(rail.drawnRows));
-  check(name, "mobile rail carries actual speed and vertical state",
-    helicopter
-      ? /KIAS/.test(actualDrawn)
-        && /(?:H\d{3}|·\d{3}·)/.test(actualDrawn)
-        && /V\/S/.test(actualDrawn)
-      : /KCAS|KIAS/.test(actualDrawn)
-        && /(?:\d(?:\.\d)?K|FL\d{3})/.test(actualDrawn)
-        && /(?:V\/S|↑|↓)/.test(actualDrawn),
-    actualDrawn);
+  const onCanvas = (rect) => rect && rect.left >= 0 && rect.top >= 0
+    && rect.right <= viewport.width && rect.bottom <= viewport.height;
+  const speedTape = geometry.tapeReadouts?.find((tape) => tape.id === "speed-tape");
+  const altitudeTape = geometry.tapeReadouts?.find((tape) => tape.id === "altitude-tape");
+  const speed = data.state.calibrated_airspeed_kts ?? data.state.indicated_airspeed_kts
+    ?? data.state.speed_kts ?? data.state.true_airspeed_kts;
+  const speedUnit = data.state.calibrated_airspeed_kts != null ? "KCAS"
+    : data.state.indicated_airspeed_kts != null || data.state.speed_kts != null ? "KIAS" : "KTAS";
+  check(name, "mobile speed tape paints authoritative airspeed and units wholly on canvas",
+    onCanvas(speedTape) && speedTape.text === String(Math.round(speed))
+      && speedTape.unit === speedUnit,
+    JSON.stringify(speedTape));
+  check(name, "mobile altitude tape paints authoritative feet wholly on canvas",
+    onCanvas(altitudeTape) && altitudeTape.text === String(Math.round(data.state.alt_ft))
+      && altitudeTape.unit === "ALT FT",
+    JSON.stringify(altitudeTape));
+  check(name, "mobile rail retains vertical state beside the speed/altitude tapes",
+    /(?:V\/S\s*0|[↑↓]\d)/.test(actualDrawn), actualDrawn);
+  if (helicopter) {
+    check(name, "helicopter heading remains explicit",
+      /H\d{3}/.test(actualDrawn), actualDrawn);
+  }
+  if (drawnRows.combat != null) {
+    check(name, "fighter retains one combat row without the old flight/context rows",
+      !drawnRows.actual && !drawnRows.context && !drawnRows.directive
+        && rail.drawnRows.filter((row) => row.key === "combat").length === 1,
+      JSON.stringify(rail.drawnRows));
+  }
   check(name, "mobile rail carries authoritative ammunition in combat",
     helicopter
-      || !/forward-level|gun-overheat|padlock-ground-warning|rapier-mobile-climb-bvr/.test(name)
-      || /GUN\d+/.test(contextDrawn),
+      || !/forward-level|gun-overheat|padlock-ground-warning|rapier-mobile-climb-bvr|assisted-corner/.test(name)
+      || contextDrawn.split(/\s*·\s*/).includes(`GUN${Math.floor(data.state.ammo)}`),
     contextDrawn);
   check(name, "mobile rail stays wholly on canvas",
     rail.x >= 0 && rail.y >= 0
       && rail.x + rail.width <= viewport.width
       && rail.y + rail.height <= viewport.height,
     `box=${rail.x},${rail.y} ${rail.width}x${rail.height}; viewport=${viewport.width}x${viewport.height}`);
-  check(name, "desktop tapes and normal secondary cards stay off mobile",
+  check(name, "desktop secondary cards stay off mobile",
     geometry.desktopFlightChrome === false
       && !geometry.limitsPanel
       && !geometry.systemsPanel
@@ -939,17 +958,21 @@ function assertMobileTacticalHierarchy(data) {
     geometry.ladderRungs.every((rung) => rung.deg % 10 === 0),
     geometry.ladderRungs.map((rung) => rung.deg).join(","));
 
-  if (name.endsWith(":gun-overheat-latched")) {
+  if (data.state.gun_overheat === true) {
     check(name, "mobile weapon line retains the qualified overheat state",
       /GUN\d+/.test(contextDrawn)
         && /OVERHEAT/.test(contextDrawn)
         && geometry.gunHeat?.integrated === true,
       `${contextDrawn}; gunHeat=${JSON.stringify(geometry.gunHeat)}`);
   }
-  if (name.endsWith(":assisted-corner-hold")) {
-    check(name, "portrait assistance mode remains explicit after tape removal",
+  if (data.state.assisted_flight === true) {
+    check(name, "mobile assistance mode remains explicit alongside the tapes",
       /AUTO(?: COR)?\+30/.test(actualDrawn),
       actualDrawn);
+  }
+  if (data.state.high_alpha_recovery === true) {
+    check(name, "high-alpha recovery cue survives simultaneous automation and overheat",
+      actualDrawn.includes("→⊙←"), actualDrawn);
   }
   if (name.endsWith(":rapier-mobile-climb-bvr")) {
     check(name, "BVR target identity, range, closure, fuel, and fast time are explicit",
@@ -983,6 +1006,7 @@ function assertMobileTacticalHierarchy(data) {
 // landscape pass to bound gate time.
 const PORTRAIT_SCENARIOS = new Set([
   "assisted-corner-hold",
+  "assisted-corner-overheat-recovery",
   "cobra-forward-level", "cobra-forward-pitched", "cobra-hover-heading-east",
   "forward-level", "forward-bandit-near-edge", "forward-bandit-offscreen",
   "forward-target-two-offscreen",
@@ -996,6 +1020,7 @@ const PORTRAIT_SCENARIOS = new Set([
 
 const MOBILE_SCENARIOS = new Set([
   "assisted-corner-hold",
+  "assisted-corner-overheat-recovery",
   "cobra-forward-level",
   "cobra-forward-pitched",
   "cobra-hover-heading-east",
@@ -1009,11 +1034,12 @@ const MOBILE_SCENARIOS = new Set([
 async function runViewport(site, browser, {
   label, width, height, subset, profile = "standard", largeText = false,
 }) {
-  const page = await browser.newPage({ viewport: { width, height } });
+  const page = await browser.newPage({ viewport: { width, height },
+    hasTouch: profile !== "standard", isMobile: profile !== "standard" });
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
   await page.goto(
-    `${site.url}render/hud/tests/harness/harness.html?all=1&w=${width}&h=${height}&profile=${profile}`,
+    `${site.url}render/hud/tests/harness/harness.html?all=1&audioQa=silent&w=${width}&h=${height}&profile=${profile}`,
     { waitUntil: "load", timeout: 30000 },
   );
   await page.waitForFunction(() => window.__hudReady === "harness", { timeout: 15000 });
@@ -1067,7 +1093,7 @@ async function runViewport(site, browser, {
 
 async function main() {
   const site = await serveStatic(WWWROOT);
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, channel: "chromium" });
   try {
     await runViewport(site, browser,
       { label: "landscape", width: 1400, height: 1020, subset: null });
@@ -1098,7 +1124,7 @@ async function main() {
       label: "mobile-small-portrait-large-text",
       width: 320,
       height: 568,
-      subset: new Set(["assisted-corner-hold", "rapier-mobile-climb-bvr"]),
+      subset: MOBILE_SCENARIOS,
       profile: "portrait_dual_stick",
       largeText: true,
     });

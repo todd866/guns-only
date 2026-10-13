@@ -183,30 +183,35 @@ export function mobileTacticalReadout(state = {}, display = {}, {
 
   // ONE COMBAT ROW for the phone fighter. Airspeed and altitude are already on the tapes beside
   // the gunsight, so the row carries only what the tapes do not: Mach, the energy cue, G once it
-  // matters, vertical speed, and the weapon/fuel state. Optional parts drop first (right to left
-  // in priority) when the row cannot fit, so it never needs a second line or an ellipsis.
+  // matters, vertical speed, and the weapon/fuel state. Optional readings shed in order:
+  // Mach, manual energy, G, temperature, normal fuel. Keep one row without losing flight truth.
   const highAlpha = highAlphaRecoveryPresentation(state);
   const combatParts = [];
   if (compressionFactor > 1) combatParts.push({ text: `×${compressionFactor}`, optional: false });
   combatParts.push({
     text: mach === null ? "M---" : `M${Math.max(0, mach).toFixed(2).replace(/^0/, "")}`,
-    optional: highAlpha.active,
+    optional: true,
   });
-  // During recovery the stick cue takes priority over Mach/energy (speed is on the tape).
-  if (energyToken) combatParts.push({ text: energyToken, optional: highAlpha.active });
+  // Automation ownership is essential even during recovery. Manual corner/Mach advice can go.
+  if (energyToken) combatParts.push({ text: energyToken, optional: !assistedFlight });
   else {
     combatParts.push({
       text: headingDeg === null
         ? "H---"
         : `H${String(Math.round(((headingDeg % 360) + 360) % 360)).padStart(3, "0")}`,
-      optional: false,
+      optional: state.heli_flight_path !== true,
     });
   }
   if (actualG !== null && Math.abs(actualG) >= 2.5) {
-    combatParts.push({ text: `${actualG.toFixed(1)}G`, optional: false });
+    combatParts.push({ text: `${actualG.toFixed(1)}G`, optional: true });
   }
-  combatParts.push({ text: compactVerticalSpeed(verticalFpm, { condensed }), optional: true });
-  for (const text of combatWeaponParts) combatParts.push({ text, optional: false });
+  // The tapes carry speed/altitude, but no vertical-speed number. Never shed this reading,
+  // ammunition or a latched OVERHEAT to make room for secondary Mach/G/temperature/fuel data.
+  combatParts.push({ text: compactVerticalSpeed(verticalFpm, { condensed }), optional: false });
+  for (const text of combatWeaponParts) combatParts.push({
+    text,
+    optional: /^T\d+%$/.test(text) || /^F[\d.]+K?$/.test(text),
+  });
   if (highAlpha.active) combatParts.push({
     text: highAlpha.symbol, optional: false, reserved: true,
   });

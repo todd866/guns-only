@@ -7,7 +7,7 @@ export function fitCombatRow(parts, width, measure) {
   let text = readings.map((part) => part.text).join(" · ");
   if (!fits(text)) text = readings.map((part) => part.text).join("·");
   while (!fits(text) && readings.some((part) => part.optional)) {
-    readings.splice(readings.findLastIndex((part) => part.optional), 1);
+    readings.splice(readings.findIndex((part) => part.optional), 1);
     text = readings.map((part) => part.text).join("·");
   }
   return { text, reservedText, reservedWidth };

@@ -2651,6 +2651,8 @@ class CombatHud {
   drawVerticalTape({
     value,
     displayValue = value,
+    instrumentId = null,
+    unit = "",
     x,
     step,
     decimals = 0,
@@ -2816,8 +2818,26 @@ class CombatHud {
     ctx.fillStyle = GREEN;
     ctx.font = this.hudFont(13, 700);
     ctx.textAlign = "center";
-    ctx.fillText(displayValueValid ? `${displayValue.toFixed(decimals)}${suffix}` : "---",
-      x, centerY + 0.5);
+    const valueText = displayValueValid ? `${displayValue.toFixed(decimals)}${suffix}` : "---";
+    ctx.fillText(valueText, x, centerY + 0.5);
+    const valueWidth = ctx.measureText(valueText).width;
+    if (unit) {
+      ctx.save();
+      ctx.font = this.hudFont(8, 800);
+      ctx.textBaseline = "middle";
+      this.fillEssentialHudText(unit, x, centerY - halfHeight - 12);
+      ctx.restore();
+    }
+    // Record the actual value paint, not just the layout's proposed tape rectangle.
+    if (this._debug && instrumentId) {
+      (this._debug.tapeReadouts ??= []).push({
+        id: instrumentId, text: valueText, unit,
+        left: Math.min(x - 37, x - valueWidth / 2),
+        right: Math.max(x + 37, x + valueWidth / 2),
+        top: centerY - halfHeight - (unit ? 18 : 0),
+        bottom: centerY + halfHeight,
+      });
+    }
 
     // Trend caret: a vertical line from the current value to where the value is heading (value +
     // trend over the lookahead), clamped to the tape. Amber, so accel/decel reads at a glance.
@@ -6210,6 +6230,8 @@ class CombatHud {
       this.drawVerticalTape({
         value: spd,
         displayValue: display.indicatedDigits,
+        instrumentId: "speed-tape",
+        unit: airdataReadout(frame.state).speedUnit,
         x: mobileTapeInset,
         floor: 0,
         step: 20,
@@ -6221,6 +6243,8 @@ class CombatHud {
       this.drawVerticalTape({
         value: display.altitudeFt,
         displayValue: display.altitudeDigits,
+        instrumentId: "altitude-tape",
+        unit: "ALT FT",
         x: this.width - mobileTapeInset,
         floor: 0,
         step: frame.state.alt_ft > 10000 ? 1000 : 500,
