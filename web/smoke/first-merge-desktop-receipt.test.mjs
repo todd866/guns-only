@@ -16,8 +16,7 @@
 //   kid   — the owner's main player: 450 ms reaction, coarse fixed holds that overshoot, long
 //           trigger bursts whenever the target is roughly ahead.
 // Both pilots run by default (DESKTOP_RECEIPT_PILOTS narrows them). Both need the gimballed-gun
-// auto-aim (imp/c11-hit-autoaim): when the build under test does not publish gun_gimbal_mounted
-// the result is reported as TODO, not a failure, with its numbers in the receipt JSON.
+// auto-aim (imp/c11-hit-autoaim): gun_gimbal_mounted telemetry is required in every run.
 // KID_REACTION_S / KID_ROLL_MS /
 //           KID_PULL_MS vary the child model for sweeps (defaults 0.45 s / 400 ms / 500 ms).
 //
@@ -31,12 +30,9 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { serveStatic } from "../wwwroot/render/hud/tests/harness/static_server.mjs";
 
+import { checkDesktopReceipt, WINDOW_BY_S, HIT_BY_S, KILL_TO_D1_S } from "./first-merge-desktop-acceptance.mjs";
+
 const VIEWPORT = { width: 1280, height: 720 };
-const CONTACT_BY_S = 20;
-const WINDOW_BY_S = 30;
-const WINDOW_MIN_S = 2;
-const HIT_BY_S = 45;
-const KILL_TO_D1_S = 30;
 const COARSE_CONE_DEG = 12;
 const COARSE_RANGE_M = 800;
 const PILOTS = (process.env.DESKTOP_RECEIPT_PILOTS || "human,kid").split(",").filter(Boolean);
@@ -198,7 +194,7 @@ async function flyDesktop(browser, site, pilotName) {
       assisted: globalThis.__gunsState.assisted_flight ?? null,
       lesson: globalThis.__gunsState.bfm_lesson ?? null,
       presenting: globalThis.__gunsState.bandit_presenting ?? null,
-      // The gimballed-gun auto-aim (imp/c11-hit-autoaim) publishes these; absent before it lands.
+      // Required telemetry from the integrated gimballed-gun implementation.
       autoAim: typeof globalThis.__gunsState.gun_gimbal_mounted === "boolean",
     }));
     await frame("launch", 0);
@@ -295,25 +291,10 @@ async function flyDesktop(browser, site, pilotName) {
   return receipt;
 }
 
-function check(r) {
-  const tag = `${r.pilot} (${r.launch?.mission ?? "?"}, end ${r.endReason})`;
-  assert.ok(r.contactS !== null && r.contactS <= CONTACT_BY_S,
-    `${tag}: no target bracket in the forward view within ${CONTACT_BY_S} s (first at ${r.contactS})`);
-  // A kill inside the window ends it early; the window must then have lasted until the hit.
-  const windowNeed = r.firstHitS !== null && r.firstWindowS !== null
-    ? Math.min(WINDOW_MIN_S, Math.max(0, r.firstHitS - r.firstWindowS)) : WINDOW_MIN_S;
-  assert.ok(r.coarseWindowS >= windowNeed - 0.05,
-    `${tag}: coarse gun window ${r.coarseWindowS} s before ${WINDOW_BY_S} s, need ${windowNeed} s`);
-  assert.ok(r.firstHitS !== null && r.firstHitS <= HIT_BY_S,
-    `${tag}: no physical hit within ${HIT_BY_S} s (rounds fired ${r.end?.rounds ?? "?"})`);
-  assert.equal(r.launch?.lesson, "O1", `${tag}: the first sortie is not O1`);
-  assert.ok(r.d1S !== null, `${tag}: no O1 -> D1 hand-over within ${KILL_TO_D1_S} s of the kill (kill ${r.killS})`);
-  assert.deepEqual(r.errors, []);
-}
 
 for (const pilot of PILOTS) {
   test(`first merge on a 1280x720 laptop: ${pilot} keyboard pilot gets contact, a hit, a kill and D1`,
-    { timeout: 480_000 }, async (t) => {
+    { timeout: 480_000 }, async () => {
       assert.ok(process.env.SMOKE_WWWROOT, "SMOKE_WWWROOT must name the published wwwroot");
       await mkdir(captureRoot, { recursive: true });
       const site = await serveStatic(process.env.SMOKE_WWWROOT);
@@ -321,13 +302,7 @@ for (const pilot of PILOTS) {
         args: ["--enable-unsafe-swiftshader", "--mute-audio"] });
       try {
         const r = await flyDesktop(browser, site, pilot);
-        // Measured 2026-10-14: without the gimballed gun neither keyboard pilot converts
-        // reliably (human 1/3, Build 378 0/3); with it both kill 3/3 by ~1.6 s. Until that
-        // branch is in the build under test, report the numbers as TODO instead of failing.
-        if (r.launch?.autoAim !== true) {
-          t.todo("needs the gimballed-gun auto-aim (imp/c11-hit-autoaim); numbers in the receipt JSON");
-        }
-        check(r);
+        checkDesktopReceipt(r);
       } finally { await browser.close(); await site.close(); }
     });
 }
