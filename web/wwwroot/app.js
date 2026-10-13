@@ -1,3 +1,6 @@
+import { highAlphaRecoveryPresentation } from "./render/hud/high_alpha_recovery.js?v=__RELEASE_BUILD__";
+import { attemptDurationSeconds } from "./render/shell/attempt_duration.js?v=__RELEASE_BUILD__";
+import { beginMissionCloudEntry } from "./render/shell/mission_cloud_entry.js?v=__RELEASE_BUILD__";
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
 import {
   createDirectorPersistence,
@@ -231,7 +234,7 @@ import {
   createBootWatchdog,
   resourceProgressCounter,
 } from "./render/shell/boot_watchdog.js?v=__RELEASE_BUILD__";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=__RELEASE_BUILD__";
+import { bootFallbackModel, mountBootFallback, dismissStalledBootFallback } from "./render/shell/boot_fallback.js?v=__RELEASE_BUILD__";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -1518,7 +1521,9 @@ const embeddedBrowser = detectEmbeddedBrowser({
 let bootFallbackShown = false;
 
 function showBootFallback(reason, detail = "") {
-  if (bootFallbackShown) return false;
+  // A real failure supersedes an earlier timeout suspicion.
+  if (bootFallbackShown && (reason === "stalled"
+      || document.querySelector("#shell-fallback")?.dataset.reason !== "stalled")) return false;
   const model = bootFallbackModel({
     reason,
     detection: embeddedBrowser,
@@ -1565,7 +1570,10 @@ const bootWatchdog = createBootWatchdog({
       showBootFallback("stalled");
       return;
     }
-    if (snapshot.state === "ready" && bootScreen) delete bootScreen.dataset.progress;
+    if (snapshot.state === "ready") {
+      if (bootScreen) delete bootScreen.dataset.progress;
+      if (dismissStalledBootFallback(document, readyStart)) bootFallbackShown = false;
+    }
   },
 });
 // A plain interval, deliberately: requestAnimationFrame is throttled or suspended in exactly the
@@ -3186,7 +3194,20 @@ function closeSettings() {
   return true;
 }
 
+let lastHighAlphaRecoveryActive = false;
 function announceFlightState(state) {
+  const recovery = highAlphaRecoveryPresentation(state);
+  if (recovery.active !== lastHighAlphaRecoveryActive) {
+    lastHighAlphaRecoveryActive = recovery.active;
+    sceneCanvas.setAttribute("aria-label", recovery.active
+      ? `Air combat simulation view. ${recovery.label}` : "Air combat simulation view");
+    sceneCanvas.title = recovery.active ? recovery.label : "";
+    if (touchLimitOverride) {
+      touchLimitOverride.setAttribute("aria-label", recovery.active
+        ? recovery.label : "G-limiter and high-alpha override");
+      touchLimitOverride.title = recovery.active ? recovery.label : "";
+    }
+  }
   if (!flightAnnouncer || !state) return;
   const urgentLso = ["WAVEOFF", "CORRECTING"].includes(String(state.lso_severity || ""))
     ? String(state.lso || "") : "";
@@ -4899,7 +4920,7 @@ function renderPauseUi(state = latestState) {
     if (readyConfigLabel) readyConfigLabel.textContent = finished ? "Evidence" : "Aircraft";
     readySortie.textContent = exercise.title;
     readyConfig.textContent = finished
-      ? `${Math.round(Number(state?.simulation_time_s) || 0)} seconds · ${Number(state?.sortie_hits) || 0} hits · ${Number(state?.sortie_rounds_fired) || 0} rounds`
+      ? `${Math.round(attemptDurationSeconds(state) || 0)} seconds · ${Number(state?.sortie_hits) || 0} hits · ${Number(state?.sortie_rounds_fired) || 0} rounds`
       : "F-22A public-data surrogate · full flight and landing physics";
     const key = (action) => controlCodeLabel(playerSettings.bindings[action]);
     const practiceControls = mobileControls
@@ -5882,7 +5903,7 @@ function beginFlight() {
   // starts from its mission-authored terrain radius and restored shadow/scenery policy.
   frameGovernor.reset(activeView);
   resetAdaptiveAiBudget({ recordInitial: true });
-  activeView?.beginCloudBreakEntry();
+  beginMissionCloudEntry(activeView, latestState);
   pauseReasons.delete("ready");
   bridgePauseApplied = false;
   renderPauseUi();

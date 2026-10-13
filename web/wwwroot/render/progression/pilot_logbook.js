@@ -1,3 +1,4 @@
+import { attemptDurationSeconds } from "../shell/attempt_duration.js";
 // Local device history only. No telemetry dependency, credentials, unlocks or aircraft modifiers.
 export const LOGBOOK_KEY = "guns-only.pilot-logbook.v1";
 export const LOGBOOK_LIMIT = 100;
@@ -97,7 +98,7 @@ export function snapshotAttemptResult(state = {}, { abandoned = false, correctio
         ended: "Exercise ended" }[state.practice_status] || "Exercise ended")
       : String(state.sortie_outcome || "Ended").replaceAll("_", " "),
     correction,
-    durationSeconds: Number(state.simulation_time_s),
+    durationSeconds: attemptDurationSeconds(state),
     rounds: Number(state.sortie_rounds_fired), hits: Number(state.sortie_hits),
     kills: Number(state.kill_count),
     recovered: state.runway_recovery_phase_name === "RECOVERED"

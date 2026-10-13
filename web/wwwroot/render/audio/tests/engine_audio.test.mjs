@@ -2177,6 +2177,7 @@ test("RCS ticks, trap snatch, and combat hit/destroy edges fire", async () => {
       updateRcsVoice,
       updateTrapVoice,
       updateCombatCueVoices,
+      boomDelaySeconds,
     } = await freshModule("../event_audio.js", "regime-cues");
     const audio = new FakeAudioContext();
     const voices = createEventVoices(audio, audio.destination);
@@ -2216,12 +2217,20 @@ test("RCS ticks, trap snatch, and combat hit/destroy edges fire", async () => {
     assert.equal(audio.oscillators.length, beforeFalseBoom,
       "a dead primary must not boom while the selected formation survivor is alive");
     const beforeBoom = audio.oscillators.length;
+    const beforeBoomGains = audio.gains.length;
+    audio.currentTime = 2;
     updateCombatCueVoices(voices, audio, {
       hits: 1,
       opponent_alive: false,
       bandit_alive: true,
+      range_m: 686,
     });
     assert.ok(audio.oscillators.length > beforeBoom, "destroy boom");
+    const boomDelay = boomDelaySeconds(686);
+    assert.equal(audio.gains[beforeBoomGains].gain.targets[0].time, 2 + boomDelay,
+      "destroy layers share one range/343 arrival time");
+    assert.equal(audio.gains[beforeBoomGains + 1].gain.targets[0].time, 2 + boomDelay,
+      "destroy boom body layer shares the arrival time");
 
     const contacts = createContactAcousticVoices(audio, audio.destination);
     const selectedSurvivor = updateContactAcousticVoices(contacts, audio, {
@@ -2244,6 +2253,116 @@ test("RCS ticks, trap snatch, and combat hit/destroy edges fire", async () => {
     });
     assert.equal(selectedDestroyed.fighterPresence, 0,
       "selected-target death, not primary liveness, silences the contact");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("combined combat and feel audio owns one delayed destroy boom edge", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const { createEventVoices, updateCombatCueVoices, boomDelaySeconds } = await freshModule(
+      "../event_audio.js", "combined-destroy-boom",
+    );
+    const { createFeelVoices, updateFeelVoices } = await freshModule(
+      "../feel_audio.js", "combined-destroy-boom",
+    );
+    const audio = new FakeAudioContext();
+    const eventVoices = createEventVoices(audio, audio.destination);
+    const feelVoices = createFeelVoices(audio, audio.destination);
+    const alive = { opponent_alive: true, bandit_alive: true, range_m: 343 };
+    const dead = { opponent_alive: false, bandit_alive: false, fight: "Splash", range_m: 343 };
+
+    updateCombatCueVoices(eventVoices, audio, alive);
+    updateFeelVoices(feelVoices, audio, alive, { enabled: true });
+    const beforeBoomSources = audio.sources.length;
+    const beforeBoomOscillators = audio.oscillators.length;
+    const beforeBoomGains = audio.gains.length;
+    audio.currentTime = 2;
+    updateCombatCueVoices(eventVoices, audio, dead);
+    updateFeelVoices(feelVoices, audio, dead, { enabled: true });
+    assert.equal(audio.sources.length - beforeBoomSources, 1,
+      "the combined edge creates one destroy noise source");
+    assert.equal(audio.oscillators.length - beforeBoomOscillators, 1,
+      "the combined edge creates one destroy body oscillator");
+    assert.equal(audio.gains[beforeBoomGains].gain.targets[0].time, 3,
+      "343 m boom arrives one second later");
+    assert.equal(audio.gains[beforeBoomGains + 1].gain.targets[0].time, 3,
+      "both destroy layers share the arrival time");
+
+    const afterFirstBoomSources = audio.sources.length;
+    const afterFirstBoomOscillators = audio.oscillators.length;
+    updateCombatCueVoices(eventVoices, audio, dead);
+    updateFeelVoices(feelVoices, audio, dead, { enabled: true });
+    assert.equal(audio.sources.length, afterFirstBoomSources, "same edge does not replay noise");
+    assert.equal(audio.oscillators.length, afterFirstBoomOscillators,
+      "same edge does not replay body");
+
+    updateCombatCueVoices(eventVoices, audio, alive);
+    updateFeelVoices(feelVoices, audio, alive, { enabled: true });
+    audio.currentTime = 5;
+    const cappedGains = audio.gains.length;
+    updateCombatCueVoices(eventVoices, audio, {
+      ...dead,
+      range_m: 500,
+    });
+    updateFeelVoices(feelVoices, audio, { ...dead, range_m: 500 }, { enabled: true });
+    assert.equal(audio.gains[cappedGains].gain.targets[0].time, 6.45,
+      "500 m arrival uses the existing 1.45 s cap");
+    assert.equal(boomDelaySeconds(500), 1.45);
+
+    const mutedAudio = new FakeAudioContext();
+    const mutedEventVoices = createEventVoices(mutedAudio, mutedAudio.destination);
+    const mutedFeelVoices = createFeelVoices(mutedAudio, mutedAudio.destination);
+    updateCombatCueVoices(mutedEventVoices, mutedAudio, alive);
+    updateFeelVoices(mutedFeelVoices, mutedAudio, alive, { enabled: true });
+    mutedAudio.currentTime = 1;
+    updateCombatCueVoices(mutedEventVoices, mutedAudio, { ...dead, range_m: 900 });
+    updateFeelVoices(mutedFeelVoices, mutedAudio, { ...dead, range_m: 900 }, { enabled: true });
+    const beforeMutedResumeSources = mutedAudio.sources.length;
+    const beforeMutedResumeOscillators = mutedAudio.oscillators.length;
+    assert.equal(mutedEventVoices.pendingDestroyBooms.length, 1);
+    mutedAudio.currentTime = 1.1;
+    updateCombatCueVoices(mutedEventVoices, mutedAudio, dead, { enabled: false });
+    updateFeelVoices(mutedFeelVoices, mutedAudio, dead, { enabled: false });
+    assert.equal(mutedEventVoices.pendingDestroyBooms.length, 0,
+      "muting cancels the pending destroy boom");
+    updateCombatCueVoices(mutedEventVoices, mutedAudio, dead, { enabled: true });
+    updateFeelVoices(mutedFeelVoices, mutedAudio, dead, { enabled: true });
+    assert.equal(mutedAudio.sources.length, beforeMutedResumeSources,
+      "re-enabling audio does not replay muted kill edge");
+    assert.equal(mutedAudio.oscillators.length, beforeMutedResumeOscillators,
+      "re-enabling audio does not replay muted kill body");
+
+    const resetAudio = new FakeAudioContext();
+    const resetVoices = createEventVoices(resetAudio, resetAudio.destination);
+    const resetAlive = {
+      ...alive,
+      player_entity_id: "player-a",
+      bandit_entity_id: "bandit-a",
+      event_stream_id: "stream-a",
+    };
+    const resetDead = {
+      ...dead,
+      player_entity_id: "player-a",
+      bandit_entity_id: "bandit-a",
+      event_stream_id: "stream-a",
+    };
+    updateCombatCueVoices(resetVoices, resetAudio, resetAlive);
+    resetAudio.currentTime = 1;
+    updateCombatCueVoices(resetVoices, resetAudio, resetDead);
+    assert.equal(resetVoices.pendingDestroyBooms.length, 1);
+    resetAudio.currentTime = 1.1;
+    updateCombatCueVoices(resetVoices, resetAudio, {
+      ...resetDead,
+      player_entity_id: "player-b",
+      bandit_entity_id: "bandit-b",
+      event_stream_id: "stream-b",
+    });
+    assert.equal(resetVoices.pendingDestroyBooms.length, 0,
+      "lifecycle identity change cancels the pending destroy boom");
   } finally {
     globalThis.AudioContext = previous;
   }

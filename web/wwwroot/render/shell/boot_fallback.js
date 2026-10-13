@@ -130,3 +130,14 @@ export function mountBootFallback(documentRef, model) {
   root.hidden = false;
   return true;
 }
+
+/** Only a recovered stall may disappear on READY; real load/graphics failures persist. */
+export function dismissStalledBootFallback(documentRef, launchControl) {
+  const root = documentRef?.querySelector?.("#shell-fallback");
+  if (!root || root.hidden || root.dataset.reason !== "stalled") return false;
+  root.hidden = true;
+  root.classList.remove("visible");
+  delete root.dataset.reason;
+  launchControl?.focus({ preventScroll: true });
+  return true;
+}
