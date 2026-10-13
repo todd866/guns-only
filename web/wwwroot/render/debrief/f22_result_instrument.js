@@ -31,7 +31,9 @@ const NEXT_MILESTONE = Object.freeze([
 
 function lost(state) {
   const outcome = token(state?.sortie_outcome);
-  return outcome === "DEFEAT" || outcome === "DRAW";
+  const terminal = token(state?.player_terminal_state);
+  return outcome === "DEFEAT" || outcome === "DRAW"
+    || (terminal !== "" && terminal !== "FLYING");
 }
 
 function physicallyRecovered(state) {
@@ -144,6 +146,7 @@ export function f22ResultInstrument(state, {
   const recoverAvailable = phase === "combat"
     && combat === "complete"
     && state.player_rtb_active === true
+    && token(state.player_terminal_state) === "FLYING"
     && !lost(state);
 
   return Object.freeze({

@@ -4789,7 +4789,8 @@ function renderF22ResultInstrument(state, { finished, combatResult }) {
 const COMBAT_RESULT_HOLD_SECONDS = 2.0;
 function observeCombatResultBoundary(state) {
   if (!state || selectedPracticeExercise || isMultiplayerLane() || !isF22Sortie(state)
-      || state.session_phase !== "ACTIVE" || state.combat_complete !== true
+      || state.session_phase !== "ACTIVE" || state.player_terminal_state !== "FLYING"
+      || state.combat_complete !== true
       || state.player_rtb_active !== true) {
     if (state?.combat_complete !== true) combatCompleteSeenAt = null;
     return;
@@ -4809,7 +4810,8 @@ function observeCombatResultBoundary(state) {
 }
 
 function recoverFromCombatResult() {
-  if (!pauseReasons.has("combat-result")) return false;
+  if (!pauseReasons.has("combat-result")
+      || latestState?.player_terminal_state !== "FLYING") return false;
   recorder.event("lifecycle", "combat_result_recover", {});
   setPauseReason("combat-result", false);
   sceneCanvas.focus({ preventScroll: true });

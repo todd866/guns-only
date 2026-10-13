@@ -7,8 +7,8 @@ import {
 } from "../f22_result_instrument.js";
 
 // Both fixtures are written by sim.Tests F22FiniteSortieTests from the real kernel projection.
-const fixture = async (name) => JSON.parse(
-  await readFile(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
+const fixture = async (name) => ({ player_terminal_state: "FLYING", ...JSON.parse(
+  await readFile(new URL(`./fixtures/${name}`, import.meta.url), "utf8")) });
 
 test("combat boundary: complete combat, recovery open, Recover offered, no landing claimed", async () => {
   const state = { ...(await fixture("f22_combat_complete.json")), sortie_hits: 2, sortie_rounds_fired: 61 };
@@ -87,3 +87,14 @@ test("unknown values render as a dash, never a fabricated number", () => {
   assert.equal(model.combat.value, "");
   assert.equal(model.gun.value, "0/0");
 });
+
+for (const terminal of ["DESTROYED_AIRBORNE", "IMPACTED"]) {
+  test(`physical ${terminal} before final outcome loses recovery and cannot Recover`, async () => {
+    const state = { ...(await fixture("f22_combat_complete.json")),
+      player_terminal_state: terminal, sortie_outcome: "NONE", session_phase: "ACTIVE" };
+    assert.equal(f22RecoveryDisposition(state), "lost");
+    assert.equal(f22ResultInstrument(state, { phase: "combat" }).actions.recover, false);
+    assert.equal(f22CombatDisposition(state), "complete");
+    assert.equal(f22CombatDisposition({ ...state, combat_complete: false }), "lost");
+  });
+}
