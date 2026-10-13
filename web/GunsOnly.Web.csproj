@@ -12,14 +12,11 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.29" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../sim/GunsOnly.Sim.csproj" />
+    <ProjectReference Include="../sim/GunsOnly.Sim.csproj" AdditionalProperties="EmbedOkanaganTruth=false" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource
-      Include="../content/packs/korea-1950s/environment/terrain/central-front.truth"
-      Link="Data/central-front.truth"
-      LogicalName="GunsOnly.Web.Data.KoreaCentralFront.truth"
-      Condition="'$(EmbedKoreaTerrainTruth)' != 'false'" />
+    <!-- Legacy Korea truth remains an exact static pack asset. All current browser beats,
+         including Panther, select Ukraine truth; do not ship this unused grid in WASM. -->
     <EmbeddedResource
       Include="../content/packs/ukraine-modern/environment/terrain-atlas/rapier-site.kernel.truth"
       Link="Data/rapier-site.kernel.truth"

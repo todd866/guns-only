@@ -23,6 +23,11 @@ test('real worker: stalled online, offline, body failure, upgrade and durable in
     ['/index.html', '<!doctype html><title>Offline fixture</title><p>saved shell</p>'],
     ['/app.js', 'globalThis.fixture = true;'],
     ['/content/page.terrain', 'complete terrain bundle'],
+    ['/content/packs/never-requested.truth', 'truth not downloaded'],
+    ['/content/packs/korea-1950s/environment/terrain/central-front.truth', 'korea truth bytes\n'],
+    ['/content/packs/okanagan-fire/environment/okanagan-resorts.osm.json', '{"osm":"resorts"}\n'],
+    ['/content/packs/okanagan-fire/environment/okanagan-central.cdem.json', '{"cdem":"central"}\n'],
+    ['/content/packs/okanagan-fire/environment/okanagan-central.world.json', '{"world":"central"}\n'],
   ]);
   const server = http.createServer((req, res) => {
     if (serverOffline) { req.socket.destroy(); return; }
@@ -44,7 +49,7 @@ test('real worker: stalled online, offline, body failure, upgrade and durable in
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify({ build, assets: [...files].map(([url, body]) => ({ url,
         size: Buffer.byteLength(body), sha256: createHash('sha256').update(body).digest('hex'),
-        core: !url.endsWith('.terrain'),
+        core: !url.endsWith('.terrain') && !url.includes('/packs/'),
       })) }));
     } else {
       const body = files.get(pathname === '/' ? '/index.html' : pathname);
@@ -64,7 +69,7 @@ test('real worker: stalled online, offline, body failure, upgrade and durable in
     if (browserType === webkit) {
       browser = await webkit.launch({ headless: true });
       context = await browser.newContext();
-    } else context = await browserType.launchPersistentContext(profile, { headless: true });
+    } else context = await browserType.launchPersistentContext(profile, { headless: true, channel: "chromium" });
     // WebKit's emulated-offline mode bypasses even constant-response workers on this host.
     // A dead fixture socket tests real loss of transport without that automation defect.
     const setOffline = async value => { if (browser) serverOffline = value; else await context.setOffline(value); };
@@ -79,8 +84,12 @@ test('real worker: stalled online, offline, body failure, upgrade and durable in
     await page.reload();
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
     const fetchText = path => page.evaluate(async path => {
-      const response = await fetch(path);
-      return { status: response.status, text: await response.text(), online: navigator.onLine };
+      try {
+        const response = await fetch(path);
+        return { status: response.status, text: await response.text(), online: navigator.onLine };
+      } catch (error) {
+        return { status: 0, text: '', online: navigator.onLine, error: String(error) };
+      }
     }, path);
     // Navigation mode really goes through the navigation branch, including body consumption.
     for (const mode of ['headers', 'body', '503']) {
@@ -98,6 +107,29 @@ test('real worker: stalled online, offline, body failure, upgrade and durable in
     const before = requests.get('/content/page.terrain');
     assert.equal((await fetchText('/content/page.terrain')).text, terrain.text);
     assert.equal(requests.get('/content/page.terrain'), before, 'saved terrain must not wait for any network');
+
+    // Frozen theatre truth is optional: it is absent from install's core set, then becomes
+    // reusable only after the first online fetch has persisted the exact response bytes.
+    const frozenUrls = [...files.keys()].filter(url => url.includes('/packs/') && !url.endsWith('/never-requested.truth'));
+    for (const frozenUrl of frozenUrls) {
+      assert.equal(await page.evaluate(async url =>
+        !!(await (await caches.open('guns-only-100')).match(url)), frozenUrl), false,
+      'optional truth must not be downloaded during core install');
+      const expectedBytes = files.get(frozenUrl);
+      const first = await fetchText(frozenUrl);
+      assert.equal(first.status, 200);
+      assert.equal(first.text, expectedBytes);
+      await page.waitForFunction(async url => !!(await (await caches.open('guns-only-100')).match(url)), frozenUrl);
+      serverOffline = true;
+      const cached = await fetchText(frozenUrl);
+      assert.equal(cached.status, 200, `${frozenUrl} must be available after caching offline`);
+      assert.equal(cached.text, expectedBytes);
+      serverOffline = false;
+    }
+    serverOffline = true;
+    const uncached = await fetchText('/content/packs/never-requested.truth');
+    assert.equal(uncached.status, 0, 'an uncached optional truth asset must remain unavailable offline');
+    serverOffline = false;
     await setOffline(true);
     await page.reload({ waitUntil: 'domcontentloaded' });
     assert.match(await page.textContent('body'), /saved shell/);
@@ -118,7 +150,7 @@ test('real worker: stalled online, offline, body failure, upgrade and durable in
     const count = rows.length;
     if (!browser) {
       await context.close(); context = null;
-      context = await browserType.launchPersistentContext(profile, { headless: true });
+      context = await browserType.launchPersistentContext(profile, { headless: true, channel: "chromium" });
       page = context.pages()[0];
     }
     await setOffline(true);
@@ -154,8 +186,20 @@ test('real worker: stalled online, offline, body failure, upgrade and durable in
     assert.equal(new URL(await page.evaluate(() => navigator.serviceWorker.controller.scriptURL)).searchParams.get('v'), initialBuild,
       'a prepared update must not take over an in-flight old client');
     await page.close();
-    // No controlled documents remain; allow the browser's activation task to run.
-    await new Promise(resolve => setTimeout(resolve, 250));
+    // Wait in the worker itself: opening another controlled document after an arbitrary
+    // 250 ms can pin the old worker again on a busy host/full Chromium.
+    if (!browser) {
+      const replacement = context.serviceWorkers().find(worker => worker.url().endsWith(`v=${nextBuild}`));
+      assert.ok(replacement);
+      await replacement.evaluate(async () => {
+        const deadline = Date.now() + 15_000;
+        while (self.registration.active?.state !== 'activated'
+          || self.registration.active?.scriptURL !== self.location.href) {
+          if (Date.now() > deadline) throw new Error('replacement worker did not activate');
+          await new Promise(resolve => setTimeout(resolve, 25));
+        }
+      });
+    } else await new Promise(resolve => setTimeout(resolve, 250));
     page = await context.newPage();
     await page.goto(origin);
     await page.waitForFunction(build => navigator.serviceWorker.controller?.scriptURL.endsWith(`v=${build}`), nextBuild);

@@ -73,8 +73,8 @@ public sealed class OkanaganIncident
 
     static IReadOnlyDictionary<OkanaganSortieType, OkanaganIncident> Load()
     {
-        using Stream worldStream = typeof(OkanaganIncident).Assembly.GetManifestResourceStream("GunsOnly.Sim.Data.OkanaganCentral.world.json")!;
-        using Stream resortStream = typeof(OkanaganIncident).Assembly.GetManifestResourceStream("GunsOnly.Sim.Data.OkanaganResorts.osm.json")!;
+        using Stream worldStream = OkanaganTruth.Open("GunsOnly.Sim.Data.OkanaganCentral.world.json");
+        using Stream resortStream = OkanaganTruth.Open("GunsOnly.Sim.Data.OkanaganResorts.osm.json");
         using JsonDocument world = JsonDocument.Parse(worldStream), resorts = JsonDocument.Parse(resortStream);
         JsonElement Resort(string id) => resorts.RootElement.GetProperty("resorts").EnumerateArray().Single(r => r.GetProperty("id").GetString() == id);
         return new Dictionary<OkanaganSortieType, OkanaganIncident> {

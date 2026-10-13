@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 
 namespace GunsOnly.Sim.Okanagan;
@@ -11,7 +10,8 @@ namespace GunsOnly.Sim.Okanagan;
 public static class OkanaganCdem
 {
     const string ResourceName = "GunsOnly.Sim.Data.OkanaganCentral.cdem.json";
-    static readonly Grid Data = Load();
+    static Grid? _data;
+    static Grid Data => _data ??= Load();
 
     public static double SampleRawHeightM(in Vec3D position)
     {
@@ -62,9 +62,7 @@ public static class OkanaganCdem
 
     static Grid Load()
     {
-        using Stream stream = Assembly.GetExecutingAssembly()
-            .GetManifestResourceStream(ResourceName)
-            ?? throw new InvalidOperationException($"Missing embedded Okanagan CDEM {ResourceName}.");
+        using Stream stream = OkanaganTruth.Open(ResourceName);
         using JsonDocument document = JsonDocument.Parse(stream);
         return ReadGrid(document.RootElement);
     }

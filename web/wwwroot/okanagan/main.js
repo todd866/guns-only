@@ -1,3 +1,4 @@
+import { loadOkanaganTruth } from "../render/okanagan/okanagan_truth.js?v=__RELEASE_BUILD__";
 import { createBrowserPilotLogbook } from "../render/progression/pilot_logbook.js";
 import { installDisposedPageRestore } from "../render/onboarding/disposed_page_restore.js";
 const pilotLogbook = createBrowserPilotLogbook();
@@ -1072,11 +1073,8 @@ bindFlightStick(document.querySelector("#right-stick"), (value) => { rightStick 
 
 async function boot() {
   resize();
-  const [terrainData, worldData, resortData] = await Promise.all([
-    fetch("/content/packs/okanagan-fire/environment/okanagan-central.cdem.json").then((response) => response.json()),
-    fetch("/content/packs/okanagan-fire/environment/okanagan-central.world.json").then((response) => response.json()),
-    fetch("/content/packs/okanagan-fire/environment/okanagan-resorts.osm.json").then((response) => response.json()),
-  ]);
+  const truth = await loadOkanaganTruth();
+  const [terrainData, worldData, resortData] = truth.data;
   worldData.resorts = resortData.resorts;
   navigationPlaces = okanaganNavigationPlaces(worldData);
   const sceneryTextures = await loadOkanaganSceneryTextures(terrainData, quality);
@@ -1086,7 +1084,10 @@ async function boot() {
   const runtimeAccessor = await waitFor(() => globalThis.getDotnetRuntime, "Fire Boss bridge unavailable");
   const { getAssemblyExports } = await runtimeAccessor(0);
   const assemblyExports = await getAssemblyExports("GunsOnly.Web");
-  bridge = assemblyExports.GunsOnly.Web.OkanaganWebBridge;
+  const loadedBridge = assemblyExports.GunsOnly.Web.OkanaganWebBridge;
+  loadedBridge.LoadTruth(...truth.texts);
+  // Publish the launch handle only after the kernel has accepted all three exact payloads.
+  bridge = loadedBridge;
   status.textContent = "Ready · choose a sortie";
   status.dataset.ready = "true";
   const requested = new URLSearchParams(location.search).get("sortie");

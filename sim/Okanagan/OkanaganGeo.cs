@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 
 namespace GunsOnly.Sim.Okanagan;
@@ -13,7 +12,8 @@ public static class OkanaganGeo
     const double MetresPerLatitudeDegree = 111_320.0;
     static readonly double MetresPerLongitudeDegree =
         MetresPerLatitudeDegree * Math.Cos(AnchorLatitudeDeg * Math.PI / 180.0);
-    static readonly LakeGeometry Lake = LoadLake();
+    static LakeGeometry? _lake;
+    static LakeGeometry Lake => _lake ??= LoadLake();
     sealed record LakeGeometry((double Longitude, double Latitude)[] Shoreline,
         (double Longitude, double Latitude)[][] Islands);
 
@@ -100,8 +100,7 @@ public static class OkanaganGeo
     static LakeGeometry LoadLake()
     {
         const string resourceName = "GunsOnly.Sim.Data.OkanaganCentral.world.json";
-        using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"Missing embedded Okanagan world {resourceName}.");
+        using Stream stream = OkanaganTruth.Open(resourceName);
         using JsonDocument document = JsonDocument.Parse(stream);
         JsonElement lake = document.RootElement.GetProperty("lake");
         static (double Longitude, double Latitude)[] ReadRing(JsonElement ring) => ring.EnumerateArray()
