@@ -2335,6 +2335,18 @@ public sealed class ReactiveBandit :
             ? _maximumThrottle
             : System.Math.Min(_maximumThrottle, 0.84);
         double maxG = AvailableAcquireG(safetyReserve: false);
+        // A TURNING FIGHT IS WON AT CORNER SPEED, NOT ON THE BURNER. Every candidate used to carry
+        // cruise or full burner, so once the chase latch lit the burner the Su-27 accelerated to
+        // ~360 m/s and circled the player for minutes 1-2 km out: at 4.8 G that is a 2.8 km turn
+        // radius and 7 deg/s, the same rate as the fast player, so the angles never closed
+        // (fight audit trace r0/Competent/seed 0, 2026-10-13). The max-G pull on the lead may
+        // instead bleed toward corner speed with the throttle back; the score decides whether
+        // that beats the burner candidates.
+        double noseOffRad = System.Math.Acos(System.Math.Clamp(
+            State.ForwardDir().Dot(lineOfSight), -1.0, 1.0));
+        double pullThrottle = State.Speed > _highSpeedMps && noseOffRad > CornerTurnNoseOffRad
+            ? System.Math.Min(_maximumThrottle, CornerTurnThrottle)
+            : fastThrottle;
 
         // Full 3D pursuit uses the UNCLAMPED lift-vector-on-target roll: the bank that places the
         // lift vector on the aim point may exceed 90 deg (rolling toward inverted) so the ace can
@@ -2386,7 +2398,7 @@ public sealed class ReactiveBandit :
         // Fixed storage is owned by the controller and reused plan after plan. The candidate order
         // is the historical declaration order because it is also the deterministic tie-break.
         _lookaheadCandidates[0] =
-            new(maxG, bankOnLead, fastThrottle, 0.0);
+            new(maxG, bankOnLead, pullThrottle, 0.0);
         _lookaheadCandidates[1] =
             new(System.Math.Min(maxG, 4.0), bankOnLead, cruiseThrottle, 0.0);
         _lookaheadCandidates[2] =
@@ -2718,6 +2730,10 @@ public sealed class ReactiveBandit :
     /// Below this closure the bandit is not catching the player and lights the burner.
     const double ChaseClosureMps = 30.0;
     const double ChaseStallSeconds = 3.0;
+    /// Target this far off the nose is a turning fight, where speed above corner costs turn rate.
+    const double CornerTurnNoseOffRad = 30.0 * System.Math.PI / 180.0;
+    /// Throttle for the max-G pull while bleeding toward corner speed.
+    const double CornerTurnThrottle = 0.30;
     double _chaseStallSeconds;
     double _chaseStallCheckedAt;
 
