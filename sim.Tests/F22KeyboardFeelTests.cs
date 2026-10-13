@@ -160,11 +160,12 @@ public class F22KeyboardFeelTests {
 
     [Fact]
     public void AHumanTapIsAFineCorrection() {
-        // 100 ms is a quick human key tap. Before (bang-bang): 8.5 deg bank / 2.2 deg nose.
+        // 100 ms is a quick human key tap. Before (bang-bang): 8.5 deg bank / 2.2 deg nose;
+        // now about half of each.
         var roll = Tap(GKey.RollRight, 100);
         var pull = Tap(GKey.PullUp, 100);
-        Assert.InRange(roll.bankDeg, 1.0, 3.0);
-        Assert.InRange(pull.pitchDeg, 0.4, 1.2);
+        Assert.InRange(roll.bankDeg, 2.0, 5.0);
+        Assert.InRange(pull.pitchDeg, 0.6, 1.5);
         Assert.True(Tap(GKey.RollRight, 100, p: BangBang).bankDeg > 7.0, "sensitivity: old law");
         Assert.True(Tap(GKey.PullUp, 100, p: BangBang).pitchDeg > 1.8, "sensitivity: old law");
         // Monotonic: a longer press always gives a larger correction.

@@ -985,12 +985,15 @@ public static class FlightModel {
         GenericAfterburnerFuelFlowLbPerMinute: 650.0,
         // Keyboard stick travel (package a8, 2026-10-13, keyboard is the core experience). Measured
         // at 354 KCAS / 10,000 ft (F22KeyboardFeelTests): the bang-bang key turned a 100 ms tap
-        // into 8.5 deg of bank and 2.2 deg of nose, too coarse to place a pipper. A 35 % onset and
-        // quadratic walk-out make that tap 2.8 deg / 1.0 deg. Holds still reach full aileron
-        // (~197 deg/s peak) and the protected pull (8.8 G 0.99 s vs 0.97 s). Cost: a full-key
-        // -60/+60 reversal takes 1.59 s instead of 1.48 s, inside the Build 73 pilot corridor.
-        KeyboardStickOnsetFraction: 0.35,
-        KeyboardRollRampSeconds: 0.25,
+        // into 8.5 deg of bank and 2.2 deg of nose, too coarse to place a pipper. A half-stick
+        // onset and quadratic walk-out make that tap 4.1 deg / 1.2 deg. Holds still reach full
+        // aileron (~197 deg/s peak) and the protected pull (8.8 G 1.00 s vs 0.97 s); a full-key
+        // -60/+60 reversal takes 1.55 s instead of 1.48 s. A 35 % onset was finer still (2.8 /
+        // 1.0 deg) but cost the coarse-holding child pilot most of his opening kills in the
+        // browser receipt (2/7 flights; 3/4 at this setting; bang-bang 7/7). The owner's main
+        // player is a child, so that decided it.
+        KeyboardStickOnsetFraction: 0.5,
+        KeyboardRollRampSeconds: 0.2,
         KeyboardPitchRampSeconds: 0.15);
 
     /// F-35C PUBLIC-DATA CARRIER SURROGATE. The public anchors are the programme card's
