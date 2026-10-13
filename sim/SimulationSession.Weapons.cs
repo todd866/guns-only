@@ -318,6 +318,10 @@ public sealed partial class SimulationSession {
             RecordHitsOnPlayer(_opponentGun.HitsThisStep);
     }
 
+    bool PlayerGunPathClear(Vec3D muzzle, Vec3D velocity, double life) =>
+        GunFireSafety.PathClear(muzzle, velocity, life, _terrainSurface,
+            _reliefFighter is { } relief ? relief.State : null);
+
     void StepRetiredOpponentGuns(in AircraftState playerState) {
         for (int index = _retiredOpponentGuns.Count - 1; index >= 0; index--) {
             RetiredOpponentGun retired = _retiredOpponentGuns[index];
