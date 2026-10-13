@@ -49,27 +49,31 @@ public readonly record struct BfmLesson(
             ? new Vec3D(towardPlayer.X, 0.0, towardPlayer.Z).Normalized()
             : new Vec3D(System.Math.Sin(player.Chi + AngleOffDeg * System.Math.PI / 180.0),
                 0.0, System.Math.Cos(player.Chi + AngleOffDeg * System.Math.PI / 180.0));
-        position = TerrainAwarePosition(position, initialHeading, terrain);
-        towardPlayer = player.Position - position;
         double chi = Defensive ? System.Math.Atan2(towardPlayer.X, towardPlayer.Z)
             : player.Chi + AngleOffDeg * System.Math.PI / 180;
         double gamma = Defensive ? System.Math.Asin(towardPlayer.Y / towardPlayer.Length) : player.Gamma;
-        return new(position, System.Math.Max(80, player.Speed + ClosureMps), gamma, chi, 0, air.MassKg);
+        var authored = new AircraftState(position, System.Math.Max(80, player.Speed + ClosureMps),
+            gamma, chi, 0, air.MassKg);
+        position = TerrainAwarePosition(authored, terrain);
+        return authored with { Position = position };
     }
 
-    static Vec3D TerrainAwarePosition(in Vec3D authoredPosition, in Vec3D flightDirection,
+    static Vec3D TerrainAwarePosition(in AircraftState authored,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain) {
-        if (terrain is null) return authoredPosition;
-        Vec3D pathEnd = authoredPosition + flightDirection * InitialFlightPathM;
+        Vec3D pathEnd = authored.Position + authored.ForwardDir() * InitialFlightPathM;
+        double clearance;
         try {
-            double clearance = GunsOnly.Sim.Environment.TerrainQueries.MinimumClearanceM(
-                terrain, authoredPosition, pathEnd, maximumHorizontalStepM: 60.0);
-            if (clearance >= TerrainSpawnClearanceM) return authoredPosition;
-            return authoredPosition with { Y = authoredPosition.Y
-                + TerrainSpawnClearanceM - clearance };
+            clearance = terrain is null
+                ? Math.Min(authored.Position.Y, pathEnd.Y)
+                : GunsOnly.Sim.Environment.TerrainQueries.MinimumClearanceM(
+                    terrain, authored.Position, pathEnd, maximumHorizontalStepM: 60.0);
         } catch (ArgumentOutOfRangeException) {
-            return authoredPosition;
+            // Missing streamed terrain still has the sea-level datum as its conservative floor.
+            clearance = Math.Min(authored.Position.Y, pathEnd.Y);
         }
+        if (clearance >= TerrainSpawnClearanceM) return authored.Position;
+        return authored.Position with { Y = authored.Position.Y
+            + TerrainSpawnClearanceM - clearance };
     }
 
 }
