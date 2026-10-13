@@ -1,3 +1,4 @@
+import { highAlphaRecoveryPresentation } from "./render/hud/high_alpha_recovery.js?v=__RELEASE_BUILD__";
 import { attemptDurationSeconds } from "./render/shell/attempt_duration.js?v=__RELEASE_BUILD__";
 import { beginMissionCloudEntry } from "./render/shell/mission_cloud_entry.js?v=__RELEASE_BUILD__";
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
@@ -3192,7 +3193,20 @@ function closeSettings() {
   return true;
 }
 
+let lastHighAlphaRecoveryActive = false;
 function announceFlightState(state) {
+  const recovery = highAlphaRecoveryPresentation(state);
+  if (recovery.active !== lastHighAlphaRecoveryActive) {
+    lastHighAlphaRecoveryActive = recovery.active;
+    sceneCanvas.setAttribute("aria-label", recovery.active
+      ? `Air combat simulation view. ${recovery.label}` : "Air combat simulation view");
+    sceneCanvas.title = recovery.active ? recovery.label : "";
+    if (touchLimitOverride) {
+      touchLimitOverride.setAttribute("aria-label", recovery.active
+        ? recovery.label : "G-limiter and high-alpha override");
+      touchLimitOverride.title = recovery.active ? recovery.label : "";
+    }
+  }
   if (!flightAnnouncer || !state) return;
   const urgentLso = ["WAVEOFF", "CORRECTING"].includes(String(state.lso_severity || ""))
     ? String(state.lso || "") : "";
