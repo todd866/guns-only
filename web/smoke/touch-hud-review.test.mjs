@@ -76,3 +76,39 @@ test("390px BVR/heat/G header preserves weapons and fuel and leaves contact data
     }
   });
 });
+
+test("selected target data avoids published controls along the portrait lower edge", async () => {
+  await withHud({ width: 390, height: 844 }, async (page) => {
+    for (const x of [60, 195, 330]) {
+      for (const y of [680, 810]) {
+        const result = await page.evaluate(({ x, y }) => {
+          const controls = [
+            { id: "padlock-target", left: 16, right: 122, top: 668, bottom: 712 },
+            { id: "flight-stick", left: 232, right: 374, top: 682, bottom: 824 },
+          ];
+          reviewHud.setOccupiedRects(controls);
+          // Project a real world point onto the requested pixel using the fixture camera.
+          const point = reviewFrame.banditPosition.clone().set(
+            x / 390 * 2 - 1, 1 - y / 844 * 2, 0.5).unproject(reviewFrame.camera);
+          point.sub(reviewFrame.camera.position).normalize().multiplyScalar(600)
+            .add(reviewFrame.camera.position);
+          reviewFrame.banditPosition.copy(point);
+          reviewFrame.state.range_m = 600;
+          reviewHud.draw(reviewFrame);
+          return { line: __HUD_GEOMETRY.targetDataLine, controls,
+            target: __HUD_GEOMETRY.banditPx };
+        }, { x, y });
+        await screenshot(page, `lower-edge-${x}-${y}`);
+        assert.ok(Math.abs(result.target.x - x) < 0.1 && Math.abs(result.target.y - y) < 0.1,
+          `expected ${x},${y}; projected ${JSON.stringify(result.target)}`);
+        const line = result.line;
+        assert.ok(line, "the selected target must retain its range/closure line");
+        for (const rect of result.controls) {
+          assert.ok(!(line.x < rect.right && line.x + line.width > rect.left
+            && line.y < rect.bottom && line.y + line.height > rect.top),
+          `${x},${y}: ${JSON.stringify(line)} overlaps ${rect.id}`);
+        }
+      }
+    }
+  });
+});

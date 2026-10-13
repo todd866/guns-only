@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { targetDataLineOwner, targetDataLinePlacement } from "../target_data_line.js";
+import { rectsIntersect } from "../occupied_area.js";
 
 test("the data line rides the bracket of the selected gun target", () => {
   // The primary owns the line by default and for older kernels without the field.
@@ -50,7 +51,7 @@ test("with no room below the line goes above, and never leaves the gutter", () =
   assert.equal(placed.side, "above");
   assert.ok(placed.y + PORTRAIT.textHeight <= 690 - PORTRAIT.size);
   const wide = targetDataLinePlacement({ ...PORTRAIT, textWidth: 400, projection: { x: 195, y: 400 } });
-  assert.ok(wide.x - 4 >= PORTRAIT.gutterLeft);
+  assert.equal(wide, null, "an oversized plate must not spill across the tapes");
 });
 
 test("the data line steps around the padlock attitude inset", () => {
@@ -65,4 +66,30 @@ test("the data line steps around the padlock attitude inset", () => {
   assert.notEqual(placed.side, "left");
   assert.ok(placed.x >= 514 + 4 || placed.x + 140 + 4 <= 330 || placed.y >= 300
     || placed.y + 17 <= 150);
+});
+
+test("lower-edge targets clear controls even when all four preferred positions are blocked", () => {
+  const avoid = [
+    { left: 16, right: 178, top: 668, bottom: 712 },
+    { left: 190, right: 374, top: 640, bottom: 828 },
+    { left: 16, right: 178, top: 614, bottom: 658 },
+  ];
+  for (const x of [20, 60, 110, 195, 280, 370]) {
+    for (const y of [650, 680, 706, 820]) {
+      const placed = targetDataLinePlacement({ ...PORTRAIT, projection: { x, y }, avoid });
+      assert.ok(placed, `no line for ${x},${y}`);
+      const rect = { left: placed.x - 4, right: placed.x + 124,
+        top: placed.y, bottom: placed.y + 17 };
+      assert.ok(rect.left >= 89 && rect.right <= 301 && rect.top >= 120 && rect.bottom <= 706);
+      assert.ok(avoid.every((control) => !rectsIntersect(rect, control)),
+        `line at ${JSON.stringify(rect)} covers controls for target ${x},${y}`);
+    }
+  }
+});
+
+test("a fully occupied gutter has no safe placement", () => {
+  const placed = targetDataLinePlacement({ ...PORTRAIT, projection: { x: 195, y: 680 },
+    avoid: [{ left: 89, right: 301, top: 120, bottom: 706 }],
+  });
+  assert.equal(placed, null, "never fall back to drawing through an occupied control");
 });

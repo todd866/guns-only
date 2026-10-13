@@ -1396,7 +1396,7 @@ class CombatHud {
     const layout = this.getLayout();
     // Clamp against the TAPES as well as targetSafe: on a phone targetSafe is only the safe-area
     // inset, which let the left fallback print the range across the airspeed box.
-    const { x: textX, y: textY } = targetDataLinePlacement({
+    const placement = targetDataLinePlacement({
       projection,
       size,
       textWidth,
@@ -1404,8 +1404,13 @@ class CombatHud {
       safe,
       gutterLeft: layout.tapeInset + layout.tapeHalfWidth + 6,
       gutterRight: this.width - layout.tapeInset - layout.tapeHalfWidth - 6,
-      avoid: this._lastPadlockInsetRect ? [this._lastPadlockInsetRect] : [],
+      avoid: [
+        ...(this._lastPadlockInsetRect ? [this._lastPadlockInsetRect] : []),
+        ...(this.touchMode ? this.occupiedRects ?? [] : []),
+      ],
     });
+    if (!placement) return;
+    const { x: textX, y: textY } = placement;
     // Share the per-frame contact-label registry so the "TARGET 1 · SELECTED" caption steps
     // clear when the line has had to go below the bracket.
     this._contactLabelSlots?.push({
