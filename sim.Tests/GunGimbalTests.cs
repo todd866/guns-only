@@ -253,6 +253,31 @@ public sealed class GunGimbalTests {
         Assert.False(GunFireSafety.PathClear(muzzle, velocity, 1.0,
             new FlatTerrain(2000.0), friendly: null));
     }
+    sealed class ProductionResolutionTerrain(bool ridge = false) : ITerrainSurface {
+        public TerrainBounds Bounds => new(-10000, 10000, -10000, 10000);
+        public double HorizontalResolutionM => 32;
+        public double MaximumHeightM => 369.6;
+        public int Queries { get; private set; }
+        public bool TrySample(double eastM, double northM, out TerrainSample sample) {
+            Queries++;
+            sample = new TerrainSample(ridge && northM > 2000 && northM < 2032 ? 150 : 20,
+                new Vec3D(0, 1, 0));
+            return Bounds.Contains(eastM, northM);
+        }
+    }
+
+    [Fact]
+    public void FullM61LifeAtProductionResolutionClearsLowGroundButDetectsDistantRidge() {
+        var clear = new ProductionResolutionTerrain();
+        var ridge = new ProductionResolutionTerrain(ridge: true);
+        Vec3D muzzle = new(0, 100, 0);
+        Vec3D velocity = new(0, 0, 1230); // M61 + 200 m/s aircraft translation
+        Assert.True(GunFireSafety.PathClear(muzzle, velocity, 2, clear));
+        Assert.InRange(clear.Queries, 309, 4097);
+        Assert.False(GunFireSafety.PathClear(muzzle, velocity, 2, ridge));
+        Assert.True(ridge.Queries > 250, "must reach the ridge beyond the old 256-sample budget");
+    }
+
     [Theory]
     [InlineData(0, 12)]
     [InlineData(1, 12)]
