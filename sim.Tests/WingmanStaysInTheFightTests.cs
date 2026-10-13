@@ -320,7 +320,10 @@ public sealed class WingmanStaysInTheFightTests {
         var s = FlySolo(180.0);
         Assert.NotEmpty(s);
         var alive = s.Where(x => x.SessionActive && x.PlayerAlive).ToList();
-        Assert.True(alive.Count >= 60,
+        // A primary that guns the fixture player down inside the window has been judged: the
+        // opt-in ramp opponent (a7) now converts this opening at ~53-58 s instead of ~68 s.
+        bool shotDownByThePrimary = s.Any(x => !x.PlayerAlive) && alive.Count > 0 && alive[^1].Rounds > 0;
+        Assert.True(alive.Count >= 60 || shotDownByThePrimary,
             $"the fixture only kept the session alive {alive.Count} sampled seconds — the "
             + "contract judged nothing");
         Assert.True(alive[^1].Rounds > 0,
