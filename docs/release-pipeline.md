@@ -89,6 +89,12 @@ three minutes. `GUNS_DEPLOY_SKIP_FRAME_GATE=1` skips it with a warning; use that
 emergency rollback, never to get a regression out. First recorded run (Apple M5, Build 372 +
 practice-smoke fix): 59.95 / 59.98 fps, p95 17.3 ms, budget misses 0.06% / 0.03%.
 
+The performance browser blocks service workers so the measured low-level leg must perform
+real terrain range reads. Offline priming would otherwise prepare whole pages before the leg
+and remove the streaming workload. Published browser smoke separately checks automatic worker
+activation, cached terrain, and a fully offline app reload; all performance thresholds remain
+unchanged.
+
 ## The merge-commit problem
 
 `gh pr merge --merge` lands a **new** commit. Verify ran on the PR head; the merge commit that
