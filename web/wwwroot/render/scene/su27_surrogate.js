@@ -25,18 +25,20 @@ const ORIGIN_STATION_M = 11.2;
 const z = (station) => station - ORIGIN_STATION_M;
 const HALF_SPAN_M = SU27_SPAN_M / 2;
 
-// Two-tone grey-blue: a mid-tone upper surface reads darker than the sky and lighter than
-// forest/terrain; the lighter underside keeps the belly from collapsing to black when backlit.
+// Two-tone blue-grey in the darker Flanker scheme. Measured in the real game camera, the light
+// Su-27 factory grey sat within ~60 luminance levels of the hazy sky and pale terrain at 1.5 km;
+// this keeps the airframe a dark mid-tone against both while the lighter radome, dark intakes and
+// nozzles still carry aspect.
 const COLOR = Object.freeze({
-  upper: new THREE.Color(0x71859a),
-  lower: new THREE.Color(0x9fb1c1),
-  radome: new THREE.Color(0xb8c1c6),
-  dielectric: new THREE.Color(0x3b4650),
-  intake: new THREE.Color(0x0b0e10),
-  nozzle: new THREE.Color(0x4d4740),
-  nozzleInner: new THREE.Color(0x15110e),
-  fin: new THREE.Color(0x667b90),
-  canopyFar: new THREE.Color(0x1c2a33),
+  upper: new THREE.Color(0x4a5b6a),
+  lower: new THREE.Color(0x667886),
+  radome: new THREE.Color(0x9aa4a9),
+  dielectric: new THREE.Color(0x2b343b),
+  intake: new THREE.Color(0x07090a),
+  nozzle: new THREE.Color(0x3d3833),
+  nozzleInner: new THREE.Color(0x100d0b),
+  fin: new THREE.Color(0x435466),
+  canopyFar: new THREE.Color(0x14212a),
 });
 
 function superellipseOffset(theta, exponent) {
