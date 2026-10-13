@@ -60,30 +60,84 @@ public class SparringPartnerTests {
         Assert.False(bandit.Presenting);
     }
 
-    /// Production rung 0 graduates on proximity again: four seconds inside 1.5 km is "you are in
-    /// the fight". Build 370 had removed that latch for rung 0 so the opener stayed a non-firing
-    /// lead until tracked; the owner's verdict on that was "boring".
-    [Fact]
-    public void ProductionRungZeroGraduatesOnProximity() {
+    /// Production rung 0 opens on a LEAD (docs/grok-overhaul/design/f22-opening.md), and its
+    /// present keeps all three bounded exits. The reciprocal latch radius (1.5 km) would fire on
+    /// the lead's 650 m spawn whatever the player did, so the lead restates "proximity" as an
+    /// overrun: four seconds inside 300 m starts the fight. Build 370's never-ending present is
+    /// still impossible: the 12 s cap is pinned below.
+    static SimulationSession ProductionRungZero() {
         var session = new SimulationSession();
         session.StartBeat(() => Beats.ModernVisualMerge());
         session.Begin();
-        Assert.True(session.Bandit.Presenting);
-        // The spawn is 1 km ahead, so the proximity latch (4 s inside 1.5 km) must fire well before
-        // the 12 s cap could; graduating at the cap would mean the latch is still off.
-        double limitS = ReactiveBandit.PresentProximitySeconds + 2.0;
+        var merge = Assert.IsType<NeutralMergeBandit>(session.Bandit);
+        Assert.Equal(OpeningPresentation.Lead, merge.Presentation);
+        Assert.True(merge.Presenting);
+        return session;
+    }
+
+    static double HoldStation(SimulationSession session, double trailM, double limitS,
+        double aboveM = 0.0) {
         int ticks = (int)(limitS * AircraftSim.TickHz);
-        for (int i = 0; i < ticks && session.Bandit.Presenting; i++) {
-            // Hold station 1 km in trail: inside 1.5 km, outside the 900 m tracking funnel.
+        int i = 0;
+        for (; i < ticks && session.Bandit.Presenting; i++) {
             AircraftState lead = session.Bandit.State;
             session.Player.AdoptExternalKinematics(lead with {
-                Position = lead.Position - lead.ForwardDir() * 1_000.0 });
+                Position = lead.Position - lead.ForwardDir() * trailM + new Vec3D(0.0, aboveM, 0.0) });
             session.Advance(Dt);
         }
-        Assert.False(session.Bandit.Presenting,
-            $"still presenting after {limitS:F0} s at {Geometry.Range(session.Player.State, session.Bandit.State):F0} m "
-            + $"({session.Bandit.GetType().Name}, skill {(session.Bandit as NeutralMergeBandit)?.Skill}); "
-            + "the rung-0 proximity latch is off");
+        return i * Dt;
+    }
+
+    [Fact]
+    public void ProductionRungZeroLeadGraduatesOnAnOverrun() {
+        SimulationSession session = ProductionRungZero();
+        // 250 m in trail but 80 m high: inside the overrun radius, outside the 3-degree funnel.
+        double ended = HoldStation(session, 250.0, ReactiveBandit.PresentProximitySeconds + 1.0,
+            aboveM: 80.0);
+        Assert.False(session.Bandit.Presenting, "an overrun did not start the fight");
+        Assert.InRange(ended, ReactiveBandit.PresentProximitySeconds - 0.1,
+            ReactiveBandit.PresentProximitySeconds + 0.2);
+    }
+
+    [Fact]
+    public void ProductionRungZeroLeadGraduatesOnTwoSecondsOfRealTracking() {
+        SimulationSession session = ProductionRungZero();
+        double ended = HoldStation(session, 600.0, ReactiveBandit.PresentHoldSeconds + 1.0);
+        Assert.False(session.Bandit.Presenting);
+        Assert.InRange(ended, ReactiveBandit.PresentHoldSeconds - 0.1,
+            ReactiveBandit.PresentHoldSeconds + 0.2);
+    }
+
+    [Fact]
+    public void ProductionRungZeroLeadStillEndsByTheCapWhenThePlayerLoitersBehind() {
+        SimulationSession session = ProductionRungZero();
+        // 1 km trail, nose on: outside the 900 m funnel and the overrun radius.
+        double ended = HoldStation(session, 1_000.0, ReactiveBandit.PresentMaximumSeconds + 1.0);
+        Assert.False(session.Bandit.Presenting);
+        Assert.InRange(ended, ReactiveBandit.PresentMaximumSeconds - 0.1,
+            ReactiveBandit.PresentMaximumSeconds + 0.2);
+        var merge = Assert.IsType<NeutralMergeBandit>(session.Bandit);
+        session.Advance(Dt);
+        Assert.True(merge.FirstPassComplete, "the finished lead did not hand over to the fighter");
+    }
+
+    /// The first scored round ends the present for the whole formation, so a hit is never
+    /// followed by a straight-flying target to finish off at leisure.
+    [Fact]
+    public void AFirstPhysicalHitEndsTheLead() {
+        SimulationSession session = ProductionRungZero();
+        // Fly it through the real analog inputs with the acceptance HUD pilot: real rounds.
+        var pilot = new FirstMergeOpeningAcceptanceTests.HudPilot(
+            new FirstMergeOpeningAcceptanceTests.HudPilotProfile("hit", 0.25, 3.0, 1.0));
+        int ticks = (int)(ReactiveBandit.PresentMaximumSeconds * AircraftSim.TickHz);
+        bool presentingAtFirstHit = true;
+        for (int i = 0; i < ticks && session.SortiePlayerHits == 0; i++) {
+            pilot.Drive(session);
+            session.StepFixed();
+            presentingAtFirstHit = session.Bandit.Presenting;
+        }
+        Assert.True(session.SortiePlayerHits > 0, "the fixture never hit");
+        Assert.False(presentingAtFirstHit, "the lead kept presenting after a hit");
     }
 
     /// A finished present must start the fight, not leave the scripted pass flying a straight line
