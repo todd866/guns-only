@@ -1,9 +1,9 @@
-import { AssetPipelineError, assetAssert, asAssetPipelineError } from "./errors.js?runtime=2";
+import { AssetPipelineError, assetAssert, asAssetPipelineError } from "./errors.js?v=__RELEASE_BUILD__";
 import {
   lodMinimumPixelHeight,
   selectLodByProjectedPixelHeight,
   selectLodWithHysteresis,
-} from "./lod.js?runtime=2";
+} from "./lod.js?v=__RELEASE_BUILD__";
 import {
   cloneStaticGltfScene,
   createGltfLoaderAdapter,
@@ -11,7 +11,7 @@ import {
   disposeResourceSet,
   disposeSceneResources,
   selectGltfScene,
-} from "./resource_utils.js?runtime=2";
+} from "./resource_utils.js?v=__RELEASE_BUILD__";
 
 const hasDocument = typeof document !== "undefined" && typeof document.baseURI === "string";
 const DEFAULT_BASE_URL = hasDocument ? document.baseURI : import.meta.url;

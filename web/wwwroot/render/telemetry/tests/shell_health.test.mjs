@@ -7,7 +7,38 @@ import {
   classifyShellDevice,
   classifyShellFatal,
   createShellHealthBeacon,
+  readLocalShellIncidents,
 } from "../shell_health.js";
+
+test("failures remain locally readable by a new recorder; journal is capped and sanitized", async () => {
+  const values = new Map();
+  const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
+  for (let i = 0; i < 205; i++) {
+    const beacon = createShellHealthBeacon({ build: '373', localStore: storage, documentRef: null,
+      sendBeacon: () => true, fetchImpl: null });
+    beacon.fatal(new Error('Failed to fetch https://private.example/?token=secret'));
+    await beacon.stop();
+  }
+  const rows = readLocalShellIncidents(storage);
+  assert.equal(rows.length, 200);
+  assert.equal(rows.at(-1).code, 'module');
+  assert.doesNotMatch(JSON.stringify(rows), /secret|private\.example/);
+  assert.deepEqual(readLocalShellIncidents({ getItem() { throw new Error('storage unavailable'); } }), []);
+});
+
+test("hung telemetry upload is bounded and persisted without blocking later attempts", async () => {
+  const values = new Map();
+  const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
+  let attempts = 0;
+  const beacon = createShellHealthBeacon({ build: '373', localStore: storage, documentRef: null,
+    uploadDeadlineMs: 10, sendBeacon: null,
+    fetchImpl: async () => { attempts++; return new Promise(() => {}); } });
+  beacon.mark('script_load');
+  await beacon.flush();
+  await beacon.stop();
+  assert.equal(attempts, 2);
+  assert.equal(readLocalShellIncidents(storage).filter(row => row.code === 'timeout').length, 2);
+});
 
 test("classifies Threads iPhone as ios phone-portrait with threads arrival", () => {
   const device = classifyShellDevice(

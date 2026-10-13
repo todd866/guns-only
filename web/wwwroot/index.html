@@ -4756,12 +4756,8 @@ Two engagements, then recover · H controls · R restarts</p>
     // app.js arrives. The deep link still selects the sortie -- it is read by the module graph
     // from the same query string -- it just no longer has a splash screen to announce itself on.
 
-    // A network-fresh Build 238 document may still be controlled by Build 178's cache-first
-    // service worker. Purge that controller and its Cache Storage before Blazor requests the
-    // unversioned boot manifest/WASM graph. Offline clients never see this newer document until a
-    // network navigation succeeds, so the gate cannot destroy the only usable offline release.
-    // Derive from the publish placeholder so this comparison cannot drift from the worker
-    // registration. dotnet publish replaces that placeholder with the numeric build.
+    // Wait for a verified replacement worker before mixing this document with a stale runtime.
+    // Cached releases are retained during this handoff, including a failed or interrupted update.
     const releaseBuild = new URL("./service-worker.js?v=__RELEASE_BUILD__", location.href)
       .searchParams.get("v");
 
@@ -4779,15 +4775,20 @@ Two engagements, then recover · H controls · R restarts</p>
           .searchParams.get("v") !== releaseBuild);
       if (!staleWorker) return;
 
-      await Promise.all(registrations.map((registration) => registration.unregister()));
-      if ("caches" in globalThis) {
-        const keys = await caches.keys();
-        await Promise.all(
-          keys
-            .filter((key) => key.startsWith("guns-only-"))
-            .map((key) => caches.delete(key)),
-        );
-      }
+      // Keep the working release until the replacement worker has verified its core files.
+      // A failed update must never erase the only usable offline copy.
+      await new Promise((resolve, reject) => {
+        const sw = navigator.serviceWorker;
+        const matches = () => sw.controller && new URL(sw.controller.scriptURL, location.href)
+          .searchParams.get("v") === releaseBuild;
+        const cleanup = () => { clearTimeout(timer); sw.removeEventListener("controllerchange", changed); };
+        const changed = () => { if (matches()) { cleanup(); resolve(); } };
+        const timer = setTimeout(() => { cleanup(); reject(new Error("Release update unavailable; saved release retained")); }, 30_000);
+        sw.addEventListener("controllerchange", changed);
+        sw.register("./service-worker.js?v=__RELEASE_BUILD__")
+          .then(() => changed())
+          .catch(error => { cleanup(); reject(error); });
+      });
     })();
 
     // RELEASE HANDSHAKE. The gate above only helps a document that was itself fetched from the

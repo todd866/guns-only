@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
+import { createHash, webcrypto } from "node:crypto";
 import { RELEASE_QUERY_TOKEN } from "../../../../../tools/release/stamp-release.mjs";
 import { RELEASE_BUILD } from "../release_identity.js";
 
@@ -53,6 +54,7 @@ async function workerHarness({ fetchImpl, fetchResponse, match, put, storageEsti
       : Date,
     Set,
     Promise,
+    setTimeout, clearTimeout, AbortController, Response, crypto: webcrypto,
   };
   runInNewContext(source, context);
   return {
@@ -111,7 +113,7 @@ test("offline terrain cache primes every theatre bundle independently and cools 
     /availableStorageBytes\(\)[\s\S]*TERRAIN_CACHE_RESERVE_BYTES[\s\S]*content-length/,
     "terrain caching must honor a known storage budget and the response's declared size");
   assert.match(source,
-    /if \(TERRAIN_BUNDLE\.test\(url\.pathname\)\) \{[\s\S]*event\.waitUntil\(primeTerrainBundle\(request\.url\)\)[\s\S]*event\.respondWith/,
+    /if \(TERRAIN_BUNDLE\.test\(url\.pathname\)\) \{[\s\S]*event\.respondWith\(task\)[\s\S]*event\.waitUntil\(Promise\.all\(\[task\.catch\([\s\S]*primeTerrainBundle\(request\.url\)/,
     "the fetch event must stay alive until its full-bundle offline cache write settles");
   assert.doesNotMatch(source, /let terrainBundlePrimed = false/);
 });
@@ -399,15 +401,15 @@ test("runtime priming reuses healthy same-build cache hits without fetching", as
     "runtime priming must keep the message event alive through cache inspection");
   await event.lifetime;
   assert.deepEqual(matched, [
+    "/offline-manifest.json",
     `https://guns-only.vercel.app/render/flight.js?v=${RELEASE_BUILD}`,
-    "https://guns-only.vercel.app/index.html",
   ]);
   assert.equal(harness.networkRequests.length, 0);
   assert.deepEqual(harness.puts, []);
   assert.deepEqual(event.messages, [{
-    requested: 2,
+    requested: 1,
     cached: 0,
-    reused: 2,
+    reused: 1,
     failed: 0,
     build: RELEASE_BUILD,
   }]);
@@ -451,13 +453,13 @@ test("runtime priming caps concurrency and completes after individual errors", a
       maximumActive = Math.max(maximumActive, active);
       await fetchGate;
       active -= 1;
-      if (String(url).endsWith("/failure.js")) throw new Error("expected fetch failure");
+      if (new URL(url).pathname.endsWith("/failure.js")) throw new Error("expected fetch failure");
       return successfulResponse;
     },
   });
   const urls = Array.from({ length: 11 }, (_, index) =>
     `https://guns-only.vercel.app/render/runtime-${index}.js?v=${RELEASE_BUILD}`);
-  urls.push("https://guns-only.vercel.app/render/failure.js");
+  urls.push(`https://guns-only.vercel.app/render/failure.js?v=${RELEASE_BUILD}`);
   const event = harness.dispatchMessage({ type: "prime-runtime", urls });
 
   for (let turn = 0; turn < 20 && harness.networkRequests.length < 4; turn += 1) {
@@ -479,4 +481,35 @@ test("runtime priming caps concurrency and completes after individual errors", a
     failed: 1,
     build: RELEASE_BUILD,
   }], "one rejected fetch must be counted without aborting queue completion");
+});
+
+test("stalled cache writes finish priming and retain terrain retry cooldown", async () => {
+  const worker = await workerHarness({ put: () => new Promise(() => {}) });
+  const result = await worker.primeRuntimeUrls([`/app.js?v=${RELEASE_BUILD}`]);
+  assert.equal(result.failed, 1);
+  assert.equal(result.cached, 0);
+  await worker.primeTerrainBundle("https://guns-only.vercel.app/content/test.terrain");
+  const calls = worker.networkRequests.length;
+  await worker.primeTerrainBundle("https://guns-only.vercel.app/content/test.terrain");
+  assert.equal(worker.networkRequests.length, calls);
+});
+
+test("runtime priming rejects unlisted unversioned URLs and incompatible manifest bytes", async () => {
+  const expected = "current release";
+  const manifest = { assets: [{ url: "/app.js", size: Buffer.byteLength(expected),
+    sha256: createHash("sha256").update(expected).digest("hex") }] };
+  let body = "obsolete release";
+  const worker = await workerHarness({
+    match: async url => url === "/offline-manifest.json" ? { json: async () => manifest } : null,
+    fetchImpl: async () => ({ ok: true, status: 200, type: "basic",
+      clone: () => new Response(body) }),
+  });
+  let result = await worker.primeRuntimeUrls(["/app.js", "/unlisted.js"]);
+  assert.equal(result.requested, 1);
+  assert.equal(result.failed, 1);
+  assert.equal(worker.puts.length, 0, "old client bytes must not enter the new bucket");
+  body = expected;
+  result = await worker.primeRuntimeUrls(["/app.js"]);
+  assert.equal(result.cached, 1);
+  assert.equal(worker.puts.length, 1);
 });

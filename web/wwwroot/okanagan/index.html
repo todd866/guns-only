@@ -125,6 +125,11 @@
   </section>
 
   <script>
+    navigator.serviceWorker?.addEventListener("message", event => {
+      if (event.data?.type === "guns-release-activated") {
+        event.ports?.[0]?.postMessage({ type: "guns-release-ack", build: "__RELEASE_BUILD__" });
+      }
+    });
     globalThis.__gunsPrebootReady = (async () => {
       const releaseBuild = new URL("../service-worker.js?v=__RELEASE_BUILD__", location.href).searchParams.get("v");
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -132,8 +137,20 @@
       const stale = [navigator.serviceWorker?.controller, ...workers].filter(Boolean)
         .find((worker) => new URL(worker.scriptURL, location.href).searchParams.get("v") !== releaseBuild);
       if (!stale) return;
-      await Promise.all(registrations.map((registration) => registration.unregister()));
-      if ("caches" in globalThis) await Promise.all((await caches.keys()).filter((key) => key.startsWith("guns-only-")).map((key) => caches.delete(key)));
+      // Keep the working release until the replacement worker has verified its core files.
+      // A failed update must never erase the only usable offline copy.
+      await new Promise((resolve, reject) => {
+        const sw = navigator.serviceWorker;
+        const matches = () => sw.controller && new URL(sw.controller.scriptURL, location.href)
+          .searchParams.get("v") === releaseBuild;
+        const cleanup = () => { clearTimeout(timer); sw.removeEventListener("controllerchange", changed); };
+        const changed = () => { if (matches()) { cleanup(); resolve(); } };
+        const timer = setTimeout(() => { cleanup(); reject(new Error("Release update unavailable; saved release retained")); }, 30_000);
+        sw.addEventListener("controllerchange", changed);
+        sw.register("../service-worker.js?v=__RELEASE_BUILD__")
+          .then(() => changed())
+          .catch(error => { cleanup(); reject(error); });
+      });
     })();
   </script>
   <script type="module">

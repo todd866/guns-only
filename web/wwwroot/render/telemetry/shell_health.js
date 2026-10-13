@@ -110,6 +110,15 @@ function milestoneRank(name) {
   return index >= 0 ? index : -1;
 }
 
+export const LOCAL_SHELL_DIAGNOSTICS_KEY = "guns-shell-incidents-v1";
+
+export function readLocalShellIncidents(storage) {
+  try {
+    const rows = JSON.parse((storage ?? globalThis.localStorage)?.getItem(LOCAL_SHELL_DIAGNOSTICS_KEY) ?? "[]");
+    return Array.isArray(rows) ? rows.slice(-200) : [];
+  } catch { return []; }
+}
+
 /**
  * Create a shell-health recorder. Always enabled; independent of flight-diagnostics opt-in.
  */
@@ -132,6 +141,8 @@ export function createShellHealthBeacon({
   }),
   endpoint = "/telemetry",
   documentRef = globalThis.document,
+  localStore,
+  uploadDeadlineMs = 5_000,
 } = {}) {
   const startedAt = epochMs();
   const session = `shell-${startedAt}-${Math.floor(Math.random() * 1e6)}`;
@@ -147,6 +158,17 @@ export function createShellHealthBeacon({
   let stopped = false;
   let flushTimer = null;
   const FLUSH_DEBOUNCE_MS = 750;
+
+  function rememberFailure(kind, code = "unknown") {
+    try {
+      const storage = localStore ?? globalThis.localStorage;
+      const rows = readLocalShellIncidents(storage);
+      rows.push({ at: epochMs(), build: String(build).slice(0, 64), kind,
+        code: String(code).replace(/[^a-z0-9_-]/gi, "_").slice(0, 32),
+        platform: device.platform, browser: device.browser });
+      storage?.setItem(LOCAL_SHELL_DIAGNOSTICS_KEY, JSON.stringify(rows.slice(-200)));
+    } catch { /* quota/disabled storage must not become a new boot failure */ }
+  }
 
   function headerRow(batchId) {
     return {
@@ -202,14 +224,22 @@ export function createShellHealthBeacon({
       }
     }
     if (typeof fetchImpl !== "function") return { ok: false, via: "none" };
-    const response = await fetchImpl(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body,
-      keepalive: keepalive === true,
-      credentials: "same-origin",
-    });
-    return { ok: response?.ok === true, via: "fetch", status: response?.status };
+    const controller = new AbortController();
+    let timer;
+    try {
+      const response = await Promise.race([
+        fetchImpl(endpoint, { method: "POST", headers: { "content-type": "application/json" },
+          body, keepalive: keepalive === true, credentials: "same-origin", signal: controller.signal }),
+        new Promise((_, reject) => { timer = setTimeout(() => {
+          controller.abort(); reject(new Error("telemetry-timeout"));
+        }, uploadDeadlineMs); }),
+      ]);
+      if (!response?.ok) rememberFailure("telemetry-upload", "http-error");
+      return { ok: response?.ok === true, via: "fetch", status: response?.status };
+    } catch {
+      rememberFailure("telemetry-upload", controller.signal.aborted ? "timeout" : "network-error");
+      return { ok: false, via: "error" };
+    } finally { clearTimeout(timer); }
   }
 
   function flush({ keepalive = false, force = false } = {}) {
@@ -274,6 +304,7 @@ export function createShellHealthBeacon({
         row[key] = typeof value === "string" ? value.slice(0, 160) : value;
       }
       notes.push(row);
+      rememberFailure("shell-note", slug);
       // `immediate` exists for notes recorded as the player leaves — tapping the escape route
       // navigates away, and a 750 ms debounce would lose the one row that says it worked. The
       // keepalive/sendBeacon decision stays inside this module: gameplay telemetry ships gzipped
@@ -300,6 +331,7 @@ export function createShellHealthBeacon({
           t: Math.round(now()),
         };
       }
+      rememberFailure("fatal", lastFatal.reason);
       void flush({ keepalive: true, force: true });
       return lastFatal;
     },

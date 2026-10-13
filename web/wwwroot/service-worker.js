@@ -5,15 +5,9 @@
 // network, so the app was a website in a frame and a dead connection was a dead game. This gives an
 // installed copy an offline path for every asset the browser successfully admits to Cache Storage.
 //
-// DESIGN: runtime caching, not a precache manifest. A precache needs a build-time list of every
-// asset — the WASM runtime, the three.js vendor tree, every render module, the content pack — and a
-// list like that goes stale silently and fails closed. Instead the first online sortie populates the
-// cache with exactly what the app really loads. Resources successfully admitted to Cache Storage
-// are then available offline; large terrain pages remain subject to the browser's storage budget.
-//
-// The cache name carries the release build, so shipping a new build orphans the old cache and
-// activate() deletes it. Source keeps a placeholder; publish writes the number from
-// web/wwwroot/render/release/release_identity.js so this bucket matches the URLs the shell requests.
+// Publication generates a bounded core manifest with content digests. An update activates only
+// after those files are durable; the previous bucket remains available for verified asset reuse.
+// Optional terrain/media are cached as used, within the browser's storage budget.
 const RELEASE_BUILD = "__RELEASE_BUILD__";
 const CACHE = `guns-only-${RELEASE_BUILD}`;
 
@@ -44,76 +38,283 @@ const TERRAIN_CACHE_RESERVE_BYTES = 32 * 1024 * 1024;
 // containing large WASM or terrain responses turn into an unbounded burst of network/body work.
 const MAX_RUNTIME_PRIME_CONCURRENCY = 4;
 
-self.addEventListener("install", (event) => {
-  // Nothing to precache; take over as soon as possible so the first sortie starts filling the cache.
-  event.waitUntil(self.skipWaiting());
-});
+// Network deadlines cover the response BODY as well as headers. A resolved fetch can still
+// contain a stream that never finishes on weak Wi-Fi.
+const NETWORK_DEADLINE_MS = 8_000;
+const STORAGE_DEADLINE_MS = 1_000;
+const MANIFEST_URL = "/offline-manifest.json";
+const READY_URL = "/.guns-offline-ready";
+const DIAGNOSTICS_DB = "guns-offline-diagnostics-v1";
+const MAX_INCIDENTS = 200;
+const manifests = new Map();
+const clientCaches = new Map();
+let diagnosticQueue = Promise.resolve();
+let pendingDiagnostics = 0;
 
-// How long an already-open document gets to prove it is alive before this worker re-navigates it.
-// It only has to run one inline event listener, so this is generous; it is short enough that a
-// player who opened a stale PWA is not left staring at last month's build.
-const RELEASE_ACK_WINDOW_MS = 1_500;
+async function storageRequired(operation) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("cache storage timeout")), STORAGE_DEADLINE_MS); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
 
-/**
- * Break the stale-release loop.
- *
- * A client that is controlled by an OLD cache-first worker has its navigations answered out of
- * Cache Storage, so it re-serves an old index.html — which contains an old preboot gate, which
- * compares the page against its own build, finds nothing stale, and keeps the client pinned there.
- * That is how a session booted Build 220 while 245 was live. Nothing in the old DOCUMENT can fix
- * it, because the old document is the thing being served.
- *
- * The new WORKER can, and this is the only actor that can: the browser byte-compares the worker
- * script on navigation regardless of what the page believes, so a new build always eventually
- * installs here. skipWaiting + clients.claim make it the controller immediately; then every window
- * client is asked whether it is running this build. Documents that answer are left alone — they are
- * current, or at least alive and able to decide for themselves. Documents that do not answer are
- * too old to know about the handshake, which is exactly the stale population, and they are
- * re-navigated once so this worker's network-first navigation handler can hand them the new build.
- *
- * Loop safety: this runs only inside `activate`, only when a DIFFERENT build's cache bucket was
- * just deleted (so never on a first install), and the resulting navigation registers the same
- * script URL — which produces no new worker, so no second activation.
- */
-async function reclaimStaleClients() {
-  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  if (clients.length === 0) return;
-  const acked = new Set();
-  await Promise.all(clients.map((client) => new Promise((resolve) => {
-    const channel = new MessageChannel();
-    const timer = setTimeout(resolve, RELEASE_ACK_WINDOW_MS);
-    channel.port1.onmessage = (event) => {
-      if (event.data?.type === "guns-release-ack") acked.add(client.id);
+async function storageOrFallback(operation, failureType) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation).catch(() => {
+        if (failureType) void diagnostic(failureType, "/");
+        return undefined;
+      }),
+      new Promise(resolve => { timer = setTimeout(() => {
+        if (failureType) void diagnostic(failureType, "/");
+        resolve();
+      }, STORAGE_DEADLINE_MS); }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+function resourceKind(request) {
+  const path = new URL(request.url ?? request, self.location.origin).pathname;
+  if (path.endsWith(".terrain")) return "terrain";
+  if (path.startsWith("/_framework/")) return "runtime";
+  if (path === MANIFEST_URL) return "manifest";
+  if (request.mode === "navigate" || path.endsWith(".html") || path.endsWith("/")) return "navigation";
+  return "asset";
+}
+
+// A bounded, local journal. It survives worker termination and browser restarts. Store only
+// coarse resource classes: no URLs, query strings, pilot identifiers, content or credentials.
+function diagnostic(type, request, fields = {}) {
+  if (pendingDiagnostics >= 64) return Promise.resolve();
+  pendingDiagnostics++;
+  const row = { type, at: Date.now(), build: RELEASE_BUILD,
+    resource: resourceKind(request), online: self.navigator?.onLine !== false,
+    status: Number(fields.status) || 0, elapsedMs: Math.max(0, Number(fields.elapsedMs) || 0) };
+  diagnosticQueue = diagnosticQueue.then(() => storageOrFallback(async () => {
+    const db = await openDiagnostics();
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction("incidents", "readwrite");
+        const store = tx.objectStore("incidents");
+        store.add(row);
+        const keys = store.getAllKeys();
+        keys.onsuccess = () => keys.result.slice(0, Math.max(0, keys.result.length - MAX_INCIDENTS))
+          .forEach(key => store.delete(key));
+        const timer = setTimeout(() => { try { tx.abort(); } catch {} reject(new Error("diagnostic transaction timeout")); }, 750);
+        tx.oncomplete = () => { clearTimeout(timer); resolve(); };
+        tx.onerror = tx.onabort = () => { clearTimeout(timer); reject(tx.error); };
+      });
+    } finally { db.close(); }
+  })).finally(() => { pendingDiagnostics--; });
+  return storageOrFallback(() => diagnosticQueue);
+}
+
+function openDiagnostics() {
+  return new Promise((resolve, reject) => {
+    let expired = false;
+    const timer = setTimeout(() => { expired = true; reject(new Error("diagnostic storage timeout")); }, 750);
+    const request = indexedDB.open(DIAGNOSTICS_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("incidents", { autoIncrement: true });
+    request.onsuccess = () => {
       clearTimeout(timer);
-      resolve();
+      if (expired) request.result.close(); else resolve(request.result);
     };
+    request.onerror = () => { clearTimeout(timer); reject(request.error); };
+  });
+}
+
+async function readDiagnostics() {
+  await diagnosticQueue;
+  return await storageOrFallback(async () => {
+    const db = await openDiagnostics();
     try {
-      client.postMessage({ type: "guns-release-activated", build: RELEASE_BUILD }, [channel.port2]);
-    } catch {
-      clearTimeout(timer);
-      resolve();
+      return await new Promise((resolve, reject) => {
+        const request = db.transaction("incidents").objectStore("incidents").getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    } finally { db.close(); }
+  }) ?? [];
+}
+
+async function fetchComplete(request, init = {}, deadline = NETWORK_DEADLINE_MS) {
+  const controller = new AbortController();
+  const started = Date.now();
+  let timer;
+  let timedOut = false;
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetch(request, { ...init, signal: controller.signal });
+        if (response.status >= 500 || response.status === 408 || response.status === 429) {
+          const error = new Error("unavailable"); error.status = response.status;
+          error.response = new Response(null, { status: response.status }); throw error;
+        }
+        // Read a clone through completion before selecting this response over a saved copy.
+        // Cap the tee's queued body: no response can make this worker buffer without limit.
+        const reader = response.clone().body?.getReader();
+        if (reader) {
+          let size = 0;
+          try {
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              size += value.byteLength;
+              if (size > 128 * 1024 * 1024) throw new Error("response-too-large");
+            }
+          } finally { reader.releaseLock(); }
+        }
+        return response;
+      })(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+          reject(new Error("deadline"));
+        }, deadline);
+      }),
+    ]);
+  } catch (error) {
+    controller.abort();
+    await diagnostic(timedOut ? "network-timeout" : error.status ? "http-error" : "network-error",
+      request, { status: error.status, elapsedMs: Date.now() - started });
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+
+function assetFor(manifest, request, cacheName = CACHE) {
+  const url = new URL(request.url ?? request, self.location.origin);
+  if ([...url.searchParams.keys()].some(key => key !== "v")) return null;
+  if (url.searchParams.has("v") && url.searchParams.get("v") !== cacheName.slice("guns-only-".length)) return null;
+  return manifest?.assets?.find(asset => asset.url === url.pathname);
+}
+
+async function digestMatches(response, asset) {
+  const bytes = await response.clone().arrayBuffer();
+  if (bytes.byteLength !== asset.size) return false;
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("") === asset.sha256;
+}
+
+function readManifest(cacheName = CACHE) {
+  if (!manifests.has(cacheName)) manifests.set(cacheName, storageOrFallback(async () => {
+    const response = await (await caches.open(cacheName)).match(MANIFEST_URL);
+    return response ? await response.json() : null;
+  }).then(value => { if (!value) manifests.delete(cacheName); return value; }));
+  return manifests.get(cacheName);
+}
+
+async function cacheForClient(event) {
+  if (!event.clientId) return CACHE;
+  if (clientCaches.has(event.clientId)) return clientCaches.get(event.clientId);
+  // The existing main-shell handshake already replies with its build. Omitting the activation
+  // build deliberately asks for identity without telling a running sortie to reload.
+  let timer;
+  let channel;
+  const build = await Promise.race([
+    (async () => {
+      const client = await self.clients.get(event.clientId);
+      if (!client) return null;
+      return new Promise(resolve => {
+        channel = new MessageChannel();
+        channel.port1.onmessage = event => { channel.port1.close(); resolve(event.data?.build); };
+        client.postMessage({ type: "guns-release-activated" }, [channel.port2]);
+      });
+    })().catch(() => null),
+    new Promise(resolve => { timer = setTimeout(() => resolve(null), 250); }),
+  ]);
+  clearTimeout(timer);
+  channel?.port1.close();
+  const hinted = build ?? new URL(event.request.url).searchParams.get("v");
+  const name = /^\d+$/.test(String(hinted)) ? `guns-only-${hinted}` : CACHE;
+  if (clientCaches.size >= 128) clientCaches.delete(clientCaches.keys().next().value);
+  clientCaches.set(event.clientId, name);
+  return name;
+}
+
+async function cachedResponse(request, cacheName = CACHE) {
+  return storageOrFallback(async () => {
+    const cache = await caches.open(cacheName);
+    const exact = await cache.match(request);
+    if (exact) return exact;
+    const manifest = await readManifest(cacheName);
+    const asset = assetFor(manifest, request, cacheName);
+    if (!asset) return undefined;
+    const canonical = await storageRequired(() => cache.match(asset.url));
+    if (canonical) return canonical;
+    // Retained assets are reusable only with the NEW release's digest. Never mix old WASM/JS.
+    const names = (await caches.keys()).filter(name => name.startsWith("guns-only-") && name !== cacheName).reverse();
+    for (const name of names) {
+      const previous = await caches.open(name);
+      const keys = await previous.keys();
+      for (const key of keys.filter(key => new URL(key.url).pathname === asset.url)) {
+        const response = await previous.match(key);
+        if (response && await digestMatches(response, asset)) return response;
+      }
     }
-  })));
-  for (const client of clients) {
-    if (acked.has(client.id) || typeof client.navigate !== "function") continue;
-    try {
-      await client.navigate(client.url);
-    } catch {
-      // A cross-origin or non-navigable client simply keeps what it has.
+  }, "cache-read-failed");
+}
+
+async function installRelease() {
+  // Development source has no published manifest. Production always fails closed if its
+  // stamped manifest or any core file is missing, leaving the prior worker in charge.
+  if (RELEASE_BUILD === "__RELEASE_" + "BUILD__") return self.skipWaiting();
+  try {
+    const response = await fetchComplete(MANIFEST_URL, { cache: "no-store" }, 30_000);
+    if (!response.ok) throw new Error("manifest unavailable");
+    const manifest = await response.json();
+    if (manifest.build !== RELEASE_BUILD || !Array.isArray(manifest.assets)
+      || manifest.assets.length > 10000) throw new Error("invalid offline manifest");
+    const core = manifest.assets.filter(asset => asset.core);
+    if (!core.some(asset => asset.url === "/index.html")
+      || core.reduce((sum, asset) => sum + asset.size, 0) > 64 * 1024 * 1024
+      || manifest.assets.some(asset => !/^\/[^?#]*$/.test(asset.url) || asset.url.startsWith("//")
+        || !/^[a-f0-9]{64}$/.test(asset.sha256) || !Number.isSafeInteger(asset.size) || asset.size < 0)) {
+      throw new Error("invalid offline assets");
     }
+    const cache = await storageRequired(() => caches.open(CACHE));
+    let index = 0;
+    let indexDocument;
+    await Promise.all(Array.from({ length: Math.min(4, core.length) }, async () => {
+      while (index < core.length) {
+        const asset = core[index++];
+        let bytes = await storageRequired(() => cache.match(asset.url));
+        if (!bytes || !await digestMatches(bytes, asset)) {
+          bytes = await fetchComplete(asset.url, { cache: "no-store" }, 30_000);
+          if (!bytes.ok || !await digestMatches(bytes, asset)) throw new Error("incomplete offline release");
+          if (asset.url === "/index.html") indexDocument = bytes.clone();
+          await storageRequired(() => cache.put(asset.url, bytes));
+        } else if (asset.url === "/index.html") indexDocument = bytes.clone();
+      }
+    }));
+    if (!indexDocument) throw new Error("offline index unavailable");
+    await storageRequired(() => cache.put("/", indexDocument));
+    await storageRequired(() => cache.put(MANIFEST_URL, new Response(JSON.stringify(manifest))));
+    await storageRequired(() => cache.put(READY_URL, new Response(RELEASE_BUILD)));
+    // Let an existing sortie finish on its original worker. The browser activates this
+    // complete replacement once the last controlled window closes; first installs activate
+    // normally. Claiming an old client here would strand uncached old-release assets.
+  } catch (error) {
+    await diagnostic("install-failed", MANIFEST_URL);
+    throw error;
   }
 }
 
-self.addEventListener("activate", (event) => {
+self.addEventListener("install", event => event.waitUntil(installRelease()));
+self.addEventListener("activate", event => {
   event.waitUntil((async () => {
-    let replacedBuild = false;
-    for (const name of await caches.keys()) {
-      if (!name.startsWith("guns-only-") || name === CACHE) continue;
-      replacedBuild = true;
-      await caches.delete(name);
-    }
+    // Keep one previous bucket for digest-checked reuse. Installation has already verified a
+    // complete replacement shell; failure never activates or erases the working release.
+    await storageOrFallback(async () => {
+      const old = (await caches.keys()).filter(name => /^guns-only-\d+$/.test(name) && name !== CACHE)
+        .sort((a, b) => Number(b.slice(10)) - Number(a.slice(10)));
+      for (const name of old.slice(1)) await caches.delete(name);
+    });
     await self.clients.claim();
-    if (replacedBuild) await reclaimStaleClients();
   })());
 });
 
@@ -124,7 +325,7 @@ async function availableStorageBytes() {
   const estimate = self.navigator?.storage?.estimate;
   if (typeof estimate !== "function") return null;
   try {
-    const result = await estimate.call(self.navigator.storage);
+    const result = await storageRequired(() => estimate.call(self.navigator.storage));
     const quota = Number(result?.quota);
     const usage = Number(result?.usage);
     if (!Number.isFinite(quota) || !Number.isFinite(usage) || quota < 0 || usage < 0) return null;
@@ -160,19 +361,22 @@ async function terrainCacheHasCapacity(response = null) {
 }
 
 async function primeRuntimeUrls(candidates) {
+  const manifest = await readManifest();
   const urls = [];
   for (const candidate of Array.isArray(candidates) ? candidates : []) {
     if (urls.length >= MAX_RUNTIME_PRIME_URLS) break;
     try {
       const url = new URL(String(candidate), self.location.origin);
       if (url.origin !== self.location.origin
+        || (url.searchParams.has("v") && url.searchParams.get("v") !== RELEASE_BUILD)
         || NEVER_CACHE.some((pattern) => pattern.test(url.pathname))) continue;
+      if (!url.searchParams.has("v") && !assetFor(manifest, url.href)) continue;
       if (!urls.includes(url.href)) urls.push(url.href);
     } catch {
       // Ignore malformed client-provided resource names.
     }
   }
-  const cache = await caches.open(CACHE);
+  const cache = await storageRequired(() => caches.open(CACHE));
   let cached = 0;
   let reused = 0;
   let failed = 0;
@@ -180,27 +384,35 @@ async function primeRuntimeUrls(candidates) {
   async function primeNextUrl() {
     while (nextUrl < urls.length) {
       const url = urls[nextUrl];
+      const asset = assetFor(manifest, url);
       nextUrl += 1;
       let existing;
       try {
-        existing = await cache.match(url);
+        existing = await storageRequired(() => cache.match(url));
       } catch {
         // A transient Cache Storage read failure must not suppress the network retry that can
         // repair the entry. A failed write below will still report the URL as failed.
       }
-      if (existing?.ok && existing.status === 200 && existing.type === "basic") {
+      if (existing?.ok && existing.status === 200 && existing.type === "basic"
+        && (!asset || await digestMatches(existing, asset))) {
         reused += 1;
         continue;
       }
       try {
-        const response = await fetch(url, { cache: "no-store" });
+        const response = await fetchComplete(url, { cache: "no-store" }, 30_000);
         if (!response.ok || response.status !== 200 || response.type !== "basic") {
           failed += 1;
           continue;
         }
-        await cache.put(url, response.clone());
+        if (asset && !await digestMatches(response, asset)) {
+          await diagnostic("runtime-prime-incompatible", url);
+          failed += 1;
+          continue;
+        }
+        await storageRequired(() => cache.put(url, response.clone()));
         cached += 1;
       } catch {
+        await diagnostic("runtime-prime-failed", url);
         failed += 1;
       }
     }
@@ -211,6 +423,10 @@ async function primeRuntimeUrls(candidates) {
 }
 
 self.addEventListener("message", (event) => {
+  if (event.data?.type === "offline-diagnostics") {
+    event.waitUntil(readDiagnostics().then(incidents => event.ports?.[0]?.postMessage({ build: RELEASE_BUILD, incidents })));
+    return;
+  }
   if (event.data?.type !== "prime-runtime") return;
   const task = primeRuntimeUrls(event.data.urls).then((result) => {
     event.ports?.[0]?.postMessage(result);
@@ -236,9 +452,11 @@ function primeTerrainBundle(url) {
       // The in-memory Set is only an in-flight/process-lifetime latch. Service workers are
       // routinely terminated between requests, while Cache Storage survives; consult this
       // build's persisted bucket before paying for the same multi-megabyte whole page again.
-      const cache = await caches.open(CACHE);
-      const cached = await cache.match(bare.href);
+      const cache = await storageRequired(() => caches.open(CACHE));
+      const existing = await storageRequired(() => cache.match(bare.href));
+      const cached = existing ?? await cachedTerrainBundle(bare.href);
       if (cached?.ok && cached.status === 200) {
+        if (!existing) await storageRequired(() => cache.put(bare.href, cached.clone()));
         terrainBundleRetryAfter.delete(bare.href);
         return;
       }
@@ -248,9 +466,9 @@ function primeTerrainBundle(url) {
         deferTerrainBundleRetry(bare.href);
         return;
       }
-      const response = await fetch(bare.href, { cache: "no-store" });
+      const response = await fetchComplete(bare.href, { cache: "no-store" }, 30_000);
       if (response.ok && response.status === 200 && await terrainCacheHasCapacity(response)) {
-        await cache.put(bare.href, response.clone());
+        await storageRequired(() => cache.put(bare.href, response.clone()));
         terrainBundleRetryAfter.delete(bare.href);
       } else {
         deferTerrainBundleRetry(bare.href);
@@ -258,15 +476,16 @@ function primeTerrainBundle(url) {
     } catch {
       // Offline, the bundle moved, or Cache Storage rejected the write. Keep serving the original
       // Range path, but suppress another whole-page attempt until the deterministic cooldown ends.
+      await diagnostic("terrain-prime-failed", bare.href);
       deferTerrainBundleRetry(bare.href);
     }
   })();
 }
 
-async function cachedTerrainBundle(url) {
+async function cachedTerrainBundle(url, cacheName = CACHE) {
   const bare = new URL(url);
   bare.search = "";
-  return (await caches.open(CACHE)).match(bare.href);
+  return cachedResponse(bare.href, cacheName);
 }
 
 function fetchWithCacheWrite(request, { basicOnly = false } = {}) {
@@ -274,13 +493,28 @@ function fetchWithCacheWrite(request, { basicOnly = false } = {}) {
   // build, and a plain fetch would then persist those stale bytes into this build's cache.
   // Unversioned assets therefore revalidate; ?v=BUILD URLs are immutable per build and skip it.
   const versioned = new URL(request.url).searchParams.has("v");
-  return fetch(request, versioned ? undefined : { cache: "no-cache" }).then((response) => {
+  return fetchComplete(request, versioned ? {} : { cache: "no-cache" }).then(async (response) => {
     let cacheWrite = Promise.resolve();
-    if (response.ok && response.status === 200 && (!basicOnly || response.type === "basic")) {
+    const manifest = await readManifest();
+    const path = new URL(request.url).pathname;
+    const assetPath = request.mode === "navigate" && path.endsWith("/") ? `${path}index.html` : path;
+    const asset = manifest?.assets?.find(asset => asset.url === assetPath);
+    const compatible = !asset || await digestMatches(response, asset);
+    // A new HTML document is not a complete update. Keep this worker's coherent shell until
+    // replacement installation verifies its runtime; a partial online deployment must not boot
+    // a new document against the saved old graph.
+    if (!compatible && request.mode === "navigate") {
+      const saved = await cachedResponse(request);
+      if (saved) {
+        await diagnostic("update-shell-retained", request);
+        return { response: saved, cacheWrite };
+      }
+    }
+    if (compatible && response.ok && response.status === 200 && (!basicOnly || response.type === "basic")) {
       // Clone while the body is unquestionably unused. The response can then be returned
       // immediately while waitUntil() keeps the asynchronous Cache API write alive.
       const copy = response.clone();
-      cacheWrite = caches.open(CACHE).then((cache) => cache.put(request, copy));
+      cacheWrite = storageOrFallback(() => caches.open(CACHE).then((cache) => cache.put(request, copy)), "cache-write-failed");
     }
     return { response, cacheWrite };
   });
@@ -290,56 +524,53 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
-  if (NEVER_CACHE.some((pattern) => pattern.test(url.pathname))) return;
+  if (url.origin !== self.location.origin || NEVER_CACHE.some(pattern => pattern.test(url.pathname))) return;
 
   if (TERRAIN_BUNDLE.test(url.pathname)) {
-    // A service worker may be terminated as soon as the response settles. Extend this fetch event
-    // through the full-bundle cache attempt so successful writes survive worker termination.
-    event.waitUntil(primeTerrainBundle(request.url));
-    event.respondWith((async () => {
+    const task = (async () => {
+      const cacheName = await cacheForClient(event);
+      const whole = await cachedTerrainBundle(request.url, cacheName);
+      if (whole) return whole;
+      if (cacheName !== CACHE) { await diagnostic("release-cache-miss", request); throw new Error("Saved release asset unavailable"); }
+      try { return await fetchComplete(request, {}, 30_000); }
+      catch (error) { await diagnostic("cache-miss", request); throw error; }
+    })();
+    event.respondWith(task);
+    event.waitUntil(Promise.all([task.catch(() => {}), primeTerrainBundle(request.url)]));
+    return;
+  }
+
+  if (request.mode === "navigate") {
+    const task = (async () => {
       try {
-        return await fetch(request);
+        const { response, cacheWrite } = await fetchWithCacheWrite(request);
+        return { response, cacheWrite };
       } catch (error) {
-        // Offline: hand back the whole bundle. The reader detects the ignored Range and switches
-        // to slicing it locally, which is the same path a non-Range-capable server produces.
-        const whole = await cachedTerrainBundle(request.url);
-        if (whole) return whole;
+        const cached = await storageOrFallback(async () => {
+          const cache = await storageRequired(() => caches.open(CACHE));
+          // A sub-app must fall back to its own entrypoint, never the main simulator.
+          const path = url.pathname.endsWith("/") ? `${url.pathname}index.html` : url.pathname;
+          return await cache.match(request) ?? await cache.match(path);
+        });
+        await diagnostic(cached ? "cache-fallback" : "cache-miss", request);
+        if (cached) return { response: cached, cacheWrite: Promise.resolve() };
+        if (error.response) return { response: error.response, cacheWrite: Promise.resolve() };
         throw error;
       }
-    })());
+    })();
+    event.respondWith(task.then(result => result.response));
+    event.waitUntil(task.then(result => result.cacheWrite).catch(() => {}).then(() => storageOrFallback(() => diagnosticQueue)));
     return;
   }
 
-  // A navigation must never be answered from a stale cache while online — that is how a PWA gets
-  // permanently stuck on an old build — but it must still open when there is no network at all.
-  if (request.mode === "navigate") {
-    const network = fetchWithCacheWrite(request);
-    event.waitUntil(network.then(({ cacheWrite }) => cacheWrite).catch(() => undefined));
-    event.respondWith(
-      network.then(({ response }) => response).catch(async (error) => {
-        // Match only this build's cache: during the activate window an older build's bucket may
-        // still exist, and an unscoped match could revive it.
-        const cache = await caches.open(CACHE);
-        const cached = await cache.match(request)
-          ?? await cache.match("index.html")
-          ?? await cache.match("/");
-        if (cached) return cached;
-        throw error;
-      }),
-    );
-    return;
-  }
-
-  // Everything else is content-addressed in practice: the entrypoint and every release-mutated
-  // direct module carry ?v=BUILD, the WASM assemblies/vendor tree are versioned by path, and the
-  // index preboot gate drops an older controller's cache before Blazor reads its boot manifest.
-  // Cache first is therefore both correct and the reason a cold offline start is fast.
-  const responseRecord = (async () => {
-    const cached = await (await caches.open(CACHE)).match(request);
+  const task = (async () => {
+    const cacheName = await cacheForClient(event);
+    const cached = await cachedResponse(request, cacheName);
     if (cached) return { response: cached, cacheWrite: Promise.resolve() };
-    return fetchWithCacheWrite(request, { basicOnly: true });
+    if (cacheName !== CACHE) { await diagnostic("release-cache-miss", request); throw new Error("Saved release asset unavailable"); }
+    try { return await fetchWithCacheWrite(request, { basicOnly: true }); }
+    catch (error) { await diagnostic("cache-miss", request); throw error; }
   })();
-  event.waitUntil(responseRecord.then(({ cacheWrite }) => cacheWrite).catch(() => undefined));
-  event.respondWith(responseRecord.then(({ response }) => response));
+  event.respondWith(task.then(result => result.response));
+  event.waitUntil(task.then(result => result.cacheWrite).catch(() => {}).then(() => storageOrFallback(() => diagnosticQueue)));
 });

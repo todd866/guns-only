@@ -1,8 +1,8 @@
 import { GLTFLoader } from "../../vendor/three/addons/loaders/GLTFLoader.js";
 import { KTX2Loader } from "../../vendor/three/addons/loaders/KTX2Loader.js";
 import { MeshoptDecoder } from "../../vendor/three/addons/libs/meshopt_decoder.module.js";
-import { AssetRegistry } from "./asset_registry.js?runtime=2";
-import { AssetPipelineError } from "./errors.js?runtime=2";
+import { AssetRegistry } from "./asset_registry.js?v=__RELEASE_BUILD__";
+import { AssetPipelineError } from "./errors.js?v=__RELEASE_BUILD__";
 
 const DEFAULT_TRANSCODER_PATH = new URL(
   "../../vendor/three/addons/libs/basis/",

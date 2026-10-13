@@ -303,6 +303,9 @@ if [ -f "$atmosphere_src" ]; then
     cp "$atmosphere_src" "$deploy_root/content/packs/ukraine-modern/environment/"
 fi
 
+# Include the exact final staged terrain bytes in the offline reuse inventory.
+node "$repo_dir/tools/release/apply-release-queries.mjs" --wwwroot "$deploy_root"
+
 atlas_sha256=$(sha256_file "$staged_atlas_manifest")
 content_sha256=$(sha256_tree "$deploy_root/content")
 echo "deploy-web: immutable atlas sha256 $atlas_sha256"
@@ -323,6 +326,15 @@ require_file indoor/sim.js
 require_file _framework/blazor.webassembly.js
 require_file _framework/blazor.boot.json
 require_file api/build-info.js
+require_file offline-manifest.json
+node --input-type=module - "$deploy_root" <<'NODE'
+import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+const root = process.argv[2];
+const manifest = JSON.parse(await readFile(`${root}/offline-manifest.json`, 'utf8'));
+const { RELEASE_BUILD } = await import(pathToFileURL(`${root}/render/release/release_identity.js`));
+if (manifest.build !== RELEASE_BUILD) throw new Error('Offline manifest does not match the published release');
+NODE
 require_file api/telemetry.js
 require_file vercel.json
 require_file content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json
