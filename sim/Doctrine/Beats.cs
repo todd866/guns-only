@@ -25,7 +25,9 @@ public sealed record CombatConfig(
     /// Player guns historically opt into the thermally limited infinite-ammunition model. A
     /// finite-pass mission can explicitly retain its declared magazine instead.
     /// </summary>
-    bool PlayerInfiniteAmmo = true) {
+    bool PlayerInfiniteAmmo = true,
+    AirframeHitGeometry? PlayerTargetGeometry = null,
+    AirframeHitGeometry? OpponentTargetGeometry = null) {
     public static CombatConfig Fighter { get; } = new();
     public static CombatConfig GliderAgainstUnarmedTarget { get; } = new(
         PlayerAmmo: 50,
@@ -56,6 +58,11 @@ public sealed record CombatConfig(
         OpponentGun: GunProfiles.GSh301PublicDataSurrogate,
         // USAF fact sheet: the F-22 carries 480 rounds of 20 mm. The magazine is that number.
         PlayerInfiniteAmmo: false);
+    // Keep the shared historical config above unchanged: the frozen Rapier intercept uses it.
+    public static CombatConfig ModernVisualMergeAirframes { get; } = ModernVisualMerge with {
+        PlayerTargetGeometry = AirframeHitGeometry.Su27,
+        OpponentTargetGeometry = AirframeHitGeometry.F22,
+    };
     /// Top Gun 1v1 DACT: symmetric 480-round M61 magazines on both sides (Tomcat canonical;
     /// MiG-28 fiction carries the same public-data gun surrogate until a dedicated F-5
     /// installation profile lands).
@@ -1586,7 +1593,7 @@ public static class Beats {
             PlayerParams: FlightModel.F22APublicDataSurrogate,
             BanditParams: FlightModel.Su27SPublicDataSurrogate,
             UsesNeutralMergeBandit: true,
-            Combat: CombatConfig.ModernVisualMerge,
+            Combat: CombatConfig.ModernVisualMergeAirframes,
             Fuel: new FuelConfig(
                 CapacityLb: 18000.0,
                 // The fight begins after launch and ingress, not at chocks with topped tanks.
@@ -1795,6 +1802,7 @@ public static class Beats {
     /// is the programme capstone. No radar, missile, stealth, or classified-system simulation.
     /// </summary>
     public static BeatSetup ModernAceDuel() => ModernVisualMerge() with {
+        Combat = CombatConfig.ModernVisualMerge, // frozen capstone retains its historical hit model
         Name = "Ace duel — F-22A surrogate vs Su-27S surrogate ace",
         // A lone climactic duel: drop the continuous-operations replacement stream so the sortie is
         // one merge against one opponent, and force the Ace tier rather than the escalation curve.
