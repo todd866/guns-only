@@ -983,17 +983,16 @@ public static class FlightModel {
         GenericIdleFuelFlowLbPerMinute: 32.0,
         GenericMilitaryFuelFlowLbPerMinute: 250.0,
         GenericAfterburnerFuelFlowLbPerMinute: 650.0,
-        // Keyboard stick travel (package a8, 2026-10-13, keyboard is the core experience). Measured
-        // at 354 KCAS / 10,000 ft (F22KeyboardFeelTests): the bang-bang key turned a 100 ms tap
-        // into 8.5 deg of bank and 2.2 deg of nose, too coarse to place a pipper. A half-stick
-        // onset and quadratic walk-out make that tap 4.1 deg / 1.2 deg. Holds still reach full
-        // aileron (~197 deg/s peak) and the protected pull (8.8 G 1.00 s vs 0.97 s); a full-key
-        // -60/+60 reversal takes 1.55 s instead of 1.48 s. A 35 % onset was finer still (2.8 /
-        // 1.0 deg) but cost the coarse-holding child pilot most of his opening kills in the
-        // browser receipt (2/7 flights; 3/4 at this setting; bang-bang 7/7). The owner's main
-        // player is a child, so that decided it.
+        // Keyboard pitch travel (package a8, 2026-10-13, keyboard is the core experience). Measured
+        // at 354 KCAS / 10,000 ft (F22KeyboardFeelTests): the bang-bang pull key turned a 100 ms tap
+        // into 2.2 deg of nose, too coarse to set a pipper; a half-stick onset walking out over
+        // 0.15 s makes it 1.2 deg while a held pull still reaches 8.8 G at 1.00 s (was 0.97 s).
+        // Roll stays bang-bang on purpose: a roll ramp (35-50 % onset, 0.2-0.25 s) made taps
+        // finer but cost the coarse-holding child pilot most of his opening kills in the browser
+        // receipt and slowed the Build 73 reversal by 0.07-0.11 s. The owner's main player is a
+        // child, so that decided it. The roll path remains available via KeyboardRollRampSeconds.
         KeyboardStickOnsetFraction: 0.5,
-        KeyboardRollRampSeconds: 0.2,
+        KeyboardRollRampSeconds: 0.0,
         KeyboardPitchRampSeconds: 0.15);
 
     /// F-35C PUBLIC-DATA CARRIER SURROGATE. The public anchors are the programme card's

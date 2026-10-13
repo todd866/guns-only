@@ -160,14 +160,13 @@ public class F22KeyboardFeelTests {
 
     [Fact]
     public void AHumanTapIsAFineCorrection() {
-        // 100 ms is a quick human key tap. Before (bang-bang): 8.5 deg bank / 2.2 deg nose;
-        // now about half of each.
+        // 100 ms is a quick human key tap. Before (bang-bang): 2.2 deg nose; now about half.
+        // Roll deliberately stays bang-bang (child-pilot receipt): ~8.5 deg per 100 ms tap.
         var roll = Tap(GKey.RollRight, 100);
         var pull = Tap(GKey.PullUp, 100);
-        Assert.InRange(roll.bankDeg, 2.0, 5.0);
         Assert.InRange(pull.pitchDeg, 0.6, 1.5);
-        Assert.True(Tap(GKey.RollRight, 100, p: BangBang).bankDeg > 7.0, "sensitivity: old law");
         Assert.True(Tap(GKey.PullUp, 100, p: BangBang).pitchDeg > 1.8, "sensitivity: old law");
+        Assert.Equal(Tap(GKey.RollRight, 100, p: BangBang).bankDeg, roll.bankDeg, 6);
         // Monotonic: a longer press always gives a larger correction.
         double prevRoll = 0, prevPitch = 0;
         foreach (double ms in new[] { 40.0, 80.0, 120.0, 200.0, 300.0, 500.0 }) {
@@ -230,6 +229,7 @@ public class F22KeyboardFeelTests {
         Assert.Equal(0.0, FlightModel.F35CPublicDataCarrierSurrogate.KeyboardRollRampSeconds);
         Assert.Equal(0.0, FlightModel.RapierPublicDataSurrogate.KeyboardPitchRampSeconds);
         Assert.Equal(0.0, FlightModel.UcavInterceptorSurrogate.KeyboardRollRampSeconds);
-        Assert.True(FlightModel.F22APublicDataSurrogate.KeyboardRollRampSeconds > 0.0);
+        Assert.True(FlightModel.F22APublicDataSurrogate.KeyboardPitchRampSeconds > 0.0);
+        Assert.Equal(0.0, FlightModel.F22APublicDataSurrogate.KeyboardRollRampSeconds);
     }
 }

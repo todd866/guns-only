@@ -95,15 +95,21 @@ const PILOT_MODELS = {
       const d = Math.hypot(aim.right, aim.up);
       const bearing = Math.atan2(aim.right, aim.up) * 180 / Math.PI; // 0 = straight up the HUD
       let roll = 0, pitch = 0;
-      if (d < 6) {
-        // Fine tracking: short taps on both axes.
-        if (Math.abs(aim.right) > 0.5) roll = Math.sign(aim.right) * clamp(Math.abs(aim.right) * 40, 30, 120);
-        if (aim.up > 0.3) pitch = clamp(aim.up * 60, 30, 200);
-        else if (aim.up < -0.5) pitch = -clamp(-aim.up * 80, 30, 160);
+      // Lift-vector tracking at every range: roll the target toward the top of the HUD, pull
+      // it down to the cross. Close in, the holds shrink to taps; a target just below the cross
+      // gets a push tap rather than a half roll.
+      const fine = d < 6;
+      if (fine && aim.up < 0 && d < 1.5) {
+        pitch = -clamp(-aim.up * 80, 30, 120);
+        if (Math.abs(aim.right) > 0.5) roll = Math.sign(aim.right) * clamp(Math.abs(aim.right) * 40, 30, 80);
       } else {
-        // Put the target above the lift vector, then pull it down to the cross.
-        if (Math.abs(bearing) > 15) roll = Math.sign(bearing) * clamp(Math.abs(bearing) * 1.5, 40, 250);
-        if (Math.abs(bearing) < 45) pitch = clamp(d * 25, 60, 300);
+        if (Math.abs(bearing) > (fine ? 25 : 15)) {
+          roll = Math.sign(bearing) * clamp(Math.abs(bearing) * (fine ? 1.2 : 1.5), 30, fine ? 160 : 250);
+        }
+        if (Math.abs(bearing) < 60) {
+          const along = d * Math.cos(bearing * Math.PI / 180);
+          pitch = fine ? clamp(along * 60, 30, 200) : clamp(along * 25, 60, 300);
+        }
       }
       return { roll, pitch, fireMs: c.solution ? 300 : 0 };
     },
@@ -184,7 +190,8 @@ async function flyDesktop(browser, site, pilotName) {
     await frame("launch", 0);
 
     const seen = [];
-    // Decision trace: [t, aimRightDeg, aimUpDeg, cue P/M/A, solution, range m, KCAS, rollMs, pitchMs, fireMs].
+    // Decision trace (diagnostic only; the pilot never reads range/KCAS/bank):
+// [t, aimRightDeg, aimUpDeg, cue P/M/A, solution, range m, KCAS, rollMs, pitchMs, fireMs, bankDeg].
     const trace = [];
     receipt.trace = trace;
     let contactS = null, windowStartS = null, coarseS = 0, firstHitS = null, roundsToFirstHit = null;
@@ -199,7 +206,7 @@ async function flyDesktop(browser, site, pilotName) {
         return {
           time: g.simulation_time_s, phase: g.session_phase, range: g.range_m, hits: g.hits,
           rounds: g.rounds_fired, kills: g.kill_count, presenting: g.bandit_presenting,
-          lesson: g.bfm_lesson, kcas: g.calibrated_airspeed_kts ?? g.kcas ?? g.ias_kts,
+          lesson: g.bfm_lesson, bank: g.bank_deg, kcas: g.calibrated_airspeed_kts ?? g.kcas ?? g.ias_kts,
           geo: h ? { gunCrossPx: h.gunCrossPx, banditPx: h.banditPx, banditLocator: h.banditLocator,
             leadPipper: h.leadPipper, ladderRungs: h.ladderRungs } : null,
         };
@@ -238,7 +245,8 @@ async function flyDesktop(browser, site, pilotName) {
         const c = view.cue, aim = c?.pipper ?? c?.marker;
         trace.push([+t.toFixed(2), aim ? +aim.right.toFixed(2) : null, aim ? +aim.up.toFixed(2) : null,
           c?.pipper ? "P" : c?.marker ? "M" : c?.arrow ? "A" : "-", c?.solution ? 1 : 0,
-          Math.round(Number(s.range)), Math.round(Number(s.kcas)), d.roll, d.pitch, d.fireMs]);
+          Math.round(Number(s.range)), Math.round(Number(s.kcas)), Math.round(d.roll), Math.round(d.pitch), d.fireMs,
+          Math.round(Number(s.bank))]);
         const hold = async (pos, neg, ms) => {
           if (ms > 0) { await release(neg); await press(pos, t + ms / 1000); }
           else if (ms < 0) { await release(pos); await press(neg, t - ms / 1000); }
