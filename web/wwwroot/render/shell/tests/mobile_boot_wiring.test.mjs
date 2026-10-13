@@ -88,13 +88,12 @@ test("in-app detection is shared by the fallback UI and the telemetry header", (
   assert.match(appSource, /detectEmbeddedBrowser\(\{\s*userAgent: navigator\.userAgent/);
 });
 
-test("a superseded release cannot keep serving itself", () => {
-  assert.match(workerSource, /async function reclaimStaleClients\(/);
+test("prepared release updates preserve an in-flight document until its window closes", () => {
   assert.match(workerSource, /guns-release-activated/);
-  assert.match(workerSource, /client\.navigate\(client\.url\)/,
-    "a document too old to answer the handshake must be re-navigated by the new worker");
-  assert.match(workerSource, /if \(replacedBuild\) await reclaimStaleClients\(\)/,
-    "a first install must never reload anybody");
+  assert.doesNotMatch(workerSource, /client\.navigate\(/,
+    "worker activation must not interrupt a sortie with a forced navigation");
+  assert.doesNotMatch(workerSource, /await self\.skipWaiting\(\)/,
+    "published installs must wait for old controlled documents to close; real handover is covered by offline-resilience.test.mjs");
   assert.match(indexSource, /guns-release-ack/,
     "the reply must live in a classic inline script so a stalled module graph still counts alive");
   assert.match(appSource, /registration\.update\(\)/,
