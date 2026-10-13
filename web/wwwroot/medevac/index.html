@@ -395,6 +395,11 @@
     // The standalone shell can be network-fresh while an older root worker still controls its
     // unversioned ESM and WASM dependencies. Finish that controller/cache handoff before fetching
     // either the release gate, the Blazor loader, or the Medevac application graph.
+    navigator.serviceWorker?.addEventListener("message", event => {
+      if (event.data?.type === "guns-release-activated") {
+        event.ports?.[0]?.postMessage({ type: "guns-release-ack", build: "__RELEASE_BUILD__" });
+      }
+    });
     globalThis.__gunsPrebootReady = (async () => {
       const releaseBuild = new URL("../service-worker.js?v=__RELEASE_BUILD__", location.href)
         .searchParams.get("v");
@@ -410,13 +415,20 @@
         .find((worker) => new URL(worker.scriptURL, location.href)
           .searchParams.get("v") !== releaseBuild);
       if (!staleWorker) return;
-      await Promise.all(registrations.map((registration) => registration.unregister()));
-      if ("caches" in globalThis) {
-        const keys = await caches.keys();
-        await Promise.all(keys
-          .filter((key) => key.startsWith("guns-only-"))
-          .map((key) => caches.delete(key)));
-      }
+      // Keep the working release until the replacement worker has verified its core files.
+      // A failed update must never erase the only usable offline copy.
+      await new Promise((resolve, reject) => {
+        const sw = navigator.serviceWorker;
+        const matches = () => sw.controller && new URL(sw.controller.scriptURL, location.href)
+          .searchParams.get("v") === releaseBuild;
+        const cleanup = () => { clearTimeout(timer); sw.removeEventListener("controllerchange", changed); };
+        const changed = () => { if (matches()) { cleanup(); resolve(); } };
+        const timer = setTimeout(() => { cleanup(); reject(new Error("Release update unavailable; saved release retained")); }, 30_000);
+        sw.addEventListener("controllerchange", changed);
+        sw.register("../service-worker.js?v=__RELEASE_BUILD__")
+          .then(() => changed())
+          .catch(error => { cleanup(); reject(error); });
+      });
     })();
   </script>
   <script type="module">

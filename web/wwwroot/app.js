@@ -224,7 +224,7 @@ import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
 } from "./render/telemetry/telemetry_batch.js?v=__RELEASE_BUILD__";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=__RELEASE_BUILD__";
+import { createShellHealthBeacon, readLocalShellIncidents } from "./render/telemetry/shell_health.js?v=__RELEASE_BUILD__";
 import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=__RELEASE_BUILD__";
 import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=__RELEASE_BUILD__";
 import {
@@ -2670,26 +2670,11 @@ function resolveBuildIdentity({ force = false } = {}) {
 }
 
 async function reloadCurrentBuild() {
-  // Cache-first service-worker responses pin app.js?v=N and unversioned modules until the
-  // cache name changes. A plain navigation to the same release therefore keeps serving the
-  // stale shell — the "Reload current build" button looked dead. Drop the worker and its
-  // caches first, then hard-navigate to the canonical production origin.
+  // Ask for an update without deleting the release that still works on this device.
   try {
-    if ("serviceWorker" in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.map((registration) => registration.unregister()));
-    }
-    if (typeof caches !== "undefined") {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter((key) => key.startsWith("guns-only-"))
-          .map((key) => caches.delete(key)),
-      );
-    }
-  } catch (error) {
-    console.warn("Could not clear offline caches before reload.", error);
-  }
+    const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+    for (const registration of registrations) void registration.update().catch(() => {});
+  } catch { /* navigation still has the saved fallback */ }
 
   const destination = new URL(
     window.location.pathname || "/",
@@ -12138,6 +12123,22 @@ async function boot() {
 
   requestAnimationFrame(tick);
 }
+
+// Read-only support hook: locally retained failures remain inspectable after a reload even
+// if every upload failed. No gameplay records, URLs or book/user content are included.
+globalThis.__gunsOfflineDiagnostics = async () => {
+  const worker = navigator.serviceWorker?.controller;
+  const incidents = await new Promise(resolve => {
+    if (!worker) return resolve([]);
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => { channel.port1.close(); resolve([]); }, 2_000);
+    channel.port1.onmessage = event => {
+      clearTimeout(timer); channel.port1.close(); resolve(event.data?.incidents ?? []);
+    };
+    worker.postMessage({ type: "offline-diagnostics" }, [channel.port2]);
+  });
+  return { shell: readLocalShellIncidents(), network: incidents };
+};
 
 async function primeOfflineRuntime(registration) {
   const worker = registration?.active ?? registration?.waiting ?? registration?.installing;

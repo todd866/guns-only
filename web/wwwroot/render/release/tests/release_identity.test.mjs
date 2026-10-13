@@ -306,11 +306,10 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.doesNotMatch(app, /setInterval\([^)]*resolveBuildIdentity/);
   assert.match(app, /async function reloadCurrentBuild\(\)/,
     "reload must be async so it can drop the service-worker cache before navigating");
-  assert.match(app, /serviceWorker\.getRegistrations/,
-    "reload must unregister service workers or the same ?v= build stays pinned in Cache Storage");
-  assert.match(app, /caches\.keys\(\)/);
-  assert.match(app, /caches\.delete/,
-    "reload must delete guns-only-* caches before navigating to the current release");
+  assert.match(app, /registration\.update\(\)/,
+    "reload must request an update while preserving a usable offline release");
+  assert.doesNotMatch(app, /caches\.delete/,
+    "a user reload must not erase the only offline copy");
   assert.match(app,
     /new URLSearchParams\(window\.location\.search\)\.get\("audioQa"\) === "silent"[\s\S]*?destination\.searchParams\.set\("audioQa", "silent"\)/,
     "stale-build reload must preserve the explicit shared-machine silent audio clamp");
@@ -347,12 +346,10 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.match(index,
     /registration\.active,[\s\S]*?registration\.waiting,[\s\S]*?registration\.installing,[\s\S]*?staleWorker/,
     "the gate must catch a stale registration before it becomes the controlling worker");
-  assert.match(index,
-    /serviceWorker\?\.getRegistrations\?\.\(\)[\s\S]*?registration\.unregister\(\)/,
-    "an older controller must be unregistered before runtime startup");
-  assert.match(index,
-    /caches\.keys\(\)[\s\S]*?key\.startsWith\("guns-only-"\)[\s\S]*?caches\.delete\(key\)/,
-    "an older controller's cache must be removed before unversioned WASM requests");
+  assert.match(index, /controllerchange[\s\S]*sw\.register\(/,
+    "the gate must wait for a prepared worker");
+  assert.doesNotMatch(index, /caches\.delete|registration\.unregister/,
+    "preboot must retain working caches during a failed update");
   assert.match(app,
     /async function boot\(\) \{[\s\S]*?await \(globalThis\.__gunsPrebootReady \?\? Promise\.resolve\(\)\);[\s\S]*?await blazor\.start\(\);/,
     "Blazor startup must await the index upgrade gate");
@@ -401,9 +398,9 @@ test("every published sub-application shares the release-qualified service worke
     const appEntry = source.indexOf(entrypoint);
     assert.ok(gate >= 0 && gate < settled && settled < releaseGate && releaseGate < appEntry,
       `${label} must purge an older worker/cache before linking any release module`);
-    assert.match(source,
-      /serviceWorker\?\.getRegistrations\?\.\(\)[\s\S]*?registration\.unregister\(\)[\s\S]*?caches\.delete\(key\)/,
-      `${label} must remove both the older controller registration and its runtime cache`);
+    assert.doesNotMatch(source, /caches\.delete|registration\.unregister/,
+      `${label} must retain the working release until its replacement is ready`);
+    assert.match(source, /controllerchange[\s\S]*sw\.register\(/);
     assert.match(source,
       /registration\.active,[\s\S]*?registration\.waiting,[\s\S]*?registration\.installing,[\s\S]*?staleWorker/,
       `${label} must inspect stale registrations even before they control a page`);

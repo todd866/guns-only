@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { applyPublishedReleaseQueries } from "./stamp-release.mjs";
+import { writeOfflineManifest } from "./offline-manifest.mjs";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -13,6 +14,7 @@ async function main() {
     );
   }
   const result = await applyPublishedReleaseQueries(path.resolve(wwwroot));
+  await writeOfflineManifest(path.resolve(wwwroot), result.releaseBuild);
   process.stdout.write(
     `applied Build ${result.releaseBuild} to ${result.rewritten} published files\n`,
   );
