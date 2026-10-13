@@ -1270,9 +1270,10 @@ public sealed partial class ReactiveBandit :
         // ceiling now gives it the room. The extension is reserved for the case it was written
         // for: energy-poor, near the cap, genuinely unable to reach the player from here.
         bool needsEnergyToReach = own.Speed < _highSpeedMps;
-        if (player.Position.Y <= _ceilingM + 350.0 || !needsEnergyToReach) _ceilingDenial = false;
-        else if (own.Position.Y > _ceilingM - 900.0) _ceilingDenial = true;
-        else if (own.Position.Y < _ceilingM - 1400.0) _ceilingDenial = false;
+        double ceilingM = FightCeilingM(player);
+        if (player.Position.Y <= ceilingM + 350.0 || !needsEnergyToReach) _ceilingDenial = false;
+        else if (own.Position.Y > ceilingM - 900.0) _ceilingDenial = true;
+        else if (own.Position.Y < ceilingM - 1400.0) _ceilingDenial = false;
 
         // Energy state outranks arena housekeeping. Previously a slow bandit outside the return
         // radius stayed in Return's nose-high 2.8 G turn instead of unloading, decelerated into a
@@ -1298,7 +1299,7 @@ public sealed partial class ReactiveBandit :
         // rebuild energy, but it does all of that inside the arena, and crossing the leash sends
         // it home regardless of how high the player is sitting. The low-energy gate above still
         // outranks the leash, for the documented stall reason.
-        if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
+        if (radius > ReturnRadiusM || own.Position.Y > ceilingM + 350.0) {
             Tactic = BanditTactic.Return;
             return;
         }
@@ -1521,12 +1522,14 @@ public sealed partial class ReactiveBandit :
         }
         double leadErrorRad = BanditFireControl.LeadNoseErrorRad(State, player);
         if (_fineTrackLatched) {
-            if (leadErrorRad <= GunTrackLeadExitRad) return true;
+            if (leadErrorRad <= GunTrackLeadExitRad && !FineTrackOutOfPatience(player, leadErrorRad))
+                return true;
             _fineTrackLatched = false;
             return false;
         }
-        if (leadErrorRad <= GunTrackLeadEntryRad) {
+        if (leadErrorRad <= GunTrackLeadEntryRad && T >= _fineTrackRetryAt) {
             _fineTrackLatched = true;
+            _fineTrackProgressAt = T;
             return true;
         }
         return false;
@@ -2364,10 +2367,16 @@ public sealed partial class ReactiveBandit :
         double cruiseThrottle = chasing
             ? _maximumThrottle
             : System.Math.Min(_maximumThrottle, 0.84);
-        // Outside gun range the cold tier needs a cut-off, not a ballistic aim point on an
-        // unreachable stern chase. Freeze this bounded aim heuristic with the rest of the plan;
+        // Outside gun range every opted-in tier needs a cut-off, not a ballistic aim point on an
+        // unreachable stern chase: pure pursuit of a turning F-22 at equal speed never closes
+        // (traced N Ace, 2026-10-13: nose 3 deg, 1-3 km, 70 s without a shot). FUN: it comes back. Freeze this bounded aim heuristic with the rest of the plan;
         // the gun-window/lead gates below still score the actual predicted physical contact.
-        _lookaheadPlanAttackLeadSeconds = AttackReengagementEnabled && Skill == PilotSkill.Competent
+        // Only a target in the forward hemisphere is being chased: a "stalled closure" with the
+        // player behind is a defensive problem, and a cut-off point there flew the O3 Ace into
+        // the player's gun (BfmFlightAcceptanceTests ladder curve 8/3/0 -> 8/3/3).
+        bool targetAhead = State.ForwardDir().Dot(lineOfSight) > 0.0;
+        _lookaheadPlanAttackLeadSeconds = AttackReengagementEnabled
+            && (Skill == PilotSkill.Competent || targetAhead)
             && chasing && lowAttackPlan is null && range > 1000.0
             ? System.Math.Clamp((range - 650.0) / System.Math.Max(State.Speed, 150.0), 0.0, 6.0) : 0.0;
         if (_lookaheadPlanAttackLeadSeconds > 0.0)
@@ -3050,7 +3059,7 @@ public sealed partial class ReactiveBandit :
         // out of its own fight volume before the scorer objected at all. Traced at 13,437 m. This
         // is the only ceiling pressure a lookahead tier gets — SelectTactic's Return was discarded
         // on that path — so it has to be the one that means something.
-        double scoreCeilingM = System.Math.Min(_ceilingM, CombatCeilingM);
+        double scoreCeilingM = System.Math.Min(FightCeilingM(player), CombatCeilingM);
         if (maxY > scoreCeilingM - 200.0)
             score -= 0.02 * (maxY - (scoreCeilingM - 200.0));
         return score;

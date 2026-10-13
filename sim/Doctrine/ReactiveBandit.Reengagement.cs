@@ -9,6 +9,48 @@ public sealed partial class ReactiveBandit {
     long? _attackContactIdentity;
     double _lookaheadPlanAttackLeadSeconds;
 
+    // FUN: a vertical fight is followed, not declined. For the opted-in ramp opponent the
+    // per-fight ceiling rises with the player (to the fixed combat ceiling), so a high yo-yo or
+    // a climbing player is chased up instead of triggering a nose-cold energy extension.
+    // Frozen modes and pair support keep the staged ceiling. Not extra aircraft authority.
+    const double VerticalFightHeadroomM = 600.0;
+    double FightCeilingM(in ActorObservation player) => AttackReengagementEnabled
+        ? System.Math.Min(CombatCeilingM, System.Math.Max(_ceilingM, player.Position.Y + VerticalFightHeadroomM))
+        : _ceilingM;
+
+    // FUN: the finisher must not become a 50-second stare. Traced 2026-10-13 (N Ace and D1
+    // Veteran vs a climbing turn): the closed-loop finisher latched 6-10 deg off the lead at
+    // 800-900 m and held there for 50 s without one round, because its rate-limited law never
+    // closes the last degrees on a target turning as hard as it can. A pilot who is not getting
+    // the shot repositions. If no tick inside the trigger's reach arrives within a tier's
+    // patience, hand the fight back to the planner (high/low yo-yo, max-G pull, reversal all
+    // compete there) and keep the finisher out briefly so the choice can play out. Patience is
+    // the tier's decision quality: the Competent fixates longest, the Ace gives up soonest.
+    // Opt-in ramp opponent only; frozen fixtures keep the historical latch.
+    internal bool FineTrackLatched => _fineTrackLatched;
+    double _fineTrackProgressAt;
+    double _fineTrackRetryAt = double.NegativeInfinity;
+    const double FineTrackRetrySeconds = 2.0;
+    double FineTrackPatienceSeconds => Skill switch {
+        PilotSkill.Competent => 5.0,
+        PilotSkill.Veteran => 3.5,
+        _ => 2.5,
+    };
+
+    bool FineTrackOutOfPatience(in ActorObservation player, double leadErrorRad) {
+        if (!AttackReengagementEnabled) return false;
+        bool progress = leadErrorRad <= 2.0 * EffectiveLeadFireConeRad
+            || (_profile.FiresOnBodyGate
+                && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad));
+        if (progress) {
+            _fineTrackProgressAt = T;
+            return false;
+        }
+        if (T - _fineTrackProgressAt < FineTrackPatienceSeconds) return false;
+        _fineTrackRetryAt = T + FineTrackRetrySeconds;
+        return true;
+    }
+
     internal string AttackStatus => !AttackReengagementEnabled ? "off"
         : Presenting ? "present"
         : _terrainRecoveryActive ? "terrain-recovery"
@@ -57,8 +99,28 @@ public sealed partial class ReactiveBandit {
     // attack opportunities in the same three-seed early-fire contract.
     double AttackTurnSpeedMps => Skill == PilotSkill.Competent ? _lowSpeedMps : _highSpeedMps;
 
+    // FUN: the Competent's over-pull into the vertical is its exploitable mistake, but it must
+    // not cost a minute. Traced O1 vs cohort (2026-10-13): zoomed to 79 deg at 115 m/s, and the
+    // wings-level -0.2 G unload drops the nose at only ~2 deg/s there (cos(gamma) ~ 0.2), so the
+    // jet hung nose-high for 25 s and returned after 55 s. Very steep and slow, a pilot rolls the
+    // lift vector below the horizon toward the fight and pulls gently: the nose falls ~4x faster
+    // through the normal roll/G actuators. Side latched so the roll never reverses.
+    const double SteepZoomGammaRad = 1.0;     // 57 deg: below this the unload is already quick
+    const double ZoomSliceBankRad = 2.6;      // 149 deg: lift vector well below the horizon
+    const double ZoomSliceG = 1.5;            // gentle at low speed; capped by available G below
+    int _zoomSliceSide;
+
     PilotCommand AttackEnergyRecoveryCommand(in ActorObservation player) {
         var own = State;
+        if (own.Gamma > SteepZoomGammaRad || (_zoomSliceSide != 0 && own.Gamma > 0.35)) {
+            if (_zoomSliceSide == 0) {
+                double toward = LimitedBankTo(player.Position with { Y = own.Position.Y }, 1.3);
+                _zoomSliceSide = System.Math.Abs(toward) > 1e-3 ? System.Math.Sign(toward) : _breakSign;
+            }
+            double sliceG = System.Math.Min(ZoomSliceG, System.Math.Max(0.5, AvailableAcquireG(safetyReserve: false)));
+            return new PilotCommand(sliceG, _zoomSliceSide * ZoomSliceBankRad, _maximumThrottle, 0.0);
+        }
+        _zoomSliceSide = 0;
         // A slow aircraft cannot pull its way out of a zoom. Unload first; steer toward
         // the fight in a shallow descending turn once the flight path reaches the horizon.
         // This is pilot intent through the normal G/roll actuators, not a pose correction.
@@ -79,7 +141,7 @@ public sealed partial class ReactiveBandit {
             LocalFloorM(own.Position.X + own.ForwardDir().X * 900.0,
                 own.Position.Z + own.ForwardDir().Z * 900.0));
         aim = aim with { Y = System.Math.Clamp(aim.Y, floor + 300.0,
-            System.Math.Max(floor + 300.0, _ceilingM - 180.0)) };
+            System.Math.Max(floor + 300.0, FightCeilingM(player) - 180.0)) };
         var forward = own.ForwardDir();
         var line = (aim - own.Position).Normalized();
         double angle = System.Math.Acos(System.Math.Clamp(forward.Dot(line), -1.0, 1.0));

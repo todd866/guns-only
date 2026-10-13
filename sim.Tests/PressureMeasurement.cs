@@ -29,8 +29,10 @@ internal sealed class PressureExposure {
             firing |= actor.Trigger;
             threat |= !actor.Presenting && (actor.Trigger
                 || (actor.RangeM < 2500 && actor.NoseRad < 35 * Math.PI / 180));
-            credible |= !actor.Presenting && inRange && actor.NoseRad <= actor.ConeRad
-                && (actor.Trigger || actor.NearFiring);
+            // A trigger on the body cone, or the nose on the ballistic lead (NearFiring) at any
+            // body angle: an Ace deflection shot sits well outside the body cone yet kills.
+            credible |= !actor.Presenting && inRange
+                && ((actor.Trigger && actor.NoseRad <= actor.ConeRad) || actor.NearFiring);
         }
         LastCredible = credible;
         if (threat && double.IsNaN(FirstThreat)) FirstThreat = LiveSeconds;

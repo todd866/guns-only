@@ -27,10 +27,31 @@ public sealed class PressureMeasurementTests {
     [Fact] public void FiringOutsideTheEnvelopeIsNotACredibleAttack() {
         var p = new PressureExposure();
         p.Add(true, 1, [Attacking with { RangeM = 1000 }]);
-        p.Add(true, 1, [Attacking with { NoseRad = 0.2 }]);
+        p.Add(true, 1, [Attacking with { NoseRad = 0.2, NearFiring = false }]);
         Assert.Equal(2, p.LongestCredibleGap);
         p.Add(true, 1, [Attacking with { Trigger = false }]);
         Assert.Equal(2, p.FirstCredible);
+    }
+    [Fact] public void DeflectionShotOnTheLeadIsCredibleOutsideTheBodyCone() {
+        var p = new PressureExposure();
+        p.Add(true, 1, [Attacking with { NoseRad = 0.2, Trigger = true, NearFiring = true }]);
+        Assert.Equal(0, p.FirstCredible);
+        Assert.True(p.LastCredible);
+    }
+    [Fact] public void FunProxiesMergeAttacksAndMeasureReturnTime() {
+        var f = new FunProxyTracker();
+        f.Add(1, true, false, true, 500, false);
+        f.Add(2, true, false, true, 500, false);   // same attack (within 3 s)
+        f.Add(30, true, true, false, 600, true);    // second attack, 28 s later; first hit now
+        f.Add(30.5, false, true, false, 600, false); // same opportunity episode
+        Assert.Equal(2, f.Attacks);
+        Assert.Equal(28, f.MedianReturn);
+        Assert.Equal(1, f.Opportunities);
+        Assert.Equal(2, f.AttacksBeforeFirstHit);
+        Assert.Equal(0, f.Overshoots);  // last behind 28 s earlier: not an overshoot
+        f.Add(40, false, false, true, 300, false);
+        f.Add(40.5, false, false, false, 300, false); // passes the 3-9 line inside 900 m
+        Assert.Equal(1, f.Overshoots);
     }
     [Fact] public void BodyConeAloneIsNotNearFiring() {
         var p = new PressureExposure();

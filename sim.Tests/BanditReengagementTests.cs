@@ -66,6 +66,88 @@ public sealed class BanditReengagementTests {
         Assert.True(recovery.Gamma < 0, "recovery recommitted while still zooming");
     }
 
+    /// FUN: the closed-loop finisher may not stare at a shot it is not getting. Against a target
+    /// in a sustained hard turn, an opted-in bandit hands back to its planner within its tier's
+    /// patience (plus one retry window) whenever no tick reaches the trigger's reach.
+    [Theory]
+    [InlineData(PilotSkill.Competent, 5.0)]
+    [InlineData(PilotSkill.Veteran, 3.5)]
+    [InlineData(PilotSkill.Ace, 2.5)]
+    public void FinisherGivesUpAShotItIsNotGettingWithinTierPatience(PilotSkill skill, double patience) {
+        double LongestStare(bool enabled) {
+            var target = new AircraftSim(State(0, 4000, 850, 320, air: PlayerAir), PlayerAir);
+            var bandit = new ReactiveBandit(State(-60, 3990, 0, 320), BanditAir, skill)
+                { AttackReengagementEnabled = enabled };
+            double stare = 0, longest = 0;
+            for (int tick = 0; tick < 60 * AircraftSim.TickHz; tick++) {
+                target.Step(new PilotCommand(4.0, 1.25, 1.0, 0.0), Dt);
+                var observed = ActorObservation.Capture(target.State, tick);
+                bandit.Step(observed, Dt);
+                bool reach = BanditFireControl.InLeadFiringEnvelope(bandit.State, observed,
+                    2.0 * BanditSkillProfile.For(skill).LeadFireConeRad);
+                stare = bandit.FineTrackLatched && !reach && !bandit.WantsToFire(observed) ? stare + Dt : 0;
+                longest = Math.Max(longest, stare);
+            }
+            return longest;
+        }
+        double fun = LongestStare(true), legacy = LongestStare(false);
+        // Legacy (frozen fixtures) still stares ~40 s here; the opted-in pilot gives up in time.
+        Assert.True(legacy > 20.0, $"fixture no longer reproduces the stare: legacy {legacy:F1} s");
+        Assert.True(fun <= patience + 0.5, $"{skill}: finisher held {fun:F1} s without reach (patience {patience} s); legacy {legacy:F1} s");
+    }
+
+    /// FUN: a vertical fight is followed. A climbing ramp opponent does not declare the player
+    /// "above the ceiling" and extend away just because the fight went up past its staging band.
+    [Fact]
+    public void OptedInOpponentFollowsAClimbingPlayerInsteadOfExtendingAway() {
+        int CeilingDenialTicks(bool enabled) {
+            var bandit = new ReactiveBandit(State(0, 3000, 0, 300, gamma: 0.6), BanditAir,
+                PilotSkill.Veteran) { AttackReengagementEnabled = enabled };
+            var player = State(0, 8000, 3500, 240);
+            int ticks = 0;
+            for (int tick = 0; tick < 25 * AircraftSim.TickHz; tick++) {
+                bandit.Step(ActorObservation.Capture(player, tick), Dt);
+                if (bandit.AttackStatus == "energy-ceiling" || (!enabled && bandit.Tactic == BanditTactic.Energy
+                        && bandit.State.Speed > 160)) ticks++;
+            }
+            return ticks;
+        }
+        Assert.Equal(0, CeilingDenialTicks(true));
+    }
+
+    /// FUN: a Competent that over-pulled into the vertical recovers in seconds, not a minute,
+    /// through ordinary roll and G, and ends nose-low and faster than it entered.
+    [Theory]
+    [InlineData(115.0, 1.35)]
+    [InlineData(100.0, 1.2)]
+    public void SteepSlowZoomSlicesTheNoseDownQuickly(double speed, double gamma) {
+        (double Exit, double MinimumSpeed, double Gamma, int Reversals) Fly(bool enabled) {
+            var bandit = new ReactiveBandit(State(0, 6000, 0, speed, gamma: gamma),
+                BanditAir, PilotSkill.Competent) { AttackReengagementEnabled = enabled };
+            var player = State(2000, 5000, 3000, 250);
+            double minimum = speed, lastSign = 0;
+            int reversals = 0;
+            for (int tick = 0; tick < 60 * AircraftSim.TickHz; tick++) {
+                bandit.Step(ActorObservation.Capture(player, tick), Dt);
+                minimum = Math.Min(minimum, bandit.State.Speed);
+                double sign = Math.Sign(bandit.LastCommand.BankTarget);
+                if (sign != 0 && lastSign != 0 && sign != lastSign && Math.Abs(bandit.LastCommand.BankTarget) > 1.0)
+                    reversals++;
+                if (sign != 0) lastSign = sign;
+                if (bandit.State.Gamma < 0.09)
+                    return (tick * Dt, minimum, bandit.State.Gamma, reversals);
+                Assert.False(bandit.LastCommand.EnvelopeOverride);
+            }
+            return (60, minimum, bandit.State.Gamma, reversals);
+        }
+        var legacy = Fly(false);
+        var recovery = Fly(true);
+        Assert.True(recovery.Exit < 12.0 && recovery.Exit < legacy.Exit * 0.6,
+            $"nose through the horizon after {recovery.Exit:F1} s vs legacy {legacy.Exit:F1} s");
+        Assert.Equal(0, recovery.Reversals);
+        Assert.True(recovery.MinimumSpeed > 60.0, $"minimum speed {recovery.MinimumSpeed:F1}");
+    }
+
     [Theory]
     [InlineData(false, 700.0)]
     [InlineData(false, 900.0)]

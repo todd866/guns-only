@@ -425,6 +425,7 @@ public sealed class BanditPressureReport {
                         + $" | inside900 {runs.Average(x => x.GunRangeShare):P0} | mean secs {runs.Average(x => x.Seconds):F0}");
                     _output.WriteLine($"FUN rung {rung} vs {pilot.Name} x{seeds}:"
                         + $" first-attack {Med(runs.Select(x => x.FirstCredibleS)):F0}s"
+                        + $" | worst credible gap {Med(runs.Select(x => x.LongestCredibleGapS)):F0}s med / {runs.Max(x => x.LongestCredibleGapS):F0}s max"
                         + $" | return med {Med(runs.Select(x => x.MedianReturnS)):F0}s max {runs.Select(x => x.MaxReturnS).Where(double.IsFinite).DefaultIfEmpty(double.NaN).Max():F0}s"
                         + $" | attacks/min {runs.Sum(x => x.Attacks) / runs.Sum(x => x.Seconds) * 60:F2}"
                         + $" | opps/min {runs.Sum(x => x.Opportunities) / runs.Sum(x => x.Seconds) * 60:F2}"
