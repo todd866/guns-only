@@ -33,7 +33,12 @@ public sealed partial class SimulationSession {
         if (_carrier is null) _detents.Variant = variant;
     }
 
-    /// <summary>Enable or disable the pilot-selected assisted dogfighting command layer.</summary>
+    /// <summary>
+    /// Enable or disable the assisted dogfighting contract (corner-speed auto-throttle, qualified
+    /// automatic fire, path-holding neutral). The browser latches this ONCE per sortie at launch
+    /// from the device class, never from orientation: rotating a phone mid-sortie must not change
+    /// who owns power, fire or pitch (feel audit, 2026-10-13).
+    /// </summary>
     public void SetAssistedFlight(bool enabled) =>
         _assistedFlight = enabled && OpponentPresent;
 
@@ -607,8 +612,6 @@ public sealed partial class SimulationSession {
         if (!_detents.AssistedFlight) {
             _detents.AssistedCalibratedAirspeedMps = double.NaN;
             _detents.AssistedTargetCalibratedAirspeedMps = double.NaN;
-            _detents.AssistedTargetWithinNoseCone = false;
-            _detents.AssistedTargetNoseAngleRad = double.NaN;
             return;
         }
         _detents.AssistedCalibratedAirspeedMps = _player.IndicatedAirspeedMps;
@@ -619,16 +622,6 @@ public sealed partial class SimulationSession {
         _detents.AssistedTargetCalibratedAirspeedMps =
             (cornerKias + AssistedSpeedBiasKts) / AirData.MpsToKnots;
 
-        AircraftState selectedTarget = SelectedOpponentState;
-        Vec3D toTarget = selectedTarget.Position - _player.State.Position;
-        double rangeSquared = toTarget.Dot(toTarget);
-        bool targetValid = SelectedOpponentAlive
-            && rangeSquared > 1e-12;
-        double noseDot = targetValid
-            ? _player.BodyForward.Dot(toTarget * (1.0 / Math.Sqrt(rangeSquared)))
-            : double.NaN;
-        _detents.AssistedTargetWithinNoseCone = targetValid && noseDot >= 0.5;
-        _detents.AssistedTargetNoseAngleRad = targetValid
-            ? Math.Acos(Math.Clamp(noseDot, -1.0, 1.0)) : double.NaN;
+        // Deliberately no target geometry here: the assisted neutral law is target-independent.
     }
 }

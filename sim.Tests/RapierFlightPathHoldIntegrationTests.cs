@@ -83,8 +83,7 @@ public sealed class RapierFlightPathHoldIntegrationTests {
         Assert.True(double.IsFinite(approach.Command.CommandedPitchRad));
 
         var assisted = new DetentLayer {
-            AssistedFlight = true,
-            AssistedTargetWithinNoseCone = false
+            AssistedFlight = true
         };
         Tick(assisted, new KeyGrammar(), sim,
             FlightModel.RapierPublicDataSurrogate);

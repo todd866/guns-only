@@ -347,6 +347,26 @@ test("mobile tactical rail replaces low-value heading with corner, G, and assist
   assert.equal(assisted.energy.token, "AUTO COR+30");
   assert.match(assisted.actualText, /AUTO COR\+30/);
   assert.doesNotMatch(assisted.actualText, /H005/);
+
+  // One assisted contract per device: a landscape pilot who takes the thumb throttle flies manual
+  // power inside it, and the readout must stop claiming AUTO.
+  const tookTheLever = mobileTacticalReadout({
+    speed_kts: 315,
+    corner_speed_kias: 315,
+    alt_ft: 8000,
+    vertical_speed_fpm: 0,
+    heading_deg: 5,
+    mach: 0.66,
+    assisted_flight: true,
+    auto_throttle: false,
+    assisted_speed_bias_kts: 30,
+    ammo: 480,
+  }, {}, { fightActive: true });
+  assert.doesNotMatch(tookTheLever.actualText, /AUTO/);
+  assert.equal(mobileTacticalReadout({
+    speed_kts: 315, corner_speed_kias: 315, alt_ft: 8000, mach: 0.66,
+    assisted_flight: true, auto_throttle: true, assisted_speed_bias_kts: 0, ammo: 480,
+  }, {}, { fightActive: true }).energy.token, "AUTO COR");
 });
 
 test("visual merge weapon safety stays visible only while it changes a pilot decision", () => {

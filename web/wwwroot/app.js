@@ -1215,19 +1215,22 @@ let previousRunPausedForAudio = false;
 const mobileControls = localTouchPreview || coarsePointer || (touchCapable && smallViewport);
 document.documentElement.classList.toggle("touch-mode", mobileControls);
 document.documentElement.classList.toggle("touch-primary", mobileControls);
-// Portrait + touch = assisted support around the two-stick primary controls: throttle holds
-// corner velocity and qualified gun solutions may fire automatically. Tilt remains roll trim only.
+// Touch phone = the assisted contract around the two-stick primary controls: throttle holds corner
+// velocity until the pilot takes the lever, qualified gun solutions may fire automatically, and a
+// centred stick holds the path. ONE contract per sortie, latched at launch from the DEVICE, never
+// from orientation (feel audit 2026-10-13: rotating a phone used to swap who owned power, fire and
+// pitch mid-sortie). Orientation now changes layout only; `.portrait-assist` + the portrait media
+// query is what hides the throttle stick in portrait. Tilt remains roll trim only.
 const portraitMedia = window.matchMedia?.("(orientation: portrait)");
 // Assisted flight requires a genuinely coarse touch pointer. mobileControls alone also admits
 // small desktop windows (tall narrow window == "portrait"), which put the autopilot on a
 // keyboard pilot — reported from the desktop within minutes.
 const assistedEligible = localTouchPreview || (coarsePointer && touchCapable);
 function syncAssistedFlight() {
-  const assisted = assistedEligible && portraitMedia?.matches === true;
+  const assisted = assistedEligible;
   document.documentElement.classList.toggle("portrait-assist", assisted);
   bridge?.SetAssistedFlight?.(assisted);
 }
-portraitMedia?.addEventListener?.("change", () => syncAssistedFlight());
 // iOS Safari/CriOS has no element-fullscreen API: standalone (Add to Home Screen) is the only
 // way to shed the browser chrome. Say so once, on the ready screen, only where it applies.
 const isIosBrowserTab = /iPhone|iPad/.test(navigator.userAgent)

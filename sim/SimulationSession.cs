@@ -549,6 +549,8 @@ public sealed partial class SimulationSession {
     public long BanditSpawnSequence => _banditSpawnSequence;
     public long CarrierSpawnSequence => _carrier is null ? 0 : _carrierSpawnSequence;
     public bool AssistedFlight => _assistedFlight;
+    /// The assisted corner-speed hold currently owns the throttle lever (not merely the contract).
+    public bool AssistedAutoThrottleActive => _assistedFlight && _detents.AutoThrottleOwnsLever;
     public int AssistedSpeedBiasKts => _assistedSpeedBiasIndex * 30;
     public bool TransitionCueActive => _catapult.IsActive || _simTimeMs < _transitionCueUntilMs;
     public string TransitionCue => TransitionCueActive ? _transitionCue : "";

@@ -132,6 +132,7 @@ public class AssistedFlightTests {
         SimulationSession session = CornerHoldSession();
         for (int i = 0; i < 30; i++) session.StepFixed();
         double automaticThrottle = session.Controls.Throttle;
+        Assert.True(session.AssistedAutoThrottleActive);
         double requestedLever01 = 0.20;
         double expectedThrottle = requestedLever01
             * session.Beat.PlayerAir.MaxThrustFraction;
@@ -140,6 +141,8 @@ public class AssistedFlightTests {
         for (int i = 0; i < 30; i++) session.StepFixed();
 
         Assert.True(session.AssistedFlight);
+        Assert.False(session.AssistedAutoThrottleActive,
+            "the HUD's AUTO must clear once the pilot owns the lever");
         Assert.True(automaticThrottle > expectedThrottle + 0.4,
             "the fixture must distinguish corner auto-throttle from the requested phone lever");
         Assert.Equal(expectedThrottle, session.Controls.Throttle, 10);
@@ -207,13 +210,13 @@ public class AssistedFlightTests {
     }
 
     [Fact]
-    public void NeutralAutoPullIsAboutRightButPilotPitchOwnsTheAxis() {
-        static SimulationSession Create(bool pull, bool push) {
+    public void NeutralAssistedDemandIgnoresTheTargetButPilotPitchOwnsTheAxis() {
+        static SimulationSession Create(bool pull, bool push, double banditZ) {
             AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
             double massKg = parameters.FuelFreeMassKg + 1_000.0 * 0.45359237;
             AircraftState player = State(new Vec3D(0.0, 3_000.0, 0.0),
                 210.0, massKg);
-            AircraftState bandit = State(new Vec3D(0.0, 3_000.0, 800.0),
+            AircraftState bandit = State(new Vec3D(0.0, 3_000.0, banditZ),
                 210.0, massKg);
             var session = new SimulationSession();
             session.StartBeat(() => FightBeat(player, bandit, parameters), CalmWeather());
@@ -221,39 +224,36 @@ public class AssistedFlightTests {
             session.Begin();
             if (pull) session.FeedKey(GKey.PullUp, true);
             if (push) session.FeedKey(GKey.PushDown, true);
-            session.StepFixed();
+            for (int i = 0; i < 60; i++) session.StepFixed();
             return session;
         }
 
-        SimulationSession neutral = Create(pull: false, push: false);
-        SimulationSession pulling = Create(pull: true, push: false);
-        SimulationSession pushing = Create(pull: false, push: true);
-        double maxPerform = Protection.MaxPerformG(neutral.Player.State,
-            neutral.Beat.PlayerAir, neutral.Player.AirspeedMps,
-            neutral.Player.AtmosphereModel);
+        SimulationSession neutralAhead = Create(pull: false, push: false, banditZ: 800.0);
+        SimulationSession neutralBehind = Create(pull: false, push: false, banditZ: -800.0);
+        SimulationSession neutralFar = Create(pull: false, push: false, banditZ: 19_000.0);
+        SimulationSession pulling = Create(pull: true, push: false, banditZ: 800.0);
+        SimulationSession pushing = Create(pull: false, push: true, banditZ: 800.0);
 
-        Assert.True(neutral.Controls.Command.GDemand > 1.0);
-        Assert.True(neutral.Controls.Command.GDemand < Math.Min(4.0, maxPerform));
-        Assert.True(pulling.Controls.Command.GDemand > neutral.Controls.Command.GDemand,
+        // Wings level, hands off: one G whatever is in the sky. The old law pulled 1.4 G toward a
+        // target on the nose and carried a portrait pilot to 65 degrees nose-up.
+        Assert.Equal(1.0, neutralAhead.Controls.Command.GDemand, 3);
+        Assert.Equal(neutralAhead.Controls.Command.GDemand,
+            neutralBehind.Controls.Command.GDemand, 6);
+        Assert.Equal(neutralAhead.Controls.Command.GDemand,
+            neutralFar.Controls.Command.GDemand, 6);
+        Assert.True(pulling.Controls.Command.GDemand > neutralAhead.Controls.Command.GDemand + 1.0,
             "held pull must replace, not add to, the assisted baseline");
-        Assert.True(pushing.Controls.Command.GDemand < neutral.Controls.Command.GDemand,
+        Assert.True(pushing.Controls.Command.GDemand < neutralAhead.Controls.Command.GDemand,
             "held push must replace, not fight, the assisted baseline");
     }
 
-    // Pilot-tuned contract (2026-07-23, "portrait is pulling way too hard by default"): the
-    // auto-pull is about-right, growing with off-axis angle. On the nose it relaxes to a light
-    // sustaining pull and lets the gunnery correction do the fine tracking; the full protected
-    // repositioning pull belongs only to a target near the 60-degree cone edge; outside the cone
-    // the assist holds the path instead of climbing away.
+    /// The assisted neutral is a bank-compensated path hold and nothing else: no target term, so
+    /// there is no cone edge for the command target to step across.
     [Fact]
-    public void AutoPullGrowsWithOffAxisAngleAndHoldsPathOutsideTheCone() {
+    public void AssistedNeutralHoldsTheBankedPathWithoutATargetTerm() {
         AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
-        AircraftState state = State(new Vec3D(0.0, 3_000.0, 0.0),
-            210.0, parameters.MassKg);
         var detents = new DetentLayer {
             AssistedFlight = true,
-            AssistedTargetWithinNoseCone = true,
-            AssistedTargetNoseAngleRad = 0.0,
             AssistedCalibratedAirspeedMps = 210.0,
             AssistedTargetCalibratedAirspeedMps = 210.0,
             AirspeedMps = 210.0,
@@ -262,22 +262,68 @@ public class AssistedFlightTests {
         var keys = new KeyGrammar();
         var advice = new DoctrineAdvice(1.0, 0.0, "neutral");
         const double dt = SimulationSession.FixedDeltaSeconds;
-
+        AircraftState level = State(new Vec3D(0.0, 3_000.0, 0.0), 210.0, parameters.MassKg);
         for (int i = 0; i < 240; i++)
-            detents.Tick(keys, i * dt * 1000.0, state, parameters, advice, dt);
-        Assert.Equal(1.4, detents.Command.GDemand, 6);
-
-        detents.AssistedTargetNoseAngleRad = System.Math.PI / 3.0;
-        for (int i = 240; i < 480; i++)
-            detents.Tick(keys, i * dt * 1000.0, state, parameters, advice, dt);
-        double maxPerform = Protection.MaxPerformG(state, parameters, 210.0,
-            StandardAtmosphere1976.Instance);
-        Assert.Equal(Math.Min(4.0, maxPerform), detents.Command.GDemand, 6);
-
-        detents.AssistedTargetWithinNoseCone = false;
-        detents.AssistedTargetNoseAngleRad = 2.0;
-        for (int i = 480; i < 720; i++)
-            detents.Tick(keys, i * dt * 1000.0, state, parameters, advice, dt);
+            detents.Tick(keys, i * dt * 1000.0, level, parameters, advice, dt);
         Assert.Equal(1.0, detents.Command.GDemand, 6);
+
+        AircraftState banked = level with { Bank = 40.0 * Math.PI / 180.0 };
+        for (int i = 240; i < 480; i++)
+            detents.Tick(keys, i * dt * 1000.0, banked, parameters, advice, dt);
+        Assert.Equal(1.0 / Math.Cos(40.0 * Math.PI / 180.0), detents.Command.GDemand, 6);
+
+        AircraftState steep = level with { Bank = 75.0 * Math.PI / 180.0 };
+        for (int i = 480; i < 720; i++)
+            detents.Tick(keys, i * dt * 1000.0, steep, parameters, advice, dt);
+        Assert.Equal(1.35, detents.Command.GDemand, 6);
+    }
+
+    /// Sweep a live target from the nose, through the old 60-degree cone edge, to the beam. The
+    /// hands-off requested G must not move at all; the audit measured a 3.6 -> 1.7 G drop in 0.1 s
+    /// at that edge with no thumb change.
+    [Fact]
+    public void SweepingTheTargetAcrossTheOldConeEdgeDoesNotStepNeutralDemand() {
+        AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
+        double massKg = parameters.FuelFreeMassKg + 1_000.0 * 0.45359237;
+        var demands = new List<double>();
+        foreach (double offDeg in new[] { 0.0, 30.0, 58.0, 62.0, 90.0 }) {
+            double off = offDeg * Math.PI / 180.0;
+            AircraftState player = State(new Vec3D(0.0, 3_000.0, 0.0), 210.0, massKg);
+            AircraftState bandit = State(
+                new Vec3D(2_000.0 * Math.Sin(off), 3_000.0, 2_000.0 * Math.Cos(off)),
+                210.0, massKg);
+            var session = new SimulationSession();
+            session.StartBeat(() => FightBeat(player, bandit, parameters), CalmWeather());
+            session.SetAssistedFlight(true);
+            session.Begin();
+            for (int i = 0; i < 30; i++) session.StepFixed();
+            demands.Add(session.Controls.Command.GDemand);
+        }
+        Assert.True(demands.Max() - demands.Min() < 1e-6,
+            "neutral demand moved with target bearing: " + string.Join(", ", demands));
+    }
+
+    /// One contract per device, so portrait and landscape are the same law; and the hands-off
+    /// assisted law agrees with the unassisted F-22 neutral to well inside 0.05 G at the real
+    /// first-merge start, with the rung-0 lead on the nose.
+    [Fact]
+    public void HandsOffDemandAtTheFirstMergeStartMatchesAcrossContracts() {
+        double Demand(bool assisted) {
+            var session = new SimulationSession();
+            session.StartBeat(() => Beats.ModernVisualMerge());
+            session.SetTouchControlModality(true);
+            session.SetAssistedFlight(assisted);
+            session.Begin();
+            double worst = 0.0;
+            for (int i = 0; i < 4 * (int)AircraftSim.TickHz; i++) {
+                session.StepFixed();
+                if (i > 60) worst = Math.Max(worst, session.Controls.Command.GDemand);
+            }
+            return worst;
+        }
+        double assistedG = Demand(true);
+        double manualG = Demand(false);
+        Assert.True(Math.Abs(assistedG - manualG) < 0.05,
+            $"hands-off requested G assisted={assistedG:F3} manual={manualG:F3}");
     }
 }
