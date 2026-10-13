@@ -25,11 +25,11 @@ public readonly record struct BfmLesson(
         Sparring: Index is 0 or 2 or 4, LessonIndex: Index);
     public static BfmLesson Get(int index) => index switch {
         0 => new(0, "O1", false, PilotSkill.Competent, BanditMount.Baseline, 650, 45, 25, 0, -12, 0),
-        1 => new(1, "D1", true, PilotSkill.Veteran, BanditMount.Baseline, -600, 20, -10, 0, 35, 12),
+        1 => new(1, "D1", true, PilotSkill.Veteran, BanditMount.Baseline, -900, 150, -10, 0, 30, 12),
         2 => new(2, "O2", false, PilotSkill.Veteran, BanditMount.Baseline, 700, 60, 30, 5, -6, 0),
         3 => new(3, "D2", true, PilotSkill.Ace, BanditMount.Baseline, -800, 150, 60, 0, 20, 20),
         4 => new(4, "O3", false, PilotSkill.Ace, BanditMount.Baseline, 750, 75, 40, 10, 0, 0),
-        5 => new(5, "D3", true, PilotSkill.Ace, BanditMount.Uprated, -1100, 400, 100, 0, 8, 30),
+        5 => new(5, "D3", true, PilotSkill.Veteran, BanditMount.Baseline, -900, 150, 60, 0, 25, 30),
         6 => new(6, "N", false, PilotSkill.Ace, BanditMount.Baseline, 0, 0, 0, 180, 0, 0),
         7 => new(7, "A2", false, PilotSkill.Ace, BanditMount.Uprated, 0, 0, 0, 180, 0, 0),
         _ => throw new System.ArgumentOutOfRangeException(nameof(index)),
