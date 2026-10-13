@@ -68,7 +68,9 @@ Ace here, so N and D3 learnability for humans remain unmeasured.
 
 One normal sortie = O then D: conversion followed by defence on the same resources.
 O1's second engagement is D1. Failure repeats the current lesson on Again; losing D
-restarts D alone, preserving the earned O. No automatic easing/demotion. Non-gun
+restarts D alone, preserving the earned O. Exception (2026-10-14): being gunned down
+in D1 or D2 advances, because those are the bandit's easy kill and C12 made it lethal;
+a crash or abandon there still repeats, and D3 must be defended. No automatic easing/demotion. Non-gun
 O victories repeat O; RTB/abandon never advances. Defensive success uses the existing
 ceasefire/recovery handoff without declaring the living bandit dead. N/A2 retain the
 two-engagement cap. Landing remains optional and separately recorded.

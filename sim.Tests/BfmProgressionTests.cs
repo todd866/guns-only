@@ -9,14 +9,15 @@ public sealed class BfmProgressionTests {
         SortieOutcome outcome,
         int hitsScored = 0,
         int gunKills = 0,
-        EngagementEndReason reason = EngagementEndReason.CombatResult) => new(
+        EngagementEndReason reason = EngagementEndReason.CombatResult,
+        int hitsTaken = 0) => new(
         EngagementNumber: 1,
         OpponentSkill: PilotSkill.Competent,
         OpponentWasBoss: false,
         Outcome: outcome,
         DurationSeconds: 20.0,
         SolutionSecondsConceded: 0.0,
-        HitsTaken: 0,
+        HitsTaken: hitsTaken,
         ShotsTotal: 0,
         ShotsInWindow: 0,
         Overshoots: 0,
@@ -103,6 +104,26 @@ public sealed class BfmProgressionTests {
         Assert.Equal(1, director.Hits);
         Assert.Equal(0, director.Kills);
         Assert.Equal("O1", director.NextSpawn(1).Reason[4..]);
+    }
+
+    [Fact]
+    public void BeingGunnedDownInTheAssistedDefensiveLessonsAdvances() {
+        var director = new FightDirector();
+        director.EnableBfmLadder();
+        var kill = Report(SortieOutcome.Victory, hitsScored: 1, gunKills: 1);
+        var crash = Report(SortieOutcome.Defeat);
+        var gunned = Report(SortieOutcome.Defeat, hitsTaken: 4);
+        director.Observe(in kill);
+        director.Observe(in crash);
+        Assert.Equal(1, director.LessonIndex);   // D1 crash repeats
+        director.Observe(in gunned);
+        Assert.Equal(2, director.LessonIndex);   // D1 gun defeat: the AI's easy kill
+        director.Observe(in kill);
+        director.Observe(in gunned);
+        Assert.Equal(4, director.LessonIndex);   // D2 likewise
+        director.Observe(in kill);
+        director.Observe(in gunned);
+        Assert.Equal(5, director.LessonIndex);   // D3 must be defended
     }
 
     [Fact]
