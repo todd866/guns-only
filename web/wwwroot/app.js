@@ -289,6 +289,7 @@ import {
   updateConventionalRunwayPresentation,
 } from "./render/scene/scene_builders.js?v=__RELEASE_BUILD__";
 import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=__RELEASE_BUILD__";
+import { createSu27 } from "./render/scene/su27_surrogate.js?v=__RELEASE_BUILD__";
 import {
   cueInterfaceSound,
   setFlightAudioEnabled,
@@ -6480,11 +6481,11 @@ const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
   ["presentation.vehicle.transport-target.prototype.v1", createTransport],
   ["presentation.vehicle.player.v1", createDrone],
   ["presentation.vehicle.glider-strike.v1", createGlider],
-  // Mission 7 deliberately uses the existing abstract contact body until purpose-built,
-  // reviewed silhouettes exist. Its capability/telemetry identity remains explicit; this is a
-  // visibility aid for a guns-only visual fight, not a claim to an F-22 or Su-27 exterior model.
+  // The F-22 is never seen from its own first-person seat, so it keeps the abstract body. The
+  // Su-27S opponent is a code-authored, dimensionally correct silhouette (21.9 m, 14.7 m span);
+  // it is presentation only: hit and aim geometry remain the simulation's.
   ["presentation.vehicle.f22a.public-data-surrogate.v1", createDrone],
-  ["presentation.vehicle.su27s.public-data-surrogate.v1", createDrone],
+  ["presentation.vehicle.su27s.public-data-surrogate.v1", createSu27],
   ["presentation.vehicle.f14a.public-data-surrogate.v1", createF14],
   ["presentation.vehicle.one-way-attack-drone.prototype.v1", createOneWayAttackDrone],
   ["presentation.vehicle.rapier-gun-drone.prototype.v1", createRapierGunDrone],
@@ -6495,6 +6496,7 @@ const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
   ["presentation.platform.rapier-dispersed-strip.v1", createRapierDispersedStrip],
   [DEFAULT_ESCORT_PRESENTATION_ID, createHiddenPresentation],
 ]);
+// Procedural-only presentations never resolve through a content pack (no Korea descriptor fetches).
 const ABSTRACT_ONLY_PRESENTATION_IDS = new Set([
   "presentation.vehicle.f22a.public-data-surrogate.v1",
   "presentation.vehicle.su27s.public-data-surrogate.v1",
