@@ -139,7 +139,7 @@ public class BfmFlightAcceptanceTests(ITestOutputHelper output) {
     }
 
     [Fact]
-    public void LaterOffensivePairsReduceConversionForTheSameDelayedPilots() {
+    public void AssistedOffensivePairsConvertBeforeTheUnassistedStep() {
         var converted = new List<int>();
         foreach (int lesson in new[] { 0, 2, 4 }) {
             int kills = 0;
@@ -157,7 +157,10 @@ public class BfmFlightAcceptanceTests(ITestOutputHelper output) {
             converted.Add(kills);
         }
         Assert.True(converted[0] >= 5);
-        Assert.True(converted[0] > converted[1], string.Join(",", converted));
+        // C11 owner addendum: O1/O2 must be forgiving enough for a child to kill.
+        // Equal conversion at full/half is intended; difficulty returns at assist none.
+        Assert.True(converted[1] >= 5, string.Join(",", converted));
+        Assert.True(converted[0] >= converted[1], string.Join(",", converted));
         Assert.True(converted[1] > converted[2], string.Join(",", converted));
     }
 

@@ -481,17 +481,17 @@ public static class SeededCombatBatchRunner {
             throw new ArgumentException(
                 "Planner-teacher samples distil the hand-written planner; a learned policy has no "
                 + "planner to distil.", nameof(plannerTeacherSamples));
-        CombatConfig combat = CombatConfig.ModernVisualMerge;
+        CombatConfig combat = CombatConfig.ModernVisualMergeAirframes;
         var referenceGun = new GunKill(
             combat.PlayerAmmo,
             combat.OpponentHitsToDefeat,
             combat.PlayerGunProfile.EffectiveHitRadiusM,
-            combat.PlayerGunProfile);
+            combat.PlayerGunProfile, targetGeometry: combat.PlayerTargetGeometry);
         var learningGun = new GunKill(
             combat.OpponentAmmo,
             combat.PlayerHitsToDefeat,
             combat.OpponentGunProfile.EffectiveHitRadiusM,
-            combat.OpponentGunProfile);
+            combat.OpponentGunProfile, targetGeometry: combat.OpponentTargetGeometry);
         var recorder = new CombatTransitionRecorder(
             episodeIndex, scenario.Id, scenario.Seed, rewardWeights);
 

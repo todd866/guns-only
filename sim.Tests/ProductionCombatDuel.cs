@@ -68,6 +68,8 @@ public readonly record struct ProductionCombatResult(
     int EnemyRoundsFired,
     int ReferenceHits,
     int EnemyHits,
+    int ReferenceRoundsToFirstHit,
+    int EnemyRoundsToFirstHit,
     int ReferenceEnvelopeTicks,
     int EnemyEnvelopeTicks,
     double ReferenceMinimumNoseErrorDegInRange,
@@ -153,7 +155,8 @@ public static class ProductionCombatDuel {
         in ProductionCombatScenario scenario,
         PilotSkill referenceSkill,
         PilotSkill enemySkill,
-        double maximumSeconds = 40.0) {
+        double maximumSeconds = 40.0,
+        bool useTargetGeometry = true) {
         if (!double.IsFinite(maximumSeconds) || maximumSeconds <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(maximumSeconds));
 
@@ -163,17 +166,21 @@ public static class ProductionCombatDuel {
             scenario.ReferenceStart, referenceAir, referenceSkill);
         var enemy = new ReactiveBandit(
             scenario.EnemyStart, enemyAir, enemySkill);
-        CombatConfig combat = CombatConfig.ModernVisualMerge;
+        CombatConfig combat = useTargetGeometry
+            ? Beats.ModernVisualMerge().CombatRules
+            : CombatConfig.ModernVisualMerge;
         var referenceGun = new GunKill(
             combat.PlayerAmmo,
             combat.OpponentHitsToDefeat,
             combat.PlayerGunProfile.EffectiveHitRadiusM,
-            combat.PlayerGunProfile);
+            combat.PlayerGunProfile,
+            targetGeometry: combat.PlayerTargetGeometry);
         var enemyGun = new GunKill(
             combat.OpponentAmmo,
             combat.PlayerHitsToDefeat,
             combat.OpponentGunProfile.EffectiveHitRadiusM,
-            combat.OpponentGunProfile);
+            combat.OpponentGunProfile,
+            targetGeometry: combat.OpponentTargetGeometry);
 
         double minimumRangeM = Geometry.Range(reference.State, enemy.State);
         double previousRangeM = minimumRangeM;
@@ -181,6 +188,8 @@ public static class ProductionCombatDuel {
         bool firstPassOpened = !scenario.FirstPassSafe;
         int referenceEnvelopeTicks = 0;
         int enemyEnvelopeTicks = 0;
+        int referenceRoundsToFirstHit = 0;
+        int enemyRoundsToFirstHit = 0;
         double referenceMinimumNoseErrorRad = double.PositiveInfinity;
         double enemyMinimumNoseErrorRad = double.PositiveInfinity;
         int maximumTicks = checked((int)System.Math.Ceiling(maximumSeconds / Dt));
@@ -224,6 +233,10 @@ public static class ProductionCombatDuel {
 
             referenceGun.Step(referenceTrigger, referenceState, enemyState, Dt);
             enemyGun.Step(enemyTrigger, enemyState, referenceState, Dt);
+            if (referenceRoundsToFirstHit == 0 && referenceGun.HitCount > 0)
+                referenceRoundsToFirstHit = referenceGun.RoundsFired;
+            if (enemyRoundsToFirstHit == 0 && enemyGun.HitCount > 0)
+                enemyRoundsToFirstHit = enemyGun.RoundsFired;
 
             bool enemyDestroyed = referenceGun.Outcome == FightOutcome.Splash;
             bool referenceDestroyed = enemyGun.Outcome == FightOutcome.Splash;
@@ -251,6 +264,8 @@ public static class ProductionCombatDuel {
             enemyGun.RoundsFired,
             referenceGun.HitCount,
             enemyGun.HitCount,
+            referenceRoundsToFirstHit,
+            enemyRoundsToFirstHit,
             referenceEnvelopeTicks,
             enemyEnvelopeTicks,
             referenceMinimumNoseErrorRad * 180.0 / System.Math.PI,

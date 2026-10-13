@@ -490,13 +490,20 @@ public class DifficultyRampTests {
             session.SetPlayerGunTargetSlot(liveWingmanSlot > 0 ? liveWingmanSlot : 0);
             if (session.OpponentPresent) {
                 AircraftState target = session.SelectedOpponentState;
-                if (Geometry.Range(session.Player.State, target) > 220.0) {
-                    session.Player.AdoptExternalKinematics(target with {
-                        Position = target.Position + new Vec3D(0, 0, -140),
-                        Speed = target.Speed + 20,
-                        Chi = 0,
-                    });
-                }
+                // This is a synthetic progression fixture, not a pilot/conversion acceptance.
+                // Its old world-Z teleport copied a turning target's body attitude while forcing
+                // Chi=0; the 12 m sphere hid the resulting aim error. Place and aim consistently
+                // at the physical body now, leaving real rounds to own kills and replacement.
+                AircraftState shooter = target with {
+                    Position = target.Position - target.ForwardDir() * 140,
+                    Speed = target.Speed + 20,
+                };
+                Assert.True(GunKill.TrySolveBallisticLead(shooter, target,
+                    session.PlayerGun.Profile, out Vec3D lead, out _));
+                Vec3D right = new Vec3D(0, 1, 0).Cross(lead).Normalized();
+                session.Player.AdoptExternalKinematics(shooter with {
+                    BodyAttitude = QuaternionD.FromFrame(right, lead.Cross(right), lead),
+                });
             }
             session.StepFixed();
         }

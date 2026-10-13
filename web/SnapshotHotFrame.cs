@@ -44,7 +44,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 34;
+    public const int LayoutVersion = 35;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -497,6 +497,17 @@ internal static class SnapshotHotFrame {
         Bool("lead_valid");
         Bool("lead_solution_valid");
         Num("lead_x", 3); Num("lead_y", 3); Num("lead_z", 3);
+        Bool("gun_gimbal_mounted");
+        Bool("gun_gimbal_tracking");
+        Bool("gun_fire_inhibited");
+        Num("gun_gimbal_cone_deg", 3);
+        Num("gun_gimbal_deg", 3);
+        Num("gun_barrel_x", 5);
+        Num("gun_barrel_y", 5);
+        Num("gun_barrel_z", 5);
+        Num("gun_impact_x", 3);
+        Num("gun_impact_y", 3);
+        Num("gun_impact_z", 3);
         Num("lead_tof", 4);
         Num("ammo", RawInteger);
         // The HUD gunsight funnel projects these 9 samples every frame; a 250 ms-stale funnel is
@@ -1644,17 +1655,29 @@ internal static class SnapshotHotFrame {
         w.Num("lead_x", opponentPresent ? gunKill!.LeadPipper.X : 0.0, 3);
         w.Num("lead_y", opponentPresent ? gunKill!.LeadPipper.Y : 0.0, 3);
         w.Num("lead_z", opponentPresent ? gunKill!.LeadPipper.Z : 0.0, 3);
+        w.Bool("gun_gimbal_mounted", gunKill?.HasGimbal == true);
+        w.Bool("gun_gimbal_tracking", gunKill?.GimbalTracking == true);
+        w.Bool("gun_fire_inhibited", gunKill?.GimbalFireInhibited == true);
+        w.Num("gun_gimbal_cone_deg", (gunKill?.GimbalConeHalfAngleRad ?? 0) * 180 / Math.PI, 3);
+        w.Num("gun_gimbal_deg", (gunKill?.GimbalOffsetRad ?? 0) * 180 / Math.PI, 3);
+        w.Num("gun_barrel_x", (gunKill?.BarrelDirection(s).X ?? 0), 5);
+        w.Num("gun_barrel_y", (gunKill?.BarrelDirection(s).Y ?? 0), 5);
+        w.Num("gun_barrel_z", (gunKill?.BarrelDirection(s).Z ?? 0), 5);
+        w.Num("gun_impact_x", (gunKill?.PredictedImpact(s).X ?? 0), 3);
+        w.Num("gun_impact_y", (gunKill?.PredictedImpact(s).Y ?? 0), 3);
+        w.Num("gun_impact_z", (gunKill?.PredictedImpact(s).Z ?? 0), 3);
         w.Num("lead_tof", opponentPresent ? gunKill!.LeadTimeOfFlight : 0.0, 4);
         w.Num("ammo", gunKill?.AmmoRemaining ?? 0, RawInteger);
         w.GunTrajectory("gun_trajectory", playerPosition, groundVelocity, pf, pl,
-            s.BodyRates, playerGunProfile);
+            s.BodyRates, playerGunProfile, gunKill?.HasGimbal == true ? gunKill.BarrelDirection(s) : null,
+            gunKill?.MuzzlePosition(s));
         w.Num("rounds_fired", opponentPresent ? gunKill!.RoundsFired : 0, RawInteger);
         w.Num("hits", opponentPresent ? gunKill!.TotalHitCount : 0, RawInteger);
         w.Num("selected_target_hits", opponentPresent ? gunKill!.HitCount : 0, RawInteger);
         w.Bool("hit", opponentPresent && gunKill!.HitThisStep);
         w.Bool("gun_firing", opponentPresent
             && session.TriggerDown && session.PlayerWeaponsAuthorized
-            && gunKill!.AmmoRemaining > 0 && gunKill.BanditAlive);
+            && gunKill!.AmmoRemaining > 0 && !gunKill.GimbalFireInhibited && gunKill.BanditAlive);
         w.Tracers("tracers", opponentPresent
             ? gunKill!.RoundsInFlight : Array.Empty<GunRound>());
         w.Num("kill_progress", opponentPresent ? gunKill!.KillProgress : 0.0, 3);
@@ -2524,7 +2547,7 @@ internal static class SnapshotHotFrame {
         /// second language. Mirrors SnapshotProjection.GunTrajectoryJson exactly.
         public void GunTrajectory(string field, in Vec3D shooterPosition,
             in Vec3D shooterVelocity, in Vec3D bodyForward, in Vec3D bodyUp,
-            in BodyRates bodyRates, GunProfile profile) {
+            in BodyRates bodyRates, GunProfile profile, Vec3D? barrel = null, Vec3D? muzzle = null) {
             SampleArrayDef def = SampleArrays.First(t => t.Field == field);
             Debug.Assert(_index == def.Start,
                 $"sample array {field}: cursor {_index} != declared start {def.Start}");
@@ -2533,8 +2556,11 @@ internal static class SnapshotHotFrame {
             Vec3D angularVelocity = GunKill.WorldAngularVelocity(bodyForward, bodyUp, bodyRates);
             for (int i = 0; i < def.Samples; i++) {
                 double age = horizonSeconds * i / (def.Samples - 1);
-                Vec3D p = GunKill.BallisticFunnelPoint(shooterPosition, shooterVelocity,
-                    bodyForward, angularVelocity, profile.MuzzleVelocityMps, age);
+                Vec3D p = barrel is Vec3D axis && muzzle is Vec3D origin
+                    ? origin + (shooterVelocity + axis * profile.MuzzleVelocityMps) * age
+                        + new Vec3D(0, -0.5 * GunKill.GravityMps2 * age * age, 0)
+                    : GunKill.BallisticFunnelPoint(shooterPosition, shooterVelocity,
+                        bodyForward, angularVelocity, profile.MuzzleVelocityMps, age);
                 _buffer[_index++] = Quantize(p.X, 2);
                 _buffer[_index++] = Quantize(p.Y, 2);
                 _buffer[_index++] = Quantize(p.Z, 2);
