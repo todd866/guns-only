@@ -28,11 +28,11 @@ public sealed class BfmSpawnSafetyTests {
     [Fact]
     public void NullTerrainProtectsLowClimbingSuccessorAndPreservesFlightVector() {
         AircraftState player = Player();
-        AircraftState authored = BfmLesson.Get(1).Start(player, FlightModel.Sabre);
+        Vec3D offset = player.ForwardDir() * 600 - new Vec3D(20, -10, 0);
         AircraftState successor = BfmLesson.Get(1).Start(player, FlightModel.Sabre);
         Assert.True(successor.Position.Y >= 600.0 - 1e-9);
-        Assert.Equal(authored.Gamma, successor.Gamma, 12);
-        Assert.Equal(authored.Chi, successor.Chi, 12);
+        Assert.Equal(Math.Asin(offset.Y / offset.Length), successor.Gamma, 12);
+        Assert.Equal(Math.Atan2(offset.X, offset.Z), successor.Chi, 12);
     }
 
     [Fact]
@@ -52,6 +52,7 @@ public sealed class BfmSpawnSafetyTests {
             Player(altitudeM: 200.0, gammaDeg: -30.0), FlightModel.Sabre);
         Assert.True(successor.Position.Y >= 600.0 - 1e-9);
         Assert.Equal(-30.0 * System.Math.PI / 180.0, successor.Gamma, 12);
+        Assert.True((successor.Position + successor.ForwardDir() * 1600).Y >= 600 - 1e-9);
     }
 
     [Fact]
@@ -60,6 +61,19 @@ public sealed class BfmSpawnSafetyTests {
             new RidgeTerrain(2_000.0, -1.0, 1.0,
                 new TerrainBounds(-10.0, 10.0, -10.0, 10.0)));
         Assert.True(successor.Position.Y >= 600.0 - 1e-9);
+    }
+
+    [Fact]
+    public void PartialTerrainCoverageRetainsKnownRidgeAlongPitchedPath() {
+        var terrain = new RidgeTerrain(1800, 200, 400,
+            new TerrainBounds(-500, 500, -1000, 500));
+        var successor = BfmLesson.Get(1).Start(Player(900, 0), FlightModel.Sabre, terrain);
+        // Both endpoints miss the ridge; the run-in then leaves the available terrain.
+        for (int metres = 0; metres <= 1600; metres += 10) {
+            Vec3D point = successor.Position + successor.ForwardDir() * metres;
+            double floor = terrain.TrySample(point.X, point.Z, out var sample) ? sample.HeightM : 0;
+            Assert.True(point.Y - floor >= 600 - 1e-9, $"clearance at {metres}m: {point.Y - floor}");
+        }
     }
 
     [Fact]

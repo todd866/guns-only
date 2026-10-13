@@ -35,6 +35,7 @@ public readonly record struct BfmLesson(
         _ => throw new System.ArgumentOutOfRangeException(nameof(index)),
     };
 
+    // Authored staging margins shared with ReactiveBandit.SpawnForMerge, not airframe data.
     const double TerrainSpawnClearanceM = 600.0;
     const double InitialFlightPathM = 1600.0;
 
@@ -45,10 +46,6 @@ public readonly record struct BfmLesson(
         Vec3D position = player.Position + forward * AlongM + right * LateralM
             + new Vec3D(0, VerticalM, 0);
         Vec3D towardPlayer = player.Position - position;
-        Vec3D initialHeading = Defensive
-            ? new Vec3D(towardPlayer.X, 0.0, towardPlayer.Z).Normalized()
-            : new Vec3D(System.Math.Sin(player.Chi + AngleOffDeg * System.Math.PI / 180.0),
-                0.0, System.Math.Cos(player.Chi + AngleOffDeg * System.Math.PI / 180.0));
         double chi = Defensive ? System.Math.Atan2(towardPlayer.X, towardPlayer.Z)
             : player.Chi + AngleOffDeg * System.Math.PI / 180;
         double gamma = Defensive ? System.Math.Asin(towardPlayer.Y / towardPlayer.Length) : player.Gamma;
@@ -60,17 +57,25 @@ public readonly record struct BfmLesson(
 
     static Vec3D TerrainAwarePosition(in AircraftState authored,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain) {
-        Vec3D pathEnd = authored.Position + authored.ForwardDir() * InitialFlightPathM;
-        double clearance;
-        try {
-            clearance = terrain is null
-                ? Math.Min(authored.Position.Y, pathEnd.Y)
-                : GunsOnly.Sim.Environment.TerrainQueries.MinimumClearanceM(
-                    terrain, authored.Position, pathEnd, maximumHorizontalStepM: 60.0);
-        } catch (ArgumentOutOfRangeException) {
-            // Missing streamed terrain still has the sea-level datum as its conservative floor.
-            clearance = Math.Min(authored.Position.Y, pathEnd.Y);
+        Vec3D direction = authored.ForwardDir();
+        // Sweep at terrain resolution, including the pitched flight path. Missing samples use
+        // the same sea-level floor as contact detection; retain every available ridge sample.
+        double resolution = terrain?.HorizontalResolutionM ?? 60.0;
+        double step = double.IsFinite(resolution) && resolution > 0
+            ? Math.Min(60.0, resolution * 0.25) : 60.0;
+        int segments = (int)Math.Clamp(Math.Ceiling(InitialFlightPathM / step), 1,
+            GunsOnly.Sim.Environment.TerrainQueries.MaximumPathSamples);
+        double clearance = double.PositiveInfinity;
+        for (int i = 0; i <= segments; i++) {
+            Vec3D point = authored.Position + direction * (InitialFlightPathM * i / segments);
+            double surface = terrain is not null
+                && terrain.TryHeightM(point.X, point.Z, out double height) && double.IsFinite(height)
+                ? Math.Max(0.0, height) : 0.0;
+            clearance = Math.Min(clearance, point.Y - surface);
         }
+        // Include the vertical travel between neighbouring terrain samples, so a pitched
+        // path does not spend the sampling interval dipping below the clearance margin.
+        clearance -= Math.Abs(direction.Y) * InitialFlightPathM / segments;
         if (clearance >= TerrainSpawnClearanceM) return authored.Position;
         return authored.Position with { Y = authored.Position.Y
             + TerrainSpawnClearanceM - clearance };
