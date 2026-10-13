@@ -279,6 +279,31 @@ public sealed class GunGimbalTests {
     }
 
     [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    public void SessionTerrainInterlockAllowsClearLowFireAndRejectsDistantRidge(int lesson) {
+        var session = BfmFlightAcceptanceTests.Start(lesson);
+        var own = State(new Vec3D(0, 100, 0)) with { Speed = 200 };
+        var target = own with { Position = new Vec3D(0, 100, 550) };
+        session.SetTerrainSurface(new ProductionResolutionTerrain());
+        session.PlayerGun.Step(true, own, target, 0);
+        Assert.False(session.PlayerGun.GimbalFireInhibited);
+        Assert.Equal(1, session.PlayerGun.RoundsFired);
+        session.SetTerrainSurface(new ProductionResolutionTerrain(ridge: true));
+        session.PlayerGun.Step(true, own, target, 0.02);
+        Assert.True(session.PlayerGun.GimbalFireInhibited);
+        Assert.Equal(1, session.PlayerGun.RoundsFired);
+    }
+
+    [Fact]
+    public void FireSafetyStillFailsClosedWhenFullTrajectoryExceedsGunBudget() {
+        var terrain = new ProductionResolutionTerrain();
+        Assert.False(GunFireSafety.PathClear(new Vec3D(0, 100, 0),
+            new Vec3D(0, 0, 20000), 2, terrain));
+        Assert.Equal(0, terrain.Queries);
+    }
+
+    [Theory]
     [InlineData(0, 12)]
     [InlineData(1, 12)]
     [InlineData(2, 6)]

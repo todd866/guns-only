@@ -167,4 +167,34 @@ public class AirframeHitGeometryTests {
         Assert.Equal(ammo, playerGun.AmmoRemaining);
         Assert.Equal(damage, playerGun.TotalHitCount);
     }
+    [Fact] public void ArenaTransitionKeepsAirborneRoundsDamageAndTriggerCadence() {
+        var session = new SimulationSession(7);
+        var gun = session.PlayerGun;
+        var own = session.Player.State with {
+            Position = new Vec3D(0, 3000, 0), Speed = 0, Gamma = 0, Chi = 0,
+            BodyAttitude = QuaternionD.Identity
+        };
+        var target = own with { Position = new Vec3D(0, 3000, 150) };
+        gun.Step(true, own, target, 0);
+        gun.Step(false, own, target, 0.2);
+        Assert.Equal(1, gun.TotalHitCount);
+        gun.Step(true, own, target, 0);
+        var rounds = gun.RoundsInFlight.ToArray();
+        Assert.Single(rounds);
+        int fired = gun.RoundsFired, ammo = gun.AmmoRemaining;
+        session.SetArenaHandicap(BanditSkillProfile.For(PilotSkill.Competent), PilotSkill.Competent);
+        Assert.Equal(rounds, gun.RoundsInFlight);
+        Assert.Equal(1, gun.TotalHitCount);
+        Assert.Equal(ammo, gun.AmmoRemaining);
+        gun.Step(true, own, target, 0.001);
+        Assert.Equal(fired, gun.RoundsFired); // held trigger must not restart cadence
+        rounds = gun.RoundsInFlight.ToArray();
+        session.ClearArenaHandicap();
+        Assert.Equal(rounds, gun.RoundsInFlight);
+        Assert.Equal(1, gun.TotalHitCount);
+        Assert.Equal(ammo, gun.AmmoRemaining);
+        gun.Step(true, own, target, 0.001);
+        Assert.Equal(fired, gun.RoundsFired);
+    }
+
 }
