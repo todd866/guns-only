@@ -56,8 +56,9 @@ N 90 s). Pass counts, median time to pass / to death:
 
 D1 was −600/+20/+35 (Veteran): the shot opened at t=0 from dead six, and the same
 break passed 2–5/8 depending only on stick speed, below D2's 7/8. D3 was −1100/+400/+8
-(Ace Su-35): it slashed past at 100–140° crossing angle and no reversal pilot ever
-reached a gun solution (0/8, also with an Ace Su-27 at the new geometry). Offensive
+(Ace Su-35): that rejected start slashed past at 100–140° crossing angle and the
+reversal pilot passed 0/8. An Ace Su-27 at the new geometry also passed 0/8;
+the approved Veteran Su-27 start in the table above improved this to 1/8. Offensive
 pass rate does not fall for this pilot (only time and rounds rise); the gentler HUD
 pilot in `LaterOffensivePairsReduceConversionForTheSameDelayedPilots` gives 8/3/0.
 Neither the harness pilot nor any other automated pilot has gunned a free-manoeuvring
