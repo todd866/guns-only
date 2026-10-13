@@ -211,6 +211,10 @@ async function launchCandidate({ name, args, requireHardware }) {
     const context = await browser.newContext({
       viewport: { width: 1440, height: 900 },
       deviceScaleFactor: 1,
+      // This gate measures cold range streaming while flying. Offline priming can save whole
+      // terrain pages before the measured legs, removing that workload entirely. The published
+      // browser smoke separately exercises the real worker and a fully offline reload.
+      serviceWorkers: "block",
     });
     const page = await context.newPage();
     await page.goto("data:text/html,<title>WebGL renderer probe</title><canvas></canvas>");
@@ -1033,6 +1037,7 @@ export async function run(options) {
       console.log(`Render mode: ${modeLabel}`);
       console.log(`Launch: ${launched.launchName}`);
       console.log(`Published-app transport: ${site.transport}`);
+      console.log("Terrain workload: cold range streaming (service workers blocked)");
       console.log("Visibility: visible and foreground-focused (asserted every RAF)");
       console.log(
         `Profile: fixed beat=${FIXED_BEAT} seed=${FIXED_SEED}; `
