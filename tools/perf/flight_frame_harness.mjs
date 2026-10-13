@@ -690,10 +690,6 @@ async function bootPublishedApp(page, siteUrl) {
 async function flyProfile(page, options) {
   return page.evaluate(async (config) => {
     const bridge = globalThis.__gunsBridge;
-    const PULL_UP = 0;
-    const PUSH_DOWN = 1;
-    let activePitchKey = null;
-    let lastCommandChangeSimS = Number(globalThis.__gunsState?.t) || 0;
     let hiddenReason = null;
     let watchdog;
 
@@ -749,9 +745,7 @@ async function flyProfile(page, options) {
           globalThis.__gunsLifecycle?.restart?.();
         }
         globalThis.__gunsLifecycle?.begin?.();
-        setPitchKey(null);
-        setRollKey(null);
-        setThrottleKey(null);
+        resetControl();
         await waitUntilFlying("combat respawn");
         return;
       }
@@ -778,78 +772,89 @@ async function flyProfile(page, options) {
         }
       }
     };
-    const setPitchKey = (next) => {
-      const simS = Number(globalThis.__gunsState?.t) || 0;
-      if (next === activePitchKey) return;
-      if (activePitchKey !== null) bridge.FeedKey(activePitchKey, false);
-      if (activeRollKey !== null) bridge.FeedKey(activeRollKey, false);
-      if (activeThrottleKey !== null) bridge.FeedKey(activeThrottleKey, false);
-      if (next !== null) bridge.FeedKey(next, true);
-      activePitchKey = next;
-      lastCommandChangeSimS = simS;
+    // ---- Profile autopilot -------------------------------------------------------------------
+    // The pilot inputs go through the real analog stick/lever path (the same bridge calls the
+    // gamepad and phone stick use), so rendering, terrain streaming and the flight model are
+    // exactly what a player gets. The controller is a continuous, damped law evaluated against
+    // SIM time, not wall-clock time.
+    //
+    // History: this used to be a bang-bang keyboard loop with a 0.28 s re-command hold. Under CPU
+    // contention the kernel advances a varying number of ticks per RAF, so every held-key edge
+    // landed at a different sim time and the limit cycle wandered: the low leg's median AGL spread
+    // 1,295-2,729 ft on unchanged code and refused a release on PROFILE VALIDITY, not frame rate.
+    // Each key setter also released the OTHER axes' keys without clearing their bookkeeping, so the
+    // throttle and roll controllers silently stopped commanding (low leg flew at ~714 kt, bank
+    // unregulated). A proportional law with gravity/bank feed-forward has no limit cycle to
+    // perturb, so frame-time jitter only shifts the output by a fraction of one sim tick.
+    const TARGET_BANK_DEG = 25;
+    const TARGET_TAS_KTS = 550;
+    const control = {
+      lastSimS: null,
+      throttleIntegral: null,
+      targetBankDeg: 0,
+      pitch: 0,
+      roll: 0,
+      lever: null,
     };
-    const controlAltitude = (targetAglFt) => {
+    const resetControl = () => {
+      control.lastSimS = null;
+      control.throttleIntegral = null;
+      control.pitch = 0;
+      control.roll = 0;
+      control.lever = null;
+    };
+    const clampUnit = (value, low = -1, high = 1) => Math.max(low, Math.min(high, value));
+    const fly = (targetAglFt) => {
       const state = globalThis.__gunsState;
       const agl = Number(state?.radar_alt_ft);
       const verticalSpeed = Number(state?.vertical_speed_fpm);
       const simS = Number(state?.t);
-      if (![agl, verticalSpeed, simS].every(Number.isFinite)) {
-        throw new Error("Flight state contains non-finite altitude-control data.");
+      const gammaDeg = Number(state?.gamma_deg);
+      const bankDeg = Number(state?.bank_deg);
+      const tas = Number(state?.true_airspeed_kts);
+      if (![agl, verticalSpeed, simS, gammaDeg, bankDeg, tas].every(Number.isFinite)) {
+        throw new Error("Flight state contains non-finite profile-control data.");
       }
-      if (simS - lastCommandChangeSimS < 0.28) return;
+      // Sim-time keyed: no new tick, no new command. A starved frame that advanced several ticks
+      // integrates the throttle over exactly the sim time that elapsed.
+      if (control.lastSimS !== null && simS <= control.lastSimS) return;
+      const dtSim = control.lastSimS === null ? 0 : Math.min(0.25, simS - control.lastSimS);
+      control.lastSimS = simS;
+      const rad = Math.PI / 180;
+
+      // Altitude -> desired vertical speed (30 s time constant), then vertical-speed error -> load
+      // factor around the 1 G/cos(bank) needed to hold the path in a banked turn.
       const errorFt = targetAglFt - agl;
-      const desiredVerticalSpeedFpm = Math.max(
-        -7_000,
-        Math.min(4_500, errorFt * 1.35),
-      );
-      const verticalSpeedError = desiredVerticalSpeedFpm - verticalSpeed;
-      let next = null;
-      if (Math.abs(errorFt) <= 260 && Math.abs(verticalSpeed) <= 1_100) next = null;
-      else if (verticalSpeedError > 1_100) next = PULL_UP;
-      else if (verticalSpeedError < -1_100) next = PUSH_DOWN;
-      setPitchKey(next);
-    };
-    // Straight-and-level flight keeps a stable ring of resident chunks (measured: residentChunks
-    // 64->64, only 18 requests in 60 s), so it never exercises the chunk BUILD path that produced
-    // every production hitch. A sustained turn continuously brings new chunks over the horizon and
-    // keeps the aircraft inside the +/-65,536 m terrain grid instead of flying off the map.
-    const ROLL_RIGHT = 2;
-    // 25 degrees, not 42: a 42-degree bank at low level with a bang-bang pitch loop and Auto-GCAS
-    // disabled flew the aircraft into the ground. This still churns chunks continuously.
-    const TARGET_BANK_DEG = 25;
-    let activeRollKey = null;
-    const setRollKey = (next) => {
-      if (next === activeRollKey) return;
-      if (activeRollKey !== null) bridge.FeedKey(activeRollKey, false);
-      if (activeThrottleKey !== null) bridge.FeedKey(activeThrottleKey, false);
-      activeRollKey = next;
-      if (next !== null) bridge.FeedKey(next, true);
-    };
-    const holdTurn = () => {
-      const bank = Number(globalThis.__gunsState?.bank_deg);
-      if (!Number.isFinite(bank)) return;
-      setRollKey(bank < TARGET_BANK_DEG ? ROLL_RIGHT : null);
-    };
-    // Hold ~550 kt, the median airspeed of the production hitch windows. Everything above is
-    // uncontrollable with bang-bang keyboard input: at ~700 kt the pitch loop oscillated between
-    // -800 and -6,400 fpm and the altitude hold collapsed inside a banked turn. FeedDirectThrottle
-    // did not reduce speed on its own, so drive the throttle keys.
-    const THROTTLE_UP = 6;
-    const THROTTLE_DOWN = 7;
-    const TARGET_TAS_KTS = 550;
-    let activeThrottleKey = null;
-    const setThrottleKey = (next) => {
-      if (next === activeThrottleKey) return;
-      if (activeThrottleKey !== null) bridge.FeedKey(activeThrottleKey, false);
-      activeThrottleKey = next;
-      if (next !== null) bridge.FeedKey(next, true);
-    };
-    const controlSpeed = () => {
-      const tas = Number(globalThis.__gunsState?.true_airspeed_kts);
-      if (!Number.isFinite(tas)) return;
-      if (tas > TARGET_TAS_KTS + 40) setThrottleKey(THROTTLE_DOWN);
-      else if (tas < TARGET_TAS_KTS - 40) setThrottleKey(THROTTLE_UP);
-      else setThrottleKey(null);
+      const desiredVerticalSpeedFpm = Math.max(-6_000, Math.min(4_500, errorFt * 2.0));
+      const gravityFeedForwardG = Math.cos(gammaDeg * rad)
+        / Math.max(0.5, Math.cos(bankDeg * rad));
+      const loadFactorG = Math.max(-0.5, Math.min(3.0,
+        gravityFeedForwardG + (desiredVerticalSpeedFpm - verticalSpeed) * 0.00035));
+      // Manual-flight analog semantics (DetentLayer): 0 = 1 G, +1 = max-perform, -1 = -1 G.
+      const maxPerformG = Math.max(2, Number(state?.g_maxperform) || 9);
+      control.pitch = clampUnit(loadFactorG >= 1
+        ? (loadFactorG - 1) / (maxPerformG - 1)
+        : (loadFactorG - 1) / 2);
+      bridge.SetAnalogPitchControl(control.pitch);
+
+      // Bank -> lateral stick (roll-rate demand), proportional and saturated well short of full.
+      control.roll = clampUnit((control.targetBankDeg - bankDeg) * 0.02, -0.5, 0.5);
+      bridge.SetAnalogRollControl(control.roll);
+
+      // TAS -> absolute lever position, PI with the integrator seeded from the current lever.
+      if (control.throttleIntegral === null) {
+        const published = Number(state?.throttle);
+        const leverStop = Number(state?.max_thrust_fraction);
+        control.throttleIntegral = Number.isFinite(published)
+          ? clampUnit(Number.isFinite(leverStop) && leverStop > 0
+            ? published / leverStop : published, 0, 1)
+          : 0.6;
+      }
+      const speedError = (TARGET_TAS_KTS - tas) / 100;
+      control.throttleIntegral = clampUnit(
+        control.throttleIntegral + speedError * 0.08 * dtSim, 0, 1);
+      control.lever = clampUnit(control.throttleIntegral + speedError * 0.5, 0, 1);
+      bridge.SetAnalogThrottleControl(control.lever);
     };
     const nextFrame = () => new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
     const reachAltitude = async (targetAglFt, label) => {
@@ -863,14 +868,13 @@ async function flyProfile(page, options) {
       while (true) {
         await nextFrame();
         await assertFlight();
-        controlAltitude(targetAglFt);
-        controlSpeed();
+        control.targetBankDeg = 0;
+        fly(targetAglFt);
         const state = snapshotState();
         const stable = Math.abs(state.radarAltitudeFt - targetAglFt) <= 700
           && Math.abs(state.verticalSpeedFpm) <= 2_200;
         stableSinceSimS = stable ? (stableSinceSimS ?? state.t) : null;
         if (stableSinceSimS !== null && state.t - stableSinceSimS >= 5) {
-          setPitchKey(null);
           return state;
         }
         if (Math.floor(state.t) % 3 === 0 && Math.floor(state.t) !== lastDiagS) {
@@ -878,7 +882,7 @@ async function flyProfile(page, options) {
           diagnostics.push({
             t: Math.round(state.t), agl: Math.round(state.radarAltitudeFt),
             vs: Math.round(state.verticalSpeedFpm), tas: Math.round(state.trueAirspeedKts),
-            key: activePitchKey, pitch: globalThis.__gunsState?.pitch_deg,
+            stick: control.pitch, lever: control.lever, pitch: globalThis.__gunsState?.pitch_deg,
             gamma: globalThis.__gunsState?.gamma_deg, gcmd: globalThis.__gunsState?.g_cmd,
             gact: globalThis.__gunsState?.g_actual,
           });
@@ -896,8 +900,8 @@ async function flyProfile(page, options) {
     // it as well made altitude unholdable there — in a bank, pulling tightens the turn instead of
     // climbing, so the control leg sank from 9,000 ft to 3,678 ft and destroyed the separation.
     const measureLeg = async (name, targetAglFt, turning = false) => {
-      // Back ON for measurement. The bang-bang pitch loop cannot hold a banked turn at low level
-      // unaided (it flew into the ground twice), and during a level leg Auto-GCAS is a floor that
+      // Back ON for measurement as a terrain floor (the old bang-bang pitch loop flew a banked low
+      // leg into the ground twice). During a held leg Auto-GCAS is a floor that
       // never fires rather than a controller that fights. Terrain streaming is unaffected either
       // way, and a fly-up would show up in the leg statistics as an altitude excursion.
       bridge.SetAutoGcasEnabled(true);
@@ -915,9 +919,8 @@ async function flyProfile(page, options) {
       while (true) {
         const timestamp = await nextFrame();
         await assertFlight();
-        controlAltitude(targetAglFt);
-        controlSpeed();
-        if (turning) holdTurn(); else setRollKey(null);
+        control.targetBankDeg = turning ? TARGET_BANK_DEG : 0;
+        fly(targetAglFt);
         const state = snapshotState();
         if (firstTimestamp === null) firstTimestamp = timestamp;
         if (previousTimestamp !== null) {
@@ -945,7 +948,6 @@ async function flyProfile(page, options) {
         }
         if (measurementStartedAt !== null
           && timestamp - measurementStartedAt >= config.legDurationMs) {
-          setPitchKey(null);
           return {
             name,
             warmupMs: config.warmupMs,
@@ -988,9 +990,8 @@ async function flyProfile(page, options) {
       // identical either way.
       bridge.SetAutoGcasEnabled(false);
       bridge.SetAnalogRollControl(0);
-      // Cruise power, NOT full afterburner. At 733 KTAS the bang-bang pitch controller cannot
-      // settle (measured: vertical speed oscillating -800 to -6,400 fpm), and 733 kt is not the
-      // condition being reproduced anyway — production hitch windows sat at 554 kt.
+      // Speed is held at TARGET_TAS_KTS by the analog lever in fly(): production hitch windows sat
+      // at 554 kt. Release any direct throttle hold left over from boot.
       bridge.FeedDirectThrottle(true, false);
 
       await reachAltitude(config.highAglFt, "high-altitude control");
@@ -1002,11 +1003,9 @@ async function flyProfile(page, options) {
       clearTimeout(watchdog);
       document.removeEventListener("visibilitychange", markHidden);
       window.removeEventListener("blur", markBlurred);
-      if (activePitchKey !== null) bridge.FeedKey(activePitchKey, false);
-      if (activeRollKey !== null) bridge.FeedKey(activeRollKey, false);
-      if (activeThrottleKey !== null) bridge.FeedKey(activeThrottleKey, false);
       bridge.FeedDirectThrottle(true, false);
       bridge.SetAnalogRollControl(0);
+      bridge.SetAnalogPitchControl(0);
     }
   }, {
     legDurationMs: options.legDurationMs,
