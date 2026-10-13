@@ -140,6 +140,41 @@ public class SparringPartnerTests {
         Assert.False(presentingAtFirstHit, "the lead kept presenting after a hit");
     }
 
+    [Fact]
+    public void APostPopOutGunHitHandsTheReciprocalPresentToTheFighterNextTick() {
+        BeatSetup beat = Beats.ModernVisualMergeFirstRun();
+        beat = beat with { Player = beat.Player with {
+            Position = beat.Player.Position with { Z = FirstRunValleyRuntime.PopOutNorthM + 10.0 }
+        } };
+        var session = new SimulationSession();
+        session.StartBeat(() => beat);
+        session.SetTouchControlModality(true);
+        session.SetAssistedFlight(true);
+        session.Begin();
+        var merge = Assert.IsType<NeutralMergeBandit>(session.Bandit);
+        Assert.Equal(OpeningPresentation.Reciprocal, merge.Presentation);
+        // The phone's qualified auto-fire uses real rounds after weapons go hot.
+        for (int tick = 0; tick < 2 * AircraftSim.TickHz && session.SortiePlayerHits == 0; tick++)
+            session.StepFixed();
+        Assert.False(session.FirstRunWeaponsCold);
+        Assert.True(session.SortiePlayerHits > 0, "post-popout fixture never hit");
+        Assert.True(session.SelectedOpponentAlive, "handoff must be caused by the hit, not destruction");
+        Assert.False(merge.Presenting);
+        Assert.False(merge.FirstPassComplete, "fixture already passed the merge gate before the hit");
+        session.StepFixed();
+        Assert.True(merge.FirstPassComplete, "external present exit did not hand over on the next tick");
+        Assert.Equal(PilotSkill.Competent, merge.FightSkill);
+    }
+
+    [Fact]
+    public void EndingAnAlreadyNonPresentingReciprocalDoesNotSkipItsAuthoredPass() {
+        var merge = new NeutralMergeBandit(State(0, 3000, 4000, 180, Math.PI),
+            FlightModel.Sabre, PilotSkill.Veteran, presenting: false);
+        merge.EndPresentation();
+        merge.Step(State(0, 3000, 0, 180), Dt);
+        Assert.False(merge.FirstPassComplete);
+    }
+
     /// A finished present must start the fight, not leave the scripted pass flying a straight line
     /// until the player happens to cross 900 m (review finding, 2026-10-01).
     [Fact]

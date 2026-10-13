@@ -31,6 +31,7 @@ public sealed class NeutralMergeBandit :
     /// neutral pass ends, instead of snapping straight into a fight they cannot win. Mutable for
     /// exactly one transition: EndPresentation latches it false when the pair graduates.
     bool _presenting;
+    bool _presentationHandoffPending;
     bool _endPresentOnProximity = true;
     double _presentElapsedSeconds;
     /// A head-on pass from the staged 9 km closes in well under 20 s; past this the merge was missed.
@@ -57,6 +58,9 @@ public sealed class NeutralMergeBandit :
     /// the run-in (so BeginFight stages a fighting bandit), and the inner call covers a fight
     /// already begun.
     public void EndPresentation() {
+        // Remember an external exit across the tick boundary. An earned-rung opponent born
+        // non-presenting still owns its reciprocal pass until the normal merge gate.
+        if (_presenting && _fight is null) _presentationHandoffPending = true;
         _presenting = false;
         _fight?.EndPresentation();
     }
@@ -208,6 +212,10 @@ public sealed class NeutralMergeBandit :
     public void Step(in ActorObservation player, double dt) {
         if (!double.IsFinite(dt) || dt <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(dt));
+        if (_presentationHandoffPending) {
+            _presentationHandoffPending = false;
+            BeginFight(player.ContactIdentity);
+        }
         if (_fight is not null) {
             _fight.Step(player, dt);
             T += dt;
