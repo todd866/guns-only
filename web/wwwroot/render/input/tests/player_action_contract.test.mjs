@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { TEST_FLIGHT_ACTIONS } from "../../systems/test_flight_console.js";
 import { CONTROL_BINDINGS } from "../../settings/player_settings.js";
+import { controlQuicklookEntries, keyCapLabel } from "../../hud/control_quicklook.js";
 import { CARRIER_SORTIE_TOUCH_RTB_ACTION_TOKEN } from "../../nav/carrier_sortie_route_presentation.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../");
@@ -1023,6 +1024,27 @@ test("drone-raid coaching is mission-gated and carries live efficiency truth int
   assert.match(appSource,
     /state\?\.drone_raid_evaluation === true[\s\S]*?\? resultFacts\.join\(" · "\)/,
     "the shared result card must render the debrief module's compact raid facts");
+});
+
+test("the F-22 key card shows every F-22 bridge action on its current binding", () => {
+  // a8: the ordinary F-22 fight draws a key-cap grid instead of the prose quicklook (which other
+  // modes keep). The same player-facing fact must hold: each action is on its live key.
+  const f22Actions = BRIDGE_ACTIONS.filter((a) => a.bindingAction && !a.bindingAction.startsWith("wingSweep"));
+  const remapped = { fire: "KeyJ", pull: "KeyI" };
+  for (const bindings of [{}, remapped]) {
+    const card = controlQuicklookEntries({ bindings, mode: "f22", gcasAvailable: true });
+    for (const action of f22Actions) {
+      const cap = keyCapLabel(bindings[action.bindingAction] ?? action.code);
+      assert.ok(card.some((entry) => entry.caps.includes(cap)),
+        `${action.id}: key card has no '${cap}' cap`);
+    }
+  }
+  const card = controlQuicklookEntries({ mode: "f22" });
+  for (const [cap, action] of [["H", "HIDE"], ["M", "SOUND"], ["R", "RESTART"], ["DRAG", "LOOK"]]) {
+    assert.ok(card.some((e) => e.caps[0] === cap && e.action === action), `key card lacks ${cap} ${action}`);
+  }
+  assert.match(hudSource, /mode !== "f22"[\s\S]*?this\.drawLegacyQuicklook\(frame\)/,
+    "every other mode keeps the legacy quicklook");
 });
 
 test("non-bridge player actions advertised by the quicklook have observable UI handlers", () => {
