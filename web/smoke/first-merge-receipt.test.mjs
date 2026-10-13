@@ -148,7 +148,7 @@ async function flyReceipt(browser, site, orientation) {
     };
 
     const seen = [];
-    let contactS = null, windowStartS = null, coarseS = 0, firstHitS = null, roundsToFirstHit = null;
+    let contactS = null, windowStartS = null, coarseS = 0, firstHitS = null, firstKillS = null, roundsToFirstHit = null;
     let presentEndS = null, solutionS = 0, prev = null, endReason = "time";
     // SwiftShader runs the kernel far below real time; this only stops a hung flight.
     const wallDeadline = Date.now() + 240_000;
@@ -181,8 +181,9 @@ async function flyReceipt(browser, site, orientation) {
       if (firstHitS === null && (Number(s.hits) > 0 || Number(s.kills) > 0)) {
         firstHitS = t; roundsToFirstHit = s.rounds; await frame("first-hit", t);
       }
+      if (firstKillS === null && Number(s.kills) > 0) firstKillS = t;
       prev = { t, coarse: !!coarse, solution: cue?.solution === true };
-      if (contactS !== null && firstHitS !== null && coarseS >= WINDOW_MIN_S && t >= firstHitS + 1) {
+      if (contactS !== null && firstHitS !== null && (coarseS >= WINDOW_MIN_S || firstKillS !== null) && t >= firstHitS + 1) {
         endReason = "receipt-complete"; break;
       }
 
@@ -233,6 +234,7 @@ async function flyReceipt(browser, site, orientation) {
       contactS: contactS === null ? null : +contactS.toFixed(3),
       firstWindowS: windowStartS === null ? null : +windowStartS.toFixed(3),
       coarseWindowS: +coarseS.toFixed(3),
+      firstKillS,
       solutionCueS: +solutionS.toFixed(3),
       firstHitS: firstHitS === null ? null : +firstHitS.toFixed(3),
       roundsToFirstHit,
@@ -241,6 +243,125 @@ async function flyReceipt(browser, site, orientation) {
         rounds: globalThis.__gunsState?.rounds_fired, kills: globalThis.__gunsState?.kill_count })),
     });
   } finally {
+    receipt.wallS = +((Date.now() - wallStart) / 1000).toFixed(1);
+    await writeFile(path.join(captureRoot, `first-merge-receipt-${name}.json`),
+      `${JSON.stringify(receipt, null, 1)}\n`).catch(() => {});
+    await context.close();
+  }
+  return receipt;
+}
+
+// Desktop receipt: the pilot uses only the HUD geometry and the production keyboard path. This
+// deliberately does not read target/player transforms or call the bridge. The keyboard driver is
+// intentionally bounded and coarse; its purpose is a repeatable first-hit receipt, not an ace
+// pilot.
+async function flyKeyboardReceipt(browser, site) {
+  const name = "desktop-keyboard";
+  const width = 1280, height = 720;
+  const out = path.join(captureRoot, name);
+  await mkdir(out, { recursive: true });
+  const context = await browser.newContext({ viewport: { width, height }, screen: { width, height },
+    hasTouch: false, isMobile: false });
+  await context.route("**/api/**", (route) => route.fulfill({ status: 204, body: "" }));
+  await context.addInitScript(() => { globalThis.__HUD_DEBUG__ = true; });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.stack || error.message));
+  const receipt = { receipt: "first-merge", orientation: name, viewport: `${width}x${height}`,
+    input: "keyboard", reactionS: REACTION_S, frames: {}, errors };
+  const wallStart = Date.now();
+  const frame = async (key, t) => {
+    const file = path.join(out, `${key}.png`);
+    await page.screenshot({ path: file });
+    receipt.frames[key] = { file, t: t === null ? null : +t.toFixed(3) };
+  };
+  const held = new Set();
+  const setHeld = async (key, shouldHold) => {
+    if (shouldHold && !held.has(key)) { held.add(key); await page.keyboard.down(key); }
+    if (!shouldHold && held.has(key)) { held.delete(key); await page.keyboard.up(key); }
+  };
+  try {
+    await page.goto(`${site.url}?audioQa=silent&server=off`, { waitUntil: "load" });
+    await page.waitForFunction(() => globalThis.__gunsState?.session_phase === "READY"
+      && document.querySelector("#ready-start")?.disabled === false, null, { timeout: 120_000 });
+    receipt.door = await page.evaluate(() => ({
+      mode: document.querySelector("#ready-screen")?.dataset.mode ?? null,
+      mission: globalThis.__gunsState?.mission_definition_id ?? null,
+    }));
+    receipt.build = await page.evaluate(() => globalThis.__gunsBuild ?? null);
+    receipt.renderer = await page.evaluate(() => {
+      const gl = document.createElement("canvas").getContext("webgl2");
+      const info = gl?.getExtension("WEBGL_debug_renderer_info");
+      return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : null;
+    });
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => globalThis.__gunsState?.session_phase === "ACTIVE", null,
+      { timeout: 90_000 });
+    const t0 = await page.evaluate(() => globalThis.__gunsState.simulation_time_s);
+    receipt.launch = await page.evaluate(() => ({
+      mission: globalThis.__gunsState.mission_definition_id ?? null,
+      assisted: globalThis.__gunsState.assisted_flight ?? null,
+      autoThrottle: globalThis.__gunsState.auto_throttle ?? null,
+      presenting: globalThis.__gunsState.bandit_presenting ?? null,
+    }));
+    await frame("launch", 0);
+
+    let contactS = null, firstHitS = null, firstKillS = null, roundsToFirstHit = null;
+    let firstWindowS = null, endReason = "time";
+    const seen = [];
+    const wallDeadline = Date.now() + 240_000;
+    while (Date.now() <= wallDeadline) {
+      const s = await page.evaluate(() => {
+        const g = globalThis.__gunsState, h = globalThis.__HUD_GEOMETRY;
+        if (!g) return null;
+        return { time: g.simulation_time_s, phase: g.session_phase, range: g.range_m,
+          hits: g.hits, rounds: g.rounds_fired, kills: g.kill_count, presenting: g.bandit_presenting,
+          geo: h ? { gunCrossPx: h.gunCrossPx, banditPx: h.banditPx, banditLocator: h.banditLocator,
+            leadPipper: h.leadPipper, ladderRungs: h.ladderRungs } : null };
+      });
+      if (!s || s.phase !== "ACTIVE") { endReason = `phase:${s?.phase ?? "none"}`; break; }
+      const t = s.time - t0;
+      if (t > HIT_BY_S) break;
+      const cue = perceive(s.geo, height);
+      if (contactS === null && cue?.marker) { contactS = t; await frame("first-contact", t); }
+      if (firstWindowS === null && cue?.solution === true) {
+        firstWindowS = t; await frame("first-window", t);
+      }
+      if (firstHitS === null && (Number(s.hits) > 0 || Number(s.kills) > 0)) {
+        firstHitS = t; roundsToFirstHit = s.rounds; await frame("first-hit", t);
+      }
+      if (firstHitS !== null && contactS !== null) { endReason = "receipt-complete"; break; }
+
+      // Act on the rendered cue after the same reaction delay used by the touch receipt.
+      seen.push({ t, cue });
+      let view = null;
+      while (seen.length && seen[0].t <= t - REACTION_S) view = seen.shift();
+      if (view) {
+        const aim = view.cue?.pipper ?? view.cue?.marker;
+        const right = aim?.right ?? view.cue?.arrow?.right ?? 0;
+        const up = aim?.up ?? view.cue?.arrow?.up ?? 0;
+        await setHeld("ArrowRight", right > 0.8);
+        await setHeld("ArrowLeft", right < -0.8);
+        await setHeld("ArrowDown", up > 0.8);
+        await setHeld("ArrowUp", up < -0.8);
+        await setHeld("f", view.cue?.solution === true);
+      }
+      await page.waitForTimeout(20);
+    }
+    for (const key of [...held]) await setHeld(key, false);
+    const endT = await page.evaluate(() => globalThis.__gunsState?.simulation_time_s ?? null);
+    await frame("end", endT === null ? null : endT - t0);
+    Object.assign(receipt, {
+      endReason,
+      contactS: contactS === null ? null : +contactS.toFixed(3),
+      firstWindowS: firstWindowS === null ? null : +firstWindowS.toFixed(3),
+      firstHitS: firstHitS === null ? null : +firstHitS.toFixed(3),
+      roundsToFirstHit,
+      end: await page.evaluate(() => ({ phase: globalThis.__gunsState?.session_phase,
+        rounds: globalThis.__gunsState?.rounds_fired, kills: globalThis.__gunsState?.kill_count })),
+    });
+  } finally {
+    for (const key of [...held]) await setHeld(key, false).catch(() => {});
     receipt.wallS = +((Date.now() - wallStart) / 1000).toFixed(1);
     await writeFile(path.join(captureRoot, `first-merge-receipt-${name}.json`),
       `${JSON.stringify(receipt, null, 1)}\n`).catch(() => {});
@@ -268,7 +389,8 @@ for (const orientation of ORIENTATIONS) {
         const tag = `${orientation.name} (${r.launch?.mission ?? "?"}, end ${r.endReason})`;
         assert.ok(r.contactS !== null && r.contactS <= CONTACT_BY_S,
           `${tag}: no target bracket in the forward view within ${CONTACT_BY_S} s (first at ${r.contactS})`);
-        assert.ok(r.coarseWindowS >= WINDOW_MIN_S,
+        // A physical kill can now close O1 before two seconds of tracking exist.
+        assert.ok(r.coarseWindowS >= WINDOW_MIN_S || (r.firstKillS !== null && r.firstKillS <= WINDOW_BY_S),
           `${tag}: coarse gun window ${r.coarseWindowS} s before ${WINDOW_BY_S} s, need ${WINDOW_MIN_S} s`);
         assert.ok(r.firstHitS !== null && r.firstHitS <= HIT_BY_S,
           `${tag}: no physical hit within ${HIT_BY_S} s (rounds fired ${r.end?.rounds ?? "?"})`);
@@ -276,3 +398,19 @@ for (const orientation of ORIENTATIONS) {
       } finally { await browser.close(); await site.close(); }
     });
 }
+
+test("first merge on a 1280x720 desktop: first hit through real keyboard",
+  { timeout: 420_000 }, async () => {
+    assert.ok(process.env.SMOKE_WWWROOT, "SMOKE_WWWROOT must name the published wwwroot");
+    await mkdir(captureRoot, { recursive: true });
+    const site = await serveStatic(process.env.SMOKE_WWWROOT);
+    const browser = await chromium.launch({ headless: true, channel: "chromium",
+      args: ["--enable-unsafe-swiftshader", "--mute-audio"] });
+    try {
+      const r = await flyKeyboardReceipt(browser, site);
+      const tag = `desktop-keyboard (${r.launch?.mission ?? "?"}, end ${r.endReason})`;
+      assert.ok(r.firstHitS !== null && r.firstHitS <= HIT_BY_S,
+        `${tag}: no physical hit within ${HIT_BY_S} s (rounds fired ${r.end?.rounds ?? "?"})`);
+      assert.deepEqual(r.errors, []);
+    } finally { await browser.close(); await site.close(); }
+  });

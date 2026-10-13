@@ -41,10 +41,10 @@ public sealed class GunGimbalKidPilotTests(ITestOutputHelper output) {
             if (valid) {
                 Vec3D d = s.Bandit.State.Position - s.Player.State.Position;
                 Vec3D f = s.Player.BodyForward, u = s.Player.BodyUp, r = s.Player.BodyRight;
-                double forward = Math.Max(1e-6, d.Dot(f));
+                double forward = d.Dot(f);
                 sample = new(
-                    Math.Atan2(d.Dot(u), forward) * 180.0 / Math.PI,
-                    Math.Atan2(d.Dot(r), forward) * 180.0 / Math.PI,
+                    Math.Atan2(d.Dot(u), Math.Max(1e-6, forward)) * 180.0 / Math.PI,
+                    Math.Atan2(d.Dot(r), Math.Max(1e-6, forward)) * 180.0 / Math.PI,
                     d.Length,
                     forward > 0.0);
             }
@@ -104,7 +104,7 @@ public sealed class GunGimbalKidPilotTests(ITestOutputHelper output) {
         }
     }
 
-    static SimulationSession Start(int lesson, int seed, bool assisted = true) {
+    static SimulationSession Start(int lesson, int seed) {
         var s = new SimulationSession();
         s.ArmDirectorStateForNextStage(BfmFlightAcceptanceTests.StateFor(lesson));
         s.StartBeat(() => {
@@ -114,7 +114,7 @@ public sealed class GunGimbalKidPilotTests(ITestOutputHelper output) {
                 Chi = seed * 0.05,
             } };
         });
-        s.SetAssistedFlight(assisted);
+        s.SetAssistedFlight(false); // Desktop: no automatic fire, throttle or path hold.
         s.SetTouchControlModality(false); // keyboard is the primary acceptance path
         s.Begin();
         return s;
@@ -132,6 +132,7 @@ public sealed class GunGimbalKidPilotTests(ITestOutputHelper output) {
                 && s.KillCount == 0; tick++) {
                 pilot.Drive(s);
                 s.StepFixed();
+                if (s.TimeSeconds < VisualDelaySeconds) Assert.Equal(0, s.SortiePlayerRoundsFired);
                 if (double.IsNaN(firstHit) && s.SortiePlayerHits > 0) {
                     firstHit = s.TimeSeconds;
                     roundsToFirstHit = s.SortiePlayerRoundsFired;
@@ -165,7 +166,8 @@ public sealed class GunGimbalKidPilotTests(ITestOutputHelper output) {
 
     /// Optional calibration receipt for the parent implementation. It is deliberately opt-in:
     /// unlike the two acceptance facts above, this is a measured report and must not add another
-    /// release gate. Both pilots still use only FeedKey and delayed instrument/visual samples.
+    /// release gate. Both pilots use FeedKey and delayed kernel lead/solution samples: idealised
+    /// lead-informed calibration, not a claim to reproduce an expert human or the HUD renderer.
     [Fact]
     public void ReportKeyboardCompetentAndExpertCurves() {
         if (System.Environment.GetEnvironmentVariable("C11_REPORT") != "1") return;
@@ -187,8 +189,8 @@ public sealed class GunGimbalKidPilotTests(ITestOutputHelper output) {
     static string Fmt(double value) => double.IsNaN(value) ? "-" : value.ToString("F2");
 
     static Result FlyReport(int lesson, int seed, bool expert, double capSeconds) {
-        SimulationSession s = Start(lesson, seed, assisted: !expert);
-        var pilot = new ReportPilot(seed, expert);
+        SimulationSession s = Start(lesson, seed);
+        var pilot = new ReportPilot(expert);
         double firstHit = double.NaN;
         int roundsToFirstHit = -1;
         try {
@@ -208,51 +210,61 @@ public sealed class GunGimbalKidPilotTests(ITestOutputHelper output) {
         } finally { pilot.Finish(s); }
     }
 
-    sealed class ReportPilot(int seed, bool expert) {
-        readonly Queue<(Vec3D D, Vec3D Cue, bool Valid)> _seen = new();
-        readonly int _delayTicks = (int)Math.Round(VisualDelaySeconds / Dt);
-        readonly Random _random = new(seed * 1013 + (expert ? 83 : 31));
+    // Competent: 250 ms delay and 100 ms corrections. Expert: 120 ms delay,
+    // 25 ms corrections, ballistic lead discipline. Both remain discrete keyboard pilots;
+    // neither reads or changes the future state. Neither manages throttle.
+    sealed class ReportPilot(bool expert) {
+        readonly record struct Sight(double Right, double Up, double Angle, double Phi,
+            double Range, bool Valid, bool Solution);
+        readonly Queue<Sight> _seen = new();
+        readonly int _delayTicks = (int)Math.Round((expert ? 0.12 : 0.25) / Dt);
         GKey? _roll, _pitch;
-        int _hold;
+        int _hold, _burst;
         bool _trigger;
-        int _burst;
-
         public void Drive(SimulationSession s) {
             bool valid = s.OpponentPresent && s.SelectedOpponentAlive;
-            Vec3D d = valid ? s.Bandit.State.Position - s.Player.State.Position : default;
-            Vec3D cueAtObservation = valid && expert && s.PlayerGun.HasLeadSolution
-                ? s.PlayerGun.LeadDirection : d;
-            _seen.Enqueue((d, cueAtObservation, valid));
+            Vec3D delta = s.Bandit.State.Position - s.Player.State.Position;
+            Vec3D cue = s.PlayerGun.HasLeadSolution ? s.PlayerGun.LeadDirection : delta.Normalized();
+            double f = cue.Dot(s.Player.BodyForward), r = cue.Dot(s.Player.BodyRight), u = cue.Dot(s.Player.BodyUp);
+            _seen.Enqueue(new(Math.Atan2(r, Math.Max(1e-6, f)) * 180 / Math.PI,
+                Math.Atan2(u, Math.Max(1e-6, f)) * 180 / Math.PI,
+                Math.Acos(Math.Clamp(f, -1, 1)) * 180 / Math.PI,
+                Math.Atan2(r, u), delta.Length, valid,
+                s.PlayerGun.GunSolution));
             var seen = _seen.Count > _delayTicks ? _seen.Dequeue() : default;
-            Vec3D cue = seen.Valid ? seen.Cue : default;
             if (_hold > 0) _hold--;
-            else if (seen.Valid) {
-                Release(ref _roll, s); Release(ref _pitch, s);
-                double right = cue.Dot(s.Player.BodyRight);
-                _roll = right >= 0 ? GKey.RollRight : GKey.RollLeft;
-                s.FeedKey(_roll.Value, true);
-                _hold = (int)Math.Round((expert ? 0.3 : 0.6) / Dt);
-                double up = cue.Dot(s.Player.BodyUp);
-                if (Math.Abs(up) > 0.04) {
-                    _pitch = up >= 0 ? GKey.PullUp : GKey.PushDown;
-                    s.FeedKey(_pitch.Value, true);
+            else {
+                GKey? desiredRoll = null, desiredPitch = null;
+                if (seen.Valid) {
+                    double deadband = expert ? 0.25 : 0.8;
+                    double rollDemand = seen.Angle > 8 ? seen.Phi * 180 / Math.PI : seen.Right;
+                    if (Math.Abs(rollDemand) > deadband) {
+                        desiredRoll = rollDemand > 0 ? GKey.RollRight : GKey.RollLeft;
+                    }
+                    if (seen.Angle > 8 ? Math.Abs(seen.Phi) < Math.PI / 3 : Math.Abs(seen.Up) > deadband) {
+                        desiredPitch = seen.Angle > 8 || seen.Up > 0 ? GKey.PullUp : GKey.PushDown;
+                    }
                 }
+                SetHeld(ref _roll, desiredRoll, s);
+                SetHeld(ref _pitch, desiredPitch, s);
+                _hold = (int)Math.Round((expert ? 0.025 : 0.1) / Dt);
             }
-            double forward = seen.Valid ? cue.Dot(s.Player.BodyForward) : -1;
-            bool inside = seen.Valid && forward > 0 && cue.Length > 0
-                && Math.Acos(Math.Clamp(forward / cue.Length, -1, 1)) <= (expert ? 0.06 : 0.18)
-                && seen.D.Length <= 1000;
-            if (_burst > 0) _burst--; else if (inside) _burst =
-                (int)Math.Round((expert ? 1.0 : 2.0 + _random.NextDouble() * 1.0) / Dt);
-            bool fire = _burst > 0 && valid;
+            if (_burst > 0) _burst--;
+            else if (seen.Valid && seen.Solution && seen.Range < 900)
+                _burst = (int)Math.Round((expert ? 0.12 : 0.35) / Dt);
+            bool fire = _burst > 0;
             if (fire != _trigger) { _trigger = fire; s.FeedKey(GKey.Trigger, fire); }
         }
-
         public void Finish(SimulationSession s) {
             Release(ref _roll, s); Release(ref _pitch, s);
             if (_trigger) { _trigger = false; s.FeedKey(GKey.Trigger, false); }
         }
-
+        static void SetHeld(ref GKey? key, GKey? desired, SimulationSession s) {
+            if (key == desired) return;
+            Release(ref key, s);
+            key = desired;
+            if (key is GKey held) s.FeedKey(held, true);
+        }
         static void Release(ref GKey? key, SimulationSession s) {
             if (key is GKey held) { s.FeedKey(held, false); key = null; }
         }
