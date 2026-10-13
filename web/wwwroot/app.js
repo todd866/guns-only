@@ -2822,11 +2822,12 @@ function finishLogbookAttempt(state = latestState, abandoned = false) {
   if (!pilotLogbook.pending) return null;
   const result = sortieResultCopy(state);
   const visualMerge = result?.f22Sortie ? null : visualMergeDebriefPresentation(state);
+  // The F-22 result advises only from observed evidence; an early exit records no lesson.
   const correction = result?.safetyCorrection
     || practiceResult(state)?.correction
     || visualMerge?.correction
     || result?.correction
-    || "Review the final exchange before your next attempt.";
+    || (result?.f22Sortie ? "" : "Review the final exchange before your next attempt.");
   return pilotLogbook.finish(snapshotAttemptResult(state, { abandoned, correction }));
 }
 let campaignProfile = loadCampaignProfile();

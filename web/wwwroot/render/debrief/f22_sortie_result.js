@@ -19,10 +19,15 @@ const LANDING_CORRECTIONS = [
   [64, "Go around when the landing runs long."],
 ];
 
+/** The live F-22 sortie (visual merge or Kestrel valley), never a practice exercise. */
+export function isF22Sortie(state) {
+  const practice = String(state?.practice_exercise || "none").toLowerCase();
+  return F22_MISSIONS.has(state?.mission_definition_id) && practice === "none";
+}
+
 /** Read the terminal authority; two kills need not mean two completed formation engagements. */
 export function f22SortieResult(state, { handoff, loss } = {}) {
-  const practice = String(state?.practice_exercise || "none").toLowerCase();
-  if (!F22_MISSIONS.has(state?.mission_definition_id) || practice !== "none") return null;
+  if (!isF22Sortie(state)) return null;
   const outcome = String(state?.sortie_outcome || "").toUpperCase();
   const recovered = state.runway_recovery_complete === true
     && state.runway_touchdown_contact === true
@@ -43,16 +48,23 @@ export function f22SortieResult(state, { handoff, loss } = {}) {
     facts.push(`Reserve ${margin < 0 ? "−" : "+"}${Math.round(Math.abs(margin))} LB`);
   if (handoff?.reliefKills > 0) facts.push(`Relief kills ${handoff.reliefKills} uncredited`);
 
-  let title = "Recovery incomplete";
-  let brief = "The sortie did not reach recovery.";
-  let correction = "Practise the approach and runway stop.";
-  let practiceExercise = "recovery";
+  // Advice comes only from observed evidence. A sortie that ended (or was abandoned) before any
+  // runway contact has no landing to diagnose, so it gets no landing lesson (loop audit #9).
+  const terminal = state.finished === true
+    || ["VICTORY", "DISCONTINUED"].includes(outcome);
+  const touchdown = state.runway_touchdown_contact === true;
+  let title = terminal ? "Recovery incomplete" : "Sortie incomplete";
+  let brief = terminal ? "The sortie did not reach recovery." : "Left before the sortie ended.";
+  let correction = touchdown || (terminal && returning)
+    ? "Practise the approach and runway stop." : "";
+  let practiceExercise = correction ? "recovery" : "";
   if (victory) {
     title = "Sortie complete";
     brief = "Fight complete. Aircraft recovered.";
+    // The earned next opponent is its own instrument row; no correction is invented for a
+    // clean recovery.
     correction = margin !== null && margin < 0
-      ? "Leave the fight with more landing fuel."
-      : "Your next sortie uses your earned difficulty.";
+      ? "Leave the fight with more landing fuel." : "";
     practiceExercise = terrainLesson ? "valley" : "";
   } else if (recovered && outcome === "DISCONTINUED") {
     title = "Recovered early";

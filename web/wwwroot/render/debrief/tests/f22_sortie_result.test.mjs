@@ -206,3 +206,28 @@ test("kernel-projected recovered victory reads as a complete sortie", async () =
   assert.notEqual(result.practiceExercise, "recovery");
   assert.doesNotMatch(result.correction, /approach|runway|landing/i);
 });
+
+test("an abandoned sortie gets observed facts only, never landing advice", () => {
+  // Loop audit #9: a five-second valley exit was told to practise the approach and runway stop.
+  const abandoned = f22SortieResult(state({
+    mission_definition_id: VALLEY,
+    sortie_outcome: "NONE",
+    session_phase: "ACTIVE",
+    finished: false,
+    first_run_weapons_cold: true,
+  }));
+  assert.equal(abandoned.title, "Sortie incomplete");
+  assert.equal(abandoned.correction, "");
+  assert.equal(abandoned.practiceExercise, "");
+
+  const afterTouchdown = f22SortieResult(state({
+    sortie_outcome: "NONE",
+    finished: false,
+    runway_touchdown_contact: true,
+  }));
+  assert.equal(afterTouchdown.correction, "Practise the approach and runway stop.");
+  assert.equal(afterTouchdown.practiceExercise, "recovery");
+
+  const cleanVictory = f22SortieResult(state({ ...recovered, sortie_outcome: "VICTORY" }));
+  assert.equal(cleanVictory.correction, "");
+});
