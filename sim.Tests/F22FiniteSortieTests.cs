@@ -1,4 +1,5 @@
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Web;
 
 namespace GunsOnly.Sim.Tests;
 
@@ -89,9 +90,63 @@ public class F22FiniteSortieTests {
         for (int i = 0; i < 4 * AircraftSim.TickHz && !session.PlayerRtbActive; i++)
             session.StepFixed();
         Assert.True(session.PlayerRtbActive);
+        // The combat result exists before, and independently of, any landing.
+        Assert.True(session.FiniteCombatComplete);
+        Assert.Equal(2, session.FiniteEngagementCap);
+        Assert.Equal(2, session.EngagementsWon);
+        Assert.False(session.ConventionalRtbRecoveryCompleted);
+        AssertMatchesBrowserFixture(session, "f22_combat_complete.json");
         FullStop(session);
         Assert.Equal(SortieOutcome.Victory, session.Outcome);
         Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
+        // Regression (loop audit #1): the recovered victory used to fail the Discontinued-only
+        // completion check, so the browser told a landed pilot "Recovery incomplete".
+        Assert.True(session.ConventionalRtbRecoveryCompleted);
+        AssertMatchesBrowserFixture(session, "f22_recovered_victory.json");
+    }
+
+    // The JS debrief tests read these same fixtures, so a projection change that would make the
+    // card lie fails here first. GUNS_UPDATE_FIXTURES=1 rewrites them from the live projection.
+    static readonly string[] BrowserFixtureFields = [
+        "mission_definition_id", "practice_exercise", "session_phase", "finished",
+        "sortie_outcome", "rtb_reason", "combat_handoff_phase_name", "player_rtb_active",
+        "runway_recovery_phase_name", "runway_recovery_complete", "runway_touchdown_contact",
+        "runway_touchdown_survivable", "runway_touchdown_deviations", "kill_count",
+        "combat_complete", "engagement_cap", "engagements_won", "sortie_rung",
+        "sortie_opponent_skill", "sortie_opponent_mount", "sortie_opponent_count",
+        "difficulty_rung", "earned_opponent_skill", "earned_opponent_mount",
+        "earned_opponent_count",
+    ];
+
+    static void AssertMatchesBrowserFixture(SimulationSession session, string name) {
+        string json = SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Angled,
+            0.0, 0.0, false, null);
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        var root = document.RootElement;
+        var actual = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (string field in BrowserFixtureFields)
+            actual[field] = root.GetProperty(field).GetRawText();
+
+        // The hot frame carries the recovery flag every frame; it must agree with the JSON.
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        using var layout = System.Text.Json.JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
+        int slot = layout.RootElement.GetProperty("blocks").EnumerateArray()
+            .SelectMany(block => block.GetProperty("slots").EnumerateArray())
+            .Single(entry => entry.GetProperty("name").GetString() == "runway_recovery_complete")
+            .GetProperty("index").GetInt32();
+        Assert.Equal(root.GetProperty("runway_recovery_complete").GetBoolean() ? 1.0 : 0.0,
+            buffer[slot]);
+
+        string path = Path.Combine(TestRepository.Root,
+            "web", "wwwroot", "render", "debrief", "tests", "fixtures", name);
+        string rendered = "{\n" + string.Join(",\n",
+            actual.Select(pair => $"  \"{pair.Key}\": {pair.Value}")) + "\n}\n";
+        if (System.Environment.GetEnvironmentVariable("GUNS_UPDATE_FIXTURES") == "1") {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, rendered);
+        }
+        Assert.Equal(File.ReadAllText(path), rendered);
     }
 
     [Fact]

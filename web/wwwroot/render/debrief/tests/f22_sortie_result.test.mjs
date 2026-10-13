@@ -193,3 +193,16 @@ test("caller safety lessons still override the F-22 card safely", () => {
   assert.equal(result.safetyCorrection, "Discontinue after an Auto-GCAS fly-up.");
   assert.equal(result.practiceExercise, "valley");
 });
+
+// Fixture written by sim.Tests F22FiniteSortieTests.RecoveredStopAfterTheCapIsVictory from the
+// real kernel projection (two capped kills, accepted RTB, physical full stop).
+test("kernel-projected recovered victory reads as a complete sortie", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const fixture = JSON.parse(await readFile(
+    new URL("./fixtures/f22_recovered_victory.json", import.meta.url), "utf8"));
+  const result = sortieResultCopy(fixture);
+  assert.equal(result.title, "Sortie complete");
+  assert.equal(result.recoveryComplete, true);
+  assert.notEqual(result.practiceExercise, "recovery");
+  assert.doesNotMatch(result.correction, /approach|runway|landing/i);
+});
