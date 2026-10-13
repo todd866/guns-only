@@ -1,4 +1,5 @@
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Training;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -48,14 +49,33 @@ public sealed class HitGeometryConversionReport {
         }
     }
 
-    [Fact]
-    public void ReportLegacyAceBaseline() {
-        if (System.Environment.GetEnvironmentVariable("C10_GEOMETRY_BASELINE") != "1") return;
-        GunConversionFunnelResult funnel = GunConversionFunnel.MeasureEnemy(
-            PilotSkill.Ace, engagements: 6, useTargetGeometry: false);
-        _output.WriteLine("C10 legacy geometry-null baseline");
-        _output.WriteLine(funnel.ToString());
-        _output.WriteLine(funnel.TriggerLine);
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReportControlledGunPass(bool airframeVolumes) {
+        if (System.Environment.GetEnvironmentVariable("C10_GEOMETRY_REPORT") != "1") return;
+        BeatSetup beat = PracticeBeats.Create(PracticeExercise.Gunnery);
+        if (!airframeVolumes) beat = beat with { Combat = beat.CombatRules with {
+            PlayerTargetGeometry = null, OpponentTargetGeometry = null } };
+        var session = new SimulationSession();
+        session.StartBeat(() => beat);
+        session.Begin();
+        session.SetAssistedFlight(false);
+        session.FeedKey(GKey.Trigger,true);
+        int roundsToFirstHit = 0;
+        double firstHitSeconds = double.NaN;
+        for (int tick=0; tick<10*AircraftSim.TickHz && session.Practice!.Status==PracticeStatus.Active; tick++) {
+            session.StepFixed();
+            if (roundsToFirstHit==0 && session.SortiePlayerHits>0) {
+                roundsToFirstHit=session.SortiePlayerRoundsFired;
+                firstHitSeconds=session.TimeSeconds;
+            }
+        }
+        session.FeedKey(GKey.Trigger,false);
+        _output.WriteLine($"practice airframeVolumes={airframeVolumes} firstHit={firstHitSeconds:F4}s "
+            + $"roundsToFirstHit={roundsToFirstHit} rounds={session.SortiePlayerRoundsFired} "
+            + $"hits={session.SortiePlayerHits} status={session.Practice!.Status} t={session.TimeSeconds:F4}s");
+        Assert.True(roundsToFirstHit>0);
     }
 
     static string OrDash(int value) => value > 0 ? value.ToString() : "-";

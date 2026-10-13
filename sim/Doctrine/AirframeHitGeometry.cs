@@ -89,7 +89,11 @@ public sealed class AirframeHitGeometry {
             Vec3D centre = vertices.Aggregate(Vec3D.Zero, (a, v) => a + v) * (1.0 / vertices.Length);
             _planes = faces.Select(f => {
                 Vec3D a = vertices[f.A];
-                Vec3D n = (vertices[f.B] - a).Cross(vertices[f.C] - a).Normalized();
+                Vec3D cross = (vertices[f.B] - a).Cross(vertices[f.C] - a);
+                // Tiny but nonzero canopy endpoint tetrahedra still need every bounding plane.
+                // Vec3D.Normalized's general 1e-12 cutoff would drop their cap normals.
+                double length = cross.Length;
+                Vec3D n = length > 0 ? cross * (1 / length) : Vec3D.Zero;
                 if (n.Dot(centre - a) > 0) n = n * -1;
                 return new Plane(n, n.Dot(a));
             }).Where(p => p.Normal.Length > 0.5).ToArray();

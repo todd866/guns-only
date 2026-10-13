@@ -36,6 +36,12 @@ public class AirframeHitGeometryTests {
         Miss(AirframeHitGeometry.Su27, new(5,-1,4), new(5,1,4));
         Hit(AirframeHitGeometry.Su27, new(4,-1,-9.5), new(4,1,-9.5));
     }
+    [Fact] public void TinyCanopyEndSectionsDoNotCreateUnboundedSolids() {
+        // Just above the forward canopy pole: fuselage is below this height.
+        Miss(AirframeHitGeometry.Su27,new(-1,1.001,7.01),new(1,1.001,7.01));
+        Hit(AirframeHitGeometry.Su27,new(-1,1.001,6.95),new(1,1.001,6.95));
+        Miss(AirframeHitGeometry.Su27,new(-1,2,6.95),new(1,2,6.95));
+    }
     [Fact] public void F22HasItsOwnLengthSpanAndCantedFins() {
         Assert.Equal(18.9, AirframeHitGeometry.F22.Maximum.Z - AirframeHitGeometry.F22.Minimum.Z, 9);
         Assert.Equal(13.6, AirframeHitGeometry.F22.Maximum.X - AirframeHitGeometry.F22.Minimum.X, 9);
