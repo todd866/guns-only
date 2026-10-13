@@ -64,4 +64,8 @@ test("Auto-GCAS presentation is demand-driven and G-LOC grants no aural channel"
   assert.match(source,
     /if \(gcasAvailable\)[\s\S]*?binding\("gcasOverride", "KeyK"\)[\s\S]*?AGCAS PADDLE/,
     "paddle help must appear only on a capable aircraft");
+  const { controlQuicklookEntries } = await import("../../hud/control_quicklook.js");
+  const paddle = (gcasAvailable) => controlQuicklookEntries({ gcasAvailable })
+    .some((e) => e.caps[0] === "K" && e.action === "AGCAS PADDLE");
+  assert.ok(paddle(true) && !paddle(false), "the F-22 key card shows the paddle only when capable");
 });

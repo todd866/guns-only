@@ -5983,6 +5983,88 @@ class CombatHud {
       + rows * CombatHud.ANNUNCIATION_ROW + (rows - 1) * 4 + 6;
   }
 
+  // Pre-a8 quicklook, kept byte-for-byte for every mode except the ordinary F-22 fight
+  // (Top Gun, Rapier and the first-run valley are frozen or pinned to this copy).
+  drawLegacyQuicklook(frame) {
+    if (!this.legendVisible || this.touchMode || document.documentElement.classList.contains("touch-mode")) return;
+    const ctx = this.ctx;
+    const panelWidth = Math.min(930, this.width - 34);
+    const compact = this.width < 760;
+    const gcasAvailable = frame.state.auto_gcas_available === true;
+    const f14WingSweep = frame.state.top_gun_seat === "F-14A";
+    const panelHeight = (compact ? (gcasAvailable ? 256 : 229) : (gcasAvailable ? 222 : 191))
+      + (f14WingSweep ? (compact ? 27 : 31) : 0);
+    const x = (this.width - panelWidth) / 2;
+    const y = (this.height - panelHeight) / 2;
+
+    ctx.fillStyle = "rgba(0, 7, 12, 0.22)";
+    ctx.fillRect(0, 0, this.width, this.height);
+    roundedRect(ctx, x, y, panelWidth, panelHeight, 8);
+    ctx.fillStyle = "rgba(3, 13, 20, 0.79)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.23)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = GREEN;
+    ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("CONTROL QUICKLOOK", this.width / 2, y + 23);
+
+    const binding = (action, fallback) => controlBindingLabel(this.controlBindings?.[action], fallback);
+    const firstRunValley = frame.state.mission_definition_id
+      === "mission.modern.visual-merge.first-run-valley.v1";
+    const fireBinding = binding("fire", "KeyF");
+    const topGunQuicklook = topGunControlQuicklookPresentation(frame.state, {
+      fireBinding,
+      rtbBinding: binding("knockItOff", "KeyO"),
+    });
+    const fireQuicklook = topGunQuicklook?.weapons ?? (firstRunValley
+      ? `${fireBinding}  FOX TWO → GUNS`
+      : `${fireBinding}  GUNS`);
+    const restartOrRtbQuicklook = topGunQuicklook?.returnToCarrier ?? "R  RESTART";
+
+    const wideLines = [
+      `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
+      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("hookToggle", "KeyU")}  HOOK   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${fireQuicklook}   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
+      `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   ${restartOrRtbQuicklook}   ·   M  SOUND   ·   \`  SYNC MARK   ·   H  HIDE`,
+      "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF",
+      topGunQuicklook
+        ? `TOP GUN · ${topGunQuicklook.weapons} · ${topGunQuicklook.returnToCarrier}`
+        : firstRunValley
+        ? `FIRST RUN · FOLLOW VALLEY · ${fireBinding} FIRES TWO HEATERS, THEN GUNS`
+        : "P  RAPIER MISSION AUTOMATION   ·   Z  SHORT-RANGE MISSILE",
+    ];
+    const compactLines = [
+      `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL`,
+      `${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
+      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
+      `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${fireQuicklook}   ·   M  SOUND`,
+      `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   ${restartOrRtbQuicklook}   ·   \`  SYNC MARK   ·   H  HIDE`,
+      "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF",
+    ];
+    if (topGunQuicklook) {
+      compactLines.push(`TOP GUN · ${topGunQuicklook.weapons} · ${topGunQuicklook.returnToCarrier}`);
+    } else if (firstRunValley) {
+      compactLines.push(`FOLLOW VALLEY · ${fireBinding}: TWO HEATERS → GUNS`);
+    }
+    if (f14WingSweep) {
+      wideLines.push(`${binding("wingSweepForward", "Comma")} / ${binding("wingSweepAft", "Period")}  WING SWEEP FORWARD / AFT   ·   ${binding("wingSweepAuto", "Slash")}  WING SWEEP AUTO`);
+      compactLines.push(`${binding("wingSweepForward", "Comma")} / ${binding("wingSweepAft", "Period")}  WING SWEEP FORWARD / AFT   ·   ${binding("wingSweepAuto", "Slash")}  AUTO`);
+    }
+    if (gcasAvailable) {
+      wideLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE AN ACTIVE FLY-UP)`);
+      compactLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE FLY-UP)`);
+    }
+    const lines = compact ? compactLines : wideLines;
+    const lineHeight = compact ? 27 : 31;
+    const startY = y + (compact ? 59 : 61);
+    ctx.fillStyle = "rgba(207, 244, 222, 0.68)";
+    ctx.font = `${compact ? 8 : 10}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    lines.forEach((line, index) => ctx.fillText(line, this.width / 2, startY + index * lineHeight));
+  }
+
   drawLegend(frame) {
     if (!this.legendVisible || this.touchMode || document.documentElement.classList.contains("touch-mode")) return;
     const ctx = this.ctx;
@@ -5995,6 +6077,11 @@ class CombatHud {
     const mode = topGun ? "topgun"
       : state.mission_definition_id === "mission.modern.visual-merge.first-run-valley.v1" ? "valley"
         : phaseMission.startsWith("rapier") ? "rapier" : "f22";
+    // a8 scope: only the ordinary F-22 fight gets the key card.
+    if (mode !== "f22" || state.top_gun_seat === "F-14A") {
+      this.drawLegacyQuicklook(frame);
+      return;
+    }
     const entries = controlQuicklookEntries({
       bindings: this.controlBindings ?? {},
       mode,

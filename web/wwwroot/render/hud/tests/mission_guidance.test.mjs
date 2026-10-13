@@ -45,6 +45,11 @@ test("Top Gun quicklook reserves R for Fox Two and exposes O carrier RTB", () =>
 
 test("HUD quicklook consumes the mission-aware Top Gun presentation", async () => {
   const hud = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
+  assert.match(hud,
+    /const topGunQuicklook = topGunControlQuicklookPresentation\(frame\.state,[\s\S]*?const restartOrRtbQuicklook = topGunQuicklook\?\.returnToCarrier \?\? "R  RESTART";/);
+  assert.match(hud,
+    /topGunQuicklook[\s\S]*?TOP GUN · \$\{topGunQuicklook\.weapons\} · \$\{topGunQuicklook\.returnToCarrier\}[\s\S]*?: "P  RAPIER MISSION AUTOMATION   ·   Z  SHORT-RANGE MISSILE"/,
+    "Top Gun must branch around the generic Z missile legend");
   // a8 key card: the mission-aware presentation selects the Top Gun mode, whose entries carry
   // Fox Two and carrier RTB and never the generic Z missile / R restart (control_quicklook tests).
   assert.match(hud,
