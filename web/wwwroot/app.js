@@ -126,6 +126,7 @@ import {
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
 import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=__RELEASE_BUILD__";
+import { clearBottomFor } from "./render/hud/occupied_area.js";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -170,6 +171,14 @@ import {
   wingmanPadlockPromotedToPrimary,
 } from "./render/input/player_gun_target.js";
 import { mobileThrottleRockerState } from "./render/input/mobile_throttle_rocker.js";
+import {
+  dragThrottleLever,
+  militaryStopFraction,
+  pickUpThrottleLever,
+  publishedThrottleLever,
+  throttleLeverKnobOffset,
+  throttleLeverReadout,
+} from "./render/input/mobile_throttle_lever.js";
 import {
   mobileRollCommand,
   shouldTransmitAnalogAxis,
@@ -512,6 +521,9 @@ const touchThrottleRockerKnob = document.querySelector("#touch-throttle-rocker-k
 const touchThrottleRockerLabel = touchThrottleRockerKnob?.querySelector(".throttle-rocker-label")
   ?? null;
 const touchThrottleHelp = document.querySelector("#touch-throttle-help");
+const touchThrottleLever = touchControls?.querySelector('[data-mobile-action="throttle-lever"]')
+  ?? null;
+const touchThrottleLeverValue = document.querySelector("#touch-throttle-lever-value");
 const touchWaveOffButton = document.querySelector("#touch-wave-off");
 const touchContextControls = document.querySelector("#touch-context-controls");
 const touchGearButton = document.querySelector("#touch-gear");
@@ -524,6 +536,7 @@ const touchWingSweepAuto = document.querySelector("#touch-wing-sweep-auto");
 const touchTargetCycleButton = touchControls?.querySelector('[data-mobile-action="target-cycle"]')
   ?? null;
 const touchTargetLabel = document.querySelector("#touch-target-label");
+const touchPadlockState = document.querySelector("#touch-padlock-state");
 const touchTargetNumber = document.querySelector("#touch-target-number");
 const touchFireButton = document.querySelector("#touch-fire");
 const touchCarrierRtbButton = document.querySelector("#touch-carrier-rtb");
@@ -622,6 +635,7 @@ const settingsInterfaceSounds = document.querySelector("#setting-interface-sound
 const settingsRadioVoice = document.querySelector("#setting-radio-voice");
 const settingsRadioCaptions = document.querySelector("#setting-radio-captions");
 const settingsAutoGcas = document.querySelector("#setting-autogcas");
+const settingsTouchRudderStick = document.querySelector("#setting-touch-rudder-stick");
 const settingsHighContrast = document.querySelector("#setting-high-contrast");
 const settingsReducedMotion = document.querySelector("#setting-reduced-motion");
 const settingsLargeText = document.querySelector("#setting-large-text");
@@ -2799,6 +2813,7 @@ let gimbalReturnFast = false;
 let sensorYaw = 0;
 let sensorPitch = 0;
 let resetMobileInput = () => {};
+let syncTouchThrottleLever = () => {};
 let releaseHiddenMobileControls = () => {};
 
 function setDirectFlightAxes(source, roll, pitch) {
@@ -3142,6 +3157,8 @@ function applyPlayerSettings() {
   if (settingsRadioCaptions)
     settingsRadioCaptions.checked = playerSettings.radioCaptions === true;
   if (settingsAutoGcas) settingsAutoGcas.checked = playerSettings.autoGcas !== false;
+  if (settingsTouchRudderStick)
+    settingsTouchRudderStick.checked = playerSettings.touchRudderStick === true;
   activeView && bridge?.SetAutoGcasEnabled?.(playerSettings.autoGcas !== false);
   if (settingsHighContrast) settingsHighContrast.checked = playerSettings.highContrast;
   if (settingsReducedMotion) settingsReducedMotion.checked = playerSettings.reducedMotion;
@@ -3282,6 +3299,9 @@ for (const button of [settingsClose, settingsCloseBottom])
   button?.addEventListener("click", closeSettings);
 settingsAutoGcas?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, autoGcas: settingsAutoGcas.checked,
+}));
+settingsTouchRudderStick?.addEventListener("change", () => commitPlayerSettings({
+  ...playerSettings, touchRudderStick: settingsTouchRudderStick.checked,
 }));
 settingsAudio?.addEventListener("change", () => {
   commitAudioPreferenceFromGesture(settingsAudio.checked);
@@ -3433,6 +3453,14 @@ function syncMobileControlProfile(state) {
   const touchFireLabel = touchFireVisibleLabel(state);
   const firstRunMissileTracking = touchFireLabel === "FOX 2"
     && state?.aim9_in_flight === true;
+  // The fighter layout (FIRE + throttle lever under the left thumb) applies to every gun-fighter
+  // sortie. Carrier recovery and CASEVAC keep their own left-hand controls.
+  const fighterLayout = !casevac && state?.carrier !== true
+    && state?.maintenance_scenario !== true;
+  document.documentElement.classList.toggle("touch-fighter", fighterLayout);
+  document.documentElement.classList.toggle("touch-rudder-stick",
+    fighterLayout && playerSettings.touchRudderStick === true);
+  if (fighterLayout) syncTouchThrottleLever(state);
   if (touchThrottleControls) {
     touchThrottleControls.hidden = casevac
       ? !casevacActive
@@ -3513,7 +3541,71 @@ function syncMobileControlProfile(state) {
       || (!profile.gear && !profile.flaps && !f14WingSweep);
   }
   syncPadlockUi();
+  syncTouchPadlockState();
   releaseHiddenMobileControls();
+  syncOccupiedArea();
+}
+
+// OCCUPIED-AREA CONTRACT. The DOM touch controls publish the rectangles they really occupy; the
+// canvas HUD (tapes, objective plate) and the practice row place themselves clear of them. Only
+// re-measured when something that changes geometry changes, so a healthy frame does no layout.
+let occupiedAreaSignature = "";
+const OCCUPIED_CONTROL_SELECTOR = [
+  "#touch-controls .touch-control",
+  "#fallback-stick",
+  "#target-stick",
+].join(", ");
+
+function visibleRect(element) {
+  if (!element || element.closest?.("[hidden]")) return null;
+  const style = getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden") return null;
+  const box = element.getBoundingClientRect();
+  if (box.width < 1 || box.height < 1) return null;
+  return { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+}
+
+function syncOccupiedArea() {
+  if (!touchControls) return;
+  const controls = [...touchControls.querySelectorAll(OCCUPIED_CONTROL_SELECTOR)];
+  const signature = [
+    innerWidth, innerHeight, document.documentElement.className,
+    controls.map((element) => (element.closest("[hidden]") ? 0 : 1)).join(""),
+    practiceCue?.hidden ? "" : practiceCue?.textContent ?? "",
+  ].join("|");
+  if (signature === occupiedAreaSignature) return;
+  occupiedAreaSignature = signature;
+  const rects = [];
+  for (const element of controls) {
+    const rect = visibleRect(element);
+    if (rect) rects.push({ id: element.id || element.dataset.pulseKey || "control", ...rect });
+  }
+  if (practiceCue && !practiceCue.hidden && mobileControls) {
+    const width = practiceCue.offsetWidth;
+    const left = (innerWidth - width) / 2;
+    const bottom = clearBottomFor(rects, left, left + width, innerHeight - 12);
+    practiceCue.style.bottom = `${Math.max(8, Math.round(innerHeight - bottom))}px`;
+    const cue = visibleRect(practiceCue);
+    if (cue) rects.push({ id: "practice-cue", ...cue });
+  }
+  activeView?.hud?.setOccupiedRects?.(rects);
+  globalThis.__gunsOccupiedArea = rects;
+}
+
+// The phone's padlock state lives in its own control, not in a canvas plate over the flight
+// data: the pressed PADLOCK button reads ACQ / TRK / LOOK on its second line.
+function syncTouchPadlockState() {
+  if (!touchPadlockState) return;
+  const text = !padlock ? "—"
+    : manualLookActive() ? "LOOK"
+      : padlockPhase === "TRACK" ? "TRK" : "ACQ";
+  if (touchPadlockState.textContent !== text) touchPadlockState.textContent = text;
+  if (touchPadlockButton) {
+    const title = !padlock ? "Padlock · off"
+      : text === "LOOK" ? "Padlock · manual look; release look to reacquire"
+        : text === "TRK" ? "Padlock · tracking" : "Padlock · acquiring";
+    if (touchPadlockButton.title !== title) touchPadlockButton.title = title;
+  }
 }
 
 const MISSION_BRIEFS = Object.freeze({
@@ -10779,6 +10871,120 @@ function installMobileInput(view) {
     renderThrottleRocker(physicalCode === "KeyW" ? 0.78 : -0.78, physicalCode);
   }
 
+  // THE FIGHTER THROTTLE LEVER. Persistent and absolute: it is drawn where the aircraft's power
+  // is set, a touch picks up that value (no jump on contact, and a tap that never drags sends
+  // nothing, so it cannot stand the portrait auto-throttle down by accident), the drag moves it
+  // relative to where the thumb landed, and release leaves it set.
+  let throttleLeverPointerId = null;
+  let throttleLeverAnchor = null;
+  let throttleLeverValue = null;
+
+  function throttleLeverTravel() {
+    if (!touchThrottleLever) return 0;
+    const knob = touchThrottleLever.querySelector("#touch-throttle-lever-knob");
+    return Math.max(0, touchThrottleLever.clientHeight - (knob?.offsetHeight ?? 24) - 10);
+  }
+
+  function renderThrottleLever(lever, state = latestState) {
+    if (!touchThrottleLever) return;
+    const travel = throttleLeverTravel();
+    const value = Number.isFinite(lever) ? lever : 0;
+    const stop = state?.max_thrust_fraction;
+    const mil = militaryStopFraction(stop);
+    const readout = throttleLeverReadout(value, stop);
+    touchThrottleLever.style.setProperty("--lever-knob",
+      `${throttleLeverKnobOffset(value, travel).toFixed(1)}px`);
+    touchThrottleLever.style.setProperty("--lever-mil",
+      mil === null ? "-100px" : `${throttleLeverKnobOffset(mil, travel).toFixed(1)}px`);
+    touchThrottleLever.dataset.zone = readout.text === "AB" ? "ab" : "dry";
+    touchThrottleLever.dataset.active = String(throttleLeverPointerId !== null);
+    if (touchThrottleLeverValue && touchThrottleLeverValue.textContent !== readout.text) {
+      touchThrottleLeverValue.textContent = readout.text;
+    }
+    const percent = String(Math.round(value * 100));
+    if (touchThrottleLever.getAttribute("aria-valuenow") !== percent) {
+      touchThrottleLever.setAttribute("aria-valuenow", percent);
+      touchThrottleLever.setAttribute("aria-valuetext", readout.spoken);
+    }
+  }
+
+  function commandThrottleLever(lever) {
+    throttleLeverValue = lever;
+    // A left-stick nudge must not later resume from a stale browser-side seed.
+    throttleLever = null;
+    if (typeof bridge?.SetAnalogThrottleControl === "function") {
+      bridge.SetAnalogThrottleControl(lever);
+    }
+    renderThrottleLever(lever);
+  }
+
+  syncTouchThrottleLever = (state) => {
+    if (!touchThrottleLever || throttleLeverPointerId !== null) return;
+    const published = publishedThrottleLever(state);
+    if (published === null) return;
+    throttleLeverValue = published;
+    renderThrottleLever(published, state);
+  };
+
+  function releaseThrottleLever() {
+    const pointerId = throttleLeverPointerId;
+    throttleLeverPointerId = null;
+    throttleLeverAnchor = null;
+    renderThrottleLever(throttleLeverValue ?? publishedThrottleLever(latestState) ?? 0);
+    if (pointerId !== null && touchThrottleLever?.hasPointerCapture?.(pointerId)) {
+      try { touchThrottleLever.releasePointerCapture(pointerId); } catch { /* already released */ }
+    }
+  }
+
+  function beginThrottleLever(event) {
+    if (!touchThrottleLever || touchThrottleLever.closest?.("[hidden]")
+      || frozen || suspended || document.hidden || pauseReasons.size > 0) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (throttleLeverPointerId !== null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    throttleLeverPointerId = event.pointerId;
+    throttleLeverAnchor = pickUpThrottleLever(event.clientY,
+      throttleLeverValue ?? publishedThrottleLever(latestState) ?? 0);
+    try { touchThrottleLever.setPointerCapture(event.pointerId); } catch { /* pointer may be gone */ }
+    renderThrottleLever(throttleLeverAnchor.startLever);
+  }
+
+  function moveThrottleLever(event) {
+    if (event.pointerId !== throttleLeverPointerId || !throttleLeverAnchor) return;
+    if (frozen || suspended || document.hidden || pauseReasons.size > 0) {
+      releaseThrottleLever();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const next = dragThrottleLever(throttleLeverAnchor, event.clientY, throttleLeverTravel());
+    if (!next) return;
+    if (next.moved && !throttleLeverAnchor.moved) {
+      throttleLeverAnchor = Object.freeze({ ...throttleLeverAnchor, moved: true });
+    }
+    if (next.moved) commandThrottleLever(next.lever);
+  }
+
+  function endThrottleLever(event) {
+    if (event.pointerId !== throttleLeverPointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    releaseThrottleLever();
+  }
+
+  function throttleLeverKeyboardEvent(event) {
+    const step = event.code === "ArrowUp" ? 0.05 : event.code === "ArrowDown" ? -0.05
+      : event.code === "Home" ? -1 : event.code === "End" ? 1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (throttleLeverPointerId !== null || frozen || suspended
+      || document.hidden || pauseReasons.size > 0) return;
+    const current = throttleLeverValue ?? publishedThrottleLever(latestState) ?? 0;
+    commandThrottleLever(clamp(current + step, 0, 1));
+  }
+
   function renderVirtualStick(x = 0, y = 0) {
     if (!fallbackStick) return;
     const active = Math.abs(x) > 0.01 || Math.abs(y) > 0.01;
@@ -11368,6 +11574,8 @@ function installMobileInput(view) {
     }
     if ((throttleRockerPointerId !== null || throttleRockerControl)
       && touchThrottleRocker?.closest?.("[hidden]")) releaseThrottleRocker();
+    if (throttleLeverPointerId !== null
+      && touchThrottleLever?.closest?.("[hidden]")) releaseThrottleLever();
   };
 
   function restartFrozenRun(event) {
@@ -11482,6 +11690,14 @@ function installMobileInput(view) {
     event.stopPropagation();
   });
 
+  touchThrottleLever?.addEventListener("pointerdown", beginThrottleLever, { passive: false });
+  touchThrottleLever?.addEventListener("pointermove", moveThrottleLever, { passive: false });
+  touchThrottleLever?.addEventListener("pointerup", endThrottleLever, { passive: false });
+  touchThrottleLever?.addEventListener("pointercancel", endThrottleLever, { passive: false });
+  touchThrottleLever?.addEventListener("lostpointercapture", endThrottleLever,
+    { passive: false });
+  touchThrottleLever?.addEventListener("keydown", throttleLeverKeyboardEvent);
+
   fallbackStick?.addEventListener("pointerdown", beginVirtualStick, { passive: false });
   fallbackStick?.addEventListener("pointermove", moveVirtualStick, { passive: false });
   fallbackStick?.addEventListener("pointerup", endVirtualStick, { passive: false });
@@ -11523,6 +11739,8 @@ function installMobileInput(view) {
   window.addEventListener("pointercancel", endControl);
   window.addEventListener("pointerup", endThrottleRocker);
   window.addEventListener("pointercancel", endThrottleRocker);
+  window.addEventListener("pointerup", endThrottleLever);
+  window.addEventListener("pointercancel", endThrottleLever);
   window.addEventListener("pointerup", endVirtualStick);
   window.addEventListener("pointercancel", endVirtualStick);
   window.addEventListener("pointerup", endTargetStick);
@@ -11542,6 +11760,7 @@ function installMobileInput(view) {
 
   function orientationChanged() {
     releaseThrottleRocker();
+    releaseThrottleLever();
     releaseVirtualStick();
     releaseTargetStick();
     if (tiltState === "enabled" || tiltState === "waiting") awaitFreshCentre();
@@ -11555,6 +11774,7 @@ function installMobileInput(view) {
     suspended = true;
     tiltWatchdog.stop();
     releaseThrottleRocker();
+    releaseThrottleLever();
     releaseVirtualStick();
     releaseTargetStick();
     releaseTiltAxes();
@@ -11562,6 +11782,7 @@ function installMobileInput(view) {
   window.addEventListener("pagehide", () => {
     tiltWatchdog.stop();
     releaseThrottleRocker();
+    releaseThrottleLever();
     releaseVirtualStick();
     releaseTargetStick();
     releaseTiltAxes();
@@ -11588,6 +11809,7 @@ function installMobileInput(view) {
     activeControls.clear();
     for (const button of buttons) setControlActive(button);
     releaseThrottleRocker();
+    releaseThrottleLever();
     flightGesture = null;
     targetGesture = null;
     releaseVirtualStick();
@@ -12182,8 +12404,14 @@ async function boot() {
         const exercise = practiceExercise(state.practice_exercise);
         practiceCue.hidden = !exercise || pauseReasons.size > 0 || state.session_phase !== "ACTIVE";
         if (exercise) {
+          // One compact row: the exercise name. The full instruction stays in the practice brief
+          // and in this row's accessible label; four lines of it used to sit on the FIRE button.
           const cue = `${exercise.title} · ${exercise.cue}`;
-          if (practiceCue.textContent !== cue) practiceCue.textContent = cue;
+          if (practiceCue.textContent !== exercise.title) {
+            practiceCue.textContent = exercise.title;
+            practiceCue.setAttribute("aria-label", cue);
+            practiceCue.title = cue;
+          }
         }
       }
       observeArenaMatch(state);

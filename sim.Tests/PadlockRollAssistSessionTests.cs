@@ -144,7 +144,10 @@ public class PadlockRollAssistSessionTests {
         session.StepFixed();
 
         PilotCommand applied = session.Player.LastAppliedCommand;
-        Assert.Equal(-0.29, applied.RollControl, 12);
+        // The F-22's analog stick is centre-shaped (AnalogRollCentreExpo); the pilot's shaped
+        // command still owns the axis outright.
+        Assert.Equal(DetentLayer.ShapeAnalogRoll(-0.29,
+            FlightModel.F22APublicDataSurrogate.AnalogRollCentreExpo), applied.RollControl, 12);
         Assert.True(applied.RollControl + applied.SasRollControl < 0.0);
         Assert.InRange(System.Math.Abs(applied.SasRollControl), 0.0, 0.002);
     }

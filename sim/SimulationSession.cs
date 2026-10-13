@@ -2211,11 +2211,11 @@ public sealed partial class SimulationSession {
         AircraftState previousPlayerState = _player.State;
         AircraftState previousOpponentState = _bandit.State;
         PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
-        UpdatePilotLateralCommitment(_detents.Command.RollControl);
+        UpdatePilotLateralCommitment(_detents.PilotRollIntent);
         PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
         PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
         PilotCommand padlockAssistedCommand = ApplyPlayerGunTargetPadlockRollAssist(
-            effectiveCommand, _detents.Command.RollControl);
+            effectiveCommand, _detents.PilotRollIntent);
         PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
         bool formationSweep = (_triggerDown || _rapierFormationSweepRequested)
             && ExecuteRapierFormationSweep();

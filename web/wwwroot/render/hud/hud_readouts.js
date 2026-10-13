@@ -1,3 +1,4 @@
+import { highAlphaRecoveryPresentation } from "./high_alpha_recovery.js";
 import { recoveryPlatformAvailable } from "./carrier_sa.js";
 import { flightMissionGuidance } from "./mission_guidance.js";
 
@@ -146,6 +147,9 @@ export function mobileTacticalReadout(state = {}, display = {}, {
   const bvrContact = fightActive
     && range.rangeNm !== null
     && range.rangeNm * 1852 > tallyRangeM;
+  // The fighter's contact locator already owns range/closure. Reserve its one-row header for
+  // flight, weapon and fuel readings; keep BVR details in the frozen modes' context row only.
+  const combatWeaponParts = [...weaponParts];
   if (bvrContact) {
     weaponParts.push(`T${Math.max(1, Math.floor(targetNumber))} ${range.compactText}`);
     weaponParts.push(closure.trend === "closing"
@@ -157,9 +161,11 @@ export function mobileTacticalReadout(state = {}, display = {}, {
 
   const fuel = fuelReadout(state);
   if (fuel.consumesFuel && fuel.fuelLb !== null) {
-    weaponParts.push(fuel.statusText
+    const fuelText = fuel.statusText
       ? `${fuel.statusText}${compactMagnitude(fuel.fuelLb)}`
-      : `F${compactMagnitude(fuel.fuelLb)}`);
+      : `F${compactMagnitude(fuel.fuelLb)}`;
+    weaponParts.push(fuelText);
+    combatWeaponParts.push(fuelText);
   }
 
   const ammoLevel = ammo !== null && ammo <= 0 ? "warning"
@@ -172,9 +178,41 @@ export function mobileTacticalReadout(state = {}, display = {}, {
     ? "warning"
     : combatCaution || fuel.joker || fuel.bingo ? "caution" : "normal";
 
+  // ONE COMBAT ROW for the phone fighter. Airspeed and altitude are already on the tapes beside
+  // the gunsight, so the row carries only what the tapes do not: Mach, the energy cue, G once it
+  // matters, vertical speed, and the weapon/fuel state. Optional parts drop first (right to left
+  // in priority) when the row cannot fit, so it never needs a second line or an ellipsis.
+  const highAlpha = highAlphaRecoveryPresentation(state);
+  const combatParts = [];
+  if (compressionFactor > 1) combatParts.push({ text: `×${compressionFactor}`, optional: false });
+  combatParts.push({
+    text: mach === null ? "M---" : `M${Math.max(0, mach).toFixed(2).replace(/^0/, "")}`,
+    optional: highAlpha.active,
+  });
+  // During recovery the stick cue takes priority over Mach/energy (speed is on the tape).
+  if (energyToken) combatParts.push({ text: energyToken, optional: highAlpha.active });
+  else {
+    combatParts.push({
+      text: headingDeg === null
+        ? "H---"
+        : `H${String(Math.round(((headingDeg % 360) + 360) % 360)).padStart(3, "0")}`,
+      optional: false,
+    });
+  }
+  if (actualG !== null && Math.abs(actualG) >= 2.5) {
+    combatParts.push({ text: `${actualG.toFixed(1)}G`, optional: false });
+  }
+  combatParts.push({ text: compactVerticalSpeed(verticalFpm, { condensed }), optional: true });
+  for (const text of combatWeaponParts) combatParts.push({ text, optional: false });
+  if (highAlpha.active) combatParts.push({
+    text: highAlpha.symbol, optional: false, reserved: true,
+  });
+
   return Object.freeze({
     actualText: actualParts.join(separator),
     contextText: weaponParts.join(separator),
+    combatParts: Object.freeze(combatParts.map((part) => Object.freeze(part))),
+    fuelAttention: fuel.joker || fuel.bingo || fuel.minimumFuel || fuel.emergencyFuel,
     actual: Object.freeze({
       mach,
       indicatedKts,

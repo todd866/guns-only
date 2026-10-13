@@ -1068,3 +1068,43 @@ test("production HUD gates recovery guidance on the shared platform contract", a
   assert.match(source, /maritime[\s\S]*?`BRC [\s\S]*?: `FINAL COURSE /,
     "BRC remains maritime while a fixed strip receives a neutral final course");
 });
+
+test("the phone fighter's ONE combat row omits what the tapes already show", () => {
+  const readout = mobileTacticalReadout({
+    calibrated_airspeed_kts: 354,
+    corner_speed_kcas: 346,
+    alt_ft: 10000,
+    vertical_speed_fpm: 0,
+    heading_deg: 12,
+    mach: 0.634,
+    g_actual: 4.4,
+    ammo: 480,
+    fuel_lb: 12000,
+  }, {}, { fightActive: true });
+  const text = readout.combatParts.map((part) => part.text).join(" · ");
+  assert.equal(text, "M.63 · COR+8 · 4.4G · V/S 0 · GUN480 · F12K");
+  assert.doesNotMatch(text, /KCAS|354|10K/);
+  // Only vertical speed may be dropped to fit; Mach, energy, G and the weapon/fuel state may not.
+  assert.deepEqual(readout.combatParts.filter((part) => part.optional).map((part) => part.text),
+    ["V/S 0"]);
+});
+
+test("without an energy cue the combat row keeps heading for orientation", () => {
+  const readout = mobileTacticalReadout({
+    calibrated_airspeed_kts: 300, alt_ft: 3000, heading_deg: 87.4, mach: 0.5, fuel_lb: 9000,
+  });
+  assert.equal(readout.combatParts.map((part) => part.text).join(" · "),
+    "M.50 · H087 · V/S --- · F9K");
+  assert.equal(readout.fuelAttention, false);
+});
+
+test("BVR contact details cannot consume the fighter header's weapon and fuel space", () => {
+  const readout = mobileTacticalReadout({
+    mach: 0.634, assisted_flight: true, g_actual: 4.4, vertical_speed_fpm: 2000,
+    ammo: 400, gun_heat: 0.3, range_m: 37040, closure_kts: 600, fuel_lb: 12000,
+  }, {}, { fightActive: true });
+  assert.equal(readout.combatParts.map((part) => part.text).join("·"),
+    "M.63·AUTO COR·4.4G·↑2K·GUN400·T30%·F12K");
+  // Rapier/carrier context rows retain the original contact details and order.
+  assert.equal(readout.contextText, "GUN400 · T30% · T1 20NM · CLOS600 · F12K");
+});
