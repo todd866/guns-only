@@ -232,7 +232,7 @@ import {
   createBootWatchdog,
   resourceProgressCounter,
 } from "./render/shell/boot_watchdog.js?v=__RELEASE_BUILD__";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=__RELEASE_BUILD__";
+import { bootFallbackModel, mountBootFallback, dismissStalledBootFallback } from "./render/shell/boot_fallback.js?v=__RELEASE_BUILD__";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -1518,7 +1518,9 @@ const embeddedBrowser = detectEmbeddedBrowser({
 let bootFallbackShown = false;
 
 function showBootFallback(reason, detail = "") {
-  if (bootFallbackShown) return false;
+  // A real failure supersedes an earlier timeout suspicion.
+  if (bootFallbackShown && (reason === "stalled"
+      || document.querySelector("#shell-fallback")?.dataset.reason !== "stalled")) return false;
   const model = bootFallbackModel({
     reason,
     detection: embeddedBrowser,
@@ -1565,7 +1567,10 @@ const bootWatchdog = createBootWatchdog({
       showBootFallback("stalled");
       return;
     }
-    if (snapshot.state === "ready" && bootScreen) delete bootScreen.dataset.progress;
+    if (snapshot.state === "ready") {
+      if (bootScreen) delete bootScreen.dataset.progress;
+      if (dismissStalledBootFallback(document, readyStart)) bootFallbackShown = false;
+    }
   },
 });
 // A plain interval, deliberately: requestAnimationFrame is throttled or suspended in exactly the

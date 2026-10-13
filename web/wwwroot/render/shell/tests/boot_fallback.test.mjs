@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { detectEmbeddedBrowser } from "../inapp_browser.js";
-import { bootFallbackModel, mountBootFallback } from "../boot_fallback.js";
+import { bootFallbackModel, mountBootFallback, dismissStalledBootFallback } from "../boot_fallback.js";
 
 const THREADS_IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15"
   + " (KHTML, like Gecko) Mobile/15E148 [FBAN/Barcelona;FBAV/342.0.0.30.106;]";
@@ -79,7 +79,7 @@ function stubDocument() {
     dataset: {},
     attributes: {},
     children: [],
-    classList: { added: new Set(), add(name) { this.added.add(name); } },
+    classList: { added: new Set(), add(name) { this.added.add(name); }, remove(name) { this.added.delete(name); } },
     setAttribute(name, value) { this.attributes[name] = value; },
     append(child) { this.children.push(child); },
     querySelector(selector) { return this.nodes?.get(selector) ?? null; },
@@ -122,4 +122,26 @@ test("mounting fills the markup and reveals the overlay", () => {
 test("mounting is a no-op rather than a throw when the markup is absent", () => {
   assert.equal(mountBootFallback({ querySelector: () => null }, { title: "x" }), false);
   assert.equal(mountBootFallback(null, null), false);
+});
+
+test("READY dismisses a stalled fallback and restores launch focus", () => {
+  const doc = stubDocument();
+  let focused = 0;
+  mountBootFallback(doc, bootFallbackModel({ reason: "stalled" }));
+  assert.equal(dismissStalledBootFallback(doc, { focus: () => focused++ }), true);
+  assert.equal(doc.root.hidden, true);
+  assert.equal(doc.root.classList.added.has("visible"), false);
+  assert.equal(doc.root.dataset.reason, undefined);
+  assert.equal(focused, 1);
+  assert.equal(dismissStalledBootFallback(doc), false);
+});
+
+test("READY preserves genuine module and WebGL failure recovery", () => {
+  for (const reason of ["module", "webgl", "bridge", "unknown"]) {
+    const doc = stubDocument();
+    mountBootFallback(doc, bootFallbackModel({ reason }));
+    assert.equal(dismissStalledBootFallback(doc, { focus: () => assert.fail("focus stolen") }), false);
+    assert.equal(doc.root.hidden, false);
+    assert.equal(doc.root.classList.added.has("visible"), true);
+  }
 });
