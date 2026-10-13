@@ -172,9 +172,28 @@ export function mobileTacticalReadout(state = {}, display = {}, {
     ? "warning"
     : combatCaution || fuel.joker || fuel.bingo ? "caution" : "normal";
 
+  // ONE COMBAT ROW for the phone fighter. Airspeed and altitude are already on the tapes beside
+  // the gunsight, so the row carries only what the tapes do not: Mach, the energy cue, G once it
+  // matters, vertical speed, and the weapon/fuel state. Optional parts drop first (right to left
+  // in priority) when the row cannot fit, so it never needs a second line or an ellipsis.
+  const combatParts = [];
+  if (compressionFactor > 1) combatParts.push({ text: `×${compressionFactor}`, optional: false });
+  combatParts.push({
+    text: mach === null ? "M---" : `M${Math.max(0, mach).toFixed(2).replace(/^0/, "")}`,
+    optional: false,
+  });
+  if (energyToken) combatParts.push({ text: energyToken, optional: false });
+  if (actualG !== null && Math.abs(actualG) >= 2.5) {
+    combatParts.push({ text: `${actualG.toFixed(1)}G`, optional: false });
+  }
+  combatParts.push({ text: compactVerticalSpeed(verticalFpm, { condensed }), optional: true });
+  for (const text of weaponParts) combatParts.push({ text, optional: false });
+
   return Object.freeze({
     actualText: actualParts.join(separator),
     contextText: weaponParts.join(separator),
+    combatParts: Object.freeze(combatParts.map((part) => Object.freeze(part))),
+    fuelAttention: fuel.joker || fuel.bingo || fuel.minimumFuel || fuel.emergencyFuel,
     actual: Object.freeze({
       mach,
       indicatedKts,

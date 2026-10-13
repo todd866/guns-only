@@ -2483,6 +2483,7 @@
     .settings-copy { color: rgba(217, 255, 229, .55); font-size: 10px; line-height: 1.5; }
     .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; margin: 18px 0; }
     .settings-toggle { display: flex; align-items: center; gap: 10px; min-height: 42px; font-size: 10px; }
+    html:not(.touch-mode) .settings-touch-only { display: none; }
     .settings-toggle input { width: 20px; height: 20px; min-height: 0; accent-color: #4dff88; }
     .settings-range { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 12px; font-size: 10px; }
     .settings-range input { grid-column: 1 / -1; min-height: 24px; accent-color: #4dff88; }
@@ -4179,6 +4180,7 @@
     }
   </style>
   <link rel="stylesheet" href="./render/onboarding/pilot_notebook.css">
+  <link rel="stylesheet" href="./render/input/touch_fighter_layout.css">
 </head>
 <body>
   <canvas id="scene" tabindex="0" aria-label="Air combat simulation view"></canvas>
@@ -4401,6 +4403,12 @@
     <button id="tilt-status" type="button" data-mobile-action="recenter" aria-live="polite" aria-label="Recenter tilt controls">TILT OFF</button>
 
     <div id="touch-throttle-controls" class="touch-left" hidden>
+      <div id="touch-throttle-lever" class="touch-control" role="slider" tabindex="0" data-mobile-action="throttle-lever" data-active="false" aria-label="Throttle" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Idle" title="Throttle · drag from the knob; release holds power">
+        <span class="throttle-lever-ab" aria-hidden="true"></span>
+        <span class="throttle-lever-fill" aria-hidden="true"></span>
+        <span class="throttle-lever-mil" aria-hidden="true"></span>
+        <span id="touch-throttle-lever-knob" aria-hidden="true"><span id="touch-throttle-lever-value">--</span></span>
+      </div>
       <button id="touch-throttle-rocker" class="touch-control" type="button" data-mobile-action="throttle-rocker" data-active="false" data-direction="neutral" aria-label="Throttle rocker" aria-describedby="touch-throttle-help" aria-keyshortcuts="ArrowUp ArrowDown">
         <span class="throttle-rocker-mark throttle-rocker-plus" aria-hidden="true">+</span>
         <span id="touch-throttle-rocker-knob" aria-hidden="true"><span class="throttle-rocker-label">PWR</span></span>
@@ -4423,7 +4431,7 @@
         <button id="touch-gcas-paddle" class="touch-control touch-wave" type="button" data-hold-key="KeyK" aria-label="Hold Auto-GCAS paddle override" hidden>GCAS<br>PADDLE</button>
         <button id="touch-limit-override" class="touch-control" type="button" data-hold-key="Space" aria-label="G-limiter and high-alpha override" hidden>LIMIT<br>OVR</button>
         <button id="touch-target-cycle" class="touch-control touch-utility" type="button" data-mobile-action="target-cycle" aria-label="Select Target 2" data-selected="1" hidden><span id="touch-target-label">TARGET</span><br><span id="touch-target-number">1</span></button>
-        <button class="touch-control touch-utility" type="button" data-pulse-key="KeyV" aria-label="Padlock target or nearby carrier" aria-pressed="false" hidden>PADLOCK<br>V</button>
+        <button class="touch-control touch-utility" type="button" data-pulse-key="KeyV" aria-label="Padlock target or nearby carrier" aria-pressed="false" hidden>PADLOCK<br><span id="touch-padlock-state" aria-hidden="true">—</span></button>
         <button id="touch-carrier-rtb" class="touch-control touch-utility" type="button" data-carrier-route-action="carrier-sortie-request-rtb" data-pulse-key="KeyO" aria-label="Return to ship" hidden disabled>RTB<br>O</button>
         <button id="touch-fire" class="touch-control touch-fire" type="button" data-hold-key="KeyF" aria-label="Fire guns" hidden>FIRE</button>
       </div>
@@ -4684,6 +4692,7 @@ Two engagements, then recover · H controls · R restarts</p>
           <legend>Aircraft</legend>
           <div class="settings-grid">
             <label class="settings-toggle"><input id="setting-autogcas" type="checkbox"> Auto-GCAS backstop</label>
+            <label class="settings-toggle settings-touch-only" title="Replaces the throttle lever with the THR/YAW stick; FIRE moves inboard"><input id="setting-touch-rudder-stick" type="checkbox"> Touch rudder stick</label>
             <label class="settings-range" for="setting-tilt-sensitivity"><span>Tilt sensitivity</span><output id="setting-tilt-sensitivity-value">1.00×</output><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1"></label>
             <label class="settings-toggle"><input id="setting-telemetry-sharing" type="checkbox" aria-describedby="setting-telemetry-sharing-copy"> Share detailed flight diagnostics</label>
             <p id="setting-telemetry-sharing-copy" class="settings-telemetry-copy">Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards anything not yet sent. Minimal shell-health (boot and fatal signals, device class) remains always-on.</p>

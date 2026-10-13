@@ -1,0 +1,266 @@
+/* Phone fighter layout (F-22 and the other gun fighters on touch).
+ *
+ *   landscape                               portrait
+ *   ┌──────────────────────────────────┐    ┌──────────────────┐
+ *   │                                  │    │                  │
+ *   │ (FIRE) ▮ LIM PAD TGT       (STK) │    │ LIM PAD TGT      │
+ *   └──────────────────────────────────┘    │ (FIRE) ▮   (STK) │
+ *                                           └──────────────────┘
+ *
+ * The right thumb flies; the left thumb owns the trigger, the persistent throttle lever and the
+ * momentary/secondary actions (LIMIT is held WHILE the right thumb pulls, so it must be left).
+ * One bottom row in landscape, two in portrait. Rudder is an explicit option
+ * (Settings · Touch rudder stick → .touch-rudder-stick), not the combat thumb's default.
+ *
+ * Selectors carry :root + three classes so they outrank both the page's portrait-assist rules and
+ * the injected #mobile-flight-layout sheet without !important.
+ */
+
+:root.touch-fighter.touch-mode.touch-primary {
+  --tf-l: env(safe-area-inset-left, 0px);
+  --tf-r: env(safe-area-inset-right, 0px);
+  --tf-b: env(safe-area-inset-bottom, 0px);
+}
+
+:root.touch-fighter.touch-mode.touch-primary .touch-right {
+  display: contents;
+}
+
+:root.touch-fighter.touch-mode.touch-primary .touch-actions {
+  position: absolute;
+  left: calc(var(--tf-l) + 154px);
+  right: auto;
+  bottom: calc(var(--tf-b) + 8px);
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 6px;
+  transform: none;
+  pointer-events: none;
+}
+
+:root.touch-fighter.touch-mode.touch-primary .touch-actions > .touch-control:not([hidden]) {
+  display: grid;
+  place-items: center;
+  width: auto;
+  min-width: 52px;
+  height: 44px;
+  min-height: 44px;
+  padding: 3px 6px;
+  font-size: 9px;
+  letter-spacing: .05em;
+  pointer-events: auto;
+}
+
+:root.touch-fighter.touch-mode.touch-primary #touch-limit-override { order: 1; }
+:root.touch-fighter.touch-mode.touch-primary .touch-actions > [data-pulse-key="KeyV"] { order: 2; }
+:root.touch-fighter.touch-mode.touch-primary #touch-target-cycle { order: 3; }
+:root.touch-fighter.touch-mode.touch-primary #touch-gcas-paddle { order: 4; }
+:root.touch-fighter.touch-mode.touch-primary #touch-carrier-rtb { order: 5; }
+
+/* The trigger lives in the left thumb's resting corner. Fixed, so it leaves the action row. */
+:root.touch-fighter.touch-mode.touch-primary .touch-actions > #touch-fire:not([hidden]) {
+  position: fixed;
+  left: calc(var(--tf-l) + 10px);
+  bottom: calc(var(--tf-b) + 10px);
+  width: 76px;
+  min-width: 76px;
+  height: 76px;
+  min-height: 76px;
+  padding: 0;
+  font-size: 13px;
+  letter-spacing: .1em;
+  transform: none;
+}
+
+:root.touch-fighter.touch-mode.touch-primary .touch-actions > #touch-fire.active {
+  transform: scale(.96);
+}
+
+:root.touch-fighter.touch-mode.touch-primary #touch-throttle-controls:not([hidden]) {
+  position: absolute;
+  left: calc(var(--tf-l) + 94px);
+  right: auto;
+  bottom: calc(var(--tf-b) + 8px);
+  display: flex;
+  transform: none;
+}
+
+:root.touch-fighter.touch-mode.touch-primary #touch-throttle-rocker { display: none; }
+:root.touch-fighter.touch-mode.touch-primary #touch-throttle-lever { display: block; }
+
+:root.touch-fighter.touch-mode.touch-primary .touch-context:not([hidden]) {
+  position: absolute;
+  right: calc(var(--tf-r) + 12px);
+  bottom: calc(var(--tf-b) + 132px);
+}
+
+:root.touch-fighter.touch-mode.touch-primary:not(.touch-rudder-stick) #fallback-stick {
+  display: none;
+}
+
+/* ---- the lever ---------------------------------------------------------------------------- */
+
+#touch-throttle-lever { display: none; }
+
+#touch-throttle-lever {
+  --lever-knob: 0px;
+  --lever-mil: -100px;
+  position: relative;
+  box-sizing: border-box;
+  width: 52px;
+  min-width: 52px;
+  height: 112px;
+  min-height: 112px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  opacity: .72;
+  touch-action: none;
+  cursor: ns-resize;
+}
+
+#touch-throttle-lever[data-active="true"] {
+  border-color: rgba(163, 255, 194, .78);
+  opacity: 1;
+}
+
+#touch-throttle-lever:focus-visible {
+  outline: 2px solid #8dffb3;
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+/* Filled column = power set. Reheat travel above the MIL stop is tinted amber. */
+.throttle-lever-fill {
+  position: absolute;
+  left: 22px;
+  bottom: 6px;
+  width: 6px;
+  height: calc(var(--lever-knob) + 11px);
+  border-radius: 3px;
+  background: rgba(77, 255, 136, .38);
+  pointer-events: none;
+}
+
+.throttle-lever-ab {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 4px;
+  bottom: calc(var(--lever-mil) + 17px);
+  border-radius: 4px 4px 0 0;
+  background: rgba(255, 176, 32, .1);
+  pointer-events: none;
+}
+
+.throttle-lever-mil {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: calc(var(--lever-mil) + 17px);
+  height: 0;
+  border-top: 1px solid rgba(255, 176, 32, .72);
+  pointer-events: none;
+}
+
+#touch-throttle-lever-knob {
+  position: absolute;
+  z-index: 1;
+  left: 4px;
+  right: 4px;
+  bottom: calc(var(--lever-knob) + 5px);
+  display: grid;
+  place-items: center;
+  height: 24px;
+  border: 1px solid rgba(178, 255, 202, .7);
+  border-radius: 4px;
+  color: #d9ffe5;
+  background: rgba(21, 67, 46, .92);
+  font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .04em;
+  pointer-events: none;
+}
+
+#touch-throttle-lever[data-zone="ab"] #touch-throttle-lever-knob {
+  border-color: rgba(255, 210, 126, .9);
+  color: #ffe2aa;
+  background: rgba(70, 42, 4, .92);
+}
+
+/* ---- rudder option: the THR/YAW stick returns to the left corner, FIRE steps inboard ---------- */
+
+:root.touch-fighter.touch-rudder-stick.touch-mode.touch-primary #touch-throttle-controls {
+  display: none;
+}
+
+:root.touch-fighter.touch-rudder-stick.touch-mode.touch-primary .touch-actions > #touch-fire:not([hidden]) {
+  left: calc(var(--tf-l) + 132px);
+}
+
+:root.touch-fighter.touch-rudder-stick.touch-mode.touch-primary .touch-actions {
+  left: calc(var(--tf-l) + 216px);
+}
+
+@media (max-width: 700px) and (orientation: landscape) {
+  :root.touch-fighter.touch-mode.touch-primary #touch-throttle-controls:not([hidden]) {
+    left: calc(var(--tf-l) + 92px);
+  }
+  :root.touch-fighter.touch-mode.touch-primary #touch-throttle-lever {
+    width: 48px;
+    min-width: 48px;
+    height: 104px;
+    min-height: 104px;
+  }
+  :root.touch-fighter.touch-mode.touch-primary .throttle-lever-fill { left: 21px; }
+  :root.touch-fighter.touch-mode.touch-primary .touch-actions {
+    left: calc(var(--tf-l) + 148px);
+  }
+}
+
+@media (orientation: portrait) {
+  :root.touch-fighter.touch-mode.touch-primary .touch-actions {
+    left: calc(var(--tf-l) + 12px);
+    bottom: calc(var(--tf-b) + 132px);
+  }
+
+  :root.touch-fighter.touch-mode.touch-primary .touch-actions > #touch-fire:not([hidden]) {
+    left: calc(var(--tf-l) + 12px);
+    bottom: calc(var(--tf-b) + 16px);
+    width: 84px;
+    min-width: 84px;
+    height: 84px;
+    min-height: 84px;
+    font-size: 14px;
+  }
+
+  :root.touch-fighter.touch-mode.touch-primary #touch-throttle-controls:not([hidden]) {
+    left: calc(var(--tf-l) + 106px);
+    bottom: calc(var(--tf-b) + 8px);
+  }
+
+  :root.touch-fighter.touch-mode.touch-primary .touch-context:not([hidden]) {
+    bottom: calc(var(--tf-b) + 150px);
+  }
+
+  :root.touch-fighter.touch-rudder-stick.touch-mode.touch-primary .touch-actions > #touch-fire:not([hidden]) {
+    left: calc(50% - 42px);
+  }
+
+  :root.touch-fighter.touch-rudder-stick.touch-mode.touch-primary .touch-actions {
+    left: calc(var(--tf-l) + 12px);
+    bottom: calc(var(--tf-b) + 140px);
+  }
+}
+
+/* Paused or frozen runs hide the flight controls exactly as the base layout does. These rules
+   must stay last and match the specificity of the display rules above. */
+:root.touch-fighter.touch-mode.touch-primary.run-paused .touch-actions,
+:root.touch-fighter.touch-mode.touch-primary.run-frozen .touch-actions,
+:root.touch-fighter.touch-mode.touch-primary.run-paused .touch-context,
+:root.touch-fighter.touch-mode.touch-primary.run-frozen .touch-context,
+:root.touch-fighter.touch-mode.touch-primary.run-paused #touch-throttle-controls,
+:root.touch-fighter.touch-mode.touch-primary.run-frozen #touch-throttle-controls {
+  display: none;
+}

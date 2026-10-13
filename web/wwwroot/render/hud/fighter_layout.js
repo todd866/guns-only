@@ -1,3 +1,5 @@
+import { clearBottomFor, normaliseOccupiedRects } from "./occupied_area.js";
+
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -16,7 +18,9 @@ export function fighterHudLayout({
   touchMode = false,
   compactMobile = false,
   safeInsets = {},
+  occupiedRects = [],
 } = {}) {
+  const occupied = normaliseOccupiedRects(occupiedRects);
   const viewportWidth = Math.max(1, Number(width) || 1);
   const viewportHeight = Math.max(1, Number(height) || 1);
   const safe = {
@@ -38,9 +42,20 @@ export function fighterHudLayout({
   const instrumentCenterY = touchMode
     ? viewportHeight * 0.50
     : viewportHeight * 0.51;
+  const tapeHalfWidth = 35;
+  // Touch controls own the bottom corners. A tape whose lower end runs under the flight stick
+  // (landscape phones) is shortened symmetrically until both tapes clear every control below
+  // them, but never below a still-readable 120 px.
+  const tapeClearBottom = Math.min(
+    clearBottomFor(occupied, tapeInset - tapeHalfWidth, tapeInset + tapeHalfWidth,
+      Infinity, { gap: 8 }),
+    clearBottomFor(occupied, viewportWidth - tapeInset - tapeHalfWidth,
+      viewportWidth - tapeInset + tapeHalfWidth, Infinity, { gap: 8 }),
+  );
   const tapeHeight = Math.min(
     touchMode ? 278 : 288,
     Math.max(touchMode ? 186 : 204, viewportHeight * (touchMode ? 0.36 : 0.40)),
+    Math.max(120, 2 * (tapeClearBottom - instrumentCenterY)),
   );
   const headingY = safe.top + (touchMode ? 42 : viewportHeight < 480 ? 46 : 62);
   const headingAvailableWidth = Math.max(
@@ -58,7 +73,6 @@ export function fighterHudLayout({
     Math.max(warningY + 76, instrumentCenterY - (touchMode ? 86 : 102)),
   );
   const secondaryBottom = viewportHeight - safe.bottom - (touchMode ? 108 : 18);
-  const tapeHalfWidth = 35;
   const targetTop = Math.max(headingY + 78, warningY + 36);
 
   return {
@@ -82,6 +96,7 @@ export function fighterHudLayout({
       instrumentCenterY + (touchMode ? 86 : 102),
     ),
     secondaryBottom,
+    occupiedRects: occupied,
     targetSafe: {
       left: compactMobile ? safe.left + 24 : tapeInset + tapeHalfWidth + 20,
       right: compactMobile
