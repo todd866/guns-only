@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { experienceById } from "../campaign_progression.js";
 import {
+  classifyDirectorBlob,
   createDirectorPersistence,
   DIRECTOR_STATE_STORAGE,
   DIRECTOR_STATE_STORAGE_V1,
@@ -12,6 +13,7 @@ import {
 const VALLEY = "mission.modern.visual-merge.first-run-valley.v1";
 const V1 = "v1|1|1|1|0|0|0.0|0|0|0|0|0|0|0|0";
 const V2_RUNG_2 = "v2|2|1|1|0|-|0|0|0|0.0|0|0|0|0|0|0|1|0|0|0";
+const V3_D1 = "v3|2|1|1|0|-|0|0|0|0.0|0|0|0|0|0|0|1|0|0|0|1";
 
 function memoryStorage(seed = {}) {
   const values = new Map(Object.entries(seed));
@@ -112,4 +114,24 @@ test("a credited hit saves at once, before any engagement ends", () => {
   assert.equal(storage.getItem(DIRECTOR_STATE_STORAGE), V2_RUNG_2);
   // Same evidence again is not another write.
   assert.equal(store.persistObservation(observed({ director_hits: 1, difficulty_rung: 1 })), false);
+});
+
+test("v3 classifies the appended BFM lesson index and rejects invalid indices", () => {
+  assert.deepEqual(classifyDirectorBlob(V3_D1), {
+    kind: "v3", rung: 2, nextLessonIndex: 1, arm: true,
+  });
+  assert.equal(classifyDirectorBlob(V2_RUNG_2).nextLessonIndex, -1);
+  assert.equal(classifyDirectorBlob(V3_D1.replace(/\|1$/, "|8")).kind, "corrupt");
+});
+
+test("lesson outcome changes trigger persistence even when flight counters do not", () => {
+  const storage = memoryStorage();
+  const store = createDirectorPersistence({
+    storage, exportState: () => V3_D1, armState: () => {}, missionActive: () => true,
+  });
+  const base = observed({ bfm_lesson_index: 1, bfm_next_lesson_index: 1,
+    bfm_lesson_outcome: "open" });
+  assert.equal(store.persistObservation(base), false);
+  assert.equal(store.persistObservation({ ...base, bfm_lesson_outcome: "failed" }), true);
+  assert.equal(storage.getItem(DIRECTOR_STATE_STORAGE), V3_D1);
 });

@@ -31,12 +31,14 @@ public sealed partial class SimulationSession {
     /// is ContinuousCombat.MaximumEngagements. Zero for every other beat.
     public int FiniteEngagementCap =>
         !UsesDifficultyRamp(_beat) || _beat.Practice != PracticeExercise.None ? 0
+        : _bfmSortieStartIndex >= 0 && BfmLesson.Get(_bfmSortieStartIndex).Defensive ? 1
         : _beat.FirstRunValley is not null ? 1
         : _beat.ContinuousCombat?.MaximumEngagements ?? 0;
 
     /// Completed engagements won this sortie (handoff-interrupted fights are not wins).
     public int EngagementsWon => _engagementReports.Count(static report =>
-        report.EndReason == EngagementEndReason.CombatResult
+        (report.EndReason == EngagementEndReason.CombatResult
+            || report.EndReason == EngagementEndReason.DefensiveSuccess)
         && report.Outcome == SortieOutcome.Victory);
 
     /// The rung this sortie was staged at. Held for the whole sortie, even when a hit or kill
@@ -52,6 +54,10 @@ public sealed partial class SimulationSession {
 
     void CaptureSortieContract(bool stagesOpponent, SpawnSpec? openingSpawn) {
         _directorHitsCreditedThisEngagement = 0;
+        _bfmLessonIndex = openingSpawn?.LessonIndex ?? -1;
+        _bfmSortieStartIndex = _bfmLessonIndex;
+        _bfmLessonOutcome = "open";
+        _defensiveSuccess.Reset();
         bool ramp = UsesDifficultyRamp(_beat) && _beat.Practice == PracticeExercise.None;
         _sortieContractRung = ramp ? _fightDirector.Rung : -1;
         SpawnSpec? spawn = openingSpawn ?? _sortieOpeningSpawn;

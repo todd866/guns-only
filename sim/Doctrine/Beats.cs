@@ -667,6 +667,18 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         if (InitialOpponent is not { } authoredBandit)
             throw new InvalidOperationException(
                 "This mission does not define an opponent actor.");
+        if (spec is { LessonIndex: >= 1 and <= 5 } lessonSpawn) {
+            AircraftParams lessonAir = BanditAirForMount(lessonSpawn.Skill, lessonSpawn.Mount);
+            BfmLesson lesson = BfmLesson.Get(lessonSpawn.LessonIndex);
+            AircraftState lessonInitial = lesson.Start(Player, lessonAir, terrain);
+            if (!lesson.Defensive)
+                return new NeutralMergeBandit(lessonInitial, lessonAir, lessonSpawn.Skill, terrain,
+                    doctrineIndex: lessonSpawn.DoctrineIndex, presenting: true,
+                    endPresentOnProximity: true, presentation: OpeningPresentation.Lead,
+                    leadBankRad: (lesson.Index == 2 ? 20 : 25) * Math.PI / 180);
+            return new ReactiveBandit(lessonInitial, lessonAir, lessonSpawn.Skill, terrain,
+                doctrineIndex: lessonSpawn.DoctrineIndex);
+        }
         if (UsesNeutralMergeBandit) {
             // A director-staged opening must change the whole actor, not just the skill label.
             // Keep the authored no-spec opening byte-for-byte compatible, while a persisted
@@ -757,6 +769,10 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     public IBandit CreateNextBandit(in AircraftState player, int engagementNumber,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null, SpawnSpec? spec = null,
         AircraftState? wingLead = null) {
+        if (spec is { LessonIndex: >= 0 and <= 5 } lessonSpawn && wingLead is null) {
+            // Stage a NEW opponent only; the live player never changes position or energy.
+            return (this with { Player = player }).CreateBandit(terrain, lessonSpawn);
+        }
         // Without a director decision the interim per-engagement ladder still applies (the
         // director's own cold start reproduces it, so the two paths cannot diverge silently).
         PilotSkill skill = spec?.Skill ?? BanditSkillProfile.ForEngagement(engagementNumber);

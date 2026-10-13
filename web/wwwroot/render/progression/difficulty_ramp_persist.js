@@ -1,7 +1,7 @@
 // F-22 ramp blob. The kernel owns the rung. This module only stores the opaque
 // string and decides when a route may hand it back. A v1 blob is armed so the
 // kernel can migrate it (that migration opens at rung 0). Anything else that
-// is not a v2 snapshot is left unarmed, which is also rung 0.
+// is not a v2/v3 snapshot is left unarmed, which is also rung 0.
 
 export const DIRECTOR_STATE_STORAGE = "guns-only.fight-director.v2";
 export const DIRECTOR_STATE_STORAGE_V1 = "guns-only.fight-director.v1";
@@ -40,7 +40,17 @@ export function classifyDirectorBlob(blob) {
   if (parts.length === 20 && parts[0] === "v2") {
     const rung = Number(parts[1]);
     if (Number.isInteger(rung) && rung >= 0 && rung <= 3)
-      return { kind: "v2", rung, arm: true };
+      return { kind: "v2", rung, nextLessonIndex: -1, arm: true };
+  }
+  // v3 preserves the opaque v2 payload byte-for-byte and appends the next BFM lesson
+  // index. -1 is the legacy/unproven state; 0..7 names O1 through A2.
+  if (parts.length === 21 && parts[0] === "v3") {
+    const rung = Number(parts[1]);
+    const nextLessonIndex = Number(parts[20]);
+    if (Number.isInteger(rung) && rung >= 0 && rung <= 3
+      && Number.isInteger(nextLessonIndex) && (nextLessonIndex === -1
+        || (nextLessonIndex >= 0 && nextLessonIndex <= 7)))
+      return { kind: "v3", rung, nextLessonIndex, arm: true };
   }
   return { kind: "corrupt", rung: 0, arm: false };
 }
@@ -75,6 +85,9 @@ export function createDirectorPersistence({
       state?.difficulty_rung,
       state?.session_phase,
       state?.director_hits,
+      state?.bfm_lesson_index,
+      state?.bfm_next_lesson_index,
+      state?.bfm_lesson_outcome,
     ].join("|");
     if (key === observationKey) return false;
     const hadPrior = observationKey !== "";

@@ -1253,6 +1253,9 @@ public sealed partial class SimulationSession {
         // fields a skill-driven continuous-combat opponent, the OPENING spawn is a director
         // decision too — a boss loss last life opens this life in RELEASE, not back at the ramp.
         bool difficultyRamp = UsesDifficultyRamp(_beat);
+        if (IsVisualMergeSortie(_beat) && _beat.Practice == PracticeExercise.None
+            && !_arenaHandicapActive && (_beat.UsesNeutralMergeBandit || _beat.UsesReactiveBandit))
+            _fightDirector.EnableBfmLadder();
         bool directorCanStage = stagesOpponent
             && _beat.ContinuousCombat is not null
             && (_beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit);
@@ -2320,6 +2323,9 @@ public sealed partial class SimulationSession {
             return;
         }
 
+        // Training success is committed only after this tick's damage and surface contacts.
+        // Otherwise a fatal contact on the qualifying tick can persist a passing bookmark.
+        ObserveDefensiveLesson();
         UpdateSelectedTargetClosure();
         _simTimeMs += FixedDeltaSeconds * 1000.0;
     }
