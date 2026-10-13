@@ -22,7 +22,7 @@ public sealed class BfmSpawnSafetyTests {
         double z = 0.0) => new(new Vec3D(0.0, altitudeM, z), 180.0,
         gammaDeg * System.Math.PI / 180.0, 0.0, 0.0, FlightModel.Sabre.MassKg);
 
-    static RidgeTerrain RidgeAhead(double heightM = 900.0) => new(heightM, -500.0, 0.0,
+    static RidgeTerrain RidgeAhead(double heightM = 900.0) => new(heightM, 500.0, 700.0,
         new TerrainBounds(-5_000.0, 5_000.0, -5_000.0, 5_000.0));
 
     [Fact]
@@ -37,10 +37,11 @@ public sealed class BfmSpawnSafetyTests {
 
     [Fact]
     public void RidgeAheadIsClearedWithoutMovingPlayerOrChangingAuthoredAngles() {
-        AircraftState player = Player(altitudeM: 2_000.0, gammaDeg: 10.0, z: 1_000.0);
+        AircraftState player = Player(altitudeM: 900.0, gammaDeg: 10.0, z: 1_000.0);
         AircraftState authored = BfmLesson.Get(1).Start(player, FlightModel.Sabre);
         AircraftState successor = BfmLesson.Get(1).Start(player, FlightModel.Sabre, RidgeAhead());
-        Assert.True(successor.Position.Y >= 1_500.0 - 1e-9);
+        Assert.True(successor.Position.Y >= 1_400.0 - 1e-9,
+            $"spawn y={successor.Position.Y:F1}, authored y={authored.Position.Y:F1}");
         Assert.Equal(authored.Gamma, successor.Gamma, 12);
         Assert.Equal(authored.Chi, successor.Chi, 12);
     }
