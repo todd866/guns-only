@@ -51,6 +51,64 @@ public class FightDirectorTests {
         return director.NextSpawn(5);
     }
 
+    static void AssertOpeningPreviewMatchesRestaging(FightDirector director) {
+        string before = director.ExportState();
+        SpawnSpec preview = director.PreviewEarnedOpening();
+        Assert.Equal(preview, director.PreviewEarnedOpening());
+        Assert.Equal(before, director.ExportState()); // preview must not commit a phase
+        var restored = new FightDirector();
+        Assert.True(restored.TryImportState(before));
+        Assert.Equal(restored.NextSpawn(1), preview);
+        var session = new SimulationSession();
+        session.ArmDirectorStateForNextStage(before);
+        session.StartBeat(Beats.ModernVisualMerge);
+        Assert.Equal(preview.Skill, session.SortieOpponentSkill);
+        Assert.Equal(preview.Mount, session.SortieOpponentMount);
+        Assert.Equal(preview.FormationSize, session.SortieOpponentCount);
+    }
+
+    [Fact]
+    public void OpeningPreviewIncludesUncommittedAndCommittedBoss() {
+        var director = new FightDirector();
+        for (int i = 1; i <= 4; i++) {
+            SpawnSpec ordinary = director.NextSpawn(i);
+            director.Observe(StrongReport(i, ordinary.Skill));
+        }
+        Assert.NotEqual(DirectorPhase.Boss, director.Phase);
+        AssertOpeningPreviewMatchesRestaging(director);
+        Assert.True(director.NextSpawn(5).Boss);
+        AssertOpeningPreviewMatchesRestaging(director);
+    }
+
+    [Theory]
+    [InlineData(SortieOutcome.Defeat)]
+    [InlineData(SortieOutcome.Victory)]
+    public void OpeningPreviewIncludesBossReleaseAndItsExpiry(SortieOutcome outcome) {
+        var director = new FightDirector();
+        var boss = DriveToBoss(director);
+        director.Observe(ContestedWin(5, boss.Skill, outcome, boss: true));
+        Assert.Equal(DirectorPhase.Release, director.Phase);
+        AssertOpeningPreviewMatchesRestaging(director);
+        for (int i = 6; i <= 7; i++) {
+            var release = director.NextSpawn(i);
+            director.Observe(ContestedWin(i, release.Skill));
+            AssertOpeningPreviewMatchesRestaging(director);
+        }
+        Assert.Equal(DirectorPhase.Build, director.Phase);
+    }
+
+    [Fact]
+    public void OpeningPreviewAppliesReturningPilotRestorePolicyWithoutChangingLiveRung() {
+        var director = new FightDirector();
+        director.Observe(StrongReport(1, PilotSkill.Competent));
+        director.Observe(WeakReport(2, PilotSkill.Ace));
+        director.Observe(WeakReport(3, PilotSkill.Ace));
+        Assert.Equal(1, director.Rung);
+        AssertOpeningPreviewMatchesRestaging(director);
+        Assert.Equal(1, director.Rung);
+        Assert.Equal(PilotSkill.Ace, director.PreviewEarnedOpening().Skill);
+    }
+
     [Fact]
     public void ColdStartMatchesTheRealInterimTableAndDoctrineCounts() {
         var director = new FightDirector();
