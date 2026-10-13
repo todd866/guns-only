@@ -1,10 +1,10 @@
 # Current product status
 
 Updated: 2026-10-13.
-Production: Build 375, revision `47207df5151fb8bc4a663a625b4ab5c76654686b`.
-Next candidate: Build 376, not deployed — first wave of the 2026-10-13 improvement audit: recovered victory reads as victory, practice attempt clock, phone debrief coaching, combat-result boundary (Again / Recover), result instrument, hits persist on RTB, recovered slow-boot launch, no synthetic entry cloud, no F-22 head motion, pause RTB visible, high-alpha centre-stick cue, single destroy boom, Su-27 silhouette, frozen-theatre truth out of the mandatory WASM (−44% gzip).
+Production: Build 376, revision `1ac29fc864022801fd694031d253662b71e210c2`.
+Next candidate: Build 377, not deployed — the stranger gets a fight in seconds: fresh visits go straight to the F-22; rung-0 opens on a trackable slow lead (first hit ~3.4 s in the real-touch receipt); one assisted control contract per phone and a target-independent neutral stick; alternating offensive/defensive BFM ladder (O1→D1→O2→D2→O3→D3→neutral→Ace pair, spec docs/grok-overhaul/design/f22-bfm-ladder.md); phone touch layout (FIRE under the left thumb, throttle lever, LIMIT in portrait) with a HUD/control occupied-area contract; short-final landing practice; runway haze; first-merge receipt smoke; load-proof frame gate.
 Shipped 2026-10-01: Build 373 — the F-22 bandit fights: the rung-0 present ends (12 s cap, proximity latch restored, a finished present starts the fight), the chase uses afterburner after a sustained stall, and solution-disciplined tiers throw budgeted pressure bursts ([PR #111](https://github.com/todd866/guns-only/pull/111), `sim.Tests/BanditPressureReport.cs`). Carries the undeployed Build 372 player loop: sortie-steady opponent level and aim assist, recovery-aware debriefs, practice suggestions, briefing and HUD-overlap fixes ([player-loop audit](audits/2026-09-26-player-loop.md)).
-Live production is Build 375, revision `47207df5151fb8bc4a663a625b4ab5c76654686b`. This checkout stamps `RELEASE_BUILD` 376 in `web/wwwroot/render/release/release_identity.js`.
+Live production is Build 376, revision `1ac29fc864022801fd694031d253662b71e210c2`. This checkout stamps `RELEASE_BUILD` 377 in `web/wwwroot/render/release/release_identity.js`.
 Build-by-build narrative, moved verbatim: [status narrative through Build 372](history/status-narrative-through-build-372.md).
 
 ## Focus
