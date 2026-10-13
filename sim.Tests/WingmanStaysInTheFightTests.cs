@@ -262,7 +262,25 @@ public sealed class WingmanStaysInTheFightTests {
     sealed record SoloSample(
         double T, double Range, string Tactic, int Rounds, bool Trigger,
         double NoseErrDeg, double AltM, double GammaDeg, PilotCommand Command,
-        bool PlayerAlive, bool SessionActive);
+        bool PlayerAlive, bool SessionActive, int HitsTaken);
+
+    /// A loss counts as "shot down by the primary" only when the first dead sample carries a
+    /// lethal gun tally. A terrain crash after a nonlethal burst is not a gun defeat.
+    static bool ShotDownByGunfire(
+        System.Collections.Generic.IReadOnlyList<SoloSample> s, int hitsToDefeat) {
+        SoloSample? firstLoss = s.FirstOrDefault(x => !x.PlayerAlive);
+        return firstLoss is not null && firstLoss.Rounds > 0 && firstLoss.HitsTaken >= hitsToDefeat;
+    }
+
+    [Fact]
+    public void ACrashAfterNonlethalFireIsNotAGunDefeat() {
+        SoloSample At(bool alive, int hits) =>
+            new(10, 500, "Bfm", 30, false, 0, 100, 0, default, alive, true, hits);
+        var crash = new[] { At(true, 0), At(true, 1), At(false, 1) };
+        var gunned = new[] { At(true, 0), At(true, 2), At(false, 4) };
+        Assert.False(ShotDownByGunfire(crash, 4));
+        Assert.True(ShotDownByGunfire(gunned, 4));
+    }
 
     static System.Collections.Generic.List<SoloSample> FlySolo(double seconds) {
         var session = new SimulationSession();
@@ -290,7 +308,8 @@ public sealed class WingmanStaysInTheFightTests {
                 lead.Position.Y, lead.Gamma * 180.0 / Math.PI,
                 trace?.AppliedCommand ?? default,
                 session.PlayerAlive,
-                session.Lifecycle == SimulationSession.LifecycleState.Active));
+                session.Lifecycle == SimulationSession.LifecycleState.Active,
+                session.PlayerHitsTaken));
         }
         return samples;
     }
@@ -320,7 +339,11 @@ public sealed class WingmanStaysInTheFightTests {
         var s = FlySolo(180.0);
         Assert.NotEmpty(s);
         var alive = s.Where(x => x.SessionActive && x.PlayerAlive).ToList();
-        Assert.True(alive.Count >= 60,
+        // A primary that guns the fixture player down inside the window has been judged: the
+        // opt-in ramp opponent (a7) now converts this opening at ~53-58 s instead of ~68 s.
+        bool shotDownByThePrimary = alive.Count > 0
+            && ShotDownByGunfire(s, OneShipFixture().CombatRules.PlayerHitsToDefeat);
+        Assert.True(alive.Count >= 60 || shotDownByThePrimary,
             $"the fixture only kept the session alive {alive.Count} sampled seconds — the "
             + "contract judged nothing");
         Assert.True(alive[^1].Rounds > 0,

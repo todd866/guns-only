@@ -212,6 +212,8 @@ public sealed class NeutralMergeBandit :
         _trackingGun = profile;
         _fight?.ConfigureGunTracking(profile);
     }
+    internal bool AttackReengagementEnabled { get; set; }
+    internal string AttackStatus => _fight?.AttackStatus ?? "opening";
 
     public bool WantsToFire(in ActorObservation player) =>
         _fight?.WantsToFire(player) ?? false;
@@ -224,6 +226,7 @@ public sealed class NeutralMergeBandit :
             BeginFight(player.ContactIdentity);
         }
         if (_fight is not null) {
+            _fight.AttackReengagementEnabled = AttackReengagementEnabled;
             _fight.Step(player, dt);
             T += dt;
             return;

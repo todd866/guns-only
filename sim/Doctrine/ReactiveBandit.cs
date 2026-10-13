@@ -183,7 +183,7 @@ public enum BanditTactic { Acquire, Defend, Energy, Return, Present }
 
 /// Deterministic, deliberately beatable BFM opponent. It owns a normal AircraftSim and supplies
 /// only pilot controls: no kinematic shortcuts, wall clock, or random source enters the kernel.
-public sealed class ReactiveBandit :
+public sealed partial class ReactiveBandit :
     IBandit,
     IBanditDecisionTraceSource,
     IFormationDirectiveSink,
@@ -1194,7 +1194,16 @@ public sealed class ReactiveBandit :
                     return;
                 }
             }
-            if (lowTarget && hasLowAttackPlan) {
+            bool wasAttackInterceptActive = _attackReengagementActive;
+            UpdateAttackReengagement(player, lowTarget);
+            if (_attackReengagementActive) {
+                // Keep refreshing the planner hold on its ordinary cadence while the tactical
+                // intercept flies. An off-cadence exit resumes that recent hold, just like BFM.
+                _ = LookaheadCommand(player);
+                LastCommand = AttackInterceptCommand(player);
+                RecordSingleCandidateDecision(LastCommand, invalidatesLookaheadHold: false);
+                Tactic = BanditTactic.Acquire;
+            } else if (lowTarget && hasLowAttackPlan) {
                 _lowAttackActive = true;
                 if (ownClearanceM <= LowBlockCaptureClearanceM) {
                     CancelPendingLookaheadPlan();
@@ -1281,6 +1290,11 @@ public sealed class ReactiveBandit :
                     ? BanditTactic.Defend
                     : BanditTactic.Acquire;
             }
+            // An off-cadence exit can reuse a held planner command without publishing a new
+            // selection. Replace the intercept trace so telemetry still names the flown command.
+            if (wasAttackInterceptActive && !_attackReengagementActive
+                && DecisionTrace.SelectedCommand != LastCommand)
+                RecordSingleCandidateDecision(LastCommand, invalidatesLookaheadHold: false);
             _sim.Step(CommandForFlight(), dt);
             T += dt;
             return;
@@ -1355,9 +1369,10 @@ public sealed class ReactiveBandit :
         // ceiling now gives it the room. The extension is reserved for the case it was written
         // for: energy-poor, near the cap, genuinely unable to reach the player from here.
         bool needsEnergyToReach = own.Speed < _highSpeedMps;
-        if (player.Position.Y <= _ceilingM + 350.0 || !needsEnergyToReach) _ceilingDenial = false;
-        else if (own.Position.Y > _ceilingM - 900.0) _ceilingDenial = true;
-        else if (own.Position.Y < _ceilingM - 1400.0) _ceilingDenial = false;
+        double ceilingM = FightCeilingM(player);
+        if (player.Position.Y <= ceilingM + 350.0 || !needsEnergyToReach) _ceilingDenial = false;
+        else if (own.Position.Y > ceilingM - 900.0) _ceilingDenial = true;
+        else if (own.Position.Y < ceilingM - 1400.0) _ceilingDenial = false;
 
         // Energy state outranks arena housekeeping. Previously a slow bandit outside the return
         // radius stayed in Return's nose-high 2.8 G turn instead of unloading, decelerated into a
@@ -1383,7 +1398,7 @@ public sealed class ReactiveBandit :
         // rebuild energy, but it does all of that inside the arena, and crossing the leash sends
         // it home regardless of how high the player is sitting. The low-energy gate above still
         // outranks the leash, for the documented stall reason.
-        if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
+        if (radius > ReturnRadiusM || own.Position.Y > ceilingM + 350.0) {
             Tactic = BanditTactic.Return;
             return;
         }
@@ -1642,12 +1657,16 @@ public sealed class ReactiveBandit :
         double leadErrorRad = _trackingGun is null ? BanditFireControl.LeadNoseErrorRad(State, player)
             : TrackingSolution(player).BoreErrorRad;
         if (_fineTrackLatched) {
-            if (leadErrorRad <= (_trackingGun is null || Skill != PilotSkill.Ace ? GunTrackLeadExitRad : 25 * Math.PI / 180)) return true;
+            double exitRad = _trackingGun is null || Skill != PilotSkill.Ace ? GunTrackLeadExitRad : 25 * Math.PI / 180;
+            if (leadErrorRad <= exitRad && !FineTrackOutOfPatience(player, leadErrorRad))
+                return true;
             _fineTrackLatched = false;
             return false;
         }
-        if (leadErrorRad <= (_trackingGun is null || Skill != PilotSkill.Ace ? GunTrackLeadEntryRad : 20 * Math.PI / 180)) {
+        if (leadErrorRad <= (_trackingGun is null || Skill != PilotSkill.Ace ? GunTrackLeadEntryRad : 20 * Math.PI / 180)
+            && T >= _fineTrackRetryAt) {
             _fineTrackLatched = true;
+            _fineTrackProgressAt = T;
             return true;
         }
         return false;
@@ -1947,6 +1966,9 @@ public sealed class ReactiveBandit :
             return new PilotCommand(1.85, LimitedBankTo(climb, 0.65),
                 _maximumThrottle, 0.0);
         }
+        if (AttackReengagementEnabled && own.Speed < _energyExitMps
+            && own.Position.Y - hereFloor > 1500.0)
+            return AttackEnergyRecoveryCommand(player);
         // THE EXTENSION IS AIMED AT THE PLAYER, NOSE-LOW -- NOT STRAIGHT AHEAD. Straight ahead
         // (own forward + 1200 m) points AWAY from a player behind the bandit, so once the nose was
         // level the "energy rebuild" flew the range open nose-cold -- traced opening to 4 km, and
@@ -2421,6 +2443,15 @@ public sealed class ReactiveBandit :
         _lookaheadPlanPredictionSubstepTicks = _incrementalAiPlanning
             ? PredictionSubstepTicks(_computeLevel)
             : PredictionSubstepTicks(AiComputeLevel.Full);
+        // Use the existing Constrained forecast for distant single-ramp pursuit. Retain normal
+        // fidelity near gun range, including one horizon of current-speed head-on closure; presentation and
+        // terrain-certified attacks are unchanged. Freeze the choice for a pending rollout.
+        double gunApproachRangeM = BanditFireControl.MaximumRangeM
+            + (State.Speed + player.Speed) * _profile.LookaheadHorizonTicks / AircraftSim.TickHz;
+        if (AttackReengagementEnabled && !Presenting && lowAttackPlan is null
+            && Geometry.Range(State, player) > gunApproachRangeM)
+            _lookaheadPlanPredictionSubstepTicks = System.Math.Max(
+                _lookaheadPlanPredictionSubstepTicks, PredictionSubstepTicks(AiComputeLevel.Constrained));
         _lookaheadPlanUsesLowAttack = lowAttackPlan.HasValue;
         _lookaheadPlanContactIdentity = player.ContactIdentity;
         _lookaheadContextBound = true;
@@ -2460,7 +2491,11 @@ public sealed class ReactiveBandit :
             ? _chaseStallSeconds + System.Math.Max(0.0, T - _chaseStallCheckedAt)
             : 0.0;
         _chaseStallCheckedAt = T;
-        bool chasing = _chaseStallSeconds >= ChaseStallSeconds;
+        if (AttackReengagementEnabled) {
+            if (lowAttackPlan is not null || range < 800.0) _attackChaseLatched = false;
+            else if (_chaseStallSeconds >= ChaseStallSeconds) _attackChaseLatched = true;
+        } else _attackChaseLatched = false;
+        bool chasing = _chaseStallSeconds >= ChaseStallSeconds || _attackChaseLatched;
         double fastThrottle = chasing
             ? _maximumThrottle
             : System.Math.Min(_maximumThrottle, 1.05);
@@ -2469,7 +2504,34 @@ public sealed class ReactiveBandit :
         double cruiseThrottle = chasing
             ? _maximumThrottle
             : System.Math.Min(_maximumThrottle, 0.84);
+        // Outside gun range every opted-in tier needs a cut-off, not a ballistic aim point on an
+        // unreachable stern chase: pure pursuit of a turning F-22 at equal speed never closes
+        // (traced N Ace, 2026-10-13: nose 3 deg, 1-3 km, 70 s without a shot). FUN: it comes back. Freeze this bounded aim heuristic with the rest of the plan;
+        // the gun-window/lead gates below still score the actual predicted physical contact.
+        // Only a target in the forward hemisphere is being chased: a "stalled closure" with the
+        // player behind is a defensive problem, and a cut-off point there flew the O3 Ace into
+        // the player's gun (BfmFlightAcceptanceTests ladder curve 8/3/0 -> 8/3/3).
+        bool targetAhead = State.ForwardDir().Dot(lineOfSight) > 0.0;
+        _lookaheadPlanAttackLeadSeconds = AttackReengagementEnabled
+            && (Skill == PilotSkill.Competent || targetAhead)
+            && chasing && lowAttackPlan is null && range > 1000.0
+            ? System.Math.Clamp((range - 650.0) / System.Math.Max(State.Speed, 150.0), 0.0, 6.0) : 0.0;
+        if (_lookaheadPlanAttackLeadSeconds > 0.0)
+            leadPoint = AttackInterceptPoint(player, _lookaheadPlanAttackLeadSeconds);
         double maxG = AvailableAcquireG(safetyReserve: false);
+        // A TURNING FIGHT IS WON AT CORNER SPEED, NOT ON THE BURNER. Every candidate used to carry
+        // cruise or full burner, so once the chase latch lit the burner the Su-27 accelerated to
+        // ~360 m/s and circled the player for minutes 1-2 km out: at 4.8 G that is a 2.8 km turn
+        // radius and 7 deg/s, the same rate as the fast player, so the angles never closed
+        // (fight audit trace r0/Competent/seed 0, 2026-10-13). The max-G pull on the lead may
+        // instead bleed toward corner speed with the throttle back; the score decides whether
+        // that beats the burner candidates.
+        double noseOffRad = System.Math.Acos(System.Math.Clamp(
+            State.ForwardDir().Dot(lineOfSight), -1.0, 1.0));
+        double pullThrottle = AttackReengagementEnabled && State.Speed > AttackTurnSpeedMps
+            && noseOffRad > CornerTurnNoseOffRad
+            ? System.Math.Min(_maximumThrottle, CornerTurnThrottle)
+            : fastThrottle;
 
         // Full 3D pursuit uses the UNCLAMPED lift-vector-on-target roll: the bank that places the
         // lift vector on the aim point may exceed 90 deg (rolling toward inverted) so the ace can
@@ -2521,7 +2583,7 @@ public sealed class ReactiveBandit :
         // Fixed storage is owned by the controller and reused plan after plan. The candidate order
         // is the historical declaration order because it is also the deterministic tie-break.
         _lookaheadCandidates[0] =
-            new(maxG, bankOnLead, fastThrottle, 0.0);
+            new(maxG, bankOnLead, pullThrottle, 0.0);
         _lookaheadCandidates[1] =
             new(System.Math.Min(maxG, 4.0), bankOnLead, cruiseThrottle, 0.0);
         _lookaheadCandidates[2] =
@@ -2590,6 +2652,7 @@ public sealed class ReactiveBandit :
                 _lookaheadPlanThrustFraction,
                 _lookaheadPlanBossCommitted,
                 _lookaheadPlanPredictionSubstepTicks,
+                _lookaheadPlanAttackLeadSeconds,
                 out int forecastSteps,
                 out int terrainSweeps);
             score += _lookaheadDoctrineBiases[index];
@@ -2853,6 +2916,10 @@ public sealed class ReactiveBandit :
     /// Below this closure the bandit is not catching the player and lights the burner.
     const double ChaseClosureMps = 30.0;
     const double ChaseStallSeconds = 3.0;
+    /// Target this far off the nose is a turning fight, where speed above corner costs turn rate.
+    const double CornerTurnNoseOffRad = 30.0 * System.Math.PI / 180.0;
+    /// Throttle for the max-G pull while bleeding toward corner speed.
+    const double CornerTurnThrottle = 0.30;
     double _chaseStallSeconds;
     double _chaseStallCheckedAt;
 
@@ -2867,6 +2934,7 @@ public sealed class ReactiveBandit :
         double thrustFraction,
         bool bossCommitted,
         int predictionSubstepTicks,
+        double attackLeadSeconds,
         out int forecastSteps,
         out int terrainSweeps) {
         const double threatWeight = 26.0;
@@ -3056,7 +3124,12 @@ public sealed class ReactiveBandit :
         // (only ~0.2 score at the edge), so range management dominated and the controller
         // happily orbited just outside the trigger gate. Keep a smooth gradient toward the real
         // envelope without widening it.
-        double termAngle = BanditFireControl.NoseErrorRad(terminal, terminalPlayer);
+        // Only the steering-angle term uses the later intercept POINT. NoseErrorRad reads
+        // position alone; firing/threat/range terms retain the physical rollout contact above.
+        var steeringPlayer = attackLeadSeconds > 0.0 ? terminalPlayer with {
+            Position = AttackInterceptPoint(terminalPlayer, attackLeadSeconds)
+        } : terminalPlayer;
+        double termAngle = BanditFireControl.NoseErrorRad(terminal, steeringPlayer);
         double coneErrors = termAngle / gunConeRad;
         double score = -0.75 * coneErrors;
         // Direct conversion reward: seconds of trigger-eligible gun window accrued over the
@@ -3123,7 +3196,7 @@ public sealed class ReactiveBandit :
         // out of its own fight volume before the scorer objected at all. Traced at 13,437 m. This
         // is the only ceiling pressure a lookahead tier gets — SelectTactic's Return was discarded
         // on that path — so it has to be the one that means something.
-        double scoreCeilingM = System.Math.Min(_ceilingM, CombatCeilingM);
+        double scoreCeilingM = System.Math.Min(FightCeilingM(player), CombatCeilingM);
         if (maxY > scoreCeilingM - 200.0)
             score -= 0.02 * (maxY - (scoreCeilingM - 200.0));
         return score;
