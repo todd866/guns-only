@@ -10,7 +10,7 @@ public sealed partial class SimulationSession {
         ? null : new PracticeRuntime(_beat.Practice);
 
     void BeginPractice() {
-        Practice?.Begin();
+        Practice?.Begin(TimeSeconds);
         if (Practice is not null) ShowTransition("PRACTICE · ONE OBJECTIVE", 1800);
         if (Practice?.Exercise != PracticeExercise.Recovery) return;
         // Training starts in the recovery procedure with no combat actor or relief fiction.
@@ -23,7 +23,7 @@ public sealed partial class SimulationSession {
 
     void ObservePractice() {
         if (Practice is not { } practice) return;
-        practice.Observe(TimeSeconds,
+        practice.Observe(Math.Max(0.0, TimeSeconds - practice.AttemptStartSeconds),
             _playerTerminalState != AircraftTerminalState.Flying,
             _firstRunValleyRuntime?.WeaponsCold == false,
             SortiePlayerHits,

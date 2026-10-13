@@ -1,3 +1,4 @@
+import { attemptDurationSeconds } from "./render/shell/attempt_duration.js?v=__RELEASE_BUILD__";
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
 import {
   createDirectorPersistence,
@@ -4898,7 +4899,7 @@ function renderPauseUi(state = latestState) {
     if (readyConfigLabel) readyConfigLabel.textContent = finished ? "Evidence" : "Aircraft";
     readySortie.textContent = exercise.title;
     readyConfig.textContent = finished
-      ? `${Math.round(Number(state?.simulation_time_s) || 0)} seconds · ${Number(state?.sortie_hits) || 0} hits · ${Number(state?.sortie_rounds_fired) || 0} rounds`
+      ? `${Math.round(attemptDurationSeconds(state) || 0)} seconds · ${Number(state?.sortie_hits) || 0} hits · ${Number(state?.sortie_rounds_fired) || 0} rounds`
       : "F-22A public-data surrogate · full flight and landing physics";
     const key = (action) => controlCodeLabel(playerSettings.bindings[action]);
     const practiceControls = mobileControls

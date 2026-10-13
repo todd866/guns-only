@@ -50,3 +50,8 @@ test("missing snapshot fields stay blank rather than NaN", () => {
     time: "—",
   });
 });
+
+test("practice result excludes earlier flights and the completion display hold", () => {
+  assert.equal(sortieGradeBoard({practice_exercise: "gunnery", practice_status: "completed",
+    practice_elapsed_s: 1, simulation_time_s: 242.5}).time, "0:01");
+});

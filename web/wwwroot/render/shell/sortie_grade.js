@@ -1,3 +1,4 @@
+import { attemptDurationSeconds } from "./attempt_duration.js";
 function finite(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
@@ -19,7 +20,7 @@ export function sortieGradeBoard(state = {}) {
   const kills = Math.max(0, Math.round(finite(snapshot.kill_count) ?? 0));
   const hits = Math.max(0, Math.round(finite(snapshot.sortie_hits) ?? 0));
   const rounds = Math.max(0, Math.round(finite(snapshot.sortie_rounds_fired) ?? 0));
-  const time = finite(snapshot.simulation_time_s);
+  const time = attemptDurationSeconds(snapshot);
   const peakG = finite(snapshot.pilot_peak_positive_g);
   const accuracy = rounds > 0 ? hits / rounds : null;
 

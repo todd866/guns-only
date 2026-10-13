@@ -110,6 +110,68 @@ public sealed class PracticeSessionTests {
     }
 
     [Fact]
+    public void PracticeAttemptClockStartsAtBeginAndRepeatGetsAFullAllowance() {
+        var attempt = new PracticeRuntime(PracticeExercise.Gunnery);
+        attempt.Begin(240.0);
+        attempt.Observe(179.0, false, false, 0, false, false);
+        Assert.Equal(PracticeStatus.Active, attempt.Status);
+        attempt.Observe(180.0, false, false, 0, false, false);
+        Assert.Equal(PracticeStatus.TimeLimit, attempt.Status);
+
+        var repeated = new PracticeRuntime(PracticeExercise.Gunnery);
+        repeated.Begin(241.0);
+        repeated.Observe(1.0, false, false, 0, false, false);
+        Assert.Equal(PracticeStatus.Active, repeated.Status);
+        Assert.Equal(1.0, repeated.ElapsedSeconds);
+    }
+
+    [Fact]
+    public void PracticeProjectionPublishesAttemptDuration() {
+        var session = new SimulationSession();
+        session.StartBeat(() => PracticeBeats.Create(PracticeExercise.Gunnery));
+        session.Begin();
+        session.StepFixed();
+        using var snapshot = JsonDocument.Parse(SnapshotProjection.BuildState(session,
+            Carrier.DeckConfiguration.Angled, 0, 0, false, null));
+        Assert.InRange(snapshot.RootElement.GetProperty("practice_elapsed_s").GetDouble(), 0.0, 0.02);
+        Assert.InRange(snapshot.RootElement.GetProperty("practice_started_at_s").GetDouble(), 0.0, 0.02);
+    }
+
+    [Fact]
+    public void RepeatUsesAttemptClockAfterSessionLifetimeHasPassed() {
+        var session = new SimulationSession();
+        session.StartBeat(() => PracticeBeats.Create(PracticeExercise.Gunnery));
+        session.Begin();
+        for (int i = 0; i < 181 * (int)AircraftSim.TickHz; i++)
+            session.StepFixed();
+        Assert.True(session.TimeSeconds > 180.0);
+
+        session.Restart();
+        session.Begin();
+        session.StepFixed((int)AircraftSim.TickHz);
+        Assert.Equal(PracticeStatus.Active, session.Practice!.Status);
+        Assert.InRange(session.Practice.ElapsedSeconds, 0.99, 1.02);
+
+        session.SetPaused(true);
+        double pausedElapsed = session.Practice.ElapsedSeconds;
+        session.StepFixed(2 * (int)AircraftSim.TickHz);
+        Assert.Equal(pausedElapsed, session.Practice.ElapsedSeconds);
+        session.SetPaused(false);
+        session.StepFixed();
+        Assert.True(session.Practice.ElapsedSeconds > pausedElapsed);
+    }
+
+    [Fact]
+    public void RecoveryPracticeHasItsFullSixHundredSecondAllowance() {
+        var recovery = new PracticeRuntime(PracticeExercise.Recovery);
+        recovery.Begin();
+        recovery.Observe(599.0, false, false, 0, false, false);
+        Assert.Equal(PracticeStatus.Active, recovery.Status);
+        recovery.Observe(600.0, false, false, 0, false, false);
+        Assert.Equal(PracticeStatus.TimeLimit, recovery.Status);
+    }
+
+    [Fact]
     public void HotFrameInvalidatesColdPracticeStatusAtBeginAndRemovesItOnNormalRestage() {
         var session = new SimulationSession();
         session.StartBeat(() => PracticeBeats.Create(PracticeExercise.Gunnery));

@@ -71,3 +71,11 @@ test("quota failures retain unsaved attempts and clear remains effective in memo
   assert.equal(book.storageAvailable, true);
   assert.deepEqual(book.list().map((a) => a.activity), ["C"]);
 });
+
+test("practice logbook uses attempt duration for terminal and abandoned live attempts", () => {
+  const state={practice_exercise:"gunnery",practice_status:"active",practice_started_at_s:240,
+    practice_elapsed_s:0,simulation_time_s:241};
+  assert.equal(snapshotAttemptResult(state,{abandoned:true}).durationSeconds,1);
+  assert.equal(snapshotAttemptResult({...state,practice_status:"completed",practice_elapsed_s:1,
+    simulation_time_s:242.5}).durationSeconds,1);
+});
