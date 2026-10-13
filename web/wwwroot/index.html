@@ -4202,6 +4202,8 @@
     }
     .f22-result {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      min-width: 0;
       gap: 1px;
       margin: 0;
       border: 1px solid var(--flow-line);
@@ -4272,6 +4274,7 @@
     .f22-detail[hidden] { display: none; }
     .f22-actions {
       display: flex;
+      flex-wrap: wrap;
       gap: 6px;
       padding: 8px 12px;
       background: var(--flow-panel-raised);
