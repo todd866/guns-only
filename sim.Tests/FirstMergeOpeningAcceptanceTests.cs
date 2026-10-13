@@ -58,6 +58,10 @@ public class FirstMergeOpeningAcceptanceTests {
         bool _trigger;
         int _tick;
 
+        // Diagnostic reads only; the pilot still drives the ordinary session input path.
+        public double PitchControl => _pitch;
+        public double RollControl => _roll;
+
         public HudPilot(HudPilotProfile profile) {
             _profile = profile;
             _latencyTicks = Math.Max(1, (int)Math.Round(profile.ReactionSeconds / Dt));
@@ -197,9 +201,13 @@ public class FirstMergeOpeningAcceptanceTests {
                 firstHit = t;
                 roundsAtFirstHit = session.SortiePlayerRoundsFired;
             }
-            if (trace is not null && tick % 60 == 0)
+            if (trace is not null && tick % 60 == 0) {
+                PilotCommand requested = session.Controls.Command;
+                PilotCommand applied = session.Player.LastAppliedCommand;
+                GunneryPitchAssistState assist = session.GunneryPitchAssist;
                 trace(FormattableString.Invariant(
-                    $"t={t:F1} r={range:F0} nose={nose * 180 / Math.PI:F1} sol={session.PlayerGun.GunSolution} pres={session.Bandit.Presenting} rnds={session.SortiePlayerRoundsFired} hits={session.SortiePlayerHits} G={session.Player.LastNz:F2} bank={p.Bank * 180 / Math.PI:F0} spd={p.Speed:F0}/{b.Speed:F0}"));
+                    $"t={t:F3} r={range:F0} nose={nose * 180 / Math.PI:F2} sol={session.PlayerGun.GunSolution} pres={session.Bandit.Presenting} rnds={session.SortiePlayerRoundsFired} hits={session.SortiePlayerHits} stick={pilot.RollControl:F4}/{pilot.PitchControl:F4} intent={session.Controls.PilotRollIntent:F4} roll={requested.RollControl:F4}/{applied.RollControl:F4} sas={applied.SasRollControl:F4} pitchG={requested.GDemand:F2}/{applied.GDemand:F2} G={session.Player.LastNz:F2} bank={p.Bank * 180 / Math.PI:F2} rollRate={p.BodyRates.P * 180 / Math.PI:F2} assist={assist.Status} unload={session.Controls.PilotUnloadIntent} spd={p.Speed:F0}/{b.Speed:F0}"));
+            }
         }
         return new OpeningRun(profile.Name, assisted, window.CoarseSeconds, window.SolutionSeconds, firstInView, firstHit,
             roundsAtFirstHit, session.SortiePlayerRoundsFired, session.SortiePlayerHits,

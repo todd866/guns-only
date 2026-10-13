@@ -106,7 +106,8 @@ public class BfmFlightAcceptanceTests(ITestOutputHelper output) {
             output.WriteLine($"O1 seed={seed} kills={s.KillCount} hits={s.SortiePlayerHits} D1={sawD1}");
             if (s.KillCount > 0 && sawD1) kills++;
         }
-        Assert.True(kills >= 5, $"Only {kills}/8 converted O1 and reached D1");
+        // Integrated opening acceptance: retain at least seven of the eight delayed pilots.
+        Assert.True(kills >= 7, $"Only {kills}/8 converted O1 and reached D1");
     }
 
     [Fact]
