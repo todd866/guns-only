@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 import { serveStatic } from "../wwwroot/render/hud/tests/harness/static_server.mjs";
@@ -173,4 +173,24 @@ test("every production brief keeps its primary action on screen when a phone is 
       } finally { await page.close(); }
     }
   } finally { await browser.close(); await site.close(); }
+});
+
+// Exercise the real stylesheet cascade with the shell's authorised/unauthorised DOM states.
+// The separate WASM flight smoke covers the touch action's PLAYER_RTB transition.
+test('pause exposes authorised RTB and respects the hidden authority flag on phone and laptop', async () => {
+  const html=await readFile(new URL('../wwwroot/index.html',import.meta.url),'utf8');
+  const styles=[...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m=>m[1]).join('\n');
+  const browser=await chromium.launch({headless:true,channel:'chromium'});
+  try {
+    for(const viewport of [{width:390,height:844},{width:844,height:390},{width:1280,height:720}]) {
+      const page=await browser.newPage({viewport});
+      try {
+        await page.setContent(`<style>${styles}</style><div id="ready-screen" class="visible" data-mode="pause"><button id="ready-handoff">Call It A Day</button></div>`);
+        const button=page.locator('#ready-handoff');
+        assert.equal(await button.isVisible(),true);
+        await button.evaluate(el=>el.hidden=true);
+        assert.equal(await button.isVisible(),false);
+      } finally {await page.close();}
+    }
+  } finally {await browser.close();}
 });

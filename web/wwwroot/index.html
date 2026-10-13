@@ -3429,7 +3429,6 @@
     #ready-screen[data-mode="pause"] .ready-facts,
     #ready-screen[data-mode="pause"] .ready-controls,
     #ready-screen[data-mode="pause"] #ready-hint,
-    #ready-screen[data-mode="pause"] #ready-handoff,
     #ready-screen[data-mode="pause"] #ready-build-row { display: none; }
 
     #ready-screen[data-mode="pause"] {
@@ -4084,9 +4083,19 @@
     #ready-screen[data-mode="pause"] #ready-title {
       margin: 0 0 18px;
       color: #fdf6e6;
-      font: 500 clamp(64px, 9vw, 108px)/.9 var(--flow-font-display);
+      font: 500 clamp(32px, 4vw, 48px)/.9 var(--flow-font-display);
       letter-spacing: -0.04em;
       text-align: center;
+    }
+
+    @media (max-height: 500px) {
+      /* Resume already identifies this state. Preserve action space on short screens,
+         including enlarged text, instead of spending a row on the decorative heading. */
+      #ready-screen[data-mode="pause"] #ready-title { display: none; }
+      #ready-screen[data-mode="pause"] #ready-start {
+        min-height: 48px;
+        margin-bottom: 8px;
+      }
     }
 
     #ready-screen[data-mode="debrief"] #ready-title {
