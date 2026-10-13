@@ -1,6 +1,6 @@
 // Keep this runtime query in lockstep with app.js. It invalidates the unbundled ES-module graph
 // when loader/registry semantics change; authored payloads have their own SHA-256 cache keys.
-export { AssetPipelineError } from "./errors.js?runtime=2";
+export { AssetPipelineError } from "./errors.js?v=__RELEASE_BUILD__";
 export {
   boundingSphereDiameterFromSize,
   estimateProjectedPixelHeight,
@@ -9,7 +9,7 @@ export {
   maximumAxisScale,
   selectLodByProjectedPixelHeight,
   selectLodWithHysteresis,
-} from "./lod.js?runtime=2";
+} from "./lod.js?v=__RELEASE_BUILD__";
 export {
   cloneStaticGltfScene,
   createGltfLoaderAdapter,
@@ -17,10 +17,10 @@ export {
   disposeResourceSet,
   disposeSceneResources,
   selectGltfScene,
-} from "./resource_utils.js?runtime=2";
+} from "./resource_utils.js?v=__RELEASE_BUILD__";
 export {
   AssetInstance,
   AssetRegistry,
   normalizeAssetManifest,
   normalizeVisualProfile,
-} from "./asset_registry.js?runtime=2";
+} from "./asset_registry.js?v=__RELEASE_BUILD__";

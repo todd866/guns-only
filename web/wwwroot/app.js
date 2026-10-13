@@ -14,8 +14,8 @@ import {
   disposeSceneResources,
   estimateProjectedPixelHeight,
   maximumAxisScale,
-} from "./render/assets/index.js?runtime=2";
-import { createThreeR160AssetRegistry } from "./render/assets/three_r160_loader.js?runtime=2";
+} from "./render/assets/index.js?v=__RELEASE_BUILD__";
+import { createThreeR160AssetRegistry } from "./render/assets/three_r160_loader.js?v=__RELEASE_BUILD__";
 import { applyCarrierRootPose } from "./render/carrier/carrier_motion.js";
 import {
   advanceForwardGimbal,
@@ -12172,7 +12172,7 @@ async function primeOfflineRuntime(registration) {
 // prevent the game from starting; once active, it explicitly caches resources already consumed
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
+  const registerOfflineSupport = () => {
     navigator.serviceWorker.register("service-worker.js?v=__RELEASE_BUILD__")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
@@ -12199,7 +12199,11 @@ if ("serviceWorker" in navigator) {
         recorder.context("offline_runtime", { state: "unavailable" });
         console.warn("Offline support unavailable.", error);
       });
-  });
+  };
+  // Dynamic module evaluation can finish after the document's load event. In that case a
+  // load-only listener is never called, leaving the otherwise healthy app without offline support.
+  if (document.readyState === "complete") registerOfflineSupport();
+  else window.addEventListener("load", registerOfflineSupport, { once: true });
 }
 
 boot().catch(showFatal);

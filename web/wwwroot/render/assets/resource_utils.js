@@ -1,4 +1,4 @@
-import { AssetPipelineError, assetAssert } from "./errors.js?runtime=2";
+import { AssetPipelineError, assetAssert } from "./errors.js?v=__RELEASE_BUILD__";
 
 function traverse(root, visitor) {
   if (!root) return;
