@@ -294,15 +294,18 @@ public class CombatTrainingTests {
     public void TerminalGunTickStillAdvancesBothActorsAndLabelsCurrentAction() {
         AircraftParams referenceAir = FlightModel.F22APublicDataSurrogate;
         AircraftParams learningAir = FlightModel.Su27SPublicDataSurrogate;
+        // Explicit reciprocal boresights: implicit trim points the fixed guns above the
+        // fuselages; the old spherical volumes used to forgive that fixture error.
         var scenario = new CombatTrainingScenario(
             "close-hot-merge",
             Seed: 42UL,
             ReferenceStart: new AircraftState(
                 new Vec3D(0.0, 3000.0, 0.0),
-                280.0, 0.0, 0.0, 0.0, referenceAir.MassKg),
+                280.0, 0.0, 0.0, 0.0, referenceAir.MassKg, QuaternionD.Identity),
             LearningFighterStart: new AircraftState(
                 new Vec3D(0.0, 3000.0, 300.0),
-                280.0, 0.0, System.Math.PI, 0.0, learningAir.MassKg),
+                280.0, 0.0, System.Math.PI, 0.0, learningAir.MassKg,
+                new QuaternionD(0, 0, 1, 0)),
             FirstPassSafe: false);
 
         CombatEpisode episode = SeededCombatBatchRunner.RunEpisode(
@@ -396,15 +399,18 @@ public class CombatTrainingTests {
         // episode reports the authoritative MUTUAL destruction and both destruction rewards.
         AircraftParams referenceAir = FlightModel.F22APublicDataSurrogate;
         AircraftParams learningAir = FlightModel.Su27SPublicDataSurrogate;
+        // Aim both initial body axes through the true fuselage volumes, not above them
+        // at the implicit lift-trim attitude. Normal integration takes over immediately.
         var scenario = new CombatTrainingScenario(
             "delayed-mutual-kill",
             Seed: 7UL,
             ReferenceStart: new AircraftState(
                 new Vec3D(0.0, 3000.0, 0.0),
-                280.0, 0.0, 0.0, 0.0, referenceAir.MassKg),
+                280.0, 0.0, 0.0, 0.0, referenceAir.MassKg, QuaternionD.Identity),
             LearningFighterStart: new AircraftState(
                 new Vec3D(0.0, 3000.0, 300.0),
-                280.0, 0.0, System.Math.PI, 0.0, learningAir.MassKg),
+                280.0, 0.0, System.Math.PI, 0.0, learningAir.MassKg,
+                new QuaternionD(0, 0, 1, 0)),
             FirstPassSafe: false);
 
         CombatEpisode episode = SeededCombatBatchRunner.RunEpisode(

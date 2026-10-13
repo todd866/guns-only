@@ -74,13 +74,17 @@ public class F22FiniteSortieTests {
         session.Begin();
         session.FeedKey(GKey.Trigger, true);
         for (int i = 0; i < 40 * AircraftSim.TickHz && session.KillCount < 2; i++) {
-            if (session.OpponentPresent && session.Bandit.State.Position.Z
-                - session.Player.State.Position.Z > 400.0) {
+            if (session.OpponentPresent && Geometry.Range(session.Player.State, session.Bandit.State) > 220.0) {
                 AircraftState bandit = session.Bandit.State;
-                session.Player.AdoptExternalKinematics(bandit with {
-                    Position = bandit.Position + new Vec3D(0, 0, -140),
+                AircraftState shooter = bandit with {
+                    Position = bandit.Position - bandit.ForwardDir() * 140.0,
                     Speed = bandit.Speed + 20,
-                    Chi = 0,
+                };
+                Assert.True(GunKill.TrySolveBallisticLead(shooter, bandit,
+                    session.PlayerGun.Profile, out Vec3D lead, out _));
+                Vec3D right = new Vec3D(0, 1, 0).Cross(lead).Normalized();
+                session.Player.AdoptExternalKinematics(shooter with {
+                    BodyAttitude = QuaternionD.FromFrame(right, lead.Cross(right), lead),
                 });
             }
             session.StepFixed();

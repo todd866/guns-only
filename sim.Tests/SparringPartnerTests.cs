@@ -179,6 +179,14 @@ public class SparringPartnerTests {
         beat = beat with { Player = beat.Player with {
             Position = beat.Player.Position with { Z = FirstRunValleyRuntime.PopOutNorthM + 10.0 }
         } };
+        // Stage a close, boresighted post-popout pass. The old 990 m implicit-trim shot
+        // only hit the forgiving sphere; this tests hit-driven handoff, not auto-aim range.
+        beat = beat with {
+            Player = beat.Player with { BodyAttitude = QuaternionD.Identity },
+            Bandit = beat.Bandit with {
+                Position = beat.Player.Position + new Vec3D(0, 0, 300)
+            }
+        };
         var session = new SimulationSession();
         session.StartBeat(() => beat);
         session.SetTouchControlModality(true);
