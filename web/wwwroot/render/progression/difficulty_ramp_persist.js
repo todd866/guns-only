@@ -67,11 +67,14 @@ export function createDirectorPersistence({
 
   function persistObservation(state) {
     if (!missionActive(state)) return false;
+    // director_hits moves on the tick a physical hit is credited, so a hit followed by an
+    // RTB or a closed tab is already stored (loop audit #7).
     const key = [
       state?.engagement_number,
       state?.kill_count,
       state?.difficulty_rung,
       state?.session_phase,
+      state?.director_hits,
     ].join("|");
     if (key === observationKey) return false;
     const hadPrior = observationKey !== "";

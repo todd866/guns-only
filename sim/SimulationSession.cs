@@ -1297,6 +1297,7 @@ public sealed partial class SimulationSession {
             _selectedPlayerGunTargetId = 0;
         }
         _playerSpawnSequence++;
+        CaptureSortieContract(stagesOpponent, openingSpawn);
         if (stagesOpponent) _banditSpawnSequence++;
         if (_carrier is not null) _carrierSpawnSequence++;
         if (stagesOpponent) {
@@ -1530,6 +1531,7 @@ public sealed partial class SimulationSession {
         _casevacAbortRequested = false;
 
         _playerSpawnSequence++;
+        CaptureSortieContract(false, null);
         _playerTerminalState = AircraftTerminalState.Flying;
         _opponentTerminalState = AircraftTerminalState.Settled;
         _playerImpactSurface = ImpactSurface.None;
