@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { chromium } from '../../../../smoke/node_modules/playwright/index.mjs';
+import { chromium } from './node_modules/playwright/index.mjs';
 
-const html = await readFile(new URL('../../../index.html', import.meta.url), 'utf8');
+const html = await readFile(new URL('../wwwroot/index.html', import.meta.url), 'utf8');
 const styles = html.match(/<style>([\s\S]*?)<\/style>/)[1];
 
 for (const [name, width, height] of [['portrait', 390, 844], ['landscape', 844, 390]]) {

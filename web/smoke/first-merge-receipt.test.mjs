@@ -38,7 +38,10 @@ const REACTION_S = 0.25;
 // data-line range inside 800 m (the HUD's tally/gun envelope). Same bound as the a1 kernel test.
 const COARSE_CONE_DEG = 12;
 const COARSE_RANGE_M = 800;
-const ORIENTATIONS = [
+// CI's browser job renders with SwiftShader, where one orientation costs minutes; it flies portrait
+// only (FIRST_MERGE_RECEIPT_ORIENTATIONS=portrait). Locally and on GPU both orientations fly.
+const ORIENTATION_FILTER = (process.env.FIRST_MERGE_RECEIPT_ORIENTATIONS || "").split(",").filter(Boolean);
+const ALL_ORIENTATIONS = [
   { name: "portrait", width: 390, height: 844 },
   { name: "landscape", width: 844, height: 390 },
 ];
@@ -246,6 +249,9 @@ async function flyReceipt(browser, site, orientation) {
   return receipt;
 }
 
+const ORIENTATIONS = ORIENTATION_FILTER.length
+  ? ALL_ORIENTATIONS.filter((o) => ORIENTATION_FILTER.includes(o.name))
+  : ALL_ORIENTATIONS;
 for (const orientation of ORIENTATIONS) {
   test(`first merge on a ${orientation.name} phone: contact, a gun window and a hit through real touch`,
     { timeout: 420_000 }, async () => {
