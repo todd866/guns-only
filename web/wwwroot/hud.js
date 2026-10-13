@@ -82,6 +82,7 @@ import {
   navigationRateReadout,
 } from "./render/hud/limits_panel.js?v=__RELEASE_BUILD__";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
+import { highAlphaRecoveryPresentation } from "./render/hud/high_alpha_recovery.js";
 import {
   fillLegibleHudText,
   isEssentialHudGreenFill,
@@ -2879,6 +2880,7 @@ class CombatHud {
       tallyRangeM: BANDIT_TALLY_RANGE_M,
       condensed,
     });
+    const highAlpha = highAlphaRecoveryPresentation(state);
     const guidance = rapierGuidancePresentation(state);
     const carrierRoute = carrierSortieRoutePresentation(state);
     const cycle = rapierCycleTeachPresentation(state);
@@ -2919,7 +2921,13 @@ class CombatHud {
     if (condensed) directiveText = directiveText.replaceAll(" · ", "·");
 
     const rows = [
-      { key: "actual", text: tactical.actualText, color: GREEN },
+      {
+        key: "actual",
+        text: highAlpha.active
+          ? `${tactical.actualText}${condensed ? "·" : " · "}${highAlpha.symbol}`
+          : tactical.actualText,
+        color: highAlpha.active ? AMBER : GREEN,
+      },
     ];
     if (tactical.contextText) {
       rows.push({
@@ -2994,6 +3002,7 @@ class CombatHud {
         fontSize,
         condensed,
         actualText: tactical.actualText,
+        highAlpha,
         contextText: tactical.contextText,
         navigationText: navigationRates?.text ?? "",
         directiveText,
@@ -3031,6 +3040,7 @@ class CombatHud {
     const mapG = (g) => x + clamp((Number(g) || 0) / maxG, 0, 1) * width;
     const tierColor = actualG > hardG + 0.05 ? RED
       : overrideSelected || state.tier === 3 ? AMBER : GREEN;
+    const highAlpha = highAlphaRecoveryPresentation(state);
 
     // 0 at 1 G, 1 by 3 G. Never below 0.28, so the tape always has enough backing to read
     // against a bright sky rather than vanishing into it.
@@ -3053,6 +3063,12 @@ class CombatHud {
     ctx.textAlign = "right";
     ctx.fillStyle = tierColor;
     ctx.fillText((Number(state.g_actual) || 0).toFixed(1), x + width, y - 20);
+    if (highAlpha.active) {
+      ctx.fillStyle = AMBER;
+      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(highAlpha.symbol, x + width * 0.52, y - 20);
+    }
 
     ctx.strokeStyle = GREEN_DIM;
     ctx.lineWidth = 2;

@@ -1,4 +1,10 @@
 // Local device history only. No telemetry dependency, credentials, unlocks or aircraft modifiers.
+import { attemptElapsedSeconds } from "./attempt_clock.js";
+import {
+  f22AttemptContract, f22CombatDisposition, f22RecoveryDisposition,
+} from "../debrief/f22_result_instrument.js";
+
+const DISPOSITIONS = new Set(["complete", "lost", "open", "recovered"]);
 export const LOGBOOK_KEY = "guns-only.pilot-logbook.v1";
 export const LOGBOOK_LIMIT = 100;
 export function createBrowserPilotLogbook() {
@@ -8,6 +14,7 @@ export function createBrowserPilotLogbook() {
 }
 const text = (value, limit = 240) => typeof value === "string" ? value.slice(0, limit) : "";
 const count = (value) => Number.isFinite(value) ? Math.max(0, Math.min(1e7, value)) : null;
+const disposition = (value) => DISPOSITIONS.has(value) ? value : "";
 
 export function normalizeAttempt(value) {
   if (!value || typeof value !== "object" || !text(value.id, 80)
@@ -25,6 +32,10 @@ export function normalizeAttempt(value) {
     valleyCleared: value.valleyCleared === true,
     laps: count(value.laps), bestLapSeconds: value.bestLapSeconds > 0 ? count(value.bestLapSeconds) : null,
     effectiveDrops: count(value.effectiveDrops), waterKg: count(value.waterKg), cycles: count(value.cycles),
+    // F-22 like-for-like contract and the two separate results. Absent on older records.
+    rung: Number.isInteger(value.rung) && value.rung >= 0 && value.rung <= 3 ? value.rung : null,
+    opponent: text(value.opponent, 24), assist: text(value.assist, 12),
+    combat: disposition(value.combat), recovery: disposition(value.recovery),
   };
 }
 
@@ -66,12 +77,15 @@ export function createPilotLogbook({ storage, now = Date.now,
   return {
     get pending() { return pending !== null; },
     get storageAvailable() { return storageAvailable; },
+    /** Session-clock reading when the pending attempt began (see attempt_clock.js). */
+    get pendingStartSimSeconds() { return pending?.startSimSeconds ?? null; },
     list() { return latest().map((a) => ({ ...a })); },
-    begin({ activity, exercise = "" }) {
+    begin({ activity, exercise = "", startSimSeconds = null }) {
       // A duplicate Begin edge is not another attempt. Call finish before restaging.
       if (pending) return pending.id;
       pending = { id: newId(), startedAt: now(), activity, exercise,
-        kind: exercise ? "practice" : "sortie" };
+        kind: exercise ? "practice" : "sortie",
+        startSimSeconds: Number.isFinite(startSimSeconds) ? startSimSeconds : null };
       return pending.id;
     },
     finish(result) {
@@ -89,15 +103,21 @@ export function createPilotLogbook({ storage, now = Date.now,
   };
 }
 
-export function snapshotAttemptResult(state = {}, { abandoned = false, correction = "" } = {}) {
+export function snapshotAttemptResult(state = {}, {
+  abandoned = false, correction = "", startSimSeconds = null, combatResult = false,
+} = {}) {
   const practice = state.practice_exercise && state.practice_exercise !== "none";
+  const contract = f22AttemptContract(state);
   return {
-    outcome: abandoned ? "Left before completion" : practice
+    outcome: combatResult ? "Combat complete" : abandoned ? "Left before completion" : practice
       ? ({ completed: "Exercise complete", lost: "Aircraft lost", timelimit: "Time limit",
         ended: "Exercise ended" }[state.practice_status] || "Exercise ended")
       : String(state.sortie_outcome || "Ended").replaceAll("_", " "),
     correction,
-    durationSeconds: Number(state.simulation_time_s),
+    durationSeconds: attemptElapsedSeconds(state, startSimSeconds),
+    rung: contract?.rung ?? null, opponent: contract?.opponent ?? "",
+    assist: contract?.assist ?? "",
+    combat: f22CombatDisposition(state) ?? "", recovery: f22RecoveryDisposition(state) ?? "",
     rounds: Number(state.sortie_rounds_fired), hits: Number(state.sortie_hits),
     kills: Number(state.kill_count),
     recovered: state.runway_recovery_phase_name === "RECOVERED"
@@ -107,11 +127,17 @@ export function snapshotAttemptResult(state = {}, { abandoned = false, correctio
   };
 }
 
+/** Same activity under the same difficulty contract: a harder opponent is a different task. */
+export function sameTask(a, b) {
+  return a.activity === b.activity && a.kind === b.kind && a.exercise === b.exercise
+    && (a.rung ?? null) === (b.rung ?? null)
+    && (a.opponent || "") === (b.opponent || "")
+    && (a.assist || "") === (b.assist || "");
+}
+
 export function compareAttempts(attempts, attempt) {
-  const previous = [...attempts].reverse().find((a) => a.id !== attempt.id
-    && a.activity === attempt.activity && a.kind === attempt.kind
-    && a.exercise === attempt.exercise);
-  if (!previous) return "First recorded attempt";
+  const previous = [...attempts].reverse().find((a) => a.id !== attempt.id && sameTask(a, attempt));
+  if (!previous) return attempt.opponent ? "First attempt against this opponent" : "First recorded attempt";
   if (attempt.laps > 0 && previous.laps > 0 && attempt.bestLapSeconds > 0 && previous.bestLapSeconds > 0) {
     const delta = attempt.bestLapSeconds - previous.bestLapSeconds;
     return `Best clean lap ${Math.abs(delta).toFixed(2)} seconds ${delta <= 0 ? "quicker" : "slower"} vs previous ride`;

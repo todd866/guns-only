@@ -13,6 +13,29 @@ import {
 import { isAgedF22, resolvePropulsionCharacter } from "./audio_character.js";
 
 const GUN_REPORT_NOISE_POOL_SIZE = 12;
+const SPEED_OF_SOUND_MPS = 343;
+
+export function boomDelaySeconds(rangeM) {
+  const range = Math.max(0, Number.isFinite(Number(rangeM)) ? Number(rangeM) : 0);
+  return Math.min(1.45, Math.max(0.02, range / SPEED_OF_SOUND_MPS));
+}
+
+function combatLifecycleIdentity(state) {
+  const parts = [
+    state?.player_entity_id,
+    state?.bandit_entity_id,
+    state?.event_stream_id,
+  ].map((value) => String(value ?? "").trim());
+  return parts.some(Boolean) ? parts.join("|") : null;
+}
+
+function cancelPendingDestroyBooms(voices, now) {
+  for (const pending of voices.pendingDestroyBooms ?? []) {
+    try { pending.noise.stop(now); } catch { /* already stopped */ }
+    try { pending.osc.stop(now); } catch { /* already stopped */ }
+  }
+  voices.pendingDestroyBooms = [];
+}
 
 // Gunfire now receives an explicit, bounded propulsion duck in flight_audio. Keep the weapon
 // family above its original conservative authoring level, but stop using an oversized input trim
@@ -396,6 +419,8 @@ export function createEventVoices(audioContext, destination) {
     lastHits: 0,
     lastOpponentHits: 0,
     lastOpponentAlive: true,
+    lastCombatLifecycleIdentity: null,
+    pendingDestroyBooms: [],
     lastAim9Remaining: null,
     lastAim9InFlight: null,
     lastAim9StateCode: null,
@@ -1583,6 +1608,15 @@ function scheduleTrapFail(audioContext, destination, at) {
 export function updateCombatCueVoices(voices, audioContext, state, { enabled = true } = {}) {
   if (!voices || !audioContext) return;
   const now = audioContext.currentTime;
+  voices.pendingDestroyBooms = (voices.pendingDestroyBooms ?? [])
+    .filter((pending) => pending.endTime > now);
+  const lifecycleIdentity = combatLifecycleIdentity(state);
+  if (lifecycleIdentity !== null
+      && voices.lastCombatLifecycleIdentity !== null
+      && lifecycleIdentity !== voices.lastCombatLifecycleIdentity) {
+    cancelPendingDestroyBooms(voices, now);
+  }
+  if (!enabled) cancelPendingDestroyBooms(voices, now);
   const hits = Math.max(0, Math.trunc(finiteNumber(state?.hits) ?? 0));
   const opponentHits = Math.max(0, Math.trunc(finiteNumber(state?.opponent_hits) ?? 0));
   const alive = selectedOpponentAlive(state);
@@ -1638,7 +1672,12 @@ export function updateCombatCueVoices(voices, audioContext, state, { enabled = t
     }
   }
   if (enabled && voices.lastOpponentAlive !== false && alive === false) {
-    scheduleDestroyBoom(audioContext, voices.destination, now, targetScale);
+    voices.pendingDestroyBooms.push(scheduleDestroyBoom(
+      audioContext,
+      voices.destination,
+      now + boomDelaySeconds(targetRangeM),
+      targetScale,
+    ));
   }
   voices.lastHits = hits;
   voices.lastOpponentHits = opponentHits;
@@ -1646,6 +1685,7 @@ export function updateCombatCueVoices(voices, audioContext, state, { enabled = t
   voices.lastAim9Remaining = aim9Remaining;
   voices.lastAim9InFlight = aim9InFlight;
   voices.lastAim9StateCode = aim9StateCode;
+  if (lifecycleIdentity !== null) voices.lastCombatLifecycleIdentity = lifecycleIdentity;
 }
 
 function scheduleAim9Launch(audioContext, destination, at, launchIndex) {
@@ -1730,6 +1770,7 @@ function scheduleDestroyBoom(audioContext, destination, at, distanceScale) {
   osc.connect(oEnv).connect(destination);
   noise.start(at); noise.stop(at + 0.72);
   osc.start(at); osc.stop(at + 0.58);
+  return { noise, osc, endTime: at + 0.72 };
 }
 
 export function fireGunReports(voices, audioContext, state, {

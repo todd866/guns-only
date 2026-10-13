@@ -530,6 +530,60 @@ public sealed class CombatHandoffTests {
             relief.DecisionTrace.SelectedCommand);
     }
 
+    static SimulationSession StartValleyPair() {
+        var history = new FightDirector();
+        history.Observe(new EngagementReport(1, PilotSkill.Ace, false,
+            SortieOutcome.Victory, 30, 1, 0, 10, 5, 0, 300, 0,
+            HitsScored: 2, GunKills: 2));
+        var session = new SimulationSession();
+        session.ArmDirectorStateForNextStage(history.ExportState());
+        session.StartBeat(() => HandoffFight(opponentHitsToDefeat: 1,
+            usesReactiveBandit: true, maximumFormationSize: 2) with {
+            FirstRunValley = Beats.ModernVisualMergeFirstRun().FirstRunValley,
+            RecoveryPlan = Beats.ModernVisualMergeFirstRun().RecoveryPlan,
+        });
+        session.Begin();
+        session.StepFixed(); // beyond the pop-out gate: weapons hot
+        Assert.Single(session.Wingmen);
+        return session;
+    }
+
+    [Fact]
+    public void ValleyPlayerKillThenReliefKillDoesNotCompletePlayerCombat() {
+        var session = StartValleyPair();
+        ScoreOneHit(session.PlayerGun, session.PlayerGun.SelectedTargetId);
+        session.StepFixed();
+        Assert.Equal(1, session.KillCount);
+        Assert.False(session.FiniteCombatComplete);
+        AdvanceToReliefEngaged(session);
+        GunKill relief = session.Relief!.Gun!;
+        ScoreOneHit(relief, relief.SelectedTargetId);
+        session.StepFixed();
+        Assert.Equal(1, session.ReliefKills);
+        Assert.Equal(1, session.KillCount);
+        Assert.Equal(EngagementEndReason.PlayerHandoff, Assert.Single(session.EngagementReports).EndReason);
+        Assert.Equal(0, session.EngagementsWon);
+        Assert.False(session.FiniteCombatComplete);
+    }
+
+    [Fact]
+    public void ValleyPlayerVictoryStaysCompleteThroughRtbAndResetsOnRestart() {
+        var session = StartValleyPair();
+        for (int kill = 0; kill < 2; kill++) {
+            ScoreOneHit(session.PlayerGun, session.PlayerGun.SelectedTargetId);
+            session.StepFixed();
+        }
+        Assert.Equal(2, session.KillCount);
+        Assert.Equal(1, session.EngagementsWon);
+        Assert.True(session.FiniteCombatComplete);
+        session.TryRequestReturnToBase();
+        for (int tick = 0; tick < 10; tick++) session.StepFixed();
+        Assert.True(session.PlayerRtbActive);
+        Assert.True(session.FiniteCombatComplete);
+        session.Restart();
+        Assert.False(session.FiniteCombatComplete);
+    }
+
     [Fact]
     public void ReliefKillIsSeparateAndPlayerStaysAliveThroughRecovery() {
         SimulationSession session = StartHandoffFight(

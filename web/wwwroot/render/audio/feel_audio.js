@@ -4,7 +4,10 @@
 // Continuous lanes stay at zero while muted, and edge counters still advance so a pause
 // cannot replay a kill. There is no radar-warning tone: the sim has no RWR.
 
+import { boomDelaySeconds } from "./event_audio.js";
 import { pinkNoiseBuffer, whiteNoiseBuffer } from "./engine_audio.js";
+
+export { boomDelaySeconds };
 
 const SPEED_OF_SOUND_MPS = 340.29;
 
@@ -75,11 +78,6 @@ export function gStrain01(state) {
   const agsm = clamp01(finite(state?.pilot_agsm_engagement_01, 0) ?? 0);
   if (STRAIN_STAGES.has(stage)) return clamp01(Math.max(0.4, agsm));
   return agsm;
-}
-
-export function boomDelaySeconds(rangeM) {
-  const range = Math.max(0, finite(rangeM, 0));
-  return clamp(range / SPEED_OF_SOUND_MPS, 0.02, 1.45);
 }
 
 function noiseBurst(audioContext, seed, seconds) {
@@ -224,7 +222,6 @@ export function updateFeelVoices(voices, audioContext, state, {
   const alive = opponentAlive(state) && state?.opponent_alive !== false && state?.bandit_alive !== false
     && state?.fight !== "Splash";
   const firing = state?.gun_firing === true;
-  const range = Math.max(0, finite(state?.range_m, 400));
 
   if (!voices.seeded) {
     voices.seeded = true;
@@ -297,16 +294,6 @@ export function updateFeelVoices(voices, audioContext, state, {
         level: 0.16,
         seconds: 0.22,
         seed: 0x4f574e00 + opponentHits,
-      });
-    }
-    if (voices.lastAlive && !alive) {
-      const delay = boomDelaySeconds(range);
-      const distance = clamp(1 / (1 + range / 700), 0.2, 1);
-      scheduleWeight(audioContext, voices.destination, now + delay, {
-        hz: 90,
-        level: 0.22 * distance,
-        seconds: 0.85,
-        seed: 0x424f4f4d,
       });
     }
   }

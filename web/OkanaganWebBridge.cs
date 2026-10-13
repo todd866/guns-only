@@ -18,8 +18,13 @@ public static partial class OkanaganWebBridge
     static double _accumulatorSeconds;
 
     [JSExport]
+    public static void LoadTruth(string terrain, string world, string resorts) =>
+        OkanaganTruth.Install(terrain, world, resorts);
+
+    [JSExport]
     public static void Start(int sortie)
     {
+        OkanaganTruth.RequireLoaded();
         _mission = OkanaganFireMission.CreateForPlayer(ResolveSortie(sortie));
         _command = new FireBossPilotCommand(0.0, 0.0, 0.0,
             _mission.Aircraft.Telemetry.Throttle, false, false);
@@ -31,9 +36,11 @@ public static partial class OkanaganWebBridge
     }
 
     [JSExport]
-    public static string PreviewPlan(int sortie) =>
-        OkanaganSnapshotProjection.BuildStateJson(
+    public static string PreviewPlan(int sortie) {
+        OkanaganTruth.RequireLoaded();
+        return OkanaganSnapshotProjection.BuildStateJson(
             OkanaganFireMission.CreateForPlayer(ResolveSortie(sortie)));
+    }
 
     static OkanaganSortieType ResolveSortie(int sortie) =>
         sortie switch {

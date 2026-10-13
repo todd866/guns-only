@@ -1,3 +1,4 @@
+import { isF22CanopyGlassAirframe } from "./f22_canopy_glass.js";
 import {
   DEG_TO_RAD,
   clamp,
@@ -280,6 +281,12 @@ export function createCockpitHeadPresentation(THREE, options = {}) {
       resetCockpitMotionState(state, snapshot);
     },
     update(camera, snapshot, deltaSeconds, frameOptions = {}) {
+      // The F-22 eye follows aircraft attitude and commanded look only. Reset also clears
+      // residual springs when switching from a frozen aircraft which retains this layer.
+      if (isF22CanopyGlassAirframe(snapshot)) {
+        resetCockpitMotionState(state, snapshot);
+        return cockpitMotionSample(state, sample);
+      }
       const reducedMotion = frameOptions.reducedMotion
         ?? options.reducedMotion
         ?? reducedMotionMedia?.matches

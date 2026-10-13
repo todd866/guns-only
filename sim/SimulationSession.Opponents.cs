@@ -1239,6 +1239,7 @@ public sealed partial class SimulationSession {
     }
 
     void StartEngagementCounters(PilotSkill opponentSkill, bool opponentWasBoss) {
+        _directorHitsCreditedThisEngagement = 0;
         _engagementCounters = new EngagementCounters {
             Active = true,
             EngagementNumber = _engagementNumber,
@@ -1288,8 +1289,14 @@ public sealed partial class SimulationSession {
         _engagementReports.Add(report);
         // Only the F-22 ramp (visual merge and the valley) moves rungs. Other
         // beats still record the fight for the learner, without fading their assist.
+        // Hits already credited live (CreditDirectorHits) are not counted a second time.
+        // Practice never climbs the ramp.
+        int hitsAlreadyCredited = TakeDirectorHitsCreditedThisEngagement();
         if (report.EligibleForLearning)
-            _fightDirector.Observe(in report, advanceRamp: UsesDifficultyRamp(_beat));
+            _fightDirector.Observe(in report,
+                advanceRamp: UsesDifficultyRamp(_beat)
+                    && _beat.Practice == GunsOnly.Sim.Training.PracticeExercise.None,
+                hitsAlreadyCredited: hitsAlreadyCredited);
         _engagementCounters.Active = false;
     }
 
@@ -1298,6 +1305,9 @@ public sealed partial class SimulationSession {
         EngagementReport report = BuildEngagementReport(
             SortieOutcome.None, EngagementEndReason.PlayerHandoff);
         _engagementReports.Add(report);
+        // Physical hits in this fight were already credited when they landed; that positive
+        // evidence stands. Nothing else about the interrupted fight reaches the director.
+        TakeDirectorHitsCreditedThisEngagement();
         // Deliberately no FightDirector.Observe: the pilot ended the sample before either combatant
         // won, so treating it as a draw/loss would corrupt both pacing and the skill estimate.
         _engagementCounters.Active = false;

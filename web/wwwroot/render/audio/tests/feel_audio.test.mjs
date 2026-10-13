@@ -31,11 +31,15 @@ class Context {
     this.currentTime = 1;
     this.sampleRate = 800;
     this.destination = new Node();
+    this.sources = [];
+    this.oscillators = [];
   }
 
   createGain() { return Object.assign(new Node(), { gain: new Param(0) }); }
   createOscillator() {
-    return Object.assign(new Node(), { frequency: new Param(0), type: "sine" });
+    const oscillator = Object.assign(new Node(), { frequency: new Param(0), type: "sine" });
+    this.oscillators.push(oscillator);
+    return oscillator;
   }
   createBiquadFilter() {
     return Object.assign(new Node(), {
@@ -45,7 +49,9 @@ class Context {
     });
   }
   createBufferSource() {
-    return Object.assign(new Node(), { loop: false, buffer: null });
+    const source = Object.assign(new Node(), { loop: false, buffer: null });
+    this.sources.push(source);
+    return source;
   }
   createBuffer(_channels, frames) {
     const data = new Float32Array(frames);
@@ -75,12 +81,12 @@ test("G-strain follows published physiology and ignores a bare G number", () => 
 });
 
 test("a distant kill waits on the speed of sound", () => {
-  assert.ok(Math.abs(boomDelaySeconds(340.29) - 1) < 0.001);
+  assert.ok(Math.abs(boomDelaySeconds(343) - 1) < 0.001);
   assert.equal(boomDelaySeconds(1), 0.02);
   assert.equal(boomDelaySeconds(9000), 1.45);
 });
 
-test("wind follows speed, music stays off unless asked, and a kill schedules a delayed boom", () => {
+test("wind follows speed, music stays off, and feel does not duplicate destroy boom", () => {
   const audio = new Context();
   const voices = createFeelVoices(audio, audio.destination);
   const cruise = updateFeelVoices(voices, audio, {
@@ -116,14 +122,20 @@ test("wind follows speed, music stays off unless asked, and a kill schedules a d
   }, { enabled: true, music: true, scene: "flight", nowSeconds: 1 });
   assert.ok(seeded.musicLevel > 0);
   const before = audio.currentTime;
+  const sourcesBeforeKill = audio.sources.length;
+  const oscillatorsBeforeKill = audio.oscillators.length;
   updateFeelVoices(voices, audio, {
     bandit_alive: false,
     fight: "Splash",
     range_m: 680,
-    hits: 3,
+    hits: 2,
   }, { enabled: true, music: true, scene: "flight", nowSeconds: 1.1 });
   assert.ok(before >= 0);
   assert.equal(voices.lastAlive, false);
+  assert.equal(audio.sources.length, sourcesBeforeKill,
+    "feel lanes do not schedule a second destroy boom");
+  assert.equal(audio.oscillators.length, oscillatorsBeforeKill,
+    "feel lanes do not schedule a second destroy boom layer");
 });
 
 test("muted frames still consume the kill edge", () => {

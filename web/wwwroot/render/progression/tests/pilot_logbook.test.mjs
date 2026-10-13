@@ -9,11 +9,13 @@ function fixture() {
 }
 test("real lifecycle edges record once and preserve epoch dates and separate practice", () => {
   const { book } = fixture();
-  book.begin({ activity: "Valley", exercise: "valley" });
+  // The session clock had already run 200 s in an earlier attempt; duration is this attempt's.
+  book.begin({ activity: "Valley", exercise: "valley", startSimSeconds: 200 });
   book.begin({ activity: "duplicate" });
   const result = snapshotAttemptResult({ practice_exercise: "valley", practice_status: "completed",
-    simulation_time_s: 78, sortie_rounds_fired: 0, sortie_hits: 0, kill_count: 0,
-    first_run_valley_available: true, first_run_weapons_cold: false });
+    simulation_time_s: 278, sortie_rounds_fired: 0, sortie_hits: 0, kill_count: 0,
+    first_run_valley_available: true, first_run_weapons_cold: false },
+  { startSimSeconds: book.pendingStartSimSeconds });
   book.finish(result); book.finish(result);
   const [record] = book.list();
   assert.equal(book.list().length, 1);
@@ -70,4 +72,72 @@ test("quota failures retain unsaved attempts and clear remains effective in memo
   denied = false; book.begin({ activity: "C" }); book.finish({ outcome: "Ended" });
   assert.equal(book.storageAvailable, true);
   assert.deepEqual(book.list().map((a) => a.activity), ["C"]);
+});
+
+test("practice logbook uses attempt duration for terminal and abandoned live attempts", () => {
+  const state={practice_exercise:"gunnery",practice_status:"active",practice_started_at_s:240,
+    practice_elapsed_s:0,simulation_time_s:241};
+  assert.equal(snapshotAttemptResult(state,{abandoned:true}).durationSeconds,1);
+  assert.equal(snapshotAttemptResult({...state,practice_status:"completed",practice_elapsed_s:1,
+    simulation_time_s:242.5}).durationSeconds,1);
+});
+
+const F22 = "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1";
+const f22 = (overrides = {}) => ({
+  mission_definition_id: F22, practice_exercise: "none", sortie_rung: 0,
+  sortie_opponent_skill: "COMPETENT", sortie_opponent_count: 1, assisted_flight: false,
+  sortie_rounds_fired: 100, sortie_hits: 2, ...overrides,
+});
+
+test("attempt duration ignores the monotonic session clock and prefers a kernel epoch", () => {
+  assert.equal(snapshotAttemptResult(f22({ simulation_time_s: 412.5 }),
+    { startSimSeconds: 400 }).durationSeconds, 12.5);
+  assert.equal(snapshotAttemptResult(f22({ simulation_time_s: 412.5 })).durationSeconds, null);
+  assert.equal(snapshotAttemptResult(f22({ simulation_time_s: 412.5, attempt_elapsed_s: 3 }),
+    { startSimSeconds: 400 }).durationSeconds, 3);
+});
+
+test("F-22 attempts store the contract and separate combat from recovery", () => {
+  const { book } = fixture();
+  book.begin({ activity: "Guns Only", startSimSeconds: 0 });
+  const boundary = book.finish(snapshotAttemptResult(f22({
+    combat_complete: true, sortie_outcome: "NONE", simulation_time_s: 95,
+  }), { combatResult: true, startSimSeconds: 0 }));
+  assert.equal(boundary.outcome, "Combat complete");
+  assert.equal(boundary.combat, "complete");
+  assert.equal(boundary.recovery, "open");
+  assert.equal(boundary.recovered, false);
+  assert.equal(boundary.rung, 0);
+  assert.equal(boundary.opponent, "COMPETENTx1");
+  assert.equal(boundary.assist, "manual");
+
+  const landed = snapshotAttemptResult(f22({
+    combat_complete: true, sortie_outcome: "VICTORY", runway_recovery_complete: true,
+    runway_touchdown_contact: true, runway_touchdown_survivable: true,
+  }));
+  assert.equal(landed.combat, "complete");
+  assert.equal(landed.recovery, "recovered");
+
+  const lost = snapshotAttemptResult(f22({ sortie_outcome: "DEFEAT" }));
+  assert.equal(lost.combat, "lost");
+  assert.equal(lost.recovery, "lost");
+
+  const left = snapshotAttemptResult(f22({ sortie_outcome: "NONE" }), { abandoned: true });
+  assert.equal(left.combat, "open");
+  assert.equal(left.recovery, "open");
+});
+
+test("comparisons are like-for-like: a harder opponent is not a regression", () => {
+  const { book } = fixture();
+  const fly = (overrides) => {
+    book.begin({ activity: "Guns Only", startSimSeconds: 0 });
+    return book.finish(snapshotAttemptResult(f22({ sortie_outcome: "DEFEAT", ...overrides })));
+  };
+  fly({ sortie_hits: 20 });
+  const veteran = fly({ sortie_rung: 1, sortie_opponent_skill: "VETERAN", sortie_hits: 2 });
+  assert.equal(compareAttempts(book.list(), veteran), "First attempt against this opponent");
+  const assisted = fly({ sortie_rung: 1, sortie_opponent_skill: "VETERAN", assisted_flight: true });
+  assert.equal(compareAttempts(book.list(), assisted), "First attempt against this opponent");
+  const again = fly({ sortie_rung: 1, sortie_opponent_skill: "VETERAN", sortie_hits: 4 });
+  assert.match(compareAttempts(book.list(), again), /^Hit rate \+2\.0 percentage points/);
 });

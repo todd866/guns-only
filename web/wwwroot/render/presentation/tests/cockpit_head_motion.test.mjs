@@ -3,6 +3,7 @@ import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
 import {
   applyCockpitMotionToCamera,
+  createCockpitHeadPresentation,
   cockpitMotionSample,
   createCockpitMotionState,
   resetCockpitMotionState,
@@ -120,4 +121,32 @@ test("Three adapter adds local motion to a base camera pose", () => {
   });
   assert.ok(camera.position.distanceTo(new THREE.Vector3(9.98, 20.01, 30)) < 1e-10);
   assert.ok(Math.abs(camera.quaternion.length() - 1) < 1e-12);
+});
+
+test("F-22 forward and padlock keep the exact commanded eye pose under fire, G and rates", () => {
+  const presentation = createCockpitHeadPresentation(THREE);
+  const camera = new THREE.PerspectiveCamera();
+  camera.position.set(10, 20, 30);
+  camera.rotation.set(.2, .3, .1);
+  const position = camera.position.clone(), quaternion = camera.quaternion.clone();
+  // A prior aircraft must not leave spring/recoil residue in the F-22.
+  presentation.update(new THREE.PerspectiveCamera(), { g_actual: 8, rounds_fired: 20 }, .1);
+  for (const padlock of [false, true]) for (const rounds_fired of [0, 20, 40]) {
+    const sample = presentation.update(camera, {
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate", padlock,
+      rounds_fired, g_actual: 9, pitch_rate_dps: 40, roll_rate_dps: 180,
+      buffet_pitch_deg: 5, pilot_peripheral_vision_01: .4,
+    }, .1);
+    assert.deepEqual(sample.translation, { x: 0, y: 0, z: 0 });
+    assert.deepEqual(sample.rotation, { pitch: 0, yaw: 0, roll: 0 });
+    assert.deepEqual(camera.position, position);
+    assert.deepEqual(camera.quaternion.toArray(), quaternion.toArray());
+  }
+});
+
+test("frozen aircraft retain their existing head presentation", () => {
+  const presentation = createCockpitHeadPresentation(THREE);
+  const camera = new THREE.PerspectiveCamera();
+  presentation.update(camera, { player_aircraft_id: "aircraft.f9f2", g_actual: 8 }, .1);
+  assert.notEqual(camera.position.y, 0);
 });
