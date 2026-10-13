@@ -116,6 +116,45 @@ public class FirstMergeOpeningAcceptanceTests {
         }
     }
 
+    sealed class GunWindow {
+        public double CoarseSeconds { get; private set; }
+        public double SolutionSeconds { get; private set; }
+
+        public void Observe(SimulationSession session, double elapsedSeconds) {
+            if (elapsedSeconds > 30.0 || !session.SelectedOpponentAlive
+                || !session.PlayerWeaponsAuthorized) return;
+            Vec3D toTarget = session.SelectedOpponentState.Position - session.Player.State.Position;
+            double nose = Math.Acos(Math.Clamp(
+                session.Player.BodyForward.Dot(toTarget.Normalized()), -1, 1));
+            if (toTarget.Length < 800.0 && nose < 12.0 * Math.PI / 180.0) CoarseSeconds += Dt;
+            if (session.PlayerGun.GunSolution) SolutionSeconds += Dt;
+        }
+    }
+
+    [Fact]
+    public void DestroyingAVisibleTargetStopsGunWindowAccumulation() {
+        var session = new SimulationSession();
+        session.StartBeat(Beats.ModernVisualMerge);
+        session.Begin();
+        var pilot = new HudPilot(Pilots[0]);
+        for (int tick = 0; tick < 12 * AircraftSim.TickHz && !session.PlayerGun.GunSolution; tick++) {
+            pilot.Drive(session);
+            session.StepFixed();
+        }
+        Assert.True(session.SelectedOpponentAlive);
+        Assert.True(session.PlayerGun.GunSolution);
+        var window = new GunWindow();
+        window.Observe(session, Dt);
+        Assert.Equal(Dt, window.CoarseSeconds);
+        Assert.Equal(Dt, window.SolutionSeconds);
+        Assert.True(session.PlayerGun.ApplyExternalDestruction(session.PlayerGun.SelectedTargetId));
+        Assert.True(session.OpponentPresent); // Wreck visibility does not mean an engageable target.
+        Assert.False(session.SelectedOpponentAlive);
+        for (int tick = 0; tick < AircraftSim.TickHz; tick++) window.Observe(session, (tick + 2) * Dt);
+        Assert.Equal(Dt, window.CoarseSeconds);
+        Assert.Equal(Dt, window.SolutionSeconds);
+    }
+
     static readonly HudPilotProfile[] Pilots = Enumerable.Range(0, 8).Select(seed =>
         new HudPilotProfile(
             $"hud-s{seed}",
@@ -131,7 +170,8 @@ public class FirstMergeOpeningAcceptanceTests {
         session.SetAssistedFlight(assisted);
         session.Begin();
         var pilot = new HudPilot(profile);
-        double coarse = 0.0, solution = 0.0, firstHit = double.NaN, presentEnded = double.NaN;
+        var window = new GunWindow();
+        double firstHit = double.NaN, presentEnded = double.NaN;
         double firstInView = double.NaN, minRange = double.PositiveInfinity;
         int roundsAtFirstHit = -1;
         bool fought = false;
@@ -148,10 +188,7 @@ public class FirstMergeOpeningAcceptanceTests {
             double nose = Math.Acos(Math.Clamp(session.Player.BodyForward.Dot(los), -1, 1));
             // Forward view: inside portrait's ~16.7 deg half-width horizontally is the strictest.
             if (double.IsNaN(firstInView) && nose < 16.0 * Math.PI / 180.0) firstInView = t;
-            if (t <= 30.0) {
-                if (range < 800.0 && nose < 12.0 * Math.PI / 180.0) coarse += Dt;
-                if (session.PlayerGun.GunSolution) solution += Dt;
-            }
+            window.Observe(session, t);
             if (double.IsNaN(presentEnded) && !session.Bandit.Presenting) presentEnded = t;
             if (session.Bandit is NeutralMergeBandit merge && merge.FirstPassComplete
                 && !merge.Presenting) fought = true;
@@ -164,7 +201,7 @@ public class FirstMergeOpeningAcceptanceTests {
                 trace(FormattableString.Invariant(
                     $"t={t:F1} r={range:F0} nose={nose * 180 / Math.PI:F1} sol={session.PlayerGun.GunSolution} pres={session.Bandit.Presenting} rnds={session.SortiePlayerRoundsFired} hits={session.SortiePlayerHits} G={session.Player.LastNz:F2} bank={p.Bank * 180 / Math.PI:F0} spd={p.Speed:F0}/{b.Speed:F0}"));
         }
-        return new OpeningRun(profile.Name, assisted, coarse, solution, firstInView, firstHit,
+        return new OpeningRun(profile.Name, assisted, window.CoarseSeconds, window.SolutionSeconds, firstInView, firstHit,
             roundsAtFirstHit, session.SortiePlayerRoundsFired, session.SortiePlayerHits,
             session.KillCount, presentEnded, fought, minRange);
     }
