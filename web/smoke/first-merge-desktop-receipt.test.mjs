@@ -30,7 +30,7 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { serveStatic } from "../wwwroot/render/hud/tests/harness/static_server.mjs";
 
-import { checkDesktopReceipt, WINDOW_BY_S, HIT_BY_S, KILL_TO_D1_S } from "./first-merge-desktop-acceptance.mjs";
+import { checkDesktopReceipt, createGunWindowTracker, WINDOW_BY_S, HIT_BY_S, KILL_TO_D1_S } from "./first-merge-desktop-acceptance.mjs";
 
 const VIEWPORT = { width: 1280, height: 720 };
 const COARSE_CONE_DEG = 12;
@@ -204,7 +204,8 @@ async function flyDesktop(browser, site, pilotName) {
 // [t, aimRightDeg, aimUpDeg, cue P/M/A, solution, range m, KCAS, rollMs, pitchMs, fireMs, bankDeg].
     const trace = [];
     receipt.trace = trace;
-    let contactS = null, windowStartS = null, coarseS = 0, firstHitS = null, roundsToFirstHit = null;
+    const gunWindows = createGunWindowTracker();
+    let contactS = null, windowStartS = null, firstHitS = null, roundsToFirstHit = null;
     let killS = null, d1S = null, solutionS = 0, prev = null, nextDecisionS = 0, endReason = "time";
     let fireS = 0, lastFireT = null;
     const wallDeadline = Date.now() + 300_000;
@@ -229,8 +230,8 @@ async function flyDesktop(browser, site, pilotName) {
       if (contactS === null && cue?.marker) { contactS = t; await frame("first-contact", t); }
       const coarse = cue?.marker && Math.hypot(cue.marker.right, cue.marker.up) < COARSE_CONE_DEG
         && Number(s.range) < COARSE_RANGE_M;
+      gunWindows.sample(t, coarse);
       if (prev && t <= WINDOW_BY_S) {
-        if (coarse && prev.coarse) coarseS += t - prev.t;
         if (cue?.solution && prev.solution) solutionS += t - prev.t;
       }
       if (down.has(KEYS.fire) && lastFireT !== null) fireS += t - lastFireT;
@@ -241,7 +242,7 @@ async function flyDesktop(browser, site, pilotName) {
       }
       if (killS === null && Number(s.kills) > 0) { killS = t; await frame("kill", t); }
       if (killS !== null && d1S === null && s.lesson === "D1") { d1S = t; await frame("d1", t); }
-      prev = { t, coarse: !!coarse, solution: cue?.solution === true };
+      prev = { t, solution: cue?.solution === true };
       if (d1S !== null && t >= d1S + 1) { endReason = "receipt-complete"; break; }
       if (killS !== null && t > killS + KILL_TO_D1_S) { endReason = "no-d1"; break; }
 
@@ -275,8 +276,9 @@ async function flyDesktop(browser, site, pilotName) {
     await frame("end", endT === null ? null : endT - t0);
     const r3 = (v) => v === null ? null : +v.toFixed(3);
     Object.assign(receipt, {
-      endReason, contactS: r3(contactS), firstWindowS: r3(windowStartS), coarseWindowS: +coarseS.toFixed(3),
-      solutionCueS: +solutionS.toFixed(3), triggerHeldS: +fireS.toFixed(3), firstHitS: r3(firstHitS),
+      endReason, contactS: r3(contactS), firstWindowS: r3(windowStartS), ...gunWindows.result(),
+      // Keep the hit and window endpoints unrounded so containment uses the sampled times.
+      solutionCueS: +solutionS.toFixed(3), triggerHeldS: +fireS.toFixed(3), firstHitS,
       roundsToFirstHit, killS: r3(killS), d1S: r3(d1S),
       end: await page.evaluate(() => ({ phase: globalThis.__gunsState?.session_phase,
         rounds: globalThis.__gunsState?.rounds_fired, kills: globalThis.__gunsState?.kill_count,
