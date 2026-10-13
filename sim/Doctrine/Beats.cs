@@ -670,7 +670,7 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         if (spec is { LessonIndex: >= 1 and <= 5 } lessonSpawn) {
             AircraftParams lessonAir = BanditAirForMount(lessonSpawn.Skill, lessonSpawn.Mount);
             BfmLesson lesson = BfmLesson.Get(lessonSpawn.LessonIndex);
-            AircraftState lessonInitial = lesson.Start(Player, lessonAir);
+            AircraftState lessonInitial = lesson.Start(Player, lessonAir, terrain);
             if (!lesson.Defensive)
                 return new NeutralMergeBandit(lessonInitial, lessonAir, lessonSpawn.Skill, terrain,
                     doctrineIndex: lessonSpawn.DoctrineIndex, presenting: true,

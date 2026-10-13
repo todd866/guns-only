@@ -35,17 +35,43 @@ public readonly record struct BfmLesson(
         _ => throw new System.ArgumentOutOfRangeException(nameof(index)),
     };
 
-    public AircraftState Start(in AircraftState player, AircraftParams air) {
+    const double TerrainSpawnClearanceM = 600.0;
+    const double InitialFlightPathM = 1600.0;
+
+    public AircraftState Start(in AircraftState player, AircraftParams air,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null) {
         Vec3D forward = player.ForwardDir();
         Vec3D right = new(System.Math.Cos(player.Chi), 0, -System.Math.Sin(player.Chi));
         Vec3D position = player.Position + forward * AlongM + right * LateralM
             + new Vec3D(0, VerticalM, 0);
         Vec3D towardPlayer = player.Position - position;
+        Vec3D initialHeading = Defensive
+            ? new Vec3D(towardPlayer.X, 0.0, towardPlayer.Z).Normalized()
+            : new Vec3D(System.Math.Sin(player.Chi + AngleOffDeg * System.Math.PI / 180.0),
+                0.0, System.Math.Cos(player.Chi + AngleOffDeg * System.Math.PI / 180.0));
+        position = TerrainAwarePosition(position, initialHeading, terrain);
+        towardPlayer = player.Position - position;
         double chi = Defensive ? System.Math.Atan2(towardPlayer.X, towardPlayer.Z)
             : player.Chi + AngleOffDeg * System.Math.PI / 180;
         double gamma = Defensive ? System.Math.Asin(towardPlayer.Y / towardPlayer.Length) : player.Gamma;
         return new(position, System.Math.Max(80, player.Speed + ClosureMps), gamma, chi, 0, air.MassKg);
     }
+
+    static Vec3D TerrainAwarePosition(in Vec3D authoredPosition, in Vec3D flightDirection,
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain) {
+        if (terrain is null) return authoredPosition;
+        Vec3D pathEnd = authoredPosition + flightDirection * InitialFlightPathM;
+        try {
+            double clearance = GunsOnly.Sim.Environment.TerrainQueries.MinimumClearanceM(
+                terrain, authoredPosition, pathEnd, maximumHorizontalStepM: 60.0);
+            if (clearance >= TerrainSpawnClearanceM) return authoredPosition;
+            return authoredPosition with { Y = authoredPosition.Y
+                + TerrainSpawnClearanceM - clearance };
+        } catch (ArgumentOutOfRangeException) {
+            return authoredPosition;
+        }
+    }
+
 }
 
 /// A held geometric proof, independent of the AI's tactical state and of frame rate.
