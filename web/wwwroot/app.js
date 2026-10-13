@@ -1,4 +1,5 @@
 import { attemptDurationSeconds } from "./render/shell/attempt_duration.js?v=__RELEASE_BUILD__";
+import { beginMissionCloudEntry } from "./render/shell/mission_cloud_entry.js?v=__RELEASE_BUILD__";
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
 import {
   createDirectorPersistence,
@@ -5887,7 +5888,7 @@ function beginFlight() {
   // starts from its mission-authored terrain radius and restored shadow/scenery policy.
   frameGovernor.reset(activeView);
   resetAdaptiveAiBudget({ recordInitial: true });
-  activeView?.beginCloudBreakEntry();
+  beginMissionCloudEntry(activeView, latestState);
   pauseReasons.delete("ready");
   bridgePauseApplied = false;
   renderPauseUi();
