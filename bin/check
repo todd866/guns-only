@@ -92,7 +92,7 @@ node --check web/smoke/remote-route-smoke.mjs
 node --check web/smoke/production-routes.mjs
 node --check web/smoke/prewarm-origin.mjs
 node --check web/smoke/cobra_authority.mjs
-run_node_tests web/smoke/production-routes.test.mjs
+run_node_tests web/smoke/production-routes.test.mjs web/smoke/first-merge-desktop-acceptance.test.mjs
 # The AH-1G crew chain (designation -> consent -> rounds away) is syntax-checked here but NOT
 # executed by the gate: it needs a hostile the turret can physically reach, which Hold the Bridge
 # only offers for the first ~20 s of mission time. Run it by hand against a published wwwroot --
@@ -320,7 +320,7 @@ if [ -z "${GUNS_SKIP_SMOKE:-}" ]; then
     (cd web/smoke && ./node_modules/.bin/playwright install chromium webkit)
   fi
   SMOKE_WWWROOT="$publish_dir/wwwroot" \
-    node --test --test-concurrency="$node_test_concurrency" web/smoke/smoke.test.mjs web/smoke/player-quality.test.mjs web/smoke/fireboss-audio-render-smoke.test.mjs web/smoke/cobra-audio-acoustics.test.mjs web/smoke/frozen-truth.test.mjs web/smoke/first-merge-receipt.test.mjs web/smoke/f22-result-backdrop.test.mjs
+    node --test --test-concurrency="$node_test_concurrency" web/smoke/smoke.test.mjs web/smoke/player-quality.test.mjs web/smoke/fireboss-audio-render-smoke.test.mjs web/smoke/cobra-audio-acoustics.test.mjs web/smoke/frozen-truth.test.mjs web/smoke/first-merge-receipt.test.mjs web/smoke/first-merge-desktop-receipt.test.mjs web/smoke/f22-result-backdrop.test.mjs
   # HUD geometry contract: numeric assertions through the real hud.js in headless Chromium
   # (waterline/FPV alpha gap, ladder tan-projection spacing, funnel-on-trajectory, bandit
   # marker). Lives with the browser gates because it shares the web/smoke Playwright install.
