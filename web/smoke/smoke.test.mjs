@@ -64,29 +64,43 @@ test("the smoke server preserves production terrain byte-range semantics", async
   }
 });
 
-test("a network-fresh shell purges an older worker before linking standalone modules", async () => {
+test("a network-fresh shell preserves the older cache while linking current standalone modules", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
+  const legacyWorker = `
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  if (url.pathname !== "/render/progression/campaign_progression.js") return;
+  event.respondWith(caches.match(event.request, { ignoreSearch: true }));
+});
+`;
   const site = await serveStatic(WWWROOT);
   const browser = await chromium.launch({ headless: true });
   try {
-    for (const { route, registrationOnly } of [
-      { route: "indoor/", registrationOnly: false },
-      { route: "medevac/", registrationOnly: false },
-      { route: "indoor/", registrationOnly: true },
-      { route: "medevac/", registrationOnly: true },
-    ]) {
+    for (const registrationOnly of [false, true]) {
       const context = await browser.newContext();
       try {
-        const page = await context.newPage();
-        const pageErrors = [];
-        page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-        await page.goto(`${site.url}missing-sw-seed.html`, { waitUntil: "load" });
-        // Register an intentionally STALE worker (?v= older than RELEASE_BUILD). The stamp
-        // ritual must not rewrite this to the current build — otherwise the preboot "stale
-        // worker" check never fires and unregister is skipped (Build 267 gate miss).
         const staleWorkerQuery = `v=${Math.max(1, Number(RELEASE_BUILD) - 1)}`;
-        await page.evaluate(async ({ registrationOnly, staleWorkerQuery }) => {
+        // Keep the stale fixture independent of the published worker's strict build stamp. The
+        // current worker remains the real published script so this exercises its atomic handoff.
+        await context.route("**/service-worker.js?*", (route) => {
+          const url = new URL(route.request().url());
+          if (url.searchParams.get("v") !== staleWorkerQuery.slice(2)) return route.continue();
+          return route.fulfill({
+            status: 200,
+            contentType: "application/javascript",
+            body: legacyWorker,
+          });
+        });
+        let seed = await context.newPage();
+        const seedErrors = [];
+        seed.on("pageerror", (error) => seedErrors.push(error.message ?? String(error)));
+        await seed.goto(`${site.url}missing-sw-seed.html`, { waitUntil: "load" });
+        // Register an intentionally stale worker (?v= older than RELEASE_BUILD). The current
+        // shell must finish its versioned handoff without linking the poisoned legacy module.
+        const legacyProbe = await seed.evaluate(async ({ registrationOnly, staleWorkerQuery }) => {
           const registration = await navigator.serviceWorker.register(
             `/service-worker.js?${staleWorkerQuery}`,
             { scope: registrationOnly ? "/legacy-scope/" : "/" },
@@ -108,7 +122,13 @@ test("a network-fresh shell purges an older worker before linking standalone mod
               });
             }
           } else {
-            await navigator.serviceWorker.ready;
+            await Promise.race([
+              navigator.serviceWorker.ready,
+              new Promise((_, reject) => setTimeout(
+                () => reject(new Error("legacy registration did not become ready")),
+                10_000,
+              )),
+            ]);
           }
           if (!registrationOnly && !navigator.serviceWorker.controller) {
             await new Promise((resolve, reject) => {
@@ -133,25 +153,55 @@ test("a network-fresh shell purges an older worker before linking standalone mod
               headers: { "content-type": "text/javascript" },
             }),
           );
+          if (!registrationOnly) {
+            return (await fetch("/render/progression/campaign_progression.js?probe=1")).text();
+          }
+          return "";
         }, { registrationOnly, staleWorkerQuery });
+        if (!registrationOnly) assert.equal(legacyProbe, "export const legacyPoison = true;");
 
-        await page.goto(`${site.url}${route}?audioQa=silent`, {
-          waitUntil: "load",
-          timeout: scaled(30000),
-        });
-        await page.locator("#release-quarantine").waitFor({
-          state: "visible",
-          timeout: scaled(15000),
-        });
-        assert.deepEqual(pageErrors, [],
-          `${route} linked against the poisoned legacy campaign module (${
-            registrationOnly ? "registration-only" : "controlling"
-          })`);
-        assert.equal(
-          await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length),
-          0,
-          `${route} did not unregister the older controlling worker`,
-        );
+        for (const route of ["indoor/", "medevac/"]) {
+          let page = seed;
+          const pageErrors = seedErrors;
+          await page.goto(`${site.url}${route}?preview=1&audioQa=silent`, {
+            waitUntil: "load",
+            timeout: scaled(30000),
+          });
+          if (!registrationOnly && route === "indoor/") {
+            await page.locator("#fatal.visible").waitFor({ timeout: scaled(35000) });
+            assert.match(await page.locator("#fatal-copy").textContent(), /Release update unavailable/);
+            await page.close();
+            page = await context.newPage();
+            page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+            seed = page;
+            await page.goto(`${site.url}${route}?preview=1&audioQa=silent`, {
+              waitUntil: "load",
+              timeout: scaled(30000),
+            });
+          }
+          await page.waitForFunction(
+            (path) => path.startsWith("indoor/")
+              ? globalThis.__gunsIndoor?.ready === true
+              : globalThis.__gunsMedevac?.ready === true,
+            route,
+            { timeout: scaled(20000) },
+          );
+          assert.equal(pageErrors.some((error) => /legacyPoison/.test(error)), false,
+            `${route} linked against the poisoned legacy campaign module (${registrationOnly ? "registration-only" : "controlling"})`);
+          const handoff = await page.evaluate(async () => ({
+            registrations: await navigator.serviceWorker.getRegistrations(),
+            controller: navigator.serviceWorker.controller?.scriptURL ?? null,
+            caches: await caches.keys(),
+          }));
+          assert.deepEqual(pageErrors, [],
+            `${route} reported page errors during stale-worker handoff (${registrationOnly ? "registration-only" : "controlling"})`);
+          assert.ok(handoff.registrations.length >= 1,
+            `${route} lost its current service-worker registration`);
+          assert.match(handoff.controller ?? "", new RegExp(`/service-worker\\.js\\?v=${RELEASE_BUILD}$`),
+            `${route} was not controlled by the current versioned service worker`);
+          assert.ok(handoff.caches.includes("guns-only-238"),
+            `${route} discarded the retained legacy cache during handoff`);
+        }
       } finally {
         await context.close();
       }
