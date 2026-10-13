@@ -130,9 +130,15 @@ public sealed class FightDirector {
             _timeToFirstHitSeconds = timeToFirstHitSeconds;
     }
 
-    /// The opening contract the stored rung earns for the NEXT sortie: the rung table only. The
-    /// boss/release machinery stays a NextSpawn-time decision and is not promised here.
-    public SpawnSpec PreviewEarnedOpening() => RungSpec(1);
+    /// Preview the actual next-sortie restaging path without committing this director's phase.
+    /// Restaging restores the persisted estimate (including the returning-pilot rung policy),
+    /// then lets NextSpawn choose ordinary, boss or release opposition. Use that same path so
+    /// the result instrument cannot promise a different opponent from Again/page reload.
+    public SpawnSpec PreviewEarnedOpening() {
+        var nextSortie = new FightDirector();
+        nextSortie.TryImportState(ExportState());
+        return nextSortie.NextSpawn(1);
+    }
 
     public void Observe(in EngagementReport report, bool advanceRamp = true,
         int hitsAlreadyCredited = 0) {
