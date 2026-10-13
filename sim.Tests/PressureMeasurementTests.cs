@@ -20,6 +20,9 @@ public sealed class PressureMeasurementTests {
         Assert.Equal(51, p.LiveSeconds);
         Assert.Equal(30, p.LongestPassive);
         Assert.Equal(30, p.LongestCredibleGap);
+        Assert.Equal(30, p.SecondsSinceCredibleAttack);
+        p.Add(true, 1, [Attacking]);
+        Assert.Equal(0, p.SecondsSinceCredibleAttack);
     }
     [Fact] public void FiringOutsideTheEnvelopeIsNotACredibleAttack() {
         var p = new PressureExposure();

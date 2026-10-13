@@ -222,6 +222,9 @@ public sealed class BanditPressureReport {
             if (Trace is not null && tick % 600 == 0)
                 Trace($"t={t:F1} range={range:F0} altP={own.Position.Y:F0} altB={bandit.Position.Y:F0} "
                     + $"spdP={own.Speed:F0} spdB={bandit.Speed:F0} nose={BanditFireControl.NoseErrorRad(bandit, ActorObservation.Capture(own, tick))*180/Math.PI:F1} rounds={rounds} "
+                    + $"gap={exposure.SecondsSinceCredibleAttack:F1} gammaB={bandit.Gamma * 180 / Math.PI:F1} "
+                    + $"attack={session.Bandit switch { ReactiveBandit r => r.AttackStatus, NeutralMergeBandit m => m.AttackStatus, _ => "other" }} "
+                    + $"command={(session.Bandit as IBanditDecisionTraceSource)?.AppliedCommand} "
                     + $"policy={(session.Bandit as IBanditDecisionTraceSource)?.PolicyMemory}");
         }
         stopwatch.Stop();

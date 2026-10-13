@@ -16,6 +16,7 @@ internal sealed class PressureExposure {
     public double LongestCredibleGap { get; private set; }
     public double FirstThreat { get; private set; } = double.NaN;
     public double FirstCredible { get; private set; } = double.NaN;
+    public double SecondsSinceCredibleAttack => _credibleRun;
     double _passiveRun, _credibleRun;
     public void Add(bool playerAlive, double dt, ReadOnlySpan<PressureActor> actors) {
         if (!playerAlive) return;
