@@ -1720,7 +1720,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
     );
     assert.ok(audioRuntime.sessionId, "audio QA session must be attributable to one page instance");
 
-    // Terrain must stream through real HTTP 206 ranges. When a server ignores Range,
+    // Uncached terrain must stream through real HTTP 206 ranges. When a server ignores Range,
     // TerrainBundleReader legitimately falls back to holding the WHOLE bundle — and because its
     // first read is a capability probe every other read awaits, one such server serializes the
     // entire terrain stream behind a single huge transfer. That used to surface only as an
@@ -1769,8 +1769,11 @@ test("the published web app boots to a running flight kernel (no fatal render er
         await ranged.dispose();
       }
     }
-    assert.ok(terrainTransfer.rangeSupportedPages >= 1,
-      "no terrain page confirmed HTTP 206 range streaming: " + JSON.stringify(terrainTransfer));
+    // Installation can finish before the first terrain read, so every page may already be
+    // saved. The branch above proves those responses are worker-owned AND their origins support
+    // 206; requiring an additional uncached page would make this depend on installation timing.
+    assert.ok(terrainTransfer.rangeSupportedPages + terrainTransfer.completeBundleFallbackPages >= 1,
+      "no terrain page confirmed range streaming or a verified worker response: " + JSON.stringify(terrainTransfer));
 
     // The per-frame path must ride the hot buffer: over a nominal 5.5-second window the full JSON
     // snapshot should be fetched only on cold_version edges + the five-second fallback, never
