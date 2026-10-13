@@ -11,7 +11,7 @@ namespace GunsOnly.Sim.Tests;
 /// <summary>
 /// THE INSTRUMENT FOR "IT'S MOSTLY PASSIVE, THEN IT KILLS ME, AND IT'S BORING" (owner, 2026-10-01).
 ///
-/// Flies the production F-22 visual merge at every ramp rung against a closed-loop scripted pilot
+/// Flies the production F-22 visual merge from historical ramp evidence against a closed-loop scripted pilot
 /// driving the real session (assists, physiology and Auto-GCAS included, through
 /// <see cref="DetentLayer.ScriptedPilotOverride"/>), and measures the opponent's pressure as a
 /// player feels it, at 10 Hz:
@@ -39,8 +39,14 @@ public sealed class BanditPressureReport {
         double FiringShare, string End, string Tactics, double MedianRangeM, double GunRangeShare,
         double MedianPlayerAltM = double.NaN, double MedianBanditAltM = double.NaN);
 
-    /// One rung's director state, built the same way production earns it.
+    /// Historical ramp evidence, except rung 2 explicitly earns the neutral Ace bookmark.
+    /// Legacy hit-only evidence (rung 1) now migrates to O1; retain that existing diagnostic
+    /// row here. The BFM sweep measures each lesson separately.
     public static string? RungState(int rung) {
+        // A legacy single kill now migrates to O2, a presenting Veteran. The pressure
+        // contract is for the neutral Ace (N), not the O3 presentation at the same assist rung.
+        // Earn N through normal BFM progression; do not bypass or change production migration.
+        if (rung == 2) return BfmFlightAcceptanceTests.StateFor(6);
         if (rung <= 0) return null;
         var director = new FightDirector();
         if (rung == 1) {
@@ -123,12 +129,7 @@ public sealed class BanditPressureReport {
         }
     }
 
-    public static PressureResult Fly(int rung, PilotProfile profile, double seconds, bool durable,
-        int seed = 0) {
-        // Seeds perturb only the player: a lateral spawn offset, a heading offset and reaction
-        // latency. Single deterministic fights are chaotic — one tuning change flips the whole path —
-        // so conclusions are drawn over seeds, never from one run.
-        profile = profile with { ReactionLatencyS = profile.ReactionLatencyS * (1.0 + 0.15 * seed) };
+    static SimulationSession Start(int rung, bool durable, int seed) {
         var session = new SimulationSession();
         string? state = RungState(rung);
         if (state is not null) session.ArmDirectorStateForNextStage(state);
@@ -145,7 +146,43 @@ public sealed class BanditPressureReport {
                 ? beat with { Combat = beat.CombatRules with { PlayerHitsToDefeat = 1000 } }
                 : beat;
         });
+        // Fail at staging if a future migration silently changes the subject of the measurement.
+        if (rung == 2) AssertNeutralAce(session);
         session.Begin();
+        return session;
+    }
+
+    static void AssertNeutralAce(SimulationSession session) {
+        Assert.Equal(BfmLesson.Get(6).Spawn(1), session.LastDirectorSpawn);
+        Assert.Equal("N", session.BfmLessonId);
+        Assert.Equal(2, session.DifficultyRung);
+        Assert.Equal(PilotSkill.Ace, session.SortieOpponentSkill);
+        Assert.Equal(PilotSkill.Ace, Assert.IsType<NeutralMergeBandit>(session.Bandit).Skill);
+        Assert.Equal(1, session.SortieOpponentCount);
+        Assert.Empty(session.Wingmen);
+        Assert.Equal(BanditMount.Baseline, session.SortieOpponentMount);
+        Assert.False(session.Bandit.Presenting);
+        BeatSetup authored = Beats.ModernVisualMerge();
+        Assert.Equal(authored.Bandit.Position, session.Bandit.State.Position);
+        Assert.Equal(authored.Bandit.Chi, session.Bandit.State.Chi);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void RungTwoPressureStagesTheProductionNeutralAce(int seed) {
+        var session = Start(2, durable: false, seed);
+        AssertNeutralAce(session);
+    }
+
+    public static PressureResult Fly(int rung, PilotProfile profile, double seconds, bool durable,
+        int seed = 0) {
+        // Seeds perturb only the player: a lateral spawn offset, a heading offset and reaction
+        // latency. Single deterministic fights are chaotic — one tuning change flips the whole path —
+        // so conclusions are drawn over seeds, never from one run.
+        profile = profile with { ReactionLatencyS = profile.ReactionLatencyS * (1.0 + 0.15 * seed) };
+        var session = Start(rung, durable, seed);
         var pilot = new ScriptedPlayer(profile);
 
         int ticks = (int)Math.Ceiling(seconds / Dt);
@@ -262,6 +299,7 @@ public sealed class BanditPressureReport {
             .Select(seed => Fly(rung, PilotProfile.Competent, 120.0, durable: false, seed)).ToList();
         string detail = string.Join("; ", runs.Select(r =>
             $"first {r.FirstRoundS:F0}s rounds {r.OpponentRounds} passive {r.PassiveShare:P0}"));
+        _output.WriteLine($"rung {rung}: {detail}");
         double earliest = runs.Where(r => !double.IsNaN(r.FirstRoundS))
             .Select(r => r.FirstRoundS).DefaultIfEmpty(double.PositiveInfinity).Min();
         Assert.True(earliest <= firstRoundWithinS,
