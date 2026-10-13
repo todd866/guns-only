@@ -97,3 +97,19 @@ test("the guns-only ready brief does not promise an opening ace pair or an endle
   assert.match(app, /Your opponent level and aiming assistance stay steady for this sortie\./);
   assert.match(app, /Gun hits and kills earn a harder next sortie\./);
 });
+
+test("a credited hit saves at once, before any engagement ends", () => {
+  const storage = memoryStorage();
+  const store = createDirectorPersistence({
+    storage,
+    exportState: () => V2_RUNG_2,
+    armState: () => {},
+    missionActive: () => true,
+  });
+  assert.equal(store.persistObservation(observed({ director_hits: 0 })), false);
+  assert.equal(store.persistObservation(observed({ director_hits: 0 })), false);
+  assert.equal(store.persistObservation(observed({ director_hits: 1, difficulty_rung: 1 })), true);
+  assert.equal(storage.getItem(DIRECTOR_STATE_STORAGE), V2_RUNG_2);
+  // Same evidence again is not another write.
+  assert.equal(store.persistObservation(observed({ director_hits: 1, difficulty_rung: 1 })), false);
+});
