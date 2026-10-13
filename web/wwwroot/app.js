@@ -4762,8 +4762,10 @@ function paintSortieGrade(state) {
 }
 
 function renderF22ResultInstrument(state, { finished, combatResult }) {
+  // The arena lane keeps its own matchmaking-aware Fly control and card.
   const phase = combatResult ? "combat"
-    : finished && !selectedPracticeExercise && isF22Sortie(state) ? "final" : null;
+    : finished && !selectedPracticeExercise && !isMultiplayerLane() && isF22Sortie(state)
+      ? "final" : null;
   if (!phase) {
     if (readyScreen.dataset.f22Result) delete readyScreen.dataset.f22Result;
     paintF22ResultInstrument(f22ResultRoot, null);
@@ -4786,7 +4788,7 @@ function renderF22ResultInstrument(state, { finished, combatResult }) {
 // Recover resumes the SAME aircraft into the existing recovery; Again starts a new sortie.
 const COMBAT_RESULT_HOLD_SECONDS = 2.0;
 function observeCombatResultBoundary(state) {
-  if (!state || selectedPracticeExercise || !isF22Sortie(state)
+  if (!state || selectedPracticeExercise || isMultiplayerLane() || !isF22Sortie(state)
       || state.session_phase !== "ACTIVE" || state.combat_complete !== true
       || state.player_rtb_active !== true) {
     if (state?.combat_complete !== true) combatCompleteSeenAt = null;
