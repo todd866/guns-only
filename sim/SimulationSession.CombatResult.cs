@@ -16,16 +16,16 @@ public sealed partial class SimulationSession {
     /// <summary>
     /// The finite F-22 combat task is done while the pilot is still flying: either the billed
     /// engagement cap was splashed before any knock-it-off (visual merge), or the Kestrel valley
-    /// pair is down. This is a COMBAT result only. It never implies a landing; the runway stop
+    /// engagement was won by the player before handoff. This is a COMBAT result only. It never implies a landing; the runway stop
     /// remains the separate recovery record (ConventionalRtbRecoveryCompleted).
     /// </summary>
     public bool FiniteCombatComplete =>
         _billedSortieComplete
         || (_beat.FirstRunValley is not null
             && _beat.Practice == PracticeExercise.None
-            && _killCount >= 1
-            && _opponentTerminalState != AircraftTerminalState.Flying
-            && !_wingmen.Any(static wingman => wingman.StillFighting));
+            // Completed player reports persist through recovery and reset with the sortie.
+            // Relief clearing an interrupted engagement can never create a player win.
+            && EngagementsWon > 0);
 
     /// Engagements the finite F-22 task bills: the valley pair is one engagement, the visual merge
     /// is ContinuousCombat.MaximumEngagements. Zero for every other beat.
@@ -47,7 +47,7 @@ public sealed partial class SimulationSession {
     public int SortieOpponentCount => _sortieOpponentCount;
     public int DirectorHits => _fightDirector.Hits;
     public int DirectorKills => _fightDirector.Kills;
-    /// What the stored (earned) rung opens the next sortie with.
+    /// The actual opening after next-sortie restore, including boss/release pacing.
     public SpawnSpec EarnedOpening => _fightDirector.PreviewEarnedOpening();
 
     void CaptureSortieContract(bool stagesOpponent, SpawnSpec? openingSpawn) {
