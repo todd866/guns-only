@@ -2316,6 +2316,9 @@ public sealed partial class SimulationSession {
             return;
         }
 
+        // Training success is committed only after this tick's damage and surface contacts.
+        // Otherwise a fatal contact on the qualifying tick can persist a passing bookmark.
+        ObserveDefensiveLesson();
         UpdateSelectedTargetClosure();
         _simTimeMs += FixedDeltaSeconds * 1000.0;
     }

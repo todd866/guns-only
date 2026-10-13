@@ -1275,7 +1275,6 @@ public sealed partial class SimulationSession {
             || _wingmen.Any(static wingman =>
                 wingman.StillFighting && wingman.Gun.GunSolution))
             _engagementCounters.SolutionSecondsConceded += FixedDeltaSeconds;
-        ObserveDefensiveLesson();
     }
 
     void CompleteEngagementIfEnded() {
