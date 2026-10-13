@@ -1187,6 +1187,13 @@ class CombatHud {
     const pipperAlpha = this._leadPipperEnvelope.update(rawPipperVisible, frame.dt);
     const pipperVisible = pipperAlpha > 0.01
       && Number.isFinite(this._lastLeadPipperX) && Number.isFinite(this._lastLeadPipperY);
+    // Where the drawn pipper sits and whether the drawn cue reads as a solution: the
+    // first-merge receipt's HUD-only pilot steers by exactly these pixels.
+    if (this._debug) {
+      this._debug.leadPipper = pipperVisible
+        ? { x: this._lastLeadPipperX, y: this._lastLeadPipperY, solution, cue: cue ?? null }
+        : { x: null, y: null, solution, cue: cue ?? null };
+    }
 
     if (pipperVisible) {
       const pipperX = this._lastLeadPipperX;
