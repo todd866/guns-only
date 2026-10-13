@@ -1,4 +1,9 @@
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
+import { attemptElapsedSeconds, attemptStartSeconds } from "./render/progression/attempt_clock.js";
+import { isF22Sortie } from "./render/debrief/f22_sortie_result.js";
+import {
+  f22ResultInstrument, paintF22ResultInstrument,
+} from "./render/debrief/f22_result_instrument.js";
 import {
   createDirectorPersistence,
   rampMissionActive as directorRampMissionActive,
@@ -543,6 +548,15 @@ const readyConfig = document.querySelector("#ready-config");
 const readySortieLabel = document.querySelector("#ready-sortie-label");
 const readyConfigLabel = document.querySelector("#ready-config-label");
 const readyControls = document.querySelector("#ready-controls");
+const readyCorrection = document.querySelector("#ready-correction");
+const f22ResultRoot = document.querySelector("#f22-result");
+// Session-clock reading at the current attempt's Begin (attempt_clock.js). Kept after the
+// logbook entry closes so the result instrument can still show this attempt's duration.
+let attemptStartSimSeconds = null;
+// Combat-result boundary latch: the player entity it was shown for, and when the kernel first
+// reported the finite fight complete (see observeCombatResultBoundary).
+let combatResultShownFor = null;
+let combatCompleteSeenAt = null;
 const readyPractice = document.querySelector("#ready-practice");
 const readyDeckConfig = document.querySelector("#ready-deck-config");
 const readyDeckButtons = [...document.querySelectorAll("[data-deck-configuration]")];
@@ -2818,7 +2832,7 @@ let logbookStorage;
 try { logbookStorage = window.localStorage; } catch { /* memory-only logbook */ }
 const pilotLogbook = createPilotLogbook({ storage: logbookStorage });
 const practiceCue = document.querySelector("#practice-cue");
-function finishLogbookAttempt(state = latestState, abandoned = false) {
+function finishLogbookAttempt(state = latestState, abandoned = false, { combatResult = false } = {}) {
   if (!pilotLogbook.pending) return null;
   const result = sortieResultCopy(state);
   const visualMerge = result?.f22Sortie ? null : visualMergeDebriefPresentation(state);
@@ -2828,7 +2842,10 @@ function finishLogbookAttempt(state = latestState, abandoned = false) {
     || visualMerge?.correction
     || result?.correction
     || (result?.f22Sortie ? "" : "Review the final exchange before your next attempt.");
-  return pilotLogbook.finish(snapshotAttemptResult(state, { abandoned, correction }));
+  return pilotLogbook.finish(snapshotAttemptResult(state, {
+    abandoned, correction, combatResult,
+    startSimSeconds: pilotLogbook.pendingStartSimSeconds,
+  }));
 }
 let campaignProfile = loadCampaignProfile();
 const requestedProgramId = new URLSearchParams(window.location.search).get("program");
@@ -4642,6 +4659,13 @@ function focusReadyScreen() {
   // Keep Enter-to-fly honest: when the primary action is available it owns initial focus. During
   // release verification or quarantine, focus a usable explanation/recovery action rather than a
   // disabled aircraft card.
+  // The F-22 result instrument hides the generic Fly button; its Again owns focus there.
+  const f22Again = readyScreen.dataset.f22Result
+    ? f22ResultRoot?.querySelector("#f22-again") : null;
+  if (f22Again) {
+    f22Again.focus({ preventScroll: true });
+    return;
+  }
   const target = !readyStart.disabled
     ? readyStart
     : readyRouteNotice?.querySelector("a[href]") ?? selectedMission;
@@ -4737,6 +4761,72 @@ function paintSortieGrade(state) {
   if (sortieGradeTime) sortieGradeTime.textContent = board.time;
 }
 
+function renderF22ResultInstrument(state, { finished, combatResult }) {
+  const phase = combatResult ? "combat"
+    : finished && !selectedPracticeExercise && isF22Sortie(state) ? "final" : null;
+  if (!phase) {
+    if (readyScreen.dataset.f22Result) delete readyScreen.dataset.f22Result;
+    paintF22ResultInstrument(f22ResultRoot, null);
+    return;
+  }
+  readyScreen.dataset.f22Result = phase;
+  const result = phase === "final" ? sortieResultCopy(state) : null;
+  const practiceExercise = phase === "final" ? readyPractice?.dataset.exercise || "" : "";
+  paintF22ResultInstrument(f22ResultRoot, f22ResultInstrument(state, {
+    phase,
+    durationSeconds: attemptElapsedSeconds(state, attemptStartSimSeconds),
+    correction: result?.safetyCorrection || result?.correction || "",
+    practiceExercise,
+    practiceLabel: practiceExercise ? readyPractice?.textContent || "Practice" : "",
+  }));
+}
+
+// Combat-result boundary. Once the kernel reports the finite F-22 fight complete with the pilot
+// still flying (and its RTB latched), hold the splash in view briefly, then pause on the result.
+// Recover resumes the SAME aircraft into the existing recovery; Again starts a new sortie.
+const COMBAT_RESULT_HOLD_SECONDS = 2.0;
+function observeCombatResultBoundary(state) {
+  if (!state || selectedPracticeExercise || !isF22Sortie(state)
+      || state.session_phase !== "ACTIVE" || state.combat_complete !== true
+      || state.player_rtb_active !== true) {
+    if (state?.combat_complete !== true) combatCompleteSeenAt = null;
+    return;
+  }
+  const key = String(state.player_entity_id || "");
+  if (combatResultShownFor === key) return;
+  const now = Number(state.simulation_time_s);
+  if (!Number.isFinite(now)) return;
+  if (combatCompleteSeenAt === null) combatCompleteSeenAt = now;
+  if (now - combatCompleteSeenAt < COMBAT_RESULT_HOLD_SECONDS) return;
+  combatResultShownFor = key;
+  recorder.event("lifecycle", "combat_result", {
+    engagements_won: Number(state.engagements_won) || 0,
+    kills: Number(state.kill_count) || 0,
+  });
+  setPauseReason("combat-result", true);
+}
+
+function recoverFromCombatResult() {
+  if (!pauseReasons.has("combat-result")) return false;
+  recorder.event("lifecycle", "combat_result_recover", {});
+  setPauseReason("combat-result", false);
+  sceneCanvas.focus({ preventScroll: true });
+  return true;
+}
+
+function againFromCombatResult() {
+  if (!pauseReasons.has("combat-result")) return false;
+  // Combat is recorded complete and recovery unattempted; it never claims a landing.
+  finishLogbookAttempt(latestState, false, { combatResult: true });
+  recorder.event("lifecycle", "combat_result_again", {});
+  pauseReasons.delete("combat-result");
+  if (!isMultiplayerLane()) {
+    const nextNode = nextCampaignNode(campaignProfile, selectedProgramNodeId);
+    if (nextNode) selectCampaignNode(nextNode.id, { focus: false });
+  }
+  return restartMissionNow();
+}
+
 function renderPauseUi(state = latestState) {
   const ready = pauseReasons.has("ready");
   const finished = pauseReasons.has("finished");
@@ -4746,13 +4836,16 @@ function renderPauseUi(state = latestState) {
   const background = pauseReasons.has("background");
   const sessionPaused = pauseReasons.has("session");
   const settingsPaused = pauseReasons.has("settings");
+  // The finite F-22 fight is over and the aircraft is still flying: an honest combat result
+  // with Again / Recover before any recovery is required (loop audit #2).
+  const combatResult = pauseReasons.has("combat-result");
   const richCasevacDebrief = finished && isCasevacState(state);
   // Mission authority owns the card identity. Settings, help, blur/background and a redundant
   // session hold may cover or inert this surface, but none of them may make staged valley
   // authority masquerade as the normal six-aircraft programme underneath.
   const firstRunReady = firstRunAutostartPending && ready && !finished;
   const showScreen = !help && !calibrating && !pauseReasons.has("notebook")
-    && (ready || finished || background || sessionPaused || settingsPaused);
+    && (ready || finished || combatResult || background || sessionPaused || settingsPaused);
   const brief = missionBrief();
   const handoff = combatHandoffPresentation(state);
   const handoffActionAvailable = sessionPaused
@@ -4763,8 +4856,10 @@ function renderPauseUi(state = latestState) {
   const startWasDisabled = readyStart.disabled;
 
   const practiceReady = ready && !!selectedPracticeExercise;
+  if (readyControls) readyControls.hidden = false;
+  if (readyCorrection) readyCorrection.hidden = true;
   readyScreen.dataset.mode = (firstRunReady || practiceReady)
-    ? "intro" : ready ? "program" : finished ? "debrief" : "pause";
+    ? "intro" : ready ? "program" : (finished || combatResult) ? "debrief" : "pause";
   paintSortieGrade(finished && !selectedPracticeExercise ? state : null);
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
   const casevacReady = ready && selectedBeat === 13;
@@ -4816,7 +4911,8 @@ function renderPauseUi(state = latestState) {
   if (readyMenuTitle) {
     readyMenuTitle.textContent = selectedPracticeExercise && finished ? "Practice result" : practiceReady ? "Practice one skill" : firstRunReady
       ? "Your first sortie" : ready
-        ? "Pick an aircraft" : finished ? "Sortie debrief" : "Flight paused";
+        ? "Pick an aircraft" : finished ? "Sortie debrief"
+        : combatResult ? "Combat result" : "Flight paused";
   }
   if (readyMenuHelp) {
     readyMenuHelp.textContent = (practiceReady ? "One objective, then review and repeat." : firstRunReady
@@ -4905,9 +5001,15 @@ function renderPauseUi(state = latestState) {
     const practiceControls = mobileControls
       ? "Left stick power/yaw · right stick pitch/roll · GUNS fires · Pause opens controls"
       : `${key("pull")}/${key("push")} pitch · ${key("rollLeft")}/${key("rollRight")} roll · ${key("powerUp")}/${key("powerDown")} power · ${key("fire")} fire · ${key("gearToggle")} gear · H controls · Esc pause`;
-    if (readyControls) readyControls.textContent = finished
-      ? sortieResultCopy(state)?.safetyCorrection || result?.correction || exercise.correction
-      : `${exercise.cue}\n${practiceControls}`;
+    // The control legend is hidden on touch; the result correction is not a legend, so it has
+    // its own always-visible row (loop audit #5).
+    if (readyControls) readyControls.textContent = finished ? "" : `${exercise.cue}\n${practiceControls}`;
+    if (readyControls) readyControls.hidden = finished;
+    if (readyCorrection && finished) {
+      readyCorrection.textContent = sortieResultCopy(state)?.safetyCorrection
+        || result?.correction || exercise.correction;
+      readyCorrection.hidden = !readyCorrection.textContent;
+    }
     readyStart.textContent = finished ? "Repeat practice" : "Start practice";
     readyHint.textContent = "Practice results are saved locally and do not count as a full sortie.";
   } else if (finished) {
@@ -5160,6 +5262,8 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
           ? "Finding opponent…"
           : finished ? "Find opponent & fly again" : "Find opponent & fly";
   }
+
+  renderF22ResultInstrument(state, { finished, combatResult });
 
   if (showScreen && !settingsPaused && !wasScreenVisible) queueMicrotask(focusReadyScreen);
   else if (showScreen && !settingsPaused && startWasDisabled && !readyStart.disabled)
@@ -5777,7 +5881,8 @@ function prepareMissionTerrain(index, stagedState) {
 function toggleSessionPause() {
   if (settingsScreen?.classList.contains("visible")) return closeSettings();
   if (incidentReplay?.active) return false;
-  if (pauseReasons.has("ready") || pauseReasons.has("finished")) return false;
+  if (pauseReasons.has("ready") || pauseReasons.has("finished")
+    || pauseReasons.has("combat-result")) return false;
   if (pauseReasons.has("session")) {
     setPauseReason("session", false);
     return true;
@@ -5876,8 +5981,11 @@ function beginFlight() {
   // covers missions with no asynchronous terrain warmup and hosts which preserve activation.
   requestMobileFullscreenFromGesture();
   bridge.Begin();
+  attemptStartSimSeconds = attemptStartSeconds(latestState);
+  combatResultShownFor = null;
+  combatCompleteSeenAt = null;
   pilotLogbook.begin({ activity: practiceExercise(selectedPracticeExercise)?.title || missionBrief().title,
-    exercise: selectedPracticeExercise || "" });
+    exercise: selectedPracticeExercise || "", startSimSeconds: attemptStartSimSeconds });
   // Ready/warmup frames are deliberately excluded from the performance sample, and every sortie
   // starts from its mission-authored terrain radius and restored shadow/scenery policy.
   frameGovernor.reset(activeView);
@@ -5897,6 +6005,8 @@ function beginFlight() {
 }
 
 function activateReadyAction() {
+  if (pauseReasons.has("combat-result")
+    && !pauseReasons.has("settings") && !pauseReasons.has("notebook")) return againFromCombatResult();
   if (buildIdentityBlocksSortie()) return false;
   if (pauseReasons.has("finished")) {
     if (selectedPracticeExercise) return restartMissionNow();
@@ -6048,6 +6158,26 @@ readyIntroReplay?.addEventListener("click", () => {
   clearFirstRunValleyReplayQuery();
 });
 readyHandoff?.addEventListener("click", requestCombatHandoffFromPause);
+f22ResultRoot?.querySelector("#f22-again")?.addEventListener("click", () => {
+  primeSelectedMissionAudio();
+  requestMobileFullscreenFromGesture();
+  if (pauseReasons.has("combat-result")) againFromCombatResult();
+  else readyStart.click();
+});
+f22ResultRoot?.querySelector("#f22-recover")?.addEventListener("click", recoverFromCombatResult);
+f22ResultRoot?.querySelector("#f22-practice")?.addEventListener("click", () => readyPractice?.click());
+f22ResultRoot?.querySelector("#f22-logbook")?.addEventListener("click", () => pilotNotebook.show());
+f22ResultRoot?.querySelector("#f22-aircraft")?.addEventListener("click", () => {
+  if (pauseReasons.has("combat-result")) finishLogbookAttempt(latestState, false, { combatResult: true });
+  returnToCatalogue();
+});
+f22ResultRoot?.querySelector("#f22-settings")?.addEventListener("click", openSettings);
+f22ResultRoot?.querySelector("#f22-opponent-info")?.addEventListener("click", (event) => {
+  const detail = f22ResultRoot.querySelector("#f22-opponent-detail");
+  if (!detail) return;
+  detail.hidden = !detail.hidden;
+  event.currentTarget.setAttribute("aria-expanded", String(!detail.hidden));
+});
 readyRestart?.addEventListener("click", repeatSelectedSortieNow);
 readyReturn?.addEventListener("click", returnToCatalogue);
 pauseButton?.addEventListener("click", toggleSessionPause);
@@ -12020,6 +12150,7 @@ async function boot() {
       latestState = state;
       persistDirectorObservation(state);
       if (state.session_phase === "FINISHED") finishLogbookAttempt(state);
+      observeCombatResultBoundary(state);
       if (practiceCue) {
         const exercise = practiceExercise(state.practice_exercise);
         practiceCue.hidden = !exercise || pauseReasons.size > 0 || state.session_phase !== "ACTIVE";

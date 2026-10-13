@@ -58,6 +58,9 @@ export function createPilotNotebook({ logbook, onPractice, onOpen, onClose }) {
       if (attempt.durationSeconds != null) facts.push(`${Math.round(attempt.durationSeconds)} seconds`);
       if (attempt.rounds > 0) facts.push(attempt.hits == null ? `${attempt.rounds} rounds` : `${attempt.hits} hits / ${attempt.rounds} rounds`);
       if (attempt.kills > 0) facts.push(`${attempt.kills} kills`);
+      const opponent = /^([A-Z]+)x(\d+)$/.exec(attempt.opponent || "");
+      if (opponent) facts.push(`vs ${opponent[1][0]}${opponent[1].slice(1).toLowerCase()} ×${opponent[2]}`);
+      if (attempt.combat === "complete") facts.push("Combat complete");
       if (attempt.valleyCleared) facts.push("Valley cleared");
       if (attempt.recovered) facts.push("Recovered");
       if (attempt.laps != null) facts.push(`${attempt.laps} laps`);
