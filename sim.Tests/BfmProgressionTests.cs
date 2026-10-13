@@ -78,6 +78,13 @@ public sealed class BfmProgressionTests {
             Assert.Equal(restored.NextSpawn(1), preview);
             Assert.Equal(lesson, preview.LessonIndex);
             Assert.Equal(before, director.ExportState());
+            var session = new SimulationSession();
+            session.ArmDirectorStateForNextStage(before);
+            session.StartBeat(Beats.ModernVisualMerge);
+            Assert.Equal(preview, session.LastDirectorSpawn);
+            Assert.Equal(preview.Skill, session.SortieOpponentSkill);
+            Assert.Equal(preview.Mount, session.SortieOpponentMount);
+            Assert.Equal(preview.FormationSize, session.SortieOpponentCount);
             if (BfmLesson.Get(lesson).Defensive) director.CompleteDefensiveLesson();
             else {
                 var kill = Report(SortieOutcome.Victory, hitsScored: 1, gunKills: 1);

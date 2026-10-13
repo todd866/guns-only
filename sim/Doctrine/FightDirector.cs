@@ -348,7 +348,9 @@ public sealed class FightDirector {
                 return false;
             // Legacy opt-in valley may have updated its rung while preserving the BFM
             // bookmark. Enabling BFM derives its assist rung from the lesson again.
-            if (!TryImportV2(parts, returningSkip: false)) return false;
+            // A legacy export has no lesson: retain its returning-pilot policy.
+            // A BFM bookmark must restore its exact lesson rung (including D1).
+            if (!TryImportV2(parts, returningSkip: lesson < 0)) return false;
             _lessonIndex = lesson;
             if (_bfmEnabled) EnableBfmLadder();
             return true;

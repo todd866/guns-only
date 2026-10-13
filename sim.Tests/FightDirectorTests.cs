@@ -61,7 +61,8 @@ public class FightDirectorTests {
         Assert.Equal(restored.NextSpawn(1), preview);
         var session = new SimulationSession();
         session.ArmDirectorStateForNextStage(before);
-        session.StartBeat(Beats.ModernVisualMerge);
+        // The opt-in valley retains the legacy director; the public merge now uses BFM.
+        session.StartBeat(Beats.ModernVisualMergeFirstRun);
         Assert.Equal(preview.Skill, session.SortieOpponentSkill);
         Assert.Equal(preview.Mount, session.SortieOpponentMount);
         Assert.Equal(preview.FormationSize, session.SortieOpponentCount);
