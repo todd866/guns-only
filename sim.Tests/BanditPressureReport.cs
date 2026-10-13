@@ -41,7 +41,10 @@ public sealed class BanditPressureReport {
         double FirstHitS = double.NaN, double LongestCredibleGapS = double.NaN,
         int Near25M = 0, int Near50M = 0, int Near100M = 0,
         double WallMicrosecondsPerLiveTick = double.NaN, int Seed = 0,
-        double FirstCredibleS = double.NaN);
+        double FirstCredibleS = double.NaN, int Attacks = 0, double MedianReturnS = double.NaN,
+        double MaxReturnS = double.NaN, int Opportunities = 0, int Overshoots = 0,
+        int AttacksBeforeFirstHit = -1, int NearBeforeFirstHit = -1,
+        Dictionary<string, double>? GapCauses = null);
 
     /// Historical ramp evidence, except rung 2 explicitly earns the neutral Ace bookmark.
     /// Legacy hit-only evidence (rung 1) now migrates to O1; retain that existing diagnostic
@@ -51,6 +54,8 @@ public sealed class BanditPressureReport {
         // contract is for the neutral Ace (N), not the O3 presentation at the same assist rung.
         // Earn N through normal BFM progression; do not bypass or change production migration.
         if (rung == 2) return BfmFlightAcceptanceTests.StateFor(6);
+        // Diagnostic cases 10..17 stage BFM lesson (case - 10) directly, e.g. 12 = O2 Veteran.
+        if (rung >= 10) return BfmFlightAcceptanceTests.StateFor(rung - 10);
         if (rung <= 0) return null;
         var director = new FightDirector();
         if (rung == 1) {
@@ -73,7 +78,17 @@ public sealed class BanditPressureReport {
         readonly PilotProfile _profile;
         readonly Queue<AircraftState> _seen = new();
         readonly int _latencyTicks;
+        readonly GunOpportunityPilot _gunnery = new();
+        const double TailSingularityRad = 150.0 * Math.PI / 180.0;
+        int _side;
         bool _trigger;
+        double LatchedSide(double solved) {
+            if (_side == 0) _side = solved < 0 ? -1 : 1;
+            return _side;
+        }
+        // Only the gunopp pilot latches its turn against a contact near dead astern (the
+        // lift-vector solve is singular there and the sign flips tick to tick). The audit chase
+        // pilot keeps that flaw: the pinned early-fire contracts were measured with it.
         public ScriptedPlayer(PilotProfile profile) {
             _profile = profile;
             _latencyTicks = Math.Max(1, (int)Math.Round(profile.ReactionLatencyS / Dt));
@@ -107,10 +122,24 @@ public sealed class BanditPressureReport {
                 return;
             }
 
+            if (_profile.Name == GunOpportunity.Name) {
+                var decision = _gunnery.Drive(own, contact);
+                var command = decision.Command;
+                double behind = Math.Acos(Math.Clamp(own.ForwardDir().Dot(toContact.Normalized()), -1.0, 1.0));
+                if (behind > TailSingularityRad)
+                    command = command with { BankTarget = LatchedSide(command.BankTarget) * 1.25,
+                        GDemand = Math.Max(command.GDemand, 4.0) };
+                else _side = 0;
+                session.Controls.ScriptedPilotOverride = command;
+                SetTrigger(session, decision.Trigger);
+                return;
+            }
+
             Vec3D line = (aim - own.Position).Normalized();
             double angleOff = Math.Acos(Math.Clamp(own.ForwardDir().Dot(line), -1.0, 1.0));
             double bank = Math.Clamp(Geometry.BankToPlaceLiftVectorOn(own, aim),
                 -_profile.MaxBankRad, _profile.MaxBankRad);
+
             double g = 1.0 + angleOff * 2.4;
             if (_profile.EnergyFloorMps > 0.0 && own.Speed < _profile.EnergyFloorMps) g = 1.0;
             g = Math.Clamp(g, 0.5, _profile.MaxG);
@@ -193,6 +222,9 @@ public sealed class BanditPressureReport {
         int ticks = (int)Math.Ceiling(seconds / Dt);
         var stopwatch = Stopwatch.StartNew();
         var exposure = new PressureExposure();
+        var fun = new FunProxyTracker();
+        int nearBeforeHit = -1;
+        var gapCauses = new Dictionary<string, double>();
         var passes = new PressureRoundTracker();
         var guns = new HashSet<GunKill>();
         var actors = new PressureActor[4];
@@ -248,6 +280,25 @@ public sealed class BanditPressureReport {
             }
             formation = Math.Max(formation, actorCount);
             exposure.Add(true, Dt, actors.AsSpan(0, actorCount));
+            // Long-gap attribution: which controller state and range band the silent time is in.
+            if (tick % 12 == 0 && exposure.SecondsSinceCredibleAttack > 10.0 && session.OpponentPresent) {
+                double gapRange = Geometry.Range(session.Player.State, session.Bandit.State);
+                string status = session.Bandit switch {
+                    ReactiveBandit r => r.AttackStatus, NeutralMergeBandit m => m.AttackStatus, _ => "other" };
+                string key = $"{status}@{(gapRange < 900 ? "<0.9" : gapRange < 1500 ? "0.9-1.5" : gapRange < 3500 ? "1.5-3.5" : ">3.5")}km";
+                gapCauses[key] = gapCauses.GetValueOrDefault(key) + 12 * Dt;
+            }
+            bool firstHitNow = !double.IsNaN(firstHit) && nearBeforeHit < 0;
+            if (firstHitNow) nearBeforeHit = passes.Near100;
+            if (session.OpponentPresent && session.PrimaryOpponentAlive) {
+                var me = session.Player.State;
+                Vec3D rel = session.Bandit.State.Position - me.Position;
+                double rangeNow = rel.Length;
+                double cos = rangeNow < 1 ? 1 : me.ForwardDir().Dot(rel) / rangeNow;
+                fun.Add(t, exposure.LastCredible,
+                    !session.Bandit.Presenting && rangeNow is >= 120 and <= 900 && cos >= Math.Cos(10 * Math.PI / 180),
+                    cos < 0, rangeNow, firstHitNow);
+            } else fun.Add(t, exposure.LastCredible, false, true, double.PositiveInfinity, firstHitNow);
             if (tick % 12 != 0 || !session.OpponentPresent) continue;
             var own = session.Player.State;
             var bandit = session.Bandit.State;
@@ -256,9 +307,10 @@ public sealed class BanditPressureReport {
             string tactic = session.Bandit.Presenting ? "Present"
                 : (session.Bandit as IBanditDecisionTraceSource)?.PolicyMemory.Tactic.ToString() ?? "?";
             tactics[tactic] = tactics.GetValueOrDefault(tactic) + 1;
-            if (Trace is not null && tick % 600 == 0)
+            if (Trace is not null && tick % TraceEveryTicks == 0)
                 Trace($"t={t:F1} range={range:F0} altP={own.Position.Y:F0} altB={bandit.Position.Y:F0} "
                     + $"spdP={own.Speed:F0} spdB={bandit.Speed:F0} nose={BanditFireControl.NoseErrorRad(bandit, ActorObservation.Capture(own, tick))*180/Math.PI:F1} rounds={rounds} "
+                    + $"aspectP={Math.Acos(Math.Clamp(own.ForwardDir().Dot((bandit.Position - own.Position).Normalized()), -1, 1)) * 180 / Math.PI:F0} "
                     + $"gap={exposure.SecondsSinceCredibleAttack:F1} gammaB={bandit.Gamma * 180 / Math.PI:F1} "
                     + $"attack={session.Bandit switch { ReactiveBandit r => r.AttackStatus, NeutralMergeBandit m => m.AttackStatus, _ => "other" }} "
                     + $"command={(session.Bandit as IBanditDecisionTraceSource)?.AppliedCommand} "
@@ -282,7 +334,8 @@ public sealed class BanditPressureReport {
             Math.Max(0, session.TimeSeconds - liveSeconds), passes.FirstNear100, firstHit,
             exposure.LongestCredibleGap, passes.Near25, passes.Near50, passes.Near100,
             stopwatch.Elapsed.TotalMilliseconds * 1000 / Math.Max(1, liveTicks), seed,
-            exposure.FirstCredible);
+            exposure.FirstCredible, fun.Attacks, fun.MedianReturn, fun.MaxReturn,
+            fun.Opportunities, fun.Overshoots, fun.AttacksBeforeFirstHit, nearBeforeHit, gapCauses);
     }
 
     static PressureActor ObserveActor(IBandit bandit, bool alive, bool trigger, bool armed,
@@ -302,12 +355,19 @@ public sealed class BanditPressureReport {
     }
 
     public static Action<string>? Trace;
+    static readonly int TraceEveryTicks = int.TryParse(System.Environment.GetEnvironmentVariable("PRESSURE_TRACE_TICKS"), out int every) ? every : 600;
+    static double Med(IEnumerable<double> xs) {
+        var v = xs.Where(double.IsFinite).OrderBy(x => x).ToList();
+        return v.Count == 0 ? double.NaN : v[v.Count / 2];
+    }
     static double Median(List<double> xs) => xs.Count == 0 ? double.NaN : xs.OrderBy(x => x).ElementAt(xs.Count / 2);
 
     /// PRESSURE_CASES="2:cohort,3:competent" narrows the sweep while iterating.
     static IEnumerable<(int Rung, PilotProfile Pilot)> Cases() {
         string? filter = System.Environment.GetEnvironmentVariable("PRESSURE_CASES");
-        foreach (int rung in new[] { 0, 1, 2, 3 })
+        int[] rungs = string.IsNullOrEmpty(filter) ? new[] { 0, 1, 2, 3 }
+            : new[] { 0, 1, 2, 3, 10, 11, 12, 13, 14, 15, 16, 17 };
+        foreach (int rung in rungs)
         foreach (PilotProfile pilot in Pilots)
             if (string.IsNullOrEmpty(filter) || filter.Split(',').Contains($"{rung}:{pilot.Name}"))
                 yield return (rung, pilot);
@@ -333,7 +393,9 @@ public sealed class BanditPressureReport {
             $"rung {rung}: only {runs.Sum(r => r.OpponentRounds)} rounds across 3 fights ({detail})");
     }
 
-    public static readonly PilotProfile[] Pilots = { PilotProfile.Cohort, PilotProfile.Competent };
+    /// Ballistic-lead gunnery pilot (GunOpportunityPilot) with Competent latency.
+    public static readonly PilotProfile GunOpportunity = PilotProfile.Competent with { Name = "gunopp" };
+    public static readonly PilotProfile[] Pilots = { PilotProfile.Cohort, PilotProfile.Competent, GunOpportunity };
 
     /// The full sweep: 8 cases x PRESSURE_SEEDS seeds x 240 s. Minutes, so opt-in:
     ///   PRESSURE_REPORT=1 PRESSURE_SEEDS=4 dotnet test sim.Tests \
@@ -361,6 +423,22 @@ public sealed class BanditPressureReport {
                         + $" | no-fire runs {runs.Count(x => x.OpponentRounds == 0)}"
                         + $" | shot down {runs.Count(x => x.HitsTaken >= 3)} | max5s {runs.Max(x => x.MaxHitsIn5S)}"
                         + $" | inside900 {runs.Average(x => x.GunRangeShare):P0} | mean secs {runs.Average(x => x.Seconds):F0}");
+                    _output.WriteLine($"FUN rung {rung} vs {pilot.Name} x{seeds}:"
+                        + $" first-attack {Med(runs.Select(x => x.FirstCredibleS)):F0}s"
+                        + $" | return med {Med(runs.Select(x => x.MedianReturnS)):F0}s max {runs.Select(x => x.MaxReturnS).Where(double.IsFinite).DefaultIfEmpty(double.NaN).Max():F0}s"
+                        + $" | attacks/min {runs.Sum(x => x.Attacks) / runs.Sum(x => x.Seconds) * 60:F2}"
+                        + $" | opps/min {runs.Sum(x => x.Opportunities) / runs.Sum(x => x.Seconds) * 60:F2}"
+                        + $" | overshoots/min {runs.Sum(x => x.Overshoots) / runs.Sum(x => x.Seconds) * 60:F2}"
+                        + $" | attacks-before-1st-hit {string.Join(",", runs.Select(x => x.AttacksBeforeFirstHit))}"
+                        + $" | near100-before-1st-hit {string.Join(",", runs.Select(x => x.NearBeforeFirstHit))}"
+                        + $" | hitsTaken {string.Join(",", runs.Select(x => x.HitsTaken))} | myHits {string.Join(",", runs.Select(x => x.PlayerHits))}"
+                        + $" | us/tick {runs.Average(x => x.WallMicrosecondsPerLiveTick):F1}");
+                    var causes = new Dictionary<string, double>();
+                    foreach (var r in runs)
+                        foreach (var kv in r.GapCauses ?? new())
+                            causes[kv.Key] = causes.GetValueOrDefault(kv.Key) + kv.Value;
+                    _output.WriteLine($"GAPS rung {rung} vs {pilot.Name}: " + string.Join(" ",
+                        causes.OrderByDescending(kv => kv.Value).Take(6).Select(kv => $"{kv.Key}={kv.Value:F0}s")));
                 }
                 foreach (PressureResult r in runs) {
                     _output.WriteLine(

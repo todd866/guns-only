@@ -17,6 +17,7 @@ internal sealed class PressureExposure {
     public double FirstThreat { get; private set; } = double.NaN;
     public double FirstCredible { get; private set; } = double.NaN;
     public double SecondsSinceCredibleAttack => _credibleRun;
+    public bool LastCredible { get; private set; }
     double _passiveRun, _credibleRun;
     public void Add(bool playerAlive, double dt, ReadOnlySpan<PressureActor> actors) {
         if (!playerAlive) return;
@@ -31,6 +32,7 @@ internal sealed class PressureExposure {
             credible |= !actor.Presenting && inRange && actor.NoseRad <= actor.ConeRad
                 && (actor.Trigger || actor.NearFiring);
         }
+        LastCredible = credible;
         if (threat && double.IsNaN(FirstThreat)) FirstThreat = LiveSeconds;
         if (credible && double.IsNaN(FirstCredible)) FirstCredible = LiveSeconds;
         LiveSeconds += dt;
@@ -99,4 +101,46 @@ internal sealed class PressureRoundTracker {
         if (distance <= 50 && prior > 50) Near50++;
         if (distance <= 25 && prior > 25) Near25++;
     }
+}
+
+/// Fun proxies (docs/grok-overhaul/design/f22-bandit-fun.md). An attack is a credible-pressure
+/// episode; credible samples within <see cref="MergeS"/> of each other belong to one attack.
+/// Return time is the live gap from one attack's end to the next attack's start. A player
+/// opportunity is an episode with the opponent inside 120-900 m and within 10 degrees of the
+/// player's nose; an overshoot is the opponent moving from the player's rear hemisphere to
+/// ahead of the 3-9 line inside 900 m. Both are geometry the opponent offered, not hits.
+internal sealed class FunProxyTracker {
+    public const double MergeS = 3.0;
+    public int Attacks { get; private set; }
+    public int Opportunities { get; private set; }
+    public int Overshoots { get; private set; }
+    public List<double> ReturnTimes { get; } = new();
+    public int AttacksBeforeFirstHit { get; private set; } = -1;
+    double _lastCredible = double.NegativeInfinity, _lastOpportunity = double.NegativeInfinity;
+    double _lastOvershoot = double.NegativeInfinity, _lastBehind = double.NegativeInfinity;
+
+    public void Add(double t, bool credible, bool opportunity, bool behindPlayer, double rangeM,
+        bool firstHitNow) {
+        if (credible) {
+            if (t - _lastCredible > MergeS) {
+                if (Attacks > 0) ReturnTimes.Add(t - _lastCredible);
+                Attacks++;
+            }
+            _lastCredible = t;
+        }
+        if (opportunity) {
+            if (t - _lastOpportunity > MergeS) Opportunities++;
+            _lastOpportunity = t;
+        }
+        if (behindPlayer) _lastBehind = t;
+        else if (rangeM < 900 && t - _lastBehind < 1.0 && t - _lastOvershoot > MergeS) {
+            Overshoots++;
+            _lastOvershoot = t;
+        }
+        if (firstHitNow && AttacksBeforeFirstHit < 0) AttacksBeforeFirstHit = Attacks;
+    }
+
+    public double MedianReturn => ReturnTimes.Count == 0 ? double.NaN
+        : ReturnTimes.OrderBy(x => x).ElementAt(ReturnTimes.Count / 2);
+    public double MaxReturn => ReturnTimes.Count == 0 ? double.NaN : ReturnTimes.Max();
 }
