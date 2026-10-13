@@ -108,6 +108,39 @@ public class SparringPartnerTests {
             ReactiveBandit.PresentHoldSeconds + 0.2);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LeadTrackingUsesTheNoseWhenItDisagreesWithTheFlightPath(bool noseOn) {
+        SimulationSession session = ProductionRungZero();
+        var merge = Assert.IsType<NeutralMergeBandit>(session.Bandit);
+        double off = 8.0 * Math.PI / 180.0;
+        int ticks = (int)((ReactiveBandit.PresentHoldSeconds + 0.1) * AircraftSim.TickHz);
+        for (int tick = 0; tick < ticks && merge.Presenting; tick++) {
+            AircraftState lead = merge.State;
+            double pitch = noseOn ? 0.0 : off;
+            Vec3D forward = new(0.0, Math.Sin(pitch), Math.Cos(pitch));
+            Vec3D right = new(1.0, 0.0, 0.0);
+            session.Player.AdoptExternalKinematics(session.Player.State with {
+                Position = lead.Position - new Vec3D(0, 0, 600),
+                Gamma = noseOn ? -off : 0.0,
+                Chi = 0.0,
+                Bank = 0.0,
+                BodyAttitude = QuaternionD.FromFrame(right, forward.Cross(right), forward),
+                BodyRates = default,
+            });
+            Vec3D los = (lead.Position - session.Player.State.Position).Normalized();
+            double noseError = Math.Acos(Math.Clamp(session.Player.BodyForward.Dot(los), -1, 1));
+            double pathError = Geometry.AngleOff(session.Player.State, lead);
+            Assert.Equal(noseOn, noseError < NeutralMergeBandit.LeadTrackingAngleRad);
+            Assert.Equal(!noseOn, pathError < NeutralMergeBandit.LeadTrackingAngleRad);
+            session.StepFixed();
+        }
+        Assert.Equal(!noseOn, merge.Presenting);
+        session.StepFixed(); // External lesson exit is consumed at the next decision boundary.
+        Assert.Equal(noseOn, merge.FirstPassComplete);
+    }
+
     [Fact]
     public void ProductionRungZeroLeadStillEndsByTheCapWhenThePlayerLoitersBehind() {
         SimulationSession session = ProductionRungZero();

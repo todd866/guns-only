@@ -319,19 +319,20 @@ public sealed class NeutralMergeBandit :
             return;
         }
         double range = Geometry.Range(player, _mergeSim.State);
-        double angleOff = Geometry.AngleOff(player, _mergeSim.State);
-        bool tracking = range <= ReactiveBandit.PresentFunnelRangeM
-            && angleOff <= LeadTrackingAngleRad;
-        _presentHeldSeconds = tracking ? _presentHeldSeconds + dt : 0.0;
-        if (_presentHeldSeconds >= ReactiveBandit.PresentHoldSeconds) {
-            _presenting = false;
-            return;
-        }
         if (!_endPresentOnProximity) return;
         bool near = range <= LeadProximityRangeM;
         _presentProximitySeconds = near ? _presentProximitySeconds + dt : 0.0;
         if (_presentProximitySeconds >= ReactiveBandit.PresentProximitySeconds)
             _presenting = false;
+    }
+
+    /// The session judges the lesson using the player's authoritative gun boresight. Contact
+    /// observations deliberately omit body attitude; their flight path cannot prove nose tracking.
+    /// Only the resulting lesson predicate crosses into this authored controller, not AI truth.
+    internal void ObserveLeadTracking(bool tracking, double dt) {
+        if (_presentation != OpeningPresentation.Lead || !Presenting || _fight is not null) return;
+        _presentHeldSeconds = tracking ? _presentHeldSeconds + dt : 0.0;
+        if (_presentHeldSeconds >= ReactiveBandit.PresentHoldSeconds) EndPresentation();
     }
 
     /// A constant, level, gentle turn (or wings level when the bank is zero) with power on a simple
