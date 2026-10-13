@@ -635,11 +635,11 @@ public class SnapshotHotFrameTests {
         GunKill playerGun = session.PlayerGun;
         long primaryTargetId = playerGun.SelectedTargetId;
         var shooter = new AircraftState(
-            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            new Vec3D(0, 3000, 0), 0.0, 0.0, 0.0, 0.0,
             FlightModel.F22APublicDataSurrogate.MassKg,
             QuaternionD.Identity);
         var syntheticPrimary = shooter with {
-            Position = new Vec3D(0.0, 0.0, 100.0)
+            Position = new Vec3D(0.0, 3000.0, 100.0)
         };
         var primaryTargets = new[] {
             new GunTarget(primaryTargetId, syntheticPrimary)
@@ -658,7 +658,7 @@ public class SnapshotHotFrameTests {
 
         Wingman wingman = session.Wingmen[0];
         var offAxisPlayer = shooter with {
-            Position = new Vec3D(500.0, 0.0, 500.0)
+            Position = new Vec3D(500.0, 3000.0, 500.0)
         };
         wingman.Gun.Step(true, shooter, offAxisPlayer, 0.0);
         Assert.Single(wingman.Gun.RoundsInFlight);

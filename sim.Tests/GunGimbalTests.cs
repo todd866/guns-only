@@ -1,5 +1,6 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
 
 namespace GunsOnly.Sim.Tests;
 
@@ -24,6 +25,16 @@ public sealed class GunGimbalTests {
         double yaw = yawDeg * Deg;
         return new GunTarget(id, State(new Vec3D(Math.Sin(yaw) * range, 0.0,
             Math.Cos(yaw) * range)));
+    }
+
+    sealed class FlatTerrain(double heightM) : ITerrainSurface {
+        public TerrainBounds Bounds { get; } = new(-10_000, 10_000, -10_000, 10_000);
+        public double HorizontalResolutionM => 5.0;
+        public double MaximumHeightM => heightM;
+        public bool TrySample(double eastM, double northM, out TerrainSample sample) {
+            sample = new TerrainSample(heightM, new Vec3D(0, 1, 0));
+            return Bounds.Contains(eastM, northM);
+        }
     }
 
     [Fact]
@@ -68,6 +79,51 @@ public sealed class GunGimbalTests {
     }
 
     [Fact]
+    public void TrackingIsTrueOnlyAfterTheMountSettlesOnAnEligibleLead() {
+        var gun = new GunKill(ammo: 2) { Gimbal = GunGimbalConfig.ForAssist(1.0) };
+        AircraftState own = State(Vec3D.Zero);
+        GunTarget target = Target(1, 5.0);
+
+        gun.Step(false, own, target.Id, new[] { target }, 0.01);
+        Assert.False(gun.GimbalTracking);
+        gun.Step(false, own, target.Id, new[] { target }, 1.0);
+        Assert.True(gun.GimbalTracking);
+
+        GunTarget outside = Target(2, 20.0);
+        gun.Step(false, own, outside.Id, new[] { outside }, 0.01);
+        Assert.False(gun.GimbalTracking);
+    }
+
+    [Fact]
+    public void MuzzleIsAtTheNoseStationAndRotatesWithTheBody() {
+        var gun = new GunKill(ammo: 1) { Gimbal = GunGimbalConfig.ForAssist(1.0) };
+        AircraftState own = State(new Vec3D(20, 30, 40), AimAt(90.0));
+
+        Vec3D muzzle = gun.MuzzlePosition(own);
+        Vec3D expected = own.Position + own.BodyAttitude.Rotate(new Vec3D(0, 0, 9.6));
+
+        Assert.Equal(expected.X, muzzle.X, 12);
+        Assert.Equal(expected.Y, muzzle.Y, 12);
+        Assert.Equal(expected.Z, muzzle.Z, 12);
+        Assert.Equal(9.6, (muzzle - own.Position).Length, 12);
+    }
+
+    [Fact]
+    public void NoseMountCannotShootBackIntoTheF22AcrossTheFullAssistCone() {
+        double halfAngle = GunGimbalConfig.ForAssist(1.0).ConeHalfAngleRad;
+        Vec3D muzzle = new(0, 0, 9.6);
+        for (int azimuth = 0; azimuth < 360; azimuth += 15) {
+            double phi = azimuth * Deg;
+            Vec3D direction = new(
+                Math.Sin(halfAngle) * Math.Cos(phi),
+                Math.Sin(halfAngle) * Math.Sin(phi),
+                Math.Cos(halfAngle));
+            Assert.False(AirframeHitGeometry.F22.TryBodyEntry(
+                muzzle, direction * 100.0, out _), $"self hit at azimuth {azimuth}");
+        }
+    }
+
+    [Fact]
     public void NoAssistLeavesBarrelOnBodyAxis() {
         var gun = new GunKill(ammo: 1) { Gimbal = GunGimbalConfig.ForAssist(0.0) };
         AircraftState own = State(Vec3D.Zero, AimAt(20.0));
@@ -88,6 +144,8 @@ public sealed class GunGimbalTests {
         AircraftState own = State(Vec3D.Zero);
         GunTarget target = Target(1, 5.0);
 
+        gun.Step(false, own, target.Id, new[] { target }, 1.0);
+        Assert.True(gun.GimbalTracking);
         gun.Step(true, own, target.Id, new[] { target }, 0.0);
         GunRound round = Assert.Single(gun.RoundsInFlight);
         Vec3D releasedAxis = round.Velocity.Normalized();
@@ -95,7 +153,9 @@ public sealed class GunGimbalTests {
             new[] { target }, 0.25);
 
         Assert.Contains(gun.RoundsInFlight, current =>
-            current.Id == round.Id && current.Velocity.Normalized().X == releasedAxis.X);
+            current.Id == round.Id
+                && Math.Abs(current.Velocity.X - round.Velocity.X) < 1e-12
+                && Math.Abs(current.Velocity.Z - round.Velocity.Z) < 1e-12);
     }
 
     [Fact]
@@ -122,7 +182,7 @@ public sealed class GunGimbalTests {
 
         gun.Step(false, own, target.Id, new[] { target }, Dt);
         Vec3D axis = gun.BarrelDirection(own);
-        Vec3D expected = own.Position + axis * GunKill.MuzzleOffsetM
+        Vec3D expected = gun.MuzzlePosition(own)
             + (own.VelocityVector() + axis * gun.Profile.MuzzleVelocityMps)
                 * gun.LeadTimeOfFlight
             + new Vec3D(0, -0.5 * GunKill.GravityMps2
@@ -132,4 +192,101 @@ public sealed class GunGimbalTests {
         Assert.Equal(expected.Y, gun.PredictedImpact(own).Y, 9);
         Assert.Equal(expected.Z, gun.PredictedImpact(own).Z, 9);
     }
+
+    [Fact]
+    public void TrueVolumeTargetCanBeHitByTheActualUnguidedRound() {
+        const double range = 550.0;
+        const double yaw = 5.0 * Deg;
+        double tof = (range - 9.6) / GunKill.MuzzleVelocityMps;
+        AircraftState own = State(Vec3D.Zero);
+        GunTarget target = new(1, State(new Vec3D(Math.Sin(yaw) * range,
+            -0.5 * GunKill.GravityMps2 * tof * tof, Math.Cos(yaw) * range)));
+        var gun = new GunKill(ammo: 1, hitsToKill: 1, hitRadiusM: 0.2,
+            targetGeometry: AirframeHitGeometry.Su27) {
+            Gimbal = GunGimbalConfig.ForAssist(1.0)
+        };
+
+        gun.Step(false, own, target.Id, new[] { target }, 1.0);
+        Assert.True(gun.GimbalTracking);
+        gun.Step(true, own, target.Id, new[] { target }, 0.0);
+        for (int tick = 0; tick < 120 && gun.TotalHitCount == 0; tick++)
+            gun.Step(false, own, target.Id, new[] { target }, Dt);
+
+        Assert.Equal(1, gun.TotalHitCount);
+        Assert.Equal(FightOutcome.Splash, gun.Outcome);
+
+        var none = new GunKill(ammo: 1, hitsToKill: 1, hitRadiusM: 0.2,
+            targetGeometry: AirframeHitGeometry.Su27) {
+            Gimbal = GunGimbalConfig.ForAssist(0.0)
+        };
+        none.Step(true, own, target.Id, new[] { target }, 0.0);
+        for (int tick = 0; tick < 120 && none.TotalHitCount == 0; tick++)
+            none.Step(false, own, target.Id, new[] { target }, Dt);
+        Assert.Equal(0, none.TotalHitCount);
+    }
+
+    [Fact]
+    public void FirePathSafetyInhibitsReleaseAndMarksTheInstrument() {
+        var gun = new GunKill(ammo: 2) { Gimbal = GunGimbalConfig.ForAssist(1.0) };
+        gun.FirePathClear = (_, _, _) => false;
+        AircraftState own = State(Vec3D.Zero);
+        GunTarget target = Target(1, 2.0);
+
+        gun.Step(true, own, target.Id, new[] { target }, 0.1);
+
+        Assert.True(gun.GimbalFireInhibited);
+        Assert.False(gun.GimbalTracking);
+        Assert.Equal(0, gun.RoundsFired);
+    }
+
+    [Fact]
+    public void FireSafetyRejectsTerrainAndFriendlyAirframePaths() {
+        Vec3D muzzle = new(0, 2000, 0);
+        Vec3D velocity = new Vec3D(0, 0, 500);
+        Assert.True(GunFireSafety.PathClear(muzzle, velocity, 0.25,
+            terrain: null, friendly: null));
+
+        AircraftState friendly = State(new Vec3D(0, 2000, 100));
+        Assert.False(GunFireSafety.PathClear(muzzle, velocity, 0.25,
+            terrain: null, friendly));
+
+        Assert.False(GunFireSafety.PathClear(muzzle, velocity, 1.0,
+            new FlatTerrain(2000.0), friendly: null));
+    }
+    [Theory]
+    [InlineData(0, 12)]
+    [InlineData(1, 12)]
+    [InlineData(2, 6)]
+    [InlineData(3, 6)]
+    [InlineData(4, 0)]
+    [InlineData(6, 0)]
+    public void LessonSelectsTheSameGunAssistOnDesktopAndPhone(int lesson, double degrees) {
+        var session = BfmFlightAcceptanceTests.Start(lesson);
+        Assert.Equal(degrees, session.PlayerGun.GimbalConeHalfAngleRad / Deg, 9);
+        session.SetAssistedFlight(false);
+        session.SetTouchControlModality(false);
+        Assert.Equal(degrees, session.PlayerGun.GimbalConeHalfAngleRad / Deg, 9);
+        Assert.False(session.OpponentGun.HasGimbal);
+    }
+
+    [Fact]
+    public void StagingTheNextOpponentPreservesPhysicalMountPositionAndConfig() {
+        var gun = new GunKill { Gimbal = GunGimbalConfig.ForAssist(1) };
+        AircraftState own = State(Vec3D.Zero);
+        GunTarget target = Target(1, 5);
+        gun.Step(false, own, target.Id, new[] { target }, 1);
+        Assert.True(gun.ApplyExternalDestruction(target.Id));
+        GunKill next = gun.CreateForStagedNextTarget();
+        Assert.Equal(gun.BarrelDirection(own), next.BarrelDirection(own));
+        Assert.Equal(gun.Gimbal, next.Gimbal);
+        Assert.False(next.GimbalTracking);
+    }
+
+    [Fact]
+    public void FrozenValleyKeepsItsFixedGun() {
+        var session = new SimulationSession();
+        session.StartBeat(Beats.ModernVisualMergeFirstRun);
+        Assert.False(session.PlayerGun.HasGimbal);
+    }
+
 }

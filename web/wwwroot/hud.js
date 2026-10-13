@@ -144,6 +144,31 @@ function finiteHudNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+/**
+ * Return the kernel's current gun intercept in render-world coordinates.
+ *
+ * The kernel publishes positions in the simulation frame (Z north); the WebGL/HUD
+ * frame mirrors Z. Frozen modes without a mount retain their existing sight.
+ * A mounted gun at assist none still publishes its true fixed-axis impact.
+ */
+export function gunImpactCueInput(state) {
+  const coneDeg = finiteHudNumber(state?.gun_gimbal_cone_deg);
+  const x = finiteHudNumber(state?.gun_impact_x);
+  const y = finiteHudNumber(state?.gun_impact_y);
+  const z = finiteHudNumber(state?.gun_impact_z);
+  if (!(state?.gun_gimbal_mounted === true || coneDeg > 0) || x === null || y === null || z === null) return null;
+  return {
+    point: { x, y, z: -z },
+    coneDeg,
+    gimbalDeg: finiteHudNumber(state?.gun_gimbal_deg) ?? 0,
+    barrel: {
+      x: finiteHudNumber(state?.gun_barrel_x),
+      y: finiteHudNumber(state?.gun_barrel_y),
+      z: finiteHudNumber(state?.gun_barrel_z),
+    },
+  };
+}
+
 function controlBindingLabel(code, fallback) {
   const labels = {
     ArrowDown: "DOWN", ArrowUp: "UP", ArrowLeft: "LEFT", ArrowRight: "RIGHT",
@@ -1119,7 +1144,9 @@ class CombatHud {
     }
     this._lastHudHits = hits;
     const hitFlash = now < this._hitFlashUntil;
-    const solution = frame.visualGunSolution === true;
+    const solution = state.gun_gimbal_cone_deg > 0
+      ? state.gun_gimbal_tracking === true && frame.visualGunSolution === true
+      : frame.visualGunSolution === true;
     const ctx = this.ctx;
     const overheated = state.gun_overheat === true;
     const cue = gunCue(state, hitFlash, solution);
@@ -1168,9 +1195,19 @@ class CombatHud {
 
     this.drawGunFunnel(frame, anchor);
 
+    // Assisted sorties use the actual barrel's future impact, not the requested aim line.
+    // The existing pipper's closed green ring means acquired; no extra HUD instrument.
+    const impactCue = gunImpactCueInput(state);
+    const sightPoint = impactCue
+      ? this.worldPoint.set(impactCue.point.x, impactCue.point.y, impactCue.point.z)
+      : leadPipper;
+    if (this._debug) this._debug.gunImpact = impactCue ? {
+      ...impactCue, tracking: state.gun_gimbal_tracking === true,
+    } : null;
+
     let rawPipperVisible = false;
-    if (state.lead_valid === true && leadPipper && insideRoundLife(state)) {
-      const leadProjection = this.project(leadPipper, camera, this.projectionA);
+    if (state.lead_valid === true && sightPoint && insideRoundLife(state)) {
+      const leadProjection = this.project(sightPoint, camera, this.projectionA);
       if (!leadProjection.behind && Number.isFinite(leadProjection.x)
         && Number.isFinite(leadProjection.y)) {
         // Draw the exact world point emitted by GunKill through the same live PerspectiveCamera
@@ -1256,6 +1293,8 @@ class CombatHud {
     const envelope = gunFunnelEnvelope(profile);
     if (!gunFunnelUsable(state, envelope)) return;
 
+    // Mounted guns publish the future path of a round released NOW from the actual barrel.
+    // Legacy fixed guns retain the steady-turn EEGS approximation below.
     // A REAL gunsight funnel: the kernel's gun_trajectory is the bullets-in-the-air locus (where
     // rounds fired over the last second actually ARE — gravity droop and own-ship rotation lag
     // included, closed form). Each sample is projected through the SAME live camera that renders
@@ -6058,6 +6097,7 @@ class CombatHud {
         gunCrossPx: null,
         ladderRungs: [],
         funnel: null,
+        gunImpact: null,
         banditPx: null,
         gunHeat: null,
         gunOverheatAnnunciation: null,

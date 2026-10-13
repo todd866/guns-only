@@ -860,6 +860,16 @@ internal static class SnapshotProjection {
             + $"\"lead_valid\":{(opponentPresent && !Session.WeaponsInhibited && _gunKill!.HasLeadSolution ? "true" : "false")},"
             + $"\"lead_solution_valid\":{(opponentPresent && _gunKill!.HasLeadSolution ? "true" : "false")},"
             + $"\"lead_x\":{(opponentPresent ? _gunKill!.LeadPipper.X : 0.0):F3},\"lead_y\":{(opponentPresent ? _gunKill!.LeadPipper.Y : 0.0):F3},\"lead_z\":{(opponentPresent ? _gunKill!.LeadPipper.Z : 0.0):F3},"
+            + $"\"gun_gimbal_mounted\":{(_gunKill?.HasGimbal == true ? "true" : "false")},"
+            + $"\"gun_gimbal_tracking\":{(_gunKill?.GimbalTracking == true ? "true" : "false")},"
+            + $"\"gun_gimbal_cone_deg\":{(_gunKill?.GimbalConeHalfAngleRad ?? 0) * 180 / Math.PI:F3},"
+            + $"\"gun_gimbal_deg\":{(_gunKill?.GimbalOffsetRad ?? 0) * 180 / Math.PI:F3},"
+            + $"\"gun_barrel_x\":{(_gunKill?.BarrelDirection(s).X ?? 0):F5},"
+            + $"\"gun_barrel_y\":{(_gunKill?.BarrelDirection(s).Y ?? 0):F5},"
+            + $"\"gun_barrel_z\":{(_gunKill?.BarrelDirection(s).Z ?? 0):F5},"
+            + $"\"gun_impact_x\":{(_gunKill?.PredictedImpact(s).X ?? 0):F3},"
+            + $"\"gun_impact_y\":{(_gunKill?.PredictedImpact(s).Y ?? 0):F3},"
+            + $"\"gun_impact_z\":{(_gunKill?.PredictedImpact(s).Z ?? 0):F3},"
             + $"\"lead_tof\":{(opponentPresent ? _gunKill!.LeadTimeOfFlight : 0.0):F4},\"ammo\":{(_gunKill?.AmmoRemaining ?? 0)},"
             + $"\"gun_heat\":{(_gunKill?.BarrelHeat ?? 0.0):F3},"
             + $"\"gun_overheat\":{(_gunKill?.BarrelOverheated == true ? "true" : "false")},"
@@ -867,12 +877,13 @@ internal static class SnapshotProjection {
             + $"\"gun_max_flight_s\":{playerGunProfile.MaximumFlightSeconds:F3},"
             + $"\"target_wingspan_m\":{(opponentPresent ? (_beat.BanditAir.WingSpanM > 0.0 ? _beat.BanditAir.WingSpanM : Math.Sqrt(4.5 * _beat.BanditAir.WingAreaM2)) : 0.0):F2},"
             + GunTrajectoryJson(playerPosition, groundVelocity, pf, pl, s.BodyRates,
-                playerGunProfile)
+                playerGunProfile, _gunKill?.HasGimbal == true ? _gunKill.BarrelDirection(s) : null,
+                    _gunKill?.MuzzlePosition(s))
             + $"\"player_gun_profile_id\":\"{playerGunProfile.Id}\","
             + $"\"rounds_fired\":{(opponentPresent ? _gunKill!.RoundsFired : 0)},\"hits\":{(opponentPresent ? _gunKill!.TotalHitCount : 0)},"
             + $"\"selected_target_hits\":{(opponentPresent ? _gunKill!.HitCount : 0)},"
             + $"\"hit\":{(opponentPresent && _gunKill!.HitThisStep ? "true" : "false")},"
-            + $"\"gun_firing\":{(opponentPresent && Session.TriggerDown && Session.PlayerWeaponsAuthorized && _beat.CombatRules.PlayerGunEnabled && !_gunKill!.BarrelOverheated && _gunKill.BanditAlive ? "true" : "false")},"
+            + $"\"gun_firing\":{(opponentPresent && Session.TriggerDown && Session.PlayerWeaponsAuthorized && _beat.CombatRules.PlayerGunEnabled && !_gunKill!.BarrelOverheated && !_gunKill.GimbalFireInhibited && _gunKill.BanditAlive ? "true" : "false")},"
             + TracerJson("tracers", opponentPresent
                 ? _gunKill!.RoundsInFlight : Array.Empty<GunRound>())
             + $"\"kill_progress\":{(opponentPresent ? _gunKill!.KillProgress : 0.0):F3},"
@@ -1900,7 +1911,7 @@ internal static class SnapshotProjection {
     /// emitted player state (position, velocity, body axes, body rates) — the HUD only projects.
     /// </summary>
     static string GunTrajectoryJson(in Vec3D shooterPosition, in Vec3D shooterVelocity,
-        in Vec3D bodyForward, in Vec3D bodyUp, in BodyRates bodyRates, GunProfile profile) {
+        in Vec3D bodyForward, in Vec3D bodyUp, in BodyRates bodyRates, GunProfile profile, Vec3D? barrel = null, Vec3D? muzzle = null) {
         const int SampleCount = 9;
         double horizonSeconds = Math.Min(profile.MaximumFlightSeconds,
             GunKill.EffectiveRangingFlightSeconds);
@@ -1910,8 +1921,11 @@ internal static class SnapshotProjection {
         for (int i = 0; i < SampleCount; i++) {
             if (i != 0) json.Append(',');
             double age = horizonSeconds * i / (SampleCount - 1);
-            Vec3D p = GunKill.BallisticFunnelPoint(shooterPosition, shooterVelocity,
-                bodyForward, angularVelocity, profile.MuzzleVelocityMps, age);
+            Vec3D p = barrel is Vec3D axis && muzzle is Vec3D origin
+                ? origin + (shooterVelocity + axis * profile.MuzzleVelocityMps) * age
+                    + new Vec3D(0, -0.5 * GunKill.GravityMps2 * age * age, 0)
+                : GunKill.BallisticFunnelPoint(shooterPosition, shooterVelocity,
+                    bodyForward, angularVelocity, profile.MuzzleVelocityMps, age);
             json.AppendFormat(System.Globalization.CultureInfo.InvariantCulture,
                 "{{\"x\":{0:F2},\"y\":{1:F2},\"z\":{2:F2},\"r\":{3:F1}}}",
                 p.X, p.Y, p.Z, (p - shooterPosition).Length);
