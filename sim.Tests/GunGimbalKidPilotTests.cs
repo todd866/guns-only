@@ -19,6 +19,10 @@ public sealed class GunGimbalKidPilotTests(ITestOutputHelper output) {
     sealed record Result(int Seed, int Lesson, double Time, int Kills, int Hits, int Rounds,
         double FirstHitSeconds, int RoundsToFirstHit, bool Alive, string Outcome);
 
+    sealed record DefenseResult(int Seed, int Lesson, double Time, int HitsTaken,
+        double FirstIncomingHitSeconds, double DeathSeconds, string TerminalState,
+        string Outcome, int OpponentRounds);
+
     /// A coarse keyboard pilot: all observations are queued for 450 ms, controls are held for
     /// bounded chunks, and a fire burst is intentionally independent of ballistic lead.
     sealed class KidPilot(int seed) {
@@ -186,6 +190,32 @@ public sealed class GunGimbalKidPilotTests(ITestOutputHelper output) {
         }
     }
 
+    /// C12 calibration receipt for opponent gunnery. This is deliberately opt-in and has no
+    /// threshold: it records the same delayed FeedKey pilot used by the O1/O2 contracts, plus a
+    /// hands-off desktop comparator with automatic flight disabled. Defensive lessons stop as
+    /// soon as their real lesson outcome passes, so a successful break is not reported as a later
+    /// timeout. The incoming-hit clock is sampled after each fixed tick and is therefore a kernel
+    /// time, not a browser wall-clock measurement.
+    [Fact]
+    public void ReportC12DefensiveKidAndPassiveCurves() {
+        if (System.Environment.GetEnvironmentVariable("C12_REPORT") != "1") return;
+        foreach (int lesson in new[] { 1, 3 }) {
+            var kid = Enumerable.Range(0, SeedCount)
+                .Select(seed => FlyDefenseReport(lesson, seed, driveKid: true)).ToArray();
+            var passive = Enumerable.Range(0, SeedCount)
+                .Select(seed => FlyDefenseReport(lesson, seed, driveKid: false)).ToArray();
+            output.WriteLine($"C12 {BfmLesson.Get(lesson).Id} kid: "
+                + string.Join(" | ", kid.Select(FormatDefenseResult)));
+            output.WriteLine($"C12 {BfmLesson.Get(lesson).Id} passive-desktop: "
+                + string.Join(" | ", passive.Select(FormatDefenseResult)));
+            output.WriteLine($"C12 {BfmLesson.Get(lesson).Id} summary "
+                + $"kidDeaths={kid.Count(r => r.TerminalState != nameof(AircraftTerminalState.Flying))}/{SeedCount} "
+                + $"kidPasses={kid.Count(r => r.Outcome == "passed")}/{SeedCount} "
+                + $"passiveDeaths={passive.Count(r => r.TerminalState != nameof(AircraftTerminalState.Flying))}/{SeedCount} "
+                + $"passivePasses={passive.Count(r => r.Outcome == "passed")}/{SeedCount}");
+        }
+    }
+
     static string Fmt(double value) => double.IsNaN(value) ? "-" : value.ToString("F2");
 
     static Result FlyReport(int lesson, int seed, bool expert, double capSeconds) {
@@ -209,6 +239,42 @@ public sealed class GunGimbalKidPilotTests(ITestOutputHelper output) {
                 s.PlayerTerminalState == AircraftTerminalState.Flying, s.BfmLessonOutcome);
         } finally { pilot.Finish(s); }
     }
+
+    static DefenseResult FlyDefenseReport(int lesson, int seed, bool driveKid) {
+        SimulationSession s = Start(lesson, seed);
+        if (!driveKid) {
+            // Match the desktop acceptance contract explicitly: no touch modality and no
+            // automatic throttle, path hold, or fire; Start() already selects desktop controls.
+            s.SetAssistedFlight(false);
+            s.SetTouchControlModality(false);
+        }
+        var pilot = driveKid ? new KidPilot(seed) : null;
+        double firstIncomingHit = double.NaN;
+        double death = double.NaN;
+        try {
+            for (int tick = 0; tick < 60 * AircraftSim.TickHz
+                && s.PlayerTerminalState == AircraftTerminalState.Flying
+                && s.BfmLessonOutcome != "passed"; tick++) {
+                pilot?.Drive(s);
+                s.StepFixed();
+                if (double.IsNaN(firstIncomingHit) && s.PlayerHitsTaken > 0)
+                    firstIncomingHit = s.TimeSeconds;
+                if (double.IsNaN(death) && s.PlayerTerminalState != AircraftTerminalState.Flying)
+                    death = s.TimeSeconds;
+            }
+            return new(seed, lesson, s.TimeSeconds, s.PlayerHitsTaken,
+                firstIncomingHit, death, s.PlayerTerminalState.ToString(),
+                s.BfmLessonOutcome, s.SortieOpponentRoundsFired);
+        } finally {
+            pilot?.Finish(s);
+        }
+    }
+
+    static string FormatDefenseResult(DefenseResult result) =>
+        $"s{result.Seed} t={result.Time:F2}s firstIn={Fmt(result.FirstIncomingHitSeconds)}s "
+        + $"death={Fmt(result.DeathSeconds)}s hits={result.HitsTaken} "
+        + $"oppRounds={result.OpponentRounds} terminal={result.TerminalState} "
+        + $"outcome={result.Outcome}";
 
     // Competent: 250 ms delay and 100 ms corrections. Expert: 120 ms delay,
     // 25 ms corrections, ballistic lead discipline. Both remain discrete keyboard pilots;
