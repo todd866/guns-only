@@ -21,8 +21,11 @@ public sealed partial class SimulationSession {
         _conventionalRunwayRecovery?.Touchdown ?? RunwayTouchdownResult.None;
     /// <summary>
     /// True only when an accepted combat RTB has ended in a survivable physical runway contact,
-    /// full stop, and the authoritative discontinued-sortie terminal transition. This deliberately
-    /// excludes an unrequested runway stop and cannot be manufactured by navigation proximity.
+    /// full stop, and the authoritative runway terminal transition. That transition is
+    /// Discontinued for an early knock-it-off and Victory once the billed engagement cap was
+    /// splashed before the stop (FinishConventionalRunwaySortie). Both are real recoveries.
+    /// This deliberately excludes an unrequested runway stop and cannot be manufactured by
+    /// navigation proximity.
     /// </summary>
     public bool ConventionalRtbRecoveryCompleted =>
         _returnToBaseReason != MissionRtbReason.None
@@ -33,7 +36,7 @@ public sealed partial class SimulationSession {
             Touchdown.Survivable: true
         }
         && Lifecycle == LifecycleState.Finished
-        && _outcome == SortieOutcome.Discontinued;
+        && _outcome is SortieOutcome.Discontinued or SortieOutcome.Victory;
     public bool RunwayWeightOnWheels =>
         _conventionalRunwayRecovery?.WeightOnWheels ?? false;
     public RecoveryProgress RecoveryProgress => _recoveryProgress;
@@ -1014,11 +1017,7 @@ public sealed partial class SimulationSession {
         // on the runway is the end of the sortie. Kestrel's rung-0 opening is one aircraft;
         // a restored higher rung may still be a pair. Landing after that fight is empty is
         // the victory. Leaving with nobody splashed stays a discontinue.
-        bool firstRunComplete = _beat.FirstRunValley is not null
-            && _killCount >= 1
-            && _opponentTerminalState != AircraftTerminalState.Flying
-            && !_wingmen.Any(static wingman => wingman.StillFighting);
-        SortieOutcome recovered = firstRunComplete || _billedSortieComplete
+        SortieOutcome recovered = FiniteCombatComplete
             ? SortieOutcome.Victory
             : SortieOutcome.Discontinued;
         _pendingOutcome = recovered;

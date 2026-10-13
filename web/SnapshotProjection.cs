@@ -1820,6 +1820,7 @@ internal static class SnapshotProjection {
             ? "null" : JsonString(bandit.SystemsProfileId);
         string banditPresentationJson = bandit is null
             ? "null" : JsonString(bandit.PresentationId);
+        SpawnSpec earnedOpening = Session.EarnedOpening;
         string banditMountJson = opponentPresent
             ? JsonString(Session.CurrentBanditMount.ToString())
             : "null";
@@ -1862,6 +1863,20 @@ internal static class SnapshotProjection {
             + $"\"director_phase\":{JsonString(Session.DirectorPhase.ToString())},"
             + $"\"director_walkover_streak\":{Session.DirectorWalkoverStreak},"
             + $"\"director_reason\":{JsonString(Session.LastDirectorSpawn?.Reason ?? "")},"
+            // Finite F-22 combat result, separate from aircraft recovery. sortie_* is the frozen
+            // contract this sortie was staged with; earned_* is what the stored rung opens next.
+            + $"\"combat_complete\":{(Session.FiniteCombatComplete ? "true" : "false")},"
+            + $"\"engagement_cap\":{Session.FiniteEngagementCap},"
+            + $"\"engagements_won\":{Session.EngagementsWon},"
+            + $"\"sortie_rung\":{Session.SortieContractRung},"
+            + $"\"sortie_opponent_skill\":\"{PilotSkillToken(Session.SortieOpponentSkill)}\","
+            + $"\"sortie_opponent_mount\":{JsonString(Session.SortieOpponentMount.ToString())},"
+            + $"\"sortie_opponent_count\":{Session.SortieOpponentCount},"
+            + $"\"earned_opponent_skill\":\"{PilotSkillToken(earnedOpening.Skill)}\","
+            + $"\"earned_opponent_mount\":{JsonString(earnedOpening.Mount.ToString())},"
+            + $"\"earned_opponent_count\":{earnedOpening.FormationSize},"
+            + $"\"director_hits\":{Session.DirectorHits},"
+            + $"\"director_kills\":{Session.DirectorKills},"
             + $"\"carrier_entity_id\":{carrierEntityJson},"
             + $"\"carrier_presentation_id\":{carrierPresentationJson},"
             + $"\"platform_entity_id\":{carrierEntityJson},"

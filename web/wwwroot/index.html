@@ -3691,6 +3691,8 @@
       grid-column: 1 / -1;
     }
 
+
+
     #ready-screen[data-mode="program"] {
       background-color: var(--flow-bg);
     }
@@ -4177,6 +4179,125 @@
     @media (prefers-reduced-motion: reduce) {
       .boot-pulse { animation: none; }
     }
+    /* F-22 result instrument (loop audit #6). Replaces the kicker/title/brief/facts/scoreboard
+       stack for the F-22 sortie only; every other mode keeps its own card. */
+    /* Kept at the end of the sheet so it outranks the intro/debrief grid rules above. */
+    :root #ready-screen[data-f22-result] :is(#ready-kicker, #ready-title, #ready-brief, .ready-facts,
+      #sortie-grade, #ready-controls, #ready-correction, #ready-start, #ready-hint,
+      #ready-handoff, .ready-secondary-actions) { display: none; }
+    :root #ready-screen[data-f22-result][data-mode="debrief"] .ready-card {
+      width: min(34rem, 100%);
+      height: auto;
+    }
+    :root #ready-screen[data-f22-result][data-mode="debrief"] .ready-briefing {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      padding: 14px;
+    }
+    :root #ready-screen[data-f22-result][data-mode="debrief"] :is(#ready-replay, #ready-build-row) {
+      width: 100%;
+      margin: 0;
+    }
+    .f22-result {
+      display: grid;
+      gap: 1px;
+      margin: 0;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      background: var(--flow-line);
+      overflow: hidden;
+      font: 650 15px/1.2 var(--flow-font-data);
+      font-variant-numeric: tabular-nums;
+    }
+    .f22-result[hidden] { display: none; }
+    .f22-row {
+      display: grid;
+      grid-template-columns: 3.4em minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 46px;
+      padding: 6px 10px;
+      background: var(--flow-panel-raised);
+      color: var(--flow-ink);
+    }
+    .f22-row[hidden] { display: none; }
+    .f22-tag {
+      color: var(--flow-ink-faint);
+      font: 750 10px/1 var(--flow-font-data);
+      letter-spacing: .12em;
+    }
+    .f22-tag-sym { font-size: 14px; color: var(--flow-accent); letter-spacing: 0; }
+    .f22-result #f22-row-correction { grid-template-columns: 1em minmax(0, 1fr) auto; }
+    .f22-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .f22-correction {
+      white-space: normal;
+      color: var(--flow-ink-muted);
+      font: 450 14px/1.3 var(--flow-font-display);
+    }
+    .f22-datum { justify-self: end; display: inline-flex; align-items: center; gap: 6px; }
+    .f22-sym {
+      display: inline-block;
+      min-width: 1.1em;
+      margin-right: 6px;
+      font-weight: 800;
+      text-align: center;
+    }
+    [data-status="complete"] > .f22-sym, [data-status="recovered"] > .f22-sym { color: var(--flow-accent); }
+    [data-status="lost"] > .f22-sym { color: #ff8a7a; }
+    [data-status="open"] > .f22-sym { color: var(--flow-ink-faint); }
+    .f22-result button {
+      min-height: 40px;
+      padding: 0 12px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      color: var(--flow-ink-muted);
+      background: var(--flow-panel);
+      font: 450 13px/1 var(--flow-font-display);
+      cursor: pointer;
+    }
+    .f22-result button:not(.f22-primary):hover,
+    .f22-result button:not(.f22-primary):focus-visible { color: var(--flow-ink); border-color: rgba(253, 246, 230, .46); }
+    .f22-result #f22-settings { font-size: 18px; }
+    .f22-result button[hidden] { display: none; }
+    .f22-result .f22-info { min-width: 36px; min-height: 36px; padding: 0; font-size: 16px; }
+    .f22-detail {
+      margin: 0;
+      padding: 8px 12px;
+      background: var(--flow-panel);
+      color: var(--flow-ink-muted);
+      font: 450 13px/1.4 var(--flow-font-display);
+    }
+    .f22-detail[hidden] { display: none; }
+    .f22-actions {
+      display: flex;
+      gap: 6px;
+      padding: 8px 12px;
+      background: var(--flow-panel-raised);
+    }
+    .f22-actions button { flex: 0 0 auto; min-height: 46px; }
+    .f22-result .f22-primary {
+      flex: 1 1 auto;
+      border: 0;
+      color: #2a2113;
+      background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
+      font-size: 15px;
+    }
+    .f22-result #f22-recover { flex: 1 1 auto; color: var(--flow-ink); }
+    @media (max-width: 420px) {
+      .f22-actions { padding: 8px; gap: 5px; }
+      .f22-actions button { padding: 0 9px; }
+    }
+    .ready-correction {
+      margin: 0 0 var(--flow-space-3, 12px);
+      padding: 10px 12px;
+      border-left: 2px solid var(--flow-accent);
+      color: var(--flow-ink-muted);
+      background: rgba(122, 240, 165, .045);
+      font: 450 14px/1.4 var(--flow-font-display);
+    }
+    .ready-correction[hidden] { display: none; }
   </style>
   <link rel="stylesheet" href="./render/onboarding/pilot_notebook.css">
 </head>
@@ -4577,6 +4698,39 @@
             <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">Two gun engagements · land and stop</span></div>
             <div class="ready-fact"><small id="ready-config-label">Configuration</small><span id="ready-config">F-22 public-data surrogate · 480 rounds · Auto-GCAS armed</span></div>
           </div>
+          <!-- F-22 result instrument: four rows + one action row (render/debrief/f22_result_instrument.js).
+               Words live in title/aria-label; the visible tags only say what each number is. -->
+          <section id="f22-result" class="f22-result" hidden aria-label="Sortie result">
+            <div class="f22-row" id="f22-row-combat">
+              <span class="f22-tag" aria-hidden="true">FIGHT</span>
+              <span class="f22-value" id="f22-combat" role="img"><b class="f22-sym" id="f22-combat-symbol"></b><span id="f22-combat-value"></span></span>
+              <span class="f22-datum" id="f22-recovery" role="img"><span class="f22-tag" aria-hidden="true">LAND</span><b class="f22-sym" id="f22-recovery-symbol"></b></span>
+            </div>
+            <div class="f22-row" id="f22-row-gun">
+              <span class="f22-tag" aria-hidden="true">GUN</span>
+              <span class="f22-value" id="f22-gun"></span>
+              <span class="f22-datum" id="f22-clock"></span>
+            </div>
+            <div class="f22-row" id="f22-row-opponent">
+              <span class="f22-tag" aria-hidden="true">OPP</span>
+              <span class="f22-value" id="f22-opponent"></span>
+              <button class="f22-datum f22-info" id="f22-opponent-info" type="button" aria-expanded="false" aria-controls="f22-opponent-detail" aria-label="Opponent and next milestone">ⓘ</button>
+            </div>
+            <p class="f22-detail" id="f22-opponent-detail" hidden></p>
+            <div class="f22-row" id="f22-row-correction">
+              <span class="f22-tag f22-tag-sym" aria-hidden="true">▸</span>
+              <span class="f22-value f22-correction" id="f22-correction"></span>
+              <button class="f22-datum" id="f22-practice" type="button">Practice</button>
+            </div>
+            <div class="f22-actions">
+              <button id="f22-again" class="f22-primary" type="button">Again</button>
+              <button id="f22-recover" type="button" hidden title="Continue this aircraft into the runway recovery">Recover</button>
+              <button id="f22-logbook" type="button">Logbook</button>
+              <button id="f22-aircraft" type="button" title="Choose another aircraft">Aircraft</button>
+              <button id="f22-settings" type="button" aria-label="Settings" title="Settings">⚙</button>
+            </div>
+          </section>
+          <p id="ready-correction" class="ready-correction" hidden></p>
           <section id="sortie-grade" class="sortie-grade" hidden aria-label="Sortie results">
             <dl class="sortie-grade-stats">
               <div><dt>Kills</dt><dd id="sortie-grade-kills">0</dd></div>

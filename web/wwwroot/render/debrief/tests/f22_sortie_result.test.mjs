@@ -193,3 +193,41 @@ test("caller safety lessons still override the F-22 card safely", () => {
   assert.equal(result.safetyCorrection, "Discontinue after an Auto-GCAS fly-up.");
   assert.equal(result.practiceExercise, "valley");
 });
+
+// Fixture written by sim.Tests F22FiniteSortieTests.RecoveredStopAfterTheCapIsVictory from the
+// real kernel projection (two capped kills, accepted RTB, physical full stop).
+test("kernel-projected recovered victory reads as a complete sortie", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const fixture = JSON.parse(await readFile(
+    new URL("./fixtures/f22_recovered_victory.json", import.meta.url), "utf8"));
+  const result = sortieResultCopy(fixture);
+  assert.equal(result.title, "Sortie complete");
+  assert.equal(result.recoveryComplete, true);
+  assert.notEqual(result.practiceExercise, "recovery");
+  assert.doesNotMatch(result.correction, /approach|runway|landing/i);
+});
+
+test("an abandoned sortie gets observed facts only, never landing advice", () => {
+  // Loop audit #9: a five-second valley exit was told to practise the approach and runway stop.
+  const abandoned = f22SortieResult(state({
+    mission_definition_id: VALLEY,
+    sortie_outcome: "NONE",
+    session_phase: "ACTIVE",
+    finished: false,
+    first_run_weapons_cold: true,
+  }));
+  assert.equal(abandoned.title, "Sortie incomplete");
+  assert.equal(abandoned.correction, "");
+  assert.equal(abandoned.practiceExercise, "");
+
+  const afterTouchdown = f22SortieResult(state({
+    sortie_outcome: "NONE",
+    finished: false,
+    runway_touchdown_contact: true,
+  }));
+  assert.equal(afterTouchdown.correction, "Practise the approach and runway stop.");
+  assert.equal(afterTouchdown.practiceExercise, "recovery");
+
+  const cleanVictory = f22SortieResult(state({ ...recovered, sortie_outcome: "VICTORY" }));
+  assert.equal(cleanVictory.correction, "");
+});

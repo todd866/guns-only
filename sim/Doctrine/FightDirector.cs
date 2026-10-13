@@ -109,11 +109,37 @@ public sealed class FightDirector {
     /// player's death into their next life instead of resetting with the sortie.
     public bool HasHistory => _anyObserved || _phase != DirectorPhase.Calm;
 
-    public void Observe(in EngagementReport report, bool advanceRamp = true) {
+    /// <summary>
+    /// Positive physical-hit evidence, recorded the moment the round lands rather than when the
+    /// engagement ends. Option A treats one physical hit as proof for rung 1, so a pilot who
+    /// hits and then sensibly goes home (RTB quarantines the unfinished fight from Observe) must
+    /// not lose that proof. Deliberately positive-only: it never records a defeat, never moves a
+    /// win/walkover streak, the learner or the boss machinery. A hit does break a run of
+    /// consecutive hitless defeats, exactly as ApplyRamp treats a hit inside a completed fight.
+    /// The caller passes only NEW hits and later tells Observe how many it already credited, so
+    /// the same round is never counted twice.
+    /// </summary>
+    public void CreditPhysicalHits(int newHits, double timeToFirstHitSeconds = double.NaN) {
+        if (newHits <= 0) return;
+        _hits += newHits;
+        _hitlessDefeats = 0;
+        if (_rung < 1) _rung = 1;
+        if (_timeToFirstHitSeconds is null
+            && double.IsFinite(timeToFirstHitSeconds)
+            && timeToFirstHitSeconds >= 0.0)
+            _timeToFirstHitSeconds = timeToFirstHitSeconds;
+    }
+
+    /// The opening contract the stored rung earns for the NEXT sortie: the rung table only. The
+    /// boss/release machinery stays a NextSpawn-time decision and is not promised here.
+    public SpawnSpec PreviewEarnedOpening() => RungSpec(1);
+
+    public void Observe(in EngagementReport report, bool advanceRamp = true,
+        int hitsAlreadyCredited = 0) {
         // advanceRamp is the F-22 ladder only. Other beats still teach the learner
         // and the boss phase; they must not climb a rung or fade their own gun law.
         if (advanceRamp && report.EligibleForLearning)
-            ApplyRamp(in report);
+            ApplyRamp(in report, hitsAlreadyCredited);
         _learner.Observe(in report);
         _lastOpponent = report.OpponentSkill;
 
@@ -205,13 +231,13 @@ public sealed class FightDirector {
         };
     }
 
-    void ApplyRamp(in EngagementReport report) {
+    void ApplyRamp(in EngagementReport report, int hitsAlreadyCredited = 0) {
         int before = _rung;
         bool hit = report.HitsScored > 0;
         // A missile, a terrain impact, or a maneuver kill can end the fight as a victory
         // with no round on the target. Those do not climb the gun ramp.
         bool gunKill = report.GunKills > 0;
-        if (hit) _hits += report.HitsScored;
+        if (hit) _hits += System.Math.Max(0, report.HitsScored - hitsAlreadyCredited);
         if (gunKill) _kills += report.GunKills;
         if (_timeToFirstHitSeconds is null
             && double.IsFinite(report.TimeToFirstHitSeconds)

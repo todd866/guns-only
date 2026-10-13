@@ -369,6 +369,8 @@ public sealed partial class SimulationSession {
             && !double.IsNaN(_weaponsHotAtSeconds))
             _engagementCounters.TimeToFirstHitSeconds =
                 Math.Max(0.0, TimeSeconds - _weaponsHotAtSeconds);
+        if (hits > 0 && ReferenceEquals(gun, _gunKill))
+            CreditDirectorHits(hits, _engagementCounters.TimeToFirstHitSeconds);
         _sortieGunLedger[gun] = new GunLedgerBaseline {
             Rounds = gun.RoundsFired,
             Hits = gun.TotalHitCount
