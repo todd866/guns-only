@@ -4185,9 +4185,15 @@
     :root #ready-screen[data-f22-result] :is(#ready-kicker, #ready-title, #ready-brief, .ready-facts,
       #sortie-grade, #ready-controls, #ready-correction, #ready-start, #ready-hint,
       #ready-handoff, .ready-secondary-actions) { display: none; }
+    :root #ready-screen[data-f22-result][data-mode="debrief"] {
+      /* The live HUD remains behind the combat result. Show an opaque first frame,
+         rather than fading its banners and target data through the instrument rows. */
+      transition: none;
+    }
     :root #ready-screen[data-f22-result][data-mode="debrief"] .ready-card {
       width: min(34rem, 100%);
       height: auto;
+      background: var(--flow-panel);
     }
     :root #ready-screen[data-f22-result][data-mode="debrief"] .ready-briefing {
       display: flex;
