@@ -45,3 +45,56 @@ Evidence root: `/Users/iantodd/.local/state/guns-only-improve/`.
 - `shots/impl-c9-tan-polygon/points-portrait-all-lights-hidden.png`: the narrower airbase surface remains after all light fields are hidden.
 
 Existing deterministic runway tests: `node --test web/wwwroot/render/scene/tests/conventional_runway.test.mjs` — **9 passed, 0 failed**. All three browser matrix cases reached active practice, had zero page exceptions, passed scene/HUD viewport bounds, and restored exactly. No new behavior required a new regression test. No gameplay, HUD layout, opponent model, atmosphere, physics, frozen-mode or release-identity code changed. No full gameplay acceptance or real-phone performance claim is made. The full `bin/check` gate was not run for this documentation-only result; its exit code is not applicable.
+
+## c9b — shared runway atmosphere
+
+The coordinator subsequently authorised repairing the colour mismatch while preserving the
+recovery field. `updateConventionalRunwayPresentation()` now accepts the active terrain's
+atmosphere uniforms. Every conventional runway material—pavement, markings, supporting airbase
+meshes and all five point-light fields—composes `addUkraineSoftWorldFog()` with its existing
+Earth-curvature shader. The helper supplies the same extinction, haze colour and stream-edge
+burial as terrain, by reference, so weather/altitude changes remain live. Ordinary scene fog is
+disabled on those materials to avoid applying both paths.
+
+Switching terrain rebinds the uniforms. Missing or incomplete terrain uniforms restore the original
+curved materials and scene fog. The steady frame path does not traverse meshes or recompile
+materials. Runway position, dimensions, base colours, light sizes, collision authority and recovery
+physics are unchanged. Shared terrain policy applies to frozen modes using this presentation;
+carrier and Rapier arrested-strip builders are untouched.
+
+Regression coverage in `conventional_runway.test.mjs` exercises all three material types with
+Three's actual shader templates, live uniform identity, curvature/fog composition, terrain
+replacement, no per-frame recompilation, and restoration when terrain is absent or incomplete.
+
+The active atmosphere also enables tone mapping on light/paint materials, so their haze uses the
+same output transform as terrain; terrain-free modes recover their original tone-mapping setting.
+
+Visual evidence is in `~/.local/state/guns-only-improve/shots/impl-c9b-runway-haze/`:
+`{portrait,landscape}-{live,8nm,2nm}-{before,after}.png`. The live pair is at approximately
+22.87 km horizontal threshold range. The other pairs are camera-only fixtures at exactly
+14,816 m / 914.4 m above threshold and 3,704 m / 194.12 m above threshold (3°); they preserve
+the simulation, authoritative runway and scene, move the sky with the inspection camera, and hide
+the frozen flight HUD. They are appearance evidence, not flown landings. In every pair the camera
+and simulation are frozen, and only runway material atmosphere is toggled. Full viewport pairs
+and cropped `runway-detail-pairs.png` were inspected: tan fog no longer fills the distant field;
+at 2 NM the pavement, markings and base remain at least as distinct. The 8 NM lights are clearer.
+
+**Remaining visual limitation:** fixed-pixel light sprites still merge into a conspicuous pale
+strip/red beacon at long range. This change unifies atmosphere; it does not solve the underlying
+sprite-size/energy presentation. No claim that the far airfield is photorealistic or visually
+finished is made. Retuning those lights would be a separate rendering decision, not a runway
+position/geometry correction.
+
+Six real Start/input cases (phone portrait/landscape gun pass, laptop runway recovery, Ace Duel,
+Rapier intercept, Top Gun) reached active flight with zero browser/GL errors. Full Chromium was
+headless, `channel: chromium`, ANGLE Metal / Apple M5, `audioQa=silent`. The tests disable
+assisted flight/autofire to keep the capture exercise active. All six scene/HUD viewport checks
+passed. Same-frame pixel diffs are restricted to the runway; Rapier and Top Gun before/after are
+pixel-identical because they use other recovery presentations. Logs and reusable harness:
+`impl-logs/c9b-visual.mjs`, `c9b-*-visual.json`, `c9b-pixel-comparison.json` under the evidence root.
+
+Validation: 40/40 focused Node tests passed (conventional runway, mission features, Korea scenery),
+and the local SDK 8.0.423 preview publication succeeded. `bin/check` was attempted once but remained
+queued behind another agent for over nine minutes; only our waiting gate was stopped, exit 143.
+No full-gate pass is claimed. No physics, runway geometry, production, build identity or deployment
+was changed. Real-phone performance and a complete human recovery remain unverified.

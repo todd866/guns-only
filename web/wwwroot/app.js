@@ -9860,7 +9860,8 @@ class FlightView {
       placementNorthM: Number.isFinite(terrainPlacementNorthM) ? terrainPlacementNorthM : 0,
     });
 
-    updateConventionalRunwayPresentation(this.conventionalRunway, state);
+    updateConventionalRunwayPresentation(
+      this.conventionalRunway, state, this.terrainPresentation?.material?.uniforms ?? null);
     const isCarrier = state.carrier === true;
     const isRecoveryPlatform = state.recovery_platform === true;
     const banditAlive = opponentPresent && aircraftAlive(state, "opponent_terminal_state",
