@@ -8,6 +8,7 @@ namespace GunsOnly.Sim.Doctrine;
 public enum EngagementEndReason : byte {
     CombatResult = 0,
     PlayerHandoff = 1,
+    DefensiveSuccess = 2,
 }
 
 public readonly record struct EngagementReport(

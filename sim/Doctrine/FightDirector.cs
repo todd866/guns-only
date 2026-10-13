@@ -27,7 +27,7 @@ public enum BanditMount {
 public readonly record struct SpawnSpec(
     PilotSkill Skill, int DoctrineIndex, bool Boss, string Reason,
     bool Machine = false, BanditMount Mount = BanditMount.Baseline,
-    int FormationSize = 1, bool Sparring = false);
+    int FormationSize = 1, bool Sparring = false, int LessonIndex = -1);
 
 /// Session-scale pacing for infinite-spawn continuous combat: CALM → BUILD → BOSS → RELEASE.
 /// Owns a LearnerModel and turns its banded estimate into the next spawn's tier/doctrine, with
@@ -83,6 +83,24 @@ public sealed class FightDirector {
     int _hitlessDefeats;
     double? _timeToFirstHitSeconds;
 
+    int _lessonIndex = -1;
+    bool _bfmEnabled;
+    public bool BfmEnabled => _bfmEnabled;
+    public int LessonIndex => _bfmEnabled ? _lessonIndex : -1;
+    public void EnableBfmLadder() {
+        _bfmEnabled = true;
+        if (_lessonIndex < 0)
+            _lessonIndex = _rung >= 3 ? 7 : _kills > 0 ? 2 : 0;
+        _rung = BfmLesson.Get(_lessonIndex).Rung;
+    }
+    public void CompleteDefensiveLesson() {
+        if (_bfmEnabled && BfmLesson.Get(_lessonIndex).Defensive) AdvanceLesson();
+    }
+    void AdvanceLesson() {
+        _lessonIndex = System.Math.Min(7, _lessonIndex + 1);
+        _rung = BfmLesson.Get(_lessonIndex).Rung;
+    }
+
     public DirectorPhase Phase => _phase;
     /// Demonstrated rung. 0 is the cold open. Spawn reads it; nothing counter-picks mid-fight.
     public int Rung => _rung;
@@ -123,7 +141,7 @@ public sealed class FightDirector {
         if (newHits <= 0) return;
         _hits += newHits;
         _hitlessDefeats = 0;
-        if (_rung < 1) _rung = 1;
+        if (!_bfmEnabled && _rung < 1) _rung = 1;
         if (_timeToFirstHitSeconds is null
             && double.IsFinite(timeToFirstHitSeconds)
             && timeToFirstHitSeconds >= 0.0)
@@ -132,7 +150,8 @@ public sealed class FightDirector {
 
     /// The opening contract the stored rung earns for the NEXT sortie: the rung table only. The
     /// boss/release machinery stays a NextSpawn-time decision and is not promised here.
-    public SpawnSpec PreviewEarnedOpening() => RungSpec(1);
+    public SpawnSpec PreviewEarnedOpening() => _bfmEnabled
+        ? BfmLesson.Get(_lessonIndex).Spawn(1) : RungSpec(1);
 
     public void Observe(in EngagementReport report, bool advanceRamp = true,
         int hitsAlreadyCredited = 0) {
@@ -182,6 +201,7 @@ public sealed class FightDirector {
     }
 
     public SpawnSpec NextSpawn(int engagementNumber) {
+        if (_bfmEnabled) return BfmLesson.Get(_lessonIndex).Spawn(engagementNumber);
         // Boss and the release that follows it are unchanged, and they are only available once
         // the stored rung is the earned pair. A cold visitor never meets them.
         if (_rung >= 3 && _phase == DirectorPhase.Release)
@@ -249,6 +269,11 @@ public sealed class FightDirector {
         else
             _hitlessDefeats = 0;
 
+        if (_bfmEnabled) {
+            // A hit is evidence for the ledger, not proof of conversion or defence.
+            if (gunKill && report.Outcome == SortieOutcome.Victory) AdvanceLesson();
+            return; // Repeat on loss; an expected defensive loss never erases offensive proof.
+        }
         if (hit && _rung < 1) _rung = 1;
         if (gunKill && _rung < 2) _rung = 2;
         bool walkover = gunKill
@@ -269,9 +294,9 @@ public sealed class FightDirector {
     }
 
     /// <summary>
-    /// Versioned snapshot of everything NextSpawn reads. v2 stores the rung and the boss
-    /// bookkeeping a rung-3 pilot already had. A v1 blob migrates to rung 0: it has no hits
-    /// or kills, and absence must not open at Ace.
+    /// Versioned snapshot of everything NextSpawn reads. v3 appends the BFM lesson to v2's
+    /// historical evidence and pacing fields. Legacy modes opt out of BFM; the visual-merge
+    /// session enables it after import and migrates old evidence at that boundary.
     /// </summary>
     public string ExportState() {
         LearnerBands bands = _learner.Bands;
@@ -279,7 +304,7 @@ public sealed class FightDirector {
         string ttf = _timeToFirstHitSeconds is double seconds
             ? seconds.ToString("F3", invariant) : "-";
         return string.Join('|', new[] {
-            "v2",
+            "v3",
             _rung.ToString(invariant),
             _kills.ToString(invariant),
             _hits.ToString(invariant),
@@ -299,6 +324,7 @@ public sealed class FightDirector {
             ((int)bands.Gunnery).ToString(invariant),
             ((int)bands.Energy).ToString(invariant),
             ((int)bands.DefensiveBfm).ToString(invariant),
+            _lessonIndex.ToString(invariant),
         });
     }
 
@@ -307,10 +333,26 @@ public sealed class FightDirector {
     public bool TryImportState(string? state) {
         if (string.IsNullOrWhiteSpace(state)) return false;
         string[] parts = state.Split('|');
-        if (parts.Length == 15 && parts[0] == "v1")
-            return TryImportV1(parts);
-        if (parts.Length == 20 && parts[0] == "v2")
-            return TryImportV2(parts);
+        if (parts.Length == 15 && parts[0] == "v1") {
+            if (!TryImportV1(parts)) return false;
+            if (_bfmEnabled) EnableBfmLadder();
+            return true;
+        }
+        if (parts.Length == 21 && parts[0] == "v3") {
+            if (!int.TryParse(parts[20], out int lesson) || lesson is < -1 or > 7)
+                return false;
+            // Legacy opt-in valley may have updated its rung while preserving the BFM
+            // bookmark. Enabling BFM derives its assist rung from the lesson again.
+            if (!TryImportV2(parts, returningSkip: false)) return false;
+            _lessonIndex = lesson;
+            if (_bfmEnabled) EnableBfmLadder();
+            return true;
+        }
+        if (parts.Length == 20 && parts[0] == "v2") {
+            if (!TryImportV2(parts)) return false;
+            if (_bfmEnabled) EnableBfmLadder();
+            return true;
+        }
         return false;
     }
 
@@ -324,6 +366,7 @@ public sealed class FightDirector {
             observed: parts[14],
             out BossFields boss)) return false;
         AssignBoss(boss);
+        _lessonIndex = -1;
         _rung = 0;
         _kills = 0;
         _hits = 0;
@@ -332,7 +375,7 @@ public sealed class FightDirector {
         return true;
     }
 
-    bool TryImportV2(string[] parts) {
+    bool TryImportV2(string[] parts, bool returningSkip = true) {
         var invariant = System.Globalization.CultureInfo.InvariantCulture;
         if (!int.TryParse(parts[1], out int rung) || rung is < 0 or > 3) return false;
         if (!int.TryParse(parts[2], out int kills) || kills < 0) return false;
@@ -359,7 +402,8 @@ public sealed class FightDirector {
         _hits = hits;
         _hitlessDefeats = hitless;
         _timeToFirstHitSeconds = ttf;
-        ApplyReturningSkip();
+        _lessonIndex = -1;
+        if (returningSkip) ApplyReturningSkip();
         return true;
     }
 
@@ -422,6 +466,7 @@ public sealed class FightDirector {
     }
 
     public void Reset() {
+        _bfmEnabled = false;
         _learner.Reset();
         _phase = DirectorPhase.Calm;
         _anyObserved = false;
@@ -431,6 +476,7 @@ public sealed class FightDirector {
         _releaseRemaining = 0;
         _releaseTier = PilotSkill.Novice;
         _walkoverStreak = 0;
+        _lessonIndex = -1;
         _rung = 0;
         _kills = 0;
         _hits = 0;

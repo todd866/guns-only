@@ -1021,6 +1021,7 @@ public sealed partial class SimulationSession {
 
     bool ReplacementBudgetExhausted =>
         _beat.FirstRunValley is not null
+        || (_bfmLessonIndex >= 0 && BfmLesson.Get(_bfmLessonIndex).Defensive)
         || (_beat.ContinuousCombat is { MaximumEngagements: > 0 } combat
             && _engagementNumber >= combat.MaximumEngagements);
 
@@ -1180,7 +1181,8 @@ public sealed partial class SimulationSession {
         CompleteEngagementIfEnded();
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
         SpawnSpec directorSpawn = UsesDifficultyRamp(_beat)
-            ? _sortieOpeningSpawn is { } held
+            ? _fightDirector.BfmEnabled ? _fightDirector.NextSpawn(nextEngagement)
+                : _sortieOpeningSpawn is { } held
                 ? held with { Sparring = false }
                 : _fightDirector.NextSpawn(nextEngagement)
             : new SpawnSpec(
@@ -1239,6 +1241,7 @@ public sealed partial class SimulationSession {
     }
 
     void StartEngagementCounters(PilotSkill opponentSkill, bool opponentWasBoss) {
+        StartBfmLesson();
         _directorHitsCreditedThisEngagement = 0;
         _engagementCounters = new EngagementCounters {
             Active = true,
@@ -1272,6 +1275,7 @@ public sealed partial class SimulationSession {
             || _wingmen.Any(static wingman =>
                 wingman.StillFighting && wingman.Gun.GunSolution))
             _engagementCounters.SolutionSecondsConceded += FixedDeltaSeconds;
+        ObserveDefensiveLesson();
     }
 
     void CompleteEngagementIfEnded() {
@@ -1287,6 +1291,7 @@ public sealed partial class SimulationSession {
         EngagementReport report = BuildEngagementReport(
             outcome, EngagementEndReason.CombatResult);
         _engagementReports.Add(report);
+        ObserveBfmResult(in report);
         // Only the F-22 ramp (visual merge and the valley) moves rungs. Other
         // beats still record the fight for the learner, without fading their assist.
         // Hits already credited live (CreditDirectorHits) are not counted a second time.
