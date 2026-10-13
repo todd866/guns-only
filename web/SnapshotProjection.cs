@@ -843,6 +843,7 @@ internal static class SnapshotProjection {
             + $"\"sticky\":{_detents.StickyOffsetG:F2},\"tier\":{(int)_detents.Tier},"
             + $"\"variant\":{GetVariant()},\"buffet\":{(_player.Buffet ? "true" : "false")},"
             + $"\"assisted_flight\":{(Session.AssistedFlight ? "true" : "false")},"
+            + $"\"auto_throttle\":{(Session.AssistedAutoThrottleActive ? "true" : "false")},"
             + $"\"assisted_speed_bias_kts\":{Session.AssistedSpeedBiasKts},"
             + $"\"pull_limit\":{PullLimitJson(_player.PullLimit)},"
             + $"\"prompt\":{(int)_cue},"

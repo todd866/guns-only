@@ -32,8 +32,10 @@ public sealed class DetentLayer {
     /// the sole owner of the resulting pilot-demand and speed-hold lever commands.
     /// </summary>
     internal bool AssistedFlight;
-    internal bool AssistedTargetWithinNoseCone;
-    internal double AssistedTargetNoseAngleRad = double.NaN;
+    /// True on a tick where the assisted corner-speed hold set the lever. A pilot who has taken
+    /// the lever (thumb throttle or W/S) flies manual power inside the assisted contract, and the
+    /// HUD must not keep saying AUTO.
+    public bool AutoThrottleOwnsLever { get; private set; }
     internal double AssistedCalibratedAirspeedMps = double.NaN;
     internal double AssistedTargetCalibratedAirspeedMps = double.NaN;
 
@@ -160,19 +162,16 @@ public sealed class DetentLayer {
         _analogThrottleControlActive = false;
     }
 
-    double AssistedBaselineTarget(in AircraftState state, double maxPerform) {
-        if (AssistedTargetWithinNoseCone) {
-            double fullPullG = System.Math.Min(4.0, maxPerform);
-            if (double.IsFinite(AssistedTargetNoseAngleRad)) {
-                double offAxis = System.Math.Clamp(
-                    AssistedTargetNoseAngleRad / (System.Math.PI / 3.0), 0.0, 1.0);
-                return 1.4 + (fullPullG - 1.4) * offAxis * offAxis;
-            }
-            return fullPullG;
-        }
-        return System.Math.Clamp(
+    /// The assisted neutral law: bank-compensated level-path hold, and nothing else. It used to
+    /// add a 1.4 to 4 G pull whenever ANY target sat inside a 60-degree cone, scaled by the
+    /// unsigned angle off the nose (so it pulled the same way for a target below, beside or
+    /// behind the lift line) — a hands-off portrait jet climbed to 65 degrees nose-up chasing a
+    /// contact 19 km away, and crossing the cone edge stepped the command target ~3 G with no
+    /// thumb change (feel/play audits, 2026-10-13). Neutral now means the same thing whatever is
+    /// in the sky; the ballistic, weapons-hot, range-gated gunnery assist is the targeting help.
+    double AssistedBaselineTarget(in AircraftState state) =>
+        System.Math.Clamp(
             1.0 / System.Math.Max(System.Math.Cos(state.Bank), 0.5), 1.0, 1.35);
-    }
 
     // MAGIC CARPET (approach mode). The G-command grammar is wrong for a landing: with the valley
     // pinned at 1 G the pull has no authority, so the aircraft just sinks (the "uncontrollable"
@@ -460,7 +459,7 @@ public sealed class DetentLayer {
             // flight centre is 1 G. The limiter paddle therefore grants the same physical authority
             // to an analog stick as Space+arrows, rather than merely tagging intent metadata.
             double neutral = AssistedFlight
-                ? AssistedBaselineTarget(s, maxPerform) : 1.0;
+                ? AssistedBaselineTarget(s) : 1.0;
             double pushFloor = System.Math.Max(
                 FlightModel.NzAeroMin(s, p, AirspeedMps, AtmosphereModel),
                 over ? -1.5 : -1.0);
@@ -481,18 +480,12 @@ public sealed class DetentLayer {
         }
         else if (AssistedFlight) {
             _flightPathHoldCaptured = false;
-            // Portrait-phone baseline, pilot-tuned (2026-07-23): the old blanket 4 G in-cone pull
-            // made the phone "almost impossible to stop pitching up" — the bandit is near the nose
-            // most of a fight, so the assist owned the pitch axis at full pull. About-right means
-            // the demand GROWS with off-axis angle: on the nose the later gunnery correction does
-            // the fine tracking over a light sustaining pull, and only a target near the cone edge
-            // (60 deg) draws the full protected repositioning pull. Outside the cone the assist
-            // holds the path instead of climbing away. Pull/push branches above still own the axis
+            // Hands-off assisted flight holds the path through a bank; it no longer pulls toward
+            // a target (see AssistedBaselineTarget). Pull/push branches above still own the axis
             // completely whenever the pilot is touching it.
             tier = DemandTier.Baseline;
             StickyOffsetG = 0.0;
-            // Bank-compensated path hold outside the cone; an angle-shaped tactical pull inside it.
-            target = AssistedBaselineTarget(s, maxPerform);
+            target = AssistedBaselineTarget(s);
         }
         else if (p.NeutralFlightPathHold.Enabled) {
             // Modern neutral-stick law: capture the BODY NOSE where the pilot releases pitch, then
@@ -714,6 +707,7 @@ public sealed class DetentLayer {
         }
         // The lever stop is an airframe capability. A dry-thrust Sabre stops at MIL (1.0),
         // while an afterburning definition may expose the full staged range to 1.35.
+        bool autoThrottleOwnsLever = false;
         if (ApproachMode && !_manualThrottle) {
             _throttleLever = System.Math.Min(autoThr, leverStop); // track the real lever for smooth takeover
         } else if (_analogThrottleControlActive && !wHeld && !sHeld) {
@@ -725,6 +719,7 @@ public sealed class DetentLayer {
                 _analogThrottleControl * leverStop, 0.0, leverStop);
         } else if (AssistedFlight && !wHeld && !sHeld) {
             _throttleLever = System.Math.Min(autoThr, leverStop);
+            autoThrottleOwnsLever = true;
         } else {
             if (wHeld) _throttleLever += RelativeThrottleHoldRatePerSecond * dt;
             if (sHeld) _throttleLever -= RelativeThrottleHoldRatePerSecond * dt;
@@ -732,6 +727,7 @@ public sealed class DetentLayer {
             _throttleLever = System.Math.Clamp(_throttleLever, 0.0, leverStop);
         }
         Throttle = _throttleLever;
+        AutoThrottleOwnsLever = autoThrottleOwnsLever;
         // Firewalled on the approach = wave-off. Match the session's mode threshold so the climb
         // command survives the approach→fight handoff instead of becoming unreachable at 0.99.
         if (ApproachMode && _manualThrottle && _throttleLever >= 0.95) {

@@ -43,56 +43,37 @@ test("a throwing storage never crashes and stays pending", () => {
   assert.doesNotThrow(() => markFirstRunValleySeen(null));
 });
 
-test("first pending visit with no other programme query stages the guided valley", () => {
-  assert.equal(shouldAutoStartFirstRunValley({
-    firstRunPending: true,
-    programQuery: null,
-    menuQuery: null,
-    firstRunQuery: null,
-    webdriver: false,
-  }), true);
-  assert.equal(shouldAutoStartFirstRunValley({
-    firstRunPending: true,
-    programQuery: "first-merge",
-    webdriver: false,
-  }), true);
+test("a fresh visit never detours through the valley: root and first-merge open the picker", () => {
+  for (const programQuery of [null, "", "first-merge"]) {
+    assert.equal(shouldAutoStartFirstRunValley({
+      firstRunPending: true,
+      programQuery,
+      menuQuery: null,
+      firstRunQuery: null,
+    }), false, `fresh visit with program=${programQuery} must reach the gun lesson, not the gorge`);
+  }
+  assert.equal(shouldAutoStartFirstRunValley({ firstRunPending: false }), false);
+  assert.equal(shouldAutoStartFirstRunValley(), false);
 });
 
-test("return visits and explicit menu keep the six-tile picker", () => {
+test("the valley is an explicit replay, seen or unseen", () => {
+  for (const firstRunPending of [true, false]) {
+    assert.equal(shouldAutoStartFirstRunValley({
+      firstRunPending,
+      firstRunQuery: "1",
+    }), true, "explicit replay stages the valley Ready card");
+  }
   assert.equal(shouldAutoStartFirstRunValley({
-    firstRunPending: false,
-    webdriver: false,
+    firstRunPending: true,
+    firstRunQuery: "0",
   }), false);
-  assert.equal(shouldAutoStartFirstRunValley({
-    firstRunPending: true,
-    menuQuery: "1",
-    webdriver: false,
-  }), false);
 });
 
-test("automated and human first visits use the same onboarding rule", () => {
-  assert.equal(shouldAutoStartFirstRunValley({
-    firstRunPending: true,
-    webdriver: true,
-  }), true);
-  assert.equal(shouldAutoStartFirstRunValley({
-    firstRunPending: false,
-    firstRunQuery: "1",
-    webdriver: true,
-  }), true, "explicit replay stages Ready even when already seen");
-  assert.equal(shouldAutoStartFirstRunValley({
-    firstRunPending: false,
-    firstRunQuery: "1",
-    webdriver: false,
-  }), true);
-});
-
-test("other programme deep links never steal the first-run valley", () => {
+test("other programme deep links never stage the valley", () => {
   for (const programQuery of ["top-gun", "rapier-intercept", "cobra-lab", "casevac"]) {
     assert.equal(shouldAutoStartFirstRunValley({
       firstRunPending: true,
       programQuery,
-      webdriver: false,
     }), false, programQuery);
   }
 });

@@ -78,7 +78,10 @@ export function mobileTacticalReadout(state = {}, display = {}, {
     ? Math.round(indicatedKts - cornerKts)
     : null;
   const actualG = finiteNumber(state.g_actual);
-  const assistedFlight = state.assisted_flight === true;
+  // AUTO means the corner hold owns the lever NOW. Older snapshots without auto_throttle fall
+  // back to the assisted contract flag.
+  const assistedFlight = typeof state.auto_throttle === "boolean"
+    ? state.auto_throttle : state.assisted_flight === true;
   const assistedSpeedBiasKts = Math.round(
     finiteNumber(state.assisted_speed_bias_kts) ?? 0,
   );

@@ -481,6 +481,17 @@ public sealed partial class SimulationSession {
         if (_firstRunValleyRuntime?.ParkOpponents == true) return;
         if (_opponentTerminalState == AircraftTerminalState.SimulationBounded) return;
         _bandit.Step(observation, dt);
+        if (_bandit is NeutralMergeBandit { Presentation: OpeningPresentation.Lead,
+                Presenting: true, FirstPassComplete: false } lead) {
+            // Both aircraft have now integrated this tick. Judge the authored lesson against
+            // the body/gun axis, without adding player attitude to the opponent's observation.
+            Vec3D toLead = lead.State.Position - _player.State.Position;
+            bool tracking = PrimaryOpponentAlive && PlayerWeaponsAuthorized
+                && toLead.Length <= ReactiveBandit.PresentFunnelRangeM
+                && _player.BodyForward.Dot(toLead.Normalized())
+                    >= Math.Cos(NeutralMergeBandit.LeadTrackingAngleRad);
+            lead.ObserveLeadTracking(tracking, dt);
+        }
     }
 
     void ConfigureAdaptiveAiPlanning() {

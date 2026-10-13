@@ -128,6 +128,12 @@ const GUN_HEAT_AMBER_THRESHOLD = 0.7;
 const GUN_HEAT_DISPLAY_THRESHOLD = 0.05;
 const GUN_OVERHEAT_FLASH_HZ = 2;
 
+/** AUTO only while the assisted corner hold owns the lever; older snapshots fall back. */
+function autoThrottleOwnsLever(state) {
+  return typeof state?.auto_throttle === "boolean"
+    ? state.auto_throttle : state?.assisted_flight === true;
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -2873,7 +2879,7 @@ class CombatHud {
     ctx.fillText(speedSecondaryText, speedX, readoutY);
     // Assisted flight (portrait): the throttle is holding corner velocity; say so where the
     // pilot's speed attention already lives. Guarded on field presence for older snapshots.
-    if (state.assisted_flight === true) {
+    if (autoThrottleOwnsLever(state)) {
       const bias = Number(state.assisted_speed_bias_kts) || 0;
       ctx.fillStyle = AMBER;
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -2892,7 +2898,7 @@ class CombatHud {
     const altitude = Number.isFinite(display.altitudeDigits)
       ? Math.round(display.altitudeDigits) : Math.round(Number(state.alt_ft) || 0);
     const bias = Number(state.assisted_speed_bias_kts) || 0;
-    const auto = state.assisted_flight === true
+    const auto = autoThrottleOwnsLever(state)
       ? (bias === 0 ? "AUTO CORNER" : `AUTO COR${bias > 0 ? "+" : ""}${bias}`)
       : "MANUAL";
     const top = this.safeInsets.top + 18;
@@ -2905,7 +2911,7 @@ class CombatHud {
     ctx.fillStyle = "rgba(2, 10, 16, 0.68)";
     roundedRect(ctx, (this.width - width) / 2, top - 10, width, 20, 5);
     ctx.fill();
-    ctx.fillStyle = state.assisted_flight === true ? AMBER : GREEN;
+    ctx.fillStyle = autoThrottleOwnsLever(state) ? AMBER : GREEN;
     ctx.fillText(text, this.width / 2, top);
     ctx.restore();
   }

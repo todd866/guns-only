@@ -1538,7 +1538,7 @@ test("the published Medevac route resolves route hold, selective relay, and dive
   }
 });
 
-test("a fresh human or automated visit briefs the valley and remains replayable", async () => {
+test("a fresh visit opens the wordless F-22 picker and the valley stays an opt-in replay", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
   const site = await serveStatic(WWWROOT);
@@ -1550,24 +1550,49 @@ test("a fresh human or automated visit briefs the valley and remains replayable"
     const page = await browser.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}?audioQa=silent`, {
-      waitUntil: "load",
-      timeout: scaled(60000),
-    });
-    await page.waitForFunction(() =>
-      document.querySelector("#ready-screen")?.classList.contains("visible") === true
-        && document.querySelector("#ready-screen")?.dataset.mode === "intro"
-        && document.querySelector("#ready-start")?.disabled === false
-        && document.querySelector("#ready-start")?.textContent?.trim() === "Enter valley"
-        && document.activeElement?.id === "ready-start",
-    undefined, { polling: scaled(100), timeout: scaled(45000) });
+    // Fresh storage, both public doors: the root and the shared first-merge link. Neither may
+    // detour through Kestrel Gorge; one tap launches the rung-0 gun lesson.
+    for (const search of ["?audioQa=silent", "?program=first-merge&audioQa=silent"]) {
+      await page.goto(`${site.url}${search}`, {
+        waitUntil: "load",
+        timeout: scaled(60000),
+      });
+      await page.evaluate(() => localStorage.clear());
+      await page.reload({ waitUntil: "load", timeout: scaled(60000) });
+      await page.waitForFunction(() =>
+        document.querySelector("#ready-screen")?.classList.contains("visible") === true
+          && document.querySelector("#ready-screen")?.dataset.mode === "program"
+          && document.querySelector("#ready-start")?.disabled === false
+          && typeof globalThis.__gunsState?.mission_definition_id === "string"
+          && globalThis.__gunsState.mission_definition_id !== "",
+      undefined, { polling: scaled(100), timeout: scaled(45000) });
+      const door = await page.evaluate(() => ({
+        start: document.querySelector("#ready-start")?.textContent?.trim() ?? "",
+        missionId: globalThis.__gunsState?.mission_definition_id ?? "",
+        selected: document.querySelector('[data-program-node="first-merge"]')
+          ?.getAttribute("aria-pressed") === "true",
+        replay: document.querySelector("#ready-intro-replay")?.textContent?.trim() ?? "",
+      }));
+      assert.equal(door.start, "Fly Guns Only", `${search}: fresh visit must offer the F-22 sortie`);
+      assert.equal(door.missionId,
+        "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+        `${search}: fresh visit staged the valley instead of the gun lesson`);
+      assert.equal(door.selected, true, `${search}: the F-22 must be the selected aircraft`);
+      assert.equal(door.replay, "Replay valley intro");
+      await page.waitForTimeout(scaled(1000));
+      assert.equal(await page.evaluate(() =>
+        document.querySelector("#ready-screen")?.dataset.mode), "program",
+      `${search}: the picker must not be replaced by the valley brief after boot`);
+    }
 
-    assert.equal(await page.locator("#ready-start").innerText(), "Enter valley");
-    assert.equal(await page.evaluate(() => document.activeElement?.id), "ready-start");
-    await page.waitForTimeout(scaled(1000));
-    assert.equal(await page.evaluate(() =>
-      document.querySelector("#ready-screen")?.dataset.mode), "intro",
-    "first-run authority must remain Ready until a deliberate pilot action");
+    // The valley is still one deliberate tap away, and leaving it does not make it sticky.
+    await page.locator("#ready-intro-replay").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#ready-screen")?.dataset.mode === "intro"
+        && document.querySelector("#ready-start")?.textContent?.trim() === "Enter valley",
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
+      "the visible replay action must not make the intro sticky for Fly again");
 
     await page.locator("#ready-settings").click();
     await page.waitForFunction(() =>
@@ -1576,7 +1601,6 @@ test("a fresh human or automated visit briefs the valley and remains replayable"
     assert.equal(await page.evaluate(() =>
       document.querySelector("#ready-screen")?.dataset.mode), "intro",
     "Settings must not relabel staged valley authority as the aircraft programme");
-    assert.equal(await page.locator("#ready-selector").isHidden(), true);
     await page.locator("#settings-close").click();
 
     await page.locator("#ready-intro-replay").click();
@@ -1584,16 +1608,11 @@ test("a fresh human or automated visit briefs the valley and remains replayable"
       document.querySelector("#ready-screen")?.dataset.mode === "program",
     undefined, { polling: scaled(100), timeout: scaled(20000) });
     assert.equal(await page.locator("#ready-intro-replay").innerText(), "Replay valley intro");
-    assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
-      "choosing another mission must not make a later reload restage the intro");
 
     await page.locator("#ready-intro-replay").click();
     await page.waitForFunction(() =>
       document.querySelector("#ready-screen")?.dataset.mode === "intro",
     undefined, { polling: scaled(100), timeout: scaled(20000) });
-    assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
-      "the visible replay action must not make the intro sticky for Fly again");
-
     await page.locator("#ready-start").click();
     await page.waitForFunction(() =>
       globalThis.__gunsState?.session_phase === "ACTIVE"
@@ -1609,14 +1628,14 @@ test("a fresh human or automated visit briefs the valley and remains replayable"
       diagnostics: globalThis.__gunsAssets?.diagnostics?.().firstRunValley ?? null,
     }));
     assert.equal(valley.weaponsCold, true,
-      "the active ingress must begin with the weapons-cold lesson intact");
+      "the replayed ingress must begin with the weapons-cold lesson intact");
     assert.equal(valley.available, true);
     assert.equal(valley.diagnostics?.authorityMatched, true);
     assert.equal(valley.diagnostics?.drawCount, 1);
     assert.ok(valley.diagnostics?.triangleCount > 0,
-      "the active first-run sortie must render its authority-matched gorge");
+      "the replayed valley sortie must render its authority-matched gorge");
     assert.deepEqual(pageErrors, [],
-      `uncaught first-run page errors:\n${pageErrors.join("\n")}`);
+      `uncaught first-visit page errors:\n${pageErrors.join("\n")}`);
   } finally {
     await browser.close();
     await site.close();
