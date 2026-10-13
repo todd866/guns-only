@@ -630,9 +630,10 @@ test("rendered proof disambiguates reciprocal shooters that share one authority 
   for (const tracer of [friendlyTracer, hostileTracer]) {
     assert.equal(tracer.userData.ribbonWidthM,
       COBRA_BATTLEFIELD_PRESENTATION_PROFILE.groundTracerGlowWidthM);
-    assert.equal(
-      tracer.userData.expiresAt - tracer.userData.bornAt,
-      COBRA_BATTLEFIELD_PRESENTATION_PROFILE.groundTracerLifetimeMs,
+    // bornAt comes from performance.now(); (t + 1800) - t is not exactly 1800 for every float t.
+    assert.ok(
+      Math.abs(tracer.userData.expiresAt - tracer.userData.bornAt
+        - COBRA_BATTLEFIELD_PRESENTATION_PROFILE.groundTracerLifetimeMs) < 1e-6,
       "both factions receive the same readable presentation lifetime",
     );
   }
