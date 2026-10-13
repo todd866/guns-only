@@ -140,12 +140,31 @@ public class AirframeHitGeometryTests {
         var playerGun = session.PlayerGun;
         var enemyGun = session.OpponentGun;
         Assert.Same(AirframeHitGeometry.Su27,playerGun.TargetGeometry);
+        Assert.True(playerGun.HasGimbal);
+        Assert.NotNull(playerGun.FirePathClear);
+        playerGun.FirePathClear = (_, _, _) => false;
+        playerGun.Step(true, session.Player.State, session.Bandit.State, 0.01);
+        Assert.True(playerGun.GimbalFireInhibited);
+        int ammo = playerGun.AmmoRemaining;
+        int damage = playerGun.TotalHitCount;
         session.SetArenaHandicap(BanditSkillProfile.For(PilotSkill.Competent),PilotSkill.Competent);
         Assert.Same(playerGun,session.PlayerGun);
         Assert.Same(enemyGun,session.OpponentGun);
         Assert.Null(playerGun.TargetGeometry);
         Assert.Null(enemyGun.TargetGeometry);
+        Assert.False(playerGun.HasGimbal);
+        Assert.Null(playerGun.FirePathClear);
+        Assert.False(playerGun.GimbalFireInhibited);
+        Assert.False(playerGun.GimbalTracking);
+        Assert.Equal(0, playerGun.GimbalOffsetRad);
+        Assert.Equal(ammo, playerGun.AmmoRemaining);
+        Assert.Equal(damage, playerGun.TotalHitCount);
         session.ClearArenaHandicap();
         Assert.Same(AirframeHitGeometry.F22,enemyGun.TargetGeometry);
+        Assert.Same(AirframeHitGeometry.Su27,playerGun.TargetGeometry);
+        Assert.True(playerGun.HasGimbal);
+        Assert.NotNull(playerGun.FirePathClear);
+        Assert.Equal(ammo, playerGun.AmmoRemaining);
+        Assert.Equal(damage, playerGun.TotalHitCount);
     }
 }

@@ -154,7 +154,17 @@ public sealed class GunKill {
     /// Null preserves the legacy sphere for frozen modes and compatibility callers.
     public AirframeHitGeometry? TargetGeometry { get; internal set; }
     // Session assigns this only to the F-22 player, captured at sortie start.
-    internal GunGimbalConfig? Gimbal { get; set; }
+    GunGimbalConfig? _gimbalConfig;
+    internal GunGimbalConfig? Gimbal {
+        get => _gimbalConfig;
+        set {
+            _gimbalConfig = value;
+            if (value is null) {
+                _gimbal.Step(default, Vec3D.Zero, false, null, 0);
+                GimbalFireInhibited = false;
+            }
+        }
+    }
     internal Func<Vec3D, Vec3D, double, bool>? FirePathClear { get; set; }
     public bool HasGimbal => Gimbal is not null;
     public bool GimbalTracking => _gimbal.Tracking && !GimbalFireInhibited;

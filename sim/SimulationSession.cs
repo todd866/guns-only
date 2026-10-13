@@ -1322,11 +1322,7 @@ public sealed partial class SimulationSession {
             _gunKill = new GunKill(combat.PlayerAmmo, combat.OpponentHitsToDefeat,
                 playerTargetHitRadiusM, combat.PlayerGunProfile, playerGunHeat,
                 targetGeometry: _arenaHandicapActive ? null : combat.PlayerTargetGeometry);
-            if (IsVisualMergeSortie(_beat) && !_arenaHandicapActive && combat.PlayerTargetGeometry is not null) {
-                _gunKill.Gimbal = GunGimbalConfig.ForAssist(
-                    (_sortiePitchAssist ?? _fightDirector.PitchAssist).GainScale);
-                _gunKill.FirePathClear = PlayerGunPathClear;
-            }
+            ConfigurePlayerGunForMode();
             RegisterFormationGunTargets();
             _gunKill.SelectTarget(_selectedPlayerGunTargetId);
             _opponentGun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
