@@ -782,8 +782,8 @@ async function flyProfile(page, options) {
       const simS = Number(globalThis.__gunsState?.t) || 0;
       if (next === activePitchKey) return;
       if (activePitchKey !== null) bridge.FeedKey(activePitchKey, false);
-      // Each controller owns its own held key. Releasing another axis here leaves its
-      // active-key bookkeeping stale, so that controller never reasserts the desired input.
+      if (activeRollKey !== null) bridge.FeedKey(activeRollKey, false);
+      if (activeThrottleKey !== null) bridge.FeedKey(activeThrottleKey, false);
       if (next !== null) bridge.FeedKey(next, true);
       activePitchKey = next;
       lastCommandChangeSimS = simS;
@@ -821,6 +821,7 @@ async function flyProfile(page, options) {
     const setRollKey = (next) => {
       if (next === activeRollKey) return;
       if (activeRollKey !== null) bridge.FeedKey(activeRollKey, false);
+      if (activeThrottleKey !== null) bridge.FeedKey(activeThrottleKey, false);
       activeRollKey = next;
       if (next !== null) bridge.FeedKey(next, true);
     };
