@@ -271,6 +271,11 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     /// a cambered wing declares its offset here so lift, induced drag, stall incidence and the
     /// protected control law all consume one coefficient authority.
     double ZeroLiftCoefficient = 0.0,
+    /// Centre shaping of the ANALOG lateral stick (touch / gamepad), as cubic expo:
+    /// out = (1 - e) x + e x^3. Zero (default) is the identity, bit-for-bit for every airframe that
+    /// does not opt in. Full deflection is always full aileron, so roll authority is unchanged;
+    /// only the slope around centre is reduced. Digital keyboard roll (+/-1) is unaffected.
+    double AnalogRollCentreExpo = 0.0,
     ConventionalTailParameters ConventionalTail = default);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
@@ -905,6 +910,16 @@ public static class FlightModel {
         // full aileron authority per rad/s gives a firm hold that saturates near ~0.55 rad/s of
         // unwanted roll; tune with RollHoldRateGainNms.
         RollHoldRateGainNms: 2_500_000.0,
+        // FINE-ROLL CENTRE RESPONSE (feel audit 2026-10-13, finding 3). At 354 KCAS the hold
+        // above is ~7.5x the aerodynamic roll damping, and it used to fade out linearly across a
+        // 0.05 lateral-command band: on the 112 px phone stick that band is the 8->10 px interval,
+        // which measured 1 -> 11 deg/s (a ~5 deg/s-per-px gain step exactly where the thumb needs
+        // precision). The hold now stands down within the first 0.005 of command (under one pixel)
+        // and the analog stick gets a cubic centre expo, so the response is monotonic at <=2 deg/s
+        // per px over the first 15 px while full stick still gives the same ~185 deg/s. Labelled
+        // gameplay-surrogate stick shaping, not an OEM F-22 FLCS gradient.
+        RollHoldDeadband: 0.005,
+        AnalogRollCentreExpo: 0.65,
         PositiveStructuralLimitG: 9.0, MaxPerformFraction: 1.0,
         // Public +9 G remains the normal protected boundary. These are deliberately labelled
         // gameplay-surrogate control laws: they do not claim that an actual F-22 exposes an
@@ -1068,6 +1083,10 @@ public static class FlightModel {
     /// The counter is energy fighting, never rate fighting.
     public static readonly AircraftParams UcavInterceptorSurrogate =
         F22APublicDataSurrogate with {
+            // The F-22's fine-roll stick shaping is a player-feel choice for that airframe only;
+            // keep this derived surrogate on the shared defaults.
+            RollHoldDeadband = 0.05,
+            AnalogRollCentreExpo = 0.0,
             MassKg = 12500.0,
             WingAreaM2 = 58.0,
             ThrustMaxN = 72000.0,
