@@ -181,7 +181,7 @@ public enum BanditTactic { Acquire, Defend, Energy, Return, Present }
 
 /// Deterministic, deliberately beatable BFM opponent. It owns a normal AircraftSim and supplies
 /// only pilot controls: no kinematic shortcuts, wall clock, or random source enters the kernel.
-public sealed class ReactiveBandit :
+public sealed partial class ReactiveBandit :
     IBandit,
     IBanditDecisionTraceSource,
     IFormationDirectiveSink,
@@ -1095,7 +1095,16 @@ public sealed class ReactiveBandit :
                     return;
                 }
             }
-            if (lowTarget && hasLowAttackPlan) {
+            bool wasAttackInterceptActive = _attackReengagementActive;
+            UpdateAttackReengagement(player, lowTarget);
+            if (_attackReengagementActive) {
+                // Keep refreshing the planner hold on its ordinary cadence while the tactical
+                // intercept flies. An off-cadence exit resumes that recent hold, just like BFM.
+                _ = LookaheadCommand(player);
+                LastCommand = AttackInterceptCommand(player);
+                RecordSingleCandidateDecision(LastCommand, invalidatesLookaheadHold: false);
+                Tactic = BanditTactic.Acquire;
+            } else if (lowTarget && hasLowAttackPlan) {
                 _lowAttackActive = true;
                 if (ownClearanceM <= LowBlockCaptureClearanceM) {
                     CancelPendingLookaheadPlan();
@@ -1182,6 +1191,11 @@ public sealed class ReactiveBandit :
                     ? BanditTactic.Defend
                     : BanditTactic.Acquire;
             }
+            // An off-cadence exit can reuse a held planner command without publishing a new
+            // selection. Replace the intercept trace so telemetry still names the flown command.
+            if (wasAttackInterceptActive && !_attackReengagementActive
+                && DecisionTrace.SelectedCommand != LastCommand)
+                RecordSingleCandidateDecision(LastCommand, invalidatesLookaheadHold: false);
             _sim.Step(CommandForFlight(), dt);
             T += dt;
             return;
@@ -2325,7 +2339,11 @@ public sealed class ReactiveBandit :
             ? _chaseStallSeconds + System.Math.Max(0.0, T - _chaseStallCheckedAt)
             : 0.0;
         _chaseStallCheckedAt = T;
-        bool chasing = _chaseStallSeconds >= ChaseStallSeconds;
+        if (AttackReengagementEnabled) {
+            if (lowAttackPlan is not null || range < 800.0) _attackChaseLatched = false;
+            else if (_chaseStallSeconds >= ChaseStallSeconds) _attackChaseLatched = true;
+        } else _attackChaseLatched = false;
+        bool chasing = _chaseStallSeconds >= ChaseStallSeconds || _attackChaseLatched;
         double fastThrottle = chasing
             ? _maximumThrottle
             : System.Math.Min(_maximumThrottle, 1.05);
@@ -2334,6 +2352,14 @@ public sealed class ReactiveBandit :
         double cruiseThrottle = chasing
             ? _maximumThrottle
             : System.Math.Min(_maximumThrottle, 0.84);
+        // Outside gun range the cold tier needs a cut-off, not a ballistic aim point on an
+        // unreachable stern chase. Freeze this bounded aim heuristic with the rest of the plan;
+        // the gun-window/lead gates below still score the actual predicted physical contact.
+        _lookaheadPlanAttackLeadSeconds = AttackReengagementEnabled && Skill == PilotSkill.Competent
+            && chasing && lowAttackPlan is null && range > 1000.0
+            ? System.Math.Clamp((range - 650.0) / System.Math.Max(State.Speed, 150.0), 0.0, 6.0) : 0.0;
+        if (_lookaheadPlanAttackLeadSeconds > 0.0)
+            leadPoint = AttackInterceptPoint(player, _lookaheadPlanAttackLeadSeconds);
         double maxG = AvailableAcquireG(safetyReserve: false);
         // A TURNING FIGHT IS WON AT CORNER SPEED, NOT ON THE BURNER. Every candidate used to carry
         // cruise or full burner, so once the chase latch lit the burner the Su-27 accelerated to
@@ -2344,7 +2370,8 @@ public sealed class ReactiveBandit :
         // that beats the burner candidates.
         double noseOffRad = System.Math.Acos(System.Math.Clamp(
             State.ForwardDir().Dot(lineOfSight), -1.0, 1.0));
-        double pullThrottle = State.Speed > _highSpeedMps && noseOffRad > CornerTurnNoseOffRad
+        double pullThrottle = AttackReengagementEnabled && State.Speed > _highSpeedMps
+            && noseOffRad > CornerTurnNoseOffRad
             ? System.Math.Min(_maximumThrottle, CornerTurnThrottle)
             : fastThrottle;
 
@@ -2467,6 +2494,7 @@ public sealed class ReactiveBandit :
                 _lookaheadPlanThrustFraction,
                 _lookaheadPlanBossCommitted,
                 _lookaheadPlanPredictionSubstepTicks,
+                _lookaheadPlanAttackLeadSeconds,
                 out int forecastSteps,
                 out int terrainSweeps);
             score += _lookaheadDoctrineBiases[index];
@@ -2748,6 +2776,7 @@ public sealed class ReactiveBandit :
         double thrustFraction,
         bool bossCommitted,
         int predictionSubstepTicks,
+        double attackLeadSeconds,
         out int forecastSteps,
         out int terrainSweeps) {
         const double threatWeight = 26.0;
@@ -2937,7 +2966,12 @@ public sealed class ReactiveBandit :
         // (only ~0.2 score at the edge), so range management dominated and the controller
         // happily orbited just outside the trigger gate. Keep a smooth gradient toward the real
         // envelope without widening it.
-        double termAngle = BanditFireControl.NoseErrorRad(terminal, terminalPlayer);
+        // Only the steering-angle term uses the later intercept POINT. NoseErrorRad reads
+        // position alone; firing/threat/range terms retain the physical rollout contact above.
+        var steeringPlayer = attackLeadSeconds > 0.0 ? terminalPlayer with {
+            Position = AttackInterceptPoint(terminalPlayer, attackLeadSeconds)
+        } : terminalPlayer;
+        double termAngle = BanditFireControl.NoseErrorRad(terminal, steeringPlayer);
         double coneErrors = termAngle / gunConeRad;
         double score = -0.75 * coneErrors;
         // Direct conversion reward: seconds of trigger-eligible gun window accrued over the

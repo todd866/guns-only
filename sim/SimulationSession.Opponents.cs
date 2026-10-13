@@ -480,6 +480,9 @@ public sealed partial class SimulationSession {
     void StepPrimaryOpponent(in ActorObservation observation, double dt) {
         if (_firstRunValleyRuntime?.ParkOpponents == true) return;
         if (_opponentTerminalState == AircraftTerminalState.SimulationBounded) return;
+        bool pressAttack = UsesDifficultyRamp(_beat) && _wingmen.Count == 0 && DifficultyRung <= 2;
+        if (_bandit is ReactiveBandit reactive) reactive.AttackReengagementEnabled = pressAttack;
+        if (_bandit is NeutralMergeBandit merge) merge.AttackReengagementEnabled = pressAttack;
         _bandit.Step(observation, dt);
     }
 
