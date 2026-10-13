@@ -146,6 +146,9 @@ export function mobileTacticalReadout(state = {}, display = {}, {
   const bvrContact = fightActive
     && range.rangeNm !== null
     && range.rangeNm * 1852 > tallyRangeM;
+  // The fighter's contact locator already owns range/closure. Reserve its one-row header for
+  // flight, weapon and fuel readings; keep BVR details in the frozen modes' context row only.
+  const combatWeaponParts = [...weaponParts];
   if (bvrContact) {
     weaponParts.push(`T${Math.max(1, Math.floor(targetNumber))} ${range.compactText}`);
     weaponParts.push(closure.trend === "closing"
@@ -157,9 +160,11 @@ export function mobileTacticalReadout(state = {}, display = {}, {
 
   const fuel = fuelReadout(state);
   if (fuel.consumesFuel && fuel.fuelLb !== null) {
-    weaponParts.push(fuel.statusText
+    const fuelText = fuel.statusText
       ? `${fuel.statusText}${compactMagnitude(fuel.fuelLb)}`
-      : `F${compactMagnitude(fuel.fuelLb)}`);
+      : `F${compactMagnitude(fuel.fuelLb)}`;
+    weaponParts.push(fuelText);
+    combatWeaponParts.push(fuelText);
   }
 
   const ammoLevel = ammo !== null && ammo <= 0 ? "warning"
@@ -195,7 +200,7 @@ export function mobileTacticalReadout(state = {}, display = {}, {
     combatParts.push({ text: `${actualG.toFixed(1)}G`, optional: false });
   }
   combatParts.push({ text: compactVerticalSpeed(verticalFpm, { condensed }), optional: true });
-  for (const text of weaponParts) combatParts.push({ text, optional: false });
+  for (const text of combatWeaponParts) combatParts.push({ text, optional: false });
 
   return Object.freeze({
     actualText: actualParts.join(separator),

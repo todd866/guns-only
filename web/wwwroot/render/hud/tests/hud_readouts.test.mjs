@@ -1097,3 +1097,14 @@ test("without an energy cue the combat row keeps heading for orientation", () =>
     "M.50 · H087 · V/S --- · F9K");
   assert.equal(readout.fuelAttention, false);
 });
+
+test("BVR contact details cannot consume the fighter header's weapon and fuel space", () => {
+  const readout = mobileTacticalReadout({
+    mach: 0.634, assisted_flight: true, g_actual: 4.4, vertical_speed_fpm: 2000,
+    ammo: 400, gun_heat: 0.3, range_m: 37040, closure_kts: 600, fuel_lb: 12000,
+  }, {}, { fightActive: true });
+  assert.equal(readout.combatParts.map((part) => part.text).join("·"),
+    "M.63·AUTO COR·4.4G·↑2K·GUN400·T30%·F12K");
+  // Rapier/carrier context rows retain the original contact details and order.
+  assert.equal(readout.contextText, "GUN400 · T30% · T1 20NM · CLOS600 · F12K");
+});
