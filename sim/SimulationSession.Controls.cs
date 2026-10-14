@@ -609,8 +609,21 @@ public sealed partial class SimulationSession {
     /// </summary>
     void ConfigureAssistedFlightDetents() {
         _detents.AssistedFlight = _assistedFlight && !_detents.ApproachMode;
+        bool recoveryAutoThrottle = RecoveryAutothrottleEngaged;
+        _detents.RecoveryAutoThrottleIdle = false;
+        _detents.RecoveryAutoThrottleTargetCasMps = recoveryAutoThrottle
+            ? _f22Course.AutothrottleTargetCalibratedMps : double.NaN;
+        _detents.RecoveryRollAssistBankRad = recoveryAutoThrottle
+            ? RecoveryCourseBankRad() : double.NaN;
+        // Landing gains engage with the gear handle down once the course is past the break
+        // (downwind onward); a go-around with the gear still down flies the break on full gains.
+        _detents.RecoveryLandingGains = _f22Course.Armed && !_f22Course.Complete
+            && PlayerRtbActive
+            && _f22Course.NextGateNeedsGear
+            && PlayerSystems.GearHandle == LandingGearHandle.Down;
         if (!_detents.AssistedFlight) {
-            _detents.AssistedCalibratedAirspeedMps = double.NaN;
+            _detents.AssistedCalibratedAirspeedMps = recoveryAutoThrottle
+                ? _player.IndicatedAirspeedMps : double.NaN;
             _detents.AssistedTargetCalibratedAirspeedMps = double.NaN;
             return;
         }
@@ -623,5 +636,39 @@ public sealed partial class SimulationSession {
             (cornerKias + AssistedSpeedBiasKts) / AirData.MpsToKnots;
 
         // Deliberately no target geometry here: the assisted neutral law is target-independent.
+    }
+
+    /// <summary>
+    /// Build 380 recovery assist level. Full assist (autothrottle through the recovery) follows the
+    /// sortie's latched gun-assist ramp — the early ladder — or the phone's assisted contract.
+    /// Without it the course is cues only. The procedure is the same at every level.
+    /// </summary>
+    public bool RecoveryAssistFull =>
+        _assistedFlight || (_sortiePitchAssist ?? _fightDirector.PitchAssist).Active;
+
+    /// The recovery autothrottle is driving the lever this tick (airborne on the course).
+    public bool RecoveryAutothrottleEngaged =>
+        RecoveryAssistFull
+        && _f22Course.Armed
+        && !_f22Course.Complete
+        && PlayerRtbActive
+        && _playerTerminalState == AircraftTerminalState.Flying
+        && ConventionalRunwayPhase == RunwayRecoveryPhase.Airborne;
+
+    /// <summary>
+    /// The bank that steers the velocity vector onto the course box: proportional to the
+    /// horizontal bearing of the box from the flight path (pure pursuit of a point a few seconds
+    /// ahead), limited to 30° once lined up on final and 60° elsewhere (the break needs ~60°).
+    /// </summary>
+    double RecoveryCourseBankRad() {
+        if (!_f22Course.Armed || _f22Course.Complete) return double.NaN;
+        Vec3D to = _f22Course.Carrot.Position - _player.State.Position;
+        Vec3D v = _player.State.VelocityVector();
+        double bearing = Math.Atan2(v.X * to.Z - v.Z * to.X, v.X * to.X + v.Z * to.Z);
+        // Positive cross (v × to).y means the box is to the LEFT in this east/north frame.
+        double limit = _f22Course.Carrot.Leg is GunsOnly.Sim.Recovery.ApproachPatternLeg.Final
+            or GunsOnly.Sim.Recovery.ApproachPatternLeg.Threshold
+            ? 30.0 * Math.PI / 180.0 : 60.0 * Math.PI / 180.0;
+        return Math.Clamp(-2.0 * bearing, -limit, limit);
     }
 }

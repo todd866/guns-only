@@ -38,6 +38,26 @@ public sealed class DetentLayer {
     public bool AutoThrottleOwnsLever { get; private set; }
     internal double AssistedCalibratedAirspeedMps = double.NaN;
     internal double AssistedTargetCalibratedAirspeedMps = double.NaN;
+    /// <summary>
+    /// Recovery autothrottle (Build 380 full assist): the calibrated target of the next recovery
+    /// box, NaN when off. It drives the ordinary lever through the same speed-hold servo as
+    /// assisted flight; the engine model still owns spool and thrust. Held W/S win.
+    /// </summary>
+    internal double RecoveryAutoThrottleTargetCasMps = double.NaN;
+    /// <summary>Retard to idle (touchdown / rollout with the recovery autothrottle engaged).</summary>
+    internal bool RecoveryAutoThrottleIdle;
+    public bool RecoveryAutoThrottleOwnsLever { get; private set; }
+    /// <summary>
+    /// Recovery course roll coupling (Build 380 full assist): the bank the course guidance wants,
+    /// NaN when off. Applied only while the pilot has no roll input, as a bounded aileron demand
+    /// through the ordinary roll path; any roll key or stick instantly owns the axis.
+    /// </summary>
+    internal double RecoveryRollAssistBankRad = double.NaN;
+    public bool RecoveryRollAssistActive { get; private set; }
+    /// <summary>Gear-down landing gains on the recovery course (reduced lateral share).</summary>
+    internal bool RecoveryLandingGains;
+    const double RecoveryLandingMaxG = 3.0;
+    const double RecoveryLandingBankLimitRad = 45.0 * System.Math.PI / 180.0;
 
     double _throttleLever = 0.85;   // continuous, 0..1.3 (>1 = afterburner)
     double _analogYawControl;
@@ -279,6 +299,10 @@ public sealed class DetentLayer {
             ? Protection.MaxPerformG(s, p, AirspeedMps,
                 AerodynamicConfiguration, AtmosphereModel)
             : Protection.MaxPerformG(s, p, AirspeedMps, AtmosphereModel);
+        // Gear-down landing limits on the F-22 recovery course: a protected 3 G (fighter
+        // control laws schedule lower limits with the gear handle down). A held arrow is then a
+        // firm pull, not a 9 G yank 300 ft over the approach lights.
+        if (RecoveryLandingGains) maxPerform = System.Math.Min(maxPerform, RecoveryLandingMaxG);
         double overrideMax = scheduledLiftLimit
             ? Protection.OverrideMaxG(s, p, AirspeedMps,
                 AerodynamicConfiguration, AtmosphereModel)
@@ -589,7 +613,12 @@ public sealed class DetentLayer {
         // nothing once saturated, which is exactly what measuring them showed. Capping the
         // commanded rate instead means the aircraft can always stop where it was left.
         double fbwRollShare = p.RollHoldAttitudeGainNmRad > 0.0 ? 0.38 : 1.0;
-        double aileronAuthority = (ApproachMode ? 0.40 : 1.0) * fbwRollShare;
+        // Landing gains: with the gear down on the F-22 recovery course the FLCS uses the same
+        // reduced lateral share the carrier approach mode does (fighter control laws switch to
+        // takeoff/landing gains with the gear handle down), so a key held for a quarter second
+        // is a lineup correction, not a 50° bank.
+        double aileronAuthority = (ApproachMode || RecoveryLandingGains ? 0.40 : 1.0)
+            * fbwRollShare;
         int rollDirection = (rollRight ? 1 : 0) - (rollLeft ? 1 : 0);
         int tapDirection = rollDirection == 0 && _pendingRollTapPulses.Count > 0
             ? _pendingRollTapPulses.Dequeue() : 0;
@@ -604,6 +633,25 @@ public sealed class DetentLayer {
         double requestedRollControl = effectiveRollDirection != 0
             ? effectiveRollDirection * keyRollTravel
             : _analogRollControlActive ? _analogRollControl : 0.0;
+        // Landing gains also carry a bank limit: past 45° a roll command that would steepen the
+        // bank is not passed (a FLCS bank-angle protection); rolling back out always is.
+        if (RecoveryLandingGains && HasBodyAttitude(s)) {
+            double bodyBankNow = BodyBank(s);
+            if (System.Math.Abs(bodyBankNow) > RecoveryLandingBankLimitRad
+                && System.Math.Sign(requestedRollControl) == System.Math.Sign(bodyBankNow))
+                requestedRollControl = -System.Math.Sign(bodyBankNow) * System.Math.Min(0.35,
+                    1.2 * (System.Math.Abs(bodyBankNow) - RecoveryLandingBankLimitRad));
+        }
+        RecoveryRollAssistActive = false;
+        if (effectiveRollDirection == 0 && !_analogRollControlActive
+            && double.IsFinite(RecoveryRollAssistBankRad) && HasBodyAttitude(s)) {
+            double bankError = System.Math.Atan2(
+                System.Math.Sin(RecoveryRollAssistBankRad - BodyBank(s)),
+                System.Math.Cos(RecoveryRollAssistBankRad - BodyBank(s)));
+            requestedRollControl = System.Math.Clamp(
+                1.2 * bankError - 0.25 * s.BodyRates.P, -0.35, 0.35);
+            RecoveryRollAssistActive = true;
+        }
         if (HasBodyAttitude(s)) {
             double bodyBank = BodyBank(s);
             // Capture the aircraft's ACTUAL bank on entry to the fight. _bankTarget used to start at
@@ -701,6 +749,7 @@ public sealed class DetentLayer {
         // The lever stop is an airframe capability. A dry-thrust Sabre stops at MIL (1.0),
         // while an afterburning definition may expose the full staged range to 1.35.
         bool autoThrottleOwnsLever = false;
+        bool recoveryAutoThrottleOwnsLever = false;
         if (ApproachMode && !_manualThrottle) {
             _throttleLever = System.Math.Min(autoThr, leverStop); // track the real lever for smooth takeover
         } else if (_analogThrottleControlActive && !wHeld && !sHeld) {
@@ -710,6 +759,24 @@ public sealed class DetentLayer {
             // takes the lever back while the advertised portrait throttle remains active.
             _throttleLever = System.Math.Clamp(
                 _analogThrottleControl * leverStop, 0.0, leverStop);
+        } else if (!ApproachMode && !wHeld && !sHeld && thUp == 0 && thDn == 0
+            && (RecoveryAutoThrottleIdle
+                || (double.IsFinite(RecoveryAutoThrottleTargetCasMps)
+                    && double.IsFinite(AssistedCalibratedAirspeedMps)))) {
+            if (RecoveryAutoThrottleIdle) {
+                _throttleLever = 0.0;
+            } else {
+                double recoveryTrim = SpeedHoldPowerFeedForward(s, p,
+                    double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed,
+                    System.Math.Max(_gCmd, 0.0), referenceFlightPathRad: s.Gamma,
+                    AerodynamicConfiguration, AtmosphereModel);
+                // Never afterburner on the way home: MIL is the servo's ceiling.
+                _throttleLever = System.Math.Clamp(SpeedHoldThrottle(recoveryTrim,
+                    RecoveryAutoThrottleTargetCasMps, AssistedCalibratedAirspeedMps),
+                    0.0, System.Math.Min(1.0, leverStop));
+            }
+            autoThrottleOwnsLever = true;
+            recoveryAutoThrottleOwnsLever = true;
         } else if (AssistedFlight && !wHeld && !sHeld) {
             _throttleLever = System.Math.Min(autoThr, leverStop);
             autoThrottleOwnsLever = true;
@@ -721,6 +788,7 @@ public sealed class DetentLayer {
         }
         Throttle = _throttleLever;
         AutoThrottleOwnsLever = autoThrottleOwnsLever;
+        RecoveryAutoThrottleOwnsLever = recoveryAutoThrottleOwnsLever;
         // Firewalled on the approach = wave-off. Match the session's mode threshold so the climb
         // command survives the approach→fight handoff instead of becoming unreachable at 0.99.
         if (ApproachMode && _manualThrottle && _throttleLever >= 0.95) {
