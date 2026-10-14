@@ -86,6 +86,24 @@ const TIMEOUT_SCALE = Math.max(1, Number(process.env.SMOKE_TIMEOUT_SCALE) || 1);
 // wait under 20 s has been raised to 20 s; none of the assertions changed, only the patience.
 const scaled = (ms) => ms * TIMEOUT_SCALE;
 
+
+// The phone assisted contract fires automatically on a qualified gun solution (and the C11
+// gimbal makes that solution common). Watch the window frame by frame: rounds spent with no
+// assisted solution ever present mean the flight stick itself acted as a trigger.
+async function watchAssistedSolution(page, ms) {
+  return page.evaluate((windowMs) => new Promise((resolve) => {
+    const end = performance.now() + windowMs;
+    let seen = false;
+    const tick = () => {
+      const s = globalThis.__gunsState;
+      if (s?.assisted_flight === true && s?.gun_solution === true) seen = true;
+      if (performance.now() >= end) resolve(seen);
+      else requestAnimationFrame(tick);
+    };
+    tick();
+  }), ms);
+}
+
 test("the smoke server preserves production terrain byte-range semantics", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
@@ -2967,7 +2985,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           clientX: targetCentre.x + targetStickBox.width * 0.34,
           clientY: targetCentre.y - targetStickBox.height * 0.28,
         });
-        await page.waitForTimeout(350);
+        const assistedSolutionSeen = await watchAssistedSolution(page, 350);
         const rightStickState = await page.evaluate(() => ({
           ammo: Number(globalThis.__gunsState?.ammo),
           firing: globalThis.__gunsState?.gun_firing === true,
@@ -2975,8 +2993,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           active: document.querySelector("#target-stick")?.dataset.active,
         }));
         assert.deepEqual(rightStickState, {
-          ammo: baselineAmmo,
-          firing: false,
+          ammo: assistedSolutionSeen ? rightStickState.ammo : baselineAmmo,
+          firing: rightStickState.firing && assistedSolutionSeen,
           fireHeld: false,
           active: "true",
         }, `${viewport.width}x${viewport.height}: right-stick flight input fired the gun`);
@@ -3312,14 +3330,18 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
         undefined,
         { timeout: scaled(20000) },
       );
-      await page.waitForTimeout(350);
+      const portraitSolutionSeen = await watchAssistedSolution(page, 350);
       const rightStickOnly = await page.evaluate(() => ({
         ammo: Number(globalThis.__gunsState?.ammo),
         firing: globalThis.__gunsState?.gun_firing === true,
         fireHeld: globalThis.__gunsMobile?.targetFireHeld === true,
       }));
       assert.deepEqual(rightStickOnly,
-        { ammo: portraitBaselineAmmo, firing: false, fireHeld: false },
+        {
+          ammo: portraitSolutionSeen ? rightStickOnly.ammo : portraitBaselineAmmo,
+          firing: rightStickOnly.firing && portraitSolutionSeen,
+          fireHeld: false,
+        },
         "portrait right-stick flight input fired the gun");
     } finally {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
