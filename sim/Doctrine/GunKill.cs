@@ -99,6 +99,7 @@ public sealed class GunKill {
     readonly double _hitRadiusM;
     readonly GunProfile _profile;
     readonly GunHeatConfig? _heatConfig;
+    readonly GunGimbal _gimbal = new();
     bool _triggerWasHeld;
     double _secondsToNextShot;
     double _gunSolutionTransitionSeconds;
@@ -113,7 +114,7 @@ public sealed class GunKill {
 
     public GunKill(int ammo = DefaultAmmo, int hitsToKill = DefaultHitsToKill,
         double hitRadiusM = DefaultHitRadiusM, GunProfile? profile = null,
-        GunHeatConfig? heatConfig = null) {
+        GunHeatConfig? heatConfig = null, AirframeHitGeometry? targetGeometry = null) {
         if (ammo < 0) throw new System.ArgumentOutOfRangeException(nameof(ammo));
         if (hitsToKill <= 0) throw new System.ArgumentOutOfRangeException(nameof(hitsToKill));
         _profile = profile ?? GunProfiles.SixM3FiftyCal;
@@ -144,11 +145,43 @@ public sealed class GunKill {
         _hitsToKill = hitsToKill;
         _hitRadiusM = selectedHitRadius;
         _heatConfig = heatConfig;
+        TargetGeometry = targetGeometry;
         _targetDamage.Add(LegacyTargetId, new TargetDamageState());
     }
 
     public IReadOnlyList<GunRound> RoundsInFlight => _rounds;
     public GunProfile Profile => _profile;
+    /// Null preserves the legacy sphere for frozen modes and compatibility callers.
+    public AirframeHitGeometry? TargetGeometry { get; internal set; }
+    // Session assigns this only to the F-22 player, captured at sortie start.
+    GunGimbalConfig? _gimbalConfig;
+    internal GunGimbalConfig? Gimbal {
+        get => _gimbalConfig;
+        set {
+            _gimbalConfig = value;
+            if (value is null) {
+                _gimbal.Step(default, Vec3D.Zero, false, null, 0);
+                GimbalFireInhibited = false;
+            }
+        }
+    }
+    internal Func<Vec3D, Vec3D, double, bool>? FirePathClear { get; set; }
+    public bool HasGimbal => Gimbal is not null;
+    public bool GimbalTracking => _gimbal.Tracking && !GimbalFireInhibited;
+    public bool GimbalFireInhibited { get; private set; }
+    public Vec3D MuzzlePosition(in AircraftState own) => Gimbal is null
+        ? own.Position + GunDirection(own) * MuzzleOffsetM : _gimbal.MuzzlePosition(own);
+    public double GimbalConeHalfAngleRad => Gimbal?.ConeHalfAngleRad ?? 0;
+    public double GimbalOffsetRad => _gimbal.OffsetRad;
+    public Vec3D BarrelDirection(in AircraftState own) =>
+        Gimbal is null ? GunDirection(own) : _gimbal.Direction(own);
+    public Vec3D PredictedImpact(in AircraftState own) {
+        Vec3D axis = BarrelDirection(own);
+        double t = LeadTimeOfFlight;
+        return MuzzlePosition(own)
+            + (own.VelocityVector() + axis * _profile.MuzzleVelocityMps) * t
+            + Gravity * (0.5 * t * t);
+    }
     public GunHeatConfig? HeatConfig => _heatConfig;
     public bool HasInfiniteAmmo => _heatConfig is not null;
     public int AmmoRemaining { get; private set; }
@@ -330,7 +363,7 @@ public sealed class GunKill {
             throw new ArgumentOutOfRangeException(
                 nameof(selectedTargetId), "The selected target is not in the transfer set.");
 
-        var next = new GunKill(ammo, _hitsToKill, hitRadiusM, profile);
+        var next = new GunKill(ammo, _hitsToKill, hitRadiusM, profile, targetGeometry: TargetGeometry);
         next._targetDamage.Clear();
         foreach (long targetId in targetIds) {
             TargetDamageState source = _targetDamage[targetId];
@@ -346,7 +379,9 @@ public sealed class GunKill {
 
     GunKill CreateReplacementTarget(bool preserveRoundsInFlight) {
         var next = new GunKill(
-            AmmoRemaining, _hitsToKill, _hitRadiusM, _profile, _heatConfig) {
+            AmmoRemaining, _hitsToKill, _hitRadiusM, _profile, _heatConfig, TargetGeometry) {
+            Gimbal = Gimbal,
+            FirePathClear = FirePathClear,
             RoundsFired = RoundsFired,
             InheritedRoundsFired = RoundsFired,
             _triggerWasHeld = _triggerWasHeld,
@@ -355,6 +390,7 @@ public sealed class GunKill {
             BarrelHeat = BarrelHeat,
             BarrelOverheated = BarrelOverheated,
         };
+        next._gimbal.CopyFrom(_gimbal);
         if (preserveRoundsInFlight) next._rounds.AddRange(_rounds);
         return next;
     }
@@ -402,14 +438,29 @@ public sealed class GunKill {
         GunTarget selected = targets[selectedIndex];
         TargetDamageState selectedDamage = EnsureTarget(selectedTargetId);
         double firingHitRadiusM = EffectiveHitRadius(own, selected.State);
+        // Frozen/fixed guns keep their original single lead solve per tick.
+        if (Gimbal is { ConeHalfAngleRad: > 0 }) {
+            GunBallisticSolution desired = EvaluateBallisticLead(own.Position, own.VelocityVector(),
+                BarrelDirection(own), selected.State.Position, selected.State.VelocityVector(),
+                _profile, firingHitRadiusM, MuzzlePosition(own));
+            bool desiredClear = FirePathClear is null || FirePathClear(
+                MuzzlePosition(own), own.VelocityVector() + desired.LeadDirection * _profile.MuzzleVelocityMps,
+                _profile.MaximumFlightSeconds);
+            _gimbal.Step(own, desired.LeadDirection,
+                selected.Damageable && selectedDamage.Outcome == FightOutcome.Flying && desired.HasLeadSolution && desiredClear,
+                Gimbal, dt);
+        } else _gimbal.Step(own, Vec3D.Zero, false, Gimbal, dt);
         UpdateLead(own, selected.State, firingHitRadiusM, dt);
+        GimbalFireInhibited = Gimbal is not null && FirePathClear is not null && !FirePathClear(
+            MuzzlePosition(own), own.VelocityVector() + BarrelDirection(own) * _profile.MuzzleVelocityMps,
+            _profile.MaximumFlightSeconds);
         bool selectedMayBeFiredOn =
-            selected.Damageable && selectedDamage.Outcome == FightOutcome.Flying;
+            selected.Damageable && selectedDamage.Outcome == FightOutcome.Flying && !GimbalFireInhibited;
         bool barrelAllowsFire = StepBarrelHeat(
             triggerHeld && selectedMayBeFiredOn && AmmoRemaining > 0, dt);
 
         var ownVelocity = own.VelocityVector();
-        var gunForward = GunDirection(own);
+        var gunForward = BarrelDirection(own);
         double elapsed = 0.0;
 
         if (!triggerHeld || !selectedMayBeFiredOn
@@ -445,8 +496,7 @@ public sealed class GunKill {
                 if (selectedDamage.Outcome != FightOutcome.Flying) break;
             }
 
-            var firingPosition = own.Position + ownVelocity * elapsed
-                + gunForward * MuzzleOffsetM;
+            var firingPosition = MuzzlePosition(own) + ownVelocity * elapsed;
             Fire(firingPosition,
                 ownVelocity + gunForward * _profile.MuzzleVelocityMps,
                 firingHitRadiusM, selectedTargetId);
@@ -544,15 +594,20 @@ public sealed class GunKill {
                 Vec3D targetEnd = targetStart + targetVelocity * dt;
 
                 // Continuous intersection between the round chord and this target's moving chord.
-                // At 120 Hz the gravity/chord deviation is under 0.1 mm. Resolve the sphere
+                // At 120 Hz the gravity/chord deviation is under 0.1 mm. Resolve the solid
                 // ENTRY time rather than the time of closest approach so two intersected aircraft
                 // cannot be ordered by their centres after the round has already touched one.
                 Vec3D relativeStart = round.Position - targetStart;
                 Vec3D relativeDelta = (nextPosition - targetEnd) - relativeStart;
                 double hitRadiusM = target.Id == round.AimTargetId
                     ? round.EffectiveHitRadiusM : _hitRadiusM;
-                if (!TrySweptSphereEntryFraction(
-                        relativeStart, relativeDelta, hitRadiusM, out double fraction))
+                double fraction;
+                bool intersects = TargetGeometry is { } geometry
+                    ? geometry.TryEntry(target.State, relativeStart, relativeDelta,
+                        elapsedAtStart, dt, out fraction)
+                    : TrySweptSphereEntryFraction(
+                        relativeStart, relativeDelta, hitRadiusM, out fraction);
+                if (!intersects)
                     continue;
                 if (fraction < hitFraction - 1e-12
                     || (System.Math.Abs(fraction - hitFraction) <= 1e-12
@@ -637,10 +692,11 @@ public sealed class GunKill {
 
     void UpdateLead(in AircraftState own, in AircraftState bandit,
         double effectiveHitRadiusM, double dt) {
-        var gunForward = GunDirection(own);
-        var muzzle = own.Position + gunForward * MuzzleOffsetM;
+        var gunForward = BarrelDirection(own);
+        var muzzle = MuzzlePosition(own);
         GunBallisticSolution solution = EvaluateBallisticLead(
-            own, bandit, _profile, effectiveHitRadiusM);
+            own.Position, own.VelocityVector(), gunForward, bandit.Position,
+            bandit.VelocityVector(), _profile, effectiveHitRadiusM, muzzle);
         HasLeadSolution = solution.HasLeadSolution;
         LeadDirection = solution.LeadDirection;
         LeadTimeOfFlight = solution.TimeOfFlightSeconds;
@@ -726,7 +782,7 @@ public sealed class GunKill {
         in Vec3D targetPosition,
         in Vec3D targetVelocity,
         GunProfile profile,
-        double effectiveHitRadiusM) {
+        double effectiveHitRadiusM, Vec3D? muzzlePosition = null) {
         System.ArgumentNullException.ThrowIfNull(profile);
         if (!double.IsFinite(effectiveHitRadiusM) || effectiveHitRadiusM <= 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(effectiveHitRadiusM));
@@ -735,7 +791,7 @@ public sealed class GunKill {
             return new GunBallisticSolution(
                 false, Vec3D.Zero, 0.0, double.NaN, double.NaN, false);
 
-        Vec3D muzzle = shooterPosition + forward * MuzzleOffsetM;
+        Vec3D muzzle = muzzlePosition ?? (shooterPosition + forward * MuzzleOffsetM);
         Vec3D relativePosition = targetPosition - muzzle;
         Vec3D relativeVelocity = targetVelocity - shooterVelocity;
         bool hasLead = TrySolveLead(

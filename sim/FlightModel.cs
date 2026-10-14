@@ -271,7 +271,19 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     /// a cambered wing declares its offset here so lift, induced drag, stall incidence and the
     /// protected control law all consume one coefficient authority.
     double ZeroLiftCoefficient = 0.0,
-    ConventionalTailParameters ConventionalTail = default);
+    ConventionalTailParameters ConventionalTail = default,
+    /// <summary>
+    /// Keyboard stick-travel surrogate. A key is binary but a hand on a stick is not: with these
+    /// set, a held pitch/roll key commands KeyboardStickOnsetFraction of full deflection at the
+    /// press and travels to full deflection over the axis ramp time (quadratic, so a short tap
+    /// stays a fine correction and a hold still reaches full authority). Pitch ramps faster than
+    /// roll because the airframe's own G build already lags the command. Gameplay input policy,
+    /// not aircraft data. Zero ramps (the default) preserve the bang-bang keyboard of every other
+    /// airframe bit-for-bit; analog stick, touch and the limit override are unaffected.
+    /// </summary>
+    double KeyboardStickOnsetFraction = 1.0,
+    double KeyboardRollRampSeconds = 0.0,
+    double KeyboardPitchRampSeconds = 0.0);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -970,7 +982,18 @@ public static class FlightModel {
         FuelFreeMassKg: 19535.0,
         GenericIdleFuelFlowLbPerMinute: 32.0,
         GenericMilitaryFuelFlowLbPerMinute: 250.0,
-        GenericAfterburnerFuelFlowLbPerMinute: 650.0);
+        GenericAfterburnerFuelFlowLbPerMinute: 650.0,
+        // Keyboard pitch travel (package a8, 2026-10-13, keyboard is the core experience). Measured
+        // at 354 KCAS / 10,000 ft (F22KeyboardFeelTests): the bang-bang pull key turned a 100 ms tap
+        // into 2.2 deg of nose, too coarse to set a pipper; a half-stick onset walking out over
+        // 0.15 s makes it 1.2 deg while a held pull still reaches 8.8 G at 1.00 s (was 0.97 s).
+        // Roll stays bang-bang on purpose: a roll ramp (35-50 % onset, 0.2-0.25 s) made taps
+        // finer but cost the coarse-holding child pilot most of his opening kills in the browser
+        // receipt and slowed the Build 73 reversal by 0.07-0.11 s. The owner's main player is a
+        // child, so that decided it. The roll path remains available via KeyboardRollRampSeconds.
+        KeyboardStickOnsetFraction: 0.5,
+        KeyboardRollRampSeconds: 0.0,
+        KeyboardPitchRampSeconds: 0.15);
 
     /// F-35C PUBLIC-DATA CARRIER SURROGATE. The public anchors are the programme card's
     /// 668 ft2 wing, 34,800 lb empty weight, 19,750 lb internal fuel, 7.5 G limit and
@@ -1077,6 +1100,10 @@ public static class FlightModel {
             // The F-22's hold fade is a player-feel choice for that airframe only;
             // keep this derived surrogate on the shared defaults.
             RollHoldDeadband = 0.05,
+            // Likewise the keyboard stick-travel ramp (a8): bang-bang keys, as before.
+            KeyboardStickOnsetFraction = 1.0,
+            KeyboardRollRampSeconds = 0.0,
+            KeyboardPitchRampSeconds = 0.0,
             MassKg = 12500.0,
             WingAreaM2 = 58.0,
             ThrustMaxN = 72000.0,

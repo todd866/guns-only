@@ -226,11 +226,13 @@ public class FormationCombatTests {
 
         // Produce the same latched Splash state as a real ballistic kill. The synthetic geometry
         // keeps this regression deterministic while damage observation and promotion still travel
-        // through the production fixed-tick lifecycle.
+        // through the production fixed-tick lifecycle. Keep these direct mounted-gun shots
+        // above sea level: C11 rejects paths into the ground even without a terrain surface.
         var own = new AircraftState(
-            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0, FlightModel.F22APublicDataSurrogate.MassKg,
+            new Vec3D(0.0, 5486.4, 0.0), 0.0, 0.0, 0.0, 0.0,
+            FlightModel.F22APublicDataSurrogate.MassKg,
             QuaternionD.Identity);
-        var target = own with { Position = new Vec3D(0.0, 0.0, 100.0) };
+        var target = own with { Position = own.Position + new Vec3D(0.0, 0.0, 100.0) };
         Assert.True(session.SetPlayerGunTargetSlot(0));
         long leaderTargetId = session.PlayerGun.SelectedTargetId;
         var targets = new[] { new GunTarget(leaderTargetId, target) };
@@ -272,10 +274,10 @@ public class FormationCombatTests {
         Assert.Equal(1, session.SelectedPlayerGunTargetSlot);
         long wingmanTargetId = session.PlayerGun.SelectedTargetId;
         var own = new AircraftState(
-            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            new Vec3D(0.0, 5486.4, 0.0), 0.0, 0.0, 0.0, 0.0,
             FlightModel.F22APublicDataSurrogate.MassKg,
             QuaternionD.Identity);
-        var target = own with { Position = new Vec3D(0.0, 0.0, 100.0) };
+        var target = own with { Position = own.Position + new Vec3D(0.0, 0.0, 100.0) };
         var targets = new[] { new GunTarget(wingmanTargetId, target) };
         for (int tick = 0; tick < AircraftSim.TickHz
             && session.PlayerGun.DamageFor(wingmanTargetId).TargetAlive; tick++)
@@ -308,10 +310,10 @@ public class FormationCombatTests {
         Assert.True(session.SetPlayerGunTargetSlot(1));
         long survivorTargetId = physicalGun.SelectedTargetId;
         var own = new AircraftState(
-            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            new Vec3D(0.0, 5486.4, 0.0), 0.0, 0.0, 0.0, 0.0,
             FlightModel.F22APublicDataSurrogate.MassKg,
             QuaternionD.Identity);
-        var target = own with { Position = new Vec3D(0.0, 0.0, 100.0) };
+        var target = own with { Position = own.Position + new Vec3D(0.0, 0.0, 100.0) };
         var targets = new[] { new GunTarget(survivorTargetId, target) };
         physicalGun.Step(
             true, own, survivorTargetId, targets,

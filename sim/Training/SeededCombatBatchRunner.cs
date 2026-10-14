@@ -481,17 +481,22 @@ public static class SeededCombatBatchRunner {
             throw new ArgumentException(
                 "Planner-teacher samples distil the hand-written planner; a learned policy has no "
                 + "planner to distil.", nameof(plannerTeacherSamples));
-        CombatConfig combat = CombatConfig.ModernVisualMerge;
+        CombatConfig combat = CombatConfig.ModernVisualMergeAirframes;
         var referenceGun = new GunKill(
             combat.PlayerAmmo,
             combat.OpponentHitsToDefeat,
             combat.PlayerGunProfile.EffectiveHitRadiusM,
-            combat.PlayerGunProfile);
+            combat.PlayerGunProfile, targetGeometry: combat.PlayerTargetGeometry);
         var learningGun = new GunKill(
             combat.OpponentAmmo,
             combat.PlayerHitsToDefeat,
             combat.OpponentGunProfile.EffectiveHitRadiusM,
-            combat.OpponentGunProfile);
+            combat.OpponentGunProfile, targetGeometry: combat.OpponentTargetGeometry);
+        // The runner scores against the same true solids as the live visual merge. Configure
+        // its stock controllers with the actual fixed guns too; otherwise training evaluates
+        // the legacy sphere-tuned tracker against an airframe it was never aiming to hit.
+        referenceBandit?.ConfigureGunTracking(referenceGun.Profile);
+        learningBandit?.ConfigureGunTracking(learningGun.Profile);
         var recorder = new CombatTransitionRecorder(
             episodeIndex, scenario.Id, scenario.Seed, rewardWeights);
 

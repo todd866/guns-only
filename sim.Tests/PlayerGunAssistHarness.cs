@@ -89,7 +89,7 @@ public static class PlayerGunAssistHarness {
         double Jitter(double span) => (random.NextDouble() * 2.0 - 1.0) * span;
         AircraftParams playerAir = FlightModel.F22APublicDataSurrogate;
         AircraftParams banditAir = FlightModel.Su27SPublicDataSurrogate;
-        CombatConfig combat = CombatConfig.ModernVisualMerge;
+        CombatConfig combat = Beats.ModernVisualMerge().CombatRules;
 
         // The player starts OFF the solution — offset, low, and pointed across the bandit — so that
         // every round of the measured conversion has to be earned by tracking. A dead-astern start
@@ -111,7 +111,7 @@ public static class PlayerGunAssistHarness {
         const int HitsToKillForMeasurement = 400;
         var gun = new GunKill(combat.PlayerAmmo, HitsToKillForMeasurement,
             combat.PlayerGunProfile.EffectiveHitRadiusM, combat.PlayerGunProfile,
-            GunHeatConfig.PlayerInfiniteAmmo);
+            GunHeatConfig.PlayerInfiniteAmmo, combat.PlayerTargetGeometry);
         var padlock = new PadlockRollAssist();
         var leadRate = new GunneryLeadRateEstimator();
         var commitment = new PilotLateralCommitment();

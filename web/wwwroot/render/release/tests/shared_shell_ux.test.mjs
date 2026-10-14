@@ -23,14 +23,19 @@ test("unselected aircraft posters retain aircraft and sortie identity", () => {
     "the longer sortie contract must remain available to the interaction reveal");
 });
 
-test("desktop flight chrome advertises Escape pause and the H quicklook repeats it", () => {
+test("desktop flight chrome advertises Escape pause and the H quicklook repeats it", async () => {
   assert.match(indexSource,
     /class="pause-desktop"[^>]*>ESC · PAUSE<\/span>/u);
   assert.match(indexSource,
     /class="pause-mobile"[^>]*>Ⅱ<\/span>/u,
     "touch keeps a compact 44px pause target without advertising an unavailable key");
   assert.equal((hudSource.match(/ESC  PAUSE \/ MENU/g) ?? []).length, 2,
-    "wide and compact H quicklooks must both expose the pause/menu lifecycle key");
+    "wide and compact legacy quicklooks must both expose the pause/menu lifecycle key");
+  // a8: one key card serves every width (2 or 3 columns), drawn from control_quicklook.js.
+  const { controlQuicklookEntries } = await import("../../hud/control_quicklook.js");
+  assert.ok(controlQuicklookEntries().some((e) => e.caps[0] === "ESC" && e.action === "PAUSE"),
+    "the H key card must expose the pause/menu lifecycle key");
+  assert.match(hudSource, /controlQuicklookEntries\(/);
 });
 
 test("systems and navigation disclosure selectors target both summaries and both cues", () => {

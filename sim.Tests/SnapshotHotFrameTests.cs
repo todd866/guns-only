@@ -91,7 +91,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(34, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(35, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
         string[] names = layout.GetProperty("blocks")
             .EnumerateArray()
@@ -107,6 +107,7 @@ public class SnapshotHotFrameTests {
         Assert.Contains("gunnery_yaw_assist", names);
         Assert.Contains("gunnery_time_to_pass_s", names);
         Assert.Contains("lead_solution_valid", names);
+        Assert.Contains("gun_fire_inhibited", names);
         Assert.Contains("applied_rudder", names);
         Assert.Contains("f22_ari_gain", names);
         Assert.Contains("f22_ari_rudder", names);
@@ -413,6 +414,32 @@ public class SnapshotHotFrameTests {
     }
 
     [Fact]
+    public void AssistNoneAlignedObstructedShotPublishesInterlockInBothSnapshots() {
+        var session = BfmFlightAcceptanceTests.Start(4);
+        var gun = session.PlayerGun;
+        Assert.True(gun.HasGimbal);
+        Assert.Equal(0, gun.GimbalConeHalfAngleRad);
+        var own = session.Player.State with {
+            Position = new Vec3D(0, 10, 0), Speed = 0, Gamma = 0, Chi = 0,
+            BodyAttitude = QuaternionD.Identity
+        };
+        double tof = (400 - 9.6) / gun.Profile.MuzzleVelocityMps;
+        var target = own with { Position = new Vec3D(0, 10 - 0.5 * GunKill.GravityMps2 * tof * tof, 400) };
+        gun.FirePathClear = (muzzle, velocity, life) =>
+            GunFireSafety.PathClear(muzzle, velocity, life, new FlatTerrain());
+        for (int tick = 0; tick < 30; tick++)
+            gun.Step(true, own, target, 1.0 / AircraftSim.TickHz);
+        Assert.True(gun.GunSolution);
+        Assert.True(gun.GimbalFireInhibited);
+        Assert.Equal(0, gun.RoundsFired);
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            Assert.True(root.GetProperty("gun_fire_inhibited").GetBoolean());
+            AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    [Fact]
     public void HotAndJsonSnapshotsPublishIndependentPrecipitationAndSurfaceTruth() {
         WeatherProfile baseline = KoreaWeatherPresets.ForBeat(1);
         var cloud = new CloudSample(
@@ -635,11 +662,11 @@ public class SnapshotHotFrameTests {
         GunKill playerGun = session.PlayerGun;
         long primaryTargetId = playerGun.SelectedTargetId;
         var shooter = new AircraftState(
-            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            new Vec3D(0, 3000, 0), 0.0, 0.0, 0.0, 0.0,
             FlightModel.F22APublicDataSurrogate.MassKg,
             QuaternionD.Identity);
         var syntheticPrimary = shooter with {
-            Position = new Vec3D(0.0, 0.0, 100.0)
+            Position = new Vec3D(0.0, 3000.0, 100.0)
         };
         var primaryTargets = new[] {
             new GunTarget(primaryTargetId, syntheticPrimary)
@@ -658,7 +685,7 @@ public class SnapshotHotFrameTests {
 
         Wingman wingman = session.Wingmen[0];
         var offAxisPlayer = shooter with {
-            Position = new Vec3D(500.0, 0.0, 500.0)
+            Position = new Vec3D(500.0, 3000.0, 500.0)
         };
         wingman.Gun.Step(true, shooter, offAxisPlayer, 0.0);
         Assert.Single(wingman.Gun.RoundsInFlight);
@@ -703,7 +730,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(34, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(35, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())

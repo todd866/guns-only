@@ -25,6 +25,8 @@ public interface IBandit {
     /// never be orphaned waiting for a gun funnel the player is spending on its leader. One-way
     /// and idempotent; the default is a no-op for actors that never present.
     void EndPresentation() { }
+    /// Optional fixed-gun tracking policy; null preserves the legacy/frozen controller.
+    void ConfigureGunTracking(GunProfile? profile) { }
     bool WreckSettled { get; }
     ImpactSurface WreckSurface { get; }
     bool WreckSurfaceChangedThisStep { get; }
@@ -181,7 +183,7 @@ public enum BanditTactic { Acquire, Defend, Energy, Return, Present }
 
 /// Deterministic, deliberately beatable BFM opponent. It owns a normal AircraftSim and supplies
 /// only pilot controls: no kinematic shortcuts, wall clock, or random source enters the kernel.
-public sealed class ReactiveBandit :
+public sealed partial class ReactiveBandit :
     IBandit,
     IBanditDecisionTraceSource,
     IFormationDirectiveSink,
@@ -871,26 +873,121 @@ public sealed class ReactiveBandit :
         _terrain = terrain;
     }
 
+    GunProfile? _trackingGun;
+    internal GunProfile? TrackingGun => _trackingGun;
+    public void ConfigureGunTracking(GunProfile? profile) {
+        if (ReferenceEquals(profile, _trackingGun)) return;
+        _trackingGun = profile;
+        _observedAt = _previousLeadTime = _solutionAt = double.NegativeInfinity;
+        _observedAcceleration = Vec3D.Zero;
+        _fineTrackLatched = false;
+    }
+
+    // Beginning-of-tick observations only: trigger and Step read the same sample at T.
+    // Duplicate reads at that T do not advance the estimate. No target body state or future
+    // integrator state crosses ActorObservation. Gains are authored controller policy.
+    Vec3D _observedVelocity, _observedAcceleration;
+    double _observedAt = double.NegativeInfinity;
+    long _observedContact;
+    void ObserveGunTarget(in ActorObservation player) {
+        double dt = T - _observedAt;
+        if (_observedContact != player.ContactIdentity || player.ObservationAgeTicks > 0) {
+            _previousLeadTime = double.NegativeInfinity;
+            _observedAcceleration = Vec3D.Zero;
+        }
+        if (dt == 0 && _observedContact == player.ContactIdentity) return;
+        Vec3D velocity = player.VelocityVector();
+        if (dt > 0 && dt <= 4.0 / AircraftSim.TickHz && player.ObservationAgeTicks == 0
+            && _observedContact == player.ContactIdentity) {
+            Vec3D raw = (velocity - _observedVelocity) * (1 / dt);
+            double limit = 12 * FlightModel.G0;
+            if (raw.Length > limit) raw *= limit / raw.Length;
+            _observedAcceleration += (raw - _observedAcceleration) * (dt / (0.15 + dt));
+        } else _observedAcceleration = Vec3D.Zero;
+        _observedVelocity = velocity;
+        _observedAt = T;
+        _observedContact = player.ContactIdentity;
+    }
+
+    // Position is the F-22 body origin inside its central fuselage, not the old sphere's skin.
+    // The 1 m argument is unused for tracking/trigger decisions: only lead, TOF and bore error
+    // are consumed. GunKill's unchanged swept solids remain the sole hit authority.
+    double _solutionAt = double.NegativeInfinity;
+    AircraftState _solutionOwn;
+    ActorObservation _solutionObservation;
+    GunBallisticSolution _solution;
+
+    internal GunBallisticSolution TrackingSolution(in ActorObservation player) {
+        var own = State;
+        // Trigger, capture gate and steering share the beginning-of-tick solution. Comparing
+        // samples as well as T keeps a same-tick retarget/configuration from reusing old lead.
+        if (_solutionAt == T && _solutionOwn == own && _solutionObservation == player)
+            return _solution;
+        ObserveGunTarget(player);
+        var solution = GunKill.EvaluateBallisticLead(own.Position, own.VelocityVector(),
+            GunKill.GunDirection(own), player.Position, player.VelocityVector(), _trackingGun!, 1.0);
+        if (solution.HasLeadSolution && _observedAcceleration.Length > 1e-9) {
+            // Refine the existing ballistic root for observed constant acceleration. Three
+            // bounded Newton steps avoid two more bracket searches per tick. The shared solver
+            // remains the fallback if the local refinement leaves its physical flight window.
+            Vec3D bore = GunKill.GunDirection(own);
+            Vec3D relative = player.Position - own.Position - bore * GunKill.MuzzleOffsetM;
+            Vec3D velocity = player.VelocityVector() - own.VelocityVector();
+            Vec3D acceleration = _observedAcceleration + new Vec3D(0, GunKill.GravityMps2, 0);
+            double speed = _trackingGun!.MuzzleVelocityMps;
+            double t = solution.TimeOfFlightSeconds;
+            for (int i = 0; i < 3; i++) {
+                Vec3D required = relative + velocity * t + acceleration * (0.5 * t * t);
+                double f = required.Dot(required) - speed * speed * t * t;
+                double derivative = 2 * required.Dot(velocity + acceleration * t) - 2 * speed * speed * t;
+                if (!double.IsFinite(derivative) || Math.Abs(derivative) < 1e-9) {
+                    t = double.NaN;
+                    break;
+                }
+                t -= f / derivative;
+            }
+            if (double.IsFinite(t) && t > 0 && t <= _trackingGun.MaximumFlightSeconds
+                && t >= 0.5 * solution.TimeOfFlightSeconds && t <= 1.5 * solution.TimeOfFlightSeconds) {
+                Vec3D required = relative + velocity * t + acceleration * (0.5 * t * t);
+                // Accept only a converged root (1 cm muzzle-relative distance residual).
+                if (Math.Abs(required.Length - speed * t) <= 0.01) {
+                    Vec3D lead = required.Normalized();
+                    double error = Math.Acos(Math.Clamp(bore.Dot(lead), -1, 1));
+                    solution = solution with { LeadDirection = lead, TimeOfFlightSeconds = t,
+                        BoreErrorRad = error, BodyAxisOnSolution = error <= solution.HitConeHalfAngleRad };
+                }
+            }
+        }
+        _solutionAt = T;
+        _solutionOwn = own;
+        _solutionObservation = player;
+        return _solution = solution;
+    }
+
     public bool WantsToFire(in ActorObservation player) {
         // A bandit that is setting the player up does not shoot them. Step's presenting gate
         // cannot cover this: the session asks the actor to fire on a separate path.
         if (Presenting) return false;
         if (CatastrophicallyDamaged || _terrainRecoveryActive) return false;
-        bool onSolution = BanditFireControl.InLeadFiringEnvelope(
-            State, player, EffectiveLeadFireConeRad);
+        double range = Geometry.Range(State, player);
+        // Authored trigger discipline, not a collision cone. Even an accepted shot can miss.
+        bool onSolution = _trackingGun is null
+            ? BanditFireControl.InLeadFiringEnvelope(State, player, EffectiveLeadFireConeRad)
+            : range >= BanditFireControl.MinimumRangeM && range <= BanditFireControl.MaximumRangeM
+                && TrackingSolution(player).BoreErrorRad <= Math.Min(EffectiveLeadFireConeRad, 0.8 * Math.PI / 180);
         // The body gate is not wrong everywhere — it is wrong exactly where it DISAGREES with the
         // solution. In a low-aspect tail chase the required lead is a fraction of a degree, so the
         // target IS the solution and pointing at it is correct airmanship; across a crossing turn
         // the solution is 17 deg away and the same gate authorises a shot into empty sky. A pilot
         // with solution discipline therefore keeps the wide gate only where the two agree, which
         // is a geometric test on the shot, not a tracking test on the pilot.
-        bool onBody = (_profile.FiresOnBodyGate
+        bool onBody = (_trackingGun is null || _profile.FiresOnBodyGate) && (_profile.FiresOnBodyGate
                 || BanditFireControl.RequiredLeadAngleRad(State, player)
                     <= EffectiveLeadFireConeRad)
             && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad);
         if (!onSolution && !onBody) {
             if (_pressureBurstActive && T < _fireBurstUntil
-                && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad))
+                && InPressureFiringEnvelope(player))
                 return true;
             _pressureBurstActive = false;
             if (!PressureShotAvailable(player)) return false;
@@ -906,10 +1003,11 @@ public sealed class ReactiveBandit :
         // engagement clock discarded short post-merge windows whenever they happened to arrive
         // during its arbitrary 0.9-second "off" phase, which made a physically nose-on bandit
         // decline the only shot of an engagement. This state is driven only by deterministic sim
-        // time and still enforces the same burst length/cycle; GunKill remains cadence, ammunition,
+        // time. The physical tracker can hold a 0.7 s burst while the gate stays met;
+        // the 1.25 s cycle remains. GunKill owns cadence, ammunition,
         // projectile, hit, and damage authority.
         if (T >= _nextFireBurstAt) {
-            _fireBurstUntil = T + BanditFireControl.BurstSeconds;
+            _fireBurstUntil = T + (_trackingGun is null ? BanditFireControl.BurstSeconds : 0.7);
             _nextFireBurstAt = T + BanditFireControl.BurstCycleSeconds;
         }
         return T < _fireBurstUntil;
@@ -923,7 +1021,21 @@ public sealed class ReactiveBandit :
         && !(_profile.IsBoss && !BossCommitted)
         && _pressureBurstsFired < PressureBurstLimit
         && T >= _nextPressureBurstAt
-        && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad);
+        && InPressureFiringEnvelope(player);
+
+    // Also take a snapshot as the ballistic lead crosses the barrel. A body-only
+    // gate misses these opportunities when the contact still needs substantial lead.
+    // Keep the existing angular discipline, range, short burst and finite budget;
+    // actual fixed-axis rounds may miss. Legacy/frozen pilots retain their body gate.
+    bool InPressureFiringEnvelope(in ActorObservation player) {
+        if (BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad)) return true;
+        if (_trackingGun is null) return false;
+        double range = Geometry.Range(State, player);
+        if (range < BanditFireControl.MinimumRangeM || range > BanditFireControl.MaximumRangeM)
+            return false;
+        var solution = TrackingSolution(player);
+        return solution.HasLeadSolution && solution.BoreErrorRad <= EffectiveFireConeRad;
+    }
 
     /// A committed boss shoots with the standard Ace gate; a stalking boss holds its raised
     /// quality bar. Every other tier reads its profile cone unchanged.
@@ -1007,6 +1119,7 @@ public sealed class ReactiveBandit :
     public void Step(in ActorObservation player, double dt) {
         if (!double.IsFinite(dt) || dt <= 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(dt));
+        if (_trackingGun is not null) ObserveGunTarget(player);
 
         if (_wreckMotion is not null) {
             CancelPendingLookaheadPlan();
@@ -1095,7 +1208,16 @@ public sealed class ReactiveBandit :
                     return;
                 }
             }
-            if (lowTarget && hasLowAttackPlan) {
+            bool wasAttackInterceptActive = _attackReengagementActive;
+            UpdateAttackReengagement(player, lowTarget);
+            if (_attackReengagementActive) {
+                // Keep refreshing the planner hold on its ordinary cadence while the tactical
+                // intercept flies. An off-cadence exit resumes that recent hold, just like BFM.
+                _ = LookaheadCommand(player);
+                LastCommand = AttackInterceptCommand(player);
+                RecordSingleCandidateDecision(LastCommand, invalidatesLookaheadHold: false);
+                Tactic = BanditTactic.Acquire;
+            } else if (lowTarget && hasLowAttackPlan) {
                 _lowAttackActive = true;
                 if (ownClearanceM <= LowBlockCaptureClearanceM) {
                     CancelPendingLookaheadPlan();
@@ -1182,6 +1304,11 @@ public sealed class ReactiveBandit :
                     ? BanditTactic.Defend
                     : BanditTactic.Acquire;
             }
+            // An off-cadence exit can reuse a held planner command without publishing a new
+            // selection. Replace the intercept trace so telemetry still names the flown command.
+            if (wasAttackInterceptActive && !_attackReengagementActive
+                && DecisionTrace.SelectedCommand != LastCommand)
+                RecordSingleCandidateDecision(LastCommand, invalidatesLookaheadHold: false);
             _sim.Step(CommandForFlight(), dt);
             T += dt;
             return;
@@ -1256,9 +1383,10 @@ public sealed class ReactiveBandit :
         // ceiling now gives it the room. The extension is reserved for the case it was written
         // for: energy-poor, near the cap, genuinely unable to reach the player from here.
         bool needsEnergyToReach = own.Speed < _highSpeedMps;
-        if (player.Position.Y <= _ceilingM + 350.0 || !needsEnergyToReach) _ceilingDenial = false;
-        else if (own.Position.Y > _ceilingM - 900.0) _ceilingDenial = true;
-        else if (own.Position.Y < _ceilingM - 1400.0) _ceilingDenial = false;
+        double ceilingM = FightCeilingM(player);
+        if (player.Position.Y <= ceilingM + 350.0 || !needsEnergyToReach) _ceilingDenial = false;
+        else if (own.Position.Y > ceilingM - 900.0) _ceilingDenial = true;
+        else if (own.Position.Y < ceilingM - 1400.0) _ceilingDenial = false;
 
         // Energy state outranks arena housekeeping. Previously a slow bandit outside the return
         // radius stayed in Return's nose-high 2.8 G turn instead of unloading, decelerated into a
@@ -1284,7 +1412,7 @@ public sealed class ReactiveBandit :
         // rebuild energy, but it does all of that inside the arena, and crossing the leash sends
         // it home regardless of how high the player is sitting. The low-energy gate above still
         // outranks the leash, for the documented stall reason.
-        if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
+        if (radius > ReturnRadiusM || own.Position.Y > ceilingM + 350.0) {
             Tactic = BanditTactic.Return;
             return;
         }
@@ -1381,6 +1509,7 @@ public sealed class ReactiveBandit :
     /// directly on the SAME ballistic lead point BanditFireControl scores the shot against. One
     /// solution, shared by guidance and fire control, is the whole point.
     PilotCommand GunTrackCommand(in ActorObservation player) {
+        if (_trackingGun is not null) return PhysicalGunTrackCommand(player);
         var own = State;
         var aim = BanditFireControl.LeadPoint(own, player);
         double authority = System.Math.Clamp(
@@ -1442,8 +1571,55 @@ public sealed class ReactiveBandit :
         return new PilotCommand(g, bank, throttle, 0.0);
     }
 
+    Vec3D _previousLeadDirection;
+    double _previousLeadTime = double.NegativeInfinity;
+
+    // Close the gun-axis error with finite aerodynamic G/bank commands. Adding gravity before
+    // selecting a lift direction avoids the old near-zero-error ±77-degree bank switching.
+    // Project demand onto CURRENT lift during rollout: pulling full requested G in the old
+    // plane amplifies the sight error. This is a feedback approximation (AoA transients remain),
+    // not an inverse flight model or an instantaneous nose/barrel rotation.
+    PilotCommand PhysicalGunTrackCommand(in ActorObservation player) {
+        var own = State;
+        Vec3D bore = GunKill.GunDirection(own);
+        Vec3D lead = TrackingSolution(player).LeadDirection;
+        double interval = T - _previousLeadTime;
+        Vec3D rate = interval > 0 && interval <= 4.0 / AircraftSim.TickHz
+            ? (lead - _previousLeadDirection) * (1.0 / interval) : Vec3D.Zero;
+        _previousLeadDirection = lead;
+        _previousLeadTime = T;
+        // Angular rather than world-point feedforward: own translation is not sight rotation.
+        Vec3D desiredRate = rate + (lead - bore) * (1.0 / 1.2);
+        Vec3D forward = own.ForwardDir();
+        Vec3D acceleration = desiredRate * own.Speed + new Vec3D(0, FlightModel.G0, 0);
+        acceleration -= forward * acceleration.Dot(forward);
+        Vec3D right = new(Math.Cos(own.Chi), 0, -Math.Sin(own.Chi));
+        Vec3D up = forward.Cross(right);
+        double bankLimit = ClosingGunApproach(player) ? 2.6 : 1.35;
+        double bank = Math.Clamp(Math.Atan2(acceleration.Dot(right), acceleration.Dot(up)), -bankLimit, bankLimit);
+        Vec3D lift = up * Math.Cos(own.Bank) + right * Math.Sin(own.Bank);
+        double g = Math.Clamp(acceleration.Dot(lift) / FlightModel.G0, -0.2,
+            Math.Max(0, AvailableAcquireG(safetyReserve: false)));
+        double throttle = own.Speed < _lowSpeedMps ? Math.Min(_maximumThrottle, 1.05)
+            : own.Speed > _highSpeedMps ? Math.Min(_maximumThrottle, 0.60)
+            : Math.Min(_maximumThrottle, 0.92);
+        return new PilotCommand(g, bank, throttle, 0);
+    }
+
+    // A reciprocal approach needs its lift vector below the horizon when the observed
+    // gun solution is below the nose. The normal 77-degree tracking bank cap cannot do
+    // that; it flies past the shot and leaves a long return. Single-ramp Ace only, with
+    // measured closure: slower-closing tracking and formation pilots keep their policy.
+    bool ClosingGunApproach(in ActorObservation player) {
+        if (!AttackReengagementEnabled || _trackingGun is null || Skill != PilotSkill.Ace)
+            return false;
+        var line = player.Position - State.Position;
+        double range = line.Length;
+        return range > 1 && -(player.VelocityVector() - State.VelocityVector()).Dot(line * (1.0 / range)) > 300.0;
+    }
+
     /// Is this a shot worth closing the loop on? Deliberately generous on angle and strict on
-    /// range: outside gun reach the rollout's energy and geometry work is still the better plan.
+    /// range. True-volume gunnery starts settling before gun range; firing still requires 120–900 m.
     bool ShouldFineTrack(in ActorObservation player) {
         // ONLY WHERE THE PLANNER IS THE ONE FLYING. This is the component with the defect: a tier
         // with no lookahead horizon flies the reactive laws and already tracks a non-manoeuvring
@@ -1456,9 +1632,12 @@ public sealed class ReactiveBandit :
             return false;
         }
         double rangeM = Geometry.Range(State, player);
+        double captureRangeM = _trackingGun is null || Skill != PilotSkill.Ace
+            ? BanditFireControl.MaximumRangeM
+            : ClosingGunApproach(player) ? 2400.0 : 1400.0;
         if (!double.IsFinite(rangeM)
             || rangeM < BanditFireControl.MinimumRangeM
-            || rangeM > BanditFireControl.MaximumRangeM) {
+            || rangeM > captureRangeM) {
             _fineTrackLatched = false;
             return false;
         }
@@ -1505,14 +1684,19 @@ public sealed class ReactiveBandit :
             _fineTrackLatched = false;
             return false;
         }
-        double leadErrorRad = BanditFireControl.LeadNoseErrorRad(State, player);
+        double leadErrorRad = _trackingGun is null ? BanditFireControl.LeadNoseErrorRad(State, player)
+            : TrackingSolution(player).BoreErrorRad;
         if (_fineTrackLatched) {
-            if (leadErrorRad <= GunTrackLeadExitRad) return true;
+            double exitRad = _trackingGun is null || Skill != PilotSkill.Ace ? GunTrackLeadExitRad : 25 * Math.PI / 180;
+            if (leadErrorRad <= exitRad && !FineTrackOutOfPatience(player, leadErrorRad))
+                return true;
             _fineTrackLatched = false;
             return false;
         }
-        if (leadErrorRad <= GunTrackLeadEntryRad) {
+        if (leadErrorRad <= (_trackingGun is null || Skill != PilotSkill.Ace ? GunTrackLeadEntryRad : 20 * Math.PI / 180)
+            && T >= _fineTrackRetryAt) {
             _fineTrackLatched = true;
+            _fineTrackProgressAt = T;
             return true;
         }
         return false;
@@ -1812,6 +1996,9 @@ public sealed class ReactiveBandit :
             return new PilotCommand(1.85, LimitedBankTo(climb, 0.65),
                 _maximumThrottle, 0.0);
         }
+        if (AttackReengagementEnabled && own.Speed < _energyExitMps
+            && own.Position.Y - hereFloor > 1500.0)
+            return AttackEnergyRecoveryCommand(player);
         // THE EXTENSION IS AIMED AT THE PLAYER, NOSE-LOW -- NOT STRAIGHT AHEAD. Straight ahead
         // (own forward + 1200 m) points AWAY from a player behind the bandit, so once the nose was
         // level the "energy rebuild" flew the range open nose-cold -- traced opening to 4 km, and
@@ -2286,6 +2473,15 @@ public sealed class ReactiveBandit :
         _lookaheadPlanPredictionSubstepTicks = _incrementalAiPlanning
             ? PredictionSubstepTicks(_computeLevel)
             : PredictionSubstepTicks(AiComputeLevel.Full);
+        // Use the existing Constrained forecast for distant single-ramp pursuit. Retain normal
+        // fidelity near gun range, including one horizon of current-speed head-on closure; presentation and
+        // terrain-certified attacks are unchanged. Freeze the choice for a pending rollout.
+        double gunApproachRangeM = BanditFireControl.MaximumRangeM
+            + (State.Speed + player.Speed) * _profile.LookaheadHorizonTicks / AircraftSim.TickHz;
+        if (AttackReengagementEnabled && !Presenting && lowAttackPlan is null
+            && Geometry.Range(State, player) > gunApproachRangeM)
+            _lookaheadPlanPredictionSubstepTicks = System.Math.Max(
+                _lookaheadPlanPredictionSubstepTicks, PredictionSubstepTicks(AiComputeLevel.Constrained));
         _lookaheadPlanUsesLowAttack = lowAttackPlan.HasValue;
         _lookaheadPlanContactIdentity = player.ContactIdentity;
         _lookaheadContextBound = true;
@@ -2325,7 +2521,11 @@ public sealed class ReactiveBandit :
             ? _chaseStallSeconds + System.Math.Max(0.0, T - _chaseStallCheckedAt)
             : 0.0;
         _chaseStallCheckedAt = T;
-        bool chasing = _chaseStallSeconds >= ChaseStallSeconds;
+        if (AttackReengagementEnabled) {
+            if (lowAttackPlan is not null || range < 800.0) _attackChaseLatched = false;
+            else if (_chaseStallSeconds >= ChaseStallSeconds) _attackChaseLatched = true;
+        } else _attackChaseLatched = false;
+        bool chasing = _chaseStallSeconds >= ChaseStallSeconds || _attackChaseLatched;
         double fastThrottle = chasing
             ? _maximumThrottle
             : System.Math.Min(_maximumThrottle, 1.05);
@@ -2334,7 +2534,34 @@ public sealed class ReactiveBandit :
         double cruiseThrottle = chasing
             ? _maximumThrottle
             : System.Math.Min(_maximumThrottle, 0.84);
+        // Outside gun range every opted-in tier needs a cut-off, not a ballistic aim point on an
+        // unreachable stern chase: pure pursuit of a turning F-22 at equal speed never closes
+        // (traced N Ace, 2026-10-13: nose 3 deg, 1-3 km, 70 s without a shot). FUN: it comes back. Freeze this bounded aim heuristic with the rest of the plan;
+        // the gun-window/lead gates below still score the actual predicted physical contact.
+        // Only a target in the forward hemisphere is being chased: a "stalled closure" with the
+        // player behind is a defensive problem, and a cut-off point there flew the O3 Ace into
+        // the player's gun (BfmFlightAcceptanceTests ladder curve 8/3/0 -> 8/3/3).
+        bool targetAhead = State.ForwardDir().Dot(lineOfSight) > 0.0;
+        _lookaheadPlanAttackLeadSeconds = AttackReengagementEnabled
+            && (Skill == PilotSkill.Competent || targetAhead)
+            && chasing && lowAttackPlan is null && range > 1000.0
+            ? System.Math.Clamp((range - 650.0) / System.Math.Max(State.Speed, 150.0), 0.0, 6.0) : 0.0;
+        if (_lookaheadPlanAttackLeadSeconds > 0.0)
+            leadPoint = AttackInterceptPoint(player, _lookaheadPlanAttackLeadSeconds);
         double maxG = AvailableAcquireG(safetyReserve: false);
+        // A TURNING FIGHT IS WON AT CORNER SPEED, NOT ON THE BURNER. Every candidate used to carry
+        // cruise or full burner, so once the chase latch lit the burner the Su-27 accelerated to
+        // ~360 m/s and circled the player for minutes 1-2 km out: at 4.8 G that is a 2.8 km turn
+        // radius and 7 deg/s, the same rate as the fast player, so the angles never closed
+        // (fight audit trace r0/Competent/seed 0, 2026-10-13). The max-G pull on the lead may
+        // instead bleed toward corner speed with the throttle back; the score decides whether
+        // that beats the burner candidates.
+        double noseOffRad = System.Math.Acos(System.Math.Clamp(
+            State.ForwardDir().Dot(lineOfSight), -1.0, 1.0));
+        double pullThrottle = AttackReengagementEnabled && State.Speed > AttackTurnSpeedMps
+            && noseOffRad > CornerTurnNoseOffRad
+            ? System.Math.Min(_maximumThrottle, CornerTurnThrottle)
+            : fastThrottle;
 
         // Full 3D pursuit uses the UNCLAMPED lift-vector-on-target roll: the bank that places the
         // lift vector on the aim point may exceed 90 deg (rolling toward inverted) so the ace can
@@ -2386,7 +2613,7 @@ public sealed class ReactiveBandit :
         // Fixed storage is owned by the controller and reused plan after plan. The candidate order
         // is the historical declaration order because it is also the deterministic tie-break.
         _lookaheadCandidates[0] =
-            new(maxG, bankOnLead, fastThrottle, 0.0);
+            new(maxG, bankOnLead, pullThrottle, 0.0);
         _lookaheadCandidates[1] =
             new(System.Math.Min(maxG, 4.0), bankOnLead, cruiseThrottle, 0.0);
         _lookaheadCandidates[2] =
@@ -2455,6 +2682,7 @@ public sealed class ReactiveBandit :
                 _lookaheadPlanThrustFraction,
                 _lookaheadPlanBossCommitted,
                 _lookaheadPlanPredictionSubstepTicks,
+                _lookaheadPlanAttackLeadSeconds,
                 out int forecastSteps,
                 out int terrainSweeps);
             score += _lookaheadDoctrineBiases[index];
@@ -2718,6 +2946,10 @@ public sealed class ReactiveBandit :
     /// Below this closure the bandit is not catching the player and lights the burner.
     const double ChaseClosureMps = 30.0;
     const double ChaseStallSeconds = 3.0;
+    /// Target this far off the nose is a turning fight, where speed above corner costs turn rate.
+    const double CornerTurnNoseOffRad = 30.0 * System.Math.PI / 180.0;
+    /// Throttle for the max-G pull while bleeding toward corner speed.
+    const double CornerTurnThrottle = 0.30;
     double _chaseStallSeconds;
     double _chaseStallCheckedAt;
 
@@ -2732,6 +2964,7 @@ public sealed class ReactiveBandit :
         double thrustFraction,
         bool bossCommitted,
         int predictionSubstepTicks,
+        double attackLeadSeconds,
         out int forecastSteps,
         out int terrainSweeps) {
         const double threatWeight = 26.0;
@@ -2921,7 +3154,12 @@ public sealed class ReactiveBandit :
         // (only ~0.2 score at the edge), so range management dominated and the controller
         // happily orbited just outside the trigger gate. Keep a smooth gradient toward the real
         // envelope without widening it.
-        double termAngle = BanditFireControl.NoseErrorRad(terminal, terminalPlayer);
+        // Only the steering-angle term uses the later intercept POINT. NoseErrorRad reads
+        // position alone; firing/threat/range terms retain the physical rollout contact above.
+        var steeringPlayer = attackLeadSeconds > 0.0 ? terminalPlayer with {
+            Position = AttackInterceptPoint(terminalPlayer, attackLeadSeconds)
+        } : terminalPlayer;
+        double termAngle = BanditFireControl.NoseErrorRad(terminal, steeringPlayer);
         double coneErrors = termAngle / gunConeRad;
         double score = -0.75 * coneErrors;
         // Direct conversion reward: seconds of trigger-eligible gun window accrued over the
@@ -2988,7 +3226,7 @@ public sealed class ReactiveBandit :
         // out of its own fight volume before the scorer objected at all. Traced at 13,437 m. This
         // is the only ceiling pressure a lookahead tier gets — SelectTactic's Return was discarded
         // on that path — so it has to be the one that means something.
-        double scoreCeilingM = System.Math.Min(_ceilingM, CombatCeilingM);
+        double scoreCeilingM = System.Math.Min(FightCeilingM(player), CombatCeilingM);
         if (maxY > scoreCeilingM - 200.0)
             score -= 0.02 * (maxY - (scoreCeilingM - 200.0));
         return score;

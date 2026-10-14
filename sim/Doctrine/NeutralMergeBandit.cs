@@ -206,17 +206,34 @@ public sealed class NeutralMergeBandit :
         _fight?.ConfigureLookaheadCadencePhase(phase);
     }
 
+    GunProfile? _trackingGun;
+    internal GunProfile? TrackingGun => _trackingGun;
+    public void ConfigureGunTracking(GunProfile? profile) {
+        _trackingGun = profile;
+        _fight?.ConfigureGunTracking(profile);
+    }
+    internal bool AttackReengagementEnabled { get; set; }
+    internal string AttackStatus => _fight?.AttackStatus ?? "opening";
+
     public bool WantsToFire(in ActorObservation player) =>
         _fight?.WantsToFire(player) ?? false;
 
     public void Step(in ActorObservation player, double dt) {
         if (!double.IsFinite(dt) || dt <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(dt));
-        if (_presentationHandoffPending) {
+        // An earned Ace with physical gun tracking is already fighting. Holding only the
+        // lead on the scripted reciprocal pass until after the merge denied it the approach
+        // its reactive wingman could fly from spawn; the wing then ended the fight before the
+        // lead returned. Start the same aerodynamic pilot now, without waiting for a range
+        // threshold. Presenting, lower-tier and legacy/frozen passes keep their authored exit.
+        if (_presentationHandoffPending
+            || (_fight is null && _trackingGun is not null && _skill == PilotSkill.Ace
+                && !_presenting && _presentation == OpeningPresentation.Reciprocal)) {
             _presentationHandoffPending = false;
             BeginFight(player.ContactIdentity);
         }
         if (_fight is not null) {
+            _fight.AttackReengagementEnabled = AttackReengagementEnabled;
             _fight.Step(player, dt);
             T += dt;
             return;
@@ -367,6 +384,7 @@ public sealed class NeutralMergeBandit :
             Atmosphere = _atmosphere,
             PresentElapsedSeconds = _presentElapsedSeconds,
         };
+        fight.ConfigureGunTracking(_trackingGun);
         if (_lookaheadCadencePhase is int phase)
             fight.ConfigureLookaheadCadencePhase(phase);
         // Preserve the physical wing configuration on the exact tick that opens the merge gate.
@@ -375,9 +393,12 @@ public sealed class NeutralMergeBandit :
         fight.SetEffectiveWingSpanM(_mergeSim.EffectiveWingSpanM);
         fight.ConfigureAiPlanning(_computeLevel, _incrementalAiPlanning);
         fight.SeedEnginePowerFraction(_mergeSim.ThrustFraction);
-        fight.SeedHeldCommand(
-            _mergeSim.LastAppliedCommand,
-            contactIdentity);
+        // Before the first step there is no authored command to preserve. Let the
+        // reactive pilot initialise its own plan rather than hold the unflown trim.
+        if (_mergeSim.HasAppliedFlightCommand)
+            fight.SeedHeldCommand(
+                _mergeSim.LastAppliedCommand,
+                contactIdentity);
         fight.AcceptFormationDirective(_formationDirective);
         _fight = fight;
     }

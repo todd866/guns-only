@@ -50,6 +50,13 @@ test("HUD quicklook consumes the mission-aware Top Gun presentation", async () =
   assert.match(hud,
     /topGunQuicklook[\s\S]*?TOP GUN · \$\{topGunQuicklook\.weapons\} · \$\{topGunQuicklook\.returnToCarrier\}[\s\S]*?: "P  RAPIER MISSION AUTOMATION   ·   Z  SHORT-RANGE MISSILE"/,
     "Top Gun must branch around the generic Z missile legend");
+  // a8 key card: the mission-aware presentation selects the Top Gun mode, whose entries carry
+  // Fox Two and carrier RTB and never the generic Z missile / R restart (control_quicklook tests).
+  assert.match(hud,
+    /const topGun = topGunControlQuicklookPresentation\(state,[\s\S]*?const mode = topGun \? "topgun"[\s\S]*?controlQuicklookEntries\(\{[\s\S]*?foxTwo: topGun\?\.foxTwo/);
+  const card = (await import("../control_quicklook.js")).controlQuicklookEntries({ mode: "topgun", foxTwo: "R FOX TWO ×2" });
+  assert.doesNotMatch(card.map((e) => e.action).join(" · "), /RESTART|MISSILE/,
+    "Top Gun must branch around the generic Z missile legend");
   assert.match(hud,
     /foxTwoBinding: "R"/,
     "the objective strip must render the same fixed Top Gun Fox Two binding as input authority");

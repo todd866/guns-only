@@ -1,3 +1,4 @@
+import { controlQuicklookEntries } from "./render/hud/control_quicklook.js";
 import * as THREE from "./vendor/three.module.js";
 import {
   airdataReadout,
@@ -144,6 +145,31 @@ function finiteHudNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+/**
+ * Return the kernel's current gun intercept in render-world coordinates.
+ *
+ * The kernel publishes positions in the simulation frame (Z north); the WebGL/HUD
+ * frame mirrors Z. Frozen modes without a mount retain their existing sight.
+ * A mounted gun at assist none still publishes its true fixed-axis impact.
+ */
+export function gunImpactCueInput(state) {
+  const coneDeg = finiteHudNumber(state?.gun_gimbal_cone_deg);
+  const x = finiteHudNumber(state?.gun_impact_x);
+  const y = finiteHudNumber(state?.gun_impact_y);
+  const z = finiteHudNumber(state?.gun_impact_z);
+  if (!(state?.gun_gimbal_mounted === true || coneDeg > 0) || x === null || y === null || z === null) return null;
+  return {
+    point: { x, y, z: -z },
+    coneDeg,
+    gimbalDeg: finiteHudNumber(state?.gun_gimbal_deg) ?? 0,
+    barrel: {
+      x: finiteHudNumber(state?.gun_barrel_x),
+      y: finiteHudNumber(state?.gun_barrel_y),
+      z: finiteHudNumber(state?.gun_barrel_z),
+    },
+  };
+}
+
 function controlBindingLabel(code, fallback) {
   const labels = {
     ArrowDown: "DOWN", ArrowUp: "UP", ArrowLeft: "LEFT", ArrowRight: "RIGHT",
@@ -256,6 +282,11 @@ function insideRoundLife(state) {
   const range = Number(state?.range_m);
   if (!Number.isFinite(range)) return true;
   return range <= velocity * life;
+}
+
+function gunReleaseReady(state) {
+  if (state.gun_gimbal_mounted === true && state.gun_fire_inhibited === true) return false;
+  return !(state.gun_gimbal_cone_deg > 0) || state.gun_gimbal_tracking === true;
 }
 
 function hasGunSolution(state) {
@@ -1119,7 +1150,7 @@ class CombatHud {
     }
     this._lastHudHits = hits;
     const hitFlash = now < this._hitFlashUntil;
-    const solution = frame.visualGunSolution === true;
+    const solution = gunReleaseReady(state) && frame.visualGunSolution === true;
     const ctx = this.ctx;
     const overheated = state.gun_overheat === true;
     const cue = gunCue(state, hitFlash, solution);
@@ -1168,9 +1199,19 @@ class CombatHud {
 
     this.drawGunFunnel(frame, anchor);
 
+    // Assisted sorties use the actual barrel's future impact, not the requested aim line.
+    // The existing pipper's closed green ring means acquired; no extra HUD instrument.
+    const impactCue = gunImpactCueInput(state);
+    const sightPoint = impactCue
+      ? this.worldPoint.set(impactCue.point.x, impactCue.point.y, impactCue.point.z)
+      : leadPipper;
+    if (this._debug) this._debug.gunImpact = impactCue ? {
+      ...impactCue, tracking: state.gun_gimbal_tracking === true,
+    } : null;
+
     let rawPipperVisible = false;
-    if (state.lead_valid === true && leadPipper && insideRoundLife(state)) {
-      const leadProjection = this.project(leadPipper, camera, this.projectionA);
+    if (state.lead_valid === true && sightPoint && insideRoundLife(state)) {
+      const leadProjection = this.project(sightPoint, camera, this.projectionA);
       if (!leadProjection.behind && Number.isFinite(leadProjection.x)
         && Number.isFinite(leadProjection.y)) {
         // Draw the exact world point emitted by GunKill through the same live PerspectiveCamera
@@ -1256,6 +1297,8 @@ class CombatHud {
     const envelope = gunFunnelEnvelope(profile);
     if (!gunFunnelUsable(state, envelope)) return;
 
+    // Mounted guns publish the future path of a round released NOW from the actual barrel.
+    // Legacy fixed guns retain the steady-turn EEGS approximation below.
     // A REAL gunsight funnel: the kernel's gun_trajectory is the bullets-in-the-air locus (where
     // rounds fired over the last second actually ARE — gravity droop and own-ship rotation lag
     // included, closed form). Each sample is projected through the SAME live camera that renders
@@ -2355,11 +2398,17 @@ class CombatHud {
       ctx.fillStyle = leakers > 0 ? AMBER : GREEN;
       ctx.fillText(this.fitText(cue, width - 20), x + 10, y + 49);
     } else if (!raid && kills > 0) {
-      const x = this.safeInsets.left + 18;
-      const y = this.safeInsets.top + 17;
+      // Share the pause control's row instead of stacking on top of it: the fixed 17 px slot
+      // overlapped the ESC · PAUSE button (top 38 px) by two pixels at every desktop size.
+      const pause = typeof document !== "undefined" ? document.getElementById("pause-button") : null;
+      const pauseRect = pause && !pause.hidden ? pause.getBoundingClientRect() : null;
+      const besidePause = pauseRect && pauseRect.width > 0;
+      const x = besidePause ? pauseRect.right + 8 : this.safeInsets.left + 18;
+      const y = besidePause ? pauseRect.top + (pauseRect.height - 23) / 2 : this.safeInsets.top + 17;
       ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       const tally = `KILLS ${String(kills).padStart(2, "0")}`;
       const tallyWidth = ctx.measureText(tally).width + 18;
+      if (this._debug) this._debug.killTally = { x, y, width: tallyWidth, height: 23 };
       this.glassPanel(x, y, tallyWidth, 23, GREEN);
       ctx.fillStyle = GREEN;
       ctx.textAlign = "center";
@@ -4291,23 +4340,21 @@ class CombatHud {
     // "TARGET 1 · SELECTED · PADLOCK"). Selection is already printed at the bracket and the TARGET
     // control; padlock state now lives on the pressed PADLOCK control (ACQ / TRK / LOOK).
     if (!this.touchMode) {
+      // One row: mode, which target, track state and the way out. "SELECTED" is already printed
+      // at the bracket, and the old two-row plate crowded the OWN HDG label under it (a8).
+      const plate = `${isCombatPadlock || isBanditPadlock ? "PADLOCK · " : ""}${modeTitle
+        .replace(" · SELECTED · PADLOCK", "")} · ${modeStatus}`;
+      if (this._debug?.padlockMode) this._debug.padlockMode.drawn = plate;
       padlockCtx.save();
       padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      const titleWidth = padlockCtx.measureText(modeTitle).width;
-      padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      const statusWidth = padlockCtx.measureText(modeStatus).width;
-      const modeWidth = Math.min(this.width - 28, Math.max(titleWidth, statusWidth) + 20);
+      const modeWidth = Math.min(this.width - 28, padlockCtx.measureText(plate).width + 20);
       const modeX = (this.width - modeWidth) / 2;
       const modeY = Math.max(this.safeInsets.top + 3, this.getLayout().heading.top - 30);
-      this.glassPanel(modeX, modeY, modeWidth, 28, frame.manualLookActive ? AMBER : GREEN_DIM);
+      this.glassPanel(modeX, modeY, modeWidth, 18, frame.manualLookActive ? AMBER : GREEN_DIM);
       padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN;
       padlockCtx.textAlign = "center";
       padlockCtx.textBaseline = "middle";
-      padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      padlockCtx.fillText(this.fitText(modeTitle, modeWidth - 12), this.width / 2, modeY + 9);
-      padlockCtx.fillStyle = frame.manualLookActive ? AMBER : GREEN_DIM;
-      padlockCtx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      padlockCtx.fillText(this.fitText(modeStatus, modeWidth - 12), this.width / 2, modeY + 20);
+      padlockCtx.fillText(this.fitText(plate, modeWidth - 12), this.width / 2, modeY + 9.5);
       padlockCtx.restore();
     }
     padlockCtx.save();
@@ -5478,7 +5525,9 @@ class CombatHud {
     if (this.showLegendHint !== true || this.legendVisible || this.touchMode) return;
     const ctx = this.ctx;
     ctx.save();
-    const text = "H \u00B7 CONTROLS";
+    // FIRE is the one control a new (often young) pilot must find unaided; the chip names it
+    // beside the way into the full key card (a8, owner 2026-10-13).
+    const text = `${controlBindingLabel(this.controlBindings?.fire, "KeyF")} \u00B7 FIRE   H \u00B7 CONTROLS`;
     ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const width = ctx.measureText(text).width + 18;
     const x = this.width - this.safeInsets.right - width - 12;
@@ -5934,7 +5983,9 @@ class CombatHud {
       + rows * CombatHud.ANNUNCIATION_ROW + (rows - 1) * 4 + 6;
   }
 
-  drawLegend(frame) {
+  // Pre-a8 quicklook, kept byte-for-byte for every mode except the ordinary F-22 fight
+  // (Top Gun, Rapier and the first-run valley are frozen or pinned to this copy).
+  drawLegacyQuicklook(frame) {
     if (!this.legendVisible || this.touchMode || document.documentElement.classList.contains("touch-mode")) return;
     const ctx = this.ctx;
     const panelWidth = Math.min(930, this.width - 34);
@@ -6014,6 +6065,82 @@ class CombatHud {
     lines.forEach((line, index) => ctx.fillText(line, this.width / 2, startY + index * lineHeight));
   }
 
+  drawLegend(frame) {
+    if (!this.legendVisible || this.touchMode || document.documentElement.classList.contains("touch-mode")) return;
+    const ctx = this.ctx;
+    const state = frame.state ?? {};
+    const phaseMission = String(hudPhasePresentation(state)?.mission ?? "");
+    const topGun = topGunControlQuicklookPresentation(state, {
+      fireBinding: controlBindingLabel(this.controlBindings?.fire, "KeyF"),
+      rtbBinding: controlBindingLabel(this.controlBindings?.knockItOff, "KeyO"),
+    });
+    const mode = topGun ? "topgun"
+      : state.mission_definition_id === "mission.modern.visual-merge.first-run-valley.v1" ? "valley"
+        : phaseMission.startsWith("rapier") ? "rapier" : "f22";
+    // a8 scope: only the ordinary F-22 fight gets the key card.
+    if (mode !== "f22" || state.top_gun_seat === "F-14A") {
+      this.drawLegacyQuicklook(frame);
+      return;
+    }
+    const entries = controlQuicklookEntries({
+      bindings: this.controlBindings ?? {},
+      mode,
+      gcasAvailable: state.auto_gcas_available === true,
+      f14WingSweep: state.top_gun_seat === "F-14A",
+      foxTwo: topGun?.foxTwo ?? null,
+    });
+    // Key card: [CAP] ACTION cells in fixed columns, primary controls first and bright.
+    const columns = this.width < 760 ? 2 : 3;
+    const cellWidth = Math.min(210, (this.width - 60) / columns);
+    const rowHeight = 26;
+    const rows = Math.ceil(entries.length / columns);
+    const panelWidth = cellWidth * columns + 24;
+    const panelHeight = rows * rowHeight + 20;
+    const x = (this.width - panelWidth) / 2;
+    const y = (this.height - panelHeight) / 2;
+    if (this._debug) this._debug.controlQuicklook = { x, y, width: panelWidth, height: panelHeight,
+      cells: entries.map((e) => `${e.caps.join(" ")} ${e.action}`) };
+
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 7, 12, 0.22)";
+    ctx.fillRect(0, 0, this.width, this.height);
+    roundedRect(ctx, x, y, panelWidth, panelHeight, 8);
+    ctx.fillStyle = "rgba(3, 13, 20, 0.84)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(77, 255, 136, 0.23)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.textBaseline = "middle";
+    const capFont = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    entries.forEach((entry, index) => {
+      // Column-major fill keeps the primary controls together down the first column.
+      const column = Math.floor(index / rows);
+      const row = index % rows;
+      const cx = x + 12 + column * cellWidth;
+      const cy = y + 10 + row * rowHeight + rowHeight / 2;
+      const ink = entry.primary ? GREEN : "rgba(207, 244, 222, 0.62)";
+      let capX = cx;
+      ctx.font = capFont;
+      for (const label of entry.caps) {
+        const w = Math.max(20, ctx.measureText(label).width + 10);
+        roundedRect(ctx, capX, cy - 9, w, 18, 3);
+        ctx.fillStyle = entry.primary ? "rgba(77, 255, 136, 0.14)" : "rgba(207, 244, 222, 0.06)";
+        ctx.fill();
+        ctx.strokeStyle = entry.primary ? "rgba(77, 255, 136, 0.55)" : "rgba(207, 244, 222, 0.25)";
+        ctx.stroke();
+        ctx.fillStyle = ink;
+        ctx.textAlign = "center";
+        ctx.fillText(label, capX + w / 2, cy + 0.5);
+        capX += w + 4;
+      }
+      ctx.textAlign = "left";
+      ctx.font = `${entry.primary ? 800 : 700} 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.fillStyle = ink;
+      ctx.fillText(this.fitText(entry.action, cellWidth - (capX - cx) - 10), capX + 4, cy + 0.5);
+    });
+    ctx.restore();
+  }
+
   draw(frame) {
     const ctx = this.ctx;
     const root = typeof document !== "undefined" ? document.documentElement : null;
@@ -6048,6 +6175,8 @@ class CombatHud {
         ? "solution" : "no-solution" },
       frame.dt,
     )?.key === "solution";
+    // A physical interlock overrides the display qualifier's release dwell immediately.
+    frame.visualGunSolution &&= gunReleaseReady(frame.state);
 
     // Harness-only geometry contract (assertions.mjs): populated when window.__HUD_DEBUG__ is
     // set, a single falsy test per frame otherwise.
@@ -6058,6 +6187,7 @@ class CombatHud {
         gunCrossPx: null,
         ladderRungs: [],
         funnel: null,
+        gunImpact: null,
         banditPx: null,
         gunHeat: null,
         gunOverheatAnnunciation: null,

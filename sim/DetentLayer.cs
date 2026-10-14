@@ -424,7 +424,12 @@ public sealed class DetentLayer {
                 : p.NormalPullUsesMaxPerformance ? DemandTier.MaxPerform
                 : DemandTier.Valley;
             StickyOffsetG -= pushTaps * StickyStepG;                       // ease taps (<=0)
-            double baseG = over ? cap : ValleyG;                          // override => pull to the limit
+            // Keyboard stick travel (F-22 opt-in): a tap is a fine correction, a hold walks out to
+            // the full protected pull. The override stays a deliberate full-authority demand.
+            double keyNeutral = AssistedFlight ? AssistedBaselineTarget(s) : 1.0;
+            double baseG = over ? cap
+                : keyNeutral + (ValleyG - keyNeutral)
+                    * KeyStickTravel(keys, GKey.PullUp, nowMs, p);       // override => pull to the limit
             target = System.Math.Clamp(baseG + StickyOffsetG, System.Math.Min(1.0, cap), cap);
         }
         else if (push != KeyPhase.Idle) {
@@ -434,7 +439,10 @@ public sealed class DetentLayer {
             tier = over ? DemandTier.OverDemand : DemandTier.Valley;
             double pushFloor = System.Math.Max(
                 FlightModel.NzAeroMin(s, p, AirspeedMps, AtmosphereModel), -1.5);
-            target = over ? pushFloor : System.Math.Max(pushFloor, -1.0);
+            double keyNeutral = AssistedFlight ? AssistedBaselineTarget(s) : 1.0;
+            target = over ? pushFloor
+                : keyNeutral + (System.Math.Max(pushFloor, -1.0) - keyNeutral)
+                    * KeyStickTravel(keys, GKey.PushDown, nowMs, p);
         }
         else if (_analogPitchControlActive) {
             // A common semantic axis for touch and gamepad. In assisted flight the centred stick
@@ -586,8 +594,15 @@ public sealed class DetentLayer {
         int tapDirection = rollDirection == 0 && _pendingRollTapPulses.Count > 0
             ? _pendingRollTapPulses.Dequeue() : 0;
         int effectiveRollDirection = rollDirection != 0 ? rollDirection : tapDirection;
+        // Keyboard stick travel (F-22 opt-in, see KeyStickTravel): a held roll key starts at the
+        // onset fraction and walks to full aileron; an unseen sub-tick tap pulses at the onset.
+        double keyRollTravel = rollDirection > 0
+            ? KeyStickTravel(keys, GKey.RollRight, nowMs, p)
+            : rollDirection < 0
+                ? KeyStickTravel(keys, GKey.RollLeft, nowMs, p)
+                : KeyStickOnset(GKey.RollRight, p);
         double requestedRollControl = effectiveRollDirection != 0
-            ? effectiveRollDirection
+            ? effectiveRollDirection * keyRollTravel
             : _analogRollControlActive ? _analogRollControl : 0.0;
         if (HasBodyAttitude(s)) {
             double bodyBank = BodyBank(s);
@@ -882,6 +897,28 @@ public sealed class DetentLayer {
                 : parameters.ThrustMaxN * densityRatio;
         return unitAvailableN <= 1e-9 ? stop
             : System.Math.Clamp(requiredThrustN / unitAvailableN, 0.0, stop);
+    }
+
+    static double KeyStickRampSeconds(GKey key, in AircraftParams p) =>
+        key is GKey.PullUp or GKey.PushDown ? p.KeyboardPitchRampSeconds : p.KeyboardRollRampSeconds;
+
+    static double KeyStickOnset(GKey key, in AircraftParams p) =>
+        KeyStickRampSeconds(key, p) > 0.0
+            ? System.Math.Clamp(p.KeyboardStickOnsetFraction, 0.0, 1.0) : 1.0;
+
+    /// <summary>
+    /// Fraction of full stick a held pitch/roll key commands after it has been held for
+    /// (nowMs - press time). Airframes without a ramp keep the bang-bang key (1.0). With one, the
+    /// travel is onset + (1 - onset) * (held / ramp)^2, reaching full deflection at the ramp time.
+    /// </summary>
+    internal static double KeyStickTravel(KeyGrammar keys, GKey key, double nowMs,
+        in AircraftParams p) {
+        double ramp = KeyStickRampSeconds(key, p);
+        if (ramp <= 0.0) return 1.0;
+        double onset = KeyStickOnset(key, p);
+        double held = System.Math.Max(0.0, (nowMs - keys.PressTime(key)) / 1000.0);
+        double x = System.Math.Min(1.0, held / ramp);
+        return onset + (1.0 - onset) * x * x;
     }
 
     static bool HasBodyAttitude(in AircraftState s) =>

@@ -68,7 +68,9 @@ Ace here, so N and D3 learnability for humans remain unmeasured.
 
 One normal sortie = O then D: conversion followed by defence on the same resources.
 O1's second engagement is D1. Failure repeats the current lesson on Again; losing D
-restarts D alone, preserving the earned O. No automatic easing/demotion. Non-gun
+restarts D alone, preserving the earned O. Exception (2026-10-14): being gunned down
+in D1 or D2 advances, because those are the bandit's easy kill and C12 made it lethal;
+a crash or abandon there still repeats, and D3 must be defended. No automatic easing/demotion. Non-gun
 O victories repeat O; RTB/abandon never advances. Defensive success uses the existing
 ceasefire/recovery handoff without declaring the living bandit dead. N/A2 retain the
 two-engagement cap. Landing remains optional and separately recorded.
@@ -92,3 +94,73 @@ trains offensive, defensive and neutral sets. Numeric thresholds here are game t
 Acceptance: deterministic delayed-input sweeps, migration/progression tests, existing
 pressure report, and real-touch phone-landscape O1→D1 screenshots. Geometry or code
 checks alone cannot establish a playable, monotonically harder ladder.
+
+## C11: physical gun assist (13 October 2026)
+
+Ian's child-pilot addendum supersedes restoring the old sphere-hit conversion curve.
+O1/D1 use a **12°** cone, O2/D2 **6°**, later lessons **0°**, all with a **60°/s**
+body-relative slew limit. Acquisition requires the gravity-compensated lead inside
+that cone; outside it the mount slews home. Configuration and mount position persist
+across the sortie's O→D transition. Keyboard gets the same gun assist without the
+phone's automatic trigger or throttle. The existing lift-axis pitch assist remains.
+
+This is **fiction**, explicitly not a claim about the real F-22's fixed internal M61.
+The authored external muzzle is on the centreline, 9.6 m ahead of the reference,
+0.15 m beyond the 18.9 m collision solid. The entire cone points away from that solid.
+A round inherits shooter velocity plus the current barrel velocity, then follows the
+existing gravity/cadence/lifetime and true-volume sweep. There is no in-flight steering,
+expanded volume, damage change, or Ace-gun change. Interlocks predict the whole round
+lifetime against terrain and the relief fighter (the only friendly in this route;
+`Wingmen` are enemies). Unknown terrain samples fail closed; terrain is sampled at
+quarter-resolution (1–20 m spacing), with a spacing-sized clearance margin. Friendly
+prediction assumes current velocity/body rates; it cannot foresee a later manoeuvre.
+
+The existing pipper projects the current barrel's impact at the lead time of flight;
+its existing closed green solution shape means acquired and clear. The funnel uses
+the current barrel's prospective ballistic path. Neither represents steering of old
+rounds. The gun holds one axis during each 1/120 s step, matching the kernel's existing
+integration convention. Hot and cold snapshots carry identical barrel/impact data.
+Frozen routes retain their original gun and sight path.
+
+Deterministic keyboard child model: 450 ms visual delay, seeded 0.3–1.5 s holds,
+wrong-way initial roll in seeds 2/5, 2–4 s bursts inside a 15° visual cone, no lead or
+throttle discipline. `FeedKey` only; automatic fire/throttle disabled. Seeds 0–7:
+
+| Lesson | Kills | Kill time (successful) | Rounds at first hit | Total rounds (successful) |
+|---|---:|---:|---:|---:|
+| O1 | 8/8 | 1.075–1.083 s | 61 | 63 |
+| O2 | 6/8 | 1.667–1.700 s | 120–124 | 121–125 |
+
+O2's wrong-way seeds die without hits after 395/344 rounds. The bounded cone does
+not rescue every mistake. Full assist intentionally makes O1 very easy; no search
+for the weakest passing configuration is claimed. These are automated inputs, not
+observations of Ian's child. Browser keyboard and phone receipts, calibration curves,
+practice results and screenshots are recorded in the C11 handoff.
+
+Test-policy changes are intentional: an actual early kill satisfies the opening's
+opportunity receipt when it ends the target's two-second window; O1/O2 may have equal
+conversion for competent pilots; the old four-degree poor-shot miss test now explicitly
+uses assist none. None of those changes relaxes projectile intersection. The Ace
+conversion contract is **unchanged and red** after C10: 6 hits, 2/6 engagements hit,
+2 kills versus the legacy spheres' 10 hits, 4/6, 3 kills. The coordinator owns any
+opponent tuning. D1's passive-pilot lethality contract is also red on the pre-C11
+combined branch; C11 does not silently buff that opponent.
+
+Additional calibration (four seeds; idealised delayed **kernel lead-informed** keyboard
+pilots, not browser vision):
+
+| Pilot / step | Hits | Kills | Rounds to first hit |
+|---|---:|---:|---:|
+| Competent, O1 | 12 | 4/4 | 62 |
+| Competent, O2 | 3 | 1/4 | 67 (successful seed) |
+| Competent, O3 / N / A2 | 0 each | 0/4 each | — |
+| Expert model, none, O3 / N / A2 | 0 each | 0/4 each | — |
+| Ace reference duels, true volumes (six seeds) | 6 AI hits | 2/6 AI kills | 9 in both successful duels |
+
+The expert model never obtained its trigger criterion (zero rounds). That is a
+**model/acceptance limitation**, not evidence that skilled humans cannot score or a
+validated measure of expert difficulty. It must not be sold as expert playability
+acceptance. The competent pilot's shorter solution-gated bursts also convert less
+well in O2 than the child's long bursts; “better discipline always wins” is not claimed.
+The sphere-era delayed stick sweep remains in the historical table above for comparison;
+it is a different pilot/input path and is not a paired keyboard baseline.

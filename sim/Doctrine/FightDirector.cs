@@ -277,7 +277,13 @@ public sealed class FightDirector {
         if (_bfmEnabled) {
             // A hit is evidence for the ledger, not proof of conversion or defence.
             if (gunKill && report.Outcome == SortieOutcome.Victory) AdvanceLesson();
-            return; // Repeat on loss; an expected defensive loss never erases offensive proof.
+            // D1/D2 are the bandit's easy kill (owner, 2026-10-13: "the second is a really easy
+            // kill for the AI"). Being gunned down there is the lesson, so it advances; a crash
+            // or abandon does not. D3 and later still repeat on loss.
+            else if (BfmLesson.Get(_lessonIndex).Index is 1 or 3
+                && report.Outcome == SortieOutcome.Defeat && report.HitsTaken > 0)
+                AdvanceLesson();
+            return; // Otherwise repeat on loss; a defensive loss never erases offensive proof.
         }
         if (hit && _rung < 1) _rung = 1;
         if (gunKill && _rung < 2) _rung = 2;

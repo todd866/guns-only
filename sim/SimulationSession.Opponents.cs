@@ -425,6 +425,10 @@ public sealed partial class SimulationSession {
         _arenaHandicapProfile = profile;
         _arenaHandicapSkill = skillLabel;
         _arenaHandicapActive = true;
+        // Handicap can arrive after staging. Switch the complete player gun configuration;
+        // retain the gun instance, airborne rounds, damage ledger, magazine and cadence.
+        ConfigurePlayerGunForMode();
+        if (_opponentGun is not null) _opponentGun.TargetGeometry = null;
         // StartBeat may have already staged a 1v2 before the matchmaker reply arrived. Multiplayer
         // is always 1v1 — drop any wingmen when the handicap lands.
         ClearWingmen();
@@ -434,7 +438,19 @@ public sealed partial class SimulationSession {
     public void ClearArenaHandicap() {
         _arenaHandicapProfile = null;
         _arenaHandicapActive = false;
+        ConfigurePlayerGunForMode();
+        if (_opponentGun is not null) _opponentGun.TargetGeometry = _beat.CombatRules.OpponentTargetGeometry;
         _arenaHandicapSkill = PilotSkill.Competent;
+    }
+
+    void ConfigurePlayerGunForMode() {
+        if (_gunKill is null) return;
+        _gunKill.TargetGeometry = _arenaHandicapActive ? null : _beat.CombatRules.PlayerTargetGeometry;
+        bool mounted = IsVisualMergeSortie(_beat) && !_arenaHandicapActive
+            && _beat.CombatRules.PlayerTargetGeometry is not null;
+        _gunKill.Gimbal = mounted ? GunGimbalConfig.ForAssist(
+            (_sortiePitchAssist ?? _fightDirector.PitchAssist).GainScale) : null;
+        _gunKill.FirePathClear = mounted ? PlayerGunPathClear : null;
     }
 
     public bool ArenaHandicapActive => _arenaHandicapActive;
@@ -480,6 +496,9 @@ public sealed partial class SimulationSession {
     void StepPrimaryOpponent(in ActorObservation observation, double dt) {
         if (_firstRunValleyRuntime?.ParkOpponents == true) return;
         if (_opponentTerminalState == AircraftTerminalState.SimulationBounded) return;
+        bool pressAttack = UsesDifficultyRamp(_beat) && _wingmen.Count == 0 && DifficultyRung <= 2;
+        if (_bandit is ReactiveBandit reactive) reactive.AttackReengagementEnabled = pressAttack;
+        if (_bandit is NeutralMergeBandit merge) merge.AttackReengagementEnabled = pressAttack;
         _bandit.Step(observation, dt);
         if (_bandit is NeutralMergeBandit { Presentation: OpeningPresentation.Lead,
                 Presenting: true, FirstPassComplete: false } lead) {
@@ -495,10 +514,15 @@ public sealed partial class SimulationSession {
     }
 
     void ConfigureAdaptiveAiPlanning() {
+        bool physicalTracking = IsVisualMergeSortie(_beat)
+            && !_arenaHandicapActive && _beat.FirstRunValley is null
+            && _beat.CombatRules.OpponentTargetGeometry is not null;
+        _bandit.ConfigureGunTracking(physicalTracking ? _opponentGun.Profile : null);
         if (_bandit is IAdaptiveAiPlanner primary)
             primary.ConfigureAiPlanning(
                 _aiComputeLevel, _incrementalAiPlanningEnabled);
         foreach (Wingman wingman in _wingmen) {
+            wingman.Bandit.ConfigureGunTracking(physicalTracking ? wingman.Gun.Profile : null);
             if (wingman.Bandit is IAdaptiveAiPlanner support)
                 support.ConfigureAiPlanning(
                     _aiComputeLevel, _incrementalAiPlanningEnabled);
@@ -617,7 +641,8 @@ public sealed partial class SimulationSession {
             wing.Wind = _player.Wind;
             wing.Atmosphere = _player.AtmosphereModel;
             var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
-                combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
+                combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile,
+                targetGeometry: _arenaHandicapActive ? null : combat.OpponentTargetGeometry);
             _wingmen.Add(new Wingman(
                 wing, gun, spec.Skill, AllocateOpponentGunTargetId()));
         }
@@ -663,7 +688,8 @@ public sealed partial class SimulationSession {
             aircraft.Atmosphere = _player.AtmosphereModel;
             var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
                 combat.OpponentGunProfile.EffectiveHitRadiusM,
-                combat.OpponentGunProfile);
+                combat.OpponentGunProfile,
+                targetGeometry: _arenaHandicapActive ? null : combat.OpponentTargetGeometry);
             _wingmen.Add(new Wingman(
                 aircraft, gun, _beat.BanditSkill, AllocateOpponentGunTargetId()));
         }

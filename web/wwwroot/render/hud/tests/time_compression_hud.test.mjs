@@ -35,4 +35,7 @@ test("production HUD draws the time-compression chip from snapshot state", async
     /drawTimeCompression\(frame\) \{[\s\S]*?timeCompressionHudPresentation\(frame\.state\)/);
   assert.match(source, /this\.drawTimeCompression\(frame\);/);
   assert.match(source, /T  TIME COMPRESSION ON \/ OFF/);
+  const { controlQuicklookEntries } = await import("../control_quicklook.js");
+  assert.ok(controlQuicklookEntries().some((e) => e.caps[0] === "T" && e.action === "TIME COMP"),
+    "the key card names the time-compression key");
 });
