@@ -8,6 +8,8 @@ import {
 import {
   CONVENTIONAL_AIRBASE_VISUAL_PROFILE,
   createConventionalRunwayPresentation,
+  RUNWAY_LIGHT_OPACITY,
+  runwayLightOpacity,
   updateConventionalRunwayPresentation,
 } from "../scene_builders.js";
 
@@ -264,4 +266,35 @@ test("short conventional strips keep the scored runway but omit the full airbase
   assert.equal(runway.airbaseDetails.every((object) => object.visible === false), true);
   assert.equal(runway.approachLights.visible, true);
   assert.equal(runway.thresholdLights.visible, true);
+});
+
+test("runway light sprites fade out at fight range and return for any recovery", () => {
+  const nm = 1852;
+  const at = (rangeNm, extra = {}) => runwayState({
+    px: -55_000, pz: -55_300 - rangeNm * nm, ...extra,
+  });
+  assert.equal(runwayLightOpacity(at(3)), RUNWAY_LIGHT_OPACITY);
+  assert.equal(runwayLightOpacity(at(6)), RUNWAY_LIGHT_OPACITY);
+  const mid = runwayLightOpacity(at(8));
+  assert.ok(mid > 0.3 && mid < 0.7, `8 NM is half-faded, got ${mid}`);
+  assert.equal(runwayLightOpacity(at(13)), 0, "no lit cluster under the gunsight at fight range");
+  assert.equal(runwayLightOpacity(at(13, { player_rtb_active: true })), RUNWAY_LIGHT_OPACITY);
+  assert.equal(runwayLightOpacity(at(13, { approach_guidance_active: true })), RUNWAY_LIGHT_OPACITY);
+  assert.equal(runwayLightOpacity(runwayState()), RUNWAY_LIGHT_OPACITY,
+    "no ownship pose: never hide the field");
+
+  const runway = createConventionalRunwayPresentation();
+  updateConventionalRunwayPresentation(runway, at(13));
+  assert.equal(runway.edgeLights.visible, false);
+  assert.equal(runway.towerBeacon.visible, false);
+  updateConventionalRunwayPresentation(runway, at(13, { player_rtb_active: true }));
+  assert.equal(runway.edgeLights.visible, true);
+  assert.equal(runway.towerBeacon.visible, true);
+  assert.equal(runway.edgeLights.material.opacity, RUNWAY_LIGHT_OPACITY);
+
+  // A short strip keeps its beacon hidden whatever the range.
+  const short = createConventionalRunwayPresentation();
+  updateConventionalRunwayPresentation(short, { ...at(2), runway_length_m: 900 });
+  assert.equal(short.towerBeacon.visible, false);
+  assert.equal(short.edgeLights.visible, true);
 });
