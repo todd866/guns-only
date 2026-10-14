@@ -672,6 +672,8 @@ export const SCENARIOS = [
       conventional_rtb_pattern_active: true,
       approach_pattern_leg: "DOWNWIND",
       approach_next_label: "PERCH",
+      approach_power_01: 0.55,
+      sortie_valid: true, sortie_leg: "Groove", sortie_power_01: 0.2, sortie_waveoff_s: 3.1,
       approach_track_required_m: 1_700,
       approach_next_alt_m: 457,
       approach_alt_error_m: 12,
