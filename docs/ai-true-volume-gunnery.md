@@ -12,6 +12,23 @@ not opted in. `NeutralMergeBandit` forwards the profile when it creates its figh
 actor. Direct duel/funnel acceptance harnesses configure the enemy in the same way;
 their reference opponents remain the existing ruler.
 
+An earned, non-presenting Ace on the reciprocal opening starts its reactive pilot on
+its first tick when physical tracking is configured. Its wingman already fights from
+spawn. Holding only the lead to the scripted pass left it recovering from a distant
+bracket while the more accurate wingman ended the encounter. Handoff preserves the
+same aircraft state, engine state and formation order; it changes the pilot's command
+selection, not the aircraft or its weapons. An authored command is transferred only
+after the merge aircraft has actually applied a flight command; at spawn the reactive
+pilot starts its normal plan instead of inheriting unflown neutral controls.
+Presenting, lower-tier and legacy/frozen
+passes retain their existing exits. `WingmanStaysInTheFightTests` pins both the lead's
+live opening shot and both ships firing before the durable fixture player is lost.
+
+This handoff does not edit the fine-track latch. When integrating a7, retain its
+`FineTrackOutOfPatience` exit and `_fineTrackRetryAt` entry guard alongside C12's
+physical Ace 20°/25° thresholds (and the 1,400 m range); neither side replaces the
+other's latch condition.
+
 ## Tracking and trigger policy
 
 - Aim at the observed target body origin, which lies inside the F-22 fuselage. No

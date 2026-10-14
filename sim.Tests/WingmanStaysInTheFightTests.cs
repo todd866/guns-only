@@ -352,6 +352,26 @@ public sealed class WingmanStaysInTheFightTests {
             + $"{alive[^1].Range:F0} m, altitude {alive[^1].AltM:F0} m, tactic {alive[^1].Tactic})");
     }
 
+    [Fact]
+    public void EarnedColdPairLeadFiresOnItsApproachWhileThePlayerIsAlive() {
+        var session = new SimulationSession();
+        session.ArmDirectorStateForNextStage(EarnedPairState());
+        session.StartBeat(DurablePlayerTwoShipFixture);
+        session.Begin();
+        session.SetAnalogThrottleControl(0.2);
+        while (session.TimeSeconds < 30.0
+            && session.PlayerTerminalState == AircraftTerminalState.Flying
+            && session.OpponentGun.RoundsFired == 0) {
+            session.SetAnalogRollControl(0.0);
+            session.Advance(1.0 / AircraftSim.TickHz);
+        }
+        _output.WriteLine($"first lead fire: t={session.TimeSeconds:F3}, "
+            + $"lead={session.OpponentGun.RoundsFired}, wing={session.Wingmen[0].Gun.RoundsFired}");
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+        Assert.True(session.OpponentGun.RoundsFired > 0,
+            "the earned lead must use the live approach, not wait for its wingman to end the fight");
+    }
+
     /// THE COLD OPENING MUST SHOOT BACK — BOTH OF THEM. Production Builds 260 and 263 (owner
     /// flights, both cold page loads, ~110 s of real fight each): opponent_rounds_fired 0 and
     /// opponent_gun_firing true in 0 of 4,383 snapshot rows, while the player scored 3 hits and

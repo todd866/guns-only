@@ -142,6 +142,37 @@ public sealed class PhysicalGunTrackingTests {
         return (projectile - target).Length;
     }
 
+    [Theory]
+    [InlineData(PilotSkill.Ace, true, false, true)]
+    [InlineData(PilotSkill.Ace, true, true, false)]
+    [InlineData(PilotSkill.Ace, false, false, false)]
+    [InlineData(PilotSkill.Competent, true, false, false)]
+    [InlineData(PilotSkill.Veteran, true, false, false)]
+    public void OnlyEarnedPhysicalAceStartsFightingBeforeTheScriptedPass(
+        PilotSkill skill, bool physical, bool presenting, bool expectedFight) {
+        var initial = new AircraftState(new Vec3D(0, 3000, 0), 250, 0, 0, 0,
+            FlightModel.Su27SPublicDataSurrogate.MassKg);
+        var bandit = new NeutralMergeBandit(initial, FlightModel.Su27SPublicDataSurrogate,
+            skill, presenting: presenting);
+        var observation = ActorObservation.Capture(Target(new(0, 3000, 4000), 250, Math.PI));
+        var before = bandit.State; // AircraftSim initializes body attitude from trim.
+        if (physical) bandit.ConfigureGunTracking(Profile);
+        Assert.Equal(before, bandit.State);
+
+        bandit.Step(observation, Dt);
+
+        Assert.Equal(expectedFight, bandit.FirstPassComplete);
+        Assert.Equal(presenting, bandit.Presenting);
+        if (expectedFight) {
+            Assert.Equal(skill, bandit.FightSkill);
+            Assert.Equal(FlightModel.Su27SPublicDataSurrogate, bandit.FightAircraftParameters);
+        }
+        // Handoff preserves the airframe: only this tick's ordinary integration moves it.
+        Assert.InRange((bandit.State.Position - initial.Position).Length, 0, initial.Speed * Dt + 0.1);
+        Assert.InRange(Math.Abs(bandit.State.Speed - initial.Speed), 0, 1.0);
+        Assert.False(bandit.WantsToFire(observation)); // still well outside the 900 m gun gate
+    }
+
     [Fact]
     public void F22BodyOriginIsInsideTrueFuselageForShortAimRay() {
         Assert.True(AirframeHitGeometry.F22.TryBodyEntry(
