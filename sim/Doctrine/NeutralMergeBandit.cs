@@ -219,15 +219,14 @@ public sealed class NeutralMergeBandit :
     public void Step(in ActorObservation player, double dt) {
         if (!double.IsFinite(dt) || dt <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(dt));
-        // An earned Ace pair with physical gun tracking is already fighting. Holding only the
+        // An earned Ace with physical gun tracking is already fighting. Holding only the
         // lead on the scripted reciprocal pass until after the merge denied it the approach
         // its reactive wingman could fly from spawn; the wing then ended the fight before the
         // lead returned. Start the same aerodynamic pilot now, without waiting for a range
-        // threshold. Solo, presenting, lower-tier and legacy/frozen passes keep their authored exit.
+        // threshold. Presenting, lower-tier and legacy/frozen passes keep their authored exit.
         if (_presentationHandoffPending
             || (_fight is null && _trackingGun is not null && _skill == PilotSkill.Ace
-                && !_presenting && _presentation == OpeningPresentation.Reciprocal
-                && _formationDirective.Role != FormationTacticalRole.Independent)) {
+                && !_presenting && _presentation == OpeningPresentation.Reciprocal)) {
             _presentationHandoffPending = false;
             BeginFight(player.ContactIdentity);
         }

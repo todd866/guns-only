@@ -143,14 +143,13 @@ public sealed class PhysicalGunTrackingTests {
     }
 
     [Theory]
-    [InlineData(PilotSkill.Ace, true, false, true, true)]
-    [InlineData(PilotSkill.Ace, true, false, false, false)]
-    [InlineData(PilotSkill.Ace, true, true, true, false)]
-    [InlineData(PilotSkill.Ace, false, false, true, false)]
-    [InlineData(PilotSkill.Competent, true, false, true, false)]
-    [InlineData(PilotSkill.Veteran, true, false, true, false)]
-    public void OnlyEarnedPhysicalAcePairStartsFightingBeforeTheScriptedPass(
-        PilotSkill skill, bool physical, bool presenting, bool paired, bool expectedFight) {
+    [InlineData(PilotSkill.Ace, true, false, true)]
+    [InlineData(PilotSkill.Ace, true, true, false)]
+    [InlineData(PilotSkill.Ace, false, false, false)]
+    [InlineData(PilotSkill.Competent, true, false, false)]
+    [InlineData(PilotSkill.Veteran, true, false, false)]
+    public void OnlyEarnedPhysicalAceStartsFightingBeforeTheScriptedPass(
+        PilotSkill skill, bool physical, bool presenting, bool expectedFight) {
         var initial = new AircraftState(new Vec3D(0, 3000, 0), 250, 0, 0, 0,
             FlightModel.Su27SPublicDataSurrogate.MassKg);
         var bandit = new NeutralMergeBandit(initial, FlightModel.Su27SPublicDataSurrogate,
@@ -158,10 +157,6 @@ public sealed class PhysicalGunTrackingTests {
         var observation = ActorObservation.Capture(Target(new(0, 3000, 4000), 250, Math.PI));
         var before = bandit.State; // AircraftSim initializes body attitude from trim.
         if (physical) bandit.ConfigureGunTracking(Profile);
-        if (paired)
-            bandit.AcceptFormationDirective(new FormationDirective(
-                FormationTacticalRole.Pressure, LateralSign: 0, PartnerId: 2,
-                AssignmentSequence: 1, SharedContact: observation));
         Assert.Equal(before, bandit.State);
 
         bandit.Step(observation, Dt);
