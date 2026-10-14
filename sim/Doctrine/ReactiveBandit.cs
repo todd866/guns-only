@@ -1703,6 +1703,11 @@ public sealed class ReactiveBandit :
         return new PilotCommand(g, bank, throttle, 0.0);
     }
 
+    // Authored doctrine margins, not airframe data: inside this range and with the player's nose
+    // this far off the support fighter, the bracket has done its job and collapses.
+    const double BracketCollapseRangeM = 3500.0;
+    const double BracketCollapsePlayerNoseOffRad = 60.0 * System.Math.PI / 180.0;
+
     bool ShouldFollowFormationDirective(in ActorObservation player) {
         FormationTacticalRole role = EffectiveFormationRole;
         if (role is FormationTacticalRole.Independent
@@ -1710,6 +1715,20 @@ public sealed class ReactiveBandit :
             || Tactic == BanditTactic.Defend
             || IsGunThreat(player))
             return false;
+
+        // BRACKET COLLAPSE. A bracket exists to make the player choose which nose to honour; once he
+        // has chosen, the unengaged fighter turns in. Holding a fixed station 1.3 km abeam forever
+        // kept the rung-3 pair ~80% passive (BanditPressureReport, 2026-10-14: 81-84%, 75-92 s mean
+        // gaps). Owner doctrine: two for one is a trade worth taking — commit. So when the support
+        // is inside the fight and the player's nose is committed elsewhere, attack independently.
+        if (role is FormationTacticalRole.Bracket) {
+            Vec3D toMe = State.Position - player.Position;
+            double meRangeM = toMe.Length;
+            if (meRangeM > 1e-6 && meRangeM <= BracketCollapseRangeM
+                && player.ForwardDir().Dot(toMe * (1.0 / meRangeM))
+                    < System.Math.Cos(BracketCollapsePlayerNoseOffRad))
+                return false;
+        }
 
         // A supporting fighter does not fly past an honest shot merely to touch an abstract
         // station. Once the real, current contact is close to a usable lead solution, ordinary

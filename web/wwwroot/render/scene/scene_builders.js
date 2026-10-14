@@ -1699,6 +1699,45 @@ function updateConventionalRunwayAtmosphere(runway, atmosphereUniforms) {
   runway.atmosphereUniforms = atmosphereUniforms;
 }
 
+const NM_M = 1852;
+// Fixed-pixel light sprites do not shrink with range, so from fight distance (13-24 km) the whole
+// lit airfield collapses into a bright cluster and red beacon under the gunsight
+// (docs/audits/2026-10-13-f22-tan-polygon.md). Outside recovery they fade from full at 6 NM to
+// nothing at 10 NM; any recovery intent restores them at every range.
+export const RUNWAY_LIGHT_FULL_RANGE_M = 6 * NM_M;
+export const RUNWAY_LIGHT_HIDDEN_RANGE_M = 10 * NM_M;
+export const RUNWAY_LIGHT_OPACITY = 0.96;
+
+export function runwayLightOpacity(state = {}) {
+  const recovering = state?.player_rtb_active === true
+    || state?.rtb === true
+    || state?.approach_guidance_active === true
+    || state?.runway_weight_on_wheels === true
+    || (typeof state?.runway_recovery_phase_name === "string"
+      && !["", "AIRBORNE"].includes(state.runway_recovery_phase_name.trim().toUpperCase()));
+  if (recovering) return RUNWAY_LIGHT_OPACITY;
+  const px = Number(state?.px);
+  const pz = Number(state?.pz);
+  const tx = Number(state?.runway_threshold_x);
+  const tz = Number(state?.runway_threshold_z);
+  if (![px, pz, tx, tz].every(Number.isFinite)) return RUNWAY_LIGHT_OPACITY;
+  const rangeM = Math.hypot(px - tx, pz - tz);
+  const fade = (RUNWAY_LIGHT_HIDDEN_RANGE_M - rangeM)
+    / (RUNWAY_LIGHT_HIDDEN_RANGE_M - RUNWAY_LIGHT_FULL_RANGE_M);
+  return RUNWAY_LIGHT_OPACITY * Math.max(0, Math.min(1, fade));
+}
+
+function applyRunwayLightOpacity(runway, opacity) {
+  for (const field of [runway.edgeLights, runway.approachLights, runway.thresholdLights,
+    runway.runwayEndLights, runway.towerBeacon]) {
+    if (!field) continue;
+    // The beacon is also airbase dressing: a short strip never shows it (showFullAirbase).
+    const dressing = field === runway.towerBeacon && runway.showFullAirbase === false;
+    field.visible = opacity > 0.002 && !dressing;
+    if (field.material) field.material.opacity = opacity;
+  }
+}
+
 export function updateConventionalRunwayPresentation(runway, state, atmosphereUniforms = null) {
   if (!runway?.group) return;
   updateConventionalRunwayAtmosphere(runway, atmosphereUniforms);
@@ -1724,6 +1763,7 @@ export function updateConventionalRunwayPresentation(runway, state, atmosphereUn
   runway.group.position.set(thresholdX, thresholdY + 0.055, -thresholdZ);
   // Simulation +Z is north and renderer Z is mirrored. Local +Z runs threshold-to-far-end.
   runway.group.rotation.set(0, Math.PI - headingRad, 0);
+  applyRunwayLightOpacity(runway, runwayLightOpacity(state));
 
   const layoutKey = [
     lengthM,
@@ -1909,7 +1949,9 @@ export function updateConventionalRunwayPresentation(runway, state, atmosphereUn
   updateRunwayPointField(runway.towerBeacon, [[towerX, 27.2, towerZ]]);
 
   const showFullAirbase = lengthM >= 1_200;
+  runway.showFullAirbase = showFullAirbase;
   for (const object of runway.airbaseDetails) object.visible = showFullAirbase;
+  applyRunwayLightOpacity(runway, runwayLightOpacity(state));
 }
 
 export function createCarrierRuntimePresentation() {

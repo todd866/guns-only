@@ -33,7 +33,7 @@ import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
 } from "./render/hud/contact_visibility.js?v=__RELEASE_BUILD__";
-import { sortiePowerCommand } from "./render/hud/sortie_power.js";
+import { patternOwnsPower, sortiePowerCommand } from "./render/hud/sortie_power.js";
 import { patternEnergyWord } from "./render/hud/approach_energy.js";
 import { approachNextCue } from "./render/hud/approach_next_cue.js";
 import {
@@ -3879,14 +3879,22 @@ class CombatHud {
     // Name the leg above the rail rather than anywhere else on the glass: the pilot's question
     // "what am I supposed to be doing" and their question "where should this lever be" have the
     // same answer, so they belong in the same glance.
-    ctx.fillText(sortieValid && typeof state?.sortie_leg === "string"
-      ? String(state.sortie_leg).toUpperCase() : "PWR", x + railWidth / 2, y - 9);
+    const patternPower = patternOwnsPower(state);
+    ctx.fillText(patternPower ? "PATTERN"
+      : sortieValid && typeof state?.sortie_leg === "string"
+        ? String(state.sortie_leg).toUpperCase() : "PWR", x + railWidth / 2, y - 9);
 
     // On a straight deck the wave-off is not a reflex, it is a decision with a price: the engine
     // has to be given time to answer. Count that time down, and turn it amber when it is gone,
     // because past it the only remaining outcome is the barrier.
     const waveOff = Number(state?.sortie_waveoff_s);
-    if (sortieValid && state?.sortie_leg === "Groove" && Number.isFinite(waveOff)) {
+    // In the overhead the straight-in plan's Groove starts over the numbers, mid-break; only a
+    // pattern pilot actually on final gets the wave-off countdown.
+    // The countdown itself is the SortieSchedule's, valid only on its Groove leg (Recovery
+    // publishes a placeholder 0 that would read COMMITTED, e.g. at 2 NM in short-final practice).
+    const inGroove = sortieValid && state?.sortie_leg === "Groove"
+      && (!patternPower || state?.approach_in_groove === true);
+    if (inGroove && Number.isFinite(waveOff)) {
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillStyle = waveOff > 0.05 ? GREEN : AMBER;
       ctx.fillText(waveOff > 0.05 ? `WVOFF ${waveOff.toFixed(1)}` : "COMMITTED",

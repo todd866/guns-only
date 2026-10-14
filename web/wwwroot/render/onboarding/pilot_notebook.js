@@ -34,25 +34,22 @@ export function createPilotNotebook({ logbook, onPractice, onOpen, onClose }) {
     body.replaceChildren();
     title.textContent = mode === "practice" ? "Practice one skill" : "Pilot logbook";
     if (mode === "practice") {
-      element("p", "Short F-22 exercises using the full flight model. Each has its own result; all aircraft remain available.", body);
+      // One row per exercise: [go button] [time limit]. The brief lives in the tooltip and the
+      // accessible name (instrument-ux: words behind the instrument, not stacked prose cards).
+      const rows = element("ol", "", body);
+      rows.className = "practice-rows";
       for (const exercise of PRACTICE_EXERCISES) {
-        if (exercise.compact) {
-          // A second recovery start shares the existing control row, without another card.
-          const choose = element("button", exercise.title, body.lastElementChild.querySelector("footer"));
-          choose.type = "button";
-          choose.title = `${exercise.brief} · ${exercise.limit}`;
-          choose.setAttribute("aria-label", `Brief: ${exercise.title}. ${choose.title}`);
-          choose.addEventListener("click", () => { dialog.close(); onPractice(exercise.id); });
-          continue;
-        }
-        const card = element("article", "", body);
-        element("h3", exercise.title, card);
-        element("p", exercise.brief, card);
-        element("small", `${exercise.limit} · repeat as often as you like`, card);
-        const actions = exercise.id === "recovery" ? element("footer", "", card) : card;
-        const choose = element("button", `Brief: ${exercise.title}`, actions);
+        const row = element("li", "", rows);
+        const choose = element("button", exercise.title, row);
         choose.type = "button";
+        choose.className = "practice-go";
+        choose.title = exercise.brief;
+        choose.setAttribute("aria-label",
+          `${exercise.title}, ${exercise.limit}. ${exercise.brief}`);
         choose.addEventListener("click", () => { dialog.close(); onPractice(exercise.id); });
+        const limit = element("span", exercise.limit.replace(/\bminutes?\b/, "min"), row);
+        limit.className = "practice-limit";
+        limit.setAttribute("aria-hidden", "true");
       }
       return;
     }

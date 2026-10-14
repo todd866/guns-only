@@ -17,7 +17,8 @@ test("published practice owns staging, real input, pause, restart and the local 
     await page.waitForFunction(() => globalThis.__gunsState?.session_phase === "READY", null, { timeout: 90_000 });
     for (const [exercise, title] of [["gunnery", "Controlled gun pass"], ["valley", "Clear the valley"], ["recovery", "Runway recovery"]]) {
       await page.locator("#ready-practice").click();
-      await page.getByRole("button", { name: `Brief: ${title}`, exact: true }).click();
+      // Practice rows name each button "<title>, <limit>. <brief>" (brief also in the tooltip).
+      await page.getByRole("button", { name: new RegExp(`^${title},`) }).click();
       await page.waitForFunction((id) => globalThis.__gunsState?.practice_exercise === id
         && globalThis.__gunsState?.practice_status === "ready", exercise);
       assert.equal(await page.locator("#ready-selector").isVisible(), false);

@@ -49,8 +49,10 @@ public class FormationDirectivePilotTests {
     [Fact]
     public void BracketRoleUsesTheDelayedSharedContactForLateralStationing() {
         AircraftState initial = State(0.0, 1_500.0, 0.0);
+        // Beyond BracketCollapseRangeM: inside it, a player flying away from the support (its
+        // nose off the bracket ship) collapses the bracket into an attack — tested separately.
         ActorObservation player = ActorObservation.Capture(
-            State(0.0, 1_500.0, 2_000.0, speed: 160.0),
+            State(0.0, 1_500.0, 4_000.0, speed: 160.0),
             sourceTick: 42);
         ActorObservation delayedSharedContact = player with {
             SourceTick = 0,
@@ -84,6 +86,32 @@ public class FormationDirectivePilotTests {
         Assert.Equal(0.8,
             bracket.PolicyMemory.FormationSharedContactConfidence,
             10);
+    }
+
+    [Fact]
+    public void ABracketCollapsesOntoAPlayerCommittedElsewhere() {
+        // Support at the player's six inside 3.5 km: the player's nose is 180 degrees off it, so
+        // the bracket has done its job and the support attacks instead of holding station.
+        AircraftState initial = State(0.0, 1_500.0, 0.0);
+        ActorObservation player = ActorObservation.Capture(
+            State(0.0, 1_500.0, 2_000.0, speed: 160.0),
+            sourceTick: 42);
+        var independent = new ReactiveBandit(
+            initial, FlightModel.Sabre, PilotSkill.Novice);
+        var bracket = new ReactiveBandit(
+            initial, FlightModel.Sabre, PilotSkill.Novice);
+        bracket.AcceptFormationDirective(new FormationDirective(
+            FormationTacticalRole.Bracket,
+            LateralSign: 1,
+            PartnerId: 2,
+            AssignmentSequence: 3,
+            SharedContact: player));
+
+        independent.Step(player, Dt);
+        bracket.Step(player, Dt);
+
+        Assert.Equal(independent.LastCommand.BankTarget, bracket.LastCommand.BankTarget, 10);
+        Assert.Equal(independent.LastCommand.GDemand, bracket.LastCommand.GDemand, 10);
     }
 
     [Fact]

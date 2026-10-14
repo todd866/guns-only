@@ -218,18 +218,10 @@ self.addEventListener("fetch", (event) => {
             waitUntil: "load",
             timeout: scaled(30000),
           });
-          if (!registrationOnly && route === "indoor/") {
-            await page.locator("#fatal.visible").waitFor({ timeout: scaled(35000) });
-            assert.match(await page.locator("#fatal-copy").textContent(), /Release update unavailable/);
-            await page.close();
-            page = await context.newPage();
-            page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-            seed = page;
-            await page.goto(`${site.url}${route}?preview=1&audioQa=silent`, {
-              waitUntil: "load",
-              timeout: scaled(30000),
-            });
-          }
+          // Build 380: this page is itself a client of the stale worker, so it used to fail with
+          // "Release update unavailable" and only a fresh tab booted. The gate now hands the
+          // verified waiting replacement over (exact-build skipWaiting), so the SAME page boots
+          // current modules — and still never links the poisoned legacy module (asserted below).
           await page.waitForFunction(
             (path) => path.startsWith("indoor/")
               ? globalThis.__gunsIndoor?.ready === true

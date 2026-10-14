@@ -18,6 +18,14 @@
 .pilot-notebook button:focus-visible { outline: 3px solid #fff0c0; outline-offset: 3px; }
 .pilot-notebook header button { margin: 0; }
 .pilot-notebook footer { display: flex; flex-wrap: wrap; gap: .75rem; }
+.pilot-notebook .practice-rows { list-style: none; margin: 0; padding: 0; }
+.pilot-notebook .practice-rows li { display: flex; align-items: center; gap: .75rem;
+  padding: .5rem 0; border-top: 1px solid #51564c; }
+.pilot-notebook .practice-go { margin: 0; flex: 0 1 15rem; text-align: left; }
+.pilot-notebook .practice-go::before { content: "\25B6\FE0E"; margin-right: .6rem; font-size: .75em; }
+.pilot-notebook .practice-limit { min-width: 4.5rem; color: #c5cabb;
+  font: 600 .9rem/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums; text-align: right; }
 #practice-cue { position: fixed; left: 50%; bottom: max(1rem, env(safe-area-inset-bottom));
   transform: translateX(-50%); box-sizing: border-box; max-width: min(34rem, calc(100vw - 32px));
   padding: 4px 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;

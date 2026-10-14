@@ -243,6 +243,10 @@ import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
 } from "./render/telemetry/telemetry_batch.js?v=__RELEASE_BUILD__";
+import {
+  createTelemetryOutbox,
+  drainTelemetryOutbox,
+} from "./render/telemetry/telemetry_outbox.js?v=__RELEASE_BUILD__";
 import { createShellHealthBeacon, readLocalShellIncidents } from "./render/telemetry/shell_health.js?v=__RELEASE_BUILD__";
 import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=__RELEASE_BUILD__";
 import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=__RELEASE_BUILD__";
@@ -1645,7 +1649,9 @@ const TELEMETRY_TICK_STRIDE = DEFAULT_TELEMETRY_TICK_STRIDE;
 // 30-second immutable chunks. The bounded buffer still holds more than a full interval.
 const TELEMETRY_FLUSH_INTERVAL_MS = 30_000;
 const TELEMETRY_MAX_BACKOFF_MS = 5 * 60_000;
-const TELEMETRY_BUFFER_LIMIT = 1_500;
+// ~5 minutes of 20 Hz state. At 1,500 rows (~75 s) a Starlink outage dropped exactly that window
+// of the owner's 2026-10-14 sortie (t = 38-114 s). Rows average ~3.4 KB, so this is ~20 MB.
+const TELEMETRY_BUFFER_LIMIT = 6_000;
 const TELEMETRY_SCHEMA_VERSION = "2.0.0";
 const TELEMETRY_SHARING_STORAGE_KEY = "guns-only.telemetry-sharing.v1";
 const TELEMETRY_SESSION_STARTED_AT = Date.now();
@@ -2222,6 +2228,11 @@ const recorder = {
   _sending: null,
   _fetchAbortController: null,
   _pendingBatch: null,
+  _pendingBatchId: null,
+  _outbox: createTelemetryOutbox(),
+  // Bumped on every opt-out; a replay that began under an older consent can never resume.
+  _consentGeneration: 0,
+  _outboxDrainAbort: null,
   _retryDelay: TELEMETRY_FLUSH_INTERVAL_MS,
   _nextPost: performance.now() + TELEMETRY_FLUSH_INTERVAL_MS,
   _lastContext: new Map(),
@@ -2244,6 +2255,11 @@ const recorder = {
       this._fetchAbortController = null;
       this.buf = [];
       this._pendingBatch = null;
+      this._pendingBatchId = null;
+      this._consentGeneration++;
+      this._outboxDrainAbort?.abort();
+      this._outboxDrainAbort = null;
+      void this._outbox.clear();
       this._sortie = null;
       this._headerSent = false;
       this._lastContext.clear();
@@ -2479,6 +2495,32 @@ const recorder = {
       if (performance.now() >= this._nextPost) this.flush();
     } catch (e) { this.errors++; this.lastError = String(e); }
   },
+  /// Page is going away: write what has not been acknowledged to the durable outbox. The pending
+  /// body keeps its id; the unsent buffer becomes one more immutable batch. Both re-send next load.
+  persistForUnload() {
+    if (!this.enabled) return;
+    try {
+      if (this._pendingBatch?.payload && this._pendingBatchId)
+        void this._outbox.put(this._pendingBatchId, this._pendingBatch.payload);
+      // Persist the WHOLE retained queue: one batch holds at most 1,500 rows / 2 MiB, and a
+      // backed-up 6,000-row buffer must not leave its newest (RTB) tail volatile. Every chunk
+      // starts with its own header and keyframe, exactly as flush() builds them.
+      while (this.buf.length) {
+        this.buf = ensureTelemetryChunkKeyframe(this.buf);
+        const batchId = newTelemetryBatchId();
+        this.buf = ensureTelemetryChunkHeader(this.buf, this.chunkHeader(batchId));
+        const batch = buildTelemetryBatch({ session: this.session, batchId, rows: this.buf });
+        if (!batch.payload) break;
+        void this._outbox.put(batchId, batch.payload);
+        if (!this._pendingBatch) {
+          // flush() below will try this exact body now; if it lands, its success path deletes it.
+          this._pendingBatch = batch;
+          this._pendingBatchId = batchId;
+        }
+        this.buf = batch.remainingRows;
+      }
+    } catch (e) { this.errors++; this.lastError = String(e); }
+  },
   flush({ force = false } = {}) {
     if (!this.enabled) return;
     try {
@@ -2507,6 +2549,7 @@ const recorder = {
           return;
         }
         this._pendingBatch = batch;
+        this._pendingBatchId = batchId;
         // Samples collected while this immutable upload is in flight form the next chunk. Start
         // that chunk with a full state so every ordinary 30-second Blob is independently useful.
         this._stateEncoder.forceKeyframe();
@@ -2520,6 +2563,7 @@ const recorder = {
       // the next immutable chunk. The server's deterministic Blob path makes an acknowledged retry
       // idempotent even if the first response was lost after storage succeeded.
       let drainAfterSuccess = false;
+      const sendingBatchId = this._pendingBatchId;
       const fetchAbortController = new AbortController();
       this._fetchAbortController = fetchAbortController;
       this._sending = Promise.resolve().then(() => fetch("/telemetry", {
@@ -2536,6 +2580,8 @@ const recorder = {
             throw error;
           }
           this._pendingBatch = null;
+          this._pendingBatchId = null;
+          void this._outbox.remove(sendingBatchId);
           this._retryDelay = TELEMETRY_FLUSH_INTERVAL_MS;
           drainAfterSuccess = this.buf.length > 0;
           this._nextPost = performance.now()
@@ -2550,6 +2596,8 @@ const recorder = {
             // bounded batch and continue with newer trace data instead of retrying poison forever.
             this.droppedRows += batch.rows.length;
             this._pendingBatch = null;
+            this._pendingBatchId = null;
+            void this._outbox.remove(sendingBatchId);
             drainAfterSuccess = this.buf.length > 0;
             this._nextPost = performance.now()
               + (drainAfterSuccess ? 0 : TELEMETRY_FLUSH_INTERVAL_MS);
@@ -2557,6 +2605,8 @@ const recorder = {
           }
           // Transport/storage failures retain the exact pending body and back off. Newer rows stay
           // independently bounded, so a prolonged outage cannot grow browser memory without limit.
+          // The body also goes to the durable outbox, so closing the tab no longer loses it.
+          void this._outbox.put(sendingBatchId, batch.payload);
           this._retryDelay = Math.min(TELEMETRY_MAX_BACKOFF_MS, this._retryDelay * 2);
           this._nextPost = performance.now() + this._retryDelay;
         })
@@ -2571,6 +2621,28 @@ const recorder = {
     } catch (e) { this.errors++; this.lastError = String(e); }
   },
 };
+
+// Re-send batches a previous load saved during an outage or at tab close (oldest first). Delayed so
+// it never competes with boot, and re-checked against the live opt-in at send time.
+setTimeout(() => {
+  if (!recorder.enabled) return;
+  const generation = recorder._consentGeneration;
+  const abort = new AbortController();
+  recorder._outboxDrainAbort = abort;
+  const consentCurrent = () => recorder.enabled && recorder._consentGeneration === generation
+    && !abort.signal.aborted;
+  void drainTelemetryOutbox(recorder._outbox, async (payload) => {
+    if (!consentCurrent()) throw new Error("telemetry consent changed");
+    const response = await fetch("/telemetry", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: payload,
+      signal: abort.signal,
+    });
+    if (!consentCurrent()) throw new Error("telemetry consent changed");
+    return response.status;
+  }).finally(() => {
+    if (recorder._outboxDrainAbort === abort) recorder._outboxDrainAbort = null;
+  });
+}, 8_000);
 globalThis.__rec = recorder;   // inspectable: __rec.samples / .flushes / .errors / .lastError
 
 function renderTelemetrySharingPreference() {
@@ -2750,10 +2822,12 @@ window.addEventListener("pagehide", () => {
   }
   finishLogbookAttempt(latestState, true);
   recorder.endSortie("pagehide", latestState);
+  recorder.persistForUnload();
   recorder.flush({ force: true });
 });
 window.addEventListener("beforeunload", () => {
   recorder.endSortie("beforeunload", latestState);
+  recorder.persistForUnload();
   recorder.flush({ force: true });
 });
 document.addEventListener("visibilitychange", () => {
