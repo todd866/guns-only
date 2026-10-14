@@ -3386,8 +3386,8 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
           "lifecycle", "player_alive"];
         return Object.fromEntries(pick.map((k) => [k, s[k]]));
       }).catch(() => ({}));
-      error.message += `\nportrait FIRE did not fire: ${JSON.stringify(why)}`;
-      throw error;
+      console.error(`portrait FIRE did not fire: ${JSON.stringify(why)}`);
+      throw new Error(`portrait FIRE did not fire: ${JSON.stringify(why)}`, { cause: error });
     } finally {
       await fire.dispatchEvent("pointerup", {
         pointerId: 21, pointerType: "touch", isPrimary: true, button: 0, buttons: 0,
