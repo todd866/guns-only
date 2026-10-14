@@ -22,6 +22,7 @@ import {
 } from "./airframe_primitives.js?v=__RELEASE_BUILD__";
 import rapierV2Definition from "../../airframes/rapier_v2.embedded.js?v=__RELEASE_BUILD__";
 import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
+import { attenuateRunwayLights } from "./runway_lights.js?v=__RELEASE_BUILD__";
 
 export {
   addSemanticSocket,
@@ -1397,6 +1398,7 @@ function createRunwayPointField(name, capacity, color, sizePx) {
     depthWrite: false,
     toneMapped: false,
   }));
+  attenuateRunwayLights(material);
   const points = new THREE.Points(geometry, material);
   points.name = name;
   points.frustumCulled = false;

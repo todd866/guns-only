@@ -60,7 +60,11 @@ test("all conventional runway surfaces and light fields share live terrain haze 
     assert.match(shader.fragmentShader, /uFogDensity \* uAtmosphereDensityScale/);
     assert.match(shader.fragmentShader, /uWorldEdgeM \* 0.72/);
     assert.match(shader.fragmentShader, /outgoingLight = mix\(/);
-    assert.match(material.customProgramCacheKey(), /terrain-curvature-v1\|ukraine-soft-world-fog-v1$/);
+    assert.match(material.customProgramCacheKey(), /terrain-curvature-v1(?:\|runway-light-angular-v1)?\|ukraine-soft-world-fog-v1$/);
+    if (material.isPointsMaterial) {
+      assert.match(shader.fragmentShader, /opacity \* vRunwayLightCoverage/);
+      assert.match(shader.vertexShader, /max\(length\(mvPosition.xyz\), 1.0\)/);
+    }
     const version = material.version;
     updateConventionalRunwayPresentation(runway, runwayState(), atmosphere);
     assert.equal(material.version, version, "steady frames do not recompile runway shaders");
@@ -174,15 +178,14 @@ test("every long-range airbase mesh and point field follows the runway horizon b
     if (!object.name.startsWith("AIRBASE_") || !object.material) return;
     curvedObjects.push(object);
     assert.equal(typeof object.material.onBeforeCompile, "function", object.name);
-    const shader = { vertexShader: "before\n#include <project_vertex>\nafter" };
-    object.material.onBeforeCompile(shader);
+    const shader = compiledShader(object.material);
     assert.match(shader.vertexShader, /runwayRadialM - 12000\.0/, object.name);
     assert.match(shader.vertexShader, /\/ 12742000\.0/, object.name);
     assert.doesNotMatch(shader.vertexShader, /#include <project_vertex>/, object.name);
   });
   assert.ok(curvedObjects.length >= 30, "full airbase curvature coverage should stay broad");
   assert.ok(curvedObjects.some((object) => object.isPoints),
-    "fixed-pixel light fields must share the curvature shader");
+    "light fields must share the curvature shader");
 });
 
 test("conventional strip never creates carrier recovery hardware", () => {
