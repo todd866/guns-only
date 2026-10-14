@@ -158,7 +158,12 @@ public class BfmFlightAcceptanceTests(ITestOutputHelper output) {
         }
         Assert.True(converted[0] >= 5);
         Assert.True(converted[0] > converted[1], string.Join(",", converted));
-        Assert.True(converted[1] > converted[2], string.Join(",", converted));
+        // Monotone, not strict, between the later pairs. Until 2026-10-14 rungs 1+ also halved
+        // then removed the player's gun assist, which manufactured part of this drop; the assist
+        // is now constant at every rung (owner: "keep gun assist"), so separation here is the
+        // bandit's alone and these delayed pilots convert ~1/8 at both lessons 2 and 4.
+        Assert.True(converted[1] >= converted[2], string.Join(",", converted));
+        Assert.True(converted[0] > converted[2], string.Join(",", converted));
     }
 
     [Fact]
