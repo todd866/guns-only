@@ -3378,6 +3378,16 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
         globalThis.__gunsState?.gun_firing === true
           || Number(globalThis.__gunsState?.ammo) < before,
         ammoBeforeFire, { timeout: scaled(20000) });
+    } catch (error) {
+      const why = await page.evaluate(() => {
+        const s = globalThis.__gunsState ?? {};
+        const pick = ["ammo", "gun_firing", "gun_fire_inhibited", "weapons_inhibited",
+          "gun_solution", "assisted_flight", "altitude_ft", "agl_ft", "pitch_deg", "gamma_deg",
+          "lifecycle", "player_alive"];
+        return Object.fromEntries(pick.map((k) => [k, s[k]]));
+      }).catch(() => ({}));
+      error.message += `\nportrait FIRE did not fire: ${JSON.stringify(why)}`;
+      throw error;
     } finally {
       await fire.dispatchEvent("pointerup", {
         pointerId: 21, pointerType: "touch", isPrimary: true, button: 0, buttons: 0,
