@@ -423,6 +423,13 @@ async function primeRuntimeUrls(candidates) {
 }
 
 self.addEventListener("message", (event) => {
+  // A new-release document is itself controlled by the old worker, so this verified replacement
+  // can only activate on request. Honour it for this exact build only; activation claims clients,
+  // and old documents keep reading their own retained release bucket (cacheForClient).
+  if (event.data?.type === "guns-skip-waiting") {
+    if (event.data.build === RELEASE_BUILD) event.waitUntil(self.skipWaiting());
+    return;
+  }
   if (event.data?.type === "offline-diagnostics") {
     event.waitUntil(readDiagnostics().then(incidents => event.ports?.[0]?.postMessage({ build: RELEASE_BUILD, incidents })));
     return;

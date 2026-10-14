@@ -242,13 +242,20 @@
         // for every old tab to close. Keep waiting while the new worker is still installing or is
         // installed-and-waiting, and say which; fail only when neither appears within 30 s.
         const updateStarted = Date.now();
+        let handoffRequested = false;
         const updateStatus = (text) => { const node = document.getElementById("boot-status"); if (node) node.textContent = text; };
         const releaseWorker = (worker) => !!worker && new URL(worker.scriptURL, location.href).searchParams.get("v") === releaseBuild;
         const timer = setInterval(async () => {
           const registration = await sw.getRegistration?.().catch(() => null);
           const elapsed = Date.now() - updateStarted;
           if (elapsed < 600_000 && releaseWorker(registration?.installing)) return updateStatus("DOWNLOADING UPDATE…");
-          if (elapsed < 600_000 && releaseWorker(registration?.waiting)) return updateStatus("UPDATE READY · CLOSE OTHER GUNS ONLY TABS");
+          if (elapsed < 600_000 && releaseWorker(registration?.waiting)) {
+            // This page is itself an old-worker client, so closing other tabs can never activate
+            // the verified replacement. Ask that exact build to take over; old tabs keep their own
+            // retained release bucket and the activation handshake.
+            if (!handoffRequested) { handoffRequested = true; registration.waiting.postMessage({ type: "guns-skip-waiting", build: releaseBuild }); }
+            return updateStatus("UPDATE READY · SWITCHING…");
+          }
           if (elapsed < 30_000) return;
           cleanup(); reject(new Error("Release update unavailable; saved release retained"));
         }, 1_000);

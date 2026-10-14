@@ -3890,8 +3890,10 @@ class CombatHud {
     const waveOff = Number(state?.sortie_waveoff_s);
     // In the overhead the straight-in plan's Groove starts over the numbers, mid-break; only a
     // pattern pilot actually on final gets the wave-off countdown.
-    const inGroove = patternPower ? state?.approach_in_groove === true
-      : sortieValid && state?.sortie_leg === "Groove";
+    // The countdown itself is the SortieSchedule's, valid only on its Groove leg (Recovery
+    // publishes a placeholder 0 that would read COMMITTED, e.g. at 2 NM in short-final practice).
+    const inGroove = sortieValid && state?.sortie_leg === "Groove"
+      && (!patternPower || state?.approach_in_groove === true);
     if (inGroove && Number.isFinite(waveOff)) {
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillStyle = waveOff > 0.05 ? GREEN : AMBER;

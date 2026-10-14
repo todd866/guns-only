@@ -34,6 +34,13 @@ function harness({ installingFor = 0, waitingFor = 0, activateAt = Infinity } = 
   const listeners = new Map();
   const statusNode = { textContent: "" };
   const fresh = worker("__RELEASE_BUILD__");
+  const handoffs = [];
+  // The waiting replacement activates only when the page asks for it (skipWaiting on request).
+  fresh.postMessage = (message) => {
+    handoffs.push(message);
+    if (message?.type === "guns-skip-waiting" && message.build === "__RELEASE_BUILD__")
+      activateAt = Math.min(activateAt, now + 500);
+  };
   const sw = {
     controller: worker("378"),
     async getRegistrations() { return [{ active: this.controller, waiting: null, installing: null }]; },
@@ -95,7 +102,7 @@ function harness({ installingFor = 0, waitingFor = 0, activateAt = Infinity } = 
     }
     await new Promise((resolve) => setImmediate(resolve));
   }
-  return { context, advance, statusNode };
+  return { context, advance, statusNode, handoffs };
 }
 
 // The gate arms its timer after awaiting getRegistrations(); let that land before the clock moves.
@@ -124,15 +131,17 @@ for (const page of PAGES) {
     assert.equal(await outcome(gate), "resolved");
   });
 
-  test(`${page}: a finished update blocked by another tab says so and keeps waiting`, async () => {
+  test(`${page}: a finished update waiting on old clients is handed over and boots`, async () => {
     const h = harness({ waitingFor: 300_000 });
     vm.runInContext(await gateSource(page), h.context);
     await settle();
     const gate = h.context.__gunsPrebootReady;
-    await h.advance(120_000);
-    assert.equal(await outcome(gate), "pending");
-    if (page === "../../../index.html")
-      assert.equal(h.statusNode.textContent, "UPDATE READY · CLOSE OTHER GUNS ONLY TABS");
+    await h.advance(3_000);
+    assert.equal(JSON.stringify(h.handoffs), JSON.stringify([{ type: "guns-skip-waiting", build: "__RELEASE_BUILD__" }]),
+      "this page is an old-worker client itself: it must ask the replacement to take over, once");
+    if (page === "../../../index.html") assert.equal(h.statusNode.textContent, "UPDATE READY · SWITCHING…");
+    await h.advance(2_000);
+    assert.equal(await outcome(gate), "resolved");
   });
 
   test(`${page}: no replacement worker at all still fails closed after 30 s`, async () => {

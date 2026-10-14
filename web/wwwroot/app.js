@@ -2230,6 +2230,9 @@ const recorder = {
   _pendingBatch: null,
   _pendingBatchId: null,
   _outbox: createTelemetryOutbox(),
+  // Bumped on every opt-out; a replay that began under an older consent can never resume.
+  _consentGeneration: 0,
+  _outboxDrainAbort: null,
   _retryDelay: TELEMETRY_FLUSH_INTERVAL_MS,
   _nextPost: performance.now() + TELEMETRY_FLUSH_INTERVAL_MS,
   _lastContext: new Map(),
@@ -2253,6 +2256,9 @@ const recorder = {
       this.buf = [];
       this._pendingBatch = null;
       this._pendingBatchId = null;
+      this._consentGeneration++;
+      this._outboxDrainAbort?.abort();
+      this._outboxDrainAbort = null;
       void this._outbox.clear();
       this._sortie = null;
       this._headerSent = false;
@@ -2496,19 +2502,21 @@ const recorder = {
     try {
       if (this._pendingBatch?.payload && this._pendingBatchId)
         void this._outbox.put(this._pendingBatchId, this._pendingBatch.payload);
-      if (!this.buf.length) return;
-      this.buf = ensureTelemetryChunkKeyframe(this.buf);
-      const batchId = newTelemetryBatchId();
-      this.buf = ensureTelemetryChunkHeader(this.buf, this.chunkHeader(batchId));
-      const batch = buildTelemetryBatch({ session: this.session, batchId, rows: this.buf });
-      if (!batch.payload) return;
-      void this._outbox.put(batchId, batch.payload);
-      if (!this._pendingBatch) {
-        // flush() below will try this exact body now; if it lands, its success path deletes it.
-        this._pendingBatch = batch;
-        this._pendingBatchId = batchId;
-        this.buf = ensureTelemetryChunkKeyframe(batch.remainingRows);
-      } else {
+      // Persist the WHOLE retained queue: one batch holds at most 1,500 rows / 2 MiB, and a
+      // backed-up 6,000-row buffer must not leave its newest (RTB) tail volatile. Every chunk
+      // starts with its own header and keyframe, exactly as flush() builds them.
+      while (this.buf.length) {
+        this.buf = ensureTelemetryChunkKeyframe(this.buf);
+        const batchId = newTelemetryBatchId();
+        this.buf = ensureTelemetryChunkHeader(this.buf, this.chunkHeader(batchId));
+        const batch = buildTelemetryBatch({ session: this.session, batchId, rows: this.buf });
+        if (!batch.payload) break;
+        void this._outbox.put(batchId, batch.payload);
+        if (!this._pendingBatch) {
+          // flush() below will try this exact body now; if it lands, its success path deletes it.
+          this._pendingBatch = batch;
+          this._pendingBatchId = batchId;
+        }
         this.buf = batch.remainingRows;
       }
     } catch (e) { this.errors++; this.lastError = String(e); }
@@ -2618,12 +2626,21 @@ const recorder = {
 // it never competes with boot, and re-checked against the live opt-in at send time.
 setTimeout(() => {
   if (!recorder.enabled) return;
+  const generation = recorder._consentGeneration;
+  const abort = new AbortController();
+  recorder._outboxDrainAbort = abort;
+  const consentCurrent = () => recorder.enabled && recorder._consentGeneration === generation
+    && !abort.signal.aborted;
   void drainTelemetryOutbox(recorder._outbox, async (payload) => {
-    if (!recorder.enabled) throw new Error("telemetry sharing disabled");
+    if (!consentCurrent()) throw new Error("telemetry consent changed");
     const response = await fetch("/telemetry", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: payload,
+      signal: abort.signal,
     });
+    if (!consentCurrent()) throw new Error("telemetry consent changed");
     return response.status;
+  }).finally(() => {
+    if (recorder._outboxDrainAbort === abort) recorder._outboxDrainAbort = null;
   });
 }, 8_000);
 globalThis.__rec = recorder;   // inspectable: __rec.samples / .flushes / .errors / .lastError
