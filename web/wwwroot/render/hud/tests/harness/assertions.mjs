@@ -338,6 +338,8 @@ function assertPadlockDirector(data) {
   const preferredValid = state.padlock_preferred_plane_valid === true;
   const shouldHaveDirector = data.padlock
     && padlockState?.target !== "carrier"
+    // The roll-to-lift-plane director is a combat cue; home (FIELD) gets none, like the boat.
+    && padlockState?.target !== "airfield"
     && (padlockState?.phase === "TRACK" || padlockState?.trackPrimed === true)
     && padlockState?.manualLookActive !== true
     && (probes.padlockPlaneMagnitude >= 0.035 || probes.padlockTargetForward < 0)

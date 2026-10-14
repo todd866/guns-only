@@ -35,6 +35,7 @@ import {
 } from "./render/hud/contact_visibility.js?v=__RELEASE_BUILD__";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import { patternEnergyWord } from "./render/hud/approach_energy.js";
+import { approachNextCue } from "./render/hud/approach_next_cue.js";
 import {
   carrierAoARelevant,
   carrierConfigurationCue,
@@ -262,10 +263,23 @@ function hasGunSolution(state) {
   return state.gun_solution === true && insideRoundLife(state);
 }
 
+/// CombatHandoffPhase Requested(2) .. ReliefLost(7): bandits observe and shoot relief, not ownship.
+function combatHandedOff(state) {
+  const phase = Number(state?.combat_handoff_phase);
+  return Number.isInteger(phase) && phase >= 2 && phase <= 7;
+}
+
 function isFightHudActive(state) {
   // Circuits is pattern school — never paint bandit/gun fight chrome. Its no-opponent contract is
   // structural, so there is no parked compatibility actor for presentation to reinterpret.
   if (state?.rapier_pattern_only === true) return false;
+  // KNOCK IT OFF hands the fight to relief and retargets every bandit onto it
+  // (SpawnReliefAndRetargetOpponents); the player's hits no longer count. Leaving the funnel,
+  // TARGET brackets and edge arrows up pulled the pilot back toward a fight he had left
+  // (owner 2026-10-14: "the RTB was confusing"). Keyed to the combat-handoff phase
+  // (Requested..ReliefLost), NOT player_rtb_active: carrier-route and Rapier RTB also raise that
+  // flag without retargeting anyone, and there a live bandit can still shoot.
+  if (combatHandedOff(state)) return false;
   if (!selectedOpponentIsAlive(state)) return false;
   return !recoveryPlatformAvailable(state)
     || hudMode(state) === "FREE" || hudMode(state) === "WAVE-OFF";
@@ -2257,7 +2271,10 @@ class CombatHud {
       ctx.lineTo(boatX + 6, y - 21);
       ctx.stroke();
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText(Math.abs(boatTurn) > 48 ? (boatTurn < 0 ? "◀ B" : "B ▶") : "B", boatX, y - 28);
+      // B is the boat. A fixed airfield is home plate, not a ship (owner 2026-10-14).
+      const homeGlyph = recoveryPlatformIsMaritime(state) ? "B" : "H";
+      ctx.fillText(Math.abs(boatTurn) > 48
+        ? (boatTurn < 0 ? `◀ ${homeGlyph}` : `${homeGlyph} ▶`) : homeGlyph, boatX, y - 28);
       if (this._debug) {
         this._debug.boatRtbCaret = {
           drawn: true,
@@ -2416,9 +2433,121 @@ class CombatHud {
     ctx.restore();
   }
 
+  /// Waze-style next-manoeuvre row in the clear band under the heading tape:
+  ///   [turn arrow]  2.1 NM  INITIAL  1500▼  ^FAST
+  /// Arrow = where to point now (quantised), then distance and name of the next fix, the height
+  /// to be at there (▼ descend / ▲ climb when outside tolerance), and the energy chip.
+  drawApproachNextCue(state) {
+    if (this._debug) this._debug.approachNextCue = null;
+    const cue = approachNextCue(state);
+    if (!cue) return false;
+    const layout = this.getLayout();
+    const y = layout.heading.bottom + 10;
+    if (!(Number.isFinite(y) && y + 10 < layout.ladderSafe.top)) return false;
+    const ctx = this.ctx;
+    const mono = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const energyAccent = !cue.energy ? GREEN
+      : cue.energy.mark > 0 ? AMBER : cue.energy.mark < 0 ? RED : GREEN;
+    const altAccent = cue.altMark === 0 ? GREEN : AMBER;
+    const altText = cue.targetFt === null ? ""
+      : `${cue.targetFt}${cue.altMark > 0 ? "▼" : cue.altMark < 0 ? "▲" : ""}`;
+    const pieces = [
+      { text: cue.distance, font: `800 15px ${mono}`, color: GREEN, gap: 3 },
+      { text: "NM", font: `750 9px ${mono}`, color: GREEN_DIM, gap: 10 },
+      { text: cue.label, font: `800 12px ${mono}`, color: GREEN, gap: 12 },
+      ...(altText ? [{ text: altText, font: `800 12px ${mono}`, color: altAccent, gap: 12 }] : []),
+      ...(cue.energy ? [{ text: cue.energy.word, font: `800 12px ${mono}`, color: energyAccent,
+        gap: 0, mark: cue.energy.mark }] : []),
+    ];
+    ctx.save();
+    const arrowW = 22;
+    const markW = 20;
+    let width = arrowW + 10;
+    for (const piece of pieces) {
+      ctx.font = piece.font;
+      piece.width = ctx.measureText(piece.text).width;
+      width += piece.width + piece.gap + (piece.mark !== undefined ? markW : 0);
+    }
+    let x = this.width / 2 - width / 2;
+
+    // Turn arrow: stem from the bottom, head pointing along the quantised turn. A U-turn bends
+    // back down on the turn side.
+    const ax = x + arrowW / 2;
+    const ay = y;
+    ctx.strokeStyle = GREEN;
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    const arrowDeg = cue.arrowDeg ?? 0;
+    let tipX;
+    let tipY;
+    let headDeg;
+    if (Math.abs(arrowDeg) === 180) {
+      const side = arrowDeg < 0 ? -1 : 1;
+      ctx.moveTo(ax - side * 5, ay + 9);
+      ctx.lineTo(ax - side * 5, ay - 3);
+      // Over the top toward the turn side (canvas angles run clockwise).
+      if (side > 0) ctx.arc(ax, ay - 3, 5, Math.PI, 0, false);
+      else ctx.arc(ax, ay - 3, 5, 0, Math.PI, true);
+      tipX = ax + side * 5;
+      tipY = ay + 5;
+      ctx.lineTo(tipX, tipY);
+      headDeg = 180;
+    } else {
+      const rad = arrowDeg * Math.PI / 180;
+      ctx.moveTo(ax, ay + 9);
+      ctx.lineTo(ax, ay + 1);
+      tipX = ax + Math.sin(rad) * 9;
+      tipY = ay + 1 - Math.cos(rad) * 9;
+      ctx.lineTo(tipX, tipY);
+      headDeg = arrowDeg;
+    }
+    const headRad = headDeg * Math.PI / 180;
+    for (const flank of [-1, 1]) {
+      const a = headRad + Math.PI + flank * 0.62;
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX + Math.sin(a) * 5.5, tipY - Math.cos(a) * 5.5);
+    }
+    this.strokeLegible();
+    x += arrowW + 10;
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    for (const piece of pieces) {
+      if (piece.mark !== undefined) {
+        ctx.strokeStyle = piece.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (piece.mark > 0) {
+          ctx.moveTo(x + 2, y + 4); ctx.lineTo(x + 8, y - 3); ctx.lineTo(x + 14, y + 4);
+        } else if (piece.mark < 0) {
+          ctx.moveTo(x + 2, y); ctx.lineTo(x + 14, y);
+        } else {
+          ctx.moveTo(x + 3, y - 4); ctx.lineTo(x + 8, y + 3); ctx.lineTo(x + 13, y - 4);
+        }
+        this.strokeLegible();
+        x += markW;
+      }
+      ctx.font = piece.font;
+      fillLegibleHudText(ctx, piece.text, x, y, { fillStyle: piece.color });
+      x += piece.width + piece.gap;
+    }
+    ctx.restore();
+    if (this._debug) {
+      this._debug.approachNextCue = {
+        label: cue.label, distance: cue.distance, arrowDeg: cue.arrowDeg,
+        targetFt: cue.targetFt, altMark: cue.altMark, energy: cue.energy?.word ?? null,
+        y, width,
+      };
+    }
+    return true;
+  }
+
   drawPatternEnergyWord(state) {
-    const cue = patternEnergyWord(state);
     if (this._debug) this._debug.patternEnergy = null;
+    if (this.drawApproachNextCue(state)) return;
+    const cue = patternEnergyWord(state);
     if (!cue) return;
     const layout = this.getLayout();
     // The warning-to-weapon lane starts on the first pitch rung. Keep this one word in the
@@ -2488,11 +2617,12 @@ class CombatHud {
     const direction = Math.abs(turn) < 3 ? "STEADY"
       : `TURN ${turn < 0 ? "L" : "R"} ${Math.round(Math.abs(turn))}°`;
     const boatDetail = hasSteer
-      ? `BOAT ${String(Math.round(wrap360(bearing))).padStart(3, "0")}° · ${rangeNm.toFixed(1)} NM · ${direction}`
+      ? `${recoveryPlatformIsMaritime(state) ? "BOAT" : "HOME"} ${String(Math.round(wrap360(bearing))).padStart(3, "0")}° · ${rangeNm.toFixed(1)} NM · ${direction}`
       : "BREAK OFF · RECOVER";
     const detail = fuel.bingo ? `${boatDetail} · ${fuel.decisionText}` : boatDetail;
+    // KNOCK IT OFF is an RTB too; only claim BINGO when the fuel state actually says so.
     const headline = fuel.emergencyFuel ? "EMER FUEL - RTB"
-      : fuel.minimumFuel ? "MIN FUEL - RTB" : "BINGO - RTB";
+      : fuel.minimumFuel ? "MIN FUEL - RTB" : fuel.bingo ? "BINGO - RTB" : "RTB";
     const accent = fuel.emergencyFuel ? RED : AMBER;
     const width = Math.min(this.touchMode ? 264 : 330, this.width - 34);
     const height = 44;
@@ -4234,7 +4364,8 @@ class CombatHud {
     });
 
     const patternOnly = frame.state?.rapier_pattern_only === true;
-    const isBanditPadlock = frame.padlockTarget !== "carrier";
+    const isBanditPadlock = frame.padlockTarget !== "carrier"
+      && frame.padlockTarget !== "airfield";
     const isCombatPadlock = !patternOnly
       && (frame.padlockTarget === "bandit" || frame.padlockTarget === "wingman");
     const padlockTargetPosition = frame.padlockTargetPosition ?? frame.banditPosition;
@@ -4245,6 +4376,7 @@ class CombatHud {
         : frame.padlockTarget === "traffic3" ? "TRAFFIC 4"
         : "THRESHOLD")
       : frame.padlockTarget === "wingman" ? "TARGET 2"
+        : frame.padlockTarget === "airfield" ? "FIELD"
         : isBanditPadlock ? "TARGET 1"
         : recoveryPlatformIsMaritime(frame.state) ? "BOAT" : "STRIP";
     if (isBanditPadlock) {
@@ -4806,9 +4938,10 @@ class CombatHud {
       const targetRight = this.relative.dot(frame.playerRight);
       if (targetForward < -0.17) {
         // Exactly astern has no meaningful shoulder; do not invent one.
+        const aftNoun = frame.padlockTarget === "airfield" ? "FIELD" : "TARGET";
         aftLabel = Math.abs(targetRight) < 0.05
-          ? "TARGET AFT"
-          : `TARGET AFT \u00B7 ${targetRight >= 0 ? "R" : "L"} SHOULDER`;
+          ? `${aftNoun} AFT`
+          : `${aftNoun} AFT \u00B7 ${targetRight >= 0 ? "R" : "L"} SHOULDER`;
       }
     }
     if (frame.shoulderHandoffLatched) aftLabel = "SHOULDER SWAP";

@@ -120,6 +120,8 @@ import {
   TEST_FLIGHT_ACTIONS,
 } from "./render/systems/test_flight_console.js";
 import {
+  airfieldPadlockEligible,
+  airfieldPadlockPosition,
   carrierPadlockSupersededByCombat,
   contextualPadlockTarget,
   circuitsPadlockTargets,
@@ -4299,6 +4301,7 @@ function padlockLabel(target = padlockTarget) {
     return "THRESHOLD";
   }
   return target === "carrier" ? "BOAT"
+    : target === "airfield" ? "FIELD"
     : target === "wingman" ? "TARGET 2" : "TARGET 1";
 }
 
@@ -4416,6 +4419,7 @@ function acquirePadlock(target, reason) {
   padlockTarget = target;
   if (target === "bandit" || target === "wingman") selectedCombatTarget = target;
   padlockEntityId = target === "carrier" ? "carrier"
+    : target === "airfield" ? "airfield"
     : target === "traffic2" ? "traffic2"
     : target === "traffic3" ? "traffic3"
     : target === "wingman"
@@ -4532,7 +4536,8 @@ function cyclePadlockTarget() {
 /// V — padlock on or off. It keeps the contact Tab last selected, so V is a view toggle and
 /// nothing else.
 function togglePadlock() {
-  if (!opponentPresentationAllowed()) return;
+  // Home is a padlock target even when no opponent is published (owner 2026-10-14).
+  if (!opponentPresentationAllowed() && !airfieldPadlockEligible(latestState)) return;
   if (padlock) {
     releasePadlock("manual");
     return;
@@ -4540,6 +4545,7 @@ function togglePadlock() {
   padlock = true;
   padlockTarget = defaultPadlockTarget();
   padlockEntityId = padlockTarget === "carrier" ? "carrier"
+    : padlockTarget === "airfield" ? "airfield"
     : padlockTarget === "traffic2" ? "traffic2"
     : padlockTarget === "traffic3" ? "traffic3"
     : padlockTarget === "wingman"
@@ -8371,6 +8377,7 @@ class FlightView {
     this.banditPosition = new THREE.Vector3();
     this.carrierPosition = new THREE.Vector3();
     this.carrierPadlockPosition = new THREE.Vector3();
+    this.airfieldPadlockPosition = new THREE.Vector3();
     this.playerDamagePosition = new THREE.Vector3();
     this.banditDamagePosition = new THREE.Vector3();
     this.effectNormal = new THREE.Vector3(0, 1, 0);
@@ -9057,6 +9064,7 @@ class FlightView {
     if (padlock) {
       const trackedPosition = padlockTarget === "carrier"
         ? this.carrierPadlockPosition
+        : padlockTarget === "airfield" ? this.airfieldPadlockPosition
         : padlockTarget === "traffic2" ? this.wingman2Position
         : padlockTarget === "traffic3" ? this.wingman3Position
         : padlockTarget === "wingman" ? this.wingmanPosition
@@ -9672,7 +9680,7 @@ class FlightView {
       : "";
     // Padlock is bound to a specific visual tally. It may not silently transfer to a replacement
     // drone/bandit, survive loss of consciousness, or keep tracking stale/replay geometry.
-    if (!opponentPresent && padlock) {
+    if (!opponentPresent && padlock && padlockTarget !== "airfield") {
       releasePadlock("no opponent", { announce: false });
     } else if (padlock && state.pilot_conscious === false) {
       releasePadlock("pilot incapacitated");
@@ -9703,6 +9711,10 @@ class FlightView {
       } else {
         releasePadlock("target changed");
       }
+    } else if (padlock && padlockTarget === "airfield"
+        && !padlockTargetValid(state, "airfield")) {
+      // Home cannot be "killed": no splash hold, just return to the forward view.
+      releasePadlock("recovery ended", { announce: false });
     } else if (padlock && !padlockTargetValid(state, padlockTarget)) {
       // KILL CAM: the lock survives the death of the thing it was locked to, for a beat.
       const nowMs = nowSeconds * 1000;
@@ -9772,6 +9784,8 @@ class FlightView {
         this.carrierPadlockPosition.copy(this.carrierPosition);
       }
     }
+    const airfield = airfieldPadlockPosition(state);
+    if (airfield) this.airfieldPadlockPosition.set(airfield.x, airfield.y, -airfield.z);
     if (state.w1_present === 1) {
       this.wingmanPosition.set(state.w1x, state.w1y, -state.w1z);
       // The hot-frame wingman fields deliberately follow the same ${prefix}fx/${prefix}lx naming
@@ -10358,6 +10372,7 @@ class FlightView {
     hudFrame.padlockTarget = padlockTarget;
     hudFrame.padlockTargetPosition = padlockTarget === "carrier"
       ? this.carrierPadlockPosition
+      : padlockTarget === "airfield" ? this.airfieldPadlockPosition
       : padlockTarget === "traffic2" ? this.wingman2Position
       : padlockTarget === "traffic3" ? this.wingman3Position
       : padlockTarget === "wingman" ? this.wingmanPosition

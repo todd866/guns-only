@@ -166,26 +166,27 @@ public class DifficultyRampTests {
     }
 
     [Fact]
-    public void RoundTripAgreesAndPitchAssistFadesByRung() {
+    public void RoundTripAgreesAndPitchAssistStaysFullAtEveryRung() {
         var director = new FightDirector();
         Assert.Equal(1.0, director.PitchAssist.GainScale);
         Assert.Equal(3.5, FlightModel.F22APublicDataSurrogate.GunneryPitchAssistMaxCorrectionG
             * director.PitchAssist.CorrectionScale, 3);
         Assert.True(director.PitchAssist.Active);
 
+        // Climbing the ladder hardens the bandit, never strips the pilot's gun aid.
         Observe(director, Report(1, SortieOutcome.Defeat, hitsScored: 1));
-        Assert.Equal(0.5, director.PitchAssist.GainScale);
-        Assert.Equal(1.75, FlightModel.F22APublicDataSurrogate.GunneryPitchAssistMaxCorrectionG
-            * director.PitchAssist.CorrectionScale, 3);
+        Assert.Equal(1.0, director.PitchAssist.GainScale);
+        Assert.True(director.PitchAssist.Active);
 
         Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
-        Assert.False(director.PitchAssist.Active);
-        Assert.Equal(0.0, director.PitchAssist.CorrectionScale);
+        Assert.True(director.Rung >= 2);
+        Assert.True(director.PitchAssist.Active);
+        Assert.Equal(1.0, director.PitchAssist.CorrectionScale);
 
         var copy = new FightDirector();
         Assert.True(copy.TryImportState(director.ExportState()));
         Assert.Equal(director.ExportState(), copy.ExportState());
-        Assert.False(copy.PitchAssist.Active);
+        Assert.True(copy.PitchAssist.Active);
     }
 
     [Fact]
@@ -329,7 +330,7 @@ public class DifficultyRampTests {
         Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
         Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
         Assert.Equal(3, director.Rung);
-        Assert.False(director.PitchAssist.Active);
+        Assert.True(director.PitchAssist.Active);
 
         var armed = new SimulationSession();
         armed.ArmDirectorStateForNextStage(director.ExportState());

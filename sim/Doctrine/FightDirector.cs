@@ -109,15 +109,13 @@ public sealed class FightDirector {
     public int HitlessDefeatStreak => _hitlessDefeats;
     public double? TimeToFirstHitSeconds => _timeToFirstHitSeconds;
 
-    /// Pitch-assist scale for the current rung. Rung 0 is the full F-22 law, rung 1 halves
-    /// gain and max correction, rung 2 and above turn the assist off. Touch widening is applied
-    /// by the session on top of this scale through rung 1.
+    /// Pitch-assist scale for the current rung: the full F-22 law at every rung. Difficulty is the
+    /// bandit's job, never the cockpit's (complexity-ladder doctrine: enemy skill is orthogonal to
+    /// pilot aids). Rungs 1+ used to halve and then remove the aid, so a pilot who climbed the
+    /// ladder lost autoaim exactly when the fights got hard — owner 2026-10-14, after a rung 2-3
+    /// flight with the assist UNAVAILABLE throughout: "keep gun assist, manual aiming is annoying".
     public readonly record struct PitchAssistScale(double GainScale, double CorrectionScale, bool Active);
-    public PitchAssistScale PitchAssist => _rung switch {
-        0 => new(1.0, 1.0, true),
-        1 => new(0.5, 0.5, true),
-        _ => new(0.0, 0.0, false),
-    };
+    public PitchAssistScale PitchAssist => new(1.0, 1.0, true);
     /// How many consecutive fights the player has won quickly and untouched. Exposed for debrief
     /// and telemetry; it explains an aggressive ladder jump rather than causing one.
     public int WalkoverStreak => _walkoverStreak;

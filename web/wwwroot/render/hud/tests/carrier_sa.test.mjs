@@ -401,3 +401,35 @@ test("a wingman padlock is valid only while the second aircraft is alive and pre
   // A 1v1 wave never offers one.
   assert.equal(padlockTargetValid({ mode: "ACTIVE" }, "wingman"), false);
 });
+
+test("after KNOCK IT OFF, V padlocks the authored airfield threshold", async () => {
+  const { airfieldPadlockEligible, airfieldPadlockPosition } = await import("../carrier_sa.js");
+  const rtbState = {
+    player_rtb_active: true,
+    combat_handoff_phase: 5,
+    rtb: true,
+    runway_available: true,
+    runway_threshold_x: 600,
+    runway_threshold_y: 77.5,
+    runway_threshold_z: 19_400,
+    bx: 100, by: 3000, bz: 100, bandit_alive: true, opponent_alive: true,
+  };
+  assert.deepEqual(airfieldPadlockPosition(rtbState), { x: 600, y: 77.5, z: 19_400 });
+  assert.equal(airfieldPadlockEligible(rtbState), true);
+  assert.equal(contextualPadlockTarget(rtbState), "airfield",
+    "a live bandit handed to relief must not win V back from home");
+  assert.equal(padlockTargetValid(rtbState, "airfield"), true);
+
+  const fighting = { ...rtbState, player_rtb_active: false, rtb: false, combat_handoff_phase: 1 };
+  // Carrier-route / Rapier RTB raise player_rtb_active without handing bandits to relief: a live
+  // bandit keeps V.
+  assert.equal(contextualPadlockTarget({ ...rtbState, combat_handoff_phase: 0 }), "bandit");
+  assert.equal(contextualPadlockTarget(fighting), "bandit");
+  assert.equal(padlockTargetValid(fighting, "airfield"), false);
+
+  assert.equal(airfieldPadlockEligible({ ...rtbState, runway_threshold_z: null }), false,
+    "no published threshold, no lock");
+  assert.equal(airfieldPadlockEligible({ ...rtbState, recovery_platform: true }), false,
+    "a ship owns recovery");
+  assert.equal(airfieldPadlockEligible({ ...rtbState, finished: true }), false);
+});

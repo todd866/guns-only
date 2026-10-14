@@ -167,10 +167,35 @@ export function circuitTrafficPadlockAvailable(state = {}, slot = 1) {
   return false;
 }
 
+/// A fixed airfield is a padlock target once the pilot is going home to it (owner 2026-10-14:
+/// "pressing V should padlock the airfield"). It is the authored runway threshold, never a guess:
+/// no published threshold, or a ship/recovery platform owning recovery, means no airfield lock.
+export function airfieldPadlockPosition(state = {}) {
+  if (!state || typeof state !== "object" || recoveryPlatformAvailable(state)
+      || state.runway_available !== true) return null;
+  const x = finite(state.runway_threshold_x);
+  const y = finite(state.runway_threshold_y);
+  const z = finite(state.runway_threshold_z);
+  return x === null || y === null || z === null ? null : { x, y, z };
+}
+
+export function airfieldPadlockEligible(state = {}) {
+  if (!state || typeof state !== "object" || state.replay_external === true
+      || state.finished === true || token(state.mode) === "TERMINAL") return false;
+  if (state.player_rtb_active !== true && state.rtb !== true) return false;
+  return airfieldPadlockPosition(state) !== null;
+}
+
 export function contextualPadlockTarget(state = {}) {
   if (circuitsPatternOnly(state) && carrierPadlockEligible(state)) return "carrier";
+  // After KNOCK IT OFF the bandits belong to relief; V looks at home, not at a fight that is over.
+  // Keyed to the handoff phase (Requested..ReliefLost): other RTB paths leave bandits on ownship.
+  const handoffPhase = Number(state?.combat_handoff_phase);
+  if (Number.isInteger(handoffPhase) && handoffPhase >= 2 && handoffPhase <= 7
+      && airfieldPadlockEligible(state)) return "airfield";
   const carrierAvailable = carrierPadlockEligible(state);
   const banditAvailable = banditPadlockEligible(state);
+  if (!banditAvailable && !carrierAvailable && airfieldPadlockEligible(state)) return "airfield";
   return carrierAvailable && (carrierRecoveryIntent(state) || !banditAvailable)
     ? "carrier" : "bandit";
 }
@@ -184,6 +209,7 @@ export function padlockTargetValid(state = {}, target = "bandit") {
   // hysteresis prevents normal ship/aircraft motion at the boundary from chattering the view.
   // A selected recovery platform must not survive the authoritative transition back to combat when
   // a live bandit is available: release it, then let the pilot deliberately reacquire the threat.
+  if (target === "airfield") return airfieldPadlockEligible(state);
   if (target === "carrier") {
     if (circuitsPatternOnly(state)) {
       return carrierPadlockEligible(state, CARRIER_PADLOCK_RELEASE_RADIUS_M);

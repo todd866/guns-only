@@ -82,12 +82,73 @@ export const GUIDANCE_PATH_DEFAULTS = Object.freeze({
   patternOpacity: 0.64,
   patternActiveOpacity: 0.92,
   patternVisualHalfM: 42,
+  // Fixed-size chevrons shrink to specks at the range a pilot first looks for the pattern
+  // (owner 2026-10-14: "chevrons weren't visible"). Hold a minimum angular half-size from the
+  // ownship eye, capped so a far chevron never becomes a horizon-sized shape. Presentation only.
+  chevronMinAngularHalfDeg: 0.7,
+  chevronMaxVisualHalfM: 450,
   maxGates: 24,
   // Authored half-widths run hundreds of metres (tolerance volumes). Drawing that as a plane
   // scale makes a translucent UFO on the horizon — cap the *visual* radius; the kernel half
   // stays authoritative for scoring, not for pixels.
   maxVisualHalfM: Infinity,
 });
+
+/**
+ * Orient a chevron so it is flown THROUGH along its leg yet still faces the eye. The quad stays in
+ * the leg's vertical plane's family: its lateral axis is horizontal and square to the leg, and the
+ * face tilts about that axis toward the viewer. Seen from behind it is the old upright V; seen
+ * from above it lies nearly flat instead of going edge-on and vanishing (owner 2026-10-14:
+ * "chevrons weren't visible from above"). Vectors are scene-space {x, y, z}; returns unit basis
+ * vectors for Matrix4.makeBasis, or null when the leg is vertical or the viewer is degenerate.
+ */
+export function chevronViewerBasis(forward, toViewer) {
+  const fx = Number(forward?.x), fy = Number(forward?.y), fz = Number(forward?.z);
+  const vx = Number(toViewer?.x), vy = Number(toViewer?.y), vz = Number(toViewer?.z);
+  if (![fx, fy, fz, vx, vy, vz].every(Number.isFinite)) return null;
+  // Lateral = forward x worldUp, kept horizontal.
+  let lx = -fz, lz = fx;
+  const lateralLength = Math.hypot(lx, lz);
+  if (lateralLength < 1e-6) return null;
+  lx /= lateralLength; lz /= lateralLength;
+  const fLength = Math.hypot(fx, fy, fz);
+  // Viewer direction projected into the leg plane (remove the lateral component).
+  const lateralDot = vx * lx + vz * lz;
+  let nx = vx - lateralDot * lx, ny = vy, nz = vz - lateralDot * lz;
+  let nLength = Math.hypot(nx, ny, nz);
+  if (nLength < 1e-6) {
+    // Viewer exactly abeam: fall back to the leg-facing upright chevron.
+    nx = fx / fLength; ny = fy / fLength; nz = fz / fLength;
+    nLength = 1;
+  }
+  nx /= nLength; ny /= nLength; nz /= nLength;
+  // Up in the face = world up with the normal removed; overhead it degenerates, so lean forward.
+  const upDot = ny;
+  let ux = -upDot * nx + 1e-3 * fx / fLength;
+  let uy = 1 - upDot * ny + 1e-3 * fy / fLength;
+  let uz = -upDot * nz + 1e-3 * fz / fLength;
+  const uLength = Math.hypot(ux, uy, uz);
+  ux /= uLength; uy /= uLength; uz /= uLength;
+  // Right-handed: z = x cross y, which lies along +/- the face normal.
+  const zx = 0 * uz - lz * uy;
+  const zy = lz * ux - lx * uz;
+  const zz = lx * uy - 0 * ux;
+  return {
+    x: { x: lx, y: 0, z: lz },
+    y: { x: ux, y: uy, z: uz },
+    z: { x: zx, y: zy, z: zz },
+  };
+}
+
+/** Chevron draw half-size: authored size, grown to hold a minimum angle from the eye. */
+export function chevronVisualHalfM(baseHalfM, rangeM, options = {}) {
+  const config = { ...GUIDANCE_PATH_DEFAULTS, ...options };
+  const base = Math.max(1, Number(baseHalfM) || 1);
+  const range = Number(rangeM);
+  if (!Number.isFinite(range) || range <= 0) return base;
+  const angular = range * Math.tan(Number(config.chevronMinAngularHalfDeg) * Math.PI / 180);
+  return Math.max(base, Math.min(Number(config.chevronMaxVisualHalfM) || base, angular));
+}
 
 function finiteNumber(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -509,6 +570,8 @@ export function createGuidancePath(THREE, options = {}) {
   let cachedRtbLadder = [];
   const forward = new THREE.Vector3();
   const lookTarget = new THREE.Vector3();
+  const eye = new THREE.Vector3();
+  const toEye = new THREE.Vector3();
 
   return {
     object3d: root,
@@ -710,14 +773,26 @@ export function createGuidancePath(THREE, options = {}) {
       }
 
       const drawn = Math.min(points.length, gates.length);
+      const eyeEast = finiteNumber(state?.px);
+      const eyeUp = finiteNumber(state?.py);
+      const eyeNorth = finiteNumber(state?.pz);
+      const eyeKnown = eyeEast !== null && eyeUp !== null && eyeNorth !== null;
+      if (eyeKnown) eye.set(eyeEast, eyeUp, -eyeNorth);
       for (let i = 0; i < gates.length; i++) {
         const { mesh, tint } = gates[i];
         if (i >= drawn) { mesh.visible = false; continue; }
         const gate = ladder[i];
+        // Chevrons (pattern, RTB, join, ingress) share the open-V material; procedure volumes do
+        // not, and keep their authored upright, leg-facing presentation.
+        const chevron = (conventionalPattern && gate.pattern === true) || gate.rtb === true;
         const half = Math.max(1, Number(gate.halfM) || 1);
-        const visualHalf = conventionalPattern
+        let visualHalf = conventionalPattern
           ? Math.max(1, Number(config.patternVisualHalfM) || 1)
           : Math.min(half, Math.max(1, Number(config.maxVisualHalfM) || half));
+        if (chevron && eyeKnown) {
+          toEye.copy(eye).sub(points[i]);
+          visualHalf = chevronVisualHalfM(visualHalf, Math.sqrt(toEye.lengthSq()), config);
+        }
         mesh.position.copy(points[i]);
         // The quad is 4 units wide for 2 units of radius, so the visual half-width maps to
         // 1.0 in shader space. Visual radius is capped so a 155 m tolerance does not paint a
@@ -725,13 +800,28 @@ export function createGuidancePath(THREE, options = {}) {
         mesh.scale.setScalar(visualHalf);
 
         // Face along the leg into the gate, so it is something flown THROUGH rather than a
-        // billboard that turns to watch the pilot.
+        // billboard that turns to watch the pilot. A chevron additionally tilts about its
+        // lateral axis toward the eye, so it never goes edge-on when seen from above.
         const neighbour = points[i + 1] ?? points[i - 1] ?? null;
         if (neighbour) {
           forward.copy(neighbour).sub(points[i]);
           if (i + 1 >= points.length) forward.negate();
           if (forward.lengthSq() > 1e-6) {
-            lookTarget.copy(points[i]).add(forward.normalize());
+            forward.normalize();
+            const basis = chevron && eyeKnown
+              ? chevronViewerBasis(forward, toEye.copy(eye).sub(points[i]))
+              : null;
+            // Object3D.lookAt points +Z at the target and derives X from `up`, so an explicit up
+            // plus a normal-direction target reproduces the basis exactly. Meshes are pooled
+            // across styles: every non-chevron path restores the default world up.
+            if (basis) {
+              mesh.up?.set(basis.y.x, basis.y.y, basis.y.z);
+              lookTarget.set(
+                points[i].x + basis.z.x, points[i].y + basis.z.y, points[i].z + basis.z.z);
+            } else {
+              mesh.up?.set(0, 1, 0);
+              lookTarget.copy(points[i]).add(forward);
+            }
             mesh.lookAt(lookTarget);
           }
         }
