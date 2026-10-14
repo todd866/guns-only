@@ -35,11 +35,23 @@ test("turns quantise like a road-nav arrow", () => {
   assert.equal(quantiseTurnDeg(Number.NaN), null);
 });
 
-test("the arrow steers past chevrons the jet is already on top of", () => {
+test("on the ingress corridor the arrow steers past chevrons the jet is already on top of", () => {
   const gates = [gate(0, 300, true), gate(0, 900), gate(1_800, 900), gate(3_000, 900)];
-  assert.deepEqual(approachSteerGate(gates, 0, 0), gates[2]);
-  assert.deepEqual(approachSteerGate(gates.slice(0, 2), 0, 0), gates[1],
+  assert.deepEqual(approachSteerGate(gates, 0, 0, { ingress: true }), gates[2]);
+  assert.deepEqual(approachSteerGate(gates.slice(0, 2), 0, 0, { ingress: true }), gates[1],
     "with nothing beyond the look-ahead, the last authored gate is the target");
+});
+
+test("a mandatory pattern fix is never skipped by the look-ahead", () => {
+  // Codex review 2026-10-14: 1,490 m short of BREAK the look-ahead steered at DOWNWIND and the
+  // resulting line missed BREAK's capture volume, stalling the sequence.
+  const breakFix = gate(0, 1_490, true);
+  const downwind = gate(-1_800, 1_600);
+  assert.deepEqual(approachSteerGate([breakFix, downwind], 0, 0), breakFix);
+  const cue = approachNextCue({ ...base, approach_next_label: "BREAK",
+    approach_track_required_m: 1_490 }, [breakFix, downwind]);
+  assert.equal(cue.arrowDeg, 0, "fly at BREAK, not toward downwind");
+  assert.equal(cue.label, "BREAK");
 });
 
 test("distance reads as one decimal in NM, dropping the leading zero under a mile", () => {

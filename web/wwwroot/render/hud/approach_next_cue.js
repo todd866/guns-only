@@ -42,10 +42,17 @@ export function quantiseTurnDeg(turnDeg) {
   return 180 * sign;
 }
 
-/** The authored gate the arrow steers to: first one ahead beyond the look-ahead, else the last. */
-export function approachSteerGate(gates, eastM, northM) {
+/**
+ * The authored gate the arrow steers to. Pattern fixes (BREAK, DOWNWIND, PERCH, ...) are mandatory:
+ * the sim advances only when the jet passes inside the active fix's capture volume and heading
+ * window, so the arrow always points at the active fix. Only the sliding ingress chevrons (the
+ * PATTERN ENTRY corridor) get the look-ahead, which anticipates the corridor's turn instead of
+ * pointing at a chevron the jet is already passing.
+ */
+export function approachSteerGate(gates, eastM, northM, { ingress = false } = {}) {
   if (!Array.isArray(gates) || !gates.length) return null;
   const start = Math.max(0, gates.findIndex((gate) => gate?.active === true));
+  if (!ingress) return gates[start];
   for (let i = start; i < gates.length; i += 1) {
     const gate = gates[i];
     if (Math.hypot(gate.eastM - eastM, gate.northM - northM)
@@ -76,6 +83,8 @@ export function approachNextCue(state, gates = resolveGuidanceGates(state)) {
   if (state?.conventional_rtb_pattern_active !== true
       || state?.approach_guidance_active !== true
       || state?.approach_valid !== true) return null;
+  const rawLabel = String(state?.approach_next_label ?? "").trim().toUpperCase();
+  const ingress = rawLabel.startsWith("PATTERN ENTRY");
   const label = displayLabel(state?.approach_next_label || state?.approach_pattern_leg);
   const distance = formatCueDistanceNm(state?.approach_track_required_m);
   if (!label || label === "NONE" || distance === null) return null;
@@ -85,7 +94,7 @@ export function approachNextCue(state, gates = resolveGuidanceGates(state)) {
   const headingDeg = finite(state?.heading_deg);
   let turnDeg = null;
   if (eastM !== null && northM !== null && headingDeg !== null) {
-    const steer = approachSteerGate(gates, eastM, northM);
+    const steer = approachSteerGate(gates, eastM, northM, { ingress });
     if (steer && Number.isFinite(steer.eastM) && Number.isFinite(steer.northM)) {
       const bearingDeg = Math.atan2(steer.eastM - eastM, steer.northM - northM) * 180 / Math.PI;
       turnDeg = wrap180(bearingDeg - headingDeg);
