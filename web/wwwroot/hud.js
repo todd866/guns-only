@@ -2458,7 +2458,7 @@ class CombatHud {
       const nextEngagement = Math.max(2,
         Math.floor(Number(state.engagement_number) || Math.max(1, kills)) + 1);
       const detail = replacementPending
-        ? `BANDIT ${nextEngagement} IN ${replacementSeconds.toFixed(1)} SEC · KILLS ${kills}`
+        ? `NEXT BANDIT ${nextEngagement} IN ${replacementSeconds.toFixed(1)} SEC · KILLS ${kills}`
         : `IMPACT PHYSICS RUNNING · KILLS ${kills}`;
       ctx.fillText(detail, cueX + width - 12, cueY + height / 2);
     }

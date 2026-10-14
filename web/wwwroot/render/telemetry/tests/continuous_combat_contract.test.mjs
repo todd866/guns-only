@@ -71,5 +71,8 @@ test("mission brief and splash cue explain the finite sortie's shared resources"
   assert.match(appSource,
     /Two engagements share your fuel, ammunition and damage/);
   assert.match(hudSource,
-    /opponent_replacement_pending[\s\S]*?engagement_number[\s\S]*?\+ 1[\s\S]*?BANDIT \$\{nextEngagement\} IN/);
+    /opponent_replacement_pending[\s\S]*?engagement_number[\s\S]*?\+ 1[\s\S]*?`NEXT BANDIT \$\{nextEngagement\} IN/);
+  assert.match(hudSource,
+    /`NEXT BANDIT \$\{nextEngagement\} IN \$\{replacementSeconds\.toFixed\(1\)\} SEC · KILLS \$\{kills\}`/,
+    "the replacement splash identifies the next bandit in its single compact row");
 });
