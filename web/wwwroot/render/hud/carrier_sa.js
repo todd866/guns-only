@@ -189,7 +189,10 @@ export function airfieldPadlockEligible(state = {}) {
 export function contextualPadlockTarget(state = {}) {
   if (circuitsPatternOnly(state) && carrierPadlockEligible(state)) return "carrier";
   // After KNOCK IT OFF the bandits belong to relief; V looks at home, not at a fight that is over.
-  if (state?.player_rtb_active === true && airfieldPadlockEligible(state)) return "airfield";
+  // Keyed to the handoff phase (Requested..ReliefLost): other RTB paths leave bandits on ownship.
+  const handoffPhase = Number(state?.combat_handoff_phase);
+  if (Number.isInteger(handoffPhase) && handoffPhase >= 2 && handoffPhase <= 7
+      && airfieldPadlockEligible(state)) return "airfield";
   const carrierAvailable = carrierPadlockEligible(state);
   const banditAvailable = banditPadlockEligible(state);
   if (!banditAvailable && !carrierAvailable && airfieldPadlockEligible(state)) return "airfield";

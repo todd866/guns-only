@@ -263,6 +263,12 @@ function hasGunSolution(state) {
   return state.gun_solution === true && insideRoundLife(state);
 }
 
+/// CombatHandoffPhase Requested(2) .. ReliefLost(7): bandits observe and shoot relief, not ownship.
+function combatHandedOff(state) {
+  const phase = Number(state?.combat_handoff_phase);
+  return Number.isInteger(phase) && phase >= 2 && phase <= 7;
+}
+
 function isFightHudActive(state) {
   // Circuits is pattern school — never paint bandit/gun fight chrome. Its no-opponent contract is
   // structural, so there is no parked compatibility actor for presentation to reinterpret.
@@ -270,8 +276,10 @@ function isFightHudActive(state) {
   // KNOCK IT OFF hands the fight to relief and retargets every bandit onto it
   // (SpawnReliefAndRetargetOpponents); the player's hits no longer count. Leaving the funnel,
   // TARGET brackets and edge arrows up pulled the pilot back toward a fight he had left
-  // (owner 2026-10-14: "the RTB was confusing").
-  if (state?.player_rtb_active === true) return false;
+  // (owner 2026-10-14: "the RTB was confusing"). Keyed to the combat-handoff phase
+  // (Requested..ReliefLost), NOT player_rtb_active: carrier-route and Rapier RTB also raise that
+  // flag without retargeting anyone, and there a live bandit can still shoot.
+  if (combatHandedOff(state)) return false;
   if (!selectedOpponentIsAlive(state)) return false;
   return !recoveryPlatformAvailable(state)
     || hudMode(state) === "FREE" || hudMode(state) === "WAVE-OFF";
@@ -4930,7 +4938,7 @@ class CombatHud {
       const targetRight = this.relative.dot(frame.playerRight);
       if (targetForward < -0.17) {
         // Exactly astern has no meaningful shoulder; do not invent one.
-        const aftNoun = targetLabel === "FIELD" ? "FIELD" : "TARGET";
+        const aftNoun = frame.padlockTarget === "airfield" ? "FIELD" : "TARGET";
         aftLabel = Math.abs(targetRight) < 0.05
           ? `${aftNoun} AFT`
           : `${aftNoun} AFT \u00B7 ${targetRight >= 0 ? "R" : "L"} SHOULDER`;

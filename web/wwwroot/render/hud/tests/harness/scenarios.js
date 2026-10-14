@@ -628,6 +628,7 @@ export const SCENARIOS = [
       range_m: 2500,
       px: 0, py: 3658, pz: 0,
       player_rtb_active: true,
+      combat_handoff_phase: 5,
       rtb: true, rtb_steer: true, rtb_turn_deg: 60, rtb_bearing_deg: 60, rtb_range_nm: 9.1,
       approach_guidance_active: true,
       approach_valid: true,
@@ -664,6 +665,7 @@ export const SCENARIOS = [
       range_m: 2500,
       px: 0, py: 457, pz: 0,
       player_rtb_active: true,
+      combat_handoff_phase: 5,
       rtb: true, rtb_steer: true, rtb_turn_deg: -170, rtb_bearing_deg: 205, rtb_range_nm: 1.2,
       approach_guidance_active: true,
       approach_valid: true,
@@ -696,6 +698,7 @@ export const SCENARIOS = [
     state: {
       range_m: 15000,
       player_rtb_active: true,
+      combat_handoff_phase: 5,
       rtb: true, rtb_steer: true, rtb_turn_deg: 120, rtb_bearing_deg: 120, rtb_range_nm: 8.1,
       runway_available: true,
       runway_threshold_x: 600, runway_threshold_y: 77.5, runway_threshold_z: 19400,

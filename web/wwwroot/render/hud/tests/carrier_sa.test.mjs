@@ -406,6 +406,7 @@ test("after KNOCK IT OFF, V padlocks the authored airfield threshold", async () 
   const { airfieldPadlockEligible, airfieldPadlockPosition } = await import("../carrier_sa.js");
   const rtbState = {
     player_rtb_active: true,
+    combat_handoff_phase: 5,
     rtb: true,
     runway_available: true,
     runway_threshold_x: 600,
@@ -419,7 +420,10 @@ test("after KNOCK IT OFF, V padlocks the authored airfield threshold", async () 
     "a live bandit handed to relief must not win V back from home");
   assert.equal(padlockTargetValid(rtbState, "airfield"), true);
 
-  const fighting = { ...rtbState, player_rtb_active: false, rtb: false };
+  const fighting = { ...rtbState, player_rtb_active: false, rtb: false, combat_handoff_phase: 1 };
+  // Carrier-route / Rapier RTB raise player_rtb_active without handing bandits to relief: a live
+  // bandit keeps V.
+  assert.equal(contextualPadlockTarget({ ...rtbState, combat_handoff_phase: 0 }), "bandit");
   assert.equal(contextualPadlockTarget(fighting), "bandit");
   assert.equal(padlockTargetValid(fighting, "airfield"), false);
 
