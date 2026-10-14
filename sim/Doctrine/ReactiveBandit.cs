@@ -987,7 +987,7 @@ public sealed partial class ReactiveBandit :
             && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad);
         if (!onSolution && !onBody) {
             if (_pressureBurstActive && T < _fireBurstUntil
-                && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad))
+                && InPressureFiringEnvelope(player))
                 return true;
             _pressureBurstActive = false;
             if (!PressureShotAvailable(player)) return false;
@@ -1021,7 +1021,21 @@ public sealed partial class ReactiveBandit :
         && !(_profile.IsBoss && !BossCommitted)
         && _pressureBurstsFired < PressureBurstLimit
         && T >= _nextPressureBurstAt
-        && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad);
+        && InPressureFiringEnvelope(player);
+
+    // Also take a snapshot as the ballistic lead crosses the barrel. A body-only
+    // gate misses these opportunities when the contact still needs substantial lead.
+    // Keep the existing angular discipline, range, short burst and finite budget;
+    // actual fixed-axis rounds may miss. Legacy/frozen pilots retain their body gate.
+    bool InPressureFiringEnvelope(in ActorObservation player) {
+        if (BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad)) return true;
+        if (_trackingGun is null) return false;
+        double range = Geometry.Range(State, player);
+        if (range < BanditFireControl.MinimumRangeM || range > BanditFireControl.MaximumRangeM)
+            return false;
+        var solution = TrackingSolution(player);
+        return solution.HasLeadSolution && solution.BoreErrorRad <= EffectiveFireConeRad;
+    }
 
     /// A committed boss shoots with the standard Ace gate; a stalking boss holds its raised
     /// quality bar. Every other tier reads its profile cone unchanged.
@@ -1581,7 +1595,8 @@ public sealed partial class ReactiveBandit :
         acceleration -= forward * acceleration.Dot(forward);
         Vec3D right = new(Math.Cos(own.Chi), 0, -Math.Sin(own.Chi));
         Vec3D up = forward.Cross(right);
-        double bank = Math.Clamp(Math.Atan2(acceleration.Dot(right), acceleration.Dot(up)), -1.35, 1.35);
+        double bankLimit = ClosingGunApproach(player) ? 2.6 : 1.35;
+        double bank = Math.Clamp(Math.Atan2(acceleration.Dot(right), acceleration.Dot(up)), -bankLimit, bankLimit);
         Vec3D lift = up * Math.Cos(own.Bank) + right * Math.Sin(own.Bank);
         double g = Math.Clamp(acceleration.Dot(lift) / FlightModel.G0, -0.2,
             Math.Max(0, AvailableAcquireG(safetyReserve: false)));
@@ -1591,8 +1606,20 @@ public sealed partial class ReactiveBandit :
         return new PilotCommand(g, bank, throttle, 0);
     }
 
+    // A reciprocal approach needs its lift vector below the horizon when the observed
+    // gun solution is below the nose. The normal 77-degree tracking bank cap cannot do
+    // that; it flies past the shot and leaves a long return. Single-ramp Ace only, with
+    // measured closure: slower-closing tracking and formation pilots keep their policy.
+    bool ClosingGunApproach(in ActorObservation player) {
+        if (!AttackReengagementEnabled || _trackingGun is null || Skill != PilotSkill.Ace)
+            return false;
+        var line = player.Position - State.Position;
+        double range = line.Length;
+        return range > 1 && -(player.VelocityVector() - State.VelocityVector()).Dot(line * (1.0 / range)) > 300.0;
+    }
+
     /// Is this a shot worth closing the loop on? Deliberately generous on angle and strict on
-    /// range. True-volume gunnery starts settling at 1,400 m; firing still requires 120–900 m.
+    /// range. True-volume gunnery starts settling before gun range; firing still requires 120–900 m.
     bool ShouldFineTrack(in ActorObservation player) {
         // ONLY WHERE THE PLANNER IS THE ONE FLYING. This is the component with the defect: a tier
         // with no lookahead horizon flies the reactive laws and already tracks a non-manoeuvring
@@ -1605,9 +1632,12 @@ public sealed partial class ReactiveBandit :
             return false;
         }
         double rangeM = Geometry.Range(State, player);
+        double captureRangeM = _trackingGun is null || Skill != PilotSkill.Ace
+            ? BanditFireControl.MaximumRangeM
+            : ClosingGunApproach(player) ? 2400.0 : 1400.0;
         if (!double.IsFinite(rangeM)
             || rangeM < BanditFireControl.MinimumRangeM
-            || rangeM > (_trackingGun is null || Skill != PilotSkill.Ace ? BanditFireControl.MaximumRangeM : 1400.0)) {
+            || rangeM > captureRangeM) {
             _fineTrackLatched = false;
             return false;
         }

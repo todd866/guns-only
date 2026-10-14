@@ -4,8 +4,8 @@ using Xunit;
 namespace GunsOnly.Sim.Tests;
 
 /// Deterministic contracts for the physical opponent tracking seam. These tests exercise the
-/// belief-limited ActorObservation path; they do not fire rounds, move an aircraft by hand, or
-/// alter production tuning.
+/// belief-limited ActorObservation path, fixed-barrel emission, and bounded pilot controls.
+/// Synthetic observations isolate policy; the pressure suite flies the complete engagement.
 public sealed class PhysicalGunTrackingTests {
     const double Dt = 1.0 / AircraftSim.TickHz;
     static readonly GunProfile Profile = GunProfiles.GSh301PublicDataSurrogate;
@@ -24,6 +24,157 @@ public sealed class PhysicalGunTrackingTests {
 
     static Vec3D Muzzle(in AircraftState own) =>
         own.Position + GunKill.GunDirection(own) * GunKill.MuzzleOffsetM;
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SnapshotUsesBallisticLeadRatherThanCrossingContactsCurrentPosition(bool physical) {
+        var own = new AircraftState(new Vec3D(0, 3000, 0), 250, 0, 0, 0,
+            FlightModel.Su27SPublicDataSurrogate.MassKg, BodyAttitude: QuaternionD.Identity);
+        var tracker = new ReactiveBandit(own, FlightModel.Su27SPublicDataSurrogate, PilotSkill.Ace);
+        if (physical) tracker.ConfigureGunTracking(Profile);
+        // An exactly solvable constant-velocity crossing: the target is well left of the
+        // nose, but its intercept is two degrees right. This is a poor snapshot, not a
+        // tracking shot, and no collision geometry is used to authorize it.
+        const double flightSeconds = 0.65;
+        double angle = 2 * Math.PI / 180;
+        var lead = new Vec3D(Math.Sin(angle), 0, Math.Cos(angle));
+        var velocity = new Vec3D(180, 0, 0);
+        var position = Muzzle(tracker.State)
+            + (tracker.State.VelocityVector() + lead * Profile.MuzzleVelocityMps - velocity) * flightSeconds
+            + new Vec3D(0, -0.5 * GunKill.GravityMps2 * flightSeconds * flightSeconds, 0);
+        var contact = ActorObservation.Capture(Target(position));
+        Assert.False(BanditFireControl.InFiringEnvelope(tracker.State, contact,
+            BanditSkillProfile.For(PilotSkill.Ace).FireConeRad));
+        Assert.Equal(physical, tracker.WantsToFire(contact));
+        Assert.Equal(physical, tracker.PressureBurstActive);
+        Assert.Equal(physical ? 1 : 0, tracker.PressureBurstsFired);
+        if (physical) {
+            var solution = tracker.TrackingSolution(contact);
+            Assert.True(solution.HasLeadSolution);
+            Assert.Equal(angle, solution.BoreErrorRad, 8);
+            Assert.True(tracker.WantsToFire(contact));
+            Assert.Equal(1, tracker.PressureBurstsFired);
+            var gun = new GunKill(profile: Profile, targetGeometry: AirframeHitGeometry.F22);
+            gun.Step(tracker.WantsToFire(contact), tracker.State, Target(position), Dt);
+            var round = Assert.Single(gun.RoundsInFlight);
+            Vec3D launchVelocity = round.Velocity
+                + new Vec3D(0, GunKill.GravityMps2 * round.AgeSeconds, 0);
+            Vec3D expectedVelocity = tracker.State.VelocityVector()
+                + GunKill.GunDirection(tracker.State) * Profile.MuzzleVelocityMps;
+            Assert.InRange((launchVelocity - expectedVelocity).Length, 0, 1e-8);
+            Assert.Null(gun.Gimbal);
+        }
+
+        // The same burst must stop as soon as its lead leaves the gate, when the
+        // current contact also leaves its snapshot gate. Repeated queries cannot spend another burst.
+        var noseContact = ActorObservation.Capture(Target(new(500, 3000, 700)));
+        Assert.False(BanditFireControl.InFiringEnvelope(tracker.State, noseContact));
+        if (physical) {
+            Assert.False(tracker.WantsToFire(noseContact));
+            Assert.False(tracker.WantsToFire(contact));
+            Assert.Equal(1, tracker.PressureBurstsFired);
+        }
+    }
+
+    [Theory]
+    [InlineData(119.0)]
+    [InlineData(901.0)]
+    public void PhysicalSnapshotsKeepTheExistingGunRange(double range) {
+        var tracker = Tracker();
+        var bore = GunKill.GunDirection(tracker.State);
+        var right = new Vec3D(0, 1, 0).Cross(bore).Normalized();
+        double angle = 2 * Math.PI / 180;
+        var contact = ActorObservation.Capture(Target(tracker.State.Position
+            + (bore * Math.Cos(angle) + right * Math.Sin(angle)) * range, 250, 0));
+        var solution = tracker.TrackingSolution(contact);
+        Assert.True(solution.HasLeadSolution);
+        Assert.InRange(solution.BoreErrorRad * 180 / Math.PI, 0.81, 3.5);
+        Assert.False(tracker.WantsToFire(contact));
+        Assert.Equal(0, tracker.PressureBurstsFired);
+    }
+
+    [Fact]
+    public void PhysicalSnapshotsRemainShortSpacedAndBudgeted() {
+        var tracker = Tracker();
+        var starts = new List<double>();
+        double currentBurstSeconds = 0;
+        int previousCount = 0;
+        for (int tick = 0; tick < 34 * AircraftSim.TickHz; tick++) {
+            var own = tracker.State;
+            var bore = GunKill.GunDirection(own);
+            var right = new Vec3D(0, 1, 0).Cross(bore).Normalized();
+            double angle = 2 * Math.PI / 180;
+            var lead = bore * Math.Cos(angle) + right * Math.Sin(angle);
+            const double tof = 0.5;
+            // Synthetic observations keep a poor two-degree shot available as the pilot
+            // flies. Stale samples deliberately clear acceleration estimation: this is a
+            // trigger-clock contract, not a second model of a flyable target trajectory.
+            var target = own with { Position = Muzzle(own) + lead * (Profile.MuzzleVelocityMps * tof)
+                + new Vec3D(0, -0.5 * GunKill.GravityMps2 * tof * tof, 0) };
+            var observation = ActorObservation.Capture(target, tick) with { ObservationAgeTicks = 1 };
+            bool fire = tracker.WantsToFire(observation);
+            if (tracker.PressureBurstsFired > previousCount) {
+                starts.Add(tick * Dt);
+                previousCount = tracker.PressureBurstsFired;
+                currentBurstSeconds = 0;
+            }
+            if (fire) {
+                Assert.True(tracker.PressureBurstActive);
+                currentBurstSeconds += Dt;
+                Assert.True(currentBurstSeconds <= ReactiveBandit.PressureBurstSeconds + Dt + 1e-8);
+            }
+            tracker.Step(observation, Dt);
+        }
+        Assert.Equal(ReactiveBandit.PressureBurstLimit, starts.Count);
+        for (int i = 1; i < starts.Count; i++)
+            Assert.InRange(starts[i] - starts[i - 1], ReactiveBandit.PressureBurstIntervalSeconds - 1e-8,
+                ReactiveBandit.PressureBurstIntervalSeconds + Dt + 1e-8);
+    }
+
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    public void ClosingRampApproachCanRollLiftBelowTheGunLine(
+        bool ramp, bool reciprocal, bool noseLowRoll) {
+        var initial = new AircraftState(new Vec3D(0, 3000, 0), 250, 0, 0, 0,
+            FlightModel.Su27SPublicDataSurrogate.MassKg, BodyAttitude: QuaternionD.Identity);
+        var tracker = new ReactiveBandit(initial, FlightModel.Su27SPublicDataSurrogate, PilotSkill.Ace)
+            { AttackReengagementEnabled = ramp };
+        tracker.ConfigureGunTracking(Profile);
+        var target = Target(new(0, 2920, 1000), 250, reciprocal ? Math.PI : 0);
+        var observation = ActorObservation.Capture(target);
+        Assert.False(tracker.WantsToFire(observation)); // still beyond the firing range
+        tracker.Step(observation, Dt);
+        Assert.Equal(noseLowRoll, Math.Abs(tracker.LastCommand.BankTarget) > Math.PI / 2);
+        Assert.InRange(Math.Abs(tracker.LastCommand.BankTarget), 0, 2.6);
+        Assert.InRange(tracker.LastCommand.GDemand, -0.2, 9.0);
+        Assert.False(tracker.LastCommand.EnvelopeOverride);
+        Assert.InRange((tracker.State.Position - initial.Position).Length, 0, 250 * Dt + 0.1);
+    }
+
+    [Theory]
+    [InlineData(true, 1399.0, true)]
+    [InlineData(true, 1401.0, true)]
+    [InlineData(true, 2399.0, true)]
+    [InlineData(true, 2401.0, false)]
+    [InlineData(false, 1399.0, true)]
+    [InlineData(false, 1401.0, false)]
+    public void OnlyClosingRampAcePreparesTheShotBeyondNormalCaptureRange(
+        bool ramp, double range, bool expectedTracking) {
+        var initial = new AircraftState(new Vec3D(0, 3000, 0), 250, 0, 0, 0,
+            FlightModel.Su27SPublicDataSurrogate.MassKg, BodyAttitude: QuaternionD.Identity);
+        var tracker = new ReactiveBandit(initial, FlightModel.Su27SPublicDataSurrogate, PilotSkill.Ace)
+            { AttackReengagementEnabled = ramp };
+        tracker.ConfigureGunTracking(Profile);
+        var target = Target(initial.Position + new Vec3D(0, -0.05, Math.Sqrt(1 - 0.05 * 0.05)) * range,
+            250, Math.PI) with { Bank = 0.4 };
+        var observation = ActorObservation.Capture(target);
+        Assert.False(tracker.WantsToFire(observation));
+        tracker.Step(observation, Dt);
+        Assert.Equal(expectedTracking, tracker.FineTrackLatched);
+    }
 
     [Theory]
     [InlineData(600.0)]

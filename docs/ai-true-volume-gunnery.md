@@ -26,7 +26,7 @@ live opening shot and both ships firing before the durable fixture player is los
 
 This handoff does not edit the fine-track latch. When integrating a7, retain its
 `FineTrackOutOfPatience` exit and `_fineTrackRetryAt` entry guard alongside C12's
-physical Ace 20°/25° thresholds (and the 1,400 m range); neither side replaces the
+physical Ace 20°/25° thresholds and normal 1,400 m capture range; neither side replaces the
 other's latch condition.
 
 ## Tracking and trigger policy
@@ -50,11 +50,25 @@ other's latch condition.
   This is approximate feedback: AoA transients and changing target acceleration
   remain sources of error. It is not an instantaneous body or barrel rotation.
 - Ace starts fine tracking at up to 1,400 m and uses 20° entry / 25° exit hysteresis.
+  On the single ramp opponent's fast-closing approach (>300 m/s measured closure),
+  Ace prepares the shot at up to 2,400 m and may roll to 149° (2.6 rad) to put lift
+  below the horizon. The previous 77° bank cap could not pull down toward the lead:
+  the neutral pass was missed, followed by a long descending return. This changes
+  pilot roll intent through the normal actuators, not available G or roll rate.
+  Slower-closing approaches, formations and legacy controllers retain their existing
+  capture/roll policy. Terrain recovery still preempts tracking.
   Lower tiers retain the original 900 m and 6° / 10° maneuvering capture envelope.
   Firing still requires the existing 120–900 m range. The lead trigger gate is at
   most 0.8°, checked every tick. A maintained solution permits a 0.7 s burst within
   the existing 1.25 s cycle. Lower-tier body-gate/pressure policy remains distinct;
-  Ace's physical-tracking path does not authorize the legacy body fallback.
+  Ace's physical-tracking path does not authorize the sustained legacy body fallback.
+- Budgeted pressure snapshots still accept the existing current-contact gate, and now
+  also accept the physical ballistic lead within the same authored angular gate
+  (3.5° for Ace). A two-degree crossing opportunity can therefore start a short burst
+  even when the current contact is off the nose. The gate is checked throughout the
+  burst. Range remains 120–900 m, duration 0.2 s, interval 3 s, maximum ten bursts.
+  Rounds leave the fixed barrel with ownship velocity and gravity; a poor snapshot
+  is allowed to miss, with no gimbal or collision-volume forgiveness.
 
 All new gains and gates are **authored policy**, not sourced physical constants.
 The 1 m radius passed to the lead helper only fills unused solution metadata; neither
