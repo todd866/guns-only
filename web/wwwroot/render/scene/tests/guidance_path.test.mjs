@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   approachJoinGuidanceGates,
+  chevronViewerBasis,
+  chevronVisualHalfM,
   createGuidancePath,
   conventionalPatternEnergy,
   conventionalPatternGuidanceGates,
@@ -523,8 +525,12 @@ test("conventional pattern preserves entry-downwind-base-final-threshold geometr
   assert.equal(path.object3d.userData.guidanceEnergyToleranceKtas, 25);
   const meshes = path.object3d.children.filter((mesh) => mesh.visible);
   assert.equal(meshes.every((mesh) => mesh.userData.guidanceStyle === "pattern-chevron"), true);
-  assert.equal(meshes.every((mesh) => mesh.scale.x === GUIDANCE_PATH_DEFAULTS.patternVisualHalfM), true,
+  // Chevrons grow with eye range to hold a minimum angle, but stay chevron-sized: never the
+  // hundreds-of-metres authored tolerance discs.
+  assert.equal(meshes.every((mesh) => mesh.scale.x >= GUIDANCE_PATH_DEFAULTS.patternVisualHalfM
+    && mesh.scale.x <= GUIDANCE_PATH_DEFAULTS.chevronMaxVisualHalfM), true,
     "the pattern is floating chevrons, not runway-sized tolerance discs");
+  assert.ok(Math.max(...meshes.map((mesh) => mesh.scale.x)) < 220);
   const labels = new Set(meshes.map((mesh) => mesh.userData.guidancePatternLeg));
   for (const leg of ["PATTERN_ENTRY", "DOWNWIND", "BASE", "FINAL", "THRESHOLD"])
     assert.ok(labels.has(leg), `${leg} must remain visible in the fixed traffic-pattern path`);
@@ -836,4 +842,40 @@ test("production updates and disposes shared guidance outside the CASEVAC-only b
     "the shared guidance graph is released with the scene");
   assert.match(appSource, /presentation_guidance_drawn_gates/,
     "telemetry records what the scene actually drew, not only authority intent");
+});
+
+test("pattern chevrons hold a minimum angular size from the eye, capped", () => {
+  const near = chevronVisualHalfM(42, 1_000);
+  const far = chevronVisualHalfM(42, 20_000);
+  const veryFar = chevronVisualHalfM(42, 200_000);
+  assert.equal(near, 42, "close in, the authored size stands");
+  assert.ok(far > 100 && far < GUIDANCE_PATH_DEFAULTS.chevronMaxVisualHalfM,
+    `20 km out the chevron must grow (got ${far})`);
+  assert.equal(veryFar, GUIDANCE_PATH_DEFAULTS.chevronMaxVisualHalfM);
+});
+
+test("a chevron seen from above lies nearly flat instead of going edge-on", () => {
+  // Leg runs scene -Z (north). Viewer directly overhead.
+  const overhead = chevronViewerBasis({ x: 0, y: 0, z: -1 }, { x: 0, y: 1_000, z: 0 });
+  assert.ok(Math.abs(overhead.z.y) > 0.99, "face normal points up at an overhead eye");
+  assert.ok(Math.abs(overhead.x.y) < 1e-9, "lateral axis stays horizontal");
+  // Viewer behind on the leg, level: the authored upright, leg-facing V.
+  const behind = chevronViewerBasis({ x: 0, y: 0, z: -1 }, { x: 0, y: 0, z: 2_000 });
+  assert.ok(Math.abs(behind.z.z) > 0.99, "face normal runs along the leg");
+  assert.ok(behind.y.y > 0.99, "the V stays upright");
+  // Behind and 30 degrees above: tilted toward the eye, not edge-on.
+  const elevated = chevronViewerBasis(
+    { x: 0, y: 0, z: -1 }, { x: 0, y: Math.sin(Math.PI / 6), z: Math.cos(Math.PI / 6) });
+  const facing = Math.abs(elevated.z.y * Math.sin(Math.PI / 6)
+    + elevated.z.z * Math.cos(Math.PI / 6));
+  assert.ok(facing > 0.99, "face is square to the line of sight");
+  // Viewer abeam: lateral component removed, so it falls back to the upright leg-facing V.
+  const abeam = chevronViewerBasis({ x: 0, y: 0, z: -1 }, { x: 500, y: 0, z: 0 });
+  assert.ok(Math.abs(abeam.z.z) > 0.99);
+  for (const basis of [overhead, behind, elevated, abeam]) {
+    for (const axis of ["x", "y", "z"]) {
+      const v = basis[axis];
+      assert.ok(Math.abs(Math.hypot(v.x, v.y, v.z) - 1) < 1e-6, `${axis} is unit length`);
+    }
+  }
 });
