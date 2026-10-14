@@ -130,3 +130,29 @@ the same gate ids (`break`, `perch`).
 - Native end-to-end: HUD-cue pilot on keys, fight start → kills → recovery → full stop.
 - Browser receipt: desktop 1280×720 real keys, human and kid pilots, fight start → full stop,
   frames of every leg; portrait smoke still passes.
+
+## As built (kernel, 14 Oct 2026) — supersedes the numbers above where they differ
+
+Flying the native key pilots changed the design. What is in `sim/Recovery/F22OverheadCourse.cs`:
+
+- **One box, not box-to-box.** Discrete gate boxes made the pilots overshoot every turn. The
+  pilot now flies one box that rides the planned path 7 s ahead (8 s on final, 350–1 600 m),
+  plus a **flight-path predictor dot** (where the jet will be in the same 7 s at its present
+  bank and flight-path angle). "Put the dot in the box." On a steady turn on the path the dot
+  sits in the box, so a crude pilot has nothing to correct. Three faint highway boxes follow.
+- **Gates are graded along the path**, not by plane crossing: passing a gate's station grades
+  alt/KCAS/gear; cross-track beyond the gate window is a ✗. Cross-track > 1 500 m (to the IP) or
+  900 m (pattern) re-plans a Dubins route to the next gate (gate speed, 30° bank inside the
+  pattern). Go-around = new break 1 500 m ahead, then the same downwind.
+- **Numbers:** IP 6 NM / 2 000 ft AGL / 280; initial 3 NM / 1 500 / 250; break midfield / 1 500 /
+  250 (250 → 200 through the 180); downwind 190 (≤250, gear); perch 165 (gear); base 150 →
+  on-speed+3; final 0.8 NM on 3° at on-speed (≈129 KCAS at this weight). Flare: past the
+  threshold the path runs to 250 m beyond the aim point at wheel height − 4 m and the
+  autothrottle target drops 20 kt (a retard). Transit energy rate 0.26 m/m (measured).
+  Altitudes on the HUD/debrief are MSL (field 254 ft): pattern = 1 750 MSL.
+- **Full assist** (sortie gun assist active, or phone assisted flight): autothrottle on the
+  ordinary lever (MIL ceiling, idle at contact), **course roll coupling** while no roll input
+  (bounded aileron demand toward the bank that steers the velocity vector to the box, 30° limit
+  on final, 60° elsewhere), and with the gear down from downwind on: **landing gains** (40 %
+  lateral share as the carrier approach mode, 3 G protected limit, 45° bank protection). None of
+  these move the aircraft or add energy; any key owns its axis.
