@@ -190,6 +190,52 @@ public class DifficultyRampTests {
     }
 
     [Fact]
+    public void TouchGunneryAssistWideningStaysActiveAcrossAllRungs() {
+        var cold = new SimulationSession();
+        cold.StartBeat(() => Beats.ModernVisualMerge());
+        cold.SetTouchControlModality(true);
+        AircraftParams coldTouch = cold.GunneryPitchAssistAir();
+
+        var director = new FightDirector();
+        Observe(director, Report(1, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
+        Observe(director, Report(2, SortieOutcome.Victory, hitsScored: 1, gunKills: 1));
+        Assert.Equal(3, director.Rung);
+
+        var rungThree = new SimulationSession();
+        rungThree.ArmDirectorStateForNextStage(director.ExportState());
+        rungThree.StartBeat(() => Beats.ModernVisualMerge());
+        rungThree.SetTouchControlModality(true);
+        Assert.Equal(3, rungThree.DifficultyRung);
+        AircraftParams rungThreeTouch = rungThree.GunneryPitchAssistAir();
+
+        Assert.Equal(coldTouch.GunneryPitchAssistCaptureAngleRad,
+            rungThreeTouch.GunneryPitchAssistCaptureAngleRad, 6);
+        Assert.Equal(coldTouch.GunneryPitchAssistMaxCorrectionG,
+            rungThreeTouch.GunneryPitchAssistMaxCorrectionG, 6);
+        Assert.Equal(coldTouch.GunneryLateralAssistRollGain,
+            rungThreeTouch.GunneryLateralAssistRollGain, 6);
+    }
+
+    [Fact]
+    public void FineTrackingBelowStickCenterDoesNotTriggerPilotUnloadIntent() {
+        var detent = new DetentLayer();
+        var keys = new KeyGrammar();
+        AircraftParams air = FlightModel.F22APublicDataSurrogate;
+        var state = new AircraftState(new Vec3D(0.0, 3000.0, 0.0), 220.0,
+            0.0, 0.0, 0.0, air.MassKg);
+
+        detent.AssistedFlight = true;
+        detent.AirspeedMps = state.Speed;
+        detent.SetAnalogPitchControl(-0.04);
+        detent.Tick(keys, 0.0, in state, in air, new DoctrineAdvice(5.0, 0.0, "track"), 1.0 / 120.0);
+        Assert.False(detent.PilotUnloadIntent);
+
+        detent.SetAnalogPitchControl(-0.14);
+        detent.Tick(keys, 10.0, in state, in air, new DoctrineAdvice(5.0, 0.0, "unload"), 1.0 / 120.0);
+        Assert.True(detent.PilotUnloadIntent);
+    }
+
+    [Fact]
     public void AssistIsInactiveWhenTheRungTurnsItOff() {
         AircraftParams air = FlightModel.F22APublicDataSurrogate with {
             GunneryPitchAssistGainPerSecond = 0.0,

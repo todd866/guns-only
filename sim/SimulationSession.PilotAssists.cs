@@ -408,7 +408,6 @@ public sealed partial class SimulationSession {
 
         FightDirector.PitchAssistScale assistScale =
             _sortiePitchAssist ?? _fightDirector.PitchAssist;
-        int assistRung = _sortiePitchAssistRung ?? _fightDirector.Rung;
         AircraftParams assistAir = _beat.PlayerAir with {
             GunneryPitchAssistGainPerSecond =
                 _beat.PlayerAir.GunneryPitchAssistGainPerSecond * assistScale.GainScale,
@@ -421,9 +420,10 @@ public sealed partial class SimulationSession {
                 GunneryPitchAssistMaxCorrectionG = 0.0,
             };
         }
+        // Touch widening stays at every rung, like the base aid (owner 2026-10-14: "keep gun
+        // assist, manual aiming is annoying"); difficulty is the bandit's job.
         if (_touchControlModality
-            && !CardTwelveRequiresPilotGunTrigger
-            && assistRung <= 1)
+            && !CardTwelveRequiresPilotGunTrigger)
             return WidenGunneryAssistForTouch(assistAir);
         return assistAir;
     }

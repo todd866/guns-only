@@ -16,6 +16,8 @@ public sealed class DetentLayer {
     public DemandTier Tier { get; private set; } = DemandTier.Baseline;
     /// <summary>Raw stick-forward intent for aids that must yield before filtered G settles.</summary>
     public bool PilotUnloadIntent { get; private set; }
+    /// Authored input deadband, not airframe data: forward analog stick inside this is tracking.
+    public const double AnalogUnloadDeadband = 0.08;
     /// <summary>
     /// Raw near-stop analog pull intent for aids that must yield before the filtered protected-G
     /// command catches up. Keyboard tracking retains the bounded past-line ease path; its digital
@@ -347,9 +349,12 @@ public sealed class DetentLayer {
                 HighAlphaRecoveryActive = false;
         }
         _overrideIncidenceActiveLastTick = overrideIncidenceActive;
+        // A deliberate unload is a real push, not stick noise or the small forward correction of
+        // fine tracking: at -0.001 any forward drift on an analog stick dropped the gun assist
+        // mid-track. -0.14 (the measured raw-forward unload in GunneryPitchAssistTests) still yields.
         PilotUnloadIntent = HighAlphaRecoveryActive
             || push != KeyPhase.Idle
-            || (_analogPitchControlActive && _analogPitchControl < -0.001);
+            || (_analogPitchControlActive && _analogPitchControl < -AnalogUnloadDeadband);
         PilotMaximumPullIntent = _analogPitchControlActive
             && _analogPitchControl >= 0.90;
 
