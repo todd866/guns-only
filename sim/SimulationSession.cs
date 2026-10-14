@@ -271,6 +271,8 @@ public sealed partial class SimulationSession {
         _conventionalCarrierRecovery = new();
     readonly GunsOnly.Sim.Recovery.ConventionalRunwayPatternRecoveryDirector
         _conventionalRunwayPatternRecovery = new();
+    // Build 380: the visual-merge combat sortie flies its own box-to-box overhead course.
+    readonly GunsOnly.Sim.Recovery.F22OverheadCourse _f22Course = new();
     // Pattern school starts with a serviceable aircraft. Attrition faults remain available from
     // the systems panel, but silently failing the utility hydraulics 90 seconds into every first
     // circuit left the gear at 91% and made the taught wire pass unrecoverable.
@@ -1447,6 +1449,7 @@ public sealed partial class SimulationSession {
         _recoveryProcedure.Reset();
         _conventionalCarrierRecovery.Reset();
         _conventionalRunwayPatternRecovery.Reset();
+        _f22Course.Reset();
         ConfigureMeshNavFromBeat();
         _rapierAutomationEnabled =
             _beat.ScriptedIntercept?.AutomationDefaultEnabled ?? false;
