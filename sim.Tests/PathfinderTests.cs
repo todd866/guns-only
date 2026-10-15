@@ -45,6 +45,7 @@ public sealed class PathfinderTests {
         Assert.Null(balloon.Debris);
         Assert.Equal(before, balloon.Position);
         Assert.InRange(balloon.LeakFraction, 0.01, 1.0);
+        Assert.Equal(0, balloon.LiftLossFraction);
         for (int i = 0; i < 120 * 120; i++) {
             balloon.Step(Dt);
             Assert.InRange(-balloon.Velocity.Y, 0, 2.0 + 1e-9);
@@ -52,6 +53,7 @@ public sealed class PathfinderTests {
         Assert.InRange(-balloon.Velocity.Y, 0.5, 2.0);
         Assert.InRange(before.Y - balloon.Position.Y, 50, 240);
         Assert.True(balloon.RelayActive);
+        Assert.InRange(balloon.LiftLossFraction, 0.5, 1.0);
     }
 
     [Fact]
@@ -141,19 +143,19 @@ public sealed class PathfinderTests {
         var mission = Assert.IsType<PathfinderMission>(session.Pathfinder);
         Assert.Equal(3, mission.Balloons.Count);
         Assert.All(mission.Balloons, b => Assert.True(b.RelayActive));
-        Assert.InRange(session.PlayerState.Position.Y / 0.3048, 65_000, 70_000);
+        Assert.InRange(session.Player.State.Position.Y / 0.3048, 65_000, 70_000);
         Assert.False(session.Beat.StartsOnCatapult);
         Assert.False(session.OpponentPresent);
         Assert.True(mission.Definition.Dawn);
-        Assert.True((mission.Balloons[0].GondolaPosition - session.PlayerState.Position)
-            .Dot(session.PlayerState.ForwardDir()) > 0);
+        Assert.True((mission.Balloons[0].GondolaPosition - session.Player.State.Position)
+            .Dot(session.Player.State.ForwardDir()) > 0);
         Assert.Equal(4, session.RapierDogfightingDronesRemaining);
         Assert.Equal(MissionEconomicMode.RapierOperations, session.Beat.MissionIdentity.EconomicMode);
         Assert.Equal(RapierV2Design.FuelCapacityKg * 2.20462262,
             session.Beat.FuelLoadout.InitialFuelLb, 4);
         Assert.Equal(FlightModel.RapierPublicDataSurrogate.FuelFreeMassKg
             + RapierV2Design.FuelCapacityKg + 4 * FlightModel.RapierGunDroneSurrogate.MassKg,
-            session.PlayerState.Mass, 1);
+            session.Player.State.Mass, 1);
         session.Begin();
         session.Advance(Dt);
         Assert.Equal(RapierMissionPhase.Attack, session.RapierPhase);
@@ -177,6 +179,8 @@ public sealed class PathfinderTests {
         Assert.DoesNotContain(mission.EvaluateEconomy(Facts()).Lines, line => line.Category == "CONTRACT");
         mission.Engage(3, PathfinderBalloonComponent.Gondola);
         Assert.Equal(1, mission.RoeViolations);
+        Assert.Equal(2, mission.KillRecords.Count);
+        Assert.Equal(PathfinderFootprintClass.Populated, mission.KillRecords[1].Classification);
     }
 
     [Fact]
@@ -198,6 +202,103 @@ public sealed class PathfinderTests {
         Assert.Equal(56, gallery.CombatRules.PlayerTargetHitRadiusM);
         Assert.Equal(MissionEconomicMode.Arcade, gallery.MissionIdentity.EconomicMode);
         Assert.True(Beats.RapierPathfinders(fullSortie: true).StartsOnCatapult);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PathfinderSessionGunResolvesPhysicalKillAndRoeAtContact(bool blocked) {
+        var original = Beats.RapierPathfinders();
+        var wind = new LayeredWindField(new[] {
+            new WindVectorLevel(0, Vec3D.Zero), new WindVectorLevel(25_000, Vec3D.Zero)
+        });
+        var weather = new WeatherProfile(StandardAtmosphere1976.Instance, wind);
+        var definition = new PathfinderMissionDefinition(42,
+            new[] { new PathfinderBalloonSpawn(1, new Vec3D(0, 20_600, 0)) },
+            blocked ? new[] { Square(0, 0, 1000) } : Array.Empty<PathfinderPopulatedArea>(), weather);
+        var gondola = new Vec3D(0, 20_600, 0) + PathfinderRelayCard.GondolaOffsetM;
+        var player = original.Player with { Position = gondola + new Vec3D(0, 0, -100),
+            // Default attitude asks AircraftSim for nose-up trim. This shot fixture instead
+            // supplies an explicit body axis through the gondola, independent of flight trim.
+            Chi = 0, Gamma = 0, BodyAttitude = QuaternionD.Identity };
+        var session = new SimulationSession(beatIndex: 1);
+        session.StartBeat(() => original with { Pathfinder = definition, Player = player });
+        session.Begin();
+        session.FeedKey(GKey.Trigger, true);
+        for (int i = 0; i < 15; i++) session.Advance(Dt);
+        session.FeedKey(GKey.Trigger, false);
+        var mission = session.Pathfinder!;
+        Assert.Equal(1, mission.RelaySectorsDenied);
+        Assert.Equal(blocked ? 1 : 0, mission.RoeViolations);
+        Assert.Equal(!blocked, mission.ContractEarned);
+        Assert.Single(mission.KillRecords);
+        Assert.InRange(mission.KillRecords[0].TimeSeconds, 0.001, mission.ElapsedSeconds);
+        Assert.NotNull(mission.Balloons[0].Debris);
+        Assert.Equal(RapierMissionPhase.Attack, session.RapierPhase);
+        Assert.False(session.RapierGunDroneEgress);
+        Assert.Equal(4, session.RapierDogfightingDronesRemaining);
+        int rounds = session.PlayerGun.RoundsFired;
+        session.FeedKey(GKey.Trigger, true);
+        session.Advance(Dt);
+        Assert.True(session.PlayerGun.RoundsFired > rounds);
+        Assert.Equal(1, mission.SelectedBalloonId); // no automatic target hop
+    }
+
+    [Fact]
+    public void PathfinderPilotRtbAndRestartKeepTheirAuthority() {
+        var session = new SimulationSession(beatIndex: Beats.PathfinderBeatIndex);
+        var initial = session.Pathfinder!.Balloons.Select(b => b.Position).ToArray();
+        session.Begin();
+        session.Advance(Dt);
+        session.Pathfinder.Engage(1, PathfinderBalloonComponent.Gondola);
+        session.FeedKey(GKey.KnockItOff, true);
+        session.Advance(Dt);
+        Assert.True(session.RapierPhase >= RapierMissionPhase.ReturnToBase);
+        Assert.False(session.PlayerWeaponsAuthorized);
+        session.Restart();
+        Assert.Equal(initial, session.Pathfinder!.Balloons.Select(b => b.Position).ToArray());
+        Assert.Equal(0, session.Pathfinder.RelaySectorsDenied);
+        Assert.Equal(0, session.Pathfinder.RoeViolations);
+        Assert.Empty(session.Pathfinder.KillRecords);
+        Assert.Equal(0, session.PlayerGun.RoundsFired);
+        Assert.False(session.TriggerDown);
+    }
+
+    [Fact]
+    public void PathfinderSustainedEnvelopeFireNeverSplashesComponentOrPaysContract() {
+        var mission = new PathfinderMission(PathfinderMissionDefinition.FirstLight());
+        var balloon = mission.Balloons[0];
+        var shooter = new AircraftState(balloon.Position + new Vec3D(0, 0, -100), 1000, 0, 0, 0, 1000);
+        for (int i = 0; i < 120; i++) mission.Step(shooter, true, Dt);
+        Assert.True(mission.Gun.DamageFor(balloon.EnvelopeTargetId).HitCount > 5);
+        Assert.True(mission.Gun.DamageFor(balloon.EnvelopeTargetId).TargetAlive);
+        Assert.True(balloon.RelayActive);
+        Assert.Equal(0, mission.RelaySectorsDenied);
+        Assert.False(mission.ContractEarned);
+    }
+
+    [Fact]
+    public void PathfinderKillRecordsStayBoundedUnderRepeatedHits() {
+        var first = PathfinderMissionDefinition.FirstLight();
+        var definition = new PathfinderMissionDefinition(42,
+            Enumerable.Range(1, 6).Select(id => new PathfinderBalloonSpawn(id, new Vec3D(id * 5000, 20_600, 0))),
+            Array.Empty<PathfinderPopulatedArea>(), first.Weather);
+        var mission = new PathfinderMission(definition);
+        for (int repetition = 0; repetition < 10; repetition++)
+            for (int id = 1; id <= 6; id++) mission.Engage(id, PathfinderBalloonComponent.Gondola);
+        Assert.Equal(6, mission.KillRecords.Count);
+        Assert.Equal(6, mission.SafeKills);
+        Assert.Equal(6, mission.RelaySectorsDenied);
+    }
+
+    [Fact]
+    public void PathfinderOptInLeavesLegacySphereAndSelectedKillFireLatchIntact() {
+        var target = new AircraftState(new Vec3D(0, 20_000, 0), 0, 0, 0, 0, 1000);
+        var shooter = new AircraftState(new Vec3D(4, 20_000, -100), 1000, 0, 0, 0, 1000);
+        var gun = new GunKill(ammo: 20, hitsToKill: 1);
+        for (int i = 0; i < 120; i++) gun.Step(true, shooter, target, Dt);
+        Assert.Equal(FightOutcome.Splash, gun.Outcome);
+        Assert.Equal(1, gun.RoundsFired);
     }
 
     static RapierEconomicSortieFacts Facts() => new(MissionEconomicMode.RapierOperations,

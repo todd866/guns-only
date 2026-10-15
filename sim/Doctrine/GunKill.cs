@@ -31,7 +31,40 @@ public readonly record struct GunRound(
 public readonly record struct GunTarget(
     long Id,
     AircraftState State,
-    bool Damageable = true);
+    bool Damageable = true,
+    GunHitVolume? Volume = null,
+    bool StructuralDamage = true);
+
+/// Explicit component geometry bypasses every aim/arcade radius. Axes are world aligned; callers
+/// with rotating components must transform their chords before supplying an oriented volume.
+public readonly record struct GunHitVolume(Vec3D HalfExtents, bool Ellipsoid = false) {
+    public static GunHitVolume Sphere(double radiusM) => new(new(radiusM, radiusM, radiusM), true);
+
+    public bool TryEntry(Vec3D start, Vec3D delta, out double fraction) {
+        fraction = 0;
+        if (!HalfExtents.IsFinite || HalfExtents.X <= 0 || HalfExtents.Y <= 0 || HalfExtents.Z <= 0)
+            throw new InvalidOperationException("Component half extents must be finite and positive.");
+        if (Ellipsoid) {
+            start = new(start.X / HalfExtents.X, start.Y / HalfExtents.Y, start.Z / HalfExtents.Z);
+            delta = new(delta.X / HalfExtents.X, delta.Y / HalfExtents.Y, delta.Z / HalfExtents.Z);
+            return GunKill.TrySweptSphereEntryFraction(start, delta, 1, out fraction);
+        }
+        double enter = 0, exit = 1;
+        if (!Slab(start.X, delta.X, HalfExtents.X, ref enter, ref exit)
+            || !Slab(start.Y, delta.Y, HalfExtents.Y, ref enter, ref exit)
+            || !Slab(start.Z, delta.Z, HalfExtents.Z, ref enter, ref exit)) return false;
+        fraction = enter;
+        return true;
+    }
+
+    static bool Slab(double start, double delta, double extent, ref double enter, ref double exit) {
+        if (Math.Abs(delta) < 1e-15) return Math.Abs(start) <= extent;
+        double a = (-extent - start) / delta, b = (extent - start) / delta;
+        enter = Math.Max(enter, Math.Min(a, b));
+        exit = Math.Min(exit, Math.Max(a, b));
+        return enter <= exit;
+    }
+}
 
 /// Immutable public view of one target's damage ledger.
 public readonly record struct GunTargetDamage(
@@ -371,8 +404,11 @@ public sealed class GunKill {
     /// Advance one physical weapon against every concurrent target. Selection controls only lead
     /// symbology and which actor a new burst is aimed at; an airborne round remains unguided and is
     /// swept against all damageable actors, with the earliest intersection winning.
+    /// Missions with independent target selection may disable the selected-live-target firing
+    /// latch; that never changes a target's physical damageability or collision volume.
     public FightOutcome Step(bool triggerHeld, in AircraftState own,
-        long selectedTargetId, ReadOnlySpan<GunTarget> targets, double dt) {
+        long selectedTargetId, ReadOnlySpan<GunTarget> targets, double dt,
+        bool requireLiveSelectedTarget = true) {
         if (!double.IsFinite(dt) || dt < 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(dt));
         if (targets.IsEmpty)
@@ -404,7 +440,7 @@ public sealed class GunKill {
         double firingHitRadiusM = EffectiveHitRadius(own, selected.State);
         UpdateLead(own, selected.State, firingHitRadiusM, dt);
         bool selectedMayBeFiredOn =
-            selected.Damageable && selectedDamage.Outcome == FightOutcome.Flying;
+            !requireLiveSelectedTarget || (selected.Damageable && selectedDamage.Outcome == FightOutcome.Flying);
         bool barrelAllowsFire = StepBarrelHeat(
             triggerHeld && selectedMayBeFiredOn && AmmoRemaining > 0, dt);
 
@@ -424,7 +460,7 @@ public sealed class GunKill {
         // A trigger press fires immediately. A held trigger retains phase across any dt partition.
         if (!_triggerWasHeld) _secondsToNextShot = 0.0;
         while (elapsed <= dt && AmmoRemaining > 0
-            && selectedDamage.Outcome == FightOutcome.Flying) {
+            && (!requireLiveSelectedTarget || selectedDamage.Outcome == FightOutcome.Flying)) {
             double untilShot = System.Math.Max(0.0, _secondsToNextShot);
             double remaining = dt - elapsed;
             if (untilShot > remaining + 1e-12) {
@@ -442,7 +478,7 @@ public sealed class GunKill {
                 // selected target at that boundary.
                 _secondsToNextShot = System.Math.Max(
                     0.0, _secondsToNextShot - untilShot);
-                if (selectedDamage.Outcome != FightOutcome.Flying) break;
+                if (requireLiveSelectedTarget && selectedDamage.Outcome != FightOutcome.Flying) break;
             }
 
             var firingPosition = own.Position + ownVelocity * elapsed
@@ -529,6 +565,7 @@ public sealed class GunKill {
 
             long hitTargetId = long.MaxValue;
             double hitFraction = double.PositiveInfinity;
+            bool structuralDamage = true;
             for (int targetIndex = 0; targetIndex < targets.Length; targetIndex++) {
                 GunTarget target = targets[targetIndex];
                 TargetDamageState damage = EnsureTarget(target.Id);
@@ -551,14 +588,18 @@ public sealed class GunKill {
                 Vec3D relativeDelta = (nextPosition - targetEnd) - relativeStart;
                 double hitRadiusM = target.Id == round.AimTargetId
                     ? round.EffectiveHitRadiusM : _hitRadiusM;
-                if (!TrySweptSphereEntryFraction(
-                        relativeStart, relativeDelta, hitRadiusM, out double fraction))
+                double fraction;
+                bool intersects = target.Volume is { } volume
+                    ? volume.TryEntry(relativeStart, relativeDelta, out fraction)
+                    : TrySweptSphereEntryFraction(relativeStart, relativeDelta, hitRadiusM, out fraction);
+                if (!intersects)
                     continue;
                 if (fraction < hitFraction - 1e-12
                     || (System.Math.Abs(fraction - hitFraction) <= 1e-12
                         && target.Id < hitTargetId)) {
                     hitFraction = fraction;
                     hitTargetId = target.Id;
+                    structuralDamage = target.StructuralDamage;
                 }
             }
 
@@ -568,7 +609,7 @@ public sealed class GunKill {
                 if (damage.Outcome == FightOutcome.Flying) {
                     damage.HitCount++;
                     damage.HitsThisStep++;
-                    if (damage.HitCount >= _hitsToKill)
+                    if (structuralDamage && damage.HitCount >= _hitsToKill)
                         damage.Outcome = FightOutcome.Splash;
                     double fixedStepFraction = fixedStepDuration > 0.0
                         ? System.Math.Clamp(
@@ -591,7 +632,7 @@ public sealed class GunKill {
         }
     }
 
-    static bool TrySweptSphereEntryFraction(
+    internal static bool TrySweptSphereEntryFraction(
         in Vec3D relativeStart,
         in Vec3D relativeDelta,
         double radiusM,
