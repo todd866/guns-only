@@ -26,6 +26,11 @@ public sealed class LabPilot {
         casevac = new CasevacPilot(name, seed);
         // Explicit integer PRNG: reproducible on all .NET 8 hosts, no global RNG.
         uint state = unchecked((uint)seed + 0x9e3779b9u);
+        // Avalanche adjacent integer seeds before drawing; otherwise several nearby
+        // seeds can quantize to the same 20 Hz clone start time.
+        state = unchecked((state ^ (state >> 16)) * 0x85ebca6bu);
+        state = unchecked((state ^ (state >> 13)) * 0xc2b2ae35u);
+        state ^= state >> 16;
         double Draw() { state ^= state << 13; state ^= state >> 17; state ^= state << 5; return state / 4294967296.0; }
         double reaction = Draw(), start = Draw(), bias = Draw();
         latency = (int)Math.Round((name == "novice" ? .8 + .6 * reaction : .15 + .15 * reaction) * AircraftSim.TickHz);
@@ -83,7 +88,9 @@ public sealed class LabPilot {
         if (name == "clone") {
             if (s.Tick % 6 == 0) {
                 var observation = CombatPolicyObservation.Capture(s.Tick, s.TimeSeconds, own,
-                    ActorObservation.Capture(seen.State, seen.Tick), s.PlayerGun.AmmoRemaining, s.PlayerWeaponsAuthorized);
+                    // Use the synchronous feature contract it learned. Extra delayed-contact
+                    // distortion would test a different observation distribution, not the clone.
+                    ActorObservation.Capture(s.SelectedOpponentState, s.Tick), s.PlayerGun.AmmoRemaining, s.PlayerWeaponsAuthorized);
                 CombatPolicyDecision command = clone!.Decide(observation);
                 s.Controls.ScriptedPilotOverride = command.Command;
                 Fire(s, command.WantsToFire && s.PlayerWeaponsAuthorized);
@@ -250,6 +257,10 @@ public sealed class RecoveryPilot {
         double drag = SortieSchedule.RecoveryDragToWeight(own.Mass, s.Beat.PlayerAir, profile, own.Position.Y);
         double trimThrottle = Math.Clamp((drag + Math.Sin(desiredGamma)) * own.Mass * FlightModel.G0 / Math.Max(1, s.Beat.PlayerAir.ThrustMaxN), .04, .8);
         double throttle = Math.Clamp(trimThrottle + .018 * speedError + .0025 * speedIntegral, 0, 1);
+        // The simulated gear actuator requires a turning engine. A long idle
+        // deceleration can otherwise leave the selected gear physically retracted.
+        if (s.PlayerSystems.GearHandle == LandingGearHandle.Down && !s.PlayerSystems.AllGearDownAndLocked)
+            throttle = Math.Max(throttle, .08);
         double g = Math.Clamp((Math.Cos(own.Gamma) + own.Speed / FlightModel.G0 * .6 * (desiredGamma - own.Gamma))
             / Math.Max(.3, Math.Cos(own.Bank)), .2, 4);
         double pitch = double.NaN;

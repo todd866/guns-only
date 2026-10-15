@@ -25,6 +25,9 @@ public sealed class TimelineSecond {
     public double SpeedMps { get; set; }
     public double HeadingRad { get; set; }
     public string RecoveryGate { get; set; } = "";
+    public string Gear { get; set; } = "";
+    public double GearFraction { get; set; }
+    public string PilotState { get; set; } = "";
     public double Tension { get; set; }
     public double DeadAirSeconds { get; set; }
     public double ThreatSeconds { get; set; }
@@ -50,6 +53,7 @@ public sealed class RunResult {
     public bool CombatComplete { get; set; }
     public string RtbReason { get; set; } = "None";
     public string RunwayPhase { get; set; } = "Airborne";
+    public string LandingDetail { get; set; } = "";
     public int Kills { get; set; }
     public int HitsGiven { get; set; }
     public int HitsTaken { get; set; }
@@ -168,6 +172,7 @@ public sealed class ExperienceObserver {
         bin.AltitudeM = position.Y; bin.SpeedMps = speed;
         bin.HeadingRad = rotary ? s.CasevacFlight!.VehicleObservation.YawRad : s.Player.State.Chi;
         bin.RecoveryGate = rotary ? s.CasevacFlight!.Snapshot.Phase.ToString() : s.ApproachGuidancePlan.NextLabel;
+        if (!rotary) { bin.Gear = s.PlayerSystems.GearHandle.ToString(); bin.GearFraction = s.PlayerSystems.EffectiveGearFraction; bin.PilotState = s.PilotState + (s.PilotControlInterlocked ? ":interlocked" : ""); }
         gSum += g; energySum += energy; tensionSum += tension;
         binTicks++; ticks++;
         if (binTicks == AircraftSim.TickHz) Flush(rotary);
@@ -225,19 +230,19 @@ public sealed class ExperienceObserver {
         if (!s.PlayerAlive || !s.OpponentPresent) return (false, 0, 0);
         bool threat = false;
         double proximity = 0, closure = 0;
-        void Actor(AircraftState b, bool firing, bool presenting) {
+        void Actor(AircraftState b, bool firing) {
             var p = s.Player.State;
             var delta = p.Position - b.Position;
             double range = delta.Length;
             if (range < 1e-6) return;
             Vec3D line = delta * (1 / range);
             double nose = Math.Acos(Math.Clamp(b.ForwardDir().Dot(line), -1, 1));
-            threat |= (range < options.ThreatRangeM && nose < 35 * Math.PI / 180 && !presenting) || firing;
+            threat |= (range < options.ThreatRangeM && nose < 35 * Math.PI / 180) || firing;
             proximity = Math.Max(proximity, Math.Clamp(1 - range / options.ThreatRangeM, 0, 1));
             if (range < options.ThreatRangeM) closure = Math.Max(closure, Math.Clamp(-(p.VelocityVector() - b.VelocityVector()).Dot(line) / 300, 0, 1));
         }
-        if (s.PrimaryOpponentAlive) Actor(s.Bandit.State, s.OpponentTriggerDown, s.Bandit.Presenting);
-        foreach (var w in s.Wingmen) if (w.StillFighting) Actor(w.Bandit.State, w.TriggerDown, w.Bandit.Presenting);
+        if (s.PrimaryOpponentAlive) Actor(s.Bandit.State, s.OpponentTriggerDown);
+        foreach (var w in s.Wingmen) if (w.StillFighting) Actor(w.Bandit.State, w.TriggerDown);
         return (threat, proximity, closure);
     }
     string Phase(SimulationSession s, bool threat) {
@@ -275,6 +280,7 @@ public sealed class ExperienceObserver {
         result.Landed = s.ConventionalRtbRecoveryCompleted || s.ConventionalRunwayPhase == RunwayRecoveryPhase.Recovered || s.Recovery == Carrier.Recovery.Trap;
         result.CombatComplete = s.FiniteCombatComplete;
         result.RtbReason = s.ReturnToBaseReason.ToString(); result.RunwayPhase = s.ConventionalRunwayPhase.ToString();
+        result.LandingDetail = s.RunwayTouchdown.ToString();
         bool crashed = s.PlayerImpactSurface is ImpactSurface.Ground or ImpactSurface.Water or ImpactSurface.CarrierStructure or ImpactSurface.FlightDeck
             || s.ConventionalRunwayPhase is RunwayRecoveryPhase.Crashed or RunwayRecoveryPhase.Excursion;
         // A shot-down wreck touching the ground is a combat loss, not a second crash category.

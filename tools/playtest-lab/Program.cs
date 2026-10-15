@@ -72,6 +72,7 @@ public static class Program {
             var wall = Stopwatch.StartNew();
             foreach (string pilot in o.PilotNames)
             for (int seed = o.StartSeed; seed < o.StartSeed + o.Seeds; seed++) {
+                CheckPowerAdmission();
                 RunResult run = SortieRunner.Fly(o, pilot, seed, clone);
                 string rel = $"runs/{pilot}-{seed:D4}.json.gz";
                 using (var file = File.Create(Path.Combine(output, rel)))
@@ -91,7 +92,7 @@ public static class Program {
                         "Clone is the committed owner-pilot-clone policy (canonical features and reference-case validation), held at its training cadence of 20 Hz. Novice adapts BanditPressureReport's pursuit pilot. Ace adapts FirstMergeOpeningAcceptanceTests.HudPilot with delayed body-frame cue observations and bounded analog controls. Shared recovery and terrain escape use the existing scripted command seam; this is not a human usability study.",
                         $"Threat: live bandit within {o.ThreatRangeM:F0} m and nose within 35 degrees, or firing; includes wingmen. Gun target: selected live target with authorized ballistic solution. Dead air: no threat, no gun opportunity, no player shot, decision, spectacle or near miss. Initial begin is not counted as a decision.",
                         $"Shot near miss: unique hostile gun round's swept separation within {o.ShotMissM:F0} m outside its hit radius; counted only on passage, not repeated ticks. Ground near miss: entry below {o.GroundMissM:F0} m AGL with 25 m hysteresis, excluding configured recovery/contact. Explosions are labelled destruction/impact proxies from session events, not renderer effects.",
-                        $"RTB choice: combat complete, bingo, empty gun, or {o.RtbAfterSeconds}s combat budget, through TryRequestReturnToBase. Recovery/navigation is a shared scripted pilot, not learned owner behaviour. A {o.MaxSeconds}s limit is censored, never a win or fabricated landing.",
+                        $"RTB choice: combat complete, bingo, empty gun, or {o.RtbAfterSeconds}s combat budget, through TryRequestReturnToBase. Recovery/navigation is a shared scripted pilot, with a conventional straight-in join, not learned owner behaviour or an overhead-pattern model. A {o.MaxSeconds}s limit is censored, never a win or fabricated landing.",
                         "Tension heuristic: 0.35 proximity + 0.15 positive closure (within threat range) + 0.25 threat + 0.15 damage-risk under threat + 0.10 low-clearance risk; clamped 0..1, near shots at least 0.85 and hits at least 0.95. Engagement means exclude RTB and terminal wreck descent. Phase percentages include wreck/debrief time.",
                         "Default native terrain is the session's authored/default surface, without the browser's streamed terrain atlas. Ground-clearance results describe that substrate. CASEVAC uses semantic navigation for all profiles; fixed-wing clone/gun/G metrics do not apply. Generic pilots attempt every built-in beat; specialist mission failures and timeouts remain visible."
                     }, runs = files
@@ -112,6 +113,16 @@ public static class Program {
         } catch (Exception e) { Console.Error.WriteLine($"playtest-lab: {e}"); return 1; }
     }
     static string Quote(string s) => "'" + s.Replace("'", "'\\''") + "'";
+    static void CheckPowerAdmission() {
+        string? guard = Environment.GetEnvironmentVariable("PLAYTEST_POWER_GUARD");
+        if (string.IsNullOrEmpty(guard)) return;
+        var start = new ProcessStartInfo("python3") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        start.ArgumentList.Add(guard); start.ArgumentList.Add("status");
+        using var process = Process.Start(start)!;
+        string stdout = process.StandardOutput.ReadToEnd(), stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0) throw new InvalidOperationException($"Power guard held the next sortie; completed runs are saved. {stdout} {stderr}");
+    }
     static string FindRoot() {
         for (var p = new DirectoryInfo(AppContext.BaseDirectory); p is not null; p = p.Parent)
             if (File.Exists(Path.Combine(p.FullName, "analysis/owner-pilot-clone.json"))) return p.FullName;
@@ -134,6 +145,7 @@ public static class SortieRunner {
         s.Begin();
         for (int tick = 0; tick < o.MaxSeconds * AircraftSim.TickHz && s.Lifecycle == SimulationSession.LifecycleState.Active; tick++) {
             IReadOnlyList<string> decisions = pilot.Drive(s);
+            if (s.Lifecycle != SimulationSession.LifecycleState.Active) break; // CASEVAC's debrief acknowledgement need not consume a physics tick
             observer.BeforeStep(s);
             s.StepFixed();
             observer.Observe(s, decisions);

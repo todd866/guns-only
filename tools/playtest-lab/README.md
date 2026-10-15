@@ -26,6 +26,9 @@ python3 tools/playtest-lab/report.py analysis/playtest/2026-10-16-beat7
 `--rtb-after 600`, `--threat-km 2.5`, `--near-miss-m 25`, `--ground-m 100`, `--out DIR`.
 The time limit is an emergency bound, not an instruction to declare a sortie finished.
 The manifest checkpoints after every run; an interrupted batch can still be reported.
+When Ian's installed battery guard is present, the launcher checks before building
+and before each new sortie. `PLAYTEST_POWER_GUARD` can point to the same guard with
+a writable state location in a sandbox; a refusal stops the batch with evidence saved.
 Compare only runs with matching options, source commit and clone hash. A replay is
 deterministic on the same runtime/build; floating-point identity across architectures
 is not promised. Wall times are excluded from replay comparisons.
@@ -71,7 +74,7 @@ The report repeats the thresholds and provenance so the numbers travel with thei
 
 | Measure | Definition |
 |---|---|
-| Threat | Live primary/wingman within X m and pointing within 35°, excluding a presenting bandit; or firing. |
+| Threat | Live primary/wingman within X m and pointing within 35°; or firing. This is visible threat geometry even during a presentation pass. |
 | Gun target | Live selected target, authorized player weapon, ballistic `GunSolution`. A distant contact alone is not a shot opportunity. |
 | Meaningful action | Threat, gun opportunity, player firing, stable controller decision, spectacle or near miss. Staging/initial target selection does not count. |
 | Dead air | Every 120 Hz tick lacking all the above. Total and longest contiguous durations are exact to one tick, including wreck descent until debrief. |
@@ -107,8 +110,9 @@ assembly access to the existing internal scripted-pilot seam. It reuses
 `tools/ai/train_pilot_clone.py` remains the training authority; the lab only consumes
 its committed manifest. It does not depend on xUnit or private telemetry datasets.
 
-`--self-test` checks clone reference outputs, deterministic paired replays, timeout
-classification, duration/counter conservation, and fast-round swept-distance math.
+`--self-test` checks clone reference outputs, same/different-seed replays, timeout
+classification, duration/counter conservation, fast-round passages/hits/filtering,
+all 14 beat ids, and a physical full-stop recovery without teleporting the aircraft.
 The Python tests check metric/flag aggregation, paired escalation, partial bins,
 censoring, and parseable SVG. Run a small full sortie before large cohorts when
 changing a controller. Inspect the SVG as well as the summary: a green build is not
