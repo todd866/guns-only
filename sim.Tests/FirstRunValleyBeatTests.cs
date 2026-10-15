@@ -86,7 +86,7 @@ public sealed class FirstRunValleyBeatTests {
         Assert.Equal(
             Beats.ModernVisualMerge().MissionIdentity.Id,
             Beats.BuiltIn(7).MissionIdentity.Id);
-        Assert.Equal(14, Beats.LastBuiltInIndex);
+        Assert.Equal(15, Beats.LastBuiltInIndex); // 15 = Pathfinders first light
     }
 
     static double Aim9SurrogateMinLaunchRange() =>
