@@ -4204,8 +4204,8 @@
       <span class="feedback-glyph" title="Sends this frame (scene + HUD), your note, full simulation state, up to 120 seconds of local telemetry and inputs, settings, build/revision, URL, device/GPU, performance, camera and the last 50 warnings/errors. Failed sends are saved locally and retried, independent of Share flight diagnostics." aria-label="Report collection details">⚑</span>
       <input type="text" placeholder="What's wrong?" aria-label="What's wrong?" maxlength="2000" autocomplete="off">
       <output hidden aria-live="polite"></output>
-      <button type="submit" data-action="send">Send</button>
-      <button type="button" data-action="cancel" aria-label="Cancel report" title="Cancel (Esc)">✕</button>
+      <button id="feedback-send" type="submit" data-action="send">Send</button>
+      <button id="feedback-cancel" type="button" data-action="cancel" aria-label="Cancel report" title="Cancel (Esc)">✕</button>
     </form>
   </dialog>
   <button id="pause-button" type="button" aria-label="Pause sortie (Escape)" title="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">ESC · PAUSE</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>

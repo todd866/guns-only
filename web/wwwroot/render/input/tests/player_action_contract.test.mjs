@@ -263,6 +263,10 @@ test("the live frame initialises replay state before any early-frame consumer", 
 
 test("every visible HTML button is wired through one auditable action surface", () => {
   const explicitButtons = new Map([
+    // Feedback report: report_ui.js owns these via the dialog and trigger app.js hands it.
+    ["ready-report", /createReportUi\(\{[\s\S]*?trigger: reportButton/],
+    ["feedback-send", /createReportUi\(\{\s*dialog: document\.querySelector\("#feedback-report"\)/],
+    ["feedback-cancel", /createReportUi\(\{\s*dialog: document\.querySelector\("#feedback-report"\)/],
     ["pause-button", /pauseButton\?\.addEventListener\("click", toggleSessionPause\)/],
     ["incident-replay-play", /incidentReplayPlay\?\.addEventListener\("click"/],
     ["incident-replay-event-jump", /incidentReplayEventJump\?\.addEventListener\("click"/],
