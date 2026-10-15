@@ -46,17 +46,39 @@ test("bounded LOD: near body + canopy, single-draw far body, both within fighter
   assert.ok(budgets[0].triangles <= 2500 && budgets[0].drawCalls <= 2, JSON.stringify(budgets[0]));
   assert.ok(budgets[1].triangles <= 1500 && budgets[1].drawCalls === 1, JSON.stringify(budgets[1]));
   assert.ok(budgets[1].triangles < budgets[0].triangles);
+});
 
+test("near body and canopy remain visible through gun range approaching and receding", () => {
+  const jet = createSu27();
+  const lod = jet.getObjectByName("SU27_LOD");
   const camera = new THREE.PerspectiveCamera(66, 1, 0.1, 10000);
-  camera.position.set(0, 0, 300);
-  camera.updateMatrixWorld();
   jet.updateMatrixWorld(true);
-  lod.update(camera);
-  assert.equal(lod.getCurrentLevel(), 0);
-  camera.position.set(0, 0, 1500);
-  camera.updateMatrixWorld();
-  lod.update(camera);
-  assert.equal(lod.getCurrentLevel(), 1);
+  // Start far away: the old 650 m switch retained FAR down to 572 m on approach.
+  for (const distance of [2500, 1500, 650, 639, 630, 600, 300, 600, 650, 1500, 2500]) {
+    camera.position.set(0, 0, distance);
+    camera.updateMatrixWorld();
+    lod.update(camera);
+    const near = distance < 2500;
+    assert.equal(lod.getCurrentLevel(), near ? 0 : 1, `range ${distance}`);
+    assert.equal(jet.getObjectByName("SU27_LOD0").visible, near, `near body + canopy at ${distance}`);
+    assert.equal(jet.getObjectByName("SU27_LOD1_BODY").visible, !near, `far body at ${distance}`);
+  }
+});
+
+test("LOD hysteresis holds detail state across jitter at both range boundaries", () => {
+  const jet = createSu27();
+  const lod = jet.getObjectByName("SU27_LOD");
+  const camera = new THREE.PerspectiveCamera(66, 1, 0.1, 10000);
+  jet.updateMatrixWorld(true);
+  for (const [distance, level] of [
+    [300, 0], [1799, 0], [1800, 1], [1801, 1], [1799, 1],
+    [1585, 1], [1584, 1], [1583, 0], [1585, 0], [1799, 0], [1800, 1],
+  ]) {
+    camera.position.set(0, 0, distance);
+    camera.updateMatrixWorld();
+    lod.update(camera);
+    assert.equal(lod.getCurrentLevel(), level, `range ${distance}`);
+  }
 });
 
 test("geometry is finite, vertex-coloured, shadow-casting and shares one body material", () => {
