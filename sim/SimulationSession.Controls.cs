@@ -268,6 +268,12 @@ public sealed partial class SimulationSession {
     /// continuous weapon. Slot zero is the primary; slots one onward mirror Wingmen order.
     /// </summary>
     public bool SetPlayerGunTargetSlot(int slot) {
+        // PATHFINDERS presents relay sectors through the same bridge selector. Relay order is the
+        // authored mission order (IDs need not be contiguous), and a denied relay remains
+        // selectable so its falling gondola/debris can stay visible in the presentation.
+        if (Pathfinder is { } pathfinder)
+            return slot >= 0 && slot < pathfinder.Balloons.Count
+                && pathfinder.SelectBalloon(pathfinder.Balloons[slot].Id);
         if (slot < 0 || !OpponentPresent) return false;
 
         long requestedId;

@@ -315,6 +315,9 @@ import {
   createTransport,
   updateConventionalRunwayPresentation,
 } from "./render/scene/scene_builders.js?v=__RELEASE_BUILD__";
+import { createPathfinderRelays } from "./render/scene/pathfinder_relays.js?v=__RELEASE_BUILD__";
+import { nextPathfinderSlot } from "./render/hud/pathfinder_hud.js?v=__RELEASE_BUILD__";
+import { applyMissionLighting, applyMissionTerrainLighting } from "./render/environment/mission_lighting.js?v=__RELEASE_BUILD__";
 import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=__RELEASE_BUILD__";
 import { createSu27 } from "./render/scene/su27_surrogate.js?v=__RELEASE_BUILD__";
 import {
@@ -3936,6 +3939,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
       Object.freeze({ id: "MONITOR", label: "MONITOR", detail: "P off · you own it" }),
     ]),
   }),
+  "rapier-pathfinders": Object.freeze({
+    kicker: "Rapier · dawn relay hunt",
+    title: "Pathfinders — First Light",
+    sortie: "Three relays · gondola kill · recover",
+    configuration: "FL650–700 · M3.6 · 360 rounds",
+    brief: "Deny a relay over clear ground, then recover. Envelope punctures only cause a slow sink; aim at the dark gondola. Amber ROE marks a blocked debris footprint.",
+    controls: "Arrows fly · W/S power · F gun · Tab relay · O home",
+  }),
   "rapier-intercept": Object.freeze({
     kicker: "Eastern corridor · Rapier operations",
     title: "Rapier Intercept",
@@ -4465,13 +4476,15 @@ function wingmanPadlockAvailable(state = latestState) {
 }
 
 function syncPadlockUi(announcement = null) {
-  const selectedNumber = selectedCombatTarget === "wingman" ? 2 : 1;
+  const selectedNumber = latestState?.pathfinder?.selected_id
+    ?? (selectedCombatTarget === "wingman" ? 2 : 1);
   const otherNumber = selectedNumber === 1 ? 2 : 1;
   const patternOnly = latestState?.rapier_pattern_only === true;
   const circuitTargets = patternOnly ? circuitsPadlockTargets(latestState) : [];
   const anotherContactAvailable = patternOnly
     ? circuitTargets.length > 1
-    : wingmanPadlockAvailable();
+    : latestState?.pathfinder ? latestState.pathfinder.relays.length > 1
+      : wingmanPadlockAvailable();
   if (touchTargetCycleButton) {
     touchTargetCycleButton.dataset.selected = patternOnly
       ? padlock ? padlockLabel() : "traffic"
@@ -4480,7 +4493,7 @@ function syncPadlockUi(announcement = null) {
     touchTargetCycleButton.setAttribute("aria-disabled", String(!anotherContactAvailable));
     touchTargetCycleButton.setAttribute(
       "aria-label",
-      patternOnly ? (
+      latestState?.pathfinder ? `Relay ${latestState.pathfinder.selected_id} selected; cycle relay` : patternOnly ? (
         anotherContactAvailable
           ? "Cycle circuit traffic"
           : "No other circuit traffic"
@@ -4491,7 +4504,8 @@ function syncPadlockUi(announcement = null) {
       ),
     );
   }
-  if (touchTargetLabel) touchTargetLabel.textContent = patternOnly ? "TRAFFIC" : "TARGET";
+  if (touchTargetLabel) touchTargetLabel.textContent = latestState?.pathfinder
+    ? "RELAY" : patternOnly ? "TRAFFIC" : "TARGET";
   if (touchTargetNumber) {
     touchTargetNumber.textContent = patternOnly ? "NEXT" : String(selectedNumber);
   }
@@ -4642,6 +4656,11 @@ function defaultPadlockTarget() {
 /// TAB — select the other combat contact. The selection persists in forward view. If padlock is
 /// already up, the camera follows the newly selected aircraft without passing through boresight.
 function cyclePadlockTarget() {
+  const relaySlot = nextPathfinderSlot(latestState);
+  if (relaySlot !== null) {
+    bridge?.SetPlayerGunTargetSlot?.(relaySlot);
+    return;
+  }
   if (!opponentPresentationAllowed()) return;
   if (latestState?.rapier_pattern_only === true) {
     if (!padlock) {
@@ -8423,6 +8442,8 @@ class FlightView {
     // through a narrow screen -- so the assistance is not a crutch, it replaces cues the airframe
     // removed by being uninhabited.
     this.guidancePath = createGuidancePath(THREE);
+    this.pathfinderRelays = createPathfinderRelays();
+    this.scene.add(this.pathfinderRelays.group);
     this.firstRunValley = createFirstRunValleyPresentation(THREE, {
       // One terrain draw; the river and road share its geometry/material. The mobile grid remains
       // conservatively recessed inside analytic collision but avoids spending desktop vertex cost
@@ -8682,6 +8703,7 @@ class FlightView {
     if (this.sky?.uniforms?.uSoftWorld) {
       this.sky.uniforms.uSoftWorld.value = ukraineTheatre ? 1 : 0;
     }
+    SUN_DIRECTION.set(0.50, 0.28, -0.82).normalize();
     if (this.sky?.uniforms?.uSunDirection) {
       this.sky.uniforms.uSunDirection.value.copy(SUN_DIRECTION);
     }
@@ -8753,6 +8775,7 @@ class FlightView {
       this.renderer.toneMappingExposure = 1.02;
       if (this.sea?.mesh) this.sea.mesh.visible = true;
     }
+    applyMissionLighting(this, state, SUN_DIRECTION);
     const terrainKey = `${terrainRoute.terrainId}|${missionFeaturePackCacheIdentity(state)}`;
     const manifestUrl = ukraineTheatre
       ? UKRAINE_TRAINING_TERRAIN_MANIFEST_URL
@@ -9800,6 +9823,9 @@ class FlightView {
 
   update(state, dt, nowSeconds, renderFrameMs = dt * 1000) {
     this.configureTerrainMission(state);
+    // Restore the prior grade before the next mission applies its own terrain lighting.
+    // This also handles sea-only/Ready frames, which do not request terrain at all.
+    applyMissionLighting(this, state, SUN_DIRECTION);
     const casevac = isCasevacState(state);
     const opponentPresent = opponentPresentationAllowed(state);
     // The sortie chooser owns Ready. Defer the manifest and all height ranges until gameplay has
@@ -9908,6 +9934,7 @@ class FlightView {
     // received a frame. Keep the one authority-fed instance live for all missions; it selects
     // detailed recovery gates first and the bounded RTB breadcrumb chain otherwise.
     this.guidancePath?.update(state);
+    this.pathfinderRelays.update(state);
     // A far/coarse resident chunk does not make the cockpit's gorge resident. Wait for local
     // coverage before switching away from the bounded fallback or admitting scale scenery.
     const firstRunTerrainReady = Number(terrainDiagnostics?.localResidentChunks) >= 4;
@@ -9965,7 +9992,7 @@ class FlightView {
       this.leadPipper.set(state.lead_x, state.lead_y, -state.lead_z);
     }
     this.aim9Presentation.update(state);
-    if (opponentPresent) {
+    if (opponentPresent || state.pathfinder) {
       this.combatPresentationSuppressed = false;
       this.gunEffects.visible = true;
       this.consumeCombatEvents(state, nowSeconds);
@@ -10279,6 +10306,7 @@ class FlightView {
       placementNorthM: Number.isFinite(terrainPlacementNorthM) ? terrainPlacementNorthM : 0,
     });
 
+    applyMissionTerrainLighting(this.terrainPresentation?.material?.uniforms, state);
     updateConventionalRunwayPresentation(
       this.conventionalRunway, state, this.terrainPresentation?.material?.uniforms ?? null);
     const isCarrier = state.carrier === true;
@@ -10447,6 +10475,7 @@ class FlightView {
     } else {
       targetRoot.visible = false;
     }
+    if (state.pathfinder) this.updateGunEffects(state, nowSeconds);
     if (opponentPresent) {
       this.updateBanditDestruction(banditAlive, nowSeconds);
       this.updateGunEffects(state, nowSeconds);
@@ -10607,6 +10636,7 @@ class FlightView {
     this.f22CanopyGlass.dispose();
     this.banditContact.dispose();
     this.guidancePath?.dispose();
+    this.pathfinderRelays.dispose();
     this.firstRunValley?.dispose();
     await this.remoteAircraft.dispose();
     this.tacticalClouds.dispose();

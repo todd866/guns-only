@@ -2912,6 +2912,7 @@ export function createDecisionSupportSky() {
     uAltitude: { value: 0 },
     // 0 = cool decision-support blue (Korea / default). 1 = ADR-0003 warm Ukraine soft-world.
     uSoftWorld: { value: 0 },
+    uDawn: { value: 0 },
     uSunDirection: { value: new THREE.Vector3(0.32, 0.78, -0.53).normalize() },
     // Below-horizon wash colour. These three are REPLACED BY REFERENCE with the terrain
     // material's own atmosphere uniforms (attachSoftWorldGroundHaze) so the sky beyond the
@@ -2941,6 +2942,7 @@ export function createDecisionSupportSky() {
       precision highp float;
       uniform float uAltitude;
       uniform float uSoftWorld;
+      uniform float uDawn;
       uniform vec3 uSunDirection;
       uniform vec3 uFogColor;
       uniform vec3 uAtmosphereHazeColor;
@@ -2965,6 +2967,9 @@ export function createDecisionSupportSky() {
         vec3 zenithWarm = mix(vec3(0.080, 0.170, 0.460), vec3(0.033, 0.072, 0.199), altitudeMix);
         vec3 horizon = mix(horizonCool, horizonWarm, uSoftWorld);
         vec3 zenith = mix(zenithCool, zenithWarm, uSoftWorld);
+        horizon = mix(horizon, vec3(0.28, 0.16, 0.105), uDawn);
+        zenith = mix(zenith, mix(vec3(0.018, 0.035, 0.085),
+          vec3(0.0015, 0.004, 0.018), altitudeMix), uDawn);
         // Soft world confines the warm band close to the horizon. At the cool 0.42 exponent a ray
         // 27 deg up still carries 28% of the near-white warm horizon, and ACES lifts that blend
         // into the top sRGB decile — which is why the Ukraine sky read as flat overcast grey no
@@ -2981,19 +2986,6 @@ export function createDecisionSupportSky() {
         color = mix(color, horizon * mix(1.08, 1.14, uSoftWorld),
           horizonShoulder * mix(0.38, 0.48, uSoftWorld));
 
-        // Soft sun disc + bloom — Ukraine only. Not a lens flare; readable daylight presence.
-        if (uSoftWorld > 0.5) {
-          vec3 sunDir = normalize(uSunDirection);
-          float sunDot = max(dot(direction, sunDir), 0.0);
-          float sunCore = pow(sunDot, 1800.0);
-          float sunBloom = pow(sunDot, 42.0);
-          float sunHalo = pow(sunDot, 8.0);
-          float above = smoothstep(-0.02, 0.08, direction.y);
-          vec3 sunColor = mix(vec3(1.0, 0.82, 0.55), vec3(1.0, 0.94, 0.82), sunCore);
-          color += sunColor * (sunCore * 1.35 + sunBloom * 0.55 + sunHalo * 0.12) * above
-            * (1.0 - altitudeMix * 0.35);
-        }
-
         if (direction.y < 0.0) {
           vec3 belowCool = vec3(0.022, 0.075, 0.095);
           // Warm dusty ground wash — past the streamed disc this must not read as blue ocean,
@@ -3005,6 +2997,23 @@ export function createDecisionSupportSky() {
           // silhouette stays a different tan from the ground below it.
           float groundRamp = exp(direction.y * mix(16.0, 34.0, uSoftWorld));
           color = mix(mix(belowCool, belowWarm, uSoftWorld), horizon, groundRamp);
+        }
+
+        // Soft sun disc + bloom. Dawn can expose the sun below the local horizontal;
+        // daylight retains the existing above-horizon-only presentation.
+        if (uSoftWorld > 0.5 && (direction.y >= 0.0 || uDawn > 0.5)) {
+          vec3 sunDir = normalize(uSunDirection);
+          float sunDot = max(dot(direction, sunDir), 0.0);
+          float sunCore = pow(sunDot, 1800.0);
+          float sunBloom = pow(sunDot, 42.0);
+          float sunHalo = pow(sunDot, 8.0);
+          // Ground-horizon depression: at 20.6 km the sun is already visible aloft while
+          // the surface is in blue shadow. Use the same Earth radius as the terrain contract.
+          float dip = acos(6371000.0 / (6371000.0 + max(uAltitude, 0.0)));
+          float above = smoothstep(-0.02, 0.08, direction.y + dip * uDawn);
+          vec3 sunColor = mix(vec3(1.0, 0.82, 0.55), vec3(1.0, 0.94, 0.82), sunCore);
+          color += sunColor * (sunCore * 1.35 + sunBloom * 0.55 + sunHalo * 0.12) * above
+            * (1.0 - altitudeMix * 0.35);
         }
 
         gl_FragColor = vec4(color, 1.0);

@@ -91,7 +91,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(34, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(35, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
         string[] names = layout.GetProperty("blocks")
             .EnumerateArray()
@@ -264,6 +264,7 @@ public class SnapshotHotFrameTests {
     [InlineData(13, false)] // flight-first CASEVAC: separate commander-safe hot block
     [InlineData(11, false)] // Rapier Circuits: traffic and event-driven radio
     [InlineData(14, false)] // finite Panther carrier day: route and sortie schedule stay hot
+    [InlineData(15, false)] // Pathfinder relay hunt: bounded hot relay block
     [InlineData(7, true)]   // terrain surface drives radar_alt/below_ground paths
     public void HotFrameAgreesWithJsonAcrossBeatsAndSteps(int beatIndex, bool withTerrain) {
         SimulationSession session = StartSession(beatIndex,
@@ -272,6 +273,49 @@ public class SnapshotHotFrameTests {
             for (int tick = 0; tick < steps; tick++) session.StepFixed();
             var (root, buffer, document) = Project(session);
             using (document) AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    [Fact]
+    public void PathfinderHotFrameTracksSelectionLeakAndGondolaKill() {
+        SimulationSession session = StartSession(Beats.PathfinderBeatIndex, null);
+        var initial = Project(session);
+        using (initial.Document) AssertHotFrameMatchesJson(initial.Root, initial.Buffer);
+
+        Assert.True(session.SetPlayerGunTargetSlot(1));
+        session.Pathfinder!.Engage(1, PathfinderBalloonComponent.Envelope);
+        session.StepFixed();
+        var leaking = Project(session);
+        using (leaking.Document) AssertHotFrameMatchesJson(leaking.Root, leaking.Buffer);
+
+        session.Pathfinder.Engage(1, PathfinderBalloonComponent.Gondola);
+        session.StepFixed();
+        var killed = Project(session);
+        using (killed.Document) AssertHotFrameMatchesJson(killed.Root, killed.Buffer);
+    }
+
+    [Fact]
+    public void PathfinderGunPresentationRemainsLiveWithoutAConventionalOpponent() {
+        SimulationSession session = StartSession(Beats.PathfinderBeatIndex, null);
+        session.FeedKey(GKey.Trigger, true);
+        for (int i = 0; i < 12; i++) session.StepFixed();
+        var firing = Project(session);
+        using (firing.Document) {
+            AssertHotFrameMatchesJson(firing.Root, firing.Buffer);
+            Assert.False(firing.Root.GetProperty("opponent_present").GetBoolean());
+            Assert.True(firing.Root.GetProperty("ammo").GetInt32() > 0);
+            Assert.True(firing.Root.GetProperty("rounds_fired").GetInt32() > 0);
+            Assert.True(firing.Root.GetProperty("tracers").GetArrayLength() > 0);
+            Assert.True(firing.Root.GetProperty("gun_firing").GetBoolean());
+            Assert.True(firing.Root.GetProperty("range_m").GetDouble() > 0);
+        }
+        session.Pathfinder!.Engage(1, PathfinderBalloonComponent.Gondola);
+        session.StepFixed();
+        var denied = Project(session);
+        using (denied.Document) {
+            AssertHotFrameMatchesJson(denied.Root, denied.Buffer);
+            Assert.False(denied.Root.GetProperty("lead_valid").GetBoolean());
+            Assert.True(denied.Root.GetProperty("gun_firing").GetBoolean());
         }
     }
 
@@ -703,7 +747,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(34, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(35, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())

@@ -132,7 +132,9 @@ internal static class SnapshotProjection {
                 "F3", System.Globalization.CultureInfo.InvariantCulture)
             : "null";
         bool lateralControlApplied = _player.HasAppliedFlightCommand;
-        GunKill? _gunKill = opponentPresent ? Session.PlayerGun : null;
+        bool playerGunPresent = opponentPresent || Session.Pathfinder is not null;
+        bool gunTargetPresent = opponentPresent || Session.Pathfinder?.SelectedBalloon.RelayActive == true;
+        GunKill? _gunKill = playerGunPresent ? Session.PlayerGun : null;
         // The PRIMARY opponent's gun — one ship, not the formation. Every `opponent_*` weapon field
         // derived from this is therefore a lead-only lower bound on what the enemy formation fired,
         // and it resets when continuous combat stages a successor. Per-ship truth lives in the
@@ -190,9 +192,8 @@ internal static class SnapshotProjection {
         bool catapulting = _catapult.IsActive;
         AircraftState s = catapulting ? _catapult.State : _player.State;
         AircraftState b = _bandit?.State ?? default;
-        AircraftState gunTarget = opponentPresent
-            ? Session.SelectedOpponentState
-            : default;
+        AircraftState gunTarget = Session.Pathfinder?.SelectedBalloon.GondolaState
+            ?? (opponentPresent ? Session.SelectedOpponentState : default);
         OpponentPilotTelemetry? selectedOpponentPilot =
             Session.SelectedOpponentPilotTelemetry;
         PilotCommand? selectedOpponentLastCommand =
@@ -443,6 +444,7 @@ internal static class SnapshotProjection {
         // Hand-built JSON: no serializer, no reflection, trim-safe, allocation-cheap.
         return "{"
             + PracticeSnapshotProjection.Json(Session)
+            + PathfinderSnapshotProjection.Json(Session)
             + PresentationContractJson(_carrier is not null)
             + $"\"theatre_id\":\"{Environment.TheatreId}\","
             + $"\"location_id\":\"{Environment.LocationId}\","
@@ -851,29 +853,29 @@ internal static class SnapshotProjection {
             + $"\"aoa_deg\":{_player.AngleOfAttackRad * 57.2958:F2},\"beta_deg\":{_player.SideslipRad * 57.2958:F2},\"gamma_deg\":{displayGammaRad * 57.2958:F2},"
             + $"\"heading_deg\":{((displayHeadingRad * 57.2958) % 360 + 360) % 360:F2},"
             + $"\"roll_rate_dps\":{s.BodyRates.P * 57.2958:F2},\"pitch_rate_dps\":{s.BodyRates.Q * 57.2958:F2},\"yaw_rate_dps\":{s.BodyRates.R * 57.2958:F2},"
-            + $"\"angle_off_deg\":{(opponentPresent ? Geometry.AngleOff(s, gunTarget) * 57.2958 : 0.0):F2},"
-            + $"\"range_m\":{(opponentPresent ? Geometry.Range(s, gunTarget) : 0.0):F1},\"closure_kts\":{(opponentPresent ? _closureKts : 0.0):F1},"
+            + $"\"angle_off_deg\":{(gunTargetPresent ? Geometry.AngleOff(s, gunTarget) * 57.2958 : 0.0):F2},"
+            + $"\"range_m\":{(gunTargetPresent ? Geometry.Range(s, gunTarget) : 0.0):F1},\"closure_kts\":{(gunTargetPresent ? _closureKts : 0.0):F1},"
             + $"\"selected_player_gun_target_slot\":{(opponentPresent ? Session.SelectedPlayerGunTargetSlot : 0)},"
-            + $"\"gun_window\":{(opponentPresent && !Session.WeaponsInhibited && CameraSolver.GunWindow(s, gunTarget) ? "true" : "false")},"
-            + $"\"gun_solution_raw\":{(opponentPresent && _gunKill!.InstantaneousGunSolution ? "true" : "false")},"
-            + $"\"gun_solution\":{(opponentPresent && !Session.WeaponsInhibited && _gunKill!.GunSolution ? "true" : "false")},"
-            + $"\"lead_valid\":{(opponentPresent && !Session.WeaponsInhibited && _gunKill!.HasLeadSolution ? "true" : "false")},"
-            + $"\"lead_solution_valid\":{(opponentPresent && _gunKill!.HasLeadSolution ? "true" : "false")},"
-            + $"\"lead_x\":{(opponentPresent ? _gunKill!.LeadPipper.X : 0.0):F3},\"lead_y\":{(opponentPresent ? _gunKill!.LeadPipper.Y : 0.0):F3},\"lead_z\":{(opponentPresent ? _gunKill!.LeadPipper.Z : 0.0):F3},"
-            + $"\"lead_tof\":{(opponentPresent ? _gunKill!.LeadTimeOfFlight : 0.0):F4},\"ammo\":{(_gunKill?.AmmoRemaining ?? 0)},"
+            + $"\"gun_window\":{(gunTargetPresent && !Session.WeaponsInhibited && CameraSolver.GunWindow(s, gunTarget) ? "true" : "false")},"
+            + $"\"gun_solution_raw\":{(gunTargetPresent && _gunKill!.InstantaneousGunSolution ? "true" : "false")},"
+            + $"\"gun_solution\":{(gunTargetPresent && !Session.WeaponsInhibited && _gunKill!.GunSolution ? "true" : "false")},"
+            + $"\"lead_valid\":{(gunTargetPresent && !Session.WeaponsInhibited && _gunKill!.HasLeadSolution ? "true" : "false")},"
+            + $"\"lead_solution_valid\":{(gunTargetPresent && _gunKill!.HasLeadSolution ? "true" : "false")},"
+            + $"\"lead_x\":{(gunTargetPresent ? _gunKill!.LeadPipper.X : 0.0):F3},\"lead_y\":{(gunTargetPresent ? _gunKill!.LeadPipper.Y : 0.0):F3},\"lead_z\":{(gunTargetPresent ? _gunKill!.LeadPipper.Z : 0.0):F3},"
+            + $"\"lead_tof\":{(gunTargetPresent ? _gunKill!.LeadTimeOfFlight : 0.0):F4},\"ammo\":{(_gunKill?.AmmoRemaining ?? 0)},"
             + $"\"gun_heat\":{(_gunKill?.BarrelHeat ?? 0.0):F3},"
             + $"\"gun_overheat\":{(_gunKill?.BarrelOverheated == true ? "true" : "false")},"
             + $"\"gun_muzzle_velocity_mps\":{playerGunProfile.MuzzleVelocityMps:F2},"
             + $"\"gun_max_flight_s\":{playerGunProfile.MaximumFlightSeconds:F3},"
-            + $"\"target_wingspan_m\":{(opponentPresent ? (_beat.BanditAir.WingSpanM > 0.0 ? _beat.BanditAir.WingSpanM : Math.Sqrt(4.5 * _beat.BanditAir.WingAreaM2)) : 0.0):F2},"
+            + $"\"target_wingspan_m\":{(Session.Pathfinder is not null ? 2 * PathfinderRelayCard.GondolaHalfExtentsM.X : opponentPresent ? (_beat.BanditAir.WingSpanM > 0.0 ? _beat.BanditAir.WingSpanM : Math.Sqrt(4.5 * _beat.BanditAir.WingAreaM2)) : 0.0):F2},"
             + GunTrajectoryJson(playerPosition, groundVelocity, pf, pl, s.BodyRates,
                 playerGunProfile)
             + $"\"player_gun_profile_id\":\"{playerGunProfile.Id}\","
-            + $"\"rounds_fired\":{(opponentPresent ? _gunKill!.RoundsFired : 0)},\"hits\":{(opponentPresent ? _gunKill!.TotalHitCount : 0)},"
-            + $"\"selected_target_hits\":{(opponentPresent ? _gunKill!.HitCount : 0)},"
-            + $"\"hit\":{(opponentPresent && _gunKill!.HitThisStep ? "true" : "false")},"
-            + $"\"gun_firing\":{(opponentPresent && Session.TriggerDown && Session.PlayerWeaponsAuthorized && _beat.CombatRules.PlayerGunEnabled && !_gunKill!.BarrelOverheated && _gunKill.BanditAlive ? "true" : "false")},"
-            + TracerJson("tracers", opponentPresent
+            + $"\"rounds_fired\":{(playerGunPresent ? _gunKill!.RoundsFired : 0)},\"hits\":{(playerGunPresent ? _gunKill!.TotalHitCount : 0)},"
+            + $"\"selected_target_hits\":{(playerGunPresent ? _gunKill!.HitCount : 0)},"
+            + $"\"hit\":{(playerGunPresent && _gunKill!.HitThisStep ? "true" : "false")},"
+            + $"\"gun_firing\":{(playerGunPresent && Session.TriggerDown && Session.PlayerWeaponsAuthorized && _beat.CombatRules.PlayerGunEnabled && !_gunKill!.BarrelOverheated && (Session.Pathfinder is not null || _gunKill.BanditAlive) ? "true" : "false")},"
+            + TracerJson("tracers", playerGunPresent
                 ? _gunKill!.RoundsInFlight : Array.Empty<GunRound>())
             + $"\"kill_progress\":{(opponentPresent ? _gunKill!.KillProgress : 0.0):F3},"
             + $"\"opponent_health\":{(opponentPresent ? _gunKill!.TargetHealth : 0.0):F3},\"opponent_alive\":{(opponentPresent && _gunKill!.TargetAlive ? "true" : "false")},"

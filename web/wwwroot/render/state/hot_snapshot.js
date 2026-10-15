@@ -85,6 +85,50 @@ export function decodeHotFrame(layout, hot, coldBase) {
     if (block.presenceIndex >= 0 && !hot[block.presenceIndex]) continue;
     overlaySlots(block.slots);
   }
+  // PATHFINDERS uses a compact flat hot block but exposes the same nested object as cold JSON.
+  // Rebuild it onto this frame's fresh state so relay poses, leak/debris cues and ROE footprint
+  // classification cannot lag the renderer's display cadence.
+  if (state.pathfinder_present === true && state.pathfinder) {
+    const base = state.pathfinder;
+    const relays = (base.relays ?? []).map((relay, index) => {
+      const n = index + 1;
+      const position = {
+        x: state[`pathfinder_r${n}x`], y: state[`pathfinder_r${n}y`], z: state[`pathfinder_r${n}z`],
+      };
+      const gondolaPosition = {
+        x: state[`pathfinder_r${n}gx`], y: state[`pathfinder_r${n}gy`], z: state[`pathfinder_r${n}gz`],
+      };
+      const debris = state[`pathfinder_r${n}_debris_present`] === true ? {
+        position: {
+          x: state[`pathfinder_r${n}_dx`], y: state[`pathfinder_r${n}_dy`], z: state[`pathfinder_r${n}_dz`],
+        },
+        landed: state[`pathfinder_r${n}_landed`] === true,
+      } : null;
+      return {
+        ...relay, position, gondola_position: gondolaPosition,
+        relay_active: state[`pathfinder_r${n}_active`] === true,
+        leak_fraction: state[`pathfinder_r${n}_leak`],
+        lift_loss_fraction: state[`pathfinder_r${n}_lift_loss`], debris,
+      };
+    });
+    const classToken = ["unknown", "clear", "populated"][state.pathfinder_footprint_class_code] ?? "unknown";
+    state.pathfinder = {
+      ...base,
+      selected_id: state.pathfinder_selected_id,
+      sun_elevation_deg: state.pathfinder_sun_elevation_deg,
+      envelope_radius_m: state.pathfinder_envelope_radius_m,
+      relays,
+      selected_footprint: {
+        centre: {
+          x: state.pathfinder_footprint_x,
+          y: state.pathfinder_footprint_y,
+          z: state.pathfinder_footprint_z,
+        },
+        radius_m: state.pathfinder_footprint_radius_m,
+        classification: classToken,
+      },
+    };
+  }
   for (const tracer of layout.tracers) {
     const count = Math.min(hot[tracer.countIndex] | 0, tracer.maxRounds);
     const rounds = new Array(count < 0 ? 0 : count);

@@ -60,7 +60,7 @@ public sealed class MeshNavSnapshotTests {
         string layoutJson = SnapshotHotFrame.LayoutJson();
         using JsonDocument document = JsonDocument.Parse(layoutJson);
         JsonElement root = document.RootElement;
-        Assert.Equal(34, root.GetProperty("layout_version").GetInt32());
+        Assert.Equal(35, root.GetProperty("layout_version").GetInt32());
         // Version 33 publishes the ungated lead solution beside the weapons-authorized flag;
         // version 34 adds conventional-pattern and physical-runway recovery transport.
         Assert.Contains("lead_solution_valid", layoutJson, StringComparison.Ordinal);

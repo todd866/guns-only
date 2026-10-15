@@ -44,7 +44,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 34;
+    public const int LayoutVersion = 35;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -720,6 +720,34 @@ internal static class SnapshotHotFrame {
         OpenBlock("approach_mode", -1);
         Bool("approach");
         Bool("wave_off");
+        // PATHFINDERS presentation poses stay frame-current here; expensive footprint prediction
+        // remains inside PathfinderSnapshotProjection's one-second cache.
+        OpenBlock("pathfinder", slots.Count);
+        Bool("pathfinder_present");
+        Num("pathfinder_selected_id", RawInteger);
+        Num("pathfinder_sun_elevation_deg", 2);
+        Num("pathfinder_envelope_radius_m", 2);
+        Num("pathfinder_footprint_x", 3);
+        Num("pathfinder_footprint_y", 3);
+        Num("pathfinder_footprint_z", 3);
+        Num("pathfinder_footprint_radius_m", 2);
+        Num("pathfinder_footprint_class_code", RawInteger);
+        for (int relay = 0; relay < 6; relay++) {
+            Num($"pathfinder_r{relay + 1}x", 3);
+            Num($"pathfinder_r{relay + 1}y", 3);
+            Num($"pathfinder_r{relay + 1}z", 3);
+            Num($"pathfinder_r{relay + 1}gx", 3);
+            Num($"pathfinder_r{relay + 1}gy", 3);
+            Num($"pathfinder_r{relay + 1}gz", 3);
+            Num($"pathfinder_r{relay + 1}_leak", 4);
+            Num($"pathfinder_r{relay + 1}_lift_loss", 4);
+            Bool($"pathfinder_r{relay + 1}_active");
+            Bool($"pathfinder_r{relay + 1}_debris_present");
+            Num($"pathfinder_r{relay + 1}_dx", 3);
+            Num($"pathfinder_r{relay + 1}_dy", 3);
+            Num($"pathfinder_r{relay + 1}_dz", 3);
+            Bool($"pathfinder_r{relay + 1}_landed");
+        }
         // Recovery-platform presence is distinct from the maritime-only carrier flag. Rapier's
         // fixed arresting strip emits the full recovery group with carrier=false.
         OpenBlock("recovery_platform", slots.Count);
@@ -906,7 +934,9 @@ internal static class SnapshotHotFrame {
         double stabilityYawRateDps = (player.State.BodyRates.R * Math.Cos(playerAlphaRad)
             - player.State.BodyRates.P * Math.Sin(playerAlphaRad)) * 57.29577951308232;
         bool lateralControlApplied = player.HasAppliedFlightCommand;
-        GunKill? gunKill = opponentPresent ? session.PlayerGun : null;
+        bool playerGunPresent = opponentPresent || session.Pathfinder is not null;
+        bool gunTargetPresent = opponentPresent || session.Pathfinder?.SelectedBalloon.RelayActive == true;
+        GunKill? gunKill = playerGunPresent ? session.PlayerGun : null;
         GunKill? opponentGun = opponentPresent ? session.OpponentGun : null;
         GunProfile playerGunProfile = gunKill?.Profile
             ?? beat.CombatRules.PlayerGunProfile;
@@ -929,9 +959,8 @@ internal static class SnapshotHotFrame {
         bool catapulting = catapult.IsActive;
         AircraftState s = catapulting ? catapult.State : player.State;
         AircraftState b = bandit?.State ?? default;
-        AircraftState gunTarget = opponentPresent
-            ? session.SelectedOpponentState
-            : default;
+        AircraftState gunTarget = session.Pathfinder?.SelectedBalloon.GondolaState
+            ?? (opponentPresent ? session.SelectedOpponentState : default);
         OpponentPilotTelemetry? selectedOpponentPilot =
             session.SelectedOpponentPilotTelemetry;
         PilotCommand? selectedOpponentLastCommand =
@@ -1625,37 +1654,37 @@ internal static class SnapshotHotFrame {
         w.Num("pitch_rate_dps", s.BodyRates.Q * 57.2958, 2);
         w.Num("yaw_rate_dps", s.BodyRates.R * 57.2958, 2);
         w.Num("angle_off_deg",
-            opponentPresent ? Geometry.AngleOff(s, gunTarget) * 57.2958 : 0.0, 2);
-        w.Num("range_m", opponentPresent ? Geometry.Range(s, gunTarget) : 0.0, 1);
-        w.Num("closure_kts", opponentPresent ? session.ClosureKts : 0.0, 1);
+            gunTargetPresent ? Geometry.AngleOff(s, gunTarget) * 57.2958 : 0.0, 2);
+        w.Num("range_m", gunTargetPresent ? Geometry.Range(s, gunTarget) : 0.0, 1);
+        w.Num("closure_kts", gunTargetPresent ? session.ClosureKts : 0.0, 1);
         w.Num("selected_player_gun_target_slot",
             opponentPresent ? session.SelectedPlayerGunTargetSlot : 0, RawInteger);
         w.Bool("gun_window",
-            opponentPresent && !session.WeaponsInhibited
+            gunTargetPresent && !session.WeaponsInhibited
                 && CameraSolver.GunWindow(s, gunTarget));
         w.Bool("gun_solution_raw",
-            opponentPresent && gunKill!.InstantaneousGunSolution);
+            gunTargetPresent && gunKill!.InstantaneousGunSolution);
         w.Bool("gun_solution",
-            opponentPresent && !session.WeaponsInhibited && gunKill!.GunSolution);
+            gunTargetPresent && !session.WeaponsInhibited && gunKill!.GunSolution);
         w.Bool("lead_valid",
-            opponentPresent && !session.WeaponsInhibited && gunKill!.HasLeadSolution);
+            gunTargetPresent && !session.WeaponsInhibited && gunKill!.HasLeadSolution);
         w.Bool("lead_solution_valid",
-            opponentPresent && gunKill!.HasLeadSolution);
-        w.Num("lead_x", opponentPresent ? gunKill!.LeadPipper.X : 0.0, 3);
-        w.Num("lead_y", opponentPresent ? gunKill!.LeadPipper.Y : 0.0, 3);
-        w.Num("lead_z", opponentPresent ? gunKill!.LeadPipper.Z : 0.0, 3);
-        w.Num("lead_tof", opponentPresent ? gunKill!.LeadTimeOfFlight : 0.0, 4);
+            gunTargetPresent && gunKill!.HasLeadSolution);
+        w.Num("lead_x", gunTargetPresent ? gunKill!.LeadPipper.X : 0.0, 3);
+        w.Num("lead_y", gunTargetPresent ? gunKill!.LeadPipper.Y : 0.0, 3);
+        w.Num("lead_z", gunTargetPresent ? gunKill!.LeadPipper.Z : 0.0, 3);
+        w.Num("lead_tof", gunTargetPresent ? gunKill!.LeadTimeOfFlight : 0.0, 4);
         w.Num("ammo", gunKill?.AmmoRemaining ?? 0, RawInteger);
         w.GunTrajectory("gun_trajectory", playerPosition, groundVelocity, pf, pl,
             s.BodyRates, playerGunProfile);
-        w.Num("rounds_fired", opponentPresent ? gunKill!.RoundsFired : 0, RawInteger);
-        w.Num("hits", opponentPresent ? gunKill!.TotalHitCount : 0, RawInteger);
-        w.Num("selected_target_hits", opponentPresent ? gunKill!.HitCount : 0, RawInteger);
-        w.Bool("hit", opponentPresent && gunKill!.HitThisStep);
-        w.Bool("gun_firing", opponentPresent
+        w.Num("rounds_fired", playerGunPresent ? gunKill!.RoundsFired : 0, RawInteger);
+        w.Num("hits", playerGunPresent ? gunKill!.TotalHitCount : 0, RawInteger);
+        w.Num("selected_target_hits", playerGunPresent ? gunKill!.HitCount : 0, RawInteger);
+        w.Bool("hit", playerGunPresent && gunKill!.HitThisStep);
+        w.Bool("gun_firing", playerGunPresent
             && session.TriggerDown && session.PlayerWeaponsAuthorized
-            && gunKill!.AmmoRemaining > 0 && gunKill.BanditAlive);
-        w.Tracers("tracers", opponentPresent
+            && gunKill!.AmmoRemaining > 0 && (session.Pathfinder is not null || gunKill.BanditAlive));
+        w.Tracers("tracers", playerGunPresent
             ? gunKill!.RoundsInFlight : Array.Empty<GunRound>());
         w.Num("kill_progress", opponentPresent ? gunKill!.KillProgress : 0.0, 3);
         w.Num("opponent_health", opponentPresent ? gunKill!.TargetHealth : 0.0, 3);
@@ -1903,6 +1932,44 @@ internal static class SnapshotHotFrame {
 
         w.Bool("approach", detents.ApproachMode);
         w.Bool("wave_off", waveOff);
+
+        PathfinderMission? pathfinderMission = session.Pathfinder;
+        PathfinderSnapshotProjection.HotState? pathfinderHot = pathfinderMission is { } pathfinder
+            ? PathfinderSnapshotProjection.Capture(pathfinder) : null;
+        if (w.OpenBlock("pathfinder", pathfinderHot is not null)) {
+            PathfinderSnapshotProjection.HotState hot = pathfinderHot!.Value;
+            w.Bool("pathfinder_present", hot.Present);
+            w.Num("pathfinder_selected_id", hot.SelectedId, RawInteger);
+            w.Num("pathfinder_sun_elevation_deg", hot.SunElevationDegrees, 2);
+            w.Num("pathfinder_envelope_radius_m", PathfinderRelayCard.EnvelopeRadiusM, 2);
+            w.Num("pathfinder_footprint_x", hot.Centre.X, 3);
+            w.Num("pathfinder_footprint_y", hot.Centre.Y, 3);
+            w.Num("pathfinder_footprint_z", hot.Centre.Z, 3);
+            w.Num("pathfinder_footprint_radius_m", hot.Radius, 2);
+            w.Num("pathfinder_footprint_class_code", (int)hot.Classification, RawInteger);
+            for (int relay = 0; relay < 6; relay++) {
+                PathfinderRelayBalloon? balloon = pathfinderMission is { } mission
+                    && relay < mission.Balloons.Count ? mission.Balloons[relay] : null;
+                bool exists = balloon is not null;
+                Vec3D position = balloon?.Position ?? Vec3D.Zero;
+                Vec3D gondola = balloon?.GondolaPosition ?? Vec3D.Zero;
+                Vec3D debrisPosition = balloon?.Debris?.Position ?? Vec3D.Zero;
+                w.Num($"pathfinder_r{relay + 1}x", position.X, 3);
+                w.Num($"pathfinder_r{relay + 1}y", position.Y, 3);
+                w.Num($"pathfinder_r{relay + 1}z", position.Z, 3);
+                w.Num($"pathfinder_r{relay + 1}gx", gondola.X, 3);
+                w.Num($"pathfinder_r{relay + 1}gy", gondola.Y, 3);
+                w.Num($"pathfinder_r{relay + 1}gz", gondola.Z, 3);
+                w.Num($"pathfinder_r{relay + 1}_leak", balloon?.LeakFraction ?? 0.0, 4);
+                w.Num($"pathfinder_r{relay + 1}_lift_loss", balloon?.LiftLossFraction ?? 0.0, 4);
+                w.Bool($"pathfinder_r{relay + 1}_active", exists && balloon!.RelayActive);
+                w.Bool($"pathfinder_r{relay + 1}_debris_present", exists && balloon!.Debris is not null);
+                w.Num($"pathfinder_r{relay + 1}_dx", debrisPosition.X, 3);
+                w.Num($"pathfinder_r{relay + 1}_dy", debrisPosition.Y, 3);
+                w.Num($"pathfinder_r{relay + 1}_dz", debrisPosition.Z, 3);
+                w.Bool($"pathfinder_r{relay + 1}_landed", exists && balloon!.Debris?.Landed == true);
+            }
+        }
 
         if (w.OpenBlock("recovery_platform", carrier is not null)) {
             Carrier c = carrier!;

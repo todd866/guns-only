@@ -84,6 +84,65 @@ const CASEVAC_LAYOUT_JSON = JSON.stringify({
   },
 });
 
+const PATHFINDER_LAYOUT_JSON = JSON.stringify({
+  layout_version: 35,
+  slot_count: 27,
+  cold_version_index: 0,
+  blocks: [
+    { name: "core", presence_index: -1, slots: [
+      { name: "t", index: 1, kind: "number" },
+    ] },
+    { name: "pathfinder", presence_index: 2, slots: [
+      { name: "pathfinder_present", index: 2, kind: "boolean" },
+      { name: "pathfinder_selected_id", index: 3, kind: "number" },
+      { name: "pathfinder_sun_elevation_deg", index: 4, kind: "number" },
+      { name: "pathfinder_envelope_radius_m", index: 5, kind: "number" },
+      { name: "pathfinder_footprint_x", index: 6, kind: "number" },
+      { name: "pathfinder_footprint_y", index: 7, kind: "number" },
+      { name: "pathfinder_footprint_z", index: 8, kind: "number" },
+      { name: "pathfinder_footprint_radius_m", index: 9, kind: "number" },
+      { name: "pathfinder_footprint_class_code", index: 10, kind: "number" },
+      { name: "pathfinder_r1x", index: 11, kind: "number" },
+      { name: "pathfinder_r1y", index: 12, kind: "number" },
+      { name: "pathfinder_r1z", index: 13, kind: "number" },
+      { name: "pathfinder_r1gx", index: 14, kind: "number" },
+      { name: "pathfinder_r1gy", index: 15, kind: "number" },
+      { name: "pathfinder_r1gz", index: 16, kind: "number" },
+      { name: "pathfinder_r1_leak", index: 17, kind: "number" },
+      { name: "pathfinder_r1_lift_loss", index: 18, kind: "number" },
+      { name: "pathfinder_r1_active", index: 19, kind: "boolean" },
+      { name: "pathfinder_r1_debris_present", index: 20, kind: "boolean" },
+      { name: "pathfinder_r1_dx", index: 21, kind: "number" },
+      { name: "pathfinder_r1_dy", index: 22, kind: "number" },
+      { name: "pathfinder_r1_dz", index: 23, kind: "number" },
+      { name: "pathfinder_r1_landed", index: 24, kind: "boolean" },
+    ] },
+  ],
+  tracers: [],
+  sample_arrays: [],
+});
+
+const pathfinderHotFrame = ({ selected = 1, x = 10, footprintClass = 1 } = {}) => {
+  const hot = new Float64Array(27);
+  hot[0] = 2;
+  hot[1] = 42;
+  hot[2] = 1;
+  hot[3] = selected;
+  hot[4] = -1.2;
+  hot[5] = 120;
+  hot[6] = x + 50;
+  hot[7] = 0;
+  hot[8] = x + 80;
+  hot[9] = 30;
+  hot[10] = footprintClass;
+  hot[11] = x; hot[12] = 20600; hot[13] = 20;
+  hot[14] = x; hot[15] = 20580; hot[16] = 20;
+  hot[17] = 0.25; hot[18] = 0.1;
+  hot[19] = 1; hot[20] = 1;
+  hot[21] = x + 1; hot[22] = 100; hot[23] = 21; hot[24] = 0;
+  return hot;
+};
+
 const hotFrame = (overrides = {}) => {
   const hot = new Float64Array(25);
   hot[0] = 1;            // cold_version
@@ -131,6 +190,49 @@ test("decode overlays hot slots onto a fresh object and preserves cold fields", 
   assert.equal(state.maybe, null);
   assert.equal(state.beat, "VALLEY");
   assert.deepEqual(state.tracers, []);
+});
+
+test("PATHFINDERS numeric hot slots rebuild nested relay state without mutating cold history", () => {
+  const layout = parseHotLayout(PATHFINDER_LAYOUT_JSON);
+  const coldBase = {
+    pathfinder: {
+      selected_id: 1,
+      sun_elevation_deg: -1.2,
+      envelope_radius_m: 120,
+      relays: [{
+        id: 1,
+        position: { x: 0, y: 20600, z: 20 },
+        gondola_position: { x: 0, y: 20580, z: 20 },
+        relay_active: true,
+        leak_fraction: 0,
+        lift_loss_fraction: 0,
+        debris: null,
+      }],
+      selected_footprint: { centre: { x: 0, y: 0, z: 0 }, radius_m: 0, classification: "clear" },
+    },
+  };
+  const first = decodeHotFrame(layout, pathfinderHotFrame({ x: 10 }), coldBase);
+  const second = decodeHotFrame(layout, pathfinderHotFrame({ selected: 2, x: 40, footprintClass: 2 }), coldBase);
+  assert.notEqual(first, second);
+  assert.equal(first.pathfinder.selected_id, 1);
+  assert.equal(first.pathfinder.relays[0].position.x, 10);
+  assert.equal(first.pathfinder.relays[0].debris.position.x, 11);
+  assert.equal(first.pathfinder.selected_footprint.classification, "clear");
+  assert.equal(second.pathfinder.selected_id, 2);
+  assert.equal(second.pathfinder.relays[0].position.x, 40);
+  assert.equal(second.pathfinder.selected_footprint.classification, "populated");
+  assert.equal(coldBase.pathfinder.selected_id, 1);
+  assert.equal(coldBase.pathfinder.relays[0].position.x, 0);
+});
+
+test("PATHFINDERS hot block stays absent on other beats", () => {
+  const layout = parseHotLayout(PATHFINDER_LAYOUT_JSON);
+  const hot = new Float64Array(27);
+  hot[0] = 3;
+  hot[2] = 0;
+  const state = decodeHotFrame(layout, hot, {});
+  assert.equal("pathfinder" in state, false);
+  assert.equal("pathfinder_selected_id" in state, false);
 });
 
 test("booleans decode to real booleans, never truthy numbers", () => {

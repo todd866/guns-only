@@ -105,6 +105,17 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,
   }),
+  experience({
+    id: "rapier-pathfinders",
+    mission: 15,
+    sequence: 15,
+    aircraft: "Rapier",
+    title: "Pathfinders — First Light",
+    shortObjective: "Deny relays over clear ground, then recover.",
+    qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
+    visible: true,
+  }),
   // Korea 1951. The oldest aircraft in the game and the only one flown from a straight deck —
   // and until now the only one with no way in at all: the F9F-2 and the paddles/LSO machinery
   // built around it existed solely inside a unit test.

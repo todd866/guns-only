@@ -1,4 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
+import { pathfinderHud } from "./render/hud/pathfinder_hud.js?v=__RELEASE_BUILD__";
 import {
   airdataReadout,
   fuelReadout,
@@ -230,6 +231,7 @@ function lsoToken(call) {
 }
 
 function gunCue(state, hitFlash, solution = hasGunSolution(state)) {
+  if (pathfinderHud(state)?.blocked) return "ROE";
   if (state.gun_overheat === true) return "OVERHEAT";
   if (hitFlash) return "HITS";
   if (solution) return "SHOOT";
@@ -280,6 +282,7 @@ function isFightHudActive(state) {
   // (Requested..ReliefLost), NOT player_rtb_active: carrier-route and Rapier RTB also raise that
   // flag without retargeting anyone, and there a live bandit can still shoot.
   if (combatHandedOff(state)) return false;
+  if (state?.pathfinder) return Boolean(pathfinderHud(state)?.target);
   if (!selectedOpponentIsAlive(state)) return false;
   return !recoveryPlatformAvailable(state)
     || hudMode(state) === "FREE" || hudMode(state) === "WAVE-OFF";
@@ -1137,8 +1140,9 @@ class CombatHud {
     const ctx = this.ctx;
     const overheated = state.gun_overheat === true;
     const cue = gunCue(state, hitFlash, solution);
-    const cueColor = overheated ? RED : hitFlash || solution ? GREEN : RED;
-    const overheatVisible = !overheated
+    const roeBlocked = pathfinderHud(state)?.blocked === true;
+    const cueColor = roeBlocked ? AMBER : overheated ? RED : hitFlash || solution ? GREEN : RED;
+    const overheatVisible = roeBlocked || !overheated
       || Math.floor((Number(now) || 0) * GUN_OVERHEAT_FLASH_HZ * 2) % 2 === 0;
 
     // Barrel temperature and a qualified SHOOT/HITS/OVERHEAT state remain available while the
@@ -1231,9 +1235,10 @@ class CombatHud {
         wasted,
         scale: this._phosphor?.scale ?? 1,
       });
+      if (roeBlocked) pipper.stroke = AMBER;
       this.setLine(pipper.stroke, pipper.lineWidth);
       traceLeadPipper(ctx, pipper);
-      this.glowPath(hitFlash || solution ? GREEN : AMBER);
+      this.glowPath(roeBlocked ? AMBER : hitFlash || solution ? GREEN : AMBER);
       this.strokeLegible();
       ctx.beginPath();
       ctx.fillStyle = pipper.stroke;
@@ -1729,6 +1734,38 @@ class CombatHud {
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     this.placeContactLabel(label, x, y + size + 5);
+  }
+
+  drawPathfinderTarget(frame) {
+    const cue = pathfinderHud(frame.state);
+    if (!cue) return;
+    if (this.canvas?.getAttribute?.("aria-label") !== cue.label)
+      this.canvas?.setAttribute?.("aria-label", cue.label);
+    if (!cue.target) return;
+    this.worldPoint.set(cue.target.x, cue.target.y, -cue.target.z);
+    const projection = this.project(this.worldPoint, frame.camera, this.projectionA);
+    if (projection.behind || projection.x < 12 || projection.y < 12
+        || projection.x > this.width - 12 || projection.y > this.height - 12) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(projection.x, projection.y);
+    this.setLine(cue.blocked ? AMBER : GREEN, 1.6);
+    ctx.beginPath();
+    // Fixed angular locator, centred on the actual 5.6 x 2.8 m gondola, never the envelope.
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+      ctx.moveTo(sx * 6, sy * 10);
+      ctx.lineTo(sx * 10, sy * 10);
+      ctx.lineTo(sx * 10, sy * 6);
+    }
+    if (cue.blocked) {
+      ctx.moveTo(-10, -10); ctx.lineTo(10, 10);
+      ctx.moveTo(-10, 10); ctx.lineTo(10, -10);
+    }
+    this.strokeLegible();
+    ctx.restore();
+    if (this._debug) this._debug.pathfinderTarget = {
+      x: projection.x, y: projection.y, id: cue.selectedId, blocked: cue.blocked,
+    };
   }
 
   drawBandit(frame) {
@@ -3126,6 +3163,12 @@ class CombatHud {
     if (cycle?.thermalLevel === "caution" || cycle?.thermalLevel === "fault") {
       directiveText = cycle.skinText;
       directiveLevel = cycle.thermalLevel === "fault" ? "attack" : "active";
+    }
+    const relayCue = pathfinderHud(state);
+    if (relayCue && phase < 11 && cycle?.thermalLevel !== "caution"
+        && cycle?.thermalLevel !== "fault") {
+      directiveText = relayCue.row;
+      directiveLevel = "manual";
     }
     if (condensed) directiveText = directiveText.replaceAll(" · ", "·");
 
@@ -5702,7 +5745,8 @@ class CombatHud {
     const presentation = rapierGuidancePresentation(frame.state);
     if (!presentation) return;
     const ctx = this.ctx;
-    const accent = presentation.level === "attack"
+    const accent = frame.state?.pathfinder && Number(frame.state.rapier_mission_phase) < 11
+      ? GREEN : presentation.level === "attack"
       ? RED : presentation.level === "active" ? AMBER : GREEN_DIM;
     ctx.save();
     const gate = Math.max(0,
@@ -5956,18 +6000,20 @@ class CombatHud {
       return;
     }
 
+    const relayCue = pathfinderHud(frame.state);
+    const modeText = relayCue && missionPhase < 11 ? relayCue.row : presentation.text;
     // Quiet mode line — one short row under the heading tape. Engine bars and triad essays are gone.
     ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const width = Math.min(
       this.width - this.safeInsets.left - this.safeInsets.right - 24,
-      ctx.measureText(presentation.text).width + 24,
+      ctx.measureText(modeText).width + 24,
     );
     const x = (this.width - width) / 2;
     const occupied = this.annunciationBottom(frame.state);
     const y = Math.max(this.getLayout().heading.bottom + 8, occupied + 2);
     if (this._debug) {
       this._debug.rapierModeLine = {
-        text: presentation.text,
+        text: modeText,
         detail: presentation.detail ?? "",
         level: presentation.level,
         x,
@@ -5982,7 +6028,7 @@ class CombatHud {
     ctx.fillStyle = accent;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(this.fitText(presentation.text, width - 18),
+    ctx.fillText(this.fitText(modeText, width - 18),
       this.width / 2, y + 11);
     ctx.restore();
   }
@@ -6325,6 +6371,7 @@ class CombatHud {
       this.drawGunSight(frame, noseAnchor);
       this.drawAimPoint(frame, noseAnchor, directorAnchor);
       this.drawBandit(frame);
+      this.drawPathfinderTarget(frame);
       this.drawWingman(frame);
     }
     this.drawCivilianTarget(frame);

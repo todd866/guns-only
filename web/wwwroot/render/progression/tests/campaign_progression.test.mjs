@@ -38,6 +38,7 @@ test("one catalog names every route and exposes only accepted production experie
     // the intercept gives exactly one attempt at it, far from home and low on fuel.
     { id: "rapier-circuits", mission: 11, releaseState: "preview" },
     { id: "rapier-intercept", mission: 12, releaseState: "production" },
+    { id: "rapier-pathfinders", mission: 15, releaseState: "production" },
     // Korea last: it is the only straight-deck recovery in the game, and the only aircraft here
     // that cannot simply go around.
     { id: "korea-panther", mission: 14, releaseState: "quarantined" },
@@ -52,6 +53,7 @@ test("one catalog names every route and exposes only accepted production experie
   assert.deepEqual(productionExperiences().map(({ id }) => id), [
     "first-merge",
     "rapier-intercept",
+    "rapier-pathfinders",
     "cobra-lab",
     "weekend-ride",
     "top-gun",
@@ -81,7 +83,7 @@ test("one catalog names every route and exposes only accepted production experie
   assert.match(cobra.shortObjective, /tickets/i);
   assert.doesNotMatch(cobra.shortObjective, /45 seconds|tip .* control/i,
     "the front door must brief the live conquest objective, not the retired control threshold");
-  assert.equal(CAMPAIGN_NODES.length, 8,
+  assert.equal(CAMPAIGN_NODES.length, 9,
     "standalone research routes are not campaign beats");
 
   const fresh = createCampaignProfile();

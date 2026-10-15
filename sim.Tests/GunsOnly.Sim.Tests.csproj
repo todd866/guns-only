@@ -33,6 +33,7 @@
     <Compile Include="..\web\CobraAirframeSwapControlLatch.cs" Link="CobraAirframeSwapControlLatch.cs" />
     <Compile Include="..\web\PracticeSnapshotProjection.cs" Link="PracticeSnapshotProjection.cs" />
     <Compile Include="..\web\SnapshotProjection.cs" Link="SnapshotProjection.cs" />
+    <Compile Include="..\web\PathfinderSnapshotProjection.cs" Link="PathfinderSnapshotProjection.cs" />
     <Compile Include="..\web\SnapshotHotFrame.cs" Link="SnapshotHotFrame.cs" />
     <Compile Include="..\web\MeshSnapshot.cs" Link="MeshSnapshot.cs" />
     <Compile Include="..\web\MedevacSnapshotProjection.cs" Link="MedevacSnapshotProjection.cs" />

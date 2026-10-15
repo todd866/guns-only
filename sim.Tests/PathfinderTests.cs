@@ -1,9 +1,12 @@
+using System.Text.Json;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Turbulence;
+using GunsOnly.Web;
 
 namespace GunsOnly.Sim.Tests;
 
+[Collection("snapshot-projection-statics")]
 public sealed class PathfinderTests {
     const double Dt = 1.0 / 120.0;
     static readonly IWindField Wind = new LayeredWindField(new[] {
@@ -161,6 +164,34 @@ public sealed class PathfinderTests {
         Assert.Equal(RapierMissionPhase.Attack, session.RapierPhase);
         Assert.False(session.RapierBalloonReactionActive);
         Assert.True(session.Pathfinder!.ElapsedSeconds > 0);
+    }
+
+    [Fact]
+    public void PathfinderTargetSlotsSelectAuthoredRelayOrderIncludingDeniedRelay() {
+        var session = new SimulationSession(beatIndex: Beats.PathfinderBeatIndex);
+        var mission = Assert.IsType<PathfinderMission>(session.Pathfinder);
+        Assert.True(session.SetPlayerGunTargetSlot(2));
+        Assert.Equal(mission.Balloons[2].Id, mission.SelectedBalloonId);
+        mission.Engage(mission.Balloons[2].Id, PathfinderBalloonComponent.Gondola);
+        Assert.True(session.SetPlayerGunTargetSlot(2));
+        Assert.Equal(mission.Balloons[2].Id, mission.SelectedBalloonId);
+        Assert.False(session.SetPlayerGunTargetSlot(-1));
+        Assert.False(session.SetPlayerGunTargetSlot(mission.Balloons.Count));
+    }
+
+    [Fact]
+    public void PathfinderSnapshotPublishesGondolaTargetsAndRoeFootprint() {
+        var session = new SimulationSession(beatIndex: Beats.PathfinderBeatIndex);
+        using JsonDocument document = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Axial, 0, 0, false, null));
+        JsonElement pathfinder = document.RootElement.GetProperty("pathfinder");
+        Assert.Equal(3, pathfinder.GetProperty("relays").GetArrayLength());
+        Assert.True(pathfinder.GetProperty("relays")[0]
+            .TryGetProperty("gondola_position", out _));
+        Assert.Equal("clear", pathfinder.GetProperty("selected_footprint")
+            .GetProperty("classification").GetString());
+        Assert.Equal(-1.2, pathfinder.GetProperty("sun_elevation_deg").GetDouble(), 1);
+        Assert.True(document.RootElement.GetProperty("ammo").GetInt32() > 0);
     }
 
     [Fact]
