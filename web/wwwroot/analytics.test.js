@@ -9,7 +9,7 @@ test("static shell keeps third-party analytics out and makes hosted diagnostics 
     "anonymous page analytics would bypass the explicit flight-diagnostics consent boundary");
   assert.match(html,
     /<input id="setting-telemetry-sharing" type="checkbox" role="switch">/);
-  assert.match(html, /title="Off by default\.[^"]*Turning it off discards anything not yet sent/);
+  assert.match(html, /title="Off by default\.[^"]*Turning it off discards unsent automatic diagnostics; reports you send remain queued/);
   assert.doesNotMatch(html, /id="ready-telemetry-sharing"/);
 });
 
