@@ -70,3 +70,12 @@ Validation command (only this filter is in scope):
 ```sh
 PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet" dotnet test sim.Tests/GunsOnly.Sim.Tests.csproj --filter "FullyQualifiedName~Pathfinder"
 ```
+
+Observed on 2026-10-16 with SDK 8.0.423: both `GunsOnly.Sim` and `GunsOnly.Sim.Tests`
+compile. VSTest aborts before running any cases because the sandbox denies its local TCP
+communication socket (`SocketException (13): Permission denied`, `SocketServer.Start`).
+There are no runtime pass/fail results. The offline NuGet vulnerability lookup also reports
+NU1900. Claude should run the same filtered command outside this sandbox; no wider suite was run.
+Static adversarial review was completed, and the session-level projectile/ROE and bounded-ledger
+coverage it requested was added. The optional Cursor review could not start because the battery
+helper's state lock is outside the sandbox's writable roots; AC power was confirmed with `pmset`.
