@@ -223,6 +223,6 @@ test("app wires shell health and keeps gameplay telemetry opt-in", async () => {
   assert.match(app, /function markShellMilestone\(milestone\) \{\s*shellHealth\.mark\(milestone\)/);
   assert.match(app, /shellHealth\.fatal|shellHealth\?\.fatal/);
   assert.match(index, /shell-health|shell health|boot and fatal/i);
-  assert.match(index, /Share detailed flight diagnostics/);
-  assert.match(index, /Off by default/);
+  assert.match(index, /Share flight diagnostics/);
+  assert.match(index, /title="Off by default/);
 });

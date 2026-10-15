@@ -1,15 +1,8 @@
 /**
  * The screen a player gets instead of a blank sky.
  *
- * Three routes end here and all three used to end nowhere: WebGL refusing to create a context,
- * a boot that stops advancing, and a module/bridge load that throws. The old `#fatal` card was a
- * phosphor terminal printing a three.js exception string at someone who arrived from a Threads
- * post — technically a screen, practically a dead page.
- *
- * This module owns the WORDS and the ROUTE; index.html owns the markup and the paint. Splitting it
- * that way is what makes the copy testable without a DOM, which matters because the copy is the
- * feature: naming the app the player is inside ("Instagram's built-in browser") is the difference
- * between a shrug and a fixable instruction.
+ * This module owns the words and the route; index.html owns the markup and the paint. Splitting it
+ * that way keeps the copy testable without a DOM.
  */
 
 import { embeddedEscapeRoute } from "./inapp_browser.js";
@@ -21,7 +14,7 @@ const FALLBACK_REASONS = Object.freeze(["webgl", "stalled", "module", "bridge", 
  * @param {string} options.reason One of FALLBACK_REASONS.
  * @param {object} options.detection Result of detectEmbeddedBrowser().
  * @param {string} options.url Canonical URL to hand to a real browser.
- * @param {string} [options.detail] Technical detail (an exception message), shown as small print.
+ * @param {string} [options.detail] Technical detail (an exception message), kept behind the info control.
  */
 export function bootFallbackModel({ reason = "unknown", detection = {}, url = "", detail = "" }) {
   const code = FALLBACK_REASONS.includes(reason) ? reason : "unknown";
@@ -29,35 +22,10 @@ export function bootFallbackModel({ reason = "unknown", detection = {}, url = ""
   const label = embedded ? (detection.label || "this app's built-in browser") : "this browser";
   const route = embeddedEscapeRoute(url, detection);
 
-  let title;
-  let body;
-  if (code === "webgl") {
-    title = "This browser can’t start 3D graphics";
-    body = embedded
-      ? `${label} would not give the page a WebGL context, and Guns Only needs one to draw the `
-        + "aeroplane. The same link works in Safari or Chrome."
-      : "The page could not create a WebGL context. That is usually hardware acceleration being "
-        + "switched off, or a graphics driver the browser has blocklisted.";
-  } else if (code === "stalled") {
-    title = "The flight runtime isn’t finishing its load";
-    body = embedded
-      ? `${label} limits how much memory and GPU a page may use, and the flight kernel has stopped `
-        + "loading here. Opening the same link in a real browser normally starts straight away."
-      : "The flight kernel stopped loading. This is usually a dropped connection part-way through "
-        + "the download.";
-  } else if (code === "module" || code === "bridge") {
-    title = "Part of the simulator failed to load";
-    body = embedded
-      ? `${label} did not finish loading the flight kernel. Opening the link in Safari or Chrome `
-        + "avoids the restrictions that stop it."
-      : "A required module failed to load. Reloading usually fixes it; if not, the release may be "
-        + "mid-deploy.";
-  } else {
-    title = "Guns Only could not start";
-    body = embedded
-      ? `${label} stopped the simulator from starting. The same link works in a real browser.`
-      : "The simulator stopped before it reached the runway.";
-  }
+  const title = "Couldn't start";
+  const body = code === "webgl"
+    ? (embedded ? `Graphics are unavailable in ${label}.` : "Graphics are unavailable in this browser.")
+    : (embedded ? `Loading stopped in ${label}.` : "Check your connection, then try again.");
 
   return Object.freeze({
     reason: code,
@@ -103,6 +71,8 @@ export function mountBootFallback(documentRef, model) {
   }
 
   const action = root.querySelector("#shell-fallback-open");
+  const copy = root.querySelector("#shell-fallback-copy");
+  if (copy) copy.dataset.copyUrl = model.copyUrl;
   if (action) {
     if (model.action) {
       action.textContent = model.action.label;
@@ -115,14 +85,15 @@ export function mountBootFallback(documentRef, model) {
     if (action.parentElement) action.parentElement.hidden = !model.action;
   }
 
-  const url = root.querySelector("#shell-fallback-url");
-  if (url) url.textContent = model.copyUrl;
   const reload = root.querySelector("#shell-fallback-reload");
   if (reload) reload.setAttribute("href", model.reloadHref);
   const detail = root.querySelector("#shell-fallback-detail");
   if (detail) {
-    detail.textContent = model.detail;
-    detail.hidden = model.detail.length === 0;
+    const technicalDetail = [model.detail, model.copyUrl ? `URL: ${model.copyUrl}` : ""]
+      .filter(Boolean).join(" · ");
+    detail.setAttribute("title", technicalDetail || "Technical details unavailable");
+    detail.setAttribute("aria-label", `Technical detail: ${technicalDetail || "unavailable"}`);
+    detail.hidden = false;
   }
 
   root.dataset.reason = model.reason;

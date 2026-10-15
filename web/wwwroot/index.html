@@ -834,11 +834,7 @@
       visibility: hidden;
     }
 
-    /* All that is left of the loading shell: a pulse in the corner of the painted sky. The card,
-       the wordmark, the tagline, the sortie spec sheet and their three responsive layouts are
-       deleted -- roughly 200 lines of styling for a screen nobody wanted to look at. #boot-status
-       stays in the DOM, announced to screen readers, because a silent aria-busy region is a
-       regression for anyone who cannot see the pulse. */
+    /* Variant B: one word and a stage gauge, visible throughout loading. */
     .boot-load {
       position: absolute;
       right: calc(var(--safe-right) + clamp(20px, 4vw, 40px));
@@ -846,31 +842,34 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      /* The status line is invisible until a slow boot promotes it; once promoted it is real text
-         in a bottom-right anchored box, so it needs a ceiling or it runs off a 320 px screen. */
-      max-width: calc(100vw - var(--safe-left) - var(--safe-right) - 48px);
-    }
-
-    .boot-pulse {
-      width: 7px;
-      height: 7px;
-      flex: 0 0 auto;
-      border-radius: 50%;
-      background: rgba(222, 163, 79, .85);
-      box-shadow: 0 0 10px rgba(222, 163, 79, .45);
-      animation: boot-pulse 1.25s ease-in-out infinite;
+      max-width: calc(100vw - var(--safe-left) - var(--safe-right) - 40px);
+      padding: 8px 12px;
+      border-radius: var(--flow-radius-sm);
+      background: color-mix(in srgb, var(--flow-bg) 78%, transparent);
+      box-shadow: var(--flow-shadow);
     }
 
     #boot-status {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      margin: -1px;
-      padding: 0;
-      overflow: hidden;
-      clip: rect(0 0 0 0);
+      color: var(--flow-ink);
+      font: 450 .9375rem/1 var(--flow-font-display);
       white-space: nowrap;
-      border: 0;
+    }
+
+    #boot-progress {
+      width: 180px;
+      min-width: 40px;
+      height: 10px;
+      overflow: hidden;
+      border: 1px solid var(--flow-action-top);
+      border-radius: var(--flow-radius-sm);
+      background: var(--flow-bg);
+    }
+
+    #boot-progress i {
+      display: block;
+      width: var(--boot-progress, 0%);
+      height: 100%;
+      background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
     }
 
     #ready-screen {
@@ -1921,28 +1920,6 @@
 
     .ready-secondary-actions button[hidden] { display: none; }
 
-    #ready-handoff {
-      width: 100%;
-      min-height: 50px;
-      margin-top: 8px;
-      border: 1px solid rgba(255, 193, 93, .72);
-      border-radius: 6px;
-      color: #ffe2af;
-      background: rgba(104, 72, 18, .22);
-      cursor: pointer;
-      font: 850 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: .13em;
-      text-transform: uppercase;
-      touch-action: manipulation;
-    }
-
-    #ready-handoff:hover,
-    #ready-handoff:focus-visible {
-      outline: 2px solid #ffd28b;
-      outline-offset: 1px;
-      background: rgba(139, 94, 20, .34);
-    }
-
     #ready-handoff[hidden] { display: none; }
     #ready-handoff:disabled {
       opacity: .35;
@@ -1960,15 +1937,15 @@
       min-width: 44px;
       min-height: 44px;
       padding: 0 11px;
-      border: 1px solid rgba(77, 255, 136, .35);
-      border-radius: 4px;
-      color: rgba(217, 255, 229, .76);
-      background: rgba(2, 11, 17, .72);
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      color: var(--flow-ink-muted);
+      background: var(--flow-panel);
       backdrop-filter: blur(8px);
       cursor: pointer;
-      font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: .12em;
-      text-transform: uppercase;
+      font: 450 15px/1 var(--flow-font-display);
+      letter-spacing: normal;
+      text-transform: none;
     }
 
     .pause-mobile { display: none; }
@@ -1987,7 +1964,7 @@
     }
 
     #pause-button:hover,
-    #pause-button:focus-visible { outline: 2px solid #8dffb3; outline-offset: 1px; }
+    #pause-button:focus-visible { outline: 2px solid var(--flow-accent); outline-offset: 1px; }
     .run-paused #pause-button,
     .incident-replay #pause-button { display: none; }
 
@@ -2076,8 +2053,7 @@
 
     #ready-build-reload[hidden] { display: none; }
 
-    .ready-route-notice,
-    .ready-telemetry-disclosure {
+    .ready-route-notice {
       width: min(560px, calc(100% - 24px));
       margin: 10px auto 0;
       color: rgba(253, 246, 230, .72);
@@ -2107,20 +2083,6 @@
       text-underline-offset: 3px;
     }
 
-    .ready-telemetry-disclosure label {
-      display: inline-flex;
-      min-height: 28px;
-      align-items: center;
-      gap: 7px;
-      cursor: pointer;
-      color: rgba(253, 246, 230, .76);
-    }
-
-    .ready-telemetry-disclosure input { width: 16px; height: 16px; accent-color: #7af0a5; }
-    .ready-telemetry-disclosure small,
-    .ready-telemetry-disclosure output { display: block; color: rgba(253, 246, 230, .45); }
-    .ready-telemetry-disclosure output { margin-top: 2px; color: rgba(182, 255, 210, .58); }
-    #ready-screen:not([data-mode="program"]) .ready-telemetry-disclosure,
     #ready-screen:not([data-mode="program"]) .ready-route-notice { display: none; }
 
     @media (max-width: 760px) {
@@ -2463,68 +2425,136 @@
     #settings-screen.visible { display: grid; }
 
     .settings-card {
-      width: min(760px, 100%);
-      max-height: min(820px, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 28px));
+      width: min(860px, 100%);
+      max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 28px);
       overflow: auto;
-      padding: 22px;
-      border: 1px solid rgba(77, 255, 136, .28);
-      border-radius: 8px;
-      background: rgba(3, 13, 20, .97);
-      box-shadow: 0 24px 90px rgba(0, 0, 0, .62);
-      color: #eafff1;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      padding: 10px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-md);
+      background: var(--flow-panel);
+      box-shadow: var(--flow-shadow);
+      color: var(--flow-ink);
+      font-family: var(--flow-font-display);
       overscroll-behavior: contain;
       touch-action: pan-y pinch-zoom;
       -webkit-overflow-scrolling: touch;
     }
-
-    .settings-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    .settings-head h2 { margin: 0; font: 650 24px/1.1 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif; }
-    .settings-copy { color: rgba(217, 255, 229, .55); font-size: 10px; line-height: 1.5; }
-    .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; margin: 18px 0; }
-    .settings-toggle { display: flex; align-items: center; gap: 10px; min-height: 42px; font-size: 10px; }
+    .settings-sections {
+      display: grid;
+      gap: 6px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      background: var(--flow-line);
+      overflow: hidden;
+    }
+    .settings-section { display: grid; gap: 1px; }
+    .settings-toggle, .settings-range {
+      display: grid;
+      grid-template-columns: 3.4em minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 10px;
+      background: var(--flow-panel-raised);
+      font: 450 15px/1.2 var(--flow-font-display);
+      cursor: pointer;
+    }
+    .settings-glyph { display: grid; place-items: center; }
     html:not(.touch-mode) .settings-touch-only { display: none; }
-    .settings-toggle input { width: 20px; height: 20px; min-height: 0; accent-color: #4dff88; }
-    .settings-range { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 12px; font-size: 10px; }
-    .settings-range input { grid-column: 1 / -1; min-height: 24px; accent-color: #4dff88; }
-    .settings-bindings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
-    .settings-binding { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; min-width: 0; padding: 7px 8px; border: 1px solid rgba(77, 255, 136, .12); border-radius: 4px; font-size: 9px; }
-    .settings-binding button { min-width: 54px; }
-    .settings-binding button[data-capturing="true"] { border-color: #ffcf82; color: #ffdf9c; }
-    .settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-
-    .settings-telemetry-copy {
-      grid-column: 1 / -1;
-      margin: -4px 0 4px 30px;
-      color: rgba(217, 255, 229, .48);
-      font-size: 9px;
-      line-height: 1.45;
+    .settings-toggle input {
+      appearance: none;
+      position: relative;
+      width: 44px;
+      height: 26px;
+      min-height: 0;
+      margin: 0;
+      border: 1px solid var(--flow-line);
+      border-radius: 13px;
+      background: var(--flow-panel);
+      cursor: pointer;
     }
-
-    .settings-disclosure {
-      margin-top: 8px;
-      border-top: 1px solid rgba(77, 255, 136, .12);
+    .settings-toggle input::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--flow-ink-muted);
     }
-
+    .settings-toggle input:checked { border-color: var(--flow-accent); background: #143024; }
+    .settings-toggle input:checked::after { left: 20px; background: var(--flow-accent); }
+    .settings-toggle input:disabled { opacity: .4; cursor: default; }
+    .settings-datum { display: flex; align-items: center; gap: 12px; }
+    .settings-range input { width: 220px; min-height: 26px; margin: 0; accent-color: var(--flow-action-bottom); }
+    .settings-range output {
+      min-width: 4.6em;
+      text-align: right;
+      font: 650 15px/1 var(--flow-font-data);
+      font-variant-numeric: tabular-nums;
+    }
+    .settings-disclosure { margin-top: 8px; }
     .settings-disclosure > summary {
       display: flex;
-      min-height: 44px;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      color: rgba(217, 255, 229, .62);
-      cursor: pointer;
-      font-size: 10px;
-      letter-spacing: .08em;
+      gap: 8px;
+      min-height: 30px;
+      color: var(--flow-ink-muted);
+      font: 450 15px/1 var(--flow-font-display);
       list-style: none;
-      text-transform: uppercase;
+      cursor: pointer;
       touch-action: manipulation;
     }
-
     .settings-disclosure > summary::-webkit-details-marker { display: none; }
-    .settings-disclosure > summary::after { content: "Hide"; font-size: 8px; opacity: .58; }
-    .settings-disclosure:not([open]) > summary::after { content: "18 bindings"; }
-    .settings-binding-actions { display: flex; justify-content: flex-start; margin-top: 8px; }
+    .settings-disclosure > summary::after { content: "−"; margin-left: auto; }
+    .settings-disclosure:not([open]) > summary::after { content: "+"; }
+    .settings-keys {
+      width: 100%;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: fixed;
+      overflow: hidden;
+    }
+    .settings-key-column { width: 94px; }
+    .settings-binding th, .settings-binding td {
+      height: 30px;
+      padding: 0 10px;
+      border-top: 1px solid var(--flow-line);
+      background: var(--flow-panel-raised);
+      font: 450 14px/1.2 var(--flow-font-display);
+      text-align: left;
+    }
+    .settings-binding:first-child > * { border-top: 0; }
+    .settings-binding td { text-align: right; padding-inline: 4px 8px; }
+    .settings-card button {
+      min-height: 40px;
+      padding: 0 16px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      background: var(--flow-panel-raised);
+      color: var(--flow-ink-muted);
+      font: 450 15px/1 var(--flow-font-display);
+      letter-spacing: normal;
+      text-transform: none;
+      cursor: pointer;
+    }
+    .settings-binding button { min-width: 44px; min-height: 26px; padding: 0 8px; background: var(--flow-panel); font: 650 13px/1 var(--flow-font-data); }
+    .settings-binding button[data-capturing="true"] { border-color: var(--flow-action-bottom); color: var(--flow-action-top); }
+    .settings-card :is(button, input, summary):focus-visible { outline: 2px solid var(--flow-accent); outline-offset: 1px; }
+    .settings-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
+    @media (max-width: 620px) {
+      .settings-toggle, .settings-range { grid-template-columns: 22px minmax(0, 1fr) auto; padding: 4px 8px; min-height: 44px; }
+      .settings-datum { grid-column: 2 / -1; }
+      .settings-range input { min-width: 0; width: 100%; }
+      .settings-key-column { width: auto; }
+      .settings-keys colgroup { display: none; }
+      .settings-binding { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+      .settings-binding th, .settings-binding td { display: flex; align-items: center; min-height: 40px; height: auto; }
+      .settings-binding td { justify-content: flex-end; }
+    }
 
     .visually-hidden {
       position: fixed !important;
@@ -2578,13 +2608,13 @@
       stroke-width: 2.5px;
     }
 
-    html.top-gun-anime-1986.run-paused #ready-screen {
+    html.top-gun-anime-1986.run-paused #ready-screen:not([data-mode="pause"]) {
       background:
         radial-gradient(120% 80% at 50% 18%, rgba(255, 196, 96, .28), transparent 62%),
         linear-gradient(180deg, rgba(255, 120, 48, .22) 0%, rgba(4, 10, 20, .88) 72%);
     }
 
-    html.top-gun-anime-1986.run-paused #ready-screen .ready-card {
+    html.top-gun-anime-1986.run-paused #ready-screen:not([data-mode="pause"]) .ready-card {
       border: 2px solid var(--tg-tape);
       border-radius: 2px;
       box-shadow:
@@ -2598,14 +2628,14 @@
       box-shadow: 0 0 0 1px rgba(96, 226, 146, .36), 0 0 44px rgba(96, 226, 146, .34);
     }
 
-    html.top-gun-anime-1986.run-paused #ready-screen #ready-start {
+    html.top-gun-anime-1986.run-paused #ready-screen:not([data-mode="pause"]) #ready-start {
       border: 2px solid var(--tg-tape);
       color: var(--tg-lamp);
       background: rgba(255, 196, 96, .18);
       box-shadow: inset 0 0 0 1px var(--tg-tape-edge), 0 0 30px rgba(255, 160, 64, .22);
     }
 
-    html.top-gun-anime-1986.run-paused #ready-screen #ready-start::after {
+    html.top-gun-anime-1986.run-paused #ready-screen:not([data-mode="pause"]) #ready-start::after {
       border-color: var(--tg-lamp);
     }
 
@@ -2613,6 +2643,10 @@
     .high-contrast .settings-card { border-color: rgba(141, 255, 179, .72); background: rgba(0, 9, 14, .985); }
     .large-interface-text .ready-card,
     .large-interface-text .settings-card { zoom: 1.12; }
+    .large-interface-text .settings-card {
+      width: min(860px, calc((100vw - var(--safe-left) - var(--safe-right) - 28px) / 1.12));
+      max-height: calc((100dvh - var(--safe-top) - var(--safe-bottom) - 28px) / 1.12);
+    }
     .forced-reduced-motion *,
     .forced-reduced-motion *::before,
     .forced-reduced-motion *::after { animation: none !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
@@ -2626,195 +2660,100 @@
       #incident-replay-cause, #incident-replay-correction { font-size: 7px; }
       .replay-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .replay-controls select:last-of-type { grid-column: 1 / -1; }
-      .settings-grid, .settings-bindings { grid-template-columns: 1fr; }
-      .settings-card { padding: 17px; }
     }
 
-    #fatal {
-      position: fixed;
-      z-index: 30;
-      inset: 0;
-      display: none;
-      place-items: center;
-      padding: 32px;
-      background: rgba(3, 8, 14, .94);
-    }
-
-    #fatal.visible { display: grid; }
-
-    .fatal-card {
-      width: min(620px, 100%);
-      padding: 28px;
-      border-left: 3px solid #ffb020;
-      background: #0a1420;
-      box-shadow: 0 24px 80px rgba(0, 0, 0, .5);
-    }
-
-    .fatal-card h2 {
-      margin: 0 0 10px;
-      color: #ffb020;
-      font-size: 18px;
-      letter-spacing: .08em;
-    }
-
-    #fatal-message {
-      margin: 0 0 20px;
-      color: #b9c9ce;
-      font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      white-space: pre-wrap;
-    }
-
-    .reload {
-      color: #4dff88;
-      font-size: 12px;
-      letter-spacing: .08em;
-      text-decoration: none;
-      text-transform: uppercase;
-    }
-
-    /* ------------------------------------------------------------------------------------
-       BOOT FALLBACK
-       #fatal is an engineering console: a phosphor terminal printing an exception. It is right
-       for a desktop pilot who can act on "Error creating WebGL context." It is wrong for the
-       population shell-health actually measures -- somebody who tapped a link inside Threads or
-       Instagram, whose webview will not give the page a GPU, and who is looking at a painted sky
-       that never becomes an aeroplane. This screen is for them: it is the same warm paint as the
-       boot and the mission menu, it says what happened in English, and it gives them the one
-       thing that fixes it, which is a route into a real browser.
-       ------------------------------------------------------------------------------------ */
-    #shell-fallback {
+    /* Both startup failure paths share the approved three-row result instrument. */
+    #fatal, #shell-fallback {
       position: fixed;
       z-index: 40;
       inset: 0;
       display: none;
-      /* flex-start + `margin: auto` on the card is deliberate. Centring with align-items clips the
-         TOP of anything taller than the viewport, and it is unreachable — which on a 320x495 phone
-         means the headline explaining the failure is the first thing lost. Auto margins centre
-         when there is room and collapse to zero when there is not. */
       align-items: flex-start;
       justify-content: center;
-      box-sizing: border-box;
       padding:
         calc(var(--safe-top) + 16px) calc(var(--safe-right) + 16px)
         calc(var(--safe-bottom) + 16px) calc(var(--safe-left) + 16px);
       overflow-y: auto;
-      background:
-        radial-gradient(90% 55% at 68% 82%, rgba(222, 163, 79, .30), transparent 72%),
-        linear-gradient(180deg,
-          #C4CFD4 0%, #D8D8CC 30%, #EBE4CF 58%, #F4E7C9 80%, #E3D2A6 100%);
+      background: url("./art/menu-hangar.webp") center 46% / cover no-repeat var(--flow-bg);
     }
 
-    #shell-fallback.visible { display: flex; }
+    #fatal.visible, #shell-fallback.visible { display: flex; }
 
-    .shell-fallback-card {
-      width: min(460px, 100%);
+    .failure-card {
+      width: min(34rem, 100%);
       margin: auto;
-      padding: 20px 18px 18px;
-      border-radius: 3px;
-      border-top: 3px solid #DEA34F;
-      background: rgba(255, 252, 244, .93);
-      box-shadow: 0 18px 60px rgba(57, 74, 58, .28);
-      color: #2B3031;
-      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      background: var(--flow-line);
+      box-shadow: var(--flow-shadow);
+      color: var(--flow-ink);
+      font: 650 .9375rem/1.2 var(--flow-font-data);
     }
 
-    #shell-fallback-title {
-      margin: 0 0 8px;
-      color: #394A3A;
-      font-size: 19px;
-      font-weight: 650;
-      letter-spacing: .01em;
-      line-height: 1.22;
+    .failure-row {
+      display: grid;
+      grid-template-columns: 3.4em minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 46px;
+      padding: 6px 10px;
+      background: var(--flow-panel-raised);
     }
 
-    #shell-fallback-body { margin: 0 0 12px; }
+    .failure-glyph { color: var(--flow-action-bottom); text-align: center; }
+    .failure-row h2 { margin: 0; font: inherit; overflow-wrap: anywhere; }
+    .failure-reason {
+      grid-column: 2 / -1;
+      margin: 0;
+      color: var(--flow-ink-muted);
+      font: 450 .875rem/1.3 var(--flow-font-display);
+    }
 
     #shell-fallback-steps {
-      margin: 0 0 14px;
-      padding-left: 18px;
-      color: #4A5250;
-      font-size: 13px;
+      margin: 0;
+      padding: 10px 20px 10px 40px;
+      background: var(--flow-panel-raised);
+      color: var(--flow-ink-muted);
+      font: 450 .875rem/1.4 var(--flow-font-display);
     }
+    #shell-fallback-steps li + li { margin-top: 6px; }
 
-    #shell-fallback-steps li { margin-bottom: 6px; }
-
-    /* An author `display: flex` beats the UA sheet's [hidden] rule, so without this the escape-route
-       row keeps its gap on a desktop card that has no escape route to offer. */
-    .shell-fallback-actions[hidden] { display: none; }
-
-    .shell-fallback-actions {
+    .failure-actions {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 12px;
+      gap: 6px;
+      padding: 8px 12px;
+      background: var(--flow-panel-raised);
     }
-
-    /* 48 px minimum: this screen exists for phones, and it is the one control a stuck player has. */
-    .shell-fallback-actions a,
-    .shell-fallback-actions button {
-      flex: 1 1 auto;
-      min-height: 48px;
-      padding: 11px 16px;
-      border: 1px solid #394A3A;
-      border-radius: 2px;
-      background: #394A3A;
-      color: #F4E7C9;
-      cursor: pointer;
-      font: inherit;
-      font-weight: 600;
-      text-align: center;
+    .failure-actions[hidden] { display: none; }
+    .failure-card :is(a, button) {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 0 12px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      color: var(--flow-ink-muted);
+      background: var(--flow-panel);
+      font: 450 .9375rem/1.2 var(--flow-font-display);
       text-decoration: none;
+      text-align: center;
+      cursor: pointer;
     }
-
-    .shell-fallback-actions .shell-fallback-secondary {
-      background: transparent;
-      color: #394A3A;
+    .failure-card .failure-primary {
+      flex: 1 1 auto;
+      border: 0;
+      color: var(--flow-bg);
+      background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
     }
-
-    .shell-fallback-link {
-      display: block;
-      margin-bottom: 12px;
-      padding: 9px 11px;
-      border: 1px dashed rgba(57, 74, 58, .45);
-      border-radius: 2px;
-      background: rgba(244, 231, 201, .55);
-      color: #2B3031;
-      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      overflow-wrap: anywhere;
-      user-select: all;
-      -webkit-user-select: all;
-    }
-
-    #shell-fallback-detail {
-      margin: 0;
-      color: #6A716E;
-      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      overflow-wrap: anywhere;
-    }
-
-    /* The load pulse says "something is happening" and nothing more. Past ten seconds that is not
-       enough, so the sr-only status line is promoted onto the screen -- a slow boot on a phone is
-       a real thing that finishes, and the player deserves to be told it is still working rather
-       than left to guess whether to close the tab. */
-    #boot[data-progress="slow"] #boot-status {
-      position: static;
-      width: auto;
-      height: auto;
-      margin: 0;
-      /* A legible chip, not bare text. The painted floor under the bottom-right corner is dark and
-         busy; unbacked grey type on it is present in the DOM and unreadable on the screen, which is
-         the same as not telling the player anything. */
-      padding: 6px 9px;
-      border-radius: 2px;
-      background: rgba(255, 252, 244, .90);
-      box-shadow: 0 4px 14px rgba(57, 74, 58, .22);
-      clip: auto;
-      color: #2B3031;
-      font: 11px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
-      letter-spacing: .06em;
-      text-align: right;
-      text-transform: uppercase;
-      white-space: normal;
+    .failure-card .failure-info { min-width: 36px; min-height: 36px; padding: 0; }
+    .failure-card :is(a, button):focus-visible {
+      outline: 2px solid var(--flow-action-top);
+      outline-offset: 2px;
     }
 
     /* ------------------------------------------------------------------------------------
@@ -2954,7 +2893,6 @@
     }
 
     #ready-screen .ready-secondary-actions button,
-    #ready-screen #ready-handoff,
     #ready-screen #ready-replay {
       border: 1px solid rgba(253, 246, 230, .32);
       border-radius: 3px;
@@ -2965,11 +2903,9 @@
       text-transform: none;
     }
 
-    #ready-screen #ready-handoff,
     #ready-screen #ready-replay { max-width: 24rem; margin-top: 10px; }
 
     #ready-screen .ready-secondary-actions button:hover,
-    #ready-screen #ready-handoff:hover,
     #ready-screen #ready-replay:hover {
       border-color: rgba(253, 246, 230, .68);
       background: rgba(36, 48, 64, .5);
@@ -2985,7 +2921,6 @@
     }
 
     #ready-screen:not([data-mode="program"]) #ready-start,
-    #ready-screen:not([data-mode="program"]) #ready-handoff,
     #ready-screen:not([data-mode="program"]) .ready-secondary-actions { width: min(24rem, 100%); }
 
     /* The first visit uses the same warm briefing card as every result and pause surface, but it
@@ -3262,8 +3197,7 @@
       border-color: rgba(253, 246, 230, .3);
     }
 
-    /* Settings keeps a word because it is not part of the choice and has nowhere else to live;
-       it shrinks to a footnote in the corner instead of sitting in the row of decisions. */
+    /* Programme actions sit beneath the primary launch control. */
     #ready-screen[data-mode="program"] .ready-secondary-actions {
       display: flex;
       flex-wrap: wrap;
@@ -3355,7 +3289,7 @@
       overscroll-behavior: contain;
     }
 
-    /* The consent disclosure and an occasional quarantine notice add real controls below the
+    /* An occasional quarantine notice adds real controls below the
        paintings. Short desktop windows need a reachable scroll path just as phones do. */
     @media (max-height: 720px) {
       html:not(.touch-mode) #ready-screen[data-mode="program"] .ready-card {
@@ -3412,89 +3346,6 @@
     }
     html.laptop-hint-dismissed #ready-laptop-hint { display: none !important; }
     #ready-laptop-hint:hover { color: rgba(253, 246, 230, .9); }
-
-    /* ---------------------------------------------------------------------------------------
-       PAUSE SCREEN
-       A clean, self-contained panel -- the SAME solid dark surface as the aircraft picker, which
-       the owner signed off on. The translucent-scrim version failed badly: the live HUD (tapes,
-       "854 KT CLOSING", the target brackets, TARGET 2) bled straight through a 58%-opaque wash
-       and collided with the buttons, and the buttons were themselves translucent so the chaos
-       showed through them too -- "ugly, offset, dumb". Solid backdrop, opaque buttons, one
-       centred column: Resume, then the authoritative Call It A Day action and three small
-       utilities. Nothing from the frozen frame competes with it.
-       --------------------------------------------------------------------------------------- */
-    #ready-screen[data-mode="pause"] .ready-menu-header,
-    #ready-screen[data-mode="pause"] #ready-kicker,
-    #ready-screen[data-mode="pause"] #ready-title,
-    #ready-screen[data-mode="pause"] #ready-brief,
-    #ready-screen[data-mode="pause"] .ready-facts,
-    #ready-screen[data-mode="pause"] .ready-controls,
-    #ready-screen[data-mode="pause"] #ready-hint,
-    #ready-screen[data-mode="pause"] #ready-build-row { display: none; }
-
-    #ready-screen[data-mode="pause"] {
-      background-color: #0b0d11;
-      background-image: none;
-    }
-    #ready-screen[data-mode="pause"] .ready-card {
-      width: min(24rem, 100%);
-      height: 100%;
-      justify-content: center;
-    }
-    #ready-screen[data-mode="pause"] .ready-briefing {
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      padding: 0 clamp(16px, 5vw, 32px);
-    }
-
-    /* Resume: the one lit action, warm ink, same treatment as FLY on the picker. */
-    #ready-screen[data-mode="pause"] #ready-start {
-      width: 100%;
-      max-width: none;
-      min-height: 62px;
-      margin: 0 0 14px;
-      border: 0;
-      border-radius: 3px;
-      color: #2a2113;
-      background: linear-gradient(180deg, #fbe6b4, #f0cf8b);
-      box-shadow: 0 10px 34px rgba(0, 0, 0, .45);
-      font: 500 clamp(17px, 2.1vw, 20px)/1 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-      letter-spacing: .03em;
-      text-transform: none;
-      text-shadow: none;
-    }
-    #ready-screen[data-mode="pause"] #ready-start:hover,
-    #ready-screen[data-mode="pause"] #ready-start:focus-visible {
-      background: linear-gradient(180deg, #fff2d2, #f7dda4);
-    }
-
-    /* Three small utilities in a row, OPAQUE so nothing shows through, warm ink on the dark panel. */
-    #ready-screen[data-mode="pause"] .ready-secondary-actions {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      width: 100%;
-      max-width: none;
-      margin: 0;
-    }
-    #ready-screen[data-mode="pause"] .ready-secondary-actions button {
-      min-height: 46px;
-      padding: 0 6px;
-      border: 1px solid rgba(253, 246, 230, .2);
-      border-radius: 3px;
-      color: rgba(253, 246, 230, .82);
-      background: #161b22;
-      font: 400 14px/1.15 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-      letter-spacing: .01em;
-      text-transform: none;
-    }
-    #ready-screen[data-mode="pause"] .ready-secondary-actions button:hover,
-    #ready-screen[data-mode="pause"] .ready-secondary-actions button:focus-visible {
-      border-color: rgba(253, 246, 230, .55);
-      background: #1e242d;
-    }
-    #ready-screen[data-mode="pause"] .ready-secondary-actions button[hidden] { display: none; }
 
     /* ---------------------------------------------------------------------------------------
        SHARED MISSION-FLOW SURFACES
@@ -3644,8 +3495,7 @@
       text-transform: none;
     }
 
-    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-start,
-    #ready-screen[data-mode="pause"] #ready-start {
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-start {
       border-radius: var(--flow-radius-sm);
       color: #2a2113;
       background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
@@ -3656,8 +3506,7 @@
 
     #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-replay,
     #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-handoff,
-    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-secondary-actions button,
-    #ready-screen[data-mode="pause"] .ready-secondary-actions button {
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-secondary-actions button {
       min-height: 46px;
       border: 1px solid var(--flow-line);
       border-radius: var(--flow-radius-sm);
@@ -3670,8 +3519,7 @@
 
     #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-replay:hover,
     #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-handoff:hover,
-    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-secondary-actions button:hover,
-    #ready-screen[data-mode="pause"] .ready-secondary-actions button:hover {
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-secondary-actions button:hover {
       border-color: rgba(253, 246, 230, .46);
       color: var(--flow-ink);
       background: #202833;
@@ -3682,14 +3530,10 @@
       font: 700 8px/1.3 var(--flow-font-data);
     }
 
-    #ready-screen[data-mode="debrief"] .ready-secondary-actions,
-    #ready-screen[data-mode="pause"] .ready-secondary-actions {
+    #ready-screen[data-mode="debrief"] .ready-secondary-actions {
       grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
     }
 
-    #ready-screen[data-mode="pause"] #ready-return:not([hidden]) {
-      grid-column: 1 / -1;
-    }
 
 
 
@@ -3815,6 +3659,7 @@
 
       :root #ready-screen[data-mode="program"] .ready-secondary-actions {
         margin-top: var(--flow-space-2);
+        flex-wrap: wrap;
       }
 
       :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-card {
@@ -4001,22 +3846,6 @@
 
     #ready-screen[data-mode="program"] #ready-start::after { display: none; }
 
-    #ready-screen[data-mode="program"] .ready-telemetry-disclosure small,
-    #ready-screen[data-mode="program"] .ready-telemetry-disclosure output {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0 0 0 0);
-    }
-
-    #ready-screen[data-mode="program"] .ready-telemetry-disclosure {
-      position: relative;
-      margin-top: 8px;
-      text-align: center;
-    }
-
     #ready-screen[data-mode="intro"] .ready-card {
       width: min(1080px, 100%);
       border: 0;
@@ -4076,31 +3905,6 @@
       #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-facts { grid-template-columns: 1fr; }
     }
 
-    #ready-screen[data-mode="pause"] .ready-menu-header,
-    #ready-screen[data-mode="pause"] #ready-title {
-      display: block;
-    }
-
-    #ready-screen[data-mode="pause"] #ready-menu-title { display: none; }
-
-    #ready-screen[data-mode="pause"] #ready-title {
-      margin: 0 0 18px;
-      color: #fdf6e6;
-      font: 500 clamp(32px, 4vw, 48px)/.9 var(--flow-font-display);
-      letter-spacing: -0.04em;
-      text-align: center;
-    }
-
-    @media (max-height: 500px) {
-      /* Resume already identifies this state. Preserve action space on short screens,
-         including enlarged text, instead of spending a row on the decorative heading. */
-      #ready-screen[data-mode="pause"] #ready-title { display: none; }
-      #ready-screen[data-mode="pause"] #ready-start {
-        min-height: 48px;
-        margin-bottom: 8px;
-      }
-    }
-
     #ready-screen[data-mode="debrief"] #ready-title {
       font-size: clamp(36px, 5vw, 54px);
       letter-spacing: -0.03em;
@@ -4140,28 +3944,6 @@
       font: 560 20px/1.1 var(--flow-font-display);
     }
 
-    .settings-sections { display: grid; gap: 14px; margin: 18px 0; }
-
-    .settings-section {
-      margin: 0;
-      padding: 12px 14px 4px;
-      border: 1px solid var(--flow-line);
-      border-radius: var(--flow-radius-md);
-      background: rgba(255, 252, 244, .03);
-    }
-
-    .settings-section legend {
-      padding: 0 8px;
-      color: #f0cf8b;
-      font: 750 10px/1 var(--flow-font-data);
-      letter-spacing: .16em;
-      text-transform: uppercase;
-    }
-
-    .settings-card { border-top: 3px solid #e4b85a; }
-    .settings-toggle input { accent-color: #e4b85a; }
-    .settings-range input { accent-color: #e4b85a; }
-
     @media (max-width: 760px) {
       #ready-screen[data-mode="program"] .ready-secondary-actions {
         display: grid;
@@ -4181,14 +3963,84 @@
       .sortie-grade-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
-    @keyframes boot-pulse {
-      0%, 100% { opacity: .34; transform: scale(.78); }
-      50% { opacity: 1; transform: scale(1); }
+    /* Approved pause/picker instrument: one primary row, one utility row. */
+    .shell-icon { width: 16px; height: 16px; display: block; flex: 0 0 auto; }
+    #ready-screen .ready-secondary-actions button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    #ready-screen:is([data-mode="program"], [data-mode="pause"]) .ready-secondary-actions {
+      display: flex;
+      flex-wrap: nowrap;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      max-width: none;
+    }
+    #ready-screen:is([data-mode="program"], [data-mode="pause"]) .ready-secondary-actions button {
+      width: auto;
+      min-height: 46px;
+      margin: 0;
+      padding: 0 12px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      background: var(--flow-panel);
+      color: var(--flow-ink-muted);
+      font: 450 15px/1 var(--flow-font-display);
+      letter-spacing: normal;
+      text-transform: none;
+      white-space: nowrap;
+      text-shadow: none;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    #ready-screen:is([data-mode="program"], [data-mode="pause"]) .ready-secondary-actions button:hover {
+      color: var(--flow-ink);
+      border-color: var(--flow-ink-muted);
+    }
+    #ready-screen .ready-secondary-actions button[hidden], #ready-build-row[hidden] { display: none; }
+    #ready-screen[data-mode="pause"] :is(.ready-menu-header, #ready-kicker, #ready-title,
+      #ready-brief, .ready-facts, .ready-controls, #ready-hint, #ready-build-row) { display: none; }
+    #ready-screen[data-mode="pause"] .ready-card {
+      width: min(1080px, 100%);
+      height: auto;
+      max-height: 100%;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      background: var(--flow-panel-raised);
+      box-shadow: var(--flow-shadow);
+      overflow: auto;
+    }
+    #ready-screen[data-mode="pause"] .ready-briefing { display: block; padding: 8px; }
+    #ready-screen[data-mode="pause"] #ready-start {
+      width: 100%;
+      max-width: none;
+      min-height: 62px;
+      margin: 0;
+      border: 0;
+      border-radius: var(--flow-radius-sm);
+      color: #2a2113;
+      background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
+      box-shadow: none;
+      font: 450 20px/1 var(--flow-font-display);
+      letter-spacing: normal;
+      text-transform: none;
+      text-shadow: none;
+    }
+    #ready-screen[data-mode="pause"] #ready-start:disabled {
+      color: var(--flow-ink-faint);
+      background: var(--flow-panel);
+      cursor: wait;
+    }
+    #ready-screen[data-mode="pause"] .ready-secondary-actions { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--flow-line); }
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button { flex: 1 1 0; }
+    @media (max-width: 760px) {
+      #ready-screen:is([data-mode="program"], [data-mode="pause"]) .ready-secondary-actions { flex-wrap: wrap; }
+      #ready-screen[data-mode="pause"] .ready-secondary-actions button { flex-basis: 28%; }
     }
 
-    @media (prefers-reduced-motion: reduce) {
-      .boot-pulse { animation: none; }
-    }
     /* F-22 result instrument (loop audit #6). Replaces the kicker/title/brief/facts/scoreboard
        stack for the F-22 sortie only; every other mode keeps its own card. */
     /* Kept at the end of the sheet so it outranks the intro/debrief grid rules above. */
@@ -4326,7 +4178,7 @@
   <canvas id="hud" aria-hidden="true"></canvas>
   <div id="view-status" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off" hidden>SOLO · ROOM NOT CONFIGURED</div>
-  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">ESC · PAUSE</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>
+  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)" title="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">ESC · PAUSE</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>
   <output id="flight-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></output>
   <section id="rapier-radio" aria-label="Optional radio captions" hidden>
     <output id="rapier-radio-text" role="status" aria-live="polite" aria-atomic="true"></output>
@@ -4792,14 +4644,14 @@ Two engagements, then recover · H controls · R restarts</p>
           <div id="ready-route-notice" class="ready-route-notice" role="status" hidden></div>
           <button id="ready-start" type="button">Fly First Merge</button>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
-          <button id="ready-handoff" type="button" hidden disabled>CALL IT A DAY · RTB</button>
           <div class="ready-secondary-actions">
-            <button id="ready-practice" type="button">Practice</button>
-            <button id="ready-logbook" type="button">Logbook</button>
-            <button id="ready-intro-replay" type="button" hidden>Replay valley intro</button>
-            <button id="ready-settings" type="button">Settings</button>
-            <button id="ready-restart" type="button" hidden>Restart sortie</button>
-            <button id="ready-return" type="button" hidden>Choose sortie</button>
+            <button id="ready-practice" type="button"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.6v2.6M8 11.8v2.6M1.6 8h2.6M11.8 8h2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span class="shell-action-label">Practice</span></button>
+            <button id="ready-logbook" type="button"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 2.6h4.1C7.6 2.6 8 3.6 8 3.6V13s-.4-.8-1.8-.8H2.2ZM13.8 2.6H9.7C8.4 2.6 8 3.6 8 3.6V13s.4-.8 1.8-.8h4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg><span class="shell-action-label">Logbook</span></button>
+            <button id="ready-intro-replay" type="button" hidden><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 3.1v9.8l7.4-4.9Z" fill="currentColor"/></svg><span class="shell-action-label">Replay valley intro</span></button>
+            <button id="ready-return" type="button" hidden title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.1 9.2 5.4h3.7L10.4 7.6l.9 4.8L8 10.5 4.7 12.4l.9-4.8L3.1 5.4h3.7z" fill="currentColor"/></svg><span class="shell-action-label">Aircraft</span></button>
+            <button id="ready-restart" type="button" hidden title="Restart sortie"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M11.2 1.8v3.2H8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="shell-action-label">Restart</span></button>
+            <button id="ready-settings" type="button" title="Build __RELEASE_BUILD__ · verifying"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6.2 1.1h3.6l.5 1.7 1.6.7 1.5-1 2 2-1 1.5.7 1.6 1.7.5v3.6l-1.7.5-.7 1.6 1 1.5-2 2-1.5-1-1.6.7-.5 1.7H6.2l-.5-1.7-1.6-.7-1.5 1-2-2 1-1.5-.7-1.6-1.7-.5V6.6l1.7-.5.7-1.6-1-1.5 2-2 1.5 1 1.6-.7zM8 6.1a1.9 1.9 0 1 0 .01 3.8A1.9 1.9 0 0 0 8 6.1z"/></svg><span class="shell-action-label">Settings</span></button>
+            <button id="ready-handoff" type="button" hidden disabled title="Call it a day and return to base"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2v7.2M5.2 7.2 8 10.4l2.8-3.2M3 13.2h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="shell-action-label">RTB</span></button>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <!--
@@ -4820,66 +4672,48 @@ Two engagements, then recover · H controls · R restarts</p>
           <button id="ready-laptop-hint" type="button">
             <span aria-hidden="true">⌨</span> Best on a laptop with a keyboard or gamepad.
           </button>
-          <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build __RELEASE_BUILD__ · verifying</output>
+          <div id="ready-build-row" hidden>
+            <output id="ready-build" data-state="checking" hidden>Build __RELEASE_BUILD__ · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
-          </div>
-          <div class="ready-telemetry-disclosure">
-            <label><input id="ready-telemetry-sharing" type="checkbox"> Share detailed flight diagnostics</label>
-            <small>Optional. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Minimal shell-health (boot milestones and fatals, device class) is always sent so broken boots are visible.</small>
-            <output id="ready-telemetry-sharing-status" aria-live="polite">Off by default. No gameplay diagnostics are sent.</output>
           </div>
         </section>
       </div>
     </div>
   </div>
 
-  <section id="settings-screen" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-describedby="settings-copy" aria-hidden="true" inert>
+  <section id="settings-screen" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-hidden="true" inert>
     <div class="settings-card">
-      <header class="settings-head">
-        <h2 id="settings-title">Settings</h2>
-        <button id="settings-close" type="button">Done · Esc</button>
-      </header>
-      <p id="settings-copy" class="settings-copy">Preferences apply immediately and stay on this device. Touch controls retain their labelled actions when keyboard bindings change.</p>
+      <h2 id="settings-title" class="visually-hidden">Settings</h2>
       <div class="settings-sections">
-        <fieldset class="settings-section">
-          <legend>Audio</legend>
-          <div class="settings-grid">
-            <label class="settings-toggle"><input id="setting-audio" type="checkbox"> Sound</label>
-            <label class="settings-toggle"><input id="setting-music" type="checkbox"> Music</label>
-            <label class="settings-toggle"><input id="setting-interface-sounds" type="checkbox"> Interface sounds</label>
-            <label class="settings-toggle"><input id="setting-radio-voice" type="checkbox"> Radio voices</label>
-            <label class="settings-toggle"><input id="setting-radio-captions" type="checkbox"> Radio captions</label>
-          </div>
-        </fieldset>
-        <fieldset class="settings-section">
-          <legend>Picture</legend>
-          <div class="settings-grid">
-            <label class="settings-toggle"><input id="setting-high-contrast" type="checkbox"> High-contrast HUD</label>
-            <label class="settings-toggle"><input id="setting-reduced-motion" type="checkbox"> Reduce motion</label>
-            <label class="settings-toggle"><input id="setting-large-text" type="checkbox"> Larger interface text</label>
-          </div>
-        </fieldset>
-        <fieldset class="settings-section">
-          <legend>Aircraft</legend>
-          <div class="settings-grid">
-            <label class="settings-toggle"><input id="setting-autogcas" type="checkbox"> Auto-GCAS backstop</label>
-            <label class="settings-toggle settings-touch-only" title="Replaces the throttle lever with the THR/YAW stick; FIRE moves inboard"><input id="setting-touch-rudder-stick" type="checkbox"> Touch rudder stick</label>
-            <label class="settings-range" for="setting-tilt-sensitivity"><span>Tilt sensitivity</span><output id="setting-tilt-sensitivity-value">1.00×</output><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1"></label>
-            <label class="settings-toggle"><input id="setting-telemetry-sharing" type="checkbox" aria-describedby="setting-telemetry-sharing-copy"> Share detailed flight diagnostics</label>
-            <p id="setting-telemetry-sharing-copy" class="settings-telemetry-copy">Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards anything not yet sent. Minimal shell-health (boot and fatal signals, device class) remains always-on.</p>
-          </div>
-        </fieldset>
+        <div class="settings-section" role="group" aria-label="Audio">
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Audio"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.4 6.2h2.2L8.2 3.4v9.2L4.6 9.8H2.4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M10.2 6.1a2.6 2.6 0 0 1 0 3.8M11.8 4.6a4.6 4.6 0 0 1 0 6.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span>Sound</span><input id="setting-audio" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Music</span><input id="setting-music" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Interface sounds</span><input id="setting-interface-sounds" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Radio voices</span><input id="setting-radio-voice" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Radio captions</span><input id="setting-radio-captions" type="checkbox" role="switch"></label>
+        </div>
+        <div class="settings-section" role="group" aria-label="Picture">
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Picture"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.4 8S3.8 4.2 8 4.2 14.6 8 14.6 8 12.2 11.8 8 11.8 1.4 8 1.4 8Z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="1.7" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></span><span>High-contrast HUD</span><input id="setting-high-contrast" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Reduce motion</span><input id="setting-reduced-motion" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Larger interface text</span><input id="setting-large-text" type="checkbox" role="switch"></label>
+        </div>
+        <div class="settings-section" role="group" aria-label="Aircraft">
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Aircraft"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.1 9.2 5.4h3.7L10.4 7.6l.9 4.8L8 10.5 4.7 12.4l.9-4.8L3.1 5.4h3.7z" fill="currentColor"/></svg></span><span>Auto-GCAS backstop</span><input id="setting-autogcas" type="checkbox" role="switch"></label>
+          <label class="settings-toggle settings-touch-only" title="Replaces the throttle lever with the THR/YAW stick; FIRE moves inboard"><span class="settings-glyph" aria-hidden="true"></span><span>Touch rudder stick</span><input id="setting-touch-rudder-stick" type="checkbox" role="switch"></label>
+          <label class="settings-range" for="setting-tilt-sensitivity"><span class="settings-glyph" aria-hidden="true"></span><span>Tilt sensitivity</span><span class="settings-datum"><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1" aria-valuetext="1.00×"><output id="setting-tilt-sensitivity-value" for="setting-tilt-sensitivity">1.00×</output></span></label>
+          <label class="settings-toggle" title="Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards anything not yet sent. Minimal shell-health (boot and fatal signals, device class) remains always-on."><span class="settings-glyph" aria-hidden="true"></span><span>Share flight diagnostics</span><input id="setting-telemetry-sharing" type="checkbox" role="switch"></label>
+        </div>
       </div>
       <details id="settings-keyboard-bindings" class="settings-disclosure" open>
-        <summary>Keyboard flight controls</summary>
-        <div id="settings-bindings" class="settings-bindings"></div>
-        <div class="settings-binding-actions">
-          <button id="settings-reset-bindings" type="button">Reset keyboard controls</button>
-        </div>
+        <summary><span aria-hidden="true">⌨</span> Keyboard</summary>
+        <table class="settings-keys" aria-label="Keyboard flight controls">
+          <colgroup><col><col class="settings-key-column"><col><col class="settings-key-column"></colgroup>
+          <tbody id="settings-bindings"></tbody>
+        </table>
       </details>
       <div class="settings-actions">
-        <button id="settings-close-bottom" type="button">Done</button>
+        <button id="settings-reset-bindings" type="button" title="Reset keyboard controls">Reset keys</button>
+        <button id="settings-close" type="button" title="Close settings (Escape)">Done</button>
       </div>
     </div>
   </section>
@@ -4894,48 +4728,68 @@ Two engagements, then recover · H controls · R restarts</p>
   -->
   <div id="boot" data-phase="files" aria-busy="true">
     <div class="boot-load">
-      <i class="boot-pulse" aria-hidden="true"></i>
-      <div id="boot-status" role="status" aria-live="polite" aria-atomic="true"></div>
+      <span id="boot-status" role="status" aria-live="polite" aria-atomic="true">Loading</span>
+      <div id="boot-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+        aria-valuenow="0" aria-labelledby="boot-status"><i></i></div>
     </div>
   </div>
 
+  <!-- Independent static markup: this last resort also works when fallback modules fail. -->
   <div id="fatal" role="alert">
-    <div class="fatal-card">
-      <h2>FLIGHT KERNEL OFFLINE</h2>
-      <pre id="fatal-message"></pre>
-      <a class="reload" href=".">Reload simulation</a>
+    <div class="fatal-card failure-card">
+      <div class="failure-row">
+        <span class="failure-glyph" aria-hidden="true">⚠</span>
+        <h2>Couldn't start</h2>
+        <button id="fatal-message" class="failure-info" type="button"
+          title="Technical detail" aria-label="Technical detail">ⓘ</button>
+      </div>
+      <div class="failure-row">
+        <p class="failure-reason">Check your connection, then try again.</p>
+      </div>
+      <div class="failure-actions">
+        <a class="failure-primary" href="">Try again</a>
+        <button id="fatal-copy" type="button">Copy link</button>
+      </div>
     </div>
   </div>
 
-  <!--
-    The human-facing failure screen. Filled by render/shell/boot_fallback.js: the words depend on
-    whether WebGL was refused or the boot simply stopped, and on which app's webview the player is
-    trapped in. Markup lives here so it can be shown by the inline bootstrap below even when the
-    module graph itself is what failed to load.
-  -->
   <div id="shell-fallback" role="alert" hidden>
-    <div class="shell-fallback-card">
-      <h2 id="shell-fallback-title">Guns Only could not start</h2>
-      <p id="shell-fallback-body"></p>
+    <div class="shell-fallback-card failure-card">
+      <div class="failure-row">
+        <span class="failure-glyph" aria-hidden="true">⚠</span>
+        <h2 id="shell-fallback-title">Couldn't start</h2>
+        <button id="shell-fallback-detail" class="failure-info" type="button"
+          title="Technical detail" aria-label="Technical detail">ⓘ</button>
+      </div>
+      <div class="failure-row">
+        <p id="shell-fallback-body" class="failure-reason">Check your connection, then try again.</p>
+      </div>
       <ol id="shell-fallback-steps" hidden></ol>
-      <div class="shell-fallback-actions">
+      <div class="shell-fallback-actions failure-actions" hidden>
         <a id="shell-fallback-open" href="#" hidden>Open in your browser</a>
       </div>
-      <code id="shell-fallback-url" class="shell-fallback-link"></code>
-      <div class="shell-fallback-actions">
-        <button id="shell-fallback-copy" type="button" class="shell-fallback-secondary">
-          Copy link
-        </button>
-        <a id="shell-fallback-reload" class="shell-fallback-secondary" href=".">Try again</a>
+      <div class="shell-fallback-actions failure-actions">
+        <a id="shell-fallback-reload" class="failure-primary" href="">Try again</a>
+        <button id="shell-fallback-copy" type="button">Copy link</button>
       </div>
-      <p id="shell-fallback-detail" hidden></p>
     </div>
   </div>
 
   <script>
-    // The title card is deleted, so there is no per-sortie deck/title/detail to paint before
-    // app.js arrives. The deep link still selects the sortie -- it is read by the module graph
-    // from the same query string -- it just no longer has a splash screen to announce itself on.
+    // Stage completion, not a byte counter: downloads occupy the first part of the gauge.
+    // Classic-script ownership keeps status available before any module can load.
+    globalThis.__gunsSetBootProgress = (phase) => {
+      const progress = { files: 0, update: 20, switching: 40, runtime: 40, model: 70, scene: 90, ready: 100 }[phase] ?? 0;
+      const status = document.getElementById("boot-status");
+      if (status) status.textContent = phase === "update" ? "Updating" : "Loading";
+      const gauge = document.getElementById("boot-progress");
+      if (gauge) {
+        gauge.style.setProperty("--boot-progress", `${progress}%`);
+        gauge.setAttribute("aria-valuenow", String(progress));
+      }
+      const boot = document.getElementById("boot");
+      if (boot) boot.dataset.phase = phase;
+    };
 
     // Wait for a verified replacement worker before mixing this document with a stale runtime.
     // Cached releases are retained during this handoff, including a failed or interrupted update.
@@ -4970,18 +4824,17 @@ Two engagements, then recover · H controls · R restarts</p>
         // installed-and-waiting, and say which; fail only when neither appears within 30 s.
         const updateStarted = Date.now();
         let handoffRequested = false;
-        const updateStatus = (text) => { const node = document.getElementById("boot-status"); if (node) node.textContent = text; };
         const releaseWorker = (worker) => !!worker && new URL(worker.scriptURL, location.href).searchParams.get("v") === releaseBuild;
         const timer = setInterval(async () => {
           const registration = await sw.getRegistration?.().catch(() => null);
           const elapsed = Date.now() - updateStarted;
-          if (elapsed < 600_000 && releaseWorker(registration?.installing)) return updateStatus("DOWNLOADING UPDATE…");
+          if (elapsed < 600_000 && releaseWorker(registration?.installing)) return globalThis.__gunsSetBootProgress("update");
           if (elapsed < 600_000 && releaseWorker(registration?.waiting)) {
             // This page is itself an old-worker client, so closing other tabs can never activate
             // the verified replacement. Ask that exact build to take over; old tabs keep their own
             // retained release bucket and the activation handshake.
             if (!handoffRequested) { handoffRequested = true; registration.waiting.postMessage({ type: "guns-skip-waiting", build: releaseBuild }); }
-            return updateStatus("UPDATE READY · SWITCHING…");
+            return globalThis.__gunsSetBootProgress("switching");
           }
           if (elapsed < 30_000) return;
           cleanup(); reject(new Error("Release update unavailable; saved release retained"));
@@ -5023,26 +4876,21 @@ Two engagements, then recover · H controls · R restarts</p>
 
     // The fallback screen's copy control. Wired here, in a classic script, because the module
     // graph is one of the things that can be broken when this screen is shown.
-    document.addEventListener("click", (event) => {
-      const button = event.target?.closest?.("#shell-fallback-copy");
+    document.addEventListener("click", async (event) => {
+      const button = event.target?.closest?.("#shell-fallback-copy, #fatal-copy");
       if (!button) return;
-      const text = document.querySelector("#shell-fallback-url")?.textContent || location.href;
-      const done = () => { button.textContent = "Link copied"; };
+      const text = button.dataset.copyUrl || location.href;
       try {
-        const written = navigator.clipboard?.writeText?.(text);
-        if (written?.then) { written.then(done, () => {}); return; }
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          button.textContent = "Link copied";
+          return;
+        }
       } catch {
-        // Clipboard access is denied in several webviews. Fall through to selection.
+        // Some webviews deny clipboard access. Keep a manual copy route available.
       }
-      // No clipboard permission: select the URL so one long-press "Copy" finishes the job.
-      const range = document.createRange();
-      const node = document.querySelector("#shell-fallback-url");
-      if (!node) return;
-      range.selectNodeContents(node);
-      const selection = getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      button.textContent = "Press and hold the link, then Copy";
+      // No visible URL row: the native prompt makes the link selectable on demand.
+      window.prompt("Copy link", text);
     });
   </script>
   <script type="module">
@@ -5068,36 +4916,49 @@ Two engagements, then recover · H controls · R restarts</p>
       await import("./app.js?v=__RELEASE_BUILD__");
     } catch (error) {
       console.error(error);
-      document.querySelector("#boot")?.classList.add("ready");
-      // Prefer the human screen. A failure here is usually a webview refusing to finish the module
-      // graph, and "Failed to load ./app.js" in a phosphor terminal helps nobody who arrived from
-      // a social post. These two modules are tiny, same-origin and dependency-free precisely so
-      // they can still load when the big graph did not; if even they fail, the engineering card
-      // below is the honest last resort.
-      let shown = false;
-      try {
-        const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
-          await Promise.all([
-            import("./render/shell/inapp_browser.js?v=__RELEASE_BUILD__"),
-            import("./render/shell/boot_fallback.js?v=__RELEASE_BUILD__"),
-          ]);
-        const detection = detectEmbeddedBrowser({
-          userAgent: navigator.userAgent,
-          maxTouchPoints: navigator.maxTouchPoints,
-        });
-        shown = mountBootFallback(document, bootFallbackModel({
-          reason: "module",
-          detection,
-          url: location.href,
-          detail: error instanceof Error ? error.message : String(error),
-        }));
-      } catch (fallbackError) {
-        console.error(fallbackError);
-      }
-      if (!shown) {
-        const message = document.querySelector("#fatal-message");
-        if (message) message.textContent = error instanceof Error ? error.message : String(error);
-        document.querySelector("#fatal")?.classList.add("visible");
+      // A transient fetch failure gets one reload per build. Storage denial must fail closed.
+      const retrying = (() => {
+        try {
+          if (sessionStorage.getItem("guns-boot-retry") === releaseBuild) return false;
+          sessionStorage.setItem("guns-boot-retry", releaseBuild);
+          location.reload();
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+      if (!retrying) {
+        document.querySelector("#boot")?.classList.add("ready");
+        // Prefer the shared fallback; independent static markup is the last resort if it cannot load.
+        let shown = false;
+        try {
+          const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
+            await Promise.all([
+              import("./render/shell/inapp_browser.js?v=__RELEASE_BUILD__"),
+              import("./render/shell/boot_fallback.js?v=__RELEASE_BUILD__"),
+            ]);
+          const detection = detectEmbeddedBrowser({
+            userAgent: navigator.userAgent,
+            maxTouchPoints: navigator.maxTouchPoints,
+          });
+          shown = mountBootFallback(document, bootFallbackModel({
+            reason: "module",
+            detection,
+            url: location.href,
+            detail: error instanceof Error ? error.message : String(error),
+          }));
+        } catch (fallbackError) {
+          console.error(fallbackError);
+        }
+        if (!shown) {
+          const message = document.querySelector("#fatal-message");
+          if (message) {
+            const detail = `${error instanceof Error ? error.message : String(error)}\n${location.href}`;
+            message.title = detail;
+            message.setAttribute("aria-label", `Technical detail: ${detail}`);
+          }
+          document.querySelector("#fatal")?.classList.add("visible");
+        }
       }
     }
   </script>

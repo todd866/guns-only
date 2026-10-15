@@ -8,8 +8,9 @@ test("static shell keeps third-party analytics out and makes hosted diagnostics 
   assert.doesNotMatch(html, /\/_vercel\/insights\/script\.js/,
     "anonymous page analytics would bypass the explicit flight-diagnostics consent boundary");
   assert.match(html,
-    /<input id="ready-telemetry-sharing" type="checkbox">/);
-  assert.match(html, /Off by default\. No gameplay diagnostics are sent\./);
+    /<input id="setting-telemetry-sharing" type="checkbox" role="switch">/);
+  assert.match(html, /title="Off by default\.[^"]*Turning it off discards anything not yet sent/);
+  assert.doesNotMatch(html, /id="ready-telemetry-sharing"/);
 });
 
 test("deployment runbook preserves the same diagnostics consent boundary", async () => {

@@ -266,7 +266,7 @@ test("bootstrap dependency failures reveal a fatal surface instead of hanging", 
         // Build 265 moved the flight route's bootstrap failure off the phosphor console: when the
         // inline module bootstrap cannot load multiplayer-config, the Blazor loader or app.js, the
         // screen a player actually gets is #shell-fallback -- plain English, a route out of an
-        // in-app browser, and the exception kept as small print. That is the surface asserted here,
+        // in-app browser, and the exception kept behind the info control. That is the surface asserted here,
         // because a smoke test that watches a card nobody is shown proves nothing about hanging.
         // #fatal remains the honest last resort and is still reachable (showFatal, and the inline
         // catch when even boot_fallback.js will not load); the two other routes below still use it.
@@ -275,7 +275,7 @@ test("bootstrap dependency failures reveal a fatal surface instead of hanging", 
         fatal: "#shell-fallback",
         copy: "#shell-fallback-body",
         // The engineering truth must survive the friendlier screen, not be swallowed by it.
-        detail: { selector: "#shell-fallback-detail", match: /blazor\.webassembly\.js/ },
+        detail: { selector: "#shell-fallback-detail", match: /blazor\.webassembly\.js/, attribute: "title" },
         // Desktop has no in-app browser to escape, so the escape row must not paint an empty
         // 48 px slab: an author `display: flex` outranks the UA sheet's [hidden] rule.
         unpainted: ["#shell-fallback-open"],
@@ -295,7 +295,8 @@ test("bootstrap dependency failures reveal a fatal surface instead of hanging", 
         route: "?audioQa=silent",
         abort: "**/{_framework/blazor.webassembly.js,render/shell/boot_fallback.js}*",
         fatal: "#fatal",
-        copy: "#fatal-message",
+        copy: "#fatal",
+        detail: { selector: "#fatal-message", match: /blazor\.webassembly\.js/, attribute: "title" },
         invisible: ["#shell-fallback"],
         boot: "#boot",
       },
@@ -332,7 +333,9 @@ test("bootstrap dependency failures reveal a fatal surface instead of hanging", 
           `${entry.route} showed an empty fatal failure`,
         );
         if (entry.detail) {
-          const detail = (await page.locator(entry.detail.selector).textContent())?.trim() ?? "";
+          const detail = entry.detail.attribute
+            ? (await page.locator(entry.detail.selector).getAttribute(entry.detail.attribute))?.trim() ?? ""
+            : (await page.locator(entry.detail.selector).textContent())?.trim() ?? "";
           assert.match(detail, entry.detail.match,
             `${entry.route} dropped the technical cause from its failure screen`);
         }
@@ -412,7 +415,9 @@ test("the mobile loading cover is the painted sky and shows no title card", asyn
       });
       const page = await context.newPage();
       await page.route("**/app.js*", (route) => route.abort());
-      await page.route("**/_framework/**", (route) => route.abort());
+      // Hold loading in progress. Aborting now correctly retries and then shows a failure card,
+      // which would race the viewport measurement of the loading cover itself.
+      await page.route("**/_framework/**", () => {});
       await page.goto(`${site.url}${entry.search}`, {
         waitUntil: "domcontentloaded",
         timeout: scaled(30000),
@@ -460,8 +465,8 @@ test("the mobile loading cover is the painted sky and shows no title card", asyn
         `${where}: boot is not wearing the painted hangar`);
 
       // The whole point. If a wordmark, tagline or spec sheet ever comes back, this fails.
-      assert.deepEqual(layout.painted, [],
-        `${where}: the title card is back -- visible text on the loading cover: ${JSON.stringify(layout.painted)}`);
+      assert.deepEqual(layout.painted, ["Loading"],
+        `${where}: unexpected visible text on the loading cover: ${JSON.stringify(layout.painted)}`);
 
       // Deleting it from view must not delete it from the accessibility tree.
       assert.equal(layout.busy, "true");
@@ -477,7 +482,7 @@ test("the mobile loading cover is the painted sky and shows no title card", asyn
   }
 });
 
-test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sideways", async () => {
+test("iPhone selecting Top Gun and returning from Settings cannot scroll Ready sideways", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
   const site = await serveStatic(WWWROOT);
@@ -525,8 +530,6 @@ test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sidewa
       const selectors = [
         "#ready-start",
         "#ready-settings",
-        ".ready-telemetry-disclosure",
-        "#ready-telemetry-sharing",
       ];
       const bounds = Object.fromEntries(selectors.map((selector) => {
         const element = document.querySelector(selector);
@@ -580,23 +583,29 @@ test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sidewa
       for (const [selector, rect] of Object.entries(state.bounds)) {
         assert.ok(rect.left >= 0 && rect.right <= state.viewport.width,
           `${phase}: ${selector} escaped the phone viewport horizontally: ${JSON.stringify(rect)}`);
-        if (selector !== ".ready-telemetry-disclosure") {
-          assert.ok(rect.top >= 0 && rect.bottom <= state.viewport.height,
-            `${phase}: ${selector} escaped the phone viewport vertically: ${JSON.stringify(rect)}`);
-        }
+        assert.ok(rect.top >= 0 && rect.bottom <= state.viewport.height,
+          `${phase}: ${selector} escaped the phone viewport vertically: ${JSON.stringify(rect)}`);
         assert.equal(rect.hitTestable, true,
           `${phase}: ${selector} is visible but another layer owns its tap target: ${JSON.stringify(rect)}`);
       }
     };
 
     assertReachable(await layout(), "after selecting Top Gun");
-    await page.locator("#ready-telemetry-sharing").click();
-    await page.waitForFunction(() => document.querySelector(
-      "#ready-telemetry-sharing-status",
-    )?.textContent.includes("Sharing is on"));
+    assert.equal(await page.locator("#ready-telemetry-sharing").count(), 0);
+    await page.locator("#ready-settings").click();
+    const consent = page.locator("#setting-telemetry-sharing");
+    assert.equal(await consent.getAttribute("role"), "switch");
+    await consent.check();
+    await page.waitForFunction(() => document.documentElement.dataset.telemetrySharing === "on");
+    assert.equal(await page.evaluate(() => localStorage.getItem("guns-only.telemetry-sharing.v1")), "enabled");
+    await page.locator("#settings-close").click();
     assertReachable(await layout(), "after diagnostics consent");
+    await page.locator("#ready-settings").click();
+    assert.equal(await consent.isChecked(), true);
     // This isolated smoke context must leave the privacy preference at its safer state too.
-    await page.locator("#ready-telemetry-sharing").click();
+    await consent.uncheck();
+    await page.waitForFunction(() => document.documentElement.dataset.telemetrySharing === "off");
+    await page.locator("#settings-close").click();
     assert.deepEqual(pageErrors, [],
       `iPhone Top Gun Ready page errors:\n${pageErrors.join("\n")}`);
   } finally {
@@ -1674,13 +1683,13 @@ test("the published web app boots to a running flight kernel (no fatal render er
       () => document.querySelector("#fatal")?.classList.contains("visible") === true,
     );
     const fatalMessage = await page.evaluate(
-      () => document.querySelector("#fatal-message")?.textContent ?? "",
+      () => document.querySelector("#fatal-message")?.getAttribute("title") ?? "",
     );
 
     assert.equal(
       fatalVisible,
       false,
-      `the app booted into FLIGHT KERNEL OFFLINE:\n${fatalMessage.slice(0, 800)}`,
+      `the app booted into its fatal screen:\n${fatalMessage.slice(0, 800)}`,
     );
     assert.deepEqual(
       pageErrors,
@@ -1970,7 +1979,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
       const boot = await page.evaluate(() => ({
         status: document.querySelector("#boot-status")?.textContent,
         fatal: document.querySelector("#fatal")?.classList.contains("visible"),
-        fatalMessage: document.querySelector("#fatal-message")?.textContent,
+        fatalMessage: document.querySelector("#fatal-message")?.getAttribute("title"),
         state: globalThis.__gunsState ? {
           sessionPhase: globalThis.__gunsState.session_phase,
           casevac: globalThis.__gunsState.casevac_mission,
@@ -2065,7 +2074,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
         out.runPaused = document.documentElement.className.includes("run-paused");
         out.factsHidden = document.querySelector("[data-casevac-flight-facts]")?.hidden;
         out.fatal = document.querySelector("#fatal")?.classList.contains("visible");
-        out.fatalMsg = (document.querySelector("#fatal-message")?.textContent || "").slice(0, 300);
+        out.fatalMsg = (document.querySelector("#fatal-message")?.getAttribute("title") || "").slice(0, 300);
         return out;
       });
       console.error("CASEVAC_DIAG " + JSON.stringify(diag));

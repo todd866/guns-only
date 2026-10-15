@@ -15,29 +15,32 @@ test("shell-health always-on beacon is disclosed beside gameplay opt-in", () => 
   assert.match(indexSource, /boot milestones and fatals|boot and fatal/i);
 });
 
-test("detailed gameplay telemetry is explicit opt-in with truthful visible disclosure", () => {
+test("detailed gameplay telemetry is explicit opt-in with one Settings switch and a complete tooltip disclosure", () => {
   assert.match(appSource,
     /function loadTelemetrySharingPreference[\s\S]*?getItem\?\.\(TELEMETRY_SHARING_STORAGE_KEY\) === "enabled"[\s\S]*?return false/,
     "missing, malformed, or unavailable storage must keep network sharing off");
-  assert.match(indexSource,
-    /id="ready-telemetry-sharing"[\s\S]*?Share detailed flight diagnostics[\s\S]*?controls, aircraft state, multiplayer identifiers, and browser\/device details are sent/,
-    "the front door must disclose the data categories before a pilot flies");
-  assert.match(indexSource,
-    /id="setting-telemetry-sharing"[\s\S]*?Turning it off discards anything not yet sent/,
-    "the durable setting must explain the immediate opt-out behavior");
+  const consentRow = indexSource.match(/<label class="settings-toggle" title="Off by default[^]*?<\/label>/)?.[0];
+  assert.ok(consentRow, "the settings row must disclose default-off sharing in its tooltip");
+  assert.match(consentRow, /controls, aircraft state, multiplayer identifiers, and browser\/device details are sent/);
+  assert.match(consentRow, /Turning it off discards anything not yet sent/);
+  assert.match(consentRow, /Share flight diagnostics/);
+  assert.match(consentRow, /id="setting-telemetry-sharing" type="checkbox" role="switch"/);
+  assert.doesNotMatch(indexSource, /ready-telemetry-sharing|ready-telemetry-disclosure/,
+    "Settings is the only consent control");
   assert.doesNotMatch(indexSource, /anonymous flight diagnostics/i,
     "browser and multiplayer identifiers mean this data must not be called anonymous");
   assert.doesNotMatch(indexSource, /_vercel\/insights\/script\.js/,
     "page analytics must not bypass the explicit network-sharing preference during preboot");
   assert.match(appSource,
-    /for \(const control of \[readyTelemetrySharing, settingsTelemetrySharing\]\)[\s\S]*?commitTelemetrySharingPreference\(control\.checked\)/,
-    "both visible controls must own the same durable preference");
+    /settingsTelemetrySharing\?\.addEventListener\("change"[\s\S]*?commitTelemetrySharingPreference\(settingsTelemetrySharing\.checked\)/,
+    "the settings switch must own the existing durable preference");
   assert.match(appSource,
-    /function readyScreenFocusables\(\)[\s\S]*?input:not\(\[disabled\]\)/,
-    "the front-door checkbox must participate in the modal keyboard focus trap");
+    /settingsTelemetrySharing\.checked = telemetrySharingEnabled/,
+    "a stored opt-in must restore the switch state");
   assert.match(appSource,
-    /readyTelemetryDisclosure\.hidden = !ready/,
-    "pause and debrief must semantically hide consent so the focus trap cannot select it");
+    /function settingsFocusables\(\)[\s\S]*?input:not\(\[disabled\]\)/,
+    "the diagnostics switch must participate in the settings focus trap");
+
 });
 
 test("the recorder cannot buffer or transmit while sharing is disabled", () => {

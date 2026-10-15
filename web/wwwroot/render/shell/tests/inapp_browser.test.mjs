@@ -102,4 +102,6 @@ test("iOS gets instructions and a copyable URL, because it cannot be forced", ()
     "the instruction must name the menu item the player is looking for");
   assert.match(route.steps.join(" "), /Threads/,
     "naming the app the player is trapped in is what makes the instruction followable");
+  assert.match(route.steps[0], /Tap .*Threads/);
+  assert.match(route.steps[1], /Copy link/);
 });

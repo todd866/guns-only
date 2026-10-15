@@ -33,6 +33,11 @@ function harness({ installingFor = 0, waitingFor = 0, activateAt = Infinity } = 
   let nextId = 1;
   const listeners = new Map();
   const statusNode = { textContent: "" };
+  const gauge = {
+    value: "0", fill: "0%",
+    style: { setProperty(name, value) { gauge.fill = value; } },
+    setAttribute(name, value) { if (name === "aria-valuenow") this.value = value; },
+  };
   const fresh = worker("__RELEASE_BUILD__");
   const handoffs = [];
   // The waiting replacement activates only when the page asks for it (skipWaiting on request).
@@ -64,7 +69,7 @@ function harness({ installingFor = 0, waitingFor = 0, activateAt = Infinity } = 
     addEventListener() {},
     removeEventListener() {},
     document: {
-      getElementById: (id) => (id === "boot-status" ? statusNode : null),
+      getElementById: (id) => ({ "boot-status": statusNode, "boot-progress": gauge })[id] ?? null,
       querySelector: () => null,
       querySelectorAll: () => [],
       addEventListener() {},
@@ -102,7 +107,7 @@ function harness({ installingFor = 0, waitingFor = 0, activateAt = Infinity } = 
     }
     await new Promise((resolve) => setImmediate(resolve));
   }
-  return { context, advance, statusNode, handoffs };
+  return { context, advance, statusNode, gauge, handoffs };
 }
 
 // The gate arms its timer after awaiting getRegistrations(); let that land before the clock moves.
@@ -126,7 +131,11 @@ for (const page of PAGES) {
     const gate = h.context.__gunsPrebootReady;
     await h.advance(45_000);
     assert.equal(await outcome(gate), "pending", "still downloading at 45 s must not fail");
-    if (page === "../../../index.html") assert.equal(h.statusNode.textContent, "DOWNLOADING UPDATE…");
+    if (page === "../../../index.html") {
+      assert.equal(h.statusNode.textContent, "Updating");
+      assert.equal(h.gauge.value, "20");
+      assert.equal(h.gauge.fill, "20%");
+    }
     await h.advance(60_000);
     assert.equal(await outcome(gate), "resolved");
   });
@@ -139,7 +148,11 @@ for (const page of PAGES) {
     await h.advance(3_000);
     assert.equal(JSON.stringify(h.handoffs), JSON.stringify([{ type: "guns-skip-waiting", build: "__RELEASE_BUILD__" }]),
       "this page is an old-worker client itself: it must ask the replacement to take over, once");
-    if (page === "../../../index.html") assert.equal(h.statusNode.textContent, "UPDATE READY · SWITCHING…");
+    if (page === "../../../index.html") {
+      assert.equal(h.statusNode.textContent, "Loading");
+      assert.equal(h.gauge.value, "40");
+      assert.equal(h.gauge.fill, "40%");
+    }
     await h.advance(2_000);
     assert.equal(await outcome(gate), "resolved");
   });

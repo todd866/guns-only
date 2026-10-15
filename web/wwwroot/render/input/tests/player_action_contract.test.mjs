@@ -93,7 +93,8 @@ function gkeyOrdinals(source) {
     .map((name, ordinal) => [name, ordinal]));
 }
 
-const copy = `${normalizedCopy(hudSource)} ${normalizedCopy(indexSource, { markup: true })}`;
+const tooltipCopy = [...indexSource.matchAll(/\btitle="([^"]*)"/g)].map((match) => match[1]).join(" ");
+const copy = `${normalizedCopy(hudSource)} ${normalizedCopy(indexSource, { markup: true })} ${normalizedCopy(tooltipCopy)}`;
 const mappedCodes = baseKeyMap(appSource);
 for (const action of Object.values(TEST_FLIGHT_ACTIONS)) {
   mappedCodes.set(action.code, action.gkey);
@@ -118,7 +119,7 @@ const BRIDGE_ACTIONS = Object.freeze([
   // established, app.js sends a separate semantic transition to the fixed-tick roll augmentation;
   // it never turns camera pixels or RAF timing into aircraft input.
   { id: "padlock", bindingAction: "padlock", code: "KeyV", gkey: "Padlock", behavior: "momentary", help: "PADLOCK ON / OFF", uiConsumer: /contextualPadlockTarget\(latestState\)/, uiObservable: /hudFrame\.padlockTarget = padlockTarget/ },
-  { id: "knock-it-off", code: "KeyO", gkey: "KnockItOff", behavior: "momentary", help: "CALL IT A DAY · RTB", consumer: /key == GKey\.KnockItOff/, observable: /rtb_reason/ },
+  { id: "knock-it-off", code: "KeyO", gkey: "KnockItOff", behavior: "momentary", help: "CALL IT A DAY AND RETURN TO BASE", consumer: /key == GKey\.KnockItOff/, observable: /rtb_reason/ },
   { id: "restart", code: "KeyR", gkey: "Restart", behavior: "momentary", help: "R RESTART", consumer: /key == GKey\.Restart/, uiConsumer: /restartMission\(\)/ },
   { id: "limit-override", bindingAction: "limitOverride", code: "Space", gkey: "Override", behavior: "hold", help: "LIMIT OVERRIDE", consumer: /GKey\.Override/, observable: /requested_g_cmd/ },
   { id: "auto-gcas-paddle", bindingAction: "gcasOverride", code: "KeyK", gkey: "AutoGcasOverride", behavior: "hold", help: "AGCAS PADDLE", consumer: /GKey\.AutoGcasOverride/, observable: /auto_gcas_override_held/ },
@@ -289,8 +290,7 @@ test("every visible HTML button is wired through one auditable action surface", 
     // Phone-width "this wants a laptop" recommendation; dismissed for good on tap. It is a
     // recommendation and never a gate, so it carries no action beyond its own dismissal.
     ["ready-laptop-hint", /getElementById\("ready-laptop-hint"\)\?\.addEventListener\("click"/],
-    ["settings-close", /\[settingsClose, settingsCloseBottom\][\s\S]*?addEventListener\("click", closeSettings\)/],
-    ["settings-close-bottom", /\[settingsClose, settingsCloseBottom\][\s\S]*?addEventListener\("click", closeSettings\)/],
+    ["settings-close", /settingsClose\?\.addEventListener\("click", closeSettings\)/],
     ["settings-reset-bindings", /settingsResetBindings\?\.addEventListener\("click"/],
     ["nav-nd-follow", /navUi\.follow\?\.addEventListener\("click"/],
     ["nav-nd-free", /navUi\.free\?\.addEventListener\("click"/],
@@ -308,10 +308,17 @@ test("every visible HTML button is wired through one auditable action surface", 
   // one control cannot depend on app.js having loaded.
   const inlineButtons = new Map([
     ["shell-fallback-copy", /#shell-fallback-copy[\s\S]*?clipboard\?\.writeText/],
+    ["fatal-copy", /#fatal-copy[\s\S]*?clipboard\?\.writeText/],
   ]);
 
   for (const button of htmlButtons(indexSource)) {
     const attrs = button.attributes;
+    // Part 1 exposes technical detail through a keyboard-focusable native tooltip.
+    if (["fatal-message", "shell-fallback-detail"].includes(attrs.id)) {
+      assert.equal(attrs.title, "Technical detail");
+      assert.equal(attrs["aria-label"], "Technical detail");
+      continue;
+    }
     if (attrs.id && inlineButtons.has(attrs.id)) {
       assert.match(indexSource, inlineButtons.get(attrs.id),
         `${attrs.id}: missing inline click handler`);
@@ -378,7 +385,7 @@ test("pause-menu call-it-a-day is authoritative, deliberate, and observes accept
     /function requestCombatHandoffFromNav\(\)[\s\S]*?const accepted = typedRequest\s*\? bridge\.RequestReturnToBase\(\) === true\s*: pressMappedKey\(code, "nav-rtb", knockItOffControl\.gkey\)[\s\S]*?if \(!accepted\)[\s\S]*?source: "navigation-button"[\s\S]*?return false[\s\S]*?if \(!typedRequest\) releaseMappedKey\(code, "nav-rtb"\)/,
     "the navigation action must observe typed acceptance, report rejection, and keep press/release on the bounded legacy branch");
   assert.match(indexSource,
-    /<button id="ready-handoff"[^>]*hidden[^>]*disabled[^>]*>CALL IT A DAY · RTB<\/button>/,
+    /<button id="ready-handoff"[^>]*hidden[^>]*disabled[^>]*>[^]*?<span class="shell-action-label">RTB<\/span><\/button>/,
     "the mobile-safe pause action must start unavailable before authoritative state arrives");
   assert.match(appSource,
     /title: "F-22A vs Su-27S"[\s\S]*?controls: "Arrows fly[^\n]*\\nO calls it a day and starts RTB · G gear/,
@@ -475,7 +482,7 @@ test("phone settings remain scrollable, zoomable, and collapse desktop-only bind
   assert.match(indexSource,
     /<details id="settings-keyboard-bindings" class="settings-disclosure" open>/);
   assert.match(appSource, /settingsKeyboardBindings\?\.removeAttribute\("open"\)/,
-    "touch mode should collapse the eighteen keyboard binding buttons");
+    "touch mode should collapse the keyboard binding table");
   assert.match(appSource,
     /#ready-screen, #settings-screen, #incident-replay-overlay, #test-flight-console/,
     "touchmove protection must exempt every scrollable modal surface");
@@ -811,21 +818,21 @@ test("the shared mission-flow shell keeps one hierarchy across ready, pause, and
     /#ready-screen:is\(\[data-mode="intro"\], \[data-mode="debrief"\]\) \.ready-facts\s*\{[\s\S]*?border:\s*1px solid var\(--flow-line\)/,
     "ready and debrief evidence must read as a shared evidence grid");
   assert.match(indexSource,
-    /#ready-screen\[data-mode="debrief"\] \.ready-secondary-actions,[\s\S]*?repeat\(auto-fit, minmax\(8\.5rem, 1fr\)\)/,
+    /#ready-screen\[data-mode="debrief"\] \.ready-secondary-actions\s*\{[\s\S]*?repeat\(auto-fit, minmax\(8\.5rem, 1fr\)\)/,
     "secondary actions must retain readable targets when the viewport narrows");
   assert.match(indexSource,
-    /#ready-screen\[data-mode="pause"\] #ready-return:not\(\[hidden\]\)\s*\{[\s\S]*?grid-column:\s*1 \/ -1/,
-    "the pause escape back to mission choice must not look like an orphaned half-row utility");
+    /#ready-screen\[data-mode="pause"\] \.ready-secondary-actions button\s*\{[\s\S]*?flex:\s*1 1 0/,
+    "pause actions must share one evenly spaced utility row");
 
   assert.match(appSource,
-    /readyRestart\.textContent = selectedPracticeExercise \? "Restart practice" : finished \? "Repeat sortie" : "Restart sortie"/,
+    /readyRestart\.querySelector\("\.shell-action-label"\)\.textContent = readyScreen\.dataset\.mode === "pause"[\s\S]*?\? "Restart" : selectedPracticeExercise \? "Restart practice" : finished \? "Repeat sortie" : "Restart sortie"/,
     "repeat-current must not share the primary programme-advance label");
   assert.match(appSource,
     /Follow the valley north\. Weapons unlock at the exit: launch your two missiles, then track the aircraft ahead and hit it with the gun\./,
     "first-run copy must describe the missile-to-gun transition and recovery lesson");
   assert.doesNotMatch(appSource, /after both splashes|splash two targets → guns/,
     "a missile outcome must not be presented as the Fire authority switch");
-  assert.match(appSource, /readyReturn\.textContent = "Aircraft"/,
+  assert.match(appSource, /readyReturn\.querySelector\("\.shell-action-label"\)\.textContent = "Aircraft"/,
     "catalogue navigation must name the choice it opens");
   assert.match(appSource,
     /readyRestart\?\.addEventListener\("click", repeatSelectedSortieNow\)[\s\S]*?readyReturn\?\.addEventListener\("click", returnToCatalogue\)/,

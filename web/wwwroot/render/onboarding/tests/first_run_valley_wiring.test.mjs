@@ -93,7 +93,7 @@ test("first run is a deliberate Ready interlock and Fire visibly names its live 
   assert.doesNotMatch(app,
     /firstRunAutostartPending = true;\s*autoLaunchPending = true/,
     "staging the valley must never arm launch before the pilot consents");
-  assert.match(index, /id="ready-intro-replay"[^>]*>Replay valley intro</,
+  assert.match(index, /id="ready-intro-replay"[^>]*>[^]*?<span class="shell-action-label">Replay valley intro</,
     "returning pilots need a visible replay action in the mission programme");
   assert.match(app,
     /readyIntroReplay\?\.addEventListener\("click"[\s\S]*searchParams\.set\("firstRun", "1"\)[\s\S]*enterReady/,
