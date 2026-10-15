@@ -4337,6 +4337,8 @@
       outline: none;
       cursor: pointer;
     }
+    /* The F-22 result owns its own Again; the console Resume must not reappear under it. */
+    :root #ready-screen[data-f22-result] #ready-start.console-primary { display: none; }
     :root #ready-screen #ready-start.console-primary:disabled { color: var(--console-muted); border-color: var(--console-line); background: var(--console-panel); box-shadow: none; cursor: default; }
     :root #ready-screen .console-actions { display: flex; flex-wrap: nowrap; gap: 0; width: 100%; max-width: none; padding: 0; margin: 0; border: 0; background: none; }
     :root #ready-screen .console-actions button:not(.console-primary) {
