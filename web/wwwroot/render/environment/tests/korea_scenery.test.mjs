@@ -510,6 +510,14 @@ test("Ukraine soft-canopy stands use rounded crown geometry and Lambert lighting
     "all five six-sided smooth canopy lobes must survive the geometry reduction");
   assert.equal(trunkTriangles, UKRAINE_NEAR_RING_VISIBLE_TRUNKS * 24,
     "only one dominant trunk should remain under overlapping foliage");
+  assert.equal(crowns.count, group.userData.scenery.trees);
+  assert.equal(trunks.count, crowns.count, "reuse the existing stem batch for each stand");
+  crowns.geometry.computeBoundingBox();
+  assert.ok(Math.abs(crowns.geometry.boundingBox.max.y - 1.56) < 1e-6,
+    "the softer hull must preserve the previous near crown height");
+  assert.ok(crowns.geometry.boundingBox.min.y > 0
+    && crowns.geometry.boundingBox.min.y < 0.48,
+    "the hull base must expose the short existing stem without separating from it");
   assert.ok(crownTriangles + trunkTriangles <= 200,
     "a complete Ukraine near stand must stay inside its 200-triangle ceiling");
   assert.equal(crowns.geometry.getAttribute("color")?.itemSize, 3,
