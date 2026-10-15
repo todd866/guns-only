@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+lab_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
+export PATH="$DOTNET_ROOT:$PATH"
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+dotnet build "$lab_dir/GunsOnly.PlaytestLab.csproj" -c Release --nologo -p:UseSharedCompilation=false
+exec dotnet "$lab_dir/bin/Release/net8.0/GunsOnly.PlaytestLab.dll" "$@"
