@@ -99,6 +99,10 @@
       "destination": "/api/telemetry"
     },
     {
+      "source": "/report",
+      "destination": "/api/report"
+    },
+    {
       "source": "/telemetry-admin",
       "destination": "/api/telemetry-admin"
     },
