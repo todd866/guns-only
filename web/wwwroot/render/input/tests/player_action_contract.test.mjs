@@ -888,37 +888,38 @@ test("visual-merge results show compact facts and one bounded correction", () =>
     "raw score/dwell/hits must become labelled evidence followed by one correction");
 });
 
-test("the pictorial programme stays scannable on desktop, portrait, and short landscape", () => {
-  assert.match(indexSource,
-    /#ready-screen\[data-mode="program"\] \.ready-mission-groups\s*\{[\s\S]*?minmax\(170px, 240px\)[\s\S]*?justify-content:\s*center/,
-    "desktop posters need a stable maximum width when a domain has only two aircraft");
-  assert.match(indexSource,
-    /#ready-screen\[data-mode="program"\] \.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?aspect-ratio:\s*4 \/ 5/,
-    "desktop aircraft art needs one coherent poster ratio");
-  assert.match(indexSource,
-    /@media \(max-width: 620px\) and \(orientation: portrait\)[\s\S]*?grid-auto-columns:\s*clamp\(136px, 42vw, 190px\)/,
-    "portrait must keep a bounded horizontal aircraft rail");
-
-  const coherenceLayer = indexSource.indexOf("SHARED MISSION-FLOW SURFACES");
-  const finalShortLandscape = indexSource.lastIndexOf(
+test("the bottom-console programme stays scannable on desktop, portrait, and short landscape", () => {
+  const consoleSource = indexSource.slice(indexSource.indexOf("Owner-picked A:"));
+  assert.match(consoleSource,
+    /grid-auto-columns:\s*clamp\(210px, 22vw, 270px\)/,
+    "desktop cards stay bounded even when a domain has only two aircraft");
+  assert.match(consoleSource,
+    /height:\s*clamp\(230px, 38dvh, 410px\)/,
+    "aircraft art leaves room for the docked console on ordinary laptops");
+  assert.match(consoleSource,
+    /@media \(max-width: 760px\)[\s\S]*?grid-auto-columns:\s*min\(72vw, 270px\)/,
+    "phone cards remain a legible, bounded horizontal rail");
+  assert.match(consoleSource,
+    /@media \(max-width: 760px\)[\s\S]*?\.console-actions\s*\{[\s\S]*?repeat\(4, minmax\(0, 1fr\)\)/,
+    "seven pause actions stack into two rows at phone width");
+  const finalLandscapeSource = consoleSource.slice(consoleSource.lastIndexOf(
     "@media (max-height: 500px) and (orientation: landscape)",
-  );
-  assert.ok(coherenceLayer > 0 && finalShortLandscape > coherenceLayer,
-    "the effective short-landscape fix must live after the pictorial picker cascade");
-  const finalLandscapeSource = indexSource.slice(finalShortLandscape);
+  ));
   assert.match(finalLandscapeSource,
-    /:root #ready-screen\[data-mode="program"\] \.ready-layout\s*\{[\s\S]*?display:\s*grid[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(190px, 250px\)/,
-    "short landscape must keep the aircraft chooser and launch actions independently reachable");
+    /:root #ready-screen\[data-mode="program"\] \.ready-layout\s*\{[\s\S]*?display:\s*grid[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(300px, 1fr\)/,
+    "short landscape keeps the aircraft chooser beside full-size launch actions");
   assert.match(finalLandscapeSource,
-    /:root #ready-screen\[data-mode="program"\] \.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?aspect-ratio:\s*4 \/ 3/,
-    "short landscape needs compact art without changing the selected mission or launch flow");
-  assert.match(finalLandscapeSource,
+    /\.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?height:\s*260px/,
+    "short landscape keeps bounded art without changing launch authority");
+  const briefLandscapeSource = indexSource.slice(indexSource.indexOf(
+    "SHARED MISSION-FLOW SURFACES"), indexSource.indexOf("Owner-picked A:"));
+  assert.match(briefLandscapeSource,
     /:root #ready-screen:is\(\[data-mode="intro"\], \[data-mode="debrief"\]\) \.ready-briefing\s*\{[\s\S]*?display:\s*grid[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(230px, \.72fr\)/,
     "short-landscape briefs must put context and escape actions in independently visible columns");
-  assert.match(finalLandscapeSource,
+  assert.match(briefLandscapeSource,
     /\.ready-controls, #ready-start, #ready-replay, #ready-handoff,[\s\S]*?grid-column:\s*2/,
     "first-run and debrief actions must occupy the visible short-landscape action column");
-  assert.match(finalLandscapeSource,
+  assert.match(briefLandscapeSource,
     /\.touch-mode #ready-screen\[data-mode="intro"\] \.ready-controls\s*\{[\s\S]*?display:\s*block/,
     "short-landscape onboarding must use its open action column to expose the touch grammar");
 });
