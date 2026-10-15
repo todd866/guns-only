@@ -141,3 +141,17 @@ test("comparisons are like-for-like: a harder opponent is not a regression", () 
   const again = fly({ sortie_rung: 1, sortie_opponent_skill: "VETERAN", sortie_hits: 4 });
   assert.match(compareAttempts(book.list(), again), /^Hit rate \+2\.0 percentage points/);
 });
+
+
+test("ending completed combat does not record landing or recovery credit", () => {
+  const result = snapshotAttemptResult(f22({
+    finished: true, combat_complete: true, sortie_ended_early: true,
+    sortie_outcome: "VICTORY", player_rtb_active: true,
+    runway_recovery_complete: false, runway_touchdown_contact: false,
+    runway_touchdown_survivable: false, runway_recovery_phase_name: "AIRBORNE",
+    combat_handoff_phase_name: "PLAYER_RTB",
+  }));
+  assert.equal(result.combat, "complete");
+  assert.equal(result.recovery, "open");
+  assert.equal(result.recovered, false);
+});

@@ -36,6 +36,24 @@ test("recovered victory: both results complete, no Recover, no landing lesson", 
   assert.equal(model.correction, null);
 });
 
+test("early end after combat is a debrief with combat complete and LAND open", async () => {
+  const state = {
+    ...(await fixture("f22_combat_complete.json")),
+    finished: true,
+    sortie_outcome: "VICTORY",
+    sortie_ended_early: true,
+    runway_recovery_complete: false,
+    runway_touchdown_contact: false,
+    runway_touchdown_survivable: false,
+  };
+  const model = f22ResultInstrument(state, { phase: "final" });
+  assert.equal(model.combat.status, "complete");
+  assert.equal(model.recovery.status, "open");
+  assert.match(model.recovery.label, /Not landed/);
+  assert.equal(model.actions.recover, false);
+  assert.equal(model.recovery.symbol, "–");
+});
+
 test("Recover is only offered while the real aircraft can continue", async () => {
   const boundary = await fixture("f22_combat_complete.json");
   for (const change of [

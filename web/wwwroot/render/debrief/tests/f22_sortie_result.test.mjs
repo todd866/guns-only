@@ -207,6 +207,26 @@ test("kernel-projected recovered victory reads as a complete sortie", async () =
   assert.doesNotMatch(result.correction, /approach|runway|landing/i);
 });
 
+test("kernel-projected early end never grants landing bonus or recovery progression", async () => {
+  const fixture = JSON.parse(await (await import("node:fs/promises")).readFile(
+    new URL("./fixtures/f22_combat_complete.json", import.meta.url), "utf8"));
+  const result = f22SortieResult({
+    ...fixture,
+    finished: true,
+    sortie_outcome: "VICTORY",
+    sortie_ended_early: true,
+    runway_recovery_complete: false,
+    runway_touchdown_contact: false,
+    runway_touchdown_survivable: false,
+  });
+  assert.equal(result.title, "Sortie ended");
+  assert.match(result.brief, /before landing/);
+  assert.equal(result.recoveryComplete, false);
+  assert.deepEqual(result.facts, ["Targets destroyed 2"]);
+  assert.equal(result.correction, "");
+  assert.equal(result.practiceExercise, "");
+});
+
 test("an abandoned sortie gets observed facts only, never landing advice", () => {
   // Loop audit #9: a five-second valley exit was told to practise the approach and runway stop.
   const abandoned = f22SortieResult(state({
