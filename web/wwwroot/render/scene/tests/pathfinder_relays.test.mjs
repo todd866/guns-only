@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import * as THREE from "../../../vendor/three.module.js";
 import {
   createPathfinderRelays,
@@ -105,5 +106,39 @@ test("pooled slot resets leak wrinkles and debris when reused", () => {
   assert.equal(slot.getObjectByName("PATHFINDER_DARK_GONDOLA").visible, true);
   assert.equal(slot.getObjectByName("PATHFINDER_FALLING_GONDOLA_DEBRIS").visible, false);
   assert.equal(slot.getObjectByName("PATHFINDER_ENVELOPE_TO_GONDOLA_SUSPENSION").visible, true);
+  relays.dispose();
+});
+
+test("gun-window projection separates the physical envelope and gondola, with the glint extinguished", async () => {
+  const input = JSON.parse(await readFile(new URL("../../hud/tests/fixtures/pathfinder_start.json", import.meta.url), "utf8"));
+  const relays = createPathfinderRelays();
+  relays.update(input);
+  const slot = relays.group.children[0];
+  const camera = new THREE.PerspectiveCamera(66, 1280 / 720, 0.06, 680000);
+  const gondola = slot.getObjectByName("PATHFINDER_DARK_GONDOLA");
+  const envelope = slot.getObjectByName("PATHFINDER_PALE_LEAKING_ENVELOPE");
+  const anchor = gondola.getWorldPosition(new THREE.Vector3());
+  camera.position.copy(anchor).add(new THREE.Vector3(1500, 0, 0));
+  camera.lookAt(anchor);
+  camera.updateMatrixWorld(true);
+  function screenBounds(mesh) {
+    const box = new THREE.Box3().setFromObject(mesh);
+    const screen = new THREE.Box2();
+    for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y])
+      for (const z of [box.min.z, box.max.z]) {
+        const p = new THREE.Vector3(x, y, z).project(camera);
+        screen.expandByPoint(new THREE.Vector2(p.x * 640, p.y * 360));
+      }
+    return screen;
+  }
+  const envelopeBox = screenBounds(envelope);
+  const gondolaBox = screenBounds(gondola);
+  assert.ok(envelopeBox.max.x - envelopeBox.min.x >= 12, "envelope resolves at a short-laptop viewport");
+  assert.ok(gondolaBox.max.x - gondolaBox.min.x >= 1.5, "physical gondola remains a separate dark mark");
+  assert.ok(envelopeBox.min.y - gondolaBox.max.y >= 4, "visible sky gap separates the two masses");
+  const glints = relays.group.getObjectByName("PATHFINDER_SUNLIT_GLINTS");
+  assert.match(glints.material.vertexShader, /\* smoothstep\(1500.0, 3000.0, rangeM\)/);
+  assert.equal(gondola.material.emissiveIntensity, 1);
+  assert.equal(gondola.material.emissive.getHex(), 0);
   relays.dispose();
 });

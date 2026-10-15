@@ -2967,7 +2967,13 @@ export function createDecisionSupportSky() {
         vec3 zenithWarm = mix(vec3(0.080, 0.170, 0.460), vec3(0.033, 0.072, 0.199), altitudeMix);
         vec3 horizon = mix(horizonCool, horizonWarm, uSoftWorld);
         vec3 zenith = mix(zenithCool, zenithWarm, uSoftWorld);
-        horizon = mix(horizon, vec3(0.28, 0.16, 0.105), uDawn);
+        // First Light's warm horizon belongs to sunrise, not the whole sky. The
+        // westbound hunt sees blue twilight behind its front-lit relay envelopes.
+        float dawnFacingSun = dot(direction.xz, uSunDirection.xz)
+          / max(0.001, length(direction.xz) * length(uSunDirection.xz));
+        vec3 dawnHorizon = mix(vec3(0.025, 0.043, 0.075), vec3(0.28, 0.16, 0.105),
+          smoothstep(-0.15, 0.65, dawnFacingSun));
+        horizon = mix(horizon, dawnHorizon, uDawn);
         zenith = mix(zenith, mix(vec3(0.018, 0.035, 0.085),
           vec3(0.0015, 0.004, 0.018), altitudeMix), uDawn);
         // Soft world confines the warm band close to the horizon. At the cool 0.42 exponent a ray

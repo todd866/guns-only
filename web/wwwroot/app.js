@@ -1250,6 +1250,11 @@ const governorQaLevel = ["localhost", "127.0.0.1"].includes(location.hostname)
   ? Number(new URL(location.href).searchParams.get("governorLevel"))
   : NaN;
 let governorQaApplied = false;
+// Explicit local capture: hold the first 1.5 km gondola crossing without a menu
+// covering the gun window. The simulation owns the fixed-tick stopping condition.
+const pathfinderQaGunWindow = ["localhost", "127.0.0.1"].includes(location.hostname)
+  && new URL(location.href).searchParams.get("qa") === "pathfinder-gun-window";
+let pathfinderCycleStarted = false;
 let previousRunPausedForAudio = false;
 const mobileControls = localTouchPreview || coarsePointer || (touchCapable && smallViewport);
 document.documentElement.classList.toggle("touch-mode", mobileControls);
@@ -4551,6 +4556,7 @@ function releasePadlock(reason = "manual", { announce = true, record = true } = 
 }
 
 function resetMissionPresentation() {
+  pathfinderCycleStarted = false;
   cancelTerrainLaunchWarmup();
   frameGovernor.reset(activeView);
   resetAdaptiveAiBudget();
@@ -4656,9 +4662,10 @@ function defaultPadlockTarget() {
 /// TAB — select the other combat contact. The selection persists in forward view. If padlock is
 /// already up, the camera follows the newly selected aircraft without passing through boresight.
 function cyclePadlockTarget() {
-  const relaySlot = nextPathfinderSlot(latestState);
-  if (relaySlot !== null) {
-    bridge?.SetPlayerGunTargetSlot?.(relaySlot);
+  const relaySlot = nextPathfinderSlot(latestState, { startFromNearest: !pathfinderCycleStarted });
+  if (latestState?.pathfinder) {
+    if (relaySlot !== null && bridge?.SetPlayerGunTargetSlot?.(relaySlot))
+      pathfinderCycleStarted = true;
     return;
   }
   if (!opponentPresentationAllowed()) return;
@@ -6180,6 +6187,10 @@ function toggleSessionPause() {
   if (incidentReplay?.active) return false;
   if (pauseReasons.has("ready") || pauseReasons.has("finished")
     || pauseReasons.has("combat-result")) return false;
+  if (pauseReasons.has("qa-pathfinder")) {
+    setPauseReason("qa-pathfinder", false);
+    return true;
+  }
   if (pauseReasons.has("session")) {
     setPauseReason("session", false);
     return true;
@@ -6277,6 +6288,7 @@ function beginFlight() {
   // The ready button requests synchronously while its user activation is live. This fallback
   // covers missions with no asynchronous terrain warmup and hosts which preserve activation.
   requestMobileFullscreenFromGesture();
+  bridge.ConfigurePathfinderQaGunWindow?.(pathfinderQaGunWindow);
   bridge.Begin();
   attemptStartSimSeconds = attemptStartSeconds(latestState);
   combatResultShownFor = null;
@@ -12602,6 +12614,10 @@ async function boot() {
       });
       recorder.observeFramePhase("snap", performance.now() - afterSim);
       latestState = state;
+      if (pathfinderQaGunWindow && state.pathfinder && state.paused
+          && pauseReasons.size === 0 && bridge.PathfinderQaGunWindowReached?.()) {
+        setPauseReason("qa-pathfinder", true);
+      }
       persistDirectorObservation(state);
       if (state.session_phase === "FINISHED") finishLogbookAttempt(state);
       observeCombatResultBoundary(state);

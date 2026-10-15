@@ -29,7 +29,9 @@ test("canvas routes the relay gondola and ROE to the existing gun and mission cu
   assert.match(hud, /if \(roeBlocked\) pipper.stroke = AMBER/);
   assert.match(hud, /directiveText = relayCue.row/);
   assert.match(hud, /const modeText = relayCue && missionPhase < 11 \? relayCue.row/);
-  assert.match(app, /const relaySlot = nextPathfinderSlot\(latestState\);[\s\S]*?SetPlayerGunTargetSlot\?\.\(relaySlot\)/);
+  assert.match(app, /nextPathfinderSlot\(latestState, \{ startFromNearest: !pathfinderCycleStarted \}\)/);
+  assert.match(app, /function resetMissionPresentation\(\) \{\s*pathfinderCycleStarted = false/);
+  assert.match(app, /if \(relaySlot !== null && bridge\?\.SetPlayerGunTargetSlot\?\.\(relaySlot\)\)\s*pathfinderCycleStarted = true/);
 });
 
 test("First Light is selectable through the existing Rapier catalogue route", () => {
@@ -52,6 +54,32 @@ test("dawn sun is visible above the FL650 horizon while ground stays before sunr
   assert.match(sky, /uDawn: \{ value: 0 \}/);
   assert.match(sky, /direction.y \+ dip \* uDawn/);
   assert.match(terrain, /lit = mix\(lit, lit \* vec3\(0.12, 0.19, 0.32\), uMissionDawn\)/);
+});
+
+test("sun stays 120–160 degrees off every westbound hunt lane, front-lighting the balloons", async () => {
+  const lighting = missionLighting({ pathfinder: { sun_elevation_deg: -1.2 } });
+  // Use live-sim snapshot spawn positions, in world coordinates (+Z north).
+  const { pathfinder } = JSON.parse(await read("../../hud/tests/fixtures/pathfinder_start.json"));
+  const points = [{ x: -35000, z: 0 }, ...pathfinder.relays.map(relay => relay.position)];
+  const sun = new THREE.Vector2(lighting.sunX, -lighting.sunZ).normalize();
+  for (let i = 1; i < points.length; i++) {
+    const lane = new THREE.Vector2(points[i].x - points[i - 1].x, points[i].z - points[i - 1].z).normalize();
+    const angle = Math.acos(lane.dot(sun)) * 180 / Math.PI;
+    assert.ok(angle >= 120 && angle <= 160, `lane ${i}: ${angle}`);
+    assert.ok(lane.dot(sun) < 0, "sun illuminates the player-facing hemisphere");
+  }
+  assert.match(sky, /dawnFacingSun/);
+  assert.match(sky, /horizon = mix\(horizon, dawnHorizon, uDawn\)/);
+});
+
+test("local QA URL arms a fixed-tick hold with a clear viewport and Escape resume", async () => {
+  assert.match(app, /const pathfinderQaGunWindow = \["localhost", "127\.0\.0\.1"\]\.includes\(location.hostname\)\s*&& new URL\(location.href\).searchParams.get\("qa"\) === "pathfinder-gun-window"/);
+  assert.match(app, /ConfigurePathfinderQaGunWindow\?\.\(pathfinderQaGunWindow\);\s*bridge.Begin\(\)/);
+  assert.match(app, /state.pathfinder && state.paused[\s\S]*?PathfinderQaGunWindowReached\?\.\(\)[\s\S]*?setPauseReason\("qa-pathfinder", true\)/);
+  assert.match(app, /if \(pauseReasons.has\("qa-pathfinder"\)\) \{\s*setPauseReason\("qa-pathfinder", false\)/);
+  const bridge = await read("../../../../WebBridge.cs");
+  assert.match(bridge, /\[JSExport\]\s*public static void ConfigurePathfinderQaGunWindow\(bool enabled\)/);
+  assert.match(bridge, /\[JSExport\]\s*public static bool PathfinderQaGunWindowReached\(\)/);
 });
 
 test("mission light and shared ground haze settings reset without replacing renderer resources", () => {

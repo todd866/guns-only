@@ -2,6 +2,10 @@
 
 2026-10-16 · `rapier/pathfinders` · baseline `e2c52a4e`.
 
+Historical checkpoint for `7ddaaa35`. The dawn direction, glint settings and Tab
+behavior below are superseded by [the readability follow-up](11-pathfinders-readability.md),
+which also documents the deterministic 1.5 km QA pause.
+
 ## Causes and changes
 
 - The first envelope was 25 km ahead of the airborne start, with no minimum angular

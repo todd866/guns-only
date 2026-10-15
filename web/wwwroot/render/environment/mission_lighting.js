@@ -4,8 +4,13 @@ export function missionLighting(state) {
   const elevation = state?.pathfinder?.sun_elevation_deg;
   if (!Number.isFinite(elevation)) return null;
   const radians = elevation * Math.PI / 180;
+  // Provisional First Light art direction: the hunt runs west (-X). Put sunrise
+  // 140 degrees off that heading (050 deg in world coordinates), behind/right.
+  // Three uses -world Z, so the sun's north component is negative render Z.
+  const azimuth = 50 * Math.PI / 180;
   return {
-    sunX: -Math.cos(radians), sunY: Math.sin(radians), sunZ: 0,
+    sunX: Math.sin(azimuth) * Math.cos(radians), sunY: Math.sin(radians),
+    sunZ: -Math.cos(azimuth) * Math.cos(radians),
     dawn: 1,
     fogLow: 0x182838, fogHigh: 0x263b53,
     ambientSky: 0x809bc0, ambientGround: 0x101923, ambientIntensity: 0.24,

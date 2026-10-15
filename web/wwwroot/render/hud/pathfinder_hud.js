@@ -23,9 +23,29 @@ export function pathfinderHud(state) {
   };
 }
 
-export function nextPathfinderSlot(state) {
+export function nextPathfinderSlot(state, { startFromNearest = false } = {}) {
   const mission = state?.pathfinder;
   if (!Array.isArray(mission?.relays) || mission.relays.length < 1) return null;
-  const count = Math.min(6, mission.relays.length);
-  return (mission.relays.findIndex(relay => relay.id === mission.selected_id) + 1) % count;
+  const px = Number(state?.px);
+  const py = Number(state?.py);
+  const pz = Number(state?.pz);
+  if (![px, py, pz].every(Number.isFinite)) return null;
+
+  const liveByRange = mission.relays.slice(0, 6).map((relay, slot) => {
+    const position = relay?.gondola_position;
+    if (relay?.relay_active !== true || !position
+        || ![position.x, position.y, position.z].every(Number.isFinite)) return null;
+    const range = Math.hypot(position.x - px, position.y - py, position.z - pz);
+    if (!Number.isFinite(range)) return null;
+    return {
+      slot,
+      id: relay.id,
+      range,
+    };
+  }).filter(Boolean).sort((a, b) => a.range - b.range || a.slot - b.slot);
+  if (liveByRange.length < 1) return null;
+  if (startFromNearest) return liveByRange[0].slot;
+
+  const selectedIndex = liveByRange.findIndex(relay => relay.id === mission.selected_id);
+  return liveByRange[(selectedIndex + 1 + liveByRange.length) % liveByRange.length].slot;
 }

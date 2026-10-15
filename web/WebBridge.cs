@@ -209,6 +209,13 @@ public static partial class WebBridge {
     public static void SetPaused(bool paused) => Session.SetPaused(paused);
 
     [JSExport]
+    public static void ConfigurePathfinderQaGunWindow(bool enabled) =>
+        Session.ConfigurePathfinderQaGunWindow(enabled);
+
+    [JSExport]
+    public static bool PathfinderQaGunWindowReached() => Session.PathfinderQaGunWindowReached;
+
+    [JSExport]
     public static void FeedKey(int gkey, bool pressed) => Session.FeedKey((GKey)gkey, pressed);
 
     /// <summary>

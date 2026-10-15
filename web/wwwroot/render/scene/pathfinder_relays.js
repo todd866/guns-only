@@ -20,26 +20,37 @@ function makeGlints() {
       #include <logdepthbuf_pars_vertex>
       uniform float pixelRatio, focalPx, radiusM;
       attribute float sunlit;
-      varying float brightness;
+      varying float brightness, resolved;
       void main() {
         vec4 view = modelViewMatrix * vec4(position, 1.0);
         float diameterPx = 2.0 * radiusM * focalPx / max(1.0, -view.z);
         float rangeM = length(view.xyz);
-        brightness = sunlit * (1.0 - smoothstep(3.0, 9.0, diameterPx))
+        resolved = 1.0 - smoothstep(5556.0, 18520.0, rangeM);
+        // Retain the bright locator until the physical envelope is a resolved
+        // silhouette; a subpixel mesh must not absorb the 10 NM readability budget.
+        brightness = sunlit * (1.0 - smoothstep(4.0, 10.0, diameterPx))
+          * smoothstep(1500.0, 3000.0, rangeM)
           * (1.0 - smoothstep(74080.0, 83340.0, rangeM));
         gl_Position = projectionMatrix * view;
         #include <logdepthbuf_vertex>
-        gl_PointSize = 5.0 * pixelRatio;
+        gl_PointSize = mix(7.0, 9.0, resolved) * pixelRatio;
       }`,
     fragmentShader: `
       #include <logdepthbuf_pars_fragment>
-      varying float brightness;
+      varying float brightness, resolved;
       void main() {
-        float r = length(gl_PointCoord - vec2(0.5));
-        float alpha = (1.0 - smoothstep(0.25, 0.5, r)) * brightness;
+        vec2 p = (gl_PointCoord - vec2(0.5)) * 2.0;
+        float r = length(p);
+        // Far: soft warm dot. By 3 NM: a round, shaded envelope impostor,
+        // handing off to the actual mesh before the 1.5 km gondola window.
+        float edge = mix(0.40, 0.82, resolved);
+        float alpha = (1.0 - smoothstep(edge, 1.0, r)) * brightness;
         if (alpha < 0.01) discard;
         #include <logdepthbuf_fragment>
-        gl_FragColor = vec4(1.0, 0.88, 0.65, alpha);
+        float dome = sqrt(max(0.0, 1.0 - r * r));
+        vec3 warm = mix(vec3(1.0, 0.86, 0.56),
+          mix(vec3(0.55, 0.30, 0.10), vec3(1.0, 0.90, 0.65), dome), resolved);
+        gl_FragColor = vec4(warm, alpha);
       }`,
   });
   const points = new THREE.Points(geometry, material);
@@ -189,7 +200,7 @@ export function createPathfinderRelays() {
     envelopeGeometry: new THREE.SphereGeometry(1, 18, 12),
     envelopeMaterial: new THREE.MeshStandardMaterial({
       color: 0xe9e4d6, roughness: 0.82, metalness: 0.01,
-      emissive: 0xffd4a0, emissiveIntensity: 0.18,
+      emissive: 0xffd4a0, emissiveIntensity: 0.30,
       fog: false,
     }),
     wrinkleGeometry: makeWrinkleGeometry(),

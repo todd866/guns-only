@@ -1052,6 +1052,7 @@ public sealed partial class SimulationSession {
             FinalizeRapierServiceLife(
                 RapierServiceLifeTerminationReason.SortieFinished);
         CaptureIncidentReplaySample();
+        ObservePathfinderQaGunWindow();
         UpdateTimeCompressionDecision();
     }
 
@@ -1116,6 +1117,7 @@ public sealed partial class SimulationSession {
         _beat = setup;
         Pathfinder = setup.Pathfinder is { } pathfinder
             ? new PathfinderMission(pathfinder, Weather) : null;
+        ConfigurePathfinderQaGunWindow(false);
         StagePractice();
         // Canonical Rapier v2 carries zero design drones. An explicitly configured legacy
         // prototype count is additional stowed mass, so initialize that mission loadout before

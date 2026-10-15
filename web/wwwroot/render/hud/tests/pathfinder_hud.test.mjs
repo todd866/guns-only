@@ -5,7 +5,7 @@ import { pathfinderHud, nextPathfinderSlot } from "../pathfinder_hud.js";
 const relay = (id, live = true) => ({ id, relay_active: live, leak_fraction: 0,
   position: { x: 10, y: 20600, z: 30 },
   gondola_position: { x: 10, y: 20570, z: 30 } });
-const state = (classification = "clear") => ({ pathfinder: {
+const state = (classification = "clear") => ({ px: 0, py: 0, pz: 0, pathfinder: {
   selected_id: 1, relays: [relay(1), relay(3), relay(5, false)],
   selected_footprint: { classification },
 } });
@@ -46,13 +46,54 @@ test("kill clears the selected bracket without silently selecting another live r
   assert.equal(hud.selectedId, 1);
 });
 
-test("manual relay cycling follows authored order including denied relays", () => {
+test("first cycle selects the nearest live relay and preserves its original slot", () => {
   const input = state();
+  input.pathfinder.relays[0].gondola_position = { x: 900, y: 0, z: 0 };
+  input.pathfinder.relays[1].gondola_position = { x: 100, y: 0, z: 0 };
+  assert.equal(nextPathfinderSlot(input, { startFromNearest: true }), 1);
+  // Spawn already preselects the nearest actor: the first Tab must keep it,
+  // rather than skipping directly to the 38 NM relay as before.
+  input.pathfinder.selected_id = 3;
+  assert.equal(nextPathfinderSlot(input, { startFromNearest: true }), 1);
+  assert.equal(nextPathfinderSlot(input), 0);
+});
+
+test("subsequent cycles follow current range order, skip dead relays, and wrap", () => {
+  const input = state();
+  input.pathfinder.relays[0].gondola_position = { x: 900, y: 0, z: 0 };
+  input.pathfinder.relays[1].gondola_position = { x: 100, y: 0, z: 0 };
+  input.pathfinder.relays[2].gondola_position = { x: 10, y: 0, z: 0 };
   assert.equal(nextPathfinderSlot(input), 1);
   input.pathfinder.selected_id = 3;
-  assert.equal(nextPathfinderSlot(input), 2);
+  assert.equal(nextPathfinderSlot(input), 0);
+  input.pathfinder.selected_id = 1;
+  assert.equal(nextPathfinderSlot(input), 1);
+  input.pathfinder.relays[1].relay_active = false;
+  assert.equal(nextPathfinderSlot(input), 0);
+});
+
+test("ties retain authored slot order and missing or dead selection starts nearest", () => {
+  const input = state();
+  input.pathfinder.relays[0].gondola_position = { x: 100, y: 0, z: 0 };
+  input.pathfinder.relays[1].gondola_position = { x: -100, y: 0, z: 0 };
+  input.pathfinder.selected_id = 99;
+  assert.equal(nextPathfinderSlot(input), 0);
+  assert.equal(nextPathfinderSlot(input, { startFromNearest: true }), 0);
   input.pathfinder.selected_id = 5;
   assert.equal(nextPathfinderSlot(input), 0);
+});
+
+test("no live targets or invalid player and gondola positions return no slot", () => {
+  const input = state();
+  input.pathfinder.relays[0].relay_active = false;
+  input.pathfinder.relays[1].relay_active = false;
+  assert.equal(nextPathfinderSlot(input), null);
+  input.pathfinder.relays[0].relay_active = true;
+  input.pathfinder.relays[0].gondola_position.x = NaN;
+  assert.equal(nextPathfinderSlot(input), null);
+  input.pathfinder.relays[0].gondola_position.x = 10;
+  input.px = Infinity;
+  assert.equal(nextPathfinderSlot(input), null);
 });
 
 test("each live gondola keeps its small diamond when another relay is selected or denied", () => {
