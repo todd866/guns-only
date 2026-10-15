@@ -562,7 +562,7 @@ public sealed partial class SimulationSession {
     /// Scenario-owned weather. Null selects the historical standard atmosphere and the beat's
     /// existing deterministic default wind; no process-global environment is mutated.
     /// </summary>
-    public WeatherProfile? Weather => _weatherProfile;
+    public WeatherProfile? Weather => _weatherProfile ?? _beat.Pathfinder?.Weather;
     public ITerrainSurface? Terrain => _terrainSurface;
 
     /// <summary>
@@ -1018,14 +1018,15 @@ public sealed partial class SimulationSession {
     /// <summary>
     /// Advance a real fixed-wing sortie whose content explicitly stages no opponent. This is a
     /// separate authority path, not a combat tick with a hidden inert target: ownship and mission
-    /// systems advance normally while no AI, weapon, targeting, damage-ledger or engagement code
-    /// is called.
+    /// systems advance without a fighter AI or engagement graph. A mission-specific actor adapter
+    /// (currently PATHFINDERS relays) may own its own bounded weapon and damage ledger.
     /// </summary>
     void RunUnopposedFixedWingTick() {
         _decisionFireIntentEvaluatedThisTick = false;
         _decisionFireIntentConsumedThisTick = false;
         _decisionFireAuthorizedThisTick = false;
         MaybeRequestBingoRtb();
+        StepPathfinder();
         if (_playerTerminalState == AircraftTerminalState.Flying
             && AtmosphereBoundaryReached(_player.State, _player.AtmosphereModel,
                 integrationMarginM: 250.0))
@@ -1113,6 +1114,8 @@ public sealed partial class SimulationSession {
         }
         FinishPreviousRecoveryAttempt();
         _beat = setup;
+        Pathfinder = setup.Pathfinder is { } pathfinder
+            ? new PathfinderMission(pathfinder, Weather) : null;
         StagePractice();
         // Canonical Rapier v2 carries zero design drones. An explicitly configured legacy
         // prototype count is additional stowed mass, so initialize that mission loadout before
@@ -1154,7 +1157,8 @@ public sealed partial class SimulationSession {
             && _carrier is not null
             && !maintenanceRecovery
             && !patternOnly
-            && _beat.ContinuousCombat is null;
+            && _beat.ContinuousCombat is null
+            && _beat.Pathfinder is null;
         _systems = CreatePlayerSystems(
             onApproach: stagesOnCarrierApproach
                 || _beat.Practice == GunsOnly.Sim.Training.PracticeExercise.ShortFinal,
@@ -1193,9 +1197,10 @@ public sealed partial class SimulationSession {
                 : DifficultyModel.ForLevel(0);
             _carrier.ApplyDifficulty(_difficulty);
             // Every established carrier/strip recovery is transformed into the platform frame.
-            // Top Gun is the one exception: it owns a distant carrier but starts at an authored
-            // airborne ACM merge, not on that carrier's approach.
-            if (!TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)) {
+            // Top Gun and the PATHFINDERS short start own distant recovery platforms but start
+            // at authored airborne world coordinates, not on those platforms' approaches.
+            if (!TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
+                && !(_beat.Pathfinder is not null && !_beat.StartsOnCatapult)) {
                 double configuredOnSpeedAoa = DetentLayer.OnSpeedAoARad
                     - PlayerAerodynamicConfiguration.LiftCoefficientIncrement
                         / Math.Max(_beat.PlayerAir.CLAlpha, 1e-6);
@@ -1335,7 +1340,7 @@ public sealed partial class SimulationSession {
         _keys = new KeyGrammar();
         _detents = new DetentLayer {
             Variant = _carrier is not null ? ValleyVariant.PhysicsOnly : _requestedVariant,
-            ApproachMode = _carrier is not null,
+            ApproachMode = _carrier is not null && _beat.Pathfinder is null,
             AerodynamicConfiguration = PlayerAerodynamicConfiguration,
             AtmosphereModel = _player.AtmosphereModel
         };
@@ -1372,7 +1377,8 @@ public sealed partial class SimulationSession {
         // Built-in combat beats are already airborne and running at their staged power. Seed the
         // operating point so Ready telemetry and the first rendered frame do not claim a stopped
         // engine immediately before the first fixed tick snaps it to the same MIL command.
-        if (_carrier is null && _beat.PlayerAir.ThrustMaxN > 0.0)
+        if ((_carrier is null || (_beat.Pathfinder is not null && !_beat.StartsOnCatapult))
+            && _beat.PlayerAir.ThrustMaxN > 0.0)
             _player.SeedEnginePowerFraction(_detents.Throttle);
         _prompts = new PromptTracker();
         _advice = new DoctrineAdvice(1.0, 0.0, "setup");
@@ -1677,10 +1683,10 @@ public sealed partial class SimulationSession {
 
     AircraftSim CreatePlayer(in AircraftState state) {
         var player = new AircraftSim(WithCurrentFuelMass(state), _beat.PlayerAir,
-            _weatherProfile?.Atmosphere) {
+            Weather?.Atmosphere) {
             Wind = _carrier is { IsMaritime: true }
                 ? _burble
-                : _weatherProfile?.Wind
+                : Weather?.Wind
                     // The established-final lesson authors a calm, on-speed start. An explicit
                     // weather profile still wins; other starts retain their existing gust field.
                     ?? (_beat.Practice == GunsOnly.Sim.Training.PracticeExercise.ShortFinal

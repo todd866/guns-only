@@ -101,7 +101,8 @@ public sealed partial class SimulationSession {
             TryRequestReturnToBase(MissionRtbReason.PilotKnockItOff);
         // Weapon release is an edge-triggered cockpit action. Latch a deliberate Rapier F tap so
         // a very short browser key-down/key-up pair cannot fall entirely between fixed ticks.
-        if (key == GKey.Trigger && newPress && RapierPhase == RapierMissionPhase.Attack)
+        if (key == GKey.Trigger && newPress && Pathfinder is null
+            && RapierPhase == RapierMissionPhase.Attack)
             _rapierFormationSweepRequested = true;
         if (key == GKey.Trigger) Trigger(pressed);
         // A browser may repeat key-down while G remains held. Configuration selectors respond to

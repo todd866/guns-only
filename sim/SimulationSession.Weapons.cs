@@ -12,10 +12,10 @@ namespace GunsOnly.Sim;
 
 // Partial of SimulationSession: Weapons.
 public sealed partial class SimulationSession {
-    public GunKill PlayerGun => OpponentPresent && _gunKill is not null
+    public GunKill PlayerGun => Pathfinder?.Gun ?? (OpponentPresent && _gunKill is not null
         ? _gunKill
         : throw new InvalidOperationException(
-            "The active mission does not stage a player combat weapon graph.");
+            "The active mission does not stage a player combat weapon graph."));
     public GunKill OpponentGun => OpponentPresent && _opponentGun is not null
         ? _opponentGun
         : throw new InvalidOperationException(
@@ -87,11 +87,11 @@ public sealed partial class SimulationSession {
     public int ShotsTotal => _shotsTotal;
     public int ShotsInWindow => _shotsInWindow;
     public bool TriggerDown => _triggerDown;
-    public bool WeaponsInhibited => !OpponentPresent
+    public bool WeaponsInhibited => (!OpponentPresent && Pathfinder is null)
         || (_visualMergeEvaluation?.WeaponsInhibited ?? false)
         || (_firstRunValleyRuntime?.WeaponsCold ?? false);
     public bool PlayerWeaponsAuthorized =>
-        OpponentPresent
+        (OpponentPresent || Pathfinder is not null)
         && (_visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true)
         && !(_firstRunValleyRuntime?.WeaponsCold ?? false)
         && !CombatHandoffRequested
@@ -124,7 +124,7 @@ public sealed partial class SimulationSession {
     }
 
     void Trigger(bool down) {
-        if (!OpponentPresent) down = false;
+        if (!OpponentPresent && Pathfinder is null) down = false;
         if (down && (CombatHandoffRequested || PlayerRtbActive)) down = false;
         if (_firstRunValleyRuntime is { } firstRun) {
             if (firstRun.WeaponsCold) down = false;
@@ -135,12 +135,13 @@ public sealed partial class SimulationSession {
         }
         if (down && !_triggerDown) {
             _shotsTotal++;
-            AircraftState selectedTarget = SelectedOpponentState;
+            AircraftState selectedTarget = Pathfinder?.SelectedBalloon.GondolaState ?? SelectedOpponentState;
             if (CameraSolver.GunWindow(_player.State, selectedTarget)) _shotsInWindow++;
             // VisualMergeEvaluation is an actor-specific primary-opponent rubric. The selected
             // contact owns the actual shot-window count, but feeding a wingman's trigger geometry
             // into the primary-only projectile/overshoot state would mix two aircraft.
-            _visualMergeEvaluation?.ObserveTriggerPressed(_player.State, _bandit.State);
+            if (OpponentPresent)
+                _visualMergeEvaluation?.ObserveTriggerPressed(_player.State, _bandit.State);
         }
         if (!down) {
             _visualMergeEvaluation?.ObserveTriggerReleased();

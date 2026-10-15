@@ -1391,7 +1391,8 @@ public sealed class RapierMissionDirector {
         double reserveFuelLb = 1_200.0,
         double aircraftSupportReferenceHeightM = 0.0,
         bool returnToBaseRequested = false,
-        MissionRtbReason returnToBaseReason = MissionRtbReason.None) {
+        MissionRtbReason returnToBaseReason = MissionRtbReason.None,
+        bool pathfinderHuntActive = false) {
         AtmosphericState air = atmosphere.Sample(player.Position.Y);
         double mach = trueAirspeedMps / Math.Max(1.0, air.SpeedOfSoundMps);
         double qPa = 0.5 * air.DensityKgM3 * trueAirspeedMps * trueAirspeedMps;
@@ -1405,7 +1406,7 @@ public sealed class RapierMissionDirector {
         double homeRangeM = (home - player.Position).Length;
         string jobToken = JobToken(job);
         bool balloonApexProfile = zoomLobProfile && job == RapierJobKind.Balloon;
-        bool balloonGalleryProfile = !zoomLobProfile && job == RapierJobKind.Balloon;
+        bool balloonGalleryProfile = !pathfinderHuntActive && !zoomLobProfile && job == RapierJobKind.Balloon;
         GunBallisticSolution balloonGunSolution = balloonApexProfile
             ? GunKill.EvaluateBallisticLead(
                 player,
@@ -1448,6 +1449,12 @@ public sealed class RapierMissionDirector {
                     : "pilot_knock_it_off_rtb");
         } else if (pursuitActive) {
             EnterPhase(RapierMissionPhase.Escape, "pursuit_active");
+        } else if (pathfinderHuntActive) {
+            // Relay losses never end the hunt and a legacy drone flag cannot own its exit.
+            // Recovery and pilot/bingo RTB retain priority above this independent mission branch.
+            EnterPhase(catapultActive ? RapierMissionPhase.Launch
+                : player.Position.Y < 65_000 * 0.3048 ? RapierMissionPhase.Climb
+                : RapierMissionPhase.Attack, "pathfinder_hunt");
         } else if (gunDroneEgress) {
             if (homeRangeM <= RecoveryEntryHomeRangeM)
                 EnterPhase(RapierMissionPhase.Recovery, "gun_drone_home_leq_150km");
@@ -1873,7 +1880,19 @@ public sealed class RapierMissionDirector {
                 break;
             case RapierMissionPhase.Attack:
                 waypoint = guidedContactWaypoint;
-                if (job == RapierJobKind.Transport) {
+                if (pathfinderHuntActive) {
+                    targetMach = 3.6;
+                    targetAltitudeFt = PathfinderRelayCard.FloatAltitudeM * FeetPerMetre;
+                    targetGamma = AltitudeCaptureGamma(PathfinderRelayCard.FloatAltitudeM,
+                        player, trueAirspeedMps, captureSeconds: 45,
+                        minimumGamma: -0.04, maximumGamma: 0.04);
+                    throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                        trimLever: 1.0, gain: 0.4, maximumLever: profileMaximumLever);
+                    // Hold the lane, including after a miss. The pilot selects and aims at a
+                    // gondola; automation must not orbit a selected balloon behind ownship.
+                    waypoint = player.Position + player.ForwardDir() * 30_000;
+                    cue = "PATHFINDERS";
+                } else if (job == RapierJobKind.Transport) {
                     // Dive onto a low transport after the lob — commit altitude for the pass.
                     targetMach = 2.4;
                     targetAltitudeFt = Math.Max(

@@ -137,7 +137,7 @@ public sealed partial class SimulationSession {
             startTick: _tick,
             eventSequence: _eventSequence,
             initialFuelLb: _fuel.FuelLb,
-            initialRoundsFired: OpponentPresent ? _gunKill.RoundsFired : 0,
+            initialRoundsFired: Pathfinder?.Gun.RoundsFired ?? (OpponentPresent ? _gunKill.RoundsFired : 0),
             initialRcsGasKg: _player.ColdGasRcsGasKg);
     }
 
@@ -172,7 +172,7 @@ public sealed partial class SimulationSession {
             PropulsionRegime: RapierServiceLifeRegime(mach),
             InletUnstarted: _player.InletUnstarted,
             FuelLb: _fuel.FuelLb,
-            RoundsFired: OpponentPresent ? _gunKill.RoundsFired : 0,
+            RoundsFired: Pathfinder?.Gun.RoundsFired ?? (OpponentPresent ? _gunKill.RoundsFired : 0),
             RcsGasKg: _player.ColdGasRcsGasKg));
     }
 
@@ -531,7 +531,7 @@ public sealed partial class SimulationSession {
         Vec3D recoveryInitial = _carrier.LandingPoint(along: -16_000.0, height: 1_000.0);
         bool recovered = _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped;
         bool patternOnly = _beat.ScriptedIntercept?.PatternOnly == true;
-        AircraftState missionContact = OpponentPresent
+        AircraftState missionContact = Pathfinder?.SelectedBalloon.GondolaState ?? (OpponentPresent
             ? _bandit.State
             : patternOnly
                 // RapierMissionDirector calculates contact geometry before dispatching to the
@@ -539,7 +539,7 @@ public sealed partial class SimulationSession {
                 // ownship as a neutral value without creating or retaining a phantom actor.
                 ? _player.State
                 : throw new InvalidOperationException(
-                    "A Rapier intercept mission requires an opponent actor.");
+                    "A Rapier intercept mission requires an opponent actor."));
         // Circuits overhead is authored in the landing frame so OFT LandingPoint cards and
         // threshold padlock share the same home as INITIAL / BREAK / DOWNWIND geometry.
         Vec3D home = patternOnly ? _carrier.LandingPoint(0.0) : _carrier.Position;
@@ -550,7 +550,7 @@ public sealed partial class SimulationSession {
             _player.AtmosphereModel,
             _beat.PlayerAir,
             _catapult.IsActive,
-            LiveOpponentCount,
+            Pathfinder is { } pathfinder ? pathfinder.Balloons.Count - pathfinder.RelaySectorsDenied : LiveOpponentCount,
             _rapierPursuitActive,
             RapierPursuerCount,
             _rapierPursuitRangeM,
@@ -568,7 +568,8 @@ public sealed partial class SimulationSession {
                 _carrier.AircraftSupportReferenceHeightM,
             returnToBaseRequested: RapierMissionAvailable
                 && _returnToBaseReason != MissionRtbReason.None,
-            returnToBaseReason: _returnToBaseReason);
+            returnToBaseReason: _returnToBaseReason,
+            pathfinderHuntActive: Pathfinder is not null);
         if (patternOnly) {
             _circuitTraffic = CircuitPatternTraffic.Evaluate(
                 TimeSeconds, home, recoveryInitial, count: 3);

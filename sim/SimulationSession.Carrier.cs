@@ -335,6 +335,7 @@ public sealed partial class SimulationSession {
                     && _killCount >= intercept!.FormationSize
                     && !_rapierBalloonPayloadDeployed
                 : OpponentPresent && _gunKill.Outcome == FightOutcome.Splash);
+        if (Pathfinder is { } pathfinder) physicalBalloonKillEarned = pathfinder.ContractEarned;
         // A safe recovery after an incomplete balloon task is good airmanship, but not mission
         // success. The gallery requires every physical carrier destroyed before payload deployment;
         // legacy one-balloon cards retain their own stopped-trap plus Splash transaction.

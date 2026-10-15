@@ -543,7 +543,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     AircraftState? OpponentInitialState = null,
     GunsOnly.Sim.Casevac.CasevacScenarioDefinition? Casevac = null,
     FirstRunValleyConfig? FirstRunValley = null,
-    GunsOnly.Sim.Training.PracticeExercise Practice = GunsOnly.Sim.Training.PracticeExercise.None) {
+    GunsOnly.Sim.Training.PracticeExercise Practice = GunsOnly.Sim.Training.PracticeExercise.None,
+    PathfinderMissionDefinition? Pathfinder = null) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
@@ -876,13 +877,13 @@ public sealed class RailBandit : IBandit {
     }
 }
 
-public static class Beats {
+public static partial class Beats {
     public const int FirstBuiltInIndex = 1;
     /// Raise this WITH the switch below. An index past the end does not throw and does not warn:
     /// StartBeat silently clamps it to FirstBuiltInIndex, so the mission the player picked quietly
     /// becomes Perch in an F-86. That is exactly how the Korea sortie shipped a boot card reading
     /// "F9F-2 PANTHER" over a running mission.perch-attack.v1.
-    public const int LastBuiltInIndex = 14;
+    public const int LastBuiltInIndex = PathfinderBeatIndex;
 
     public static bool IsBuiltInIndex(int index) =>
         index is >= FirstBuiltInIndex and <= LastBuiltInIndex;
@@ -2031,6 +2032,7 @@ public static class Beats {
         // point this aircraft has ever had — the Panther and the paddles/LSO machinery built for
         // it were reachable only from a unit test until now.
         14 => KoreaSortie(),
+        PathfinderBeatIndex => RapierPathfinders(),
         _ => Perch()
     };
 }
