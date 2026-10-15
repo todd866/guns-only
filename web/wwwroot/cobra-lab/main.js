@@ -623,7 +623,7 @@ const skyMaterial = new THREE.ShaderMaterial({
       vec3 colour = mix(horizonColor, zenithColor, skyCurve);
       // Narrow non-luminous horizon shoulder: stays readable in unusual attitudes.
       float horizonShoulder = exp(-abs(direction.y) * shoulderFalloff);
-      colour = mix(colour, horizonColor * 1.08, horizonShoulder * shoulderWeight);
+      colour = mix(colour, horizonColor, horizonShoulder * shoulderWeight);
 
       // Broken monsoon cumulus shelf. This is direction-space paint rather than a texture or
       // azimuth lookup: it cannot reveal a UV seam when the player rolls through the horizon,

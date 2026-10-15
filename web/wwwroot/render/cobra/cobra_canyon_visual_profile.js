@@ -57,7 +57,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
 
   // THE F-22'S SKY, in linear working space, lifted from createDecisionSupportSky's cool
   // (Korea / uSoftWorld = 0) branch in render/scene/scene_builders.js at zero altitude — the same
-  // zenith, the same horizon, the same 0.42 sky curve and 70x horizon shoulder, so the dome over
+  // zenith, the same horizon, the same 0.42 sky curve and 96x horizon shoulder, so the dome over
   // the canyon is the dome over Korea. Authored well below 0.4 linear on purpose: ACES compresses
   // everything above that into the top sRGB decile, which is what turns a blue sky pale grey.
   //
@@ -69,8 +69,8 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     horizonColor: Object.freeze([0.34, 0.47, 0.52]),
     belowHorizonColor: Object.freeze([0.022, 0.075, 0.095]),
     skyCurveExponent: 0.42,
-    horizonShoulderFalloff: 70,
-    horizonShoulderWeight: 0.54,
+    horizonShoulderFalloff: 96,
+    horizonShoulderWeight: 0.22,
     cloudColor: Object.freeze([0.64, 0.68, 0.72]),
     // Thicker monsoon shelf so the dome does not read as clear desert air from 30 m AGL.
     cloudShelf: Object.freeze([0.055, 0.38]),

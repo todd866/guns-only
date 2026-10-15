@@ -1852,7 +1852,7 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(ukraine.fragmentShader, /float snowRetention =/,
     "snow cover must follow terrain slope rather than behave as a flat colour filter");
   assert.match(ukraine.fragmentShader,
-    /smoothstep\(uWorldEdgeM \* 0\.36, uWorldEdgeM \* 0\.72, distanceToCamera\)/,
+    /smoothstep\(uWorldEdgeM \* 0\.55, uWorldEdgeM \* 0\.90, distanceToCamera\)/,
     "Ukraine soft-world must haze out the streamed disc so it never reads as a render-square");
   assert.ok(
     modern.fragmentShader.indexOf("lit *= mix(uOcclusionRange.x")

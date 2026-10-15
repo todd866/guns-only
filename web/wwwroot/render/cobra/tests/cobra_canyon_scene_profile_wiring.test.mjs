@@ -183,11 +183,15 @@ test("the canyon sky is the decision-support sky's cool branch", async () => {
   assert.deepEqual([...sky.zenithColor], [0.035, 0.16, 0.34]);
   assert.match(builders, /vec3 belowCool = vec3\(0\.022, 0\.075, 0\.095\)/);
   assert.deepEqual([...sky.belowHorizonColor], [0.022, 0.075, 0.095]);
-  // Same curve, same shoulder: mix(0.42, 0.28, altitudeMix) at zero altitude, and exp(-|y| * 70).
+  // Same curve, same shoulder: mix(0.42, 0.28, altitudeMix) at zero altitude, and exp(-|y| * 96).
   assert.match(builders, /mix\(0\.42, 0\.28, altitudeMix\)/);
   assert.equal(sky.skyCurveExponent, 0.42);
-  assert.match(builders, /exp\(-abs\(direction\.y\) \* mix\(70\.0, 48\.0, uSoftWorld\)\)/);
-  assert.equal(sky.horizonShoulderFalloff, 70);
+  assert.match(builders, /exp\(-abs\(direction\.y\) \* 96\.0\)/);
+  assert.equal(sky.horizonShoulderFalloff, 96);
+  assert.match(builders, /mix\(color, horizon, horizonShoulder \* 0\.22\)/);
+  assert.equal(sky.horizonShoulderWeight, 0.22);
+  const lab = await source("cobra-lab/main.js");
+  assert.match(lab, /mix\(colour, horizonColor, horizonShoulder \* shoulderWeight\)/);
   assert.deepEqual([...sky.cloudColor], [0.64, 0.68, 0.72]);
   assert.deepEqual([...sky.cloudShelf], [0.055, 0.38]);
 });

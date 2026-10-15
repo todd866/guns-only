@@ -2975,11 +2975,10 @@ export function createDecisionSupportSky() {
           uSoftWorld));
         vec3 color = mix(horizon, zenith, skyCurve);
 
-        // A narrow, non-luminous horizon shoulder stays visible during unusual attitudes and over
-        // the far-field sea. Soft-world widens it slightly into a painterly band.
-        float horizonShoulder = exp(-abs(direction.y) * mix(70.0, 48.0, uSoftWorld));
-        color = mix(color, horizon * mix(1.08, 1.14, uSoftWorld),
-          horizonShoulder * mix(0.38, 0.48, uSoftWorld));
+        // A narrow, non-luminous shoulder for every theatre using this sky (Ukraine, Korea,
+        // Cobra). Shape/strength only: keep their authored horizon and zenith colours.
+        float horizonShoulder = exp(-abs(direction.y) * 96.0);
+        color = mix(color, horizon, horizonShoulder * 0.22);
 
         // Soft sun disc + bloom — Ukraine only. Not a lens flare; readable daylight presence.
         if (uSoftWorld > 0.5) {

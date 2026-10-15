@@ -12,6 +12,8 @@ import {
 } from "./terrain_mesh_builder.js";
 import {
   addUkraineSoftWorldFog,
+  UKRAINE_SOFT_WORLD_EDGE_HIDE_START,
+  UKRAINE_SOFT_WORLD_EDGE_HIDE_END,
   UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE,
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
@@ -876,9 +878,10 @@ void main() {
   // readable as a render-square against sky / cool void. Force the shared atmosphere opaque
   // approaching the visual world edge so distance stays painted atmosphere, not a tile boundary.
   if (uWorldEdgeM > 1.0) {
-    // Start the bury early: at altitude the disc silhouette still reads square if haze only
-    // thickens in the last 15% of the stream radius.
-    float edgeHide = smoothstep(uWorldEdgeM * 0.36, uWorldEdgeM * 0.72, distanceToCamera);
+    // Retain ground hue under the existing blue-grey aerial tint through the middle distance.
+    // A broad outer transition still reaches full opacity BEFORE the streamed boundary.
+    // Use the scenery's fractions so trees/runways cannot float through a different haze.
+    float edgeHide = smoothstep(uWorldEdgeM * ${UKRAINE_SOFT_WORLD_EDGE_HIDE_START.toFixed(2)}, uWorldEdgeM * ${UKRAINE_SOFT_WORLD_EDGE_HIDE_END.toFixed(2)}, distanceToCamera);
     aerial = max(aerial, edgeHide);
   }
   #endif

@@ -11,8 +11,10 @@ export const UKRAINE_SOFT_WORLD_HAZE_RGB = Object.freeze([0.48, 0.59, 0.68]);
 // Single source for the soft-world fog hex; fallback paths in scenery/mission features must
 // use this, never a literal — two hardcoded fallbacks forked the palette once already.
 export const UKRAINE_SOFT_WORLD_FOG_HEX = 0xa69d89;
-export const UKRAINE_SOFT_WORLD_EDGE_HIDE_START = 0.36;
-export const UKRAINE_SOFT_WORLD_EDGE_HIDE_END = 0.72;
+// Preserve the existing cool aerial tint through most of the disc, then bury its edge fully.
+// These fractions shape the wash; uFogDensity still follows the live streamed radius/weather.
+export const UKRAINE_SOFT_WORLD_EDGE_HIDE_START = 0.55;
+export const UKRAINE_SOFT_WORLD_EDGE_HIDE_END = 0.90;
 
 // The three uniforms that resolve the far-field wash colour. The sky dome must paint its
 // below-horizon hemisphere with the exact colour the terrain buries to — beyond the streamed disc
@@ -98,8 +100,8 @@ export function addUkraineSoftWorldFog(material, atmosphereUniforms) {
           );
           if (uWorldEdgeM > 1.0) {
             float softWorldEdgeHide = smoothstep(
-              uWorldEdgeM * 0.36,
-              uWorldEdgeM * 0.72,
+              uWorldEdgeM * ${UKRAINE_SOFT_WORLD_EDGE_HIDE_START.toFixed(2)},
+              uWorldEdgeM * ${UKRAINE_SOFT_WORLD_EDGE_HIDE_END.toFixed(2)},
               vSoftWorldFogDistance
             );
             softWorldAerial = max(softWorldAerial, softWorldEdgeHide);
