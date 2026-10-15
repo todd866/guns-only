@@ -1815,9 +1815,15 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
     "ghost-agriculture scars must not reintroduce crop blotches at altitude");
   assert.doesNotMatch(ukraine.fragmentShader, /sin\(rewild/,
     "land-cover structure belongs in the worker, not nested fragment sine calls");
-  assert.match(ukraine.fragmentShader,
-    /mix\(0\.28, 1\.0, halfLambert\)/,
+  const leeToe = ukraine.fragmentShader.match(/mix\(([\d.]+), 1\.0, halfLambert\)/);
+  assert.ok(leeToe,
     "Ukraine soft-world lighting must be continuous, not a hard two-step toon ramp");
+  const shadowFloor = ukraine.uniforms.uShadowFloor.value;
+  const fullLee = shadowFloor + (1 - shadowFloor) * Number(leeToe[1]);
+  assert.ok(fullLee >= 0.15 && fullLee <= 0.22,
+    "the continuous ramp must reach 15–22% light at full lee instead of adding a second floor");
+  assert.ok(shadowFloor >= 0.15 && shadowFloor <= 0.22,
+    "fully cast-shadowed ground must retain a soft, non-black floor");
   assert.match(ukraine.fragmentShader,
     /dot\(normal\.xz, regionalSunDirection\) \* reliefGain/,
     "coarse lowland normals need a bounded directional relief cue");
