@@ -10,8 +10,35 @@ PHASES = ("setup", "transit", "merge", "fight", "defensive", "RTB", "approach", 
 COLORS = {"setup":"#94a3b8", "transit":"#60a5fa", "merge":"#22d3ee", "fight":"#f59e0b", "defensive":"#ef4444", "RTB":"#a78bfa", "approach":"#c084fc", "landing":"#34d399", "dead":"#111827", "finished":"#64748b"}
 OUTCOMES = ("win", "loss", "crash", "recovered", "draw")
 
+def _number(value, default=0.0):
+    try: return float(value)
+    except (TypeError, ValueError): return default
+
+def bin_duration(bin, perceived=True):
+    """Return a bin duration in player or simulation seconds.
+
+    Schema 1 only has sim-clock values, so it is deliberately treated as 1x.
+    """
+    key = "duration" if perceived else "simDuration"
+    if perceived and "duration" in bin: return _number(bin["duration"], 1.0)
+    return _number(bin.get(key, bin.get("duration", 1)), 1.0)
+
+def perceived_duration(run):
+    if "perceivedSeconds" in run: return _number(run["perceivedSeconds"])
+    return sum(bin_duration(x) for x in run.get("timeline", []))
+
+def simulated_duration(run):
+    if "seconds" in run: return _number(run["seconds"])
+    return sum(bin_duration(x, False) for x in run.get("timeline", []))
+
 def run_duration(run):
-    return sum(float(x.get("duration", 1)) for x in run.get("timeline", []))
+    """Compatibility alias: report-facing duration is player wall-clock time."""
+    return perceived_duration(run)
+
+def timing(run, name, sim_name):
+    value = run.get(name)
+    if value is not None: return _number(value)
+    return _number(run.get(sim_name, 0))
 
 def load_runs(root: Path, manifest: dict) -> list[dict]:
     out = []
@@ -39,9 +66,10 @@ def flags(runs: list[dict]) -> list[str]:
     found = []
     for r in runs:
         pilot, seed = r.get("pilot", "?"), r.get("seed", "?")
-        if float(r.get("longestDeadAirSeconds", 0)) > 20:
-            found.append(f"dead air >20s: {pilot} seed {seed} ({r['longestDeadAirSeconds']:.1f}s)")
-        t = r.get("timeToFirstAction")
+        longest = timing(r, "longestDeadAirSeconds", "simLongestDeadAirSeconds")
+        if longest > 20:
+            found.append(f"dead air >20s: {pilot} seed {seed} ({longest:.1f}s perceived)")
+        t = r.get("timeToFirstAction", r.get("simTimeToFirstAction"))
         if t is None or float(t) > 30:
             found.append(f"first action >30s/missing: {pilot} seed {seed} ({'missing' if t is None else f'{float(t):.1f}s'})")
     by = defaultdict(list)
@@ -58,7 +86,7 @@ def flags(runs: list[dict]) -> list[str]:
         e1, e2 = tension(r, 1), tension(r, 2)
         if e1 is not None and e2 is not None and e2 <= e1:
             found.append(f"tension not rising: {r.get('pilot','?')} seed {r.get('seed','?')} ({e1:.2f}→{e2:.2f})")
-        phases = r.get("phaseSeconds") or {}
+        phases = r.get("phaseSeconds") or r.get("simPhaseSeconds") or {}
         fight = sum(float(phases.get(p, 0)) for p in ("fight", "defensive", "merge"))
         for p in ("RTB", "approach", "landing"):
             if float(phases.get(p, 0)) > fight:
@@ -78,13 +106,21 @@ def aggregate(rs: list[dict]) -> dict:
     durations = [run_duration(r) for r in rs]
     def phase_value(r, p):
         supplied = r.get("phaseSeconds") or {}
-        if p in supplied: return float(supplied[p])
-        return sum(float(x.get("duration", 1)) for x in r.get("timeline", []) if x.get("phase") == p)
+        if p in supplied: return _number(supplied[p])
+        return sum(bin_duration(x) for x in r.get("timeline", []) if x.get("phase") == p)
+    def sim_phase_value(r, p):
+        supplied = r.get("simPhaseSeconds") or r.get("phaseSeconds") or {}
+        if p in supplied: return _number(supplied[p])
+        return sum(bin_duration(x, False) for x in r.get("timeline", []) if x.get("phase") == p)
     phases = {p: sum(phase_value(r, p) for r in rs) for p in PHASES}
+    sim_phases = {p: sum(sim_phase_value(r, p) for r in rs) for p in PHASES}
     ptotal = sum(phases.values()) or 1
+    sim_first_actions = [float(r.get("simTimeToFirstAction", r["timeToFirstAction"])) for r in rs if r.get("timeToFirstAction") is not None]
     first_actions = [float(r["timeToFirstAction"]) for r in rs if r.get("timeToFirstAction") is not None]
     decisions = sum(len(r.get("decisions", [])) if isinstance(r.get("decisions"), list) else float(r.get("decisions", 0)) for r in rs)
-    simulated = sum(durations) or 1
+    perceived = sum(durations) or 1
+    dead = sum(timing(r, "deadAirSeconds", "simDeadAirSeconds") for r in rs)
+    sim_dead = sum(_number(r.get("simDeadAirSeconds", r.get("deadAirSeconds", 0))) for r in rs)
     paired = [(tension(r, 1), tension(r, 2)) for r in rs]
     paired = [(a, b) for a, b in paired if a is not None and b is not None]
     rising = [b > a for a, b in paired]
@@ -92,16 +128,27 @@ def aggregate(rs: list[dict]) -> dict:
             "winRate": (sum(r.get("outcome") == "win" for r in complete)/total if total else None),
             "kills": sum(float(r.get("kills", 0)) for r in rs), "hitsGiven": sum(float(r.get("hitsGiven", 0)) for r in rs), "hitsTaken": sum(float(r.get("hitsTaken", 0)) for r in rs),
             "nearMisses": sum(float(r.get("nearMisses", 0)) for r in rs), "shotNearMisses": sum(float(r.get("shotNearMisses", 0)) for r in rs), "groundNearMisses": sum(float(r.get("groundNearMisses", 0)) for r in rs),
-            "decisions": decisions, "decisionsPerMinute": 60*decisions/simulated,
+            "decisions": decisions, "decisionsPerMinute": 60*decisions/perceived,
             "escalationPaired": len(paired), "escalationRisingPct": (100*sum(rising)/len(rising) if rising else None), "escalationMeanDelta": (sum(b-a for a,b in paired)/len(paired) if paired else None),
-            "meanFirstAction": sum(first_actions)/len(first_actions) if first_actions else None, "missingFirstAction": len(rs)-len(first_actions),
-            "deadAirSeconds": sum(float(r.get("deadAirSeconds", 0)) for r in rs), "longestDeadAirSeconds": max((float(r.get("longestDeadAirSeconds", 0)) for r in rs), default=0),
-            "meanLength": sum(durations)/len(durations) if durations else 0, "lengthSpread": (max(durations)-min(durations) if durations else 0),
-            "phasePct": {p: 100*phases[p]/ptotal for p in PHASES}, "outcomes": distribution, "entropy": entropy}
+            "meanFirstAction": sum(first_actions)/len(first_actions) if first_actions else None,
+            "meanSimFirstAction": sum(sim_first_actions)/len(sim_first_actions) if sim_first_actions else None, "missingFirstAction": len(rs)-len(first_actions),
+            "deadAirSeconds": dead, "simDeadAirSeconds": sim_dead,
+            "longestDeadAirSeconds": max((timing(r, "longestDeadAirSeconds", "simLongestDeadAirSeconds") for r in rs), default=0),
+            "simLongestDeadAirSeconds": max((_number(r.get("simLongestDeadAirSeconds", r.get("longestDeadAirSeconds", 0))) for r in rs), default=0),
+            "meanLength": sum(durations)/len(durations) if durations else 0, "meanPerceivedLength": sum(durations)/len(durations) if durations else 0,
+            "meanSimulatedLength": sum(simulated_duration(r) for r in rs)/len(rs) if rs else 0,
+            "lengthSpread": (max(durations)-min(durations) if durations else 0),
+            "phasePct": {p: 100*phases[p]/ptotal for p in PHASES},
+            "simPhasePct": {p: 100*sim_phases[p]/(sum(sim_phases.values()) or 1) for p in PHASES},
+            "combatShare": 100*sum(phases[p] for p in ("merge", "fight", "defensive"))/ptotal,
+            "simCombatShare": 100*sum(sim_phases[p] for p in ("merge", "fight", "defensive"))/(sum(sim_phases.values()) or 1),
+            "outcomes": distribution, "recovered": sum(r.get("outcome") == "recovered" for r in rs),
+            "landed": sum(r.get("outcome") == "landed" or bool(r.get("landed", False)) for r in rs),
+            "endedEarly": sum(bool(r.get("sortieEndedEarly", False)) for r in rs), "entropy": entropy}
 
 def svg_strip(runs: list[dict]) -> str:
     width, row_h, left = 1100, 24, 170
-    maximum = max((sum(float(x.get("duration", 1)) for x in r.get("timeline", [])) for r in runs), default=1)
+    maximum = max((perceived_duration(r) for r in runs), default=1)
     scale = (width-left-20) / max(1, maximum)
     h = 70 + row_h * len(runs)
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{h}" viewBox="0 0 {width} {h}">', f'<rect x="0" y="0" width="{width}" height="{h}" fill="#f8fafc"/>']
@@ -112,13 +159,13 @@ def svg_strip(runs: list[dict]) -> str:
         parts.append(f'<rect x="{lx}" y="22" width="8" height="8" fill="{COLORS[phase]}"/>')
         parts.append(f'<text x="{lx+11}" y="30" font-family="sans-serif" font-size="11" fill="#0f172a">{phase}</text>')
         lx += 32 + len(phase) * 6
-    parts.append('<text x="4" y="47" font-family="sans-serif" font-size="11" fill="#0f172a">Markers are one-second bin counts: ● kill · | hit given · ! hit taken · ◆ shot/ground near miss (black/yellow) · shaded = dead air · dark trace = tension</text>')
+    parts.append('<text x="4" y="47" font-family="sans-serif" font-size="11" fill="#0f172a">Player seconds; markers = bin counts: ● kill · | hit · ! taken · ◆ near miss · shaded = dead air · dark trace = tension</text>')
     for i, r in enumerate(runs):
         y = 60 + i*row_h; label = html.escape(f"{r.get('pilot','?')} · {r.get('seed','?')}")
         parts.append(f'<text x="4" y="{y+14}" font-family="sans-serif" font-size="11" fill="#0f172a">{label}</text>')
         t = 0.0
         for x in r.get("timeline", []):
-            d = max(0.001, float(x.get("duration", 1))); w=d*scale
+            d = max(0.001, bin_duration(x)); w=d*scale
             parts.append(f'<rect x="{left+t*scale:.2f}" y="{y}" width="{w:.2f}" height="16" fill="{COLORS.get(x.get("phase"), "#94a3b8")}"/>')
             if float(x.get("deadAirSeconds", 0)) > 0:
                 parts.append(f'<rect x="{left+t*scale:.2f}" y="{y}" width="{w:.2f}" height="16" fill="#000" opacity=".22"/>')
@@ -156,36 +203,37 @@ def make_report(root: Path) -> tuple[dict, str]:
     summaries = {}
     for pilot in sorted(by):
         summaries[pilot] = aggregate(by[pilot])
-    simulated_total = sum(run_duration(r) for r in runs)
+    simulated_total = sum(simulated_duration(r) for r in runs)
+    perceived_total = sum(perceived_duration(r) for r in runs)
     wall = float(manifest.get("wallSeconds") or 0)
     speed = "N/A" if wall <= 0 else f"{simulated_total/wall:.1f}×"
-    lines = [f"# Playtest Lab — beat {manifest.get('beat','?')}", "", f"Generated {manifest.get('date','?')} · {len(runs)} runs · seed {manifest.get('startSeed','?')} · {simulated_total:.1f}s simulated · {speed} wall speed", "", "## At a glance", "", "| pilot | runs | complete | censored | win rate | mean length | spread | flags |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
+    lines = [f"# Playtest Lab — beat {manifest.get('beat','?')}", "", f"Generated {manifest.get('date','?')} · {len(runs)} runs · seed {manifest.get('startSeed','?')} · {perceived_total:.1f}s perceived / {simulated_total:.1f}s simulated · {speed}× wall speed", "", "## At a glance", "", "| pilot | runs | complete | censored | win rate | mean perceived | mean simulated | flags |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for pilot, a in summaries.items():
         wr = "N/A" if a["winRate"] is None else f"{100*a['winRate']:.0f}%"
-        lines.append(f"| {pilot} | {a['runs']} | {a['complete']} | {a['censored']} | {wr} | {a['meanLength']:.1f}s | {a['lengthSpread']:.1f}s | {sum(1 for x in fs if pilot in x)} |")
+        lines.append(f"| {pilot} | {a['runs']} | {a['complete']} | {a['censored']} | {wr} | {a['meanPerceivedLength']:.1f}s | {a['meanSimulatedLength']:.1f}s | {sum(1 for x in fs if pilot in x)} |")
     lines += ["", f"Flag count: **{len(fs)}**", "", "## Reproduction", "", f"- Command: `{manifest.get('command','(not recorded)')}`", f"- Source commit: `{manifest.get('sourceCommit','(unknown)')}`", f"- Clone SHA-256: `{manifest.get('cloneSha256','(unknown)')}`", f"- Wall time: {manifest.get('wallSeconds','?')}s", f"- Configured max seconds: {manifest.get('maxSeconds','?')}", "", "## Notes", ""]
     lines += [f"- {x}" for x in manifest.get("notes", [])] or ["- No notes recorded"]
-    lines += ["", "## Pilot metrics", "", "| pilot | kills | hits given/taken | near misses | decisions/min | first action | dead air (total/max) | outcome distribution | entropy | paired e1→e2 | rising | mean Δ |", "|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|"]
+    lines += ["", "## Pilot metrics", "", "Timing pairs are perceived / simulated; rates use perceived minutes.", "", "| pilot | kills | hits given/taken | near misses | decisions/min | first action | dead air perceived/sim (max) | perceived/sim sortie | combat share perceived/sim | outcome distribution | entropy | paired e1→e2 | rising | mean Δ |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|"]
     for pilot, a in summaries.items():
-        fa = "—" if a["meanFirstAction"] is None else f"{a['meanFirstAction']:.1f}s ({a['missingFirstAction']} missing)"
+        fa = "—" if a["meanFirstAction"] is None else f"{a['meanFirstAction']:.1f}s / {a['meanSimFirstAction']:.1f}s ({a['missingFirstAction']} missing)"
         dist = ", ".join(f"{o}:{a['outcomes'][o]}" for o in OUTCOMES)
         rising = "—" if a["escalationRisingPct"] is None else f"{a['escalationRisingPct']:.0f}%"
         delta = "—" if a["escalationMeanDelta"] is None else f"{a['escalationMeanDelta']:+.2f}"
-        lines.append(f"| {pilot} | {a['kills']:.0f} | {a['hitsGiven']:.0f}/{a['hitsTaken']:.0f} | {a['nearMisses']:.0f} | {a['decisionsPerMinute']:.2f} | {fa} | {a['deadAirSeconds']:.1f}s / {a['longestDeadAirSeconds']:.1f}s | {dist} | {a['entropy']:.2f} | {a['escalationPaired']} | {rising} | {delta} |")
+        lines.append(f"| {pilot} | {a['kills']:.0f} | {a['hitsGiven']:.0f}/{a['hitsTaken']:.0f} | {a['nearMisses']:.0f} | {a['decisionsPerMinute']:.2f} | {fa} | {a['deadAirSeconds']:.1f}s / {a['simDeadAirSeconds']:.1f}s (max {a['longestDeadAirSeconds']:.1f}s / {a['simLongestDeadAirSeconds']:.1f}s) | {a['meanPerceivedLength']:.1f}s / {a['meanSimulatedLength']:.1f}s | {a['combatShare']:.1f}% / {a['simCombatShare']:.1f}% | {dist} | {a['entropy']:.2f} | {a['escalationPaired']} | {rising} | {delta} |")
     lines += ["", "## Flags", ""]
     lines += [f"- {x}" for x in fs] if fs else ["- None"]
-    lines += ["", "## Phase share", "", "| pilot | " + " | ".join(PHASES) + " |", "|---|" + "---:|"*len(PHASES)]
-    for p, a in summaries.items(): lines.append("| " + p + " | " + " | ".join(f"{a['phasePct'][x]:.1f}%" for x in PHASES) + " |")
-    lines += ["", "## Runs by pilot"]
+    lines += ["", "## Phase share", "", "Each cell is perceived / simulated.", "", "| pilot | " + " | ".join(PHASES) + " |", "|---|" + "---:|"*len(PHASES)]
+    for p, a in summaries.items(): lines.append("| " + p + " | " + " | ".join(f"{a['phasePct'][x]:.1f}% / {a['simPhasePct'][x]:.1f}%" for x in PHASES) + " |")
+    lines += ["", "## Runs by pilot", "", "Timing pairs are perceived / simulated."]
     for pilot in sorted(by):
         lines += ["", f"### {pilot}", "", "| seed | outcome | length | first action | dead air | longest dead air | decisions/min | e1/e2 tension | kills | rounds fired | hits given/taken | shot/ground near misses |", "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
         for r in by[pilot]:
-            length = run_duration(r); first = r.get("timeToFirstAction"); first = "—" if first is None else f"{float(first):.1f}s"
+            length = perceived_duration(r); sim_length = simulated_duration(r); first = r.get("timeToFirstAction", r.get("simTimeToFirstAction")); first = "—" if first is None else f"{float(first):.1f}s / {float(r.get('simTimeToFirstAction',first)):.1f}s"
             ds = len(r.get("decisions", [])) if isinstance(r.get("decisions"), list) else float(r.get("decisions", 0)); dpm = 60*ds/(length or 1)
             e1, e2 = tension(r, 1), tension(r, 2); e = f"{e1:.2f} / {e2:.2f}" if e1 is not None and e2 is not None else "—"
-            lines.append(f"| {r.get('seed','?')} | {r.get('outcome','incomplete')} | {length:.1f}s | {first} | {float(r.get('deadAirSeconds',0)):.1f}s | {float(r.get('longestDeadAirSeconds',0)):.1f}s | {dpm:.2f} | {e} | {r.get('kills',0)} | {r.get('roundsFired',0)} | {r.get('hitsGiven',0)}/{r.get('hitsTaken',0)} | {r.get('shotNearMisses',0)}/{r.get('groundNearMisses',0)} |")
+            lines.append(f"| {r.get('seed','?')} | {r.get('outcome','incomplete')} | {length:.1f}s / {sim_length:.1f}s | {first} | {timing(r,'deadAirSeconds','simDeadAirSeconds'):.1f}s / {_number(r.get('simDeadAirSeconds',r.get('deadAirSeconds',0))):.1f}s | {timing(r,'longestDeadAirSeconds','simLongestDeadAirSeconds'):.1f}s / {_number(r.get('simLongestDeadAirSeconds',r.get('longestDeadAirSeconds',0))):.1f}s | {dpm:.2f} | {e} | {r.get('kills',0)} | {r.get('roundsFired',0)} | {r.get('hitsGiven',0)}/{r.get('hitsTaken',0)} | {r.get('shotNearMisses',0)}/{r.get('groundNearMisses',0)} |")
     lines += ["", "## Timeline strip", "", "![Per-run timeline strip](timeline.svg)", "", "The strip uses one row per run; phase colour, dead-air shading, event symbols, and the tension trace are defined in the SVG legend.", ""]
-    return {"manifest": manifest, "runs": len(runs), "flags": fs, "pilots": summaries}, "\n".join(lines)
+    return {"schemaVersion": 2, "manifest": manifest, "runs": len(runs), "flags": fs, "pilots": summaries}, "\n".join(lines)
 
 def main() -> None:
     ap = argparse.ArgumentParser(); ap.add_argument("output_dir", type=Path); args = ap.parse_args()

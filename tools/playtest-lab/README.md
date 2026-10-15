@@ -23,7 +23,8 @@ python3 tools/playtest-lab/report.py analysis/playtest/2026-10-16-beat7
 
 `--beat` accepts every built-in id, 1–14, and rejects unknown ids. Other options:
 `--pilots clone,novice,ace`, `--seeds 30`, `--start-seed 0`, `--max-seconds 3600`,
-`--rtb-after 600`, `--threat-km 2.5`, `--near-miss-m 25`, `--ground-m 100`, `--out DIR`.
+`--rtb-after 600`, `--end-after-combat`, `--threat-km 2.5`, `--near-miss-m 25`, `--ground-m 100`, `--out DIR`.
+The time limit and combat RTB budget are simulated seconds for baseline continuity.
 The time limit is an emergency bound, not an instruction to declare a sortie finished.
 The manifest checkpoints after every run; an interrupted batch can still be reported.
 When Ian's installed battery guard is present, the launcher checks before building
@@ -37,6 +38,10 @@ is not promised. Wall times are excluded from replay comparisons.
 
 Each run starts a fresh `SimulationSession(beat)` and fresh director, calls `Begin`,
 then advances through combat, RTB, approach, physical landing/crash and `Finished`.
+With `--end-after-combat`, the pilot instead calls `TryEndSortie()` on its first
+eligible update. It banks completed combat and records `sortieEndedEarly=true`,
+without a landing or recovery credit. Before combat completion (including novice
+RTB and clone crashes), behavior is unchanged.
 There are no forced kills, damage changes, teleports, fake landing credits, restarts,
 or physics shortcuts. Bounded runs are `incomplete`, with censored outcome rates.
 Some beats finish their authored lifecycle without a recovery leg; the lab does not
@@ -64,6 +69,16 @@ recovery pilot based on the production recovery schedule and
 `RecoveryProfileFlightTests` pitch/speed feedback. Conventional runway navigation uses
 a documented outbound/inbound cross-track join and straight-in final, with a missed
 approach retry; it is not an overhead-pattern human pilot model.
+The recovery pilot requests `SetTimeCompressionEnabled(true)`. On settled transit
+segments aligned with the first published approach cue, it releases pitch/roll and
+clears the scripted override; it holds throttle rather than repeating its setter.
+It resumes steering when alignment, speed or flight path needs correction. The
+kernel alone grants compression and rechecks threats, configuration, controls and
+final-approach guards. Outside 14 km horizontal runway range it flies the published moving ingress cue;
+at 14 km it hands back to the lab's straight-in recovery adapter. That cutoff is
+a controller modeling choice, so baseline deltas include this route change as
+well as time weighting.
+Compression is not a new autopilot and may be intermittent as the cue advances.
 Gear/hook/flap commands and actual runway/carrier contact remain normal session inputs.
 Beat 13 uses shared CASEVAC navigation controls for every profile; it never feeds the
 fighter clone into a rotary-wing vehicle. G is null there.
@@ -88,13 +103,34 @@ The report repeats the thresholds and provenance so the numbers travel with thei
 | Escalation | Compare exact combat-only mean tension in engagements 1 and 2 within the same run. Report paired counts, rising share and mean difference; missing engagement 2 is N/A. |
 | Outcome | `win`, `loss`, `crash`, `recovered` (early RTB), `draw`, or `incomplete`. A shot-down wreck is a combat loss. Combat completion and physical landing are also recorded separately. |
 
-Each tape contains `timeline` one-second bins (including the final fractional second),
-`events` with tick-derived timestamps, exact phase-duration totals, engagement tension
+Schema 2 uses **player wall-clock seconds** for every experience duration, phase
+share, first action, dead-air streak and rate. The runner negotiates `Advance(0, 8)`
+before each `StepFixed()`, observes that one ordinary 120 Hz production tick, and
+adds `FixedDeltaSeconds / entryFactor` to the perceived clock. This documented
+native seam preserves near-miss/event observation. It models continuous factor-
+weighted experience; it does not reproduce browser frame quantization or a
+renderer cost governor. The host always offers a ceiling of 8; safety can select 1.
+`WallSeconds` remains execution elapsed time, separate from both player and sim.
+
+Each tape contains `timeline` perceived-second bins (including the final fractional
+second), `events` with both clocks, exact phase-duration totals, engagement tension
 summaries, and sortie counters. Bin booleans mean “at any tick in this second”; continuous
-G/energy/tension are means, clearance is the minimum. Phase colour is the dominant phase
+G/energy/tension are weighted by perceived duration, clearance is the minimum. Phase colour is the dominant phase
 of the bin; `phaseSeconds` retains subsecond transitions. Heading, speed, altitude and
 recovery gate and runway-frame position at the end of each bin help distinguish pilot
 failure from mission pacing.
+`seconds` remains simulated sortie length for schema-1 continuity;
+`perceivedSeconds` is player length. Bins carry `simSecond`/`simDuration` alongside
+`second`/`duration`; run/bin `simPhaseSeconds` and `simDeadAirSeconds` retain simulated
+exposure. First action and longest dead air also have `sim` counterparts. Events
+retain their authoritative tick time as `simSecond`. First action retains the
+baseline convention of the start of its observed tick interval, with at most one
+tick of quantization relative to event stamps. A tick crossing a perceived
+bin boundary splits durations and weighted values, but its discrete counters are
+recorded once. End's between-tick finish event is retained without extra duration.
+`compressionSimSeconds` records exposure at each selected factor, and the inhibit
+histogram and final-bin cue alignment help explain unavailable compression.
+Reports read old tapes as 1× and show both clocks.
 SVG event markers are bin counts, not exact ordering; use the event tape for exact times.
 
 Flags cover >20 s dead air, >30 s/missing first action, novice 0% / ace 100% observed
@@ -120,3 +156,20 @@ The Python tests check metric/flag aggregation, paired escalation, partial bins,
 censoring, and parseable SVG. Run a small full sortie before large cohorts when
 changing a controller. Inspect the SVG as well as the summary: a green build is not
 evidence that a pilot can shoot or recover.
+
+## Paired RTB study
+
+```sh
+tools/playtest-lab/run --beat 7 --seeds 30 --out analysis/playtest/2026-10-16-beat7-rtb/land
+tools/playtest-lab/run --beat 7 --seeds 30 --end-after-combat --out analysis/playtest/2026-10-16-beat7-rtb/end-after-combat
+python3 tools/playtest-lab/compare.py analysis/playtest/2026-10-16-beat7 \
+  analysis/playtest/2026-10-16-beat7-rtb/land \
+  analysis/playtest/2026-10-16-beat7-rtb/end-after-combat \
+  --out analysis/playtest/2026-10-16-beat7-rtb/comparison.md
+```
+
+Commit the runner before collecting cohorts so both manifests identify the tested
+source. Comparison validates the exact 3×30 pilot/seed set, clone hash, thresholds,
+limits and mode; it permits the baseline source revision to differ. Phase shares
+are pooled durations, combat is merge + fight + defensive, and longest dead air is
+the maximum contiguous run over the cohort, not an average.

@@ -42,7 +42,20 @@ class ReportTests(unittest.TestCase):
     def test_svg_xml_escaping_and_partial_duration(self):
         r = run(pilot="<novice>"); s = report.svg_strip([r])
         self.assertTrue(s.startswith("<svg ")); self.assertIn("&lt;novice&gt;", s); self.assertIn('width="182.00"', s)
-        self.assertIn("one-second bin counts", s); self.assertIn("polyline", s)
+        self.assertIn("Player seconds", s); self.assertIn("polyline", s)
+
+    def test_schema_v2_keeps_both_clocks(self):
+        r = run(); r.update({"seconds": 32, "perceivedSeconds": 4, "simPhaseSeconds": {"fight": 20, "RTB": 12},
+                             "phaseSeconds": {"fight": 2, "RTB": 2}, "deadAirSeconds": 1,
+                             "simDeadAirSeconds": 8, "longestDeadAirSeconds": 1, "simLongestDeadAirSeconds": 8})
+        r["timeline"][0].update({"second": 0, "simSecond": 0, "duration": .25, "simDuration": 2})
+        a = report.aggregate([r])
+        self.assertEqual(a["meanPerceivedLength"], 4)
+        self.assertEqual(a["meanSimulatedLength"], 32)
+        self.assertAlmostEqual(a["phasePct"]["fight"], 47.0588, places=3)
+        self.assertAlmostEqual(a["simPhasePct"]["fight"], 58.8235, places=3)
+        self.assertEqual(a["longestDeadAirSeconds"], 1)
+        self.assertEqual(a["simLongestDeadAirSeconds"], 8)
 
     def test_cli_artifacts(self):
         with tempfile.TemporaryDirectory() as d:
@@ -50,5 +63,12 @@ class ReportTests(unittest.TestCase):
             with gzip.open(p,"wt") as f: json.dump(run(),f)
             (root/"manifest.json").write_text(json.dumps({"schemaVersion":1,"date":"x","beat":7,"runs":["runs/r.json.gz"]}))
             summary, md=report.make_report(root); (root/"report.md").write_text(md); self.assertTrue("Pilot metrics" in md); self.assertEqual(summary["runs"],1)
+            tables = []
+            for line in md.splitlines():
+                if line.startswith("|"):
+                    cells = line.count("|") - 1
+                    if not all(c.strip("-:") == "" for c in line.strip("|").split("|")):
+                        tables.append(cells)
+            for i in range(0, len(tables), 2): self.assertEqual(tables[i], tables[i + 1])
 
 if __name__ == "__main__": unittest.main()

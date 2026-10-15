@@ -12,14 +12,15 @@ namespace GunsOnly.PlaytestLab;
 public sealed record Options(int Beat = 7, int Seeds = 30, int StartSeed = 0,
     int MaxSeconds = 3600, int RtbAfterSeconds = 600, string Pilots = "clone,novice,ace",
     double ThreatRangeM = 2500, double ShotMissM = 25, double GroundMissM = 100,
-    string Output = "", bool SelfTest = false) {
+    string Output = "", bool SelfTest = false, bool EndAfterCombat = false) {
     public static Options Parse(string[] args) {
         var o = new Options();
         for (int i = 0; i < args.Length; i++) {
             string k = args[i];
+            if (k == "--end-after-combat") { o = o with { EndAfterCombat = true }; continue; }
             if (k == "--self-test") { o = o with { SelfTest = true }; continue; }
             if (k == "--help") {
-                Console.WriteLine("playtest-lab [--beat 1..14] [--seeds 30] [--start-seed 0] [--pilots clone,novice,ace] [--max-seconds 3600] [--rtb-after 600] [--threat-km 2.5] [--near-miss-m 25] [--ground-m 100] [--out DIR] [--self-test]");
+                Console.WriteLine("playtest-lab [--beat 1..14] [--seeds 30] [--start-seed 0] [--pilots clone,novice,ace] [--max-seconds 3600] [--rtb-after 600] [--threat-km 2.5] [--near-miss-m 25] [--ground-m 100] [--out DIR] [--end-after-combat] [--self-test]");
                 Environment.Exit(0);
             }
             if (++i == args.Length) throw new ArgumentException($"Missing value for {k}");
@@ -83,18 +84,18 @@ public static class Program {
                 files.Add(rel);
                 // Checkpoint the manifest after every sortie; interrupted batches remain inspectable.
                 var manifest = new {
-                    schemaVersion = 1, date, beat = o.Beat, seeds = o.Seeds, startSeed = o.StartSeed,
+                    schemaVersion = 2, date, beat = o.Beat, seeds = o.Seeds, startSeed = o.StartSeed,
                     maxSeconds = o.MaxSeconds, rtbAfterSeconds = o.RtbAfterSeconds,
                     command = "tools/playtest-lab/run " + string.Join(' ', args.Select(Quote)),
                     sourceCommit, cloneSha256 = cloneHash,
                     wallSeconds = wall.Elapsed.TotalSeconds, options = o,
                     notes = new[] {
-                        "Experience proxies, not a claim to measure human feelings. 120 Hz production simulation; per-second bins preserve tick events and exact phase/dead-air durations. No renderer or wall-clock pacing.",
+                        "Experience proxies, not a claim to measure human feelings. 120 Hz production simulation; perceived-second bins preserve tick events and factor-weighted phase/dead-air durations. Perceived seconds = sum(fixed dt / pre-tick kernel factor); simulated seconds remain separate. Continuous factor-weighted experience, not exact browser frame timing or CPU WallSeconds. No renderer or wall-clock pacing.",
                         "Fresh director per sortie; no progression imported. Seeds deterministically vary reaction latency, aim bias, and opening hands-off time; mission geometry/damage/AI rules stay authored. Paired seeds use the same perturbation draws for each pilot.",
                         "Clone is the committed owner-pilot-clone policy (canonical features and reference-case validation), held at its training cadence of 20 Hz. Novice adapts BanditPressureReport's pursuit pilot. Ace adapts FirstMergeOpeningAcceptanceTests.HudPilot with delayed body-frame cue observations and bounded analog controls. Shared recovery and terrain escape use the existing scripted command seam; this is not a human usability study.",
                         $"Threat: live bandit within {o.ThreatRangeM:F0} m and nose within 35 degrees, or firing; includes wingmen. Gun target: selected live target with authorized ballistic solution. Dead air: no threat, no gun opportunity, no player shot, decision, spectacle or near miss. Initial begin is not counted as a decision.",
                         $"Shot near miss: unique hostile gun round's swept separation within {o.ShotMissM:F0} m outside its hit radius; counted only on passage, not repeated ticks. Ground near miss: entry below {o.GroundMissM:F0} m AGL with 25 m hysteresis, excluding configured recovery/contact. Explosions are labelled destruction/impact proxies from session events, not renderer effects.",
-                        $"RTB choice: combat complete, bingo, empty gun, or {o.RtbAfterSeconds}s combat budget, through TryRequestReturnToBase. Recovery/navigation is a shared scripted pilot, with a conventional straight-in join, not learned owner behaviour or an overhead-pattern model. A {o.MaxSeconds}s limit is censored, never a win or fabricated landing.",
+                        $"RTB choice: combat complete, bingo, empty gun, or {o.RtbAfterSeconds}s combat budget, through TryRequestReturnToBase. Recovery/navigation follows the published RTB cue, releases steering during eligible 8x transit, then uses a conventional straight-in join. This is not learned owner behaviour or an overhead-pattern model. End-after-combat={o.EndAfterCombat}: TryEndSortie at the first eligible pilot update, without recovery credit. A {o.MaxSeconds} simulated-second limit is censored, never a win or fabricated landing.",
                         "Tension heuristic: 0.35 proximity + 0.15 positive closure (within threat range) + 0.25 threat + 0.15 damage-risk under threat + 0.10 low-clearance risk; clamped 0..1, near shots at least 0.85 and hits at least 0.95. Engagement means exclude RTB and terminal wreck descent. Phase percentages include wreck/debrief time.",
                         "Default native terrain is the session's authored/default surface, without the browser's streamed terrain atlas. Ground-clearance results describe that substrate. CASEVAC uses semantic navigation for all profiles; fixed-wing clone/gun/G metrics do not apply. Generic pilots attempt every built-in beat; specialist mission failures and timeouts remain visible."
                     }, runs = files
@@ -102,7 +103,7 @@ public static class Program {
                 string temp = Path.Combine(output, "manifest.json.tmp");
                 File.WriteAllText(temp, JsonSerializer.Serialize(manifest, new JsonSerializerOptions(Json) { WriteIndented = true }));
                 File.Move(temp, Path.Combine(output, "manifest.json"), true);
-                Console.WriteLine($"{pilot,-6} s{seed:D3} {run.Outcome,-10} {run.Seconds,7:F1}s K{run.Kills} H{run.HitsGiven}/{run.HitsTaken} dead {run.LongestDeadAirSeconds:F1}s {run.Seconds / Math.Max(.001, run.WallSeconds):F0}x");
+                Console.WriteLine($"{pilot,-6} s{seed:D3} {run.Outcome,-10} {run.PerceivedSeconds,7:F1}s player {run.Seconds,7:F1}s sim K{run.Kills} H{run.HitsGiven}/{run.HitsTaken} dead {run.LongestDeadAirSeconds:F1}s {run.Seconds / Math.Max(.001, run.WallSeconds):F0}x");
             }
             var reportStart = new ProcessStartInfo("python3") { UseShellExecute = false };
             reportStart.ArgumentList.Add(Path.Combine(root, "tools/playtest-lab/report.py"));
@@ -142,15 +143,26 @@ public static class SortieRunner {
         var watch = Stopwatch.StartNew();
         var s = new SimulationSession(o.Beat, serviceLifeCaptureEnabled: false);
         s.DecisionCaptureEnabled = false; // training recorder is unrelated to the experience tape
-        var pilot = new LabPilot(name, seed, clone, o.RtbAfterSeconds);
+        var pilot = new LabPilot(name, seed, clone, o.RtbAfterSeconds, o.EndAfterCombat);
         var observer = new ExperienceObserver(o, name, seed);
         s.Begin();
+        double perceivedSeconds = 0;
         for (int tick = 0; tick < o.MaxSeconds * AircraftSim.TickHz && s.Lifecycle == SimulationSession.LifecycleState.Active; tick++) {
-            IReadOnlyList<string> decisions = pilot.Drive(s);
-            if (s.Lifecycle != SimulationSession.LifecycleState.Active) break; // CASEVAC's debrief acknowledgement need not consume a physics tick
+            IReadOnlyList<string> decisions = pilot.Drive(s, perceivedSeconds);
+            if (s.Lifecycle != SimulationSession.LifecycleState.Active) {
+                observer.ObserveTerminal(s, decisions); break;
+            }
+            // The native per-tick seam documented by the production RTB API keeps
+            // near-miss passages observable. Advance(0, 8) negotiates the real
+            // safety decision; StepFixed is exactly one ordinary 120 Hz tick.
+            int entryFactor = s.Advance(0, maximumCompressionFactor: 8);
+            string inhibitReason = s.TimeCompressionInhibitReason.ToString();
+            long before = s.Tick;
             observer.BeforeStep(s);
             s.StepFixed();
-            observer.Observe(s, decisions);
+            if (s.Tick != before + 1) throw new InvalidOperationException("Expected one production tick.");
+            observer.Observe(s, decisions, entryFactor, inhibitReason);
+            perceivedSeconds += Dt / entryFactor;
         }
         return observer.Finish(s, watch.Elapsed.TotalSeconds);
     }

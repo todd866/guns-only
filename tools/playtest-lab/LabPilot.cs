@@ -12,6 +12,7 @@ public sealed class LabPilot {
     readonly ClonedPilotPolicy? clone;
     readonly CasevacPilot casevac;
     readonly int latency, rtbAfter;
+    readonly bool endAfterCombat;
     readonly double handsOff, aimBias;
     readonly Queue<(long Tick, AircraftState State, Vec3D Lead, bool Solution)> observations = new();
     readonly List<string> decisions = new();
@@ -19,10 +20,10 @@ public sealed class LabPilot {
     readonly HudCuePilot hud;
     bool trigger, rtbObserved, bingoObserved;
     string mode = "setup", candidateMode = "setup";
-    double candidateSince;
+    double candidateSince, decisionTime;
     long targetId;
-    public LabPilot(string name, int seed, ClonedPilotPolicy? clone, int rtbAfter) {
-        this.name = name; this.clone = clone; this.rtbAfter = rtbAfter;
+    public LabPilot(string name, int seed, ClonedPilotPolicy? clone, int rtbAfter, bool endAfterCombat = false) {
+        this.name = name; this.clone = clone; this.rtbAfter = rtbAfter; this.endAfterCombat = endAfterCombat;
         casevac = new CasevacPilot(name, seed);
         // Explicit integer PRNG: reproducible on all .NET 8 hosts, no global RNG.
         uint state = unchecked((uint)seed + 0x9e3779b9u);
@@ -39,10 +40,14 @@ public sealed class LabPilot {
         hud = new HudCuePilot(.20 + .1 * reaction, 1 + .35 * (seed % 8));
     }
 
-    public IReadOnlyList<string> Drive(SimulationSession s) {
+    public IReadOnlyList<string> Drive(SimulationSession s, double? perceivedSeconds = null) {
         decisions.Clear();
-        if (s.CasevacMission) { SetMode(casevac.Drive(s), s.TimeSeconds); return decisions; }
+        decisionTime = perceivedSeconds ?? s.TimeSeconds;
+        if (s.CasevacMission) { SetMode(casevac.Drive(s), decisionTime); return decisions; }
         if (!s.PlayerAlive) { Fire(s, false); return decisions; }
+        if (endAfterCombat && s.CanEndSortie && s.TryEndSortie()) {
+            decisions.Add("End:combat-complete"); return decisions;
+        }
         if (s.PlayerFuel.IsBingo && !bingoObserved) { bingoObserved = true; decisions.Add("bingo:acknowledge"); }
         bool empty = s.OpponentPresent && s.PlayerGun.AmmoRemaining == 0;
         if (s.ReturnToBaseAvailable && (s.FiniteCombatComplete || s.PlayerFuel.IsBingo || empty || s.TimeSeconds >= rtbAfter)) {
@@ -57,7 +62,7 @@ public sealed class LabPilot {
             || (s.Beat.RecoveryCompletesSortie && s.LiveOpponentCount == 0);
         if (recover) {
             Fire(s, false);
-            SetMode(recovery.Drive(s), s.TimeSeconds);
+            SetMode(recovery.Drive(s), decisionTime);
             return decisions;
         }
         if (s.SelectedOpponentAlive && s.PlayerGun.SelectedTargetId != targetId) {
@@ -69,7 +74,7 @@ public sealed class LabPilot {
             s.Controls.ScriptedPilotOverride = null;
             bool fire = hud.Drive(s);
             Fire(s, fire && s.PlayerWeaponsAuthorized);
-            SetMode(s.TimeSeconds < hud.HandsOffSeconds ? "setup" : fire ? "shoot" : "track-cue", s.TimeSeconds);
+            SetMode(s.TimeSeconds < hud.HandsOffSeconds ? "setup" : fire ? "shoot" : "track-cue", decisionTime);
             return decisions;
         }
         if (s.SelectedOpponentAlive) {
@@ -78,7 +83,7 @@ public sealed class LabPilot {
         if (s.TimeSeconds < handsOff || observations.Count <= latency || !s.SelectedOpponentAlive) {
             s.Controls.ScriptedPilotOverride = new PilotCommand(1, 0, .9, 0);
             Fire(s, false);
-            SetMode(s.TimeSeconds < handsOff ? "setup" : "search", s.TimeSeconds);
+            SetMode(s.TimeSeconds < handsOff ? "setup" : "search", decisionTime);
             if (!s.SelectedOpponentAlive) observations.Clear();
             return decisions;
         }
@@ -93,7 +98,7 @@ public sealed class LabPilot {
                 CombatPolicyDecision command = clone!.Decide(observation);
                 s.Controls.ScriptedPilotOverride = command.Command;
                 Fire(s, command.WantsToFire && s.PlayerWeaponsAuthorized);
-                SetMode(command.WantsToFire ? "shoot" : command.Command.GDemand > 3 ? "turn" : "extend", s.TimeSeconds);
+                SetMode(command.WantsToFire ? "shoot" : command.Command.GDemand > 3 ? "turn" : "extend", decisionTime);
             }
             return decisions;
         }
@@ -105,7 +110,7 @@ public sealed class LabPilot {
         double aheadClearance = ExperienceObserver.Clearance(s, own.Position + own.VelocityVector() * 3);
         if (Math.Min(ExperienceObserver.Clearance(s, own.Position), aheadClearance) < (name == "novice" ? 220 : 500)) {
             s.Controls.ScriptedPilotOverride = new PilotCommand(Math.Min(maxG, 4), 0, 1, 0);
-            Fire(s, false); SetMode("terrain-escape", s.TimeSeconds); return decisions;
+            Fire(s, false); SetMode("terrain-escape", decisionTime); return decisions;
         }
         double angle = Math.Acos(Math.Clamp(own.ForwardDir().Dot((aim - own.Position).Normalized()), -1, 1));
         double bank = Math.Clamp(Geometry.BankToPlaceLiftVectorOn(own, aim), -maxBank, maxBank);
@@ -117,7 +122,7 @@ public sealed class LabPilot {
         s.Controls.ScriptedPilotOverride = new PilotCommand(g, bank, throttle, 0);
         bool shot = range is > 120 and < 850 && (name == "ace" ? seen.Solution || angle < 1.5 * Math.PI / 180 : angle < 4 * Math.PI / 180);
         Fire(s, shot && s.PlayerWeaponsAuthorized);
-        SetMode(shot ? "shoot" : slow ? "energy-recovery" : angle > .2 ? "turn" : "pursue", s.TimeSeconds);
+        SetMode(shot ? "shoot" : slow ? "energy-recovery" : angle > .2 ? "turn" : "pursue", decisionTime);
         return decisions;
     }
     void SetMode(string next, double seconds) {
@@ -184,8 +189,11 @@ public sealed class RecoveryPilot {
     bool goingAround;
     bool inbound;
     double outboundSide;
+    bool quietTransit, cueTransitComplete;
+    double lastThrottle = double.NaN;
     public string Drive(SimulationSession s) {
         var own = s.Player.State;
+        s.SetTimeCompressionEnabled(true); // same persistent preference as the player toggle
         if (s.RunwayWeightOnWheels || s.ConventionalRunwayPhase == RunwayRecoveryPhase.Rollout
             || s.Recovery == Carrier.Recovery.Trap) {
             Apply(s, new PilotCommand(1, 0, 0, 0)); return "rollout";
@@ -210,11 +218,30 @@ public sealed class RecoveryPilot {
             targetHeight = destination.Y + 500;
             targetSpeed = 200;
         }
+        // Fly the published ingress while distant from the runway. The first
+        // gate is a moving lookahead on that path (often only ~325 m away), so
+        // its proximity does not mean transit is complete. Use runway distance
+        // to hand back to the lab's established straight-in landing controller.
+        bool followPublishedIngress = false;
+        if (s.TimeCompressionAvailable && !cueTransitComplete && guidance.Valid && guidance.Gates.Count > 0
+            && s.ConventionalRunwayRecovery is { } transitRunway) {
+            Vec3D offset = own.Position - transitRunway.Runway.Threshold;
+            if (Math.Sqrt(offset.X * offset.X + offset.Z * offset.Z) < 14000
+                || guidance.ActivePatternLeg != ApproachPatternLeg.PatternEntry || final)
+                cueTransitComplete = true;
+            else {
+                followPublishedIngress = true;
+                var cue = guidance.Gates[0];
+                destination = new Vec3D(cue.EastM, cue.UpM, cue.NorthM);
+                targetHeight = cue.UpM; targetSpeed = Math.Max(150, guidance.NextTrueAirspeedMps);
+                if (s.PlayerSystems.GearHandle == LandingGearHandle.Down) Press(s, GKey.GearToggle);
+            }
+        }
         // Use a common, explicit straight-in join for the lab. Chasing the overhead
         // director's current gate alone can orbit a gate whose capture also requires
         // alignment with the NEXT leg. This controller owns navigation, never recovery
         // credit; the same production runway still decides touchdown and full stop.
-        if (s.ConventionalRunwayRecovery is { } conventional) {
+        if (!followPublishedIngress && s.ConventionalRunwayRecovery is { } conventional) {
             var runway = conventional.Runway;
             var frame = runway.Frame(own.Position);
             double alignment = Math.Abs(Math.Atan2(Math.Sin(own.Chi - runway.HeadingRad), Math.Cos(own.Chi - runway.HeadingRad)));
@@ -247,7 +274,7 @@ public sealed class RecoveryPilot {
         desiredGamma = Math.Clamp(Math.Atan2(heightError, Math.Max(500, horizontal)), -.14, .12);
         var profile = s.Beat.SystemsProfile ?? AirframeSystemsProfile.F86FResearchBasis;
         if (s.Player.IndicatedAirspeedMps * AirData.MpsToKnots < profile.GearAndFlapLimitKias - 5
-            && (final || targetSpeed < 150)) {
+            && !followPublishedIngress && (final || targetSpeed < 150)) {
             if (s.PlayerSystems.GearHandle != LandingGearHandle.Down) Press(s, GKey.GearToggle);
             if (s.PlayerSystems.LeftFlapDegrees < profile.FullFlapDegrees - 1 && s.Tick % 120 == 0) Press(s, GKey.FlapDown);
             if (s.Carrier is { IsMaritime: true } && s.PlayerSystems.HookHandle != TailhookHandle.Down) Press(s, GKey.HookToggle);
@@ -286,11 +313,36 @@ public sealed class RecoveryPilot {
             double alpha = (cl - s.PlayerAerodynamicConfiguration.LiftCoefficientIncrement) / Math.Max(1e-6, s.Beat.PlayerAir.CLAlpha);
             pitch = Math.Clamp(desiredGamma + alpha, -5 * Math.PI / 180, 20 * Math.PI / 180);
         }
+        // Release only on a settled route segment aligned with the actual cue.
+        double cueError = double.PositiveInfinity;
+        if (guidance.Valid && guidance.Gates.Count > 0) {
+            var cue = guidance.Gates[0];
+            cueError = Math.IEEERemainder(Math.Atan2(cue.EastM - own.Position.X, cue.NorthM - own.Position.Z) - own.Chi, 2 * Math.PI);
+        }
+        bool publishedTransit = s.TimeCompressionAvailable && !final && !goingAround;
+        double tolerance = (quietTransit ? 4.8 : 4) * Math.PI / 180;
+        bool stable = publishedTransit && Math.Abs(cueError) < tolerance
+            && Math.Abs(headingError) < tolerance && Math.Abs(own.Bank) < tolerance
+            && Math.Abs(speedError) < (quietTransit ? 30 : 20)
+            && Math.Abs(desiredGamma - own.Gamma) < (quietTransit ? .06 : .04)
+            && ExperienceObserver.Clearance(s, own.Position + own.VelocityVector() * 8) > 500;
+        if (stable) {
+            quietTransit = true;
+            s.SetAnalogPitchControl(0); s.SetAnalogRollControl(0);
+            s.Controls.ScriptedPilotOverride = null;
+            // Keep the lever where it was: even an unchanged setter is a player
+            // interaction and correctly hands fast time back to normal time.
+            return "RTB";
+        }
+        quietTransit = false;
         Apply(s, new PilotCommand(g, bank, throttle, 0, CommandedPitchRad: pitch));
         return goingAround ? "go-around" : final ? "approach" : inbound ? "join-inbound" : "RTB";
     }
-    static void Apply(SimulationSession s, PilotCommand command) {
-        s.SetAnalogThrottleControl(command.Throttle);
+    void Apply(SimulationSession s, PilotCommand command) {
+        s.SetAnalogPitchControl(0); s.SetAnalogRollControl(0);
+        if (command.Throttle != lastThrottle) {
+            s.SetAnalogThrottleControl(command.Throttle); lastThrottle = command.Throttle;
+        }
         s.Controls.ScriptedPilotOverride = command;
     }
     static void Press(SimulationSession s, GKey key) { s.FeedKey(key, true); s.FeedKey(key, false); }

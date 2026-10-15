@@ -26,8 +26,8 @@ public static class LabChecks {
             a.WallSeconds = b.WallSeconds = 0;
             Require(JsonSerializer.Serialize(a, Program.Json) == JsonSerializer.Serialize(b, Program.Json), $"Nondeterministic {pilot} seed 3.");
             Require(a.Outcome == "incomplete" && !a.Completed, "Timeout was reported as a completed sortie.");
-            Require(Math.Abs(a.PhaseSeconds.Values.Sum() - a.Seconds) < 1e-6, "Phase duration mismatch.");
-            Require(Math.Abs(a.Timeline.Sum(x => x.Duration) - a.Seconds) < 1e-6, "Timeline duration mismatch.");
+            Require(Math.Abs(a.PhaseSeconds.Values.Sum() - a.PerceivedSeconds) < 1e-6, "Phase duration mismatch.");
+            Require(Math.Abs(a.Timeline.Sum(x => x.Duration) - a.PerceivedSeconds) < 1e-6, "Timeline duration mismatch.");
             Require(a.Timeline.Sum(x => x.RoundsFired) == a.RoundsFired && a.Timeline.Sum(x => x.HitsGiven) == a.HitsGiven,
                 "Per-second deltas disagree with sortie totals.");
             Require(a.Timeline.All(x => x.Tension is >= 0 and <= 1), "Tension outside 0..1.");
@@ -46,6 +46,31 @@ public static class LabChecks {
         for (int i = 0; i < 125; i++) { partialObserver.BeforeStep(partialSession); partialSession.StepFixed(); partialObserver.Observe(partialSession, Array.Empty<string>()); }
         var partial = partialObserver.Finish(partialSession, 0);
         Require(partial.Timeline.Count == 2 && Math.Abs(partial.Timeline[1].Duration - 5 * SortieRunner.Dt) < 1e-10, "Final fractional second was dropped.");
+        // Deliberately change factors off the perceived-second grid. Durations
+        // must split, whereas the decision on the crossing tick must not duplicate.
+        var weightedSession = new SimulationSession(7); weightedSession.Begin();
+        var weightedObserver = new ExperienceObserver(new Options(), "fixture", 0);
+        for (int i = 0; i < 124; i++) {
+            weightedObserver.BeforeStep(weightedSession); weightedSession.StepFixed();
+            weightedObserver.Observe(weightedSession, i == 122 ? new[] { "cross-bin" } : Array.Empty<string>(), i is >= 119 and < 122 ? 8 : 1);
+        }
+        var weighted = weightedObserver.Finish(weightedSession, 12.5);
+        double expectedPlayer = (121 + 3.0 / 8) * SortieRunner.Dt;
+        Require(Math.Abs(weighted.PerceivedSeconds - expectedPlayer) < 1e-9 && weighted.WallSeconds == 12.5, "Player and execution clocks conflated.");
+        Require(Math.Abs(weighted.Seconds - 124 * SortieRunner.Dt) < 1e-9, "Simulation clock changed under weighting.");
+        Require(weighted.Timeline.Count == 2 && Math.Abs(weighted.Timeline[0].Duration - 1) < 1e-9, "Mixed factors did not split at player second.");
+        Require(weighted.Timeline.Sum(x => x.Decisions.Count) == 1 && weighted.Events.Count(e => e.Kind == "decision:cross-bin") == 1, "Cross-bin event lost or duplicated.");
+        CheckClocks(weighted);
+        Require(Options.Parse(new[] { "--end-after-combat" }).EndAfterCombat, "End option did not parse.");
+        var ended = SortieRunner.Fly(new Options(MaxSeconds: 600, EndAfterCombat: true), "ace", 0, clone);
+        Require(ended.Completed && ended.SortieEndedEarly && ended.CombatComplete && ended.Outcome == "win" && !ended.Landed,
+            "End must bank completed combat without claiming landing.");
+        Require(ended.Events.Count(e => e.Kind == "SortieFinished") == 1
+            && ended.Events.Count(e => e.Kind == "decision:End:combat-complete") == 1,
+            "Between-tick End event/decision missing or duplicated.");
+        Require(ended.Events.Last().Second <= ended.PerceivedSeconds + 1e-9, "End event extends the player clock.");
+        var notEnded = SortieRunner.Fly(new Options(MaxSeconds: 5, EndAfterCombat: true), "novice", 0, clone);
+        Require(!notEnded.SortieEndedEarly && !notEnded.Completed, "End accepted before combat completion.");
         foreach (int beat in Enumerable.Range(1, 14)) {
             var staged = SortieRunner.Fly(new Options(Beat: beat, MaxSeconds: 1), "novice", 0, clone);
             Require(staged.Seconds > 0 && staged.Timeline.Count > 0, $"Beat {beat} produced no tape.");
@@ -57,9 +82,27 @@ public static class LabChecks {
         // forever after both high-altitude novice combat and a successful ace opening.
         foreach (string pilot in new[] { "novice", "ace" }) {
             var joined = SortieRunner.Fly(new Options(MaxSeconds: 2400), pilot, 1, clone);
+            CheckClocks(joined);
+            if (pilot == "ace") Require(joined.CompressionSimSeconds.GetValueOrDefault(8) > 0, "Recovery never exercised eligible compression.");
             Require(joined.Completed && joined.Landed, $"Runway join orbit regressed for {pilot}: {joined.Outcome}");
         }
-        Console.WriteLine("PASS: clone reference cases, deterministic/varied seeds, all 14 beats stage, timeout/partial-bin accounting, real near-miss passages, physical runway recovery, CLI validation.");
+        Console.WriteLine("PASS: clone reference cases, deterministic/varied seeds, all 14 beats stage, timeout/partial-bin accounting, real near-miss passages, mixed-factor dual clocks, End without landing, compressed physical runway recovery, CLI validation.");
+    }
+    static void CheckClocks(RunResult r) {
+        static void Near(double actual, double expected, string label) {
+            if (Math.Abs(actual - expected) > 1e-6) throw new Exception($"{label}: {actual} != {expected}");
+        }
+        Near(r.Timeline.Sum(x => x.Duration), r.PerceivedSeconds, "Player bins");
+        Near(r.Timeline.Sum(x => x.SimDuration), r.Seconds, "Sim bins");
+        Near(r.PhaseSeconds.Values.Sum(), r.PerceivedSeconds, "Player phases");
+        Near(r.SimPhaseSeconds.Values.Sum(), r.Seconds, "Sim phases");
+        Near(r.CompressionSimSeconds.Sum(x => x.Value / x.Key), r.PerceivedSeconds, "Weighted factors");
+        Near(r.Timeline.Sum(x => x.DeadAirSeconds), r.DeadAirSeconds, "Player dead air");
+        Near(r.Timeline.Sum(x => x.SimDeadAirSeconds), r.SimDeadAirSeconds, "Sim dead air");
+        foreach (var bin in r.Timeline) {
+            Near(bin.PhaseSeconds.Values.Sum(), bin.Duration, "Bin player phases");
+            Near(bin.SimPhaseSeconds.Values.Sum(), bin.SimDuration, "Bin sim phases");
+        }
     }
     static int ShotPass(double crossM, bool relief) {
         // Instrument fixture only: these state writes never occur in SortieRunner.
