@@ -24,6 +24,8 @@ public sealed class TimelineSecond {
     public double AltitudeM { get; set; }
     public double SpeedMps { get; set; }
     public double HeadingRad { get; set; }
+    public double? RunwayAlongM { get; set; }
+    public double? RunwayCrossM { get; set; }
     public string RecoveryGate { get; set; } = "";
     public string Gear { get; set; } = "";
     public double GearFraction { get; set; }
@@ -171,6 +173,10 @@ public sealed class ExperienceObserver {
         bin.ClearanceM = binTicks == 0 ? clearance : Math.Min(bin.ClearanceM, clearance);
         bin.AltitudeM = position.Y; bin.SpeedMps = speed;
         bin.HeadingRad = rotary ? s.CasevacFlight!.VehicleObservation.YawRad : s.Player.State.Chi;
+        if (!rotary && s.ConventionalRunwayRecovery is { } runway) {
+            var frame = runway.Runway.Frame(position);
+            bin.RunwayAlongM = frame.along; bin.RunwayCrossM = frame.cross;
+        }
         bin.RecoveryGate = rotary ? s.CasevacFlight!.Snapshot.Phase.ToString() : s.ApproachGuidancePlan.NextLabel;
         if (!rotary) { bin.Gear = s.PlayerSystems.GearHandle.ToString(); bin.GearFraction = s.PlayerSystems.EffectiveGearFraction; bin.PilotState = s.PilotState + (s.PilotControlInterlocked ? ":interlocked" : ""); }
         gSum += g; energySum += energy; tensionSum += tension;

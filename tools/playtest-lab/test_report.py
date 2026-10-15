@@ -49,6 +49,6 @@ class ReportTests(unittest.TestCase):
             root=Path(d); (root/"runs").mkdir(); p=root/"runs"/"r.json.gz"
             with gzip.open(p,"wt") as f: json.dump(run(),f)
             (root/"manifest.json").write_text(json.dumps({"schemaVersion":1,"date":"x","beat":7,"runs":["runs/r.json.gz"]}))
-            summary, md=report.make_report(root); (root/"report.md").write_text(md); self.assertTrue("Pilot summary" in md); self.assertEqual(summary["runs"],1)
+            summary, md=report.make_report(root); (root/"report.md").write_text(md); self.assertTrue("Pilot metrics" in md); self.assertEqual(summary["runs"],1)
 
 if __name__ == "__main__": unittest.main()

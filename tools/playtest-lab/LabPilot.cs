@@ -60,6 +60,11 @@ public sealed class LabPilot {
             SetMode(recovery.Drive(s), s.TimeSeconds);
             return decisions;
         }
+        if (s.SelectedOpponentAlive && s.PlayerGun.SelectedTargetId != targetId) {
+            observations.Clear();
+            if (targetId != 0) decisions.Add("target:acquire-successor");
+            targetId = s.PlayerGun.SelectedTargetId;
+        }
         if (name == "ace" && ExperienceObserver.Clearance(s, s.Player.State.Position + s.Player.State.VelocityVector() * 8) > 600) {
             s.Controls.ScriptedPilotOverride = null;
             bool fire = hud.Drive(s);
@@ -68,12 +73,6 @@ public sealed class LabPilot {
             return decisions;
         }
         if (s.SelectedOpponentAlive) {
-            long id = s.PlayerGun.SelectedTargetId;
-            if (id != targetId) {
-                observations.Clear();
-                if (targetId != 0) decisions.Add("target:acquire-successor");
-                targetId = id;
-            }
             observations.Enqueue((s.Tick, s.SelectedOpponentState, s.PlayerGun.LeadDirection, s.PlayerGun.GunSolution));
         }
         if (s.TimeSeconds < handsOff || observations.Count <= latency || !s.SelectedOpponentAlive) {
@@ -182,6 +181,9 @@ public sealed class HudCuePilot(double reactionSeconds, double handsOffSeconds) 
 public sealed class RecoveryPilot {
     double speedIntegral;
     bool joinedFinal;
+    bool goingAround;
+    bool inbound;
+    double outboundSide;
     public string Drive(SimulationSession s) {
         var own = s.Player.State;
         if (s.RunwayWeightOnWheels || s.ConventionalRunwayPhase == RunwayRecoveryPhase.Rollout
@@ -216,13 +218,27 @@ public sealed class RecoveryPilot {
             var runway = conventional.Runway;
             var frame = runway.Frame(own.Position);
             double alignment = Math.Abs(Math.Atan2(Math.Sin(own.Chi - runway.HeadingRad), Math.Cos(own.Chi - runway.HeadingRad)));
-            if (!joinedFinal && frame.along is < -3500 and > -13000 && Math.Abs(frame.cross) < 1600
+            if (joinedFinal && frame.along > runway.TouchdownAimAlongM + 600) {
+                joinedFinal = false; inbound = false; goingAround = true; speedIntegral = 0;
+            }
+            if (goingAround && frame.height > 450 && own.Speed > 130) goingAround = false;
+            if (!goingAround && !joinedFinal && frame.along is < -3500 and > -16000 && Math.Abs(frame.cross) < 1600
                 && alignment < .35 && frame.height is > 200 and < 950) joinedFinal = true;
-            if (joinedFinal && frame.along > runway.LengthM && frame.height > 20) joinedFinal = false;
             final = joinedFinal;
-            destination = runway.SurfacePoint(-9000) + new Vec3D(0, 600, 0);
+            // A fixed waypoint can become an endless orbit. Fly an outbound
+            // parallel course, then a cross-track inbound intercept with room to turn.
+            if (outboundSide == 0) outboundSide = frame.cross < 0 ? -1 : 1;
+            if (!inbound && frame.along < -16000 && frame.height is > 200 and < 950) inbound = true;
+            if (inbound && !final && frame.along > -3500) inbound = false;
+            double course = inbound
+                ? runway.HeadingRad + Math.Clamp(Math.Atan2(-frame.cross, 5000), -.8, .8)
+                : runway.HeadingRad + Math.PI + Math.Clamp(Math.Atan2(frame.cross - outboundSide * 6000, 5000), -.8, .8);
+            destination = own.Position + new Vec3D(Math.Sin(course), 0, Math.Cos(course)) * 5000;
             targetHeight = runway.Threshold.Y + 600;
             targetSpeed = 150;
+            if (goingAround) destination = own.Position + own.ForwardDir() * 4000;
+            if (!final && frame.height > 100 && s.PlayerSystems.GearHandle == LandingGearHandle.Down)
+                Press(s, GKey.GearToggle);
         }
         double desiredGamma;
         double heightError = targetHeight - own.Position.Y;
@@ -271,7 +287,7 @@ public sealed class RecoveryPilot {
             pitch = Math.Clamp(desiredGamma + alpha, -5 * Math.PI / 180, 20 * Math.PI / 180);
         }
         Apply(s, new PilotCommand(g, bank, throttle, 0, CommandedPitchRad: pitch));
-        return final ? "approach" : "RTB";
+        return goingAround ? "go-around" : final ? "approach" : inbound ? "join-inbound" : "RTB";
     }
     static void Apply(SimulationSession s, PilotCommand command) {
         s.SetAnalogThrottleControl(command.Throttle);

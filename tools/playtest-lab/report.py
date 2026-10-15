@@ -104,13 +104,18 @@ def svg_strip(runs: list[dict]) -> str:
     maximum = max((sum(float(x.get("duration", 1)) for x in r.get("timeline", [])) for r in runs), default=1)
     scale = (width-left-20) / max(1, maximum)
     h = 70 + row_h * len(runs)
-    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{h}" viewBox="0 0 {width} {h}">', '<rect width="100%" height="100%" fill="#f8fafc"/>']
-    parts.append('<style>text{font:11px sans-serif}.grid{stroke:#cbd5e1;stroke-width:.5}</style>')
-    legend = " · ".join(f'<tspan fill="{COLORS[p]}">■</tspan> {p}' for p in PHASES)
-    parts.append(f'<text x="4" y="30">Phases: {legend}</text><text x="4" y="47">Markers are one-second bin counts: ● kill · | hit given · ! hit taken · ◆ shot/ground near miss (black/yellow) · shaded = dead air · dark trace = tension</text>')
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{h}" viewBox="0 0 {width} {h}">', f'<rect x="0" y="0" width="{width}" height="{h}" fill="#f8fafc"/>']
+    lx = 4
+    for phase in PHASES:
+        # AppKit's SVG renderer ignores tspan fill in inherited text styles;
+        # explicit swatches keep the phase legend legible there.
+        parts.append(f'<rect x="{lx}" y="22" width="8" height="8" fill="{COLORS[phase]}"/>')
+        parts.append(f'<text x="{lx+11}" y="30" font-family="sans-serif" font-size="11" fill="#0f172a">{phase}</text>')
+        lx += 32 + len(phase) * 6
+    parts.append('<text x="4" y="47" font-family="sans-serif" font-size="11" fill="#0f172a">Markers are one-second bin counts: ● kill · | hit given · ! hit taken · ◆ shot/ground near miss (black/yellow) · shaded = dead air · dark trace = tension</text>')
     for i, r in enumerate(runs):
         y = 60 + i*row_h; label = html.escape(f"{r.get('pilot','?')} · {r.get('seed','?')}")
-        parts.append(f'<text x="4" y="{y+14}">{label}</text>')
+        parts.append(f'<text x="4" y="{y+14}" font-family="sans-serif" font-size="11" fill="#0f172a">{label}</text>')
         t = 0.0
         for x in r.get("timeline", []):
             d = max(0.001, float(x.get("duration", 1))); w=d*scale
@@ -138,7 +143,8 @@ def svg_strip(runs: list[dict]) -> str:
             parts.append(f'<polyline points="{pts}" fill="none" stroke="#0f172a" stroke-width="1.5"/>')
             del tension_points
     for sec in range(0, int(maximum)+1, max(1, int(maximum/10))):
-        x = left + sec*scale; parts.append(f'<path class="grid" d="M{x:.2f},15v{h-15}"/><text x="{x+2:.2f}" y="12">{sec}s</text>')
+        x = left + sec*scale; anchor = ' text-anchor="end"' if sec + max(1, int(maximum/10)) > maximum else ''
+        parts.append(f'<path d="M{x:.2f},60v{h-60}" stroke="#cbd5e1" stroke-width=".5" fill="none"/><text x="{x-2 if anchor else x+2:.2f}" y="56" font-family="sans-serif" font-size="10" fill="#475569"{anchor}>{sec}s</text>')
     parts.append('</svg>')
     return "".join(parts)
 
@@ -147,19 +153,27 @@ def make_report(root: Path) -> tuple[dict, str]:
     runs = load_runs(root, manifest); by = defaultdict(list)
     for r in runs: by[r.get("pilot", "?")].append(r)
     fs = flags(runs)
-    lines = [f"# Playtest Lab — beat {manifest.get('beat','?')}", "", f"Generated {manifest.get('date','?')} · {len(runs)} runs · seed {manifest.get('startSeed','?')}", "", "## Reproduction", "", f"- Command: `{manifest.get('command','(not recorded)')}`", f"- Source commit: `{manifest.get('sourceCommit','(unknown)')}`", f"- Clone SHA-256: `{manifest.get('cloneSha256','(unknown)')}`", f"- Wall time: {manifest.get('wallSeconds','?')}s", f"- Configured max seconds: {manifest.get('maxSeconds','?')}", "", "## Notes", ""]
-    lines += [f"- {x}" for x in manifest.get("notes", [])] or ["- No notes recorded"]
-    lines += ["", "## Flags", ""]
-    lines += [f"- {x}" for x in fs] if fs else ["- None"]
-    lines += ["", "## Pilot summary", "", "| pilot | runs | complete | censored | win rate | kills | hits given/taken | near misses | mean length | spread | decisions/min | first action | dead air | outcome distribution | entropy | paired e1→e2 | rising | mean Δ |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|"]
     summaries = {}
     for pilot in sorted(by):
-        a = summaries[pilot] = aggregate(by[pilot]); wr = "N/A" if a["winRate"] is None else f"{100*a['winRate']:.0f}%"
+        summaries[pilot] = aggregate(by[pilot])
+    simulated_total = sum(run_duration(r) for r in runs)
+    wall = float(manifest.get("wallSeconds") or 0)
+    speed = "N/A" if wall <= 0 else f"{simulated_total/wall:.1f}×"
+    lines = [f"# Playtest Lab — beat {manifest.get('beat','?')}", "", f"Generated {manifest.get('date','?')} · {len(runs)} runs · seed {manifest.get('startSeed','?')} · {simulated_total:.1f}s simulated · {speed} wall speed", "", "## At a glance", "", "| pilot | runs | complete | censored | win rate | mean length | spread | flags |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
+    for pilot, a in summaries.items():
+        wr = "N/A" if a["winRate"] is None else f"{100*a['winRate']:.0f}%"
+        lines.append(f"| {pilot} | {a['runs']} | {a['complete']} | {a['censored']} | {wr} | {a['meanLength']:.1f}s | {a['lengthSpread']:.1f}s | {sum(1 for x in fs if pilot in x)} |")
+    lines += ["", f"Flag count: **{len(fs)}**", "", "## Reproduction", "", f"- Command: `{manifest.get('command','(not recorded)')}`", f"- Source commit: `{manifest.get('sourceCommit','(unknown)')}`", f"- Clone SHA-256: `{manifest.get('cloneSha256','(unknown)')}`", f"- Wall time: {manifest.get('wallSeconds','?')}s", f"- Configured max seconds: {manifest.get('maxSeconds','?')}", "", "## Notes", ""]
+    lines += [f"- {x}" for x in manifest.get("notes", [])] or ["- No notes recorded"]
+    lines += ["", "## Pilot metrics", "", "| pilot | kills | hits given/taken | near misses | decisions/min | first action | dead air (total/max) | outcome distribution | entropy | paired e1→e2 | rising | mean Δ |", "|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|"]
+    for pilot, a in summaries.items():
         fa = "—" if a["meanFirstAction"] is None else f"{a['meanFirstAction']:.1f}s ({a['missingFirstAction']} missing)"
         dist = ", ".join(f"{o}:{a['outcomes'][o]}" for o in OUTCOMES)
         rising = "—" if a["escalationRisingPct"] is None else f"{a['escalationRisingPct']:.0f}%"
         delta = "—" if a["escalationMeanDelta"] is None else f"{a['escalationMeanDelta']:+.2f}"
-        lines.append(f"| {pilot} | {a['runs']} | {a['complete']} | {a['censored']} | {wr} | {a['kills']:.0f} | {a['hitsGiven']:.0f}/{a['hitsTaken']:.0f} | {a['nearMisses']:.0f} | {a['meanLength']:.1f}s | {a['lengthSpread']:.1f}s | {a['decisionsPerMinute']:.2f} | {fa} | {a['deadAirSeconds']:.1f}s (max {a['longestDeadAirSeconds']:.1f}) | {dist} | {a['entropy']:.2f} | {a['escalationPaired']} | {rising} | {delta} |")
+        lines.append(f"| {pilot} | {a['kills']:.0f} | {a['hitsGiven']:.0f}/{a['hitsTaken']:.0f} | {a['nearMisses']:.0f} | {a['decisionsPerMinute']:.2f} | {fa} | {a['deadAirSeconds']:.1f}s / {a['longestDeadAirSeconds']:.1f}s | {dist} | {a['entropy']:.2f} | {a['escalationPaired']} | {rising} | {delta} |")
+    lines += ["", "## Flags", ""]
+    lines += [f"- {x}" for x in fs] if fs else ["- None"]
     lines += ["", "## Phase share", "", "| pilot | " + " | ".join(PHASES) + " |", "|---|" + "---:|"*len(PHASES)]
     for p, a in summaries.items(): lines.append("| " + p + " | " + " | ".join(f"{a['phasePct'][x]:.1f}%" for x in PHASES) + " |")
     lines += ["", "## Runs by pilot"]

@@ -68,6 +68,8 @@ public static class Program {
             if (Directory.Exists(output) && Directory.EnumerateFileSystemEntries(output).Any())
                 throw new ArgumentException($"Output is not empty: {output}. Choose a fresh --out directory.");
             Directory.CreateDirectory(Path.Combine(output, "runs"));
+            string sourceCommit = GitCommit(root);
+            string cloneHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(clonePath))).ToLowerInvariant();
             var files = new List<string>();
             var wall = Stopwatch.StartNew();
             foreach (string pilot in o.PilotNames)
@@ -84,7 +86,7 @@ public static class Program {
                     schemaVersion = 1, date, beat = o.Beat, seeds = o.Seeds, startSeed = o.StartSeed,
                     maxSeconds = o.MaxSeconds, rtbAfterSeconds = o.RtbAfterSeconds,
                     command = "tools/playtest-lab/run " + string.Join(' ', args.Select(Quote)),
-                    sourceCommit = GitCommit(root), cloneSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(clonePath))).ToLowerInvariant(),
+                    sourceCommit, cloneSha256 = cloneHash,
                     wallSeconds = wall.Elapsed.TotalSeconds, options = o,
                     notes = new[] {
                         "Experience proxies, not a claim to measure human feelings. 120 Hz production simulation; per-second bins preserve tick events and exact phase/dead-air durations. No renderer or wall-clock pacing.",

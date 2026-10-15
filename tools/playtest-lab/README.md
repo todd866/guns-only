@@ -62,7 +62,8 @@ or the director. All pilots request RTB on combat completion, bingo, empty ammun
 or the combat-time budget, using `TryRequestReturnToBase`. They share a scripted
 recovery pilot based on the production recovery schedule and
 `RecoveryProfileFlightTests` pitch/speed feedback. Conventional runway navigation uses
-a documented straight-in join; it is not an overhead-pattern human pilot model.
+a documented outbound/inbound cross-track join and straight-in final, with a missed
+approach retry; it is not an overhead-pattern human pilot model.
 Gear/hook/flap commands and actual runway/carrier contact remain normal session inputs.
 Beat 13 uses shared CASEVAC navigation controls for every profile; it never feeds the
 fighter clone into a rotary-wing vehicle. G is null there.
@@ -92,7 +93,8 @@ Each tape contains `timeline` one-second bins (including the final fractional se
 summaries, and sortie counters. Bin booleans mean “at any tick in this second”; continuous
 G/energy/tension are means, clearance is the minimum. Phase colour is the dominant phase
 of the bin; `phaseSeconds` retains subsecond transitions. Heading, speed, altitude and
-recovery gate at the end of each bin help distinguish pilot failure from mission pacing.
+recovery gate and runway-frame position at the end of each bin help distinguish pilot
+failure from mission pacing.
 SVG event markers are bin counts, not exact ordering; use the event tape for exact times.
 
 Flags cover >20 s dead air, >30 s/missing first action, novice 0% / ace 100% observed
@@ -112,7 +114,8 @@ its committed manifest. It does not depend on xUnit or private telemetry dataset
 
 `--self-test` checks clone reference outputs, same/different-seed replays, timeout
 classification, duration/counter conservation, fast-round passages/hits/filtering,
-all 14 beat ids, and a physical full-stop recovery without teleporting the aircraft.
+all 14 beat ids, and physical full-stop recoveries including formerly stuck novice/ace
+join cases, without teleporting the aircraft.
 The Python tests check metric/flag aggregation, paired escalation, partial bins,
 censoring, and parseable SVG. Run a small full sortie before large cohorts when
 changing a controller. Inspect the SVG as well as the summary: a green build is not

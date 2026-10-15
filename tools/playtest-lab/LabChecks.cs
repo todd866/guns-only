@@ -53,6 +53,12 @@ public static class LabChecks {
         var recovery = SortieRunner.Fly(new Options(MaxSeconds: 600, RtbAfterSeconds: 1), "ace", 0, clone);
         Require(recovery.Completed && recovery.Landed && recovery.Outcome == "recovered",
             $"The shared pilot did not fly a physical full stop: {recovery.Outcome} {recovery.LandingDetail}");
+        // Regressions from the first cohort: a fixed join waypoint could be orbited
+        // forever after both high-altitude novice combat and a successful ace opening.
+        foreach (string pilot in new[] { "novice", "ace" }) {
+            var joined = SortieRunner.Fly(new Options(MaxSeconds: 2400), pilot, 1, clone);
+            Require(joined.Completed && joined.Landed, $"Runway join orbit regressed for {pilot}: {joined.Outcome}");
+        }
         Console.WriteLine("PASS: clone reference cases, deterministic/varied seeds, all 14 beats stage, timeout/partial-bin accounting, real near-miss passages, physical runway recovery, CLI validation.");
     }
     static int ShotPass(double crossM, bool relief) {
