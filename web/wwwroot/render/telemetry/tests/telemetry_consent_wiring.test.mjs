@@ -22,7 +22,7 @@ test("detailed gameplay telemetry is explicit opt-in with one Settings switch an
   const consentRow = indexSource.match(/<label class="settings-toggle" title="Off by default[^]*?<\/label>/)?.[0];
   assert.ok(consentRow, "the settings row must disclose default-off sharing in its tooltip");
   assert.match(consentRow, /controls, aircraft state, multiplayer identifiers, and browser\/device details are sent/);
-  assert.match(consentRow, /Turning it off discards anything not yet sent/);
+  assert.match(consentRow, /Turning it off discards unsent automatic diagnostics; reports you send remain queued/);
   assert.match(consentRow, /Share flight diagnostics/);
   assert.match(consentRow, /id="setting-telemetry-sharing" type="checkbox" role="switch"/);
   assert.doesNotMatch(indexSource, /ready-telemetry-sharing|ready-telemetry-disclosure/,
@@ -43,14 +43,18 @@ test("detailed gameplay telemetry is explicit opt-in with one Settings switch an
 
 });
 
-test("the recorder cannot buffer or transmit while sharing is disabled", () => {
+test("the automatic upload recorder cannot buffer or transmit while sharing is disabled", () => {
   assert.match(appSource, /const recorder = \{[\s\S]*?enabled: telemetrySharingEnabled/);
   assert.match(appSource,
     /setEnabled\(nextEnabled\)[\s\S]*?if \(!next\) \{[\s\S]*?_fetchAbortController\?\.abort\(\)[\s\S]*?this\.buf = \[\][\s\S]*?this\._pendingBatch = null[\s\S]*?this\._nextPost = Number\.POSITIVE_INFINITY/,
     "opt-out must abort where possible and destroy every unsent batch");
-  for (const method of ["event", "context", "sample", "flush"]) {
+  for (const method of ["sample", "flush"]) {
     assert.match(appSource, new RegExp(`${method}\\([^)]*\\) \\{\\n    if \\(!this\\.enabled\\) return;`),
       `${method} must be a no-op before touching detailed telemetry state`);
+  }
+  for (const method of ["event", "context"]) {
+    assert.match(appSource, new RegExp(`${method}\\([^)]*\\) \{[\\s\\S]*?reportHistory\\.add[\\s\\S]*?if \\(!this\\.enabled\\) return;[\\s\\S]*?this\\.ensureHeader\\(\\)`),
+      "local report evidence must still gate the automatic upload buffer on sharing");
   }
   assert.match(appSource,
     /const fetchAbortController = new AbortController\(\)[\s\S]*?fetch\("\/telemetry"[\s\S]*?signal: fetchAbortController\.signal/,

@@ -714,15 +714,15 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   // Distant Ukraine structure comes from terrain colour/parcel shaping rather than sphere stands.
   const maximumSceneryLevel = qualityTier === "desktop" ? 0 : 1;
   const softCanopy = profile.crownShape === "soft-canopy";
-  // Ukraine soft-world: rounded canopy ellipsoids. Korea eras keep the cheap faceted cone stands.
-  // Six radial sides remove the square/diamond read of the old 4×3 primitive. One visible stem
-  // keeps a complete five-lobe near stand under 160 triangles; the mid ring uses one asymmetric
-  // 24-triangle shoulder hull and no invisible trunk geometry.
+  // Ukraine soft-world: both rings use the smooth-normal asymmetric shoulder hull (24 triangles).
+  // Keep the near crown's 1.56 top and lift its base to 0.104 so the existing dark stem shows.
+  // Five near lobes plus that stem keep the same triangles, instances and draws; the mid ring
+  // still has one hull and no trunk. Korea eras retain their separate cone geometry.
   const crownPrimitive = softCanopy
     ? (() => {
-      const geometry = new THREE.SphereGeometry(1, 6, 3);
-      geometry.scale(1.05, 0.78, 1.05);
-      geometry.translate(0, 0.78, 0);
+      const geometry = createSoftWorldCanopyHull(THREE);
+      geometry.scale(1.05, 1.40, 1.05);
+      geometry.translate(0, 0.16, 0);
       return geometry;
     })()
     : (() => {

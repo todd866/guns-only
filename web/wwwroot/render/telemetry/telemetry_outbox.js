@@ -21,6 +21,7 @@ function request(req) {
 export function createTelemetryOutbox({
   indexedDB = globalThis.indexedDB,
   maxEntries = TELEMETRY_OUTBOX_MAX_ENTRIES,
+  dbName = DB_NAME,
 } = {}) {
   let dbPromise = null;
   function db() {
@@ -28,7 +29,7 @@ export function createTelemetryOutbox({
     if (!dbPromise) {
       dbPromise = new Promise((resolve) => {
         let open;
-        try { open = indexedDB.open(DB_NAME, 1); } catch { resolve(null); return; }
+        try { open = indexedDB.open(dbName, 1); } catch { resolve(null); return; }
         open.onupgradeneeded = () => {
           if (!open.result.objectStoreNames.contains(STORE))
             open.result.createObjectStore(STORE, { keyPath: "batchId" });

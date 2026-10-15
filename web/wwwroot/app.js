@@ -1,3 +1,7 @@
+import { buildReportPayload, createReportHistory, frameTimeStats, REPORT_JSON_BYTES } from "./render/feedback/report_payload.js";
+import { captureReportFrame } from "./render/feedback/report_capture.js";
+import { createReportTransport } from "./render/feedback/report_transport.js";
+import { createReportUi } from "./render/feedback/report_ui.js";
 import { highAlphaRecoveryPresentation } from "./render/hud/high_alpha_recovery.js?v=__RELEASE_BUILD__";
 import { attemptDurationSeconds } from "./render/shell/attempt_duration.js?v=__RELEASE_BUILD__";
 import { beginMissionCloudEntry } from "./render/shell/mission_cloud_entry.js?v=__RELEASE_BUILD__";
@@ -1675,6 +1679,8 @@ function saveTelemetrySharingPreference(enabled, storage = globalThis.localStora
 }
 
 let telemetrySharingEnabled = loadTelemetrySharingPreference();
+const reportHistory = createReportHistory();
+const reportFrameTimes = [];
 
 function newTelemetryBatchId() {
   const unique = globalThis.crypto?.randomUUID?.()
@@ -2389,6 +2395,10 @@ const recorder = {
       // making the recorder or kernel mutable from the page.
       document.documentElement.dataset.framePerf = JSON.stringify(summary);
       latestFrameContractPass = summary.contract_pass;
+      reportHistory.add({
+        k: "perf", t: Math.round(performance.now()), sortie: this._sortie?.id ?? null,
+        active_foreground: 1, quality_tier: VISUAL_QUALITY.tier, ...summary,
+      });
       if (!this.enabled) return;
       if (this.buf.length >= TELEMETRY_BUFFER_LIMIT && summary.contract_pass === 1) return;
       this.ensureHeader();
@@ -2405,6 +2415,9 @@ const recorder = {
   // Every method is fully guarded: telemetry must NEVER be able to crash the flight loop (an
   // earlier version did — an oversized keepalive-fetch body throws, and it killed the sim).
   event(type, code, detail = {}) {
+    // Local rolling evidence is kept even when automatic network sharing is off.
+    try { reportHistory.add({ k: "in", t: Math.round(performance.now()),
+      sortie: this._sortie?.id ?? null, type, code, held: [...heldKeys], ...detail }); } catch {}
     if (!this.enabled) return;
     try {
       this.ensureHeader();
@@ -2421,6 +2434,7 @@ const recorder = {
     catch (e) { this.errors++; this.lastError = String(e); }
   },
   context(type, value) {
+    try { reportHistory.add({ k: "ctx", t: Math.round(performance.now()), type, value }); } catch {}
     if (!this.enabled) return;
     try {
       const key = JSON.stringify(value);
@@ -3154,6 +3168,70 @@ function observeArenaMatch(state) {
 let incidentReplay = null;
 let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
+const reportButton = document.querySelector("#ready-report");
+const reportTransport = createReportTransport({
+  capabilityKey: `guns-only.feedback-enabled.${BUILD}.${ENTRYPOINT_BUILD}`,
+  onEnabled(enabled) {
+    reportButton.disabled = !enabled;
+    reportButton.title = enabled ? "Report (F8)" : "Reports unavailable on this deployment";
+  },
+});
+const reportUi = createReportUi({
+  dialog: document.querySelector("#feedback-report"), trigger: reportButton,
+  transport: reportTransport, setPaused: value => setPauseReason("report", value),
+  canCapture: () => Boolean(bridge && activeView && latestState),
+});
+void reportTransport.check().then(() => reportTransport.drain({ force: true }));
+const reportRetryTimer = setInterval(() => {
+  void reportTransport.check().then(() => reportTransport.drain());
+}, 30_000);
+window.addEventListener("online", () => {
+  void reportTransport.check().then(() => reportTransport.drain({ force: true }));
+});
+window.addEventListener("pagehide", () => clearInterval(reportRetryTimer), { once: true });
+
+function snapshotFeedbackReport(now, presentedState) {
+  now = performance.now();
+  // No await between view.update (scene render + HUD draw) and this copy. WebGL's default
+  // discard-on-present context is safe because the bytes leave it inside the same RAF callback.
+  const screenshot = captureReportFrame(sceneCanvas, hudCanvas, {
+    hudOpacity: Number(hudCanvas.style.opacity || 1),
+  });
+  // Guard the async encoder even if a synchronous metadata read below fails.
+  void screenshot.catch(() => {});
+  const state = JSON.parse(bridge.GetState());
+  const camera = activeView.camera;
+  let gpu = null;
+  try {
+    const gl = activeView.renderer.getContext();
+    const extension = gl.getExtension("WEBGL_debug_renderer_info");
+    gpu = extension ? gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) : null;
+  } catch { /* Privacy-restricted browsers can withhold the renderer string. */ }
+  const report = buildReportPayload({
+    id: crypto.randomUUID(), created: new Date().toISOString(), now: Math.round(now),
+    build: buildIdentity.telemetryBuild, revision: buildIdentity.telemetry?.revision ?? null,
+    url: location.href, program: selectedProgramNodeId,
+    mission: state.mission_definition_id ?? selectedBeat, beat: selectedBeat,
+    state, held: heldKeys, timeOrigin: TELEMETRY_TIME_ORIGIN_EPOCH_MS,
+    rows: reportHistory.snapshot(Math.round(now)), warnings: globalThis.__gunsReportConsole?.() ?? [],
+    settings: { ...playerSettings, telemetrySharing: telemetrySharingEnabled,
+      selectedDeckConfiguration, consoleLayout: loadConsoleLayout() },
+    device: { ua: navigator.userAgent, platform: navigator.platform, dpr: devicePixelRatio,
+      viewport: { width: innerWidth, height: innerHeight }, gpu,
+      inputMode: Array.from(navigator.getGamepads?.() ?? []).some(pad => pad?.connected)
+        ? "gamepad" : document.documentElement.classList.contains("touch-mode") ? "touch" : "keyboard",
+      gamepad: Array.from(navigator.getGamepads?.() ?? []).some(pad => pad?.connected) },
+    perf: { frameTimes: frameTimeStats(reportFrameTimes), ...sampleSceneCounters(),
+      recentWindow: JSON.parse(document.documentElement.dataset.framePerf || "null") },
+    camera: { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(),
+      rotation: camera.rotation.toArray(), fov: camera.fov, near: camera.near, far: camera.far },
+    presentation: { replay: incidentReplay?.active === true, state: presentedState,
+      pauseReasons: [...pauseReasons], readyMode: readyScreen.dataset.mode },
+    maxBytes: REPORT_JSON_BYTES - 8192,
+  });
+  return { report, screenshot };
+}
+
 // Every platform sees the same aircraft front door, except the one-shot first-run valley on-ramp.
 // The on-ramp is staged behind its own Ready card: no aircraft clock moves until the pilot chooses
 // Enter valley. `autoLaunchPending` is armed only after that gesture needs asynchronous terrain
@@ -3199,7 +3277,10 @@ function renderSettingsBindings() {
     }
     return row;
   });
-  settingsBindings.replaceChildren(...nodes);
+  const reportRow = document.createElement("tr");
+  reportRow.className = "settings-binding";
+  reportRow.innerHTML = '<th scope="row">Report</th><td><kbd>F8</kbd></td>';
+  settingsBindings.replaceChildren(...nodes, reportRow);
 }
 
 function applyPlayerSettings() {
@@ -5417,10 +5498,13 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     // drops the service worker and its caches and hard-navigates, so this actually gets the new
     // code (a plain reload keeps serving the cache-pinned shell). Guarded to fire once; the fresh
     // page is not stale so it cannot loop. NEVER mid-flight or paused -- that would bin the sortie.
-    if (ready && !autoReloadArmed) {
+    if (ready && !autoReloadArmed && !reportUi.active) {
       autoReloadArmed = true;
       readyHint.textContent = "Updating to the latest build…";
-      setTimeout(() => { void reloadCurrentBuild(); }, 1200);
+      setTimeout(() => {
+        if (reportUi.active) { autoReloadArmed = false; return; }
+        void reloadCurrentBuild();
+      }, 1200);
     } else {
       readyHint.textContent = "Older or mixed build detected · reload the current release";
     }
@@ -5459,10 +5543,10 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
 
   renderF22ResultInstrument(state, { finished, combatResult });
 
-  if (showScreen && !settingsPaused && !wasScreenVisible) queueMicrotask(focusReadyScreen);
-  else if (showScreen && !settingsPaused && startWasDisabled && !readyStart.disabled)
+  if (showScreen && !settingsPaused && !reportUi.active && !wasScreenVisible) queueMicrotask(focusReadyScreen);
+  else if (showScreen && !settingsPaused && !reportUi.active && startWasDisabled && !readyStart.disabled)
     queueMicrotask(focusReadyScreen);
-  else if (showScreen && !settingsPaused && !readyScreen.contains(document.activeElement))
+  else if (showScreen && !settingsPaused && !reportUi.active && !readyScreen.contains(document.activeElement))
     queueMicrotask(focusReadyScreen);
   renderTopGunPresentationTheme(state);
 }
@@ -12408,6 +12492,10 @@ async function boot() {
       // Raw (unclamped) render-frame delta: perf telemetry must see the true stall length, not the
       // deliberately short simulation-advance cap used to prevent a catch-up spiral.
       const renderDeltaMs = now - previous;
+      if (pauseReasons.size === 0 && document.visibilityState === "visible") {
+        reportFrameTimes.push(renderDeltaMs);
+        if (reportFrameTimes.length > 600) reportFrameTimes.shift();
+      }
       // That delta closes the preceding rendered frame. Capture its already-measured owners before
       // the current callback overwrites them, otherwise a current simulation burst would be paired
       // with the wrong RAF interval and the causal governor would punish the wrong subsystem.
@@ -12454,7 +12542,7 @@ async function boot() {
       const phaseStart = performance.now();
       const tickBeforeAdvance = Number(latestState?.tick) || 0;
       let kernelSelectedCompressionFactor = 1;
-      if (pauseReasons.size === 0) {
+      if (pauseReasons.size === 0 && !reportUi.pending) {
         // Refresh durable physical-axis intent immediately before the authoritative fixed ticks.
         // At 50 ms this is much faster than a player can perceive as a dropped max-performance
         // pull, while avoiding per-frame bridge traffic during a healthy hold.
@@ -12559,6 +12647,8 @@ async function boot() {
             guidanceHealth.suppressionReason ?? "NONE",
         }
         : state;
+      try { reportHistory.sample(telemetryState, Math.round(performance.now()), recorder.build, heldKeys); }
+      catch { /* Local diagnostics cannot stop the flight loop. */ }
       recorder.sample(telemetryState);
       const afterTelemetry = performance.now();
       recorder.observeFramePhase("tele", afterTelemetry - beforeTelemetry);
@@ -12573,6 +12663,7 @@ async function boot() {
         now / 1000,
         renderDeltaMs,
       );
+      reportUi.capture(() => snapshotFeedbackReport(now, presentedState));
       const afterView = performance.now();
       const viewPhaseMilliseconds = afterView - beforeView;
       previousViewPhaseMilliseconds = viewPhaseMilliseconds;

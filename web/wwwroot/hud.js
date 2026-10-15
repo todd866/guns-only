@@ -6119,7 +6119,7 @@ class CombatHud {
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("hookToggle", "KeyU")}  HOOK   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${fireQuicklook}   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
       `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   ${restartOrRtbQuicklook}   ·   M  SOUND   ·   \`  SYNC MARK   ·   H  HIDE`,
-      "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF",
+      "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF   ·   F8  REPORT",
       topGunQuicklook
         ? `TOP GUN · ${topGunQuicklook.weapons} · ${topGunQuicklook.returnToCarrier}`
         : firstRunValley
@@ -6132,7 +6132,7 @@ class CombatHud {
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
       `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${fireQuicklook}   ·   M  SOUND`,
       `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   ${restartOrRtbQuicklook}   ·   \`  SYNC MARK   ·   H  HIDE`,
-      "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF",
+      "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF   ·   F8  REPORT",
     ];
     if (topGunQuicklook) {
       compactLines.push(`TOP GUN · ${topGunQuicklook.weapons} · ${topGunQuicklook.returnToCarrier}`);

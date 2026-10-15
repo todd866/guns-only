@@ -14,9 +14,9 @@ import {
 export const SU27_PRESENTATION_ID = "presentation.vehicle.su27s.public-data-surrogate.v1";
 export const SU27_LENGTH_M = 21.935;
 export const SU27_SPAN_M = 14.698;
-// Beyond this camera range the single-draw far body replaces the near body (+canopy). At 650 m the
-// whole aircraft is ~25 px tall on a 844 px phone viewport, below canopy/intake detail.
-export const SU27_FAR_LOD_DISTANCE_M = 650;
+// Keep the near body + canopy through gun range, including an approach from the far LOD.
+// Switch out at 1,800 m and back in below 1,584 m with the existing 12% hysteresis.
+export const SU27_FAR_LOD_DISTANCE_M = 1800;
 export const SU27_LOD_HYSTERESIS = 0.12;
 
 // Station s is metres aft of the radome tip; the model origin sits at s = 11.2 (near the mid-wing
@@ -296,8 +296,10 @@ function buildBody({ segments, farCanopy }) {
 }
 
 function bodyMaterial() {
-  const material = makeMaterial(0xffffff, 0.56, 0.06, 0x000000,
-    { grain: 0.1, grainScale: 1.6, envMapIntensity: 0.8 });
+  // Reduce body albedo ~21% in linear light and temper sky reflections for a darker silhouette
+  // against sky/haze. Both LODs share this finish so the swap introduces no colour step or pass.
+  const material = makeMaterial(0xe6e6e6, 0.56, 0.06, 0x000000,
+    { grain: 0.1, grainScale: 1.6, envMapIntensity: 0.65 });
   material.vertexColors = true;
   material.name = "SU27_BODY";
   return material;

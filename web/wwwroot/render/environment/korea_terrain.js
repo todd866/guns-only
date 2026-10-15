@@ -723,9 +723,10 @@ void main() {
   halfLambert *= halfLambert;
   #ifdef UKRAINE_SCENERY
   // Continuous soft lighting — painterly value without the hard two-step toon posterization.
-  // A deeper low end keeps drainage and broad vegetation masses legible after aerial perspective.
+  // The 0.04 toe gives 0.1936 at full lee with the 0.16 shadow floor (formerly 0.3952).
+  // Keep the cool sky fill and the continuous ramp; cast shadows still reach the 0.16 floor.
   float toneRamp = uShadowFloor
-    + (1.0 - uShadowFloor) * mix(0.28, 1.0, halfLambert);
+    + (1.0 - uShadowFloor) * mix(0.04, 1.0, halfLambert);
   vec3 rimTint = vec3(0.18, 0.14, 0.07);
   #else
   float toneRamp = uShadowFloor

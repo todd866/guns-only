@@ -4169,6 +4169,27 @@
       font: 450 14px/1.4 var(--flow-font-display);
     }
     .ready-correction[hidden] { display: none; }
+    #feedback-report {
+      width: min(640px, calc(100vw - 24px)); max-width: none; box-sizing: border-box;
+      padding: 8px; border: 1px solid var(--flow-line); border-radius: var(--flow-radius-sm);
+      color: var(--flow-ink); background: var(--flow-panel-raised); box-shadow: var(--flow-shadow);
+      font: 450 16px/1.2 var(--flow-font-display);
+    }
+    #feedback-report::backdrop { background: rgb(0 0 0 / .35); }
+    .feedback-row { display: flex; align-items: center; gap: 8px; margin: 0; }
+    .feedback-glyph { color: var(--flow-action-top); font-size: 24px; }
+    .feedback-row input { flex: 1; min-width: 0; width: 0; padding: 10px 8px;
+      border: 1px solid var(--flow-line); border-radius: var(--flow-radius-sm);
+      color: var(--flow-ink); background: var(--flow-panel); font: inherit; }
+    .feedback-row button { flex: none; min-height: 44px; min-width: 44px; padding: 8px;
+      border: 1px solid var(--flow-line); border-radius: var(--flow-radius-sm);
+      color: var(--flow-ink); background: var(--flow-panel); font: inherit; cursor: pointer; }
+    .feedback-row [data-action="send"] { color: var(--flow-bg);
+      background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom)); }
+    .feedback-row button:disabled { opacity: .5; cursor: default; }
+    .feedback-row output { flex: 1; font-family: var(--flow-font-data); }
+    .feedback-row [hidden] { display: none; }
+    .feedback-row :is(input, button):focus-visible { outline: 2px solid var(--flow-accent); outline-offset: 1px; }
   </style>
   <link rel="stylesheet" href="./render/onboarding/pilot_notebook.css">
   <link rel="stylesheet" href="./render/input/touch_fighter_layout.css">
@@ -4178,6 +4199,15 @@
   <canvas id="hud" aria-hidden="true"></canvas>
   <div id="view-status" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off" hidden>SOLO · ROOM NOT CONFIGURED</div>
+  <dialog id="feedback-report" aria-label="Feedback report">
+    <form method="dialog" class="feedback-row">
+      <span class="feedback-glyph" title="Sends this frame (scene + HUD), your note, full simulation state, up to 120 seconds of local telemetry and inputs, settings, build/revision, URL, device/GPU, performance, camera and the last 50 warnings/errors. Failed sends are saved locally and retried, independent of Share flight diagnostics." aria-label="Report collection details">⚑</span>
+      <input type="text" placeholder="What's wrong?" aria-label="What's wrong?" maxlength="2000" autocomplete="off">
+      <output hidden aria-live="polite"></output>
+      <button id="feedback-send" type="submit" data-action="send">Send</button>
+      <button id="feedback-cancel" type="button" data-action="cancel" aria-label="Cancel report" title="Cancel (Esc)">✕</button>
+    </form>
+  </dialog>
   <button id="pause-button" type="button" aria-label="Pause sortie (Escape)" title="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">ESC · PAUSE</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>
   <output id="flight-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></output>
   <section id="rapier-radio" aria-label="Optional radio captions" hidden>
@@ -4650,6 +4680,7 @@ Two engagements, then recover · H controls · R restarts</p>
             <button id="ready-intro-replay" type="button" hidden><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 3.1v9.8l7.4-4.9Z" fill="currentColor"/></svg><span class="shell-action-label">Replay valley intro</span></button>
             <button id="ready-return" type="button" hidden title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.1 9.2 5.4h3.7L10.4 7.6l.9 4.8L8 10.5 4.7 12.4l.9-4.8L3.1 5.4h3.7z" fill="currentColor"/></svg><span class="shell-action-label">Aircraft</span></button>
             <button id="ready-restart" type="button" hidden title="Restart sortie"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M11.2 1.8v3.2H8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="shell-action-label">Restart</span></button>
+            <button id="ready-report" type="button" disabled title="Report (F8)"><span class="shell-icon" aria-hidden="true">⚑</span><span class="shell-action-label">Report</span></button>
             <button id="ready-settings" type="button" title="Build __RELEASE_BUILD__ · verifying"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6.2 1.1h3.6l.5 1.7 1.6.7 1.5-1 2 2-1 1.5.7 1.6 1.7.5v3.6l-1.7.5-.7 1.6 1 1.5-2 2-1.5-1-1.6.7-.5 1.7H6.2l-.5-1.7-1.6-.7-1.5 1-2-2 1-1.5-.7-1.6-1.7-.5V6.6l1.7-.5.7-1.6-1-1.5 2-2 1.5 1 1.6-.7zM8 6.1a1.9 1.9 0 1 0 .01 3.8A1.9 1.9 0 0 0 8 6.1z"/></svg><span class="shell-action-label">Settings</span></button>
             <button id="ready-handoff" type="button" hidden disabled title="Call it a day and return to base"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2v7.2M5.2 7.2 8 10.4l2.8-3.2M3 13.2h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="shell-action-label">RTB</span></button>
           </div>
@@ -4701,7 +4732,7 @@ Two engagements, then recover · H controls · R restarts</p>
           <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Aircraft"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.1 9.2 5.4h3.7L10.4 7.6l.9 4.8L8 10.5 4.7 12.4l.9-4.8L3.1 5.4h3.7z" fill="currentColor"/></svg></span><span>Auto-GCAS backstop</span><input id="setting-autogcas" type="checkbox" role="switch"></label>
           <label class="settings-toggle settings-touch-only" title="Replaces the throttle lever with the THR/YAW stick; FIRE moves inboard"><span class="settings-glyph" aria-hidden="true"></span><span>Touch rudder stick</span><input id="setting-touch-rudder-stick" type="checkbox" role="switch"></label>
           <label class="settings-range" for="setting-tilt-sensitivity"><span class="settings-glyph" aria-hidden="true"></span><span>Tilt sensitivity</span><span class="settings-datum"><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1" aria-valuetext="1.00×"><output id="setting-tilt-sensitivity-value" for="setting-tilt-sensitivity">1.00×</output></span></label>
-          <label class="settings-toggle" title="Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards anything not yet sent. Minimal shell-health (boot and fatal signals, device class) remains always-on."><span class="settings-glyph" aria-hidden="true"></span><span>Share flight diagnostics</span><input id="setting-telemetry-sharing" type="checkbox" role="switch"></label>
+          <label class="settings-toggle" title="Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards unsent automatic diagnostics; reports you send remain queued. Minimal shell-health (boot and fatal signals, device class) remains always-on."><span class="settings-glyph" aria-hidden="true"></span><span>Share flight diagnostics</span><input id="setting-telemetry-sharing" type="checkbox" role="switch"></label>
         </div>
       </div>
       <details id="settings-keyboard-bindings" class="settings-disclosure" open>
@@ -4775,6 +4806,7 @@ Two engagements, then recover · H controls · R restarts</p>
     </div>
   </div>
 
+  <script src="./render/feedback/console_ring.js"></script>
   <script>
     // Stage completion, not a byte counter: downloads occupy the first part of the gauge.
     // Classic-script ownership keeps status available before any module can load.
