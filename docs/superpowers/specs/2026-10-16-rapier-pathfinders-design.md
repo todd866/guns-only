@@ -30,6 +30,7 @@ sortie establish what is at stake. No opening lecture, villain speech or downran
 | Fallback | H offers booster denial on return; M offers none. Booster denial cannot recall an escaped payload |
 | Consequence | Ascent breakup before payload escape prevents the raid; lost relay sectors shrink/degrade a surviving raid |
 | Delivery | Phase 1 is the complete balloon hunt and recovery; no rocket, campaign sequel or promised future climax required |
+| Default entry | Short start: airborne at FL650–700 at dawn, first balloon lane ahead; get to the exciting part fast. Buried-tube departure is an optional full-sortie variant |
 
 ## Existing hooks and boundaries
 
@@ -70,13 +71,15 @@ explicit envelope decision; do not substitute the FL450 gallery, a different jet
 Times are **provisional pacing targets**, not rocket measurements. `H+0` is arrival at the first
 hunt lane; `L+0` is actual ignition/liftoff. Launch planning starts at sortie creation, independent
 of player progress. The H-relative timings below describe the reference route, not trigger gates.
-Full sortie target: 20–30 minutes; optional short-start hunt: 6–10 minutes including nearby recovery.
-Keep buried launch as the full-sortie opening. Short start uses an authored, physically achievable
-airborne state; no mid-sortie teleport, refuel or frozen adversary clock.
+Default short-start hunt: 6–10 minutes including nearby recovery; optional full sortie: 20–30 minutes.
+Start airborne at FL650–700 at dawn with the first balloon lane ahead (owner doctrine: get to the
+exciting part fast). Keep buried launch as the optional full-sortie opening. The default short start
+uses an authored, physically achievable airborne state; no mid-sortie teleport, refuel or frozen
+adversary clock.
 
 | Beat / time | What happens and what the pilot decides |
 |---|---|
-| Departure, first 5–8 min | Buried tube → ramp flash → turbine climb → ram handover. Sunrise reaches the balloons first. Fuel, not a countdown tutorial, introduces the cost of getting high |
+| Optional full-sortie departure, first 5–8 min | Buried tube → ramp flash → turbine climb → ram handover. Sunrise reaches the balloons first. Fuel, not a countdown tutorial, introduces the cost of getting high |
 | Act 1, H+0–90 s | First two balloons lie along a clear-ground lane. The huge envelope invites the wrong shot; a puncture wrinkles it, but its relay symbol stays live. The dark gondola and a clean gun/drone kill teach the distinction |
 | Act 1, H+90–240 s | One drift footprint crosses a town; a second safe balloon lies farther from the ascent corridor. Keep speed for authority, spend a drone to take a better glide line, or leave both and reposition |
 | Act 2 warning, nominal H+90–360 s | AWACS reports venting, service tower/arm retract, hold, resume or scrub. Apparent readiness can be followed by silence. New information changes the crossing uncertainty and the value of one more balloon |
