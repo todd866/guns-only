@@ -697,6 +697,10 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     uWorldEdgeM: { value: 0 },
     uHazeBands: { value: 3 },
     uHazeBandBlend: { value: 0.18 },
+    uSunDirection: {
+      value: new THREE.Vector3(0.50, 0.28, -0.82).normalize(),
+    },
+    uSoftWorld: { value: 1 },
   };
   const atmosphereUniforms = Object.fromEntries(
     Object.entries(fallbackAtmosphereUniforms).map(([name, fallback]) => [

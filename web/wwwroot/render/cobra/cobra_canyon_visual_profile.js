@@ -67,6 +67,8 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
   sky: Object.freeze({
     zenithColor: Object.freeze([0.035, 0.16, 0.34]),
     horizonColor: Object.freeze([0.34, 0.47, 0.52]),
+    // Steep-void swatch kept for the profile contract. The dome holds horizonColor
+    // below the limb so the basin's opaque aerial meets the sky.
     belowHorizonColor: Object.freeze([0.022, 0.075, 0.095]),
     skyCurveExponent: 0.42,
     horizonShoulderFalloff: 96,

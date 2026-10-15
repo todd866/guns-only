@@ -1835,9 +1835,14 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.equal(ukraine.uniforms.uHazeBands.value, 0,
     "Rapier altitude must not expose discrete simulator-like haze shelves");
   assert.equal(ukraine.uniforms.uHazeBandBlend.value, 0);
-  assert.match(ukraine.fragmentShader,
-    /mix\(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix\)/,
-    "terrain and scenery must share one naturalistic haze contract");
+  assert.match(ukraine.fragmentShader, /decisionSupportSkyColor\(/,
+    "terrain fog must sample the sky dome along this view ray");
+  assert.equal(ukraine.uniforms.uSoftWorld.value, 1,
+    "Ukraine terrain must use the warm horizon, including the sun-side glow");
+  assert.equal(period.uniforms.uSoftWorld.value, 0,
+    "Korea period terrain must use the cool decision-support horizon");
+  assert.match(ukraine.fragmentShader, /aerialOpen \* 0\.22/,
+    "mid-distance haze may carry a slight blue tint, gone at full opacity");
   assert.equal(ukraine.uniforms.uAtmosphereDensityScale.value, 0.32);
   assert.deepEqual(ukraine.uniforms.uAtmosphereHazeColor.value.toArray(),
     [0.48, 0.59, 0.68]);

@@ -549,6 +549,8 @@ test("all Ukraine scenery materials share the terrain atmosphere by identity", (
     uWorldEdgeM: { value: 12_000 },
     uHazeBands: { value: 3 },
     uHazeBandBlend: { value: 0.18 },
+    uSunDirection: { value: new THREE.Vector3(0.50, 0.28, -0.82) },
+    uSoftWorld: { value: 1 },
   };
   const runtime = createKoreaSceneryRuntime(THREE, {
     era: "ukraine-modern",
@@ -597,6 +599,7 @@ test("all Ukraine scenery materials share the terrain atmosphere by identity", (
   assert.match(shader.fragmentShader, /uWorldEdgeM \* 0\.90/);
   assert.match(shader.fragmentShader, /floor\(softWorldAerial \* uHazeBands\)/);
   assert.match(shader.fragmentShader, /outgoingLight = mix/);
+  assert.match(shader.fragmentShader, /decisionSupportSkyColor\(/);
   runtime.disposeTile(group);
   runtime.dispose();
 });

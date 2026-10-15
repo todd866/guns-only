@@ -62,7 +62,8 @@ test("all conventional runway surfaces and light fields share live terrain haze 
     assert.match(shader.fragmentShader, /uFogDensity \* uAtmosphereDensityScale/);
     assert.match(shader.fragmentShader, /uWorldEdgeM \* 0\.90/);
     assert.match(shader.fragmentShader, /outgoingLight = mix\(/);
-    assert.match(material.customProgramCacheKey(), /terrain-curvature-v1\|ukraine-soft-world-fog-v1$/);
+    assert.match(material.customProgramCacheKey(), /terrain-curvature-v1\|ukraine-soft-world-fog-v3$/);
+    assert.match(shader.fragmentShader, /decisionSupportSkyColor\(/);
     const version = material.version;
     updateConventionalRunwayPresentation(runway, runwayState(), atmosphere);
     assert.equal(material.version, version, "steady frames do not recompile runway shaders");

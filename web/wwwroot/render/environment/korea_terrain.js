@@ -12,6 +12,8 @@ import {
 } from "./terrain_mesh_builder.js";
 import {
   addUkraineSoftWorldFog,
+  DECISION_SUPPORT_HORIZON_SKY_GLSL,
+  DECISION_SUPPORT_MIDAIR_HAZE_WEIGHT,
   UKRAINE_SOFT_WORLD_EDGE_HIDE_START,
   UKRAINE_SOFT_WORLD_EDGE_HIDE_END,
   UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE,
@@ -419,6 +421,7 @@ uniform float uFogDensity;
 uniform float uAtmosphereDensityScale;
 uniform vec3 uAtmosphereHazeColor;
 uniform float uAtmosphereHazeMix;
+uniform float uSoftWorld;
 uniform float uWorldEdgeM;
 uniform float uModernScenery;
 uniform float uParcelTint;
@@ -478,6 +481,7 @@ varying vec2 vTerrainLandcover;
 #include <common>
 #include <logdepthbuf_pars_fragment>
 ${TERRAIN_SHADOW_FRAGMENT_PARS}
+${DECISION_SUPPORT_HORIZON_SKY_GLSL}
 
 // Near-field grain, packed as (value multiplier, micro-occlusion, pigment shift).
 // Returns a neutral (1, 1, 0) when the layer is off or the fragment is far away, so every caller
@@ -854,21 +858,16 @@ void main() {
   #endif
   lit = mix(lit, waterLit, waterMask);
 
-  // Aerial perspective: period haze whites the world out from altitude. Korea-modern thins
-  // density toward cool sky blue. Ukraine retains a warm ground contribution but resolves toward
-  // blue-grey air aloft, so the painted surface has depth instead of becoming an ochre slab.
+  // Aerial perspective. Density stays per theatre. The bury colour is the sky dome's
+  // horizon sample for this view azimuth, so opaque distance dissolves into the dome.
   #ifdef MODERN_SCENERY
   #ifdef UKRAINE_SCENERY
   float fogDensity = uFogDensity * uAtmosphereDensityScale;
-  // Natural painted atmosphere: warm land underneath a cool high-altitude scattering layer.
-  vec3 hazeColor = mix(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix);
   #else
   float fogDensity = uFogDensity * 0.45;
-  vec3 hazeColor = vec3(0.36, 0.52, 0.68);
   #endif
   #else
   float fogDensity = uFogDensity;
-  vec3 hazeColor = uFogColor;
   #endif
   float distanceToCamera = length(cameraPosition - vTerrainWorldPosition);
   float aerial = 1.0 - exp(-fogDensity * fogDensity
@@ -889,6 +888,14 @@ void main() {
     float banded = floor(aerial * uHazeBands) / uHazeBands;
     aerial = mix(aerial, banded, uHazeBandBlend);
   }
+  vec3 horizonFog = decisionSupportSkyColor(
+    vTerrainWorldPosition - cameraPosition,
+    uSunDirection,
+    cameraPosition.y,
+    uSoftWorld);
+  float aerialOpen = 1.0 - clamp(aerial, 0.0, 1.0);
+  vec3 hazeColor = mix(horizonFog, uAtmosphereHazeColor,
+    aerialOpen * ${DECISION_SUPPORT_MIDAIR_HAZE_WEIGHT.toFixed(2)});
   vec3 color = mix(lit, hazeColor, clamp(aerial, 0.0, 1.0));
   gl_FragColor = vec4(color, 1.0);
   #include <logdepthbuf_fragment>
@@ -1219,6 +1226,8 @@ export function createTerrainMaterial(THREE, options = {}) {
       uAtmosphereHazeMix: {
         value: ukraine ? UKRAINE_SOFT_WORLD_HAZE_MIX : 0,
       },
+      // 0 = cool decision-support horizon (Korea). 1 = warm Ukraine horizon plus sun glow.
+      uSoftWorld: { value: ukraine ? 1 : 0 },
       // 0 = no edge bury. Set each frame from visibleWorldRadiusM so Shared/dogfight stream
       // discs haze out instead of reading as squares.
       uWorldEdgeM: { value: finite(options.worldEdgeM, 0) },
@@ -1304,6 +1313,7 @@ function setTerrainMaterialEra(material, era) {
   const wasModern = material.defines?.MODERN_SCENERY === 1;
   const wasUkraine = material.defines?.UKRAINE_SCENERY === 1;
   material.uniforms.uModernScenery.value = modern ? 1 : 0;
+  if (material.uniforms.uSoftWorld) material.uniforms.uSoftWorld.value = ukraine ? 1 : 0;
   if (modern === wasModern && ukraine === wasUkraine) return;
   material.defines = {
     ...(modern ? { MODERN_SCENERY: 1 } : {}),

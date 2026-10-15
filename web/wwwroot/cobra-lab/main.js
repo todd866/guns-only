@@ -567,7 +567,6 @@ const skyMaterial = new THREE.ShaderMaterial({
   uniforms: {
     zenithColor: { value: new THREE.Vector3(...sceneProfile.sky.zenithColor) },
     horizonColor: { value: new THREE.Vector3(...sceneProfile.sky.horizonColor) },
-    belowHorizonColor: { value: new THREE.Vector3(...sceneProfile.sky.belowHorizonColor) },
     skyCurveExponent: { value: sceneProfile.sky.skyCurveExponent },
     shoulderFalloff: { value: sceneProfile.sky.horizonShoulderFalloff },
     shoulderWeight: { value: sceneProfile.sky.horizonShoulderWeight },
@@ -586,7 +585,6 @@ const skyMaterial = new THREE.ShaderMaterial({
   fragmentShader: `
     uniform vec3 zenithColor;
     uniform vec3 horizonColor;
-    uniform vec3 belowHorizonColor;
     uniform float skyCurveExponent;
     uniform float shoulderFalloff;
     uniform float shoulderWeight;
@@ -654,8 +652,13 @@ const skyMaterial = new THREE.ShaderMaterial({
       float sunDisc = smoothstep(0.999975, 0.999996, sunFacing);
       colour += vec3(1.0, 0.72, 0.42) * sunHalo * sunHalo * 0.042;
       colour += vec3(1.0, 0.86, 0.62) * sunDisc * 0.34;
+      // Mirror the cool gradient under the limb so fogged ridges meet the dome.
       if (direction.y < 0.0) {
-        colour = mix(belowHorizonColor, horizonColor, exp(direction.y * 16.0));
+        float limb = -direction.y;
+        float belowCurve = pow(limb, skyCurveExponent);
+        colour = mix(horizonColor, zenithColor, belowCurve);
+        float belowShoulder = exp(-limb * shoulderFalloff);
+        colour = mix(colour, horizonColor, belowShoulder * shoulderWeight);
       }
       gl_FragColor = vec4(colour, 1.0);
       #include <tonemapping_fragment>

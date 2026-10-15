@@ -30,6 +30,8 @@ function atmosphereUniforms() {
     uWorldEdgeM: { value: 24_000 },
     uHazeBands: { value: 3 },
     uHazeBandBlend: { value: 0.18 },
+    uSunDirection: { value: new THREE.Vector3(0.50, 0.28, -0.82) },
+    uSoftWorld: { value: 1 },
   };
 }
 
