@@ -158,9 +158,8 @@ export function embeddedEscapeRoute(url, detection = {}) {
       actionLabel: "Open in Chrome",
       copyUrl: target,
       steps: Object.freeze([
-        `If that button does nothing, tap the ⋮ menu at the top of ${label} and choose `
-          + "“Open in browser”.",
-        "Or copy the link below and paste it into Chrome.",
+        `Tap ⋮ in ${label}, then “Open in browser”.`,
+        "Or tap Copy link and paste it into Chrome.",
       ]),
     });
   }
@@ -174,9 +173,8 @@ export function embeddedEscapeRoute(url, detection = {}) {
       actionLabel: "Open in Safari",
       copyUrl: target,
       steps: Object.freeze([
-        `iOS will not let a page open Safari for you. Tap the ••• or share button in `
-          + `${label}, then choose “Open in Safari”.`,
-        "Or copy the link below and paste it into Safari.",
+        `Tap ••• or Share in ${label}, then “Open in Safari”.`,
+        "Or tap Copy link and paste it into Safari.",
       ]),
     });
   }
@@ -187,7 +185,7 @@ export function embeddedEscapeRoute(url, detection = {}) {
     actionLabel: "Open in your browser",
     copyUrl: target,
     steps: Object.freeze([
-      "Copy the link below and open it in Chrome, Safari, Firefox or Edge.",
+      "Tap Copy link and paste it into your browser.",
     ]),
   });
 }

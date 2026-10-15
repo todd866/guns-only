@@ -509,7 +509,6 @@ async function loadMissionFeaturePack(request, fetchImpl) {
 const sceneCanvas = document.querySelector("#scene");
 const hudCanvas = document.querySelector("#hud");
 const bootScreen = document.querySelector("#boot");
-const bootStatus = document.querySelector("#boot-status");
 const fatalScreen = document.querySelector("#fatal");
 const fatalMessage = document.querySelector("#fatal-message");
 const multiplayerStatus = document.querySelector("#multiplayer-status");
@@ -6408,9 +6407,8 @@ incidentReplayCamera?.addEventListener("change", () => {
   incidentReplay?.setCamera(incidentReplayCamera.value);
 });
 
-function setBootStatus(message, phase = "") {
-  bootStatus.textContent = message;
-  if (phase) bootScreen.dataset.phase = phase;
+function setBootStatus(phase) {
+  globalThis.__gunsSetBootProgress?.(phase);
 }
 
 // Polled on a timer, not requestAnimationFrame. rAF does not run in a hidden or heavily throttled
@@ -6448,7 +6446,7 @@ function showFatal(error) {
   // "Error creating WebGL context." is a true sentence and a useless one to somebody who tapped a
   // link inside Instagram. A refused GPU is not a crash to report, it is a browser to leave — so
   // that class, and anything at all that happens inside a webview, gets the human screen with the
-  // escape route. The engineering console remains for everyone who can act on a stack trace.
+  // escape route. Other failures use the same compact card with detail behind its info control.
   const reason = classified?.reason ?? "unknown";
   const humanReason = reason === "webgl" ? "webgl"
     : reason === "module" || reason === "bridge" ? reason
@@ -6458,7 +6456,9 @@ function showFatal(error) {
     if (showBootFallback(humanReason, detail)) return;
   }
 
-  fatalMessage.textContent = error instanceof Error ? `${error.message}\n\n${error.stack ?? ""}` : String(error);
+  const detail = `${error instanceof Error ? `${error.message}\n\n${error.stack ?? ""}` : String(error)}\n${location.href}`;
+  fatalMessage.title = detail;
+  fatalMessage.setAttribute("aria-label", `Technical detail: ${detail}`);
   fatalScreen.classList.add("visible");
 }
 
@@ -12247,11 +12247,11 @@ async function boot() {
   // manifest. Direct release-mutated imports above are independently query-busted because ESM
   // linking necessarily happens before this top-level boot body can await the gate.
   await (globalThis.__gunsPrebootReady ?? Promise.resolve());
-  setBootStatus("STARTING LOCAL RUNTIME…", "runtime");
+  setBootStatus("runtime");
   const blazor = await waitForGlobal(() => globalThis.Blazor);
   await blazor.start();
 
-  setBootStatus("LINKING FLIGHT MODEL…", "model");
+  setBootStatus("model");
   const runtimeAccessor = await waitForGlobal(() => globalThis.getDotnetRuntime);
   const { getAssemblyExports, getConfig } = await runtimeAccessor(0);
   await getConfig();
@@ -12310,7 +12310,7 @@ async function boot() {
   syncPlayerGunTarget();
   bridgePauseApplied = true;
 
-  setBootStatus("BUILDING FIRST FRAME…", "scene");
+  setBootStatus("scene");
   const view = new FlightView();
   activeView = view;
   markShellMilestone("webgl_ok");
@@ -12589,6 +12589,8 @@ async function boot() {
       recorder.observeFramePhase("ui", performance.now() - afterView);
       if (firstFrame) {
         firstFrame = false;
+        try { sessionStorage.removeItem("guns-boot-retry"); } catch { /* Storage may be unavailable. */ }
+        setBootStatus("ready");
         bootScreen.setAttribute("aria-busy", "false");
         bootScreen.classList.add("ready");
         markShellMilestone("ready");

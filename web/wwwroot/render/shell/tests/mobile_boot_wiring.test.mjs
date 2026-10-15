@@ -37,7 +37,7 @@ test("the shell fallback markup exists in the document the boot can still reach"
   // It has to be static markup: the case it must cover includes "the module graph did not load".
   for (const id of [
     "shell-fallback", "shell-fallback-title", "shell-fallback-body", "shell-fallback-steps",
-    "shell-fallback-open", "shell-fallback-url", "shell-fallback-reload", "shell-fallback-copy",
+    "shell-fallback-open", "shell-fallback-reload", "shell-fallback-copy",
     "shell-fallback-detail",
   ]) {
     assert.match(indexSource, new RegExp(`id="${id}"`), `missing #${id}`);
@@ -75,8 +75,9 @@ test("slow and stuck are distinguished and separately measured", () => {
   assert.match(appSource, /shellHealth\.note\("fallback_escape"/);
   assert.match(appSource, /bootScreen\.dataset\.progress = "slow"/,
     "a slow boot gets a visible status line rather than an escape hatch");
-  assert.match(indexSource, /#boot\[data-progress="slow"\] #boot-status/,
-    "the sr-only status must become visible when the boot is slow");
+  assert.match(indexSource, /id="boot-status"[^>]*>\s*Loading\s*</,
+    "the boot status must be visible and player-facing");
+  assert.match(indexSource, /id="boot-progress"/, "the boot status needs a progress gauge");
   assert.match(shellHealthSource, /note\(code, fields = \{\}, \{ immediate = false \} = \{\}\)/);
 });
 

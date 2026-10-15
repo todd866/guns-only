@@ -834,11 +834,7 @@
       visibility: hidden;
     }
 
-    /* All that is left of the loading shell: a pulse in the corner of the painted sky. The card,
-       the wordmark, the tagline, the sortie spec sheet and their three responsive layouts are
-       deleted -- roughly 200 lines of styling for a screen nobody wanted to look at. #boot-status
-       stays in the DOM, announced to screen readers, because a silent aria-busy region is a
-       regression for anyone who cannot see the pulse. */
+    /* Variant B: one word and a stage gauge, visible throughout loading. */
     .boot-load {
       position: absolute;
       right: calc(var(--safe-right) + clamp(20px, 4vw, 40px));
@@ -846,31 +842,34 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      /* The status line is invisible until a slow boot promotes it; once promoted it is real text
-         in a bottom-right anchored box, so it needs a ceiling or it runs off a 320 px screen. */
-      max-width: calc(100vw - var(--safe-left) - var(--safe-right) - 48px);
-    }
-
-    .boot-pulse {
-      width: 7px;
-      height: 7px;
-      flex: 0 0 auto;
-      border-radius: 50%;
-      background: rgba(222, 163, 79, .85);
-      box-shadow: 0 0 10px rgba(222, 163, 79, .45);
-      animation: boot-pulse 1.25s ease-in-out infinite;
+      max-width: calc(100vw - var(--safe-left) - var(--safe-right) - 40px);
+      padding: 8px 12px;
+      border-radius: var(--flow-radius-sm);
+      background: color-mix(in srgb, var(--flow-bg) 78%, transparent);
+      box-shadow: var(--flow-shadow);
     }
 
     #boot-status {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      margin: -1px;
-      padding: 0;
-      overflow: hidden;
-      clip: rect(0 0 0 0);
+      color: var(--flow-ink);
+      font: 450 .9375rem/1 var(--flow-font-display);
       white-space: nowrap;
-      border: 0;
+    }
+
+    #boot-progress {
+      width: 180px;
+      min-width: 40px;
+      height: 10px;
+      overflow: hidden;
+      border: 1px solid var(--flow-action-top);
+      border-radius: var(--flow-radius-sm);
+      background: var(--flow-bg);
+    }
+
+    #boot-progress i {
+      display: block;
+      width: var(--boot-progress, 0%);
+      height: 100%;
+      background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
     }
 
     #ready-screen {
@@ -2630,191 +2629,98 @@
       .settings-card { padding: 17px; }
     }
 
-    #fatal {
-      position: fixed;
-      z-index: 30;
-      inset: 0;
-      display: none;
-      place-items: center;
-      padding: 32px;
-      background: rgba(3, 8, 14, .94);
-    }
-
-    #fatal.visible { display: grid; }
-
-    .fatal-card {
-      width: min(620px, 100%);
-      padding: 28px;
-      border-left: 3px solid #ffb020;
-      background: #0a1420;
-      box-shadow: 0 24px 80px rgba(0, 0, 0, .5);
-    }
-
-    .fatal-card h2 {
-      margin: 0 0 10px;
-      color: #ffb020;
-      font-size: 18px;
-      letter-spacing: .08em;
-    }
-
-    #fatal-message {
-      margin: 0 0 20px;
-      color: #b9c9ce;
-      font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      white-space: pre-wrap;
-    }
-
-    .reload {
-      color: #4dff88;
-      font-size: 12px;
-      letter-spacing: .08em;
-      text-decoration: none;
-      text-transform: uppercase;
-    }
-
-    /* ------------------------------------------------------------------------------------
-       BOOT FALLBACK
-       #fatal is an engineering console: a phosphor terminal printing an exception. It is right
-       for a desktop pilot who can act on "Error creating WebGL context." It is wrong for the
-       population shell-health actually measures -- somebody who tapped a link inside Threads or
-       Instagram, whose webview will not give the page a GPU, and who is looking at a painted sky
-       that never becomes an aeroplane. This screen is for them: it is the same warm paint as the
-       boot and the mission menu, it says what happened in English, and it gives them the one
-       thing that fixes it, which is a route into a real browser.
-       ------------------------------------------------------------------------------------ */
-    #shell-fallback {
+    /* Both startup failure paths share the approved three-row result instrument. */
+    #fatal, #shell-fallback {
       position: fixed;
       z-index: 40;
       inset: 0;
       display: none;
-      /* flex-start + `margin: auto` on the card is deliberate. Centring with align-items clips the
-         TOP of anything taller than the viewport, and it is unreachable — which on a 320x495 phone
-         means the headline explaining the failure is the first thing lost. Auto margins centre
-         when there is room and collapse to zero when there is not. */
       align-items: flex-start;
       justify-content: center;
-      box-sizing: border-box;
       padding:
         calc(var(--safe-top) + 16px) calc(var(--safe-right) + 16px)
         calc(var(--safe-bottom) + 16px) calc(var(--safe-left) + 16px);
       overflow-y: auto;
-      background:
-        radial-gradient(90% 55% at 68% 82%, rgba(222, 163, 79, .30), transparent 72%),
-        linear-gradient(180deg,
-          #C4CFD4 0%, #D8D8CC 30%, #EBE4CF 58%, #F4E7C9 80%, #E3D2A6 100%);
+      background: url("./art/menu-hangar.webp") center 46% / cover no-repeat var(--flow-bg);
     }
 
-    #shell-fallback.visible { display: flex; }
+    #fatal.visible, #shell-fallback.visible { display: flex; }
 
-    .shell-fallback-card {
-      width: min(460px, 100%);
+    .failure-card {
+      width: min(34rem, 100%);
       margin: auto;
-      padding: 20px 18px 18px;
-      border-radius: 3px;
-      border-top: 3px solid #DEA34F;
-      background: rgba(255, 252, 244, .93);
-      box-shadow: 0 18px 60px rgba(57, 74, 58, .28);
-      color: #2B3031;
-      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      background: var(--flow-line);
+      box-shadow: var(--flow-shadow);
+      color: var(--flow-ink);
+      font: 650 .9375rem/1.2 var(--flow-font-data);
     }
 
-    #shell-fallback-title {
-      margin: 0 0 8px;
-      color: #394A3A;
-      font-size: 19px;
-      font-weight: 650;
-      letter-spacing: .01em;
-      line-height: 1.22;
+    .failure-row {
+      display: grid;
+      grid-template-columns: 3.4em minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 46px;
+      padding: 6px 10px;
+      background: var(--flow-panel-raised);
     }
 
-    #shell-fallback-body { margin: 0 0 12px; }
+    .failure-glyph { color: var(--flow-action-bottom); text-align: center; }
+    .failure-row h2 { margin: 0; font: inherit; overflow-wrap: anywhere; }
+    .failure-reason {
+      grid-column: 2 / -1;
+      margin: 0;
+      color: var(--flow-ink-muted);
+      font: 450 .875rem/1.3 var(--flow-font-display);
+    }
 
     #shell-fallback-steps {
-      margin: 0 0 14px;
-      padding-left: 18px;
-      color: #4A5250;
-      font-size: 13px;
+      margin: 0;
+      padding: 10px 20px 10px 40px;
+      background: var(--flow-panel-raised);
+      color: var(--flow-ink-muted);
+      font: 450 .875rem/1.4 var(--flow-font-display);
     }
+    #shell-fallback-steps li + li { margin-top: 6px; }
 
-    #shell-fallback-steps li { margin-bottom: 6px; }
-
-    /* An author `display: flex` beats the UA sheet's [hidden] rule, so without this the escape-route
-       row keeps its gap on a desktop card that has no escape route to offer. */
-    .shell-fallback-actions[hidden] { display: none; }
-
-    .shell-fallback-actions {
+    .failure-actions {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 12px;
+      gap: 6px;
+      padding: 8px 12px;
+      background: var(--flow-panel-raised);
     }
-
-    /* 48 px minimum: this screen exists for phones, and it is the one control a stuck player has. */
-    .shell-fallback-actions a,
-    .shell-fallback-actions button {
-      flex: 1 1 auto;
-      min-height: 48px;
-      padding: 11px 16px;
-      border: 1px solid #394A3A;
-      border-radius: 2px;
-      background: #394A3A;
-      color: #F4E7C9;
-      cursor: pointer;
-      font: inherit;
-      font-weight: 600;
-      text-align: center;
+    .failure-actions[hidden] { display: none; }
+    .failure-card :is(a, button) {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 0 12px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      color: var(--flow-ink-muted);
+      background: var(--flow-panel);
+      font: 450 .9375rem/1.2 var(--flow-font-display);
       text-decoration: none;
+      text-align: center;
+      cursor: pointer;
     }
-
-    .shell-fallback-actions .shell-fallback-secondary {
-      background: transparent;
-      color: #394A3A;
+    .failure-card .failure-primary {
+      flex: 1 1 auto;
+      border: 0;
+      color: var(--flow-bg);
+      background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
     }
-
-    .shell-fallback-link {
-      display: block;
-      margin-bottom: 12px;
-      padding: 9px 11px;
-      border: 1px dashed rgba(57, 74, 58, .45);
-      border-radius: 2px;
-      background: rgba(244, 231, 201, .55);
-      color: #2B3031;
-      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      overflow-wrap: anywhere;
-      user-select: all;
-      -webkit-user-select: all;
-    }
-
-    #shell-fallback-detail {
-      margin: 0;
-      color: #6A716E;
-      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      overflow-wrap: anywhere;
-    }
-
-    /* The load pulse says "something is happening" and nothing more. Past ten seconds that is not
-       enough, so the sr-only status line is promoted onto the screen -- a slow boot on a phone is
-       a real thing that finishes, and the player deserves to be told it is still working rather
-       than left to guess whether to close the tab. */
-    #boot[data-progress="slow"] #boot-status {
-      position: static;
-      width: auto;
-      height: auto;
-      margin: 0;
-      /* A legible chip, not bare text. The painted floor under the bottom-right corner is dark and
-         busy; unbacked grey type on it is present in the DOM and unreadable on the screen, which is
-         the same as not telling the player anything. */
-      padding: 6px 9px;
-      border-radius: 2px;
-      background: rgba(255, 252, 244, .90);
-      box-shadow: 0 4px 14px rgba(57, 74, 58, .22);
-      clip: auto;
-      color: #2B3031;
-      font: 11px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
-      letter-spacing: .06em;
-      text-align: right;
-      text-transform: uppercase;
-      white-space: normal;
+    .failure-card .failure-info { min-width: 36px; min-height: 36px; padding: 0; }
+    .failure-card :is(a, button):focus-visible {
+      outline: 2px solid var(--flow-action-top);
+      outline-offset: 2px;
     }
 
     /* ------------------------------------------------------------------------------------
@@ -4181,14 +4087,6 @@
       .sortie-grade-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
-    @keyframes boot-pulse {
-      0%, 100% { opacity: .34; transform: scale(.78); }
-      50% { opacity: 1; transform: scale(1); }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .boot-pulse { animation: none; }
-    }
     /* F-22 result instrument (loop audit #6). Replaces the kicker/title/brief/facts/scoreboard
        stack for the F-22 sortie only; every other mode keeps its own card. */
     /* Kept at the end of the sheet so it outranks the intro/debrief grid rules above. */
@@ -4894,48 +4792,68 @@ Two engagements, then recover · H controls · R restarts</p>
   -->
   <div id="boot" data-phase="files" aria-busy="true">
     <div class="boot-load">
-      <i class="boot-pulse" aria-hidden="true"></i>
-      <div id="boot-status" role="status" aria-live="polite" aria-atomic="true"></div>
+      <span id="boot-status" role="status" aria-live="polite" aria-atomic="true">Loading</span>
+      <div id="boot-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+        aria-valuenow="0" aria-labelledby="boot-status"><i></i></div>
     </div>
   </div>
 
+  <!-- Independent static markup: this last resort also works when fallback modules fail. -->
   <div id="fatal" role="alert">
-    <div class="fatal-card">
-      <h2>FLIGHT KERNEL OFFLINE</h2>
-      <pre id="fatal-message"></pre>
-      <a class="reload" href=".">Reload simulation</a>
+    <div class="fatal-card failure-card">
+      <div class="failure-row">
+        <span class="failure-glyph" aria-hidden="true">⚠</span>
+        <h2>Couldn't start</h2>
+        <button id="fatal-message" class="failure-info" type="button"
+          title="Technical detail" aria-label="Technical detail">ⓘ</button>
+      </div>
+      <div class="failure-row">
+        <p class="failure-reason">Check your connection, then try again.</p>
+      </div>
+      <div class="failure-actions">
+        <a class="failure-primary" href="">Try again</a>
+        <button id="fatal-copy" type="button">Copy link</button>
+      </div>
     </div>
   </div>
 
-  <!--
-    The human-facing failure screen. Filled by render/shell/boot_fallback.js: the words depend on
-    whether WebGL was refused or the boot simply stopped, and on which app's webview the player is
-    trapped in. Markup lives here so it can be shown by the inline bootstrap below even when the
-    module graph itself is what failed to load.
-  -->
   <div id="shell-fallback" role="alert" hidden>
-    <div class="shell-fallback-card">
-      <h2 id="shell-fallback-title">Guns Only could not start</h2>
-      <p id="shell-fallback-body"></p>
+    <div class="shell-fallback-card failure-card">
+      <div class="failure-row">
+        <span class="failure-glyph" aria-hidden="true">⚠</span>
+        <h2 id="shell-fallback-title">Couldn't start</h2>
+        <button id="shell-fallback-detail" class="failure-info" type="button"
+          title="Technical detail" aria-label="Technical detail">ⓘ</button>
+      </div>
+      <div class="failure-row">
+        <p id="shell-fallback-body" class="failure-reason">Check your connection, then try again.</p>
+      </div>
       <ol id="shell-fallback-steps" hidden></ol>
-      <div class="shell-fallback-actions">
+      <div class="shell-fallback-actions failure-actions" hidden>
         <a id="shell-fallback-open" href="#" hidden>Open in your browser</a>
       </div>
-      <code id="shell-fallback-url" class="shell-fallback-link"></code>
-      <div class="shell-fallback-actions">
-        <button id="shell-fallback-copy" type="button" class="shell-fallback-secondary">
-          Copy link
-        </button>
-        <a id="shell-fallback-reload" class="shell-fallback-secondary" href=".">Try again</a>
+      <div class="shell-fallback-actions failure-actions">
+        <a id="shell-fallback-reload" class="failure-primary" href="">Try again</a>
+        <button id="shell-fallback-copy" type="button">Copy link</button>
       </div>
-      <p id="shell-fallback-detail" hidden></p>
     </div>
   </div>
 
   <script>
-    // The title card is deleted, so there is no per-sortie deck/title/detail to paint before
-    // app.js arrives. The deep link still selects the sortie -- it is read by the module graph
-    // from the same query string -- it just no longer has a splash screen to announce itself on.
+    // Stage completion, not a byte counter: downloads occupy the first part of the gauge.
+    // Classic-script ownership keeps status available before any module can load.
+    globalThis.__gunsSetBootProgress = (phase) => {
+      const progress = { files: 0, update: 20, switching: 40, runtime: 40, model: 70, scene: 90, ready: 100 }[phase] ?? 0;
+      const status = document.getElementById("boot-status");
+      if (status) status.textContent = phase === "update" ? "Updating" : "Loading";
+      const gauge = document.getElementById("boot-progress");
+      if (gauge) {
+        gauge.style.setProperty("--boot-progress", `${progress}%`);
+        gauge.setAttribute("aria-valuenow", String(progress));
+      }
+      const boot = document.getElementById("boot");
+      if (boot) boot.dataset.phase = phase;
+    };
 
     // Wait for a verified replacement worker before mixing this document with a stale runtime.
     // Cached releases are retained during this handoff, including a failed or interrupted update.
@@ -4970,18 +4888,17 @@ Two engagements, then recover · H controls · R restarts</p>
         // installed-and-waiting, and say which; fail only when neither appears within 30 s.
         const updateStarted = Date.now();
         let handoffRequested = false;
-        const updateStatus = (text) => { const node = document.getElementById("boot-status"); if (node) node.textContent = text; };
         const releaseWorker = (worker) => !!worker && new URL(worker.scriptURL, location.href).searchParams.get("v") === releaseBuild;
         const timer = setInterval(async () => {
           const registration = await sw.getRegistration?.().catch(() => null);
           const elapsed = Date.now() - updateStarted;
-          if (elapsed < 600_000 && releaseWorker(registration?.installing)) return updateStatus("DOWNLOADING UPDATE…");
+          if (elapsed < 600_000 && releaseWorker(registration?.installing)) return globalThis.__gunsSetBootProgress("update");
           if (elapsed < 600_000 && releaseWorker(registration?.waiting)) {
             // This page is itself an old-worker client, so closing other tabs can never activate
             // the verified replacement. Ask that exact build to take over; old tabs keep their own
             // retained release bucket and the activation handshake.
             if (!handoffRequested) { handoffRequested = true; registration.waiting.postMessage({ type: "guns-skip-waiting", build: releaseBuild }); }
-            return updateStatus("UPDATE READY · SWITCHING…");
+            return globalThis.__gunsSetBootProgress("switching");
           }
           if (elapsed < 30_000) return;
           cleanup(); reject(new Error("Release update unavailable; saved release retained"));
@@ -5023,26 +4940,21 @@ Two engagements, then recover · H controls · R restarts</p>
 
     // The fallback screen's copy control. Wired here, in a classic script, because the module
     // graph is one of the things that can be broken when this screen is shown.
-    document.addEventListener("click", (event) => {
-      const button = event.target?.closest?.("#shell-fallback-copy");
+    document.addEventListener("click", async (event) => {
+      const button = event.target?.closest?.("#shell-fallback-copy, #fatal-copy");
       if (!button) return;
-      const text = document.querySelector("#shell-fallback-url")?.textContent || location.href;
-      const done = () => { button.textContent = "Link copied"; };
+      const text = button.dataset.copyUrl || location.href;
       try {
-        const written = navigator.clipboard?.writeText?.(text);
-        if (written?.then) { written.then(done, () => {}); return; }
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          button.textContent = "Link copied";
+          return;
+        }
       } catch {
-        // Clipboard access is denied in several webviews. Fall through to selection.
+        // Some webviews deny clipboard access. Keep a manual copy route available.
       }
-      // No clipboard permission: select the URL so one long-press "Copy" finishes the job.
-      const range = document.createRange();
-      const node = document.querySelector("#shell-fallback-url");
-      if (!node) return;
-      range.selectNodeContents(node);
-      const selection = getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      button.textContent = "Press and hold the link, then Copy";
+      // No visible URL row: the native prompt makes the link selectable on demand.
+      window.prompt("Copy link", text);
     });
   </script>
   <script type="module">
@@ -5068,36 +4980,49 @@ Two engagements, then recover · H controls · R restarts</p>
       await import("./app.js?v=__RELEASE_BUILD__");
     } catch (error) {
       console.error(error);
-      document.querySelector("#boot")?.classList.add("ready");
-      // Prefer the human screen. A failure here is usually a webview refusing to finish the module
-      // graph, and "Failed to load ./app.js" in a phosphor terminal helps nobody who arrived from
-      // a social post. These two modules are tiny, same-origin and dependency-free precisely so
-      // they can still load when the big graph did not; if even they fail, the engineering card
-      // below is the honest last resort.
-      let shown = false;
-      try {
-        const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
-          await Promise.all([
-            import("./render/shell/inapp_browser.js?v=__RELEASE_BUILD__"),
-            import("./render/shell/boot_fallback.js?v=__RELEASE_BUILD__"),
-          ]);
-        const detection = detectEmbeddedBrowser({
-          userAgent: navigator.userAgent,
-          maxTouchPoints: navigator.maxTouchPoints,
-        });
-        shown = mountBootFallback(document, bootFallbackModel({
-          reason: "module",
-          detection,
-          url: location.href,
-          detail: error instanceof Error ? error.message : String(error),
-        }));
-      } catch (fallbackError) {
-        console.error(fallbackError);
-      }
-      if (!shown) {
-        const message = document.querySelector("#fatal-message");
-        if (message) message.textContent = error instanceof Error ? error.message : String(error);
-        document.querySelector("#fatal")?.classList.add("visible");
+      // A transient fetch failure gets one reload per build. Storage denial must fail closed.
+      const retrying = (() => {
+        try {
+          if (sessionStorage.getItem("guns-boot-retry") === releaseBuild) return false;
+          sessionStorage.setItem("guns-boot-retry", releaseBuild);
+          location.reload();
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+      if (!retrying) {
+        document.querySelector("#boot")?.classList.add("ready");
+        // Prefer the shared fallback; independent static markup is the last resort if it cannot load.
+        let shown = false;
+        try {
+          const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
+            await Promise.all([
+              import("./render/shell/inapp_browser.js?v=__RELEASE_BUILD__"),
+              import("./render/shell/boot_fallback.js?v=__RELEASE_BUILD__"),
+            ]);
+          const detection = detectEmbeddedBrowser({
+            userAgent: navigator.userAgent,
+            maxTouchPoints: navigator.maxTouchPoints,
+          });
+          shown = mountBootFallback(document, bootFallbackModel({
+            reason: "module",
+            detection,
+            url: location.href,
+            detail: error instanceof Error ? error.message : String(error),
+          }));
+        } catch (fallbackError) {
+          console.error(fallbackError);
+        }
+        if (!shown) {
+          const message = document.querySelector("#fatal-message");
+          if (message) {
+            const detail = `${error instanceof Error ? error.message : String(error)}\n${location.href}`;
+            message.title = detail;
+            message.setAttribute("aria-label", `Technical detail: ${detail}`);
+          }
+          document.querySelector("#fatal")?.classList.add("visible");
+        }
       }
     }
   </script>

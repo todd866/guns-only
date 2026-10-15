@@ -24,7 +24,7 @@ try {
   );
   const boot = await page.evaluate(() => ({
     fatal: document.querySelector("#fatal")?.classList.contains("visible") === true,
-    fatalMessage: document.querySelector("#fatal-message")?.textContent ?? "",
+    fatalMessage: document.querySelector("#fatal-message")?.getAttribute("title") ?? "",
   }));
   assert.equal(boot.fatal, false, `remote flight kernel failed: ${boot.fatalMessage.slice(0, 800)}`);
 
