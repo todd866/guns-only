@@ -11,11 +11,15 @@ export function pathfinderHud(state) {
   const position = selected?.gondola_position;
   const target = live && position && [position.x, position.y, position.z].every(Number.isFinite)
     ? position : null;
+  const markers = relays.filter(relay => relay.relay_active === true
+    && relay.gondola_position
+    && [relay.gondola_position.x, relay.gondola_position.y, relay.gondola_position.z].every(Number.isFinite))
+    .map(relay => ({ id: relay.id, position: relay.gondola_position }));
   return {
     row: `${relays.map(relay => relay.relay_active ? "◇" : "◆").join("")}  F GUN`,
     label: relays.map(relay => `Relay ${relay.id}: ${relay.relay_active ? "live" : "denied"}`)
       .join("; ") + (selected ? `; selected ${selected.id}; debris ${classification}` : ""),
-    target, blocked, tag: blocked ? "ROE" : "", selectedId: selected?.id ?? null,
+    target, markers, blocked, tag: blocked ? "ROE" : "", selectedId: selected?.id ?? null,
   };
 }
 

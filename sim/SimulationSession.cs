@@ -1247,7 +1247,10 @@ public sealed partial class SimulationSession {
             _carrierSortieRoute.Reset();
         }
         RefreshLaunchTerrainClearance();
-        _waveOffArmed = _carrier is not null;
+        // First Light owns a recovery strip, but starts in the hunt at full ram power.
+        // Arm later when approach mode is actually entered, not merely because home exists.
+        _waveOffArmed = _carrier is not null
+            && !(_beat.Pathfinder is not null && !_beat.StartsOnCatapult);
         _waveOffUntilMs = double.NegativeInfinity;
         _burble = _carrier is { IsMaritime: true }
             ? CreateBurble(_carrier, _difficulty, _weatherProfile?.Wind)

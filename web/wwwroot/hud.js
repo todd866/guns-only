@@ -1741,12 +1741,26 @@ class CombatHud {
     if (!cue) return;
     if (this.canvas?.getAttribute?.("aria-label") !== cue.label)
       this.canvas?.setAttribute?.("aria-label", cue.label);
+    const ctx = this.ctx;
+    ctx.save();
+    for (const marker of cue.markers) {
+      this.worldPoint.set(marker.position.x, marker.position.y, -marker.position.z);
+      const p = this.project(this.worldPoint, frame.camera, this.projectionA);
+      if (p.behind || p.x < 12 || p.y < 12
+          || p.x > this.width - 12 || p.y > this.height - 12) continue;
+      this.setLine(marker.id === cue.selectedId && cue.blocked ? AMBER : GREEN, 1.2);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - 4); ctx.lineTo(p.x + 4, p.y);
+      ctx.lineTo(p.x, p.y + 4); ctx.lineTo(p.x - 4, p.y);
+      ctx.closePath();
+      this.strokeLegible();
+    }
+    ctx.restore();
     if (!cue.target) return;
     this.worldPoint.set(cue.target.x, cue.target.y, -cue.target.z);
     const projection = this.project(this.worldPoint, frame.camera, this.projectionA);
     if (projection.behind || projection.x < 12 || projection.y < 12
         || projection.x > this.width - 12 || projection.y > this.height - 12) return;
-    const ctx = this.ctx;
     ctx.save();
     ctx.translate(projection.x, projection.y);
     this.setLine(cue.blocked ? AMBER : GREEN, 1.6);

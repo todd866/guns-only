@@ -13,10 +13,20 @@ public static partial class Beats {
         var position = new Vec3D(-35_000, altitude, 0);
         double speed = 3.6 * definition.Weather.Atmosphere.Sample(altitude).SpeedOfSoundMps;
         var velocity = new Vec3D(-speed, 0, 0) + definition.Weather.Wind.Sample(position);
+        // The generic AircraftSim fallback trims with the low-speed CLAlpha. This authored
+        // ram-regime entry needs the live Mach slope and its full fuel/four-drone gross mass.
+        double mass = sortie.PlayerAir.FuelFreeMassKg + fuelLb * 0.45359237
+            + 4 * FlightModel.RapierGunDroneSurrogate.MassKg;
+        double q = 0.5 * definition.Weather.Atmosphere.Sample(altitude).DensityKgM3 * speed * speed;
+        double alpha = (mass * FlightModel.G0 / (q * sortie.PlayerAir.WingAreaM2)
+            - sortie.PlayerAir.ZeroLiftCoefficient) / FlightModel.EffectiveClAlpha(sortie.PlayerAir, 3.6);
+        var forward = new Vec3D(-Math.Cos(alpha), Math.Sin(alpha), 0);
+        var up = new Vec3D(Math.Sin(alpha), Math.Cos(alpha), 0);
+        var attitude = QuaternionD.FromFrame(up.Cross(forward), up, forward);
         return sortie with {
             Name = fullSortie ? "Rapier — PATHFINDERS full sortie" : "Rapier — PATHFINDERS first light",
             Pathfinder = definition,
-            Player = fullSortie ? sortie.Player : Carrier.StateFromVelocity(position, velocity, sortie.Player.Mass),
+            Player = fullSortie ? sortie.Player : Carrier.StateFromVelocity(position, velocity, mass, attitude),
             StartsOnCatapult = fullSortie,
             InitialThrottle = sortie.PlayerAir.MaxThrustFraction,
             CatapultEndSpeedMps = 120,

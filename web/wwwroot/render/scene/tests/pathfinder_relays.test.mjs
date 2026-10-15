@@ -10,6 +10,7 @@ import {
 function state(overrides = {}) {
   return { pathfinder: {
     envelope_radius_m: 10,
+    sun_elevation_deg: -1.2,
     relays: [{ id: 7, position: { x: 100, y: 200, z: 300 },
       gondola_position: { x: 100, y: 177, z: 300 }, relay_active: true,
       leak_fraction: 0, lift_loss_fraction: 0, debris: null, ...overrides }],
@@ -18,7 +19,7 @@ function state(overrides = {}) {
 
 test("prepares six relay slots and tracks authoritative gondola coordinates", () => {
   const relays = createPathfinderRelays();
-  assert.equal(relays.group.children.length, PATHFINDER_RELAY_POOL_SIZE);
+  assert.equal(relays.group.children.filter(child => child.name === "PATHFINDER_RELAY_SLOT").length, PATHFINDER_RELAY_POOL_SIZE);
   relays.update(state());
   const absoluteGondola = relays.group.children[0].getObjectByName("PATHFINDER_DARK_GONDOLA");
   // App's aircraft conversion is set(state.px, state.py, -state.pz); origin is render-space.
@@ -64,7 +65,33 @@ test("null pathfinder hides all prepared slots", () => {
   relays.update(state());
   relays.update({ pathfinder: null });
   assert.equal(relays.group.visible, false);
-  assert.equal(relays.group.children.every((slot) => !slot.visible), true);
+  assert.equal(relays.group.children.filter(child => child.name === "PATHFINDER_RELAY_SLOT").every((slot) => !slot.visible), true);
+  relays.dispose();
+});
+
+test("one preallocated glint draw follows drift, sunlight and origin without changing hit geometry", () => {
+  const relays = createPathfinderRelays();
+  const input = state({ position: { x: 74080, y: 20600, z: 30 } });
+  relays.update(input, new THREE.Vector3(10, 0, -20));
+  const glints = relays.group.getObjectByName("PATHFINDER_SUNLIT_GLINTS");
+  assert.equal(glints.geometry.attributes.position.count, 6);
+  assert.equal(glints.geometry.attributes.position.getX(0), 74070);
+  assert.equal(glints.geometry.attributes.position.getZ(0), -10);
+  assert.equal(glints.geometry.attributes.sunlit.getX(0), 1);
+  assert.equal(glints.geometry.attributes.sunlit.getX(1), 0);
+  assert.equal(glints.material.depthTest, true);
+  assert.equal(glints.material.depthWrite, false);
+  // The main renderer uses logarithmic depth. Ordinary clip-space depth would put the
+  // distant locator behind nearer sky/terrain depths despite depthTest being enabled.
+  assert.match(glints.material.vertexShader, /#include <logdepthbuf_vertex>/);
+  assert.match(glints.material.fragmentShader, /#include <logdepthbuf_fragment>/);
+  const camera = new THREE.PerspectiveCamera(66, 16 / 9, .1, 100000);
+  glints.onBeforeRender({ getSize: size => size.set(1280, 720), getPixelRatio: () => 2 }, null, camera);
+  assert.equal(glints.material.uniforms.pixelRatio.value, 2);
+  assert.ok(glints.material.uniforms.focalPx.value > 500);
+  input.pathfinder.sun_elevation_deg = -10;
+  relays.update(input);
+  assert.equal(glints.geometry.attributes.sunlit.getX(0), 0);
   relays.dispose();
 });
 

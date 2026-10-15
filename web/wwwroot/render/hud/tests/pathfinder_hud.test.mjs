@@ -55,6 +55,16 @@ test("manual relay cycling follows authored order including denied relays", () =
   assert.equal(nextPathfinderSlot(input), 0);
 });
 
+test("each live gondola keeps its small diamond when another relay is selected or denied", () => {
+  const input = state();
+  assert.deepEqual(pathfinderHud(input).markers.map(marker => marker.id), [1, 3]);
+  input.pathfinder.relays[0].relay_active = false;
+  assert.equal(pathfinderHud(input).target, null);
+  assert.deepEqual(pathfinderHud(input).markers, [{ id: 3, position: input.pathfinder.relays[1].gondola_position }]);
+  input.pathfinder.relays[1].gondola_position.x = NaN;
+  assert.deepEqual(pathfinderHud(input).markers, []);
+});
+
 test("other missions, malformed positions and absent selection cannot manufacture a target", () => {
   assert.equal(pathfinderHud({}), null);
   assert.equal(nextPathfinderSlot({}), null);

@@ -6,6 +6,55 @@ export const PATHFINDER_GONDOLA_HALF_EXTENTS_M = Object.freeze({ x: 2.8, y: 1.4,
 
 const ZERO = new THREE.Vector3();
 
+// One six-vertex draw in the existing scene, depth tested against terrain/aircraft. This is an
+// optical locator, not a larger collision envelope: fade into the real mesh as it resolves.
+function makeGlints() {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(18), 3));
+  geometry.setAttribute("sunlit", new THREE.Float32BufferAttribute(new Float32Array(6), 1));
+  const material = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, depthTest: true, toneMapped: false,
+    uniforms: { pixelRatio: { value: 1 }, focalPx: { value: 1 }, radiusM: { value: 1 } },
+    vertexShader: `
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
+      uniform float pixelRatio, focalPx, radiusM;
+      attribute float sunlit;
+      varying float brightness;
+      void main() {
+        vec4 view = modelViewMatrix * vec4(position, 1.0);
+        float diameterPx = 2.0 * radiusM * focalPx / max(1.0, -view.z);
+        float rangeM = length(view.xyz);
+        brightness = sunlit * (1.0 - smoothstep(3.0, 9.0, diameterPx))
+          * (1.0 - smoothstep(74080.0, 83340.0, rangeM));
+        gl_Position = projectionMatrix * view;
+        #include <logdepthbuf_vertex>
+        gl_PointSize = 5.0 * pixelRatio;
+      }`,
+    fragmentShader: `
+      #include <logdepthbuf_pars_fragment>
+      varying float brightness;
+      void main() {
+        float r = length(gl_PointCoord - vec2(0.5));
+        float alpha = (1.0 - smoothstep(0.25, 0.5, r)) * brightness;
+        if (alpha < 0.01) discard;
+        #include <logdepthbuf_fragment>
+        gl_FragColor = vec4(1.0, 0.88, 0.65, alpha);
+      }`,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.name = "PATHFINDER_SUNLIT_GLINTS";
+  points.frustumCulled = false; // Six vertices; stale bounds must not cull a drifting lane.
+  points.userData.noShadow = true;
+  const size = new THREE.Vector2();
+  points.onBeforeRender = (renderer, scene, camera) => {
+    renderer.getSize(size);
+    material.uniforms.pixelRatio.value = renderer.getPixelRatio();
+    material.uniforms.focalPx.value = size.y * camera.projectionMatrix.elements[5] * 0.5;
+  };
+  return points;
+}
+
 function point(vector, value, origin) {
   // Simulation coordinates use north-positive Z; Three's authored Rapier scene uses
   // camera-facing south-positive -Z (the same conversion as the aircraft presentation).
@@ -140,6 +189,7 @@ export function createPathfinderRelays() {
     envelopeGeometry: new THREE.SphereGeometry(1, 18, 12),
     envelopeMaterial: new THREE.MeshStandardMaterial({
       color: 0xe9e4d6, roughness: 0.82, metalness: 0.01,
+      emissive: 0xffd4a0, emissiveIntensity: 0.18,
       fog: false,
     }),
     wrinkleGeometry: makeWrinkleGeometry(),
@@ -161,6 +211,8 @@ export function createPathfinderRelays() {
     return slot;
   });
   const scratch = Array.from({ length: PATHFINDER_RELAY_POOL_SIZE }, () => new THREE.Vector3());
+  const glints = makeGlints();
+  group.add(glints);
   let disposed = false;
 
   function deform(slot, radius, sag, leak, liftLoss) {
@@ -203,17 +255,25 @@ export function createPathfinderRelays() {
     if (!state?.pathfinder && !group.visible) return;
     group.visible = Boolean(state?.pathfinder);
     const relays = state?.pathfinder?.relays ?? [];
+    const positions = glints.geometry.attributes.position;
+    const sunlit = glints.geometry.attributes.sunlit;
+    const sunElevation = Number(state?.pathfinder?.sun_elevation_deg);
     for (let i = 0; i < slots.length; i += 1) {
       const relay = relays[i];
       const slot = slots[i];
       if (!relay) {
         slot.slot.visible = false;
+        sunlit.setX(i, 0);
         continue;
       }
       slot.slot.visible = true;
       slot.slot.userData.relayId = relay.id;
       const radius = Math.max(1, Number(state.pathfinder.envelope_radius_m) || 1);
       point(slot.slot.position, relay.position, origin);
+      positions.setXYZ(i, slot.slot.position.x, slot.slot.position.y, slot.slot.position.z);
+      const horizonDip = Math.acos(6371000 / (6371000 + Math.max(0, relay.position.y)));
+      sunlit.setX(i, Number.isFinite(sunElevation) && sunElevation * Math.PI / 180 + horizonDip > 0 ? 1 : 0);
+      glints.material.uniforms.radiusM.value = radius;
       const leak = THREE.MathUtils.clamp(Number(relay.leak_fraction) || 0, 0, 1);
       const liftLoss = THREE.MathUtils.clamp(Number(relay.lift_loss_fraction) || 0, 0, 1);
       const sag = THREE.MathUtils.clamp(leak * 0.22 + liftLoss * 0.16, 0, 0.34);
@@ -241,6 +301,8 @@ export function createPathfinderRelays() {
         slot.debris.userData.landed = debris.landed === true;
       }
     }
+    positions.needsUpdate = true;
+    sunlit.needsUpdate = true;
   }
 
   function dispose() {
@@ -251,6 +313,8 @@ export function createPathfinderRelays() {
       slot.wrinkles.geometry.dispose();
     }
     disposeShared(shared);
+    glints.geometry.dispose();
+    glints.material.dispose();
     scratch.length = 0;
   }
 

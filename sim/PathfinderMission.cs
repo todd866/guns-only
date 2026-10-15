@@ -30,7 +30,9 @@ public sealed class PathfinderMissionDefinition {
 
     public static PathfinderMissionDefinition FirstLight(uint seed = 20261016) => new(seed,
         new[] {
-            new PathfinderBalloonSpawn(1, new(-60_000, PathfinderRelayCard.FloatAltitudeM, 0)),
+            // Provisional pacing: 20 km from the short start puts the first gun window at
+            // ~18 s at M3.6. Later lanes retain their spacing; no adversary clock is delayed.
+            new PathfinderBalloonSpawn(1, new(-55_000, PathfinderRelayCard.FloatAltitudeM, 0)),
             new PathfinderBalloonSpawn(2, new(-110_000, PathfinderRelayCard.FloatAltitudeM, 4000)),
             new PathfinderBalloonSpawn(3, new(-160_000, PathfinderRelayCard.FloatAltitudeM, 20_000))
         },

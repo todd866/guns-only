@@ -167,6 +167,87 @@ public sealed class PathfinderTests {
     }
 
     [Fact]
+    public void PathfinderAirborneStartHasNoFalseWaveOffOrInletWarning() {
+        var session = new SimulationSession(beatIndex: Beats.PathfinderBeatIndex);
+        AssertBrowserStartFixture(session, "pathfinder_start.json");
+        session.Begin();
+        for (int tick = 0; tick < 3 * AircraftSim.TickHz; tick++) {
+            session.Advance(Dt);
+            Assert.False(session.WaveOffActive);
+            Assert.False(session.Player.InletUnstarted);
+            Assert.True(session.Player.InletFlowRecovery >= 0.90,
+                $"t={tick * Dt:F3}: inlet {session.Player.InletFlowRecovery:F3}, alpha {session.Player.AngleOfAttackRad * 180 / Math.PI:F2}");
+        }
+        AssertBrowserStartFixture(session, "pathfinder_three_seconds.json");
+    }
+
+    // The Node HUD checks consume these same live-sim fields. Updating a fixture never replaces
+    // the physical assertions above. Match the repository's GUNS_UPDATE_FIXTURES convention.
+    static void AssertBrowserStartFixture(SimulationSession session, string name) {
+        using var document = JsonDocument.Parse(SnapshotProjection.BuildState(
+            session, Carrier.DeckConfiguration.Axial, 0, 0, false, null));
+        string[] fields = ["mode", "wave_off", "approach", "recovery_platform", "lso", "lso_severity",
+            "rapier_mission_available", "rapier_inlet_recovery", "range_m", "pathfinder",
+            "gun_muzzle_velocity_mps", "gun_max_flight_s"];
+        var actual = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (string field in fields)
+            if (document.RootElement.TryGetProperty(field, out var value)) actual[field] = value.GetRawText();
+        actual["sample_seconds"] = JsonSerializer.Serialize(Math.Round(session.TimeSeconds, 4));
+        string rendered = "{\n" + string.Join(",\n", actual.Select(pair => $"  \"{pair.Key}\": {pair.Value}")) + "\n}\n";
+        string path = Path.Combine(TestRepository.Root, "web", "wwwroot", "render", "hud", "tests", "fixtures", name);
+        if (System.Environment.GetEnvironmentVariable("GUNS_UPDATE_FIXTURES") == "1") {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, rendered);
+        }
+        Assert.Equal(File.ReadAllText(path), rendered);
+    }
+
+    [Fact]
+    public void PathfinderApproachStillArmsARealWaveOffAfterTheHunt() {
+        var session = new SimulationSession(beatIndex: Beats.PathfinderBeatIndex);
+        session.Begin();
+        session.Advance(Dt);
+        Assert.False(session.WaveOffActive);
+        // Move the same sortie into its strip's approach slot to exercise the later arming
+        // transition, independently of flying the whole RTB route in this initialization test.
+        var strip = session.Carrier!;
+        var approach = new AircraftState(strip.LandingPoint(along: -1500, height: 90),
+            75, -0.06, strip.LandingHeadingRad, 0, session.Player.State.Mass);
+        var trimmed = new AircraftSim(approach, session.Beat.PlayerAir);
+        session.Player.AdoptExternalKinematics(trimmed.State);
+        session.Controls.ConfigureFor(session.Beat.PlayerAir, 0.6);
+        session.Advance(Dt);
+        Assert.True(session.Controls.ApproachMode);
+        session.Controls.ConfigureFor(session.Beat.PlayerAir, session.Beat.PlayerAir.MaxThrustFraction);
+        session.Advance(Dt);
+        Assert.True(session.WaveOffActive);
+    }
+
+    [Fact]
+    public void PathfinderFirstGondolaWindowArrivesWithinTwentySeconds() {
+        var session = new SimulationSession(beatIndex: Beats.PathfinderBeatIndex);
+        var mission = session.Pathfinder!;
+        // Same 900 m effective ranging ceiling as the M61 HUD funnel, not a bigger hit volume.
+        const double windowRangeM = 900;
+        var relative = mission.Balloons[0].GondolaPosition - session.Player.State.Position;
+        var closure = session.Player.State.VelocityVector() - mission.Balloons[0].Velocity;
+        double timeAtSpawnMach = (relative.Length - windowRangeM) / closure.Length;
+        Assert.InRange(timeAtSpawnMach, 15, 20);
+        Assert.True((mission.Balloons[1].Position - mission.Balloons[0].Position).Length > 45_000);
+        session.Begin();
+        double firstWindowSeconds = double.NaN;
+        for (int tick = 1; tick <= 20 * AircraftSim.TickHz; tick++) {
+            session.Advance(Dt);
+            if ((mission.Balloons[0].GondolaPosition - session.Player.State.Position).Length <= windowRangeM) {
+                firstWindowSeconds = tick * Dt;
+                break;
+            }
+        }
+        Assert.InRange(firstWindowSeconds, 15, 20);
+        AssertBrowserStartFixture(session, "pathfinder_first_window.json");
+    }
+
+    [Fact]
     public void PathfinderTargetSlotsSelectAuthoredRelayOrderIncludingDeniedRelay() {
         var session = new SimulationSession(beatIndex: Beats.PathfinderBeatIndex);
         var mission = Assert.IsType<PathfinderMission>(session.Pathfinder);

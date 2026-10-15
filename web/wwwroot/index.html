@@ -3043,6 +3043,31 @@
       background-image: image-set(url("./art/jet-rapier-hermeus-v1.webp") type("image/webp"));
     }
 
+    /* Pathfinders keeps the Rapier painting, but its first-light contract needs a distinct
+       glance cue: warm dawn over the same airframe and one distant balloon on the horizon. */
+    #ready-screen .sortie-choice[data-program-node="rapier-pathfinders"] {
+      background-image:
+        linear-gradient(180deg, rgba(255, 177, 116, .28), rgba(255, 214, 166, .08) 48%, rgba(9, 14, 20, .18)),
+        image-set(url("./art/jet-rapier-hermeus-v1.webp") type("image/webp"));
+    }
+
+    #ready-screen .sortie-choice[data-program-node="rapier-pathfinders"]::after {
+      position: absolute;
+      z-index: 1;
+      top: 8%;
+      right: 8%;
+      width: 18%;
+      height: 32%;
+      content: "";
+      pointer-events: none;
+      opacity: .84;
+      background:
+        linear-gradient(rgba(18, 19, 22, .9), rgba(18, 19, 22, .9)) center 93% / 18% 3% no-repeat,
+        linear-gradient(rgba(18, 19, 22, .74), rgba(18, 19, 22, .74)) center 73% / 1px 24% no-repeat,
+        radial-gradient(ellipse at 50% 30%, rgba(18, 19, 22, .9) 0 47%, transparent 50%) center top / 100% 74% no-repeat;
+      filter: drop-shadow(0 0 4px rgba(255, 213, 155, .35));
+    }
+
     #ready-screen .sortie-choice[data-aircraft="cobra"] {
       background-image: image-set(url("./art/jet-cobra-generated-v4.webp") type("image/webp"));
     }

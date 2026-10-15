@@ -1,0 +1,13 @@
+{
+  "approach": false,
+  "gun_max_flight_s": 2.000,
+  "gun_muzzle_velocity_mps": 1030.00,
+  "mode": "FREE",
+  "pathfinder": {"selected_id":1,"envelope_radius_m":17.639,"sun_elevation_deg":-1.200,"relays":[{"id":1,"position":{"x":-54708.967,"y":20600.000,"z":-38.846},"gondola_position":{"x":-54708.967,"y":20569.361,"z":-38.846},"relay_active":true,"leak_fraction":0.000,"lift_loss_fraction":0.000,"debris":null},{"id":2,"position":{"x":-109701.810,"y":20600.000,"z":3964.652},"gondola_position":{"x":-109701.810,"y":20569.361,"z":3964.652},"relay_active":true,"leak_fraction":0.000,"lift_loss_fraction":0.000,"debris":null},{"id":3,"position":{"x":-159690.107,"y":20600.000,"z":19953.068},"gondola_position":{"x":-159690.107,"y":20569.361,"z":19953.068},"relay_active":true,"leak_fraction":0.000,"lift_loss_fraction":0.000,"debris":null}],"selected_footprint":{"centre":{"x":-50633.999,"y":192.000,"z":-251.684},"radius_m":782.500,"classification":"clear"}},
+  "range_m": 895.6,
+  "rapier_inlet_recovery": 0.972,
+  "rapier_mission_available": true,
+  "recovery_platform": true,
+  "sample_seconds": 17.5833,
+  "wave_off": false
+}
