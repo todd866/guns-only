@@ -90,8 +90,9 @@ export function timeCompressionHudPresentation(state) {
   const factor = Math.max(1, Math.floor(Number(state.time_compression_factor) || 1));
   if (factor > 1) {
     return Object.freeze({
-      text: `TIME ×${factor} · T NORMAL`,
+      text: `▸▸ ${factor}×`,
       level: "active",
+      ariaLabel: `RTB time compression ${factor} times active`,
     });
   }
   // No idle-state chrome: the pill exists only while fast time is actually running

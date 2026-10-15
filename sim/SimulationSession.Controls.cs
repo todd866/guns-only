@@ -97,6 +97,8 @@ public sealed partial class SimulationSession {
             _playerF14WingSweepMode = F14WingSweepMode.Auto;
             _playerF14WingSweepAutoLatch = true;
         }
+        if (key == GKey.TimeCompressionToggle && newPress)
+            ToggleTimeCompression();
         if (key == GKey.KnockItOff && newPress)
             TryRequestReturnToBase(MissionRtbReason.PilotKnockItOff);
         // Weapon release is an edge-triggered cockpit action. Latch a deliberate Rapier F tap so
@@ -340,7 +342,7 @@ public sealed partial class SimulationSession {
                 : CasevacSemanticCommand.None);
     }
 
-    bool HasControlInputBeyondTrim() {
+    bool HasControlInputBeyondTrim(bool ignoreCombatAssists = false) {
         PilotCommand command = _detents.Command;
         return KeyActive(GKey.PullUp)
             || KeyActive(GKey.PushDown)
@@ -361,7 +363,7 @@ public sealed partial class SimulationSession {
             || KeyActive(GKey.FlapDown)
             || KeyActive(GKey.EmergencyGearRelease)
             || _triggerDown
-            || _assistedFlight
+            || (!ignoreCombatAssists && _assistedFlight)
             || _playerGunTargetPadlockRollAssistSelected
             || _padlockRollAssist.State.Active
             || _gunneryPitchAssistState.Active
@@ -454,6 +456,7 @@ public sealed partial class SimulationSession {
     }
 
     TimeCompressionSafetyState CaptureTimeCompressionSafety() {
+        if (SupportsF22RtbCompression) return CaptureF22RtbCompressionSafety();
         int contactFactorCap = ContactApproachFactorCap();
         int fuelFactorCap = TimeCompressionPolicy.FactorCapForLeadSeconds(
             SecondsUntilFuelThreshold());
@@ -525,6 +528,8 @@ public sealed partial class SimulationSession {
     }
 
     void DisengageTimeCompression(TimeCompressionInhibitReason reason) {
+        if (reason == TimeCompressionInhibitReason.ControlInput)
+            _rtbControlInputUntilTick = _tick + 1;
         _timeCompressionFactor = 1;
         _timeCompressionInhibitReason = reason;
         _timeCompressionAccumulatorSeconds = 0.0;

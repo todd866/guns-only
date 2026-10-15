@@ -33,6 +33,7 @@ export function f22SortieResult(state, { handoff, loss } = {}) {
     && state.runway_touchdown_contact === true
     && state.runway_touchdown_survivable === true;
   const returning = handoff?.occurred === true || state.player_rtb_active === true;
+  const endedEarly = state.sortie_ended_early === true && state.combat_complete === true;
   const terrainLesson = state.first_run_weapons_cold === true
     || String(state.player_impact_surface || "").toUpperCase() === "GROUND"
     || (number(state.auto_gcas_activation_count) ?? 0) > 0;
@@ -58,7 +59,12 @@ export function f22SortieResult(state, { handoff, loss } = {}) {
   let correction = touchdown || (terminal && returning)
     ? "Practise the approach and runway stop." : "";
   let practiceExercise = correction ? "recovery" : "";
-  if (victory) {
+  if (endedEarly) {
+    title = "Sortie ended";
+    brief = "Combat complete. Sortie ended before landing.";
+    correction = "";
+    practiceExercise = "";
+  } else if (victory) {
     title = "Sortie complete";
     brief = "Fight complete. Aircraft recovered.";
     // The earned next opponent is its own instrument row; no correction is invented for a

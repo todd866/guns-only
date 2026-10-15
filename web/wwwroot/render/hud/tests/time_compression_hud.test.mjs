@@ -5,14 +5,15 @@ import { timeCompressionHudPresentation } from "../../telemetry/time_compression
 
 const hudUrl = new URL("../../../hud.js", import.meta.url);
 
-test("HUD presentation exposes the active kernel factor and the normal-time key", () => {
+test("HUD presentation exposes the active kernel factor as a compact instrument cell", () => {
   assert.deepEqual(timeCompressionHudPresentation({
     time_compression_available: true,
     time_compression_enabled: true,
     time_compression_factor: 8,
   }), {
-    text: "TIME ×8 · T NORMAL",
+    text: "▸▸ 8×",
     level: "active",
+    ariaLabel: "RTB time compression 8 times active",
   });
   // No idle chrome: a disabled/idle state renders nothing (owner direction 2026-07-29).
   assert.equal(timeCompressionHudPresentation({
@@ -34,5 +35,5 @@ test("production HUD draws the time-compression chip from snapshot state", async
   assert.match(source,
     /drawTimeCompression\(frame\) \{[\s\S]*?timeCompressionHudPresentation\(frame\.state\)/);
   assert.match(source, /this\.drawTimeCompression\(frame\);/);
-  assert.match(source, /T  TIME COMPRESSION ON \/ OFF/);
+  assert.match(source, /RTB COMPRESS/);
 });

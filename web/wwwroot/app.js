@@ -5128,9 +5128,12 @@ function renderPauseUi(state = latestState) {
     && (ready || finished || combatResult || background || sessionPaused || settingsPaused);
   const brief = missionBrief();
   const handoff = combatHandoffPresentation(state);
+  const endSortieAvailable = sessionPaused
+    && pauseReasons.size === 1
+    && state?.can_end_sortie === true;
   const handoffActionAvailable = sessionPaused
     && pauseReasons.size === 1
-    && handoff.available;
+    && (handoff.available || endSortieAvailable);
   observeCasevacQuietCompletion(state);
   const wasScreenVisible = readyScreen.classList.contains("visible");
   const startWasDisabled = readyStart.disabled;
@@ -5259,6 +5262,10 @@ function renderPauseUi(state = latestState) {
   if (readyHandoff) {
     readyHandoff.hidden = !handoffActionAvailable;
     readyHandoff.disabled = !handoffActionAvailable;
+    readyHandoff.querySelector(".shell-action-label").textContent = endSortieAvailable ? "End" : "RTB";
+    readyHandoff.title = endSortieAvailable
+      ? "End sortie without landing"
+      : "Call it a day and return to base";
   }
 
   if ((practiceReady || finished) && selectedPracticeExercise) {
@@ -6176,8 +6183,24 @@ function toggleSessionPause() {
 
 function requestCombatHandoffFromPause() {
   const handoff = combatHandoffPresentation(latestState);
-  if (!bridge || !knockItOffControl || !handoff.available
+  const endSortie = latestState?.can_end_sortie === true;
+  if (!bridge || !knockItOffControl || (!handoff.available && !endSortie)
     || !pauseReasons.has("session") || pauseReasons.size !== 1) return false;
+
+  if (endSortie) {
+    setPauseReason("session", false);
+    const accepted = typeof bridge.EndSortie === "function"
+      && bridge.EndSortie() === true;
+    if (!accepted) {
+      setPauseReason("session", true);
+      if (viewStatus) viewStatus.textContent = "End sortie unavailable in this phase";
+      recorder.event("sortie-end", "rejected", { source: "pause-menu" });
+      return false;
+    }
+    recorder.event("sortie-end", "accepted", { source: "pause-menu" });
+    sceneCanvas.focus({ preventScroll: true });
+    return true;
+  }
 
   // This is a deliberate phase-change command, not a background action against a paused kernel.
   // Resume first so the authoritative lifecycle can accept it, then prefer the typed bridge seam:

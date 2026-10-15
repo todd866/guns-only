@@ -303,12 +303,8 @@ public sealed partial class SimulationSession {
     double _rapierPursuitRangeM = double.PositiveInfinity;
     double _rapierBalloonReactionStartedAtMs = double.PositiveInfinity;
     bool _rapierBalloonPayloadDeployed;
-    // OFF until the pilot asks for it. Compression that engages by itself takes the aircraft away
-    // without being asked, which reads as the sim jumping rather than the pilot skipping — the
-    // pilot's words were "should be player-driven not auto fast forward". The eligibility rules
-    // still gate it; they now decide whether a REQUEST is honoured, not whether one is made.
-    // Owner direction 2026-07-29: transit compression is on by default — no enable ceremony.
-    // T toggles it off/back; the inhibit policy still drops to 1x near contact and control input.
+    // Transit compression is on by default. The pilot toggle disables it; authoritative safety
+    // checks and the host's measured cost ceiling own when additional ticks can actually run.
     bool _timeCompressionPilotEnabled = true;
     int _timeCompressionHostMaximumFactor = 1;
     int _timeCompressionSafetyFactorCap = 1;
@@ -429,7 +425,7 @@ public sealed partial class SimulationSession {
     public double TimeSeconds => _simTimeMs / 1000.0;
     public long Tick => _tick;
     public bool TimeCompressionAvailable =>
-        _beat.MissionIdentity.AllowsTimeCompression;
+        _beat.MissionIdentity.AllowsTimeCompression || SupportsF22RtbCompression;
     public bool TimeCompressionPilotEnabled => _timeCompressionPilotEnabled;
     public bool TimeCompressionEligible =>
         _timeCompressionInhibitReason == TimeCompressionInhibitReason.None;
@@ -812,7 +808,7 @@ public sealed partial class SimulationSession {
 
         _accumulatorSeconds = Math.Min(_accumulatorSeconds + elapsedSeconds, 0.25);
         if (selectedFactor > 1)
-            _timeCompressionAccumulatorSeconds += elapsedSeconds * (selectedFactor - 1);
+            _timeCompressionAccumulatorSeconds += Math.Min(elapsedSeconds, 0.25) * (selectedFactor - 1);
         while (_accumulatorSeconds >= FixedDeltaSeconds
             && Lifecycle == LifecycleState.Active) {
             _accumulatorSeconds -= FixedDeltaSeconds;
@@ -1402,6 +1398,8 @@ public sealed partial class SimulationSession {
             ? CombatHandoffPhase.Available
             : CombatHandoffPhase.Unavailable;
         _returnToBaseReason = MissionRtbReason.None;
+        _sortieEndedEarly = false;
+        _rtbControlInputUntilTick = -1;
         _reliefFighter = null;
         _reliefTargetingOpponentGuns.Clear();
         _reliefThreatState = default;
