@@ -2395,6 +2395,10 @@ const recorder = {
       // making the recorder or kernel mutable from the page.
       document.documentElement.dataset.framePerf = JSON.stringify(summary);
       latestFrameContractPass = summary.contract_pass;
+      reportHistory.add({
+        k: "perf", t: Math.round(performance.now()), sortie: this._sortie?.id ?? null,
+        active_foreground: 1, quality_tier: VISUAL_QUALITY.tier, ...summary,
+      });
       if (!this.enabled) return;
       if (this.buf.length >= TELEMETRY_BUFFER_LIMIT && summary.contract_pass === 1) return;
       this.ensureHeader();
