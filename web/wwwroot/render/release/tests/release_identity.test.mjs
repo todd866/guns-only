@@ -313,14 +313,14 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.match(app,
     /new URLSearchParams\(window\.location\.search\)\.get\("audioQa"\) === "silent"[\s\S]*?destination\.searchParams\.set\("audioQa", "silent"\)/,
     "stale-build reload must preserve the explicit shared-machine silent audio clamp");
-  assert.match(index, /id="ready-build"/);
-  assert.match(
-    index,
-    new RegExp(
-      `id="ready-build"[^>]*>Build ${RELEASE_BUILD} · verifying<\\/output>`,
-    ),
-    "the static verification placeholder must match the canonical release stamp",
-  );
+  assert.match(index, /id="ready-build"[^>]*hidden/,
+    "retain the inspectable identity without a visible build line");
+  assert.match(index, new RegExp(`id="ready-settings"[^>]*title="Build ${RELEASE_BUILD} · verifying"`),
+    "the initial identity belongs in the Settings tooltip");
+  assert.match(app, /readySettings\.title = buildIdentity\.label/,
+    "the tooltip must follow release lookup state");
+  assert.match(app, /readyBuild\.parentElement\.hidden = !buildIdentity\.stale/,
+    "only a stale release should reveal the reload row");
   assert.match(index, /id="ready-build-reload"/);
 
   const prebootGate = index.indexOf("globalThis.__gunsPrebootReady = (async () =>");

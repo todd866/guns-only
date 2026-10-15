@@ -482,7 +482,7 @@ test("the mobile loading cover is the painted sky and shows no title card", asyn
   }
 });
 
-test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sideways", async () => {
+test("iPhone selecting Top Gun and returning from Settings cannot scroll Ready sideways", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
   const site = await serveStatic(WWWROOT);
@@ -530,8 +530,6 @@ test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sidewa
       const selectors = [
         "#ready-start",
         "#ready-settings",
-        ".ready-telemetry-disclosure",
-        "#ready-telemetry-sharing",
       ];
       const bounds = Object.fromEntries(selectors.map((selector) => {
         const element = document.querySelector(selector);
@@ -585,23 +583,29 @@ test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sidewa
       for (const [selector, rect] of Object.entries(state.bounds)) {
         assert.ok(rect.left >= 0 && rect.right <= state.viewport.width,
           `${phase}: ${selector} escaped the phone viewport horizontally: ${JSON.stringify(rect)}`);
-        if (selector !== ".ready-telemetry-disclosure") {
-          assert.ok(rect.top >= 0 && rect.bottom <= state.viewport.height,
-            `${phase}: ${selector} escaped the phone viewport vertically: ${JSON.stringify(rect)}`);
-        }
+        assert.ok(rect.top >= 0 && rect.bottom <= state.viewport.height,
+          `${phase}: ${selector} escaped the phone viewport vertically: ${JSON.stringify(rect)}`);
         assert.equal(rect.hitTestable, true,
           `${phase}: ${selector} is visible but another layer owns its tap target: ${JSON.stringify(rect)}`);
       }
     };
 
     assertReachable(await layout(), "after selecting Top Gun");
-    await page.locator("#ready-telemetry-sharing").click();
-    await page.waitForFunction(() => document.querySelector(
-      "#ready-telemetry-sharing-status",
-    )?.textContent.includes("Sharing is on"));
+    assert.equal(await page.locator("#ready-telemetry-sharing").count(), 0);
+    await page.locator("#ready-settings").click();
+    const consent = page.locator("#setting-telemetry-sharing");
+    assert.equal(await consent.getAttribute("role"), "switch");
+    await consent.check();
+    await page.waitForFunction(() => document.documentElement.dataset.telemetrySharing === "on");
+    assert.equal(await page.evaluate(() => localStorage.getItem("guns-only.telemetry-sharing.v1")), "enabled");
+    await page.locator("#settings-close").click();
     assertReachable(await layout(), "after diagnostics consent");
+    await page.locator("#ready-settings").click();
+    assert.equal(await consent.isChecked(), true);
     // This isolated smoke context must leave the privacy preference at its safer state too.
-    await page.locator("#ready-telemetry-sharing").click();
+    await consent.uncheck();
+    await page.waitForFunction(() => document.documentElement.dataset.telemetrySharing === "off");
+    await page.locator("#settings-close").click();
     assert.deepEqual(pageErrors, [],
       `iPhone Top Gun Ready page errors:\n${pageErrors.join("\n")}`);
   } finally {

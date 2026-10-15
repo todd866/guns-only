@@ -604,10 +604,6 @@ const readyRestart = document.querySelector("#ready-restart");
 const readyReturn = document.querySelector("#ready-return");
 const readyHint = document.querySelector("#ready-hint");
 const readyRouteNotice = document.querySelector("#ready-route-notice");
-const readyTelemetrySharing = document.querySelector("#ready-telemetry-sharing");
-const readyTelemetryDisclosure = readyTelemetrySharing?.closest(".ready-telemetry-disclosure")
-  ?? null;
-const readyTelemetrySharingStatus = document.querySelector("#ready-telemetry-sharing-status");
 const readyBuild = document.querySelector("#ready-build");
 const readyBuildReload = document.querySelector("#ready-build-reload");
 const readyCasevacRouteBriefing = createCasevacRouteBriefing(document, {
@@ -633,7 +629,6 @@ const incidentReplayRate = document.querySelector("#incident-replay-rate");
 const incidentReplayCamera = document.querySelector("#incident-replay-camera");
 const settingsScreen = document.querySelector("#settings-screen");
 const settingsClose = document.querySelector("#settings-close");
-const settingsCloseBottom = document.querySelector("#settings-close-bottom");
 const settingsAudio = document.querySelector("#setting-audio");
 const settingsMusic = document.querySelector("#setting-music");
 const settingsInterfaceSounds = document.querySelector("#setting-interface-sounds");
@@ -2645,14 +2640,7 @@ setTimeout(() => {
 globalThis.__rec = recorder;   // inspectable: __rec.samples / .flushes / .errors / .lastError
 
 function renderTelemetrySharingPreference() {
-  for (const control of [readyTelemetrySharing, settingsTelemetrySharing]) {
-    if (control) control.checked = telemetrySharingEnabled;
-  }
-  if (readyTelemetrySharingStatus) {
-    readyTelemetrySharingStatus.textContent = telemetrySharingEnabled
-      ? "Sharing is on. Turn it off at any time; unsent diagnostics are discarded."
-      : "Off by default. No gameplay diagnostics are sent.";
-  }
+  if (settingsTelemetrySharing) settingsTelemetrySharing.checked = telemetrySharingEnabled;
   document.documentElement.dataset.telemetrySharing = telemetrySharingEnabled ? "on" : "off";
 }
 
@@ -2670,6 +2658,8 @@ function commitTelemetrySharingPreference(nextEnabled) {
 renderTelemetrySharingPreference();
 
 function renderBuildIdentity() {
+  if (readySettings) readySettings.title = buildIdentity.label;
+  if (readyBuild?.parentElement) readyBuild.parentElement.hidden = !buildIdentity.stale;
   if (!readyBuild) return;
   readyBuild.textContent = buildIdentity.label;
   readyBuild.dataset.state = buildIdentity.state;
@@ -3186,18 +3176,27 @@ let lastAccessibilityAnnouncement = "";
 
 function renderSettingsBindings() {
   if (!settingsBindings) return;
-  const nodes = CONTROL_BINDINGS.map((definition) => {
-    const row = document.createElement("div");
+  const rowsPerColumn = Math.ceil(CONTROL_BINDINGS.length / 2);
+  const nodes = Array.from({ length: rowsPerColumn }, (_, index) => {
+    const row = document.createElement("tr");
     row.className = "settings-binding";
-    const label = document.createElement("span");
-    label.textContent = definition.label;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.bindAction = definition.action;
-    button.dataset.capturing = String(bindingCaptureAction === definition.action);
-    button.textContent = bindingCaptureAction === definition.action
-      ? "Press key" : controlCodeLabel(playerSettings.bindings[definition.action]);
-    row.append(label, button);
+    for (const definition of [CONTROL_BINDINGS[index], CONTROL_BINDINGS[index + rowsPerColumn]]) {
+      if (!definition) continue;
+      const label = document.createElement("th");
+      label.scope = "row";
+      label.textContent = definition.label;
+      const cell = document.createElement("td");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.bindAction = definition.action;
+      button.dataset.capturing = String(bindingCaptureAction === definition.action);
+      button.textContent = bindingCaptureAction === definition.action
+        ? "Press key" : controlCodeLabel(playerSettings.bindings[definition.action]);
+      button.setAttribute("aria-label", `${definition.label}: ${button.textContent}`);
+      button.title = `Rebind ${definition.label}`;
+      cell.append(button);
+      row.append(label, cell);
+    }
     return row;
   });
   settingsBindings.replaceChildren(...nodes);
@@ -3241,7 +3240,10 @@ function applyPlayerSettings() {
   if (settingsHighContrast) settingsHighContrast.checked = playerSettings.highContrast;
   if (settingsReducedMotion) settingsReducedMotion.checked = playerSettings.reducedMotion;
   if (settingsLargeText) settingsLargeText.checked = playerSettings.largeText;
-  if (settingsTiltSensitivity) settingsTiltSensitivity.value = String(playerSettings.tiltSensitivity);
+  if (settingsTiltSensitivity) {
+    settingsTiltSensitivity.value = String(playerSettings.tiltSensitivity);
+    settingsTiltSensitivity.setAttribute("aria-valuetext", `${playerSettings.tiltSensitivity.toFixed(2)}×`);
+  }
   if (settingsTiltSensitivityValue)
     settingsTiltSensitivityValue.textContent = `${playerSettings.tiltSensitivity.toFixed(2)}×`;
   renderSettingsBindings();
@@ -3373,8 +3375,7 @@ window.addEventListener("keydown", (event) => {
   commitPlayerSettings(rebound);
 }, { capture: true });
 
-for (const button of [settingsClose, settingsCloseBottom])
-  button?.addEventListener("click", closeSettings);
+settingsClose?.addEventListener("click", closeSettings);
 settingsAutoGcas?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, autoGcas: settingsAutoGcas.checked,
 }));
@@ -3390,11 +3391,9 @@ settingsMusic?.addEventListener("change", () => commitPlayerSettings({
 settingsInterfaceSounds?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, interfaceSounds: settingsInterfaceSounds.checked,
 }));
-for (const control of [readyTelemetrySharing, settingsTelemetrySharing]) {
-  control?.addEventListener("change", () => {
-    commitTelemetrySharingPreference(control.checked);
-  });
-}
+settingsTelemetrySharing?.addEventListener("change", () => {
+  commitTelemetrySharingPreference(settingsTelemetrySharing.checked);
+});
 settingsRadioVoice?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, radioVoice: settingsRadioVoice.checked,
 }));
@@ -4832,7 +4831,7 @@ function centerReadyMissionChoice(selectedMission) {
 
   // scrollIntoView() walks every scrollable ancestor. WebKit includes overflow-x:hidden ancestors
   // in that walk, so centring a deep-linked poster also shifted the whole Ready card sideways on
-  // iPhone and left Fly/settings/consent controls off-screen. Own the one axis we actually mean:
+  // iPhone and left Fly/settings controls off-screen. Own the one axis we actually mean:
   // the compact aircraft rail. Keep the outer dialog at its only valid horizontal position too,
   // which repairs a browser-restored offset from an older page before focus moves into the card.
   const maximum = Math.max(0, rail.scrollWidth - rail.clientWidth);
@@ -5064,10 +5063,6 @@ function renderPauseUi(state = latestState) {
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
   const casevacReady = ready && selectedBeat === 13;
   readyScreen.dataset.casevacReady = String(casevacReady);
-  // This must be a semantic visibility edge, not CSS alone. readyScreenFocusables deliberately
-  // ignores descendants of [hidden]; without it the invisible consent checkbox becomes the
-  // computed last item in pause/debrief and lets Tab escape the aria-modal dialog.
-  if (readyTelemetryDisclosure) readyTelemetryDisclosure.hidden = !ready || firstRunReady || practiceReady;
   const routeBlocked = ready && blockedProgramExperience !== null;
   readyScreen.dataset.routeBlocked = String(routeBlocked);
   if (readyRouteNotice) {
@@ -5158,14 +5153,14 @@ function renderPauseUi(state = latestState) {
     const exerciseId = finished && !selectedPracticeExercise
       ? sortieResultCopy(state)?.practiceExercise : "";
     readyPractice.dataset.exercise = exerciseId || "";
-    readyPractice.textContent = exerciseId === "recovery" ? "Practise landing"
+    readyPractice.querySelector(".shell-action-label").textContent = exerciseId === "recovery" ? "Practise landing"
       : exerciseId === "gunnery" ? "Practise guns"
       : exerciseId === "valley" ? "Practise valley" : "Practice";
   }
   if (readyIntroReplay) {
     readyIntroReplay.hidden = !!selectedPracticeExercise || !(firstRunReady
       || (ready && selectedProgramNodeId === "first-merge"));
-    readyIntroReplay.textContent = firstRunReady
+    readyIntroReplay.querySelector(".shell-action-label").textContent = firstRunReady
       ? "Choose another mission" : "Replay valley intro";
   }
   if (readyRestart) {
@@ -5173,11 +5168,12 @@ function renderPauseUi(state = latestState) {
     // The primary finished action may advance the programme before it launches. This utility
     // repeats the sortie which just ended, so giving both controls the old "Fly again" label hid
     // a real navigation decision from the pilot.
-    readyRestart.textContent = selectedPracticeExercise ? "Restart practice" : finished ? "Repeat sortie" : "Restart sortie";
+    readyRestart.querySelector(".shell-action-label").textContent = readyScreen.dataset.mode === "pause"
+      ? "Restart" : selectedPracticeExercise ? "Restart practice" : finished ? "Repeat sortie" : "Restart sortie";
   }
   if (readyReturn) {
     readyReturn.hidden = ready && !selectedPracticeExercise;
-    readyReturn.textContent = "Aircraft";
+    readyReturn.querySelector(".shell-action-label").textContent = "Aircraft";
   }
   if (readyHandoff) {
     readyHandoff.hidden = !handoffActionAvailable;
@@ -5399,14 +5395,12 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     // already knew, in front of the sky they were looking at. The buttons say it all.
     readyReplay.hidden = true;
     readyKicker.textContent = "";
-    readyTitle.textContent = "Paused";
+    readyTitle.textContent = "";
     readyBrief.textContent = "";
     readySortie.textContent = "";
-    readyConfig.textContent = handoff.occurred
-      ? `${handoff.status} · relief kills ${handoff.reliefKills}`
-      : "";
+    readyConfig.textContent = "";
     if (readySortieLabel) readySortieLabel.textContent = "";
-    if (readyConfigLabel) readyConfigLabel.textContent = handoff.occurred ? "Handoff" : "";
+    if (readyConfigLabel) readyConfigLabel.textContent = "";
     if (readyControls) readyControls.textContent = "";
     readyStart.textContent = "Resume";
     readyHint.textContent = "";
