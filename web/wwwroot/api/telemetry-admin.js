@@ -116,9 +116,9 @@ function validateBlobUrl(raw) {
     || url.username
     || url.password
     || url.hash
-    || !url.pathname.startsWith("/telemetry/")
+    || !/^\/(?:telemetry\/[^/]+\/[^/]+\.jsonl\.gz|reports\/\d{4}-\d{2}-\d{2}\/[A-Za-z0-9_-]{1,128}\.(?:json\.gz|jpg))$/.test(url.pathname)
   ) {
-    throw new AdminRequestError(400, "url must identify one telemetry object in Vercel Blob");
+    throw new AdminRequestError(400, "url must identify one telemetry or feedback report object in Vercel Blob");
   }
   return url;
 }
@@ -214,8 +214,9 @@ async function readOneListPage(requestUrl, {
   maximumItems = MAX_LIST_ITEMS,
 } = {}) {
   const prefix = requestUrl.searchParams.get("prefix") || "telemetry/";
-  if (!prefix.startsWith("telemetry/") || prefix.length > 1024) {
-    throw new AdminRequestError(400, "prefix must start with telemetry/");
+  const reportPrefix = prefix === "reports/" || /^reports\/\d{4}-\d{2}-\d{2}\/$/.test(prefix);
+  if ((!prefix.startsWith("telemetry/") && !reportPrefix) || prefix.length > 1024) {
+    throw new AdminRequestError(400, "prefix must start with telemetry/ or reports/");
   }
   const limit = boundedInteger(
     requestUrl.searchParams.get("limit") || String(defaultLimit),
@@ -248,7 +249,8 @@ async function readOneListPage(requestUrl, {
       throw new AdminRequestError(502, "Blob list response exceeded its item limit");
     }
     for (const blob of payload.blobs) {
-      if (!blob || typeof blob.pathname !== "string" || !blob.pathname.startsWith(prefix)) {
+      if (!blob || typeof blob.pathname !== "string" || !blob.pathname.startsWith(prefix)
+        || (reportPrefix && !/^reports\/\d{4}-\d{2}-\d{2}\/[A-Za-z0-9_-]{1,128}\.(?:json\.gz|jpg)$/.test(blob.pathname))) {
         throw new AdminRequestError(502, "Blob list returned an object outside the requested prefix");
       }
     }

@@ -176,6 +176,43 @@ test("list rejects broad, oversized, and malformed metadata before returning it"
   });
 });
 
+test("operator can list only bounded feedback report objects", async () => {
+  const listed = {
+    pathname: "reports/2026-10-15/report_123.json.gz",
+    url: "https://store.private.blob.vercel-storage.com/reports/2026-10-15/report_123.json.gz",
+    size: 123,
+    etag: "report-etag",
+  };
+  let requestedPrefix;
+  await withEnvironment(async (url) => {
+    requestedPrefix = new URL(url).searchParams.get("prefix");
+    return jsonResponse({ blobs: [listed], hasMore: false, cursor: null });
+  }, async () => {
+    const response = responseRecorder();
+    await telemetryAdmin(request("/telemetry-admin?action=list&prefix=reports%2F&limit=1"), response);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(JSON.parse(response.body.toString()), {
+      prefix: "reports/", limit: 1, blobs: [listed], hasMore: false, cursor: null, autoPaginated: false,
+    });
+  });
+  assert.equal(requestedPrefix, "reports/");
+});
+
+test("feedback report get accepts the JPEG sibling under its dated report path", async () => {
+  const body = Buffer.from("jpeg bytes");
+  const blobUrl = "https://store.private.blob.vercel-storage.com/reports/2026-10-15/report_123.jpg";
+  await withEnvironment(async () => new Response(body, {
+    status: 200,
+    headers: { "content-length": String(body.length), etag: '"jpg-etag"' },
+  }), async () => {
+    const query = new URLSearchParams({ action: "get", url: blobUrl, expectedSize: String(body.length), etag: "jpg-etag" });
+    const response = responseRecorder();
+    await telemetryAdmin(request(`/telemetry-admin?${query}`), response);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body, body);
+  });
+});
+
 test("get returns exactly one selected gzip chunk when size and ETag still match", async () => {
   const contents = Buffer.from("selected gzip bytes");
   const blobUrl = "https://store.private.blob.vercel-storage.com/telemetry/web-123/batch.jsonl.gz";
