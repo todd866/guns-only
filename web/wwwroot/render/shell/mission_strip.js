@@ -17,11 +17,12 @@ export function missionStrip(state, { mode = "", startSeconds = null } = {}) {
   };
 }
 
-export function paintMissionStrip(root, state, { visible = false, ...options } = {}) {
+export function paintMissionStrip(root, state, options = {}) {
   if (!root) return;
-  root.hidden = !visible;
-  if (!visible) return;
   const model = missionStrip(state, options);
+  // Prepare the current session even while the picker is showing. The shell's data-mode
+  // controls visibility, so a mode transition cannot expose an unpainted/stale strip.
+  root.hidden = !model.mode && model.clock === null && model.engagements === null;
   const mode = root.querySelector("#ready-mission-mode");
   if (mode.textContent !== model.mode) mode.textContent = model.mode;
   mode.parentElement.hidden = !model.mode;

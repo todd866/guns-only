@@ -4311,6 +4311,8 @@
     .console-number { font: 600 28px/1.1 var(--console-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
     .console-unit { color: var(--console-muted); font: 500 16px/1.2 var(--console-font); }
     :root #ready-screen #ready-start.console-primary,
+    :root #ready-screen[data-mode="program"] #ready-start.console-primary:is(:hover, :focus-visible),
+    :root #ready-screen[data-f22-result] .f22-actions .console-primary,
     :root #ready-screen .console-primary,
     :root #ready-screen #ready-start.console-primary:is(:hover, :focus-visible) {
       display: flex;
@@ -4325,8 +4327,8 @@
       border: 1px solid var(--console-accent);
       border-top-color: #ffe7b5;
       border-radius: var(--console-radius);
-      color: var(--console-accent);
-      background: var(--console-key);
+      color: #241b0b;
+      background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
       box-shadow: inset 0 1px 0 rgb(255 255 255 / .3);
       font: 650 28px/1.2 var(--console-font);
       letter-spacing: 0;
@@ -4435,12 +4437,20 @@
     :root #ready-screen[data-f22-result] .f22-result button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; color: var(--console-ink); font: 550 18px/1.2 var(--console-font); }
     :root #ready-screen[data-f22-result] .f22-info { min-width: 48px; }
     :root #ready-screen[data-f22-result] .f22-actions { padding-top: 12px; }
-    :root #ready-screen[data-f22-result] .f22-actions .console-primary { flex: 1.5 1 0; width: auto; min-height: 72px; color: var(--console-accent); font-size: 28px; }
+    :root #ready-screen[data-f22-result] .f22-actions .console-primary { flex: 1.5 1 0; width: auto; min-height: 72px; font-size: 28px; }
     :root #ready-screen[data-f22-result] [data-status="lost"] > .f22-sym { color: var(--console-bad); }
     :root #ready-screen[data-f22-result] [data-status="open"] > .f22-sym { color: var(--console-muted); }
     /* Keep the result instrument's action ownership; generic actions must never leak through. */
     :root #ready-screen[data-f22-result] :is(#ready-start, .ready-secondary-actions),
     :root #ready-screen :is(.console-actions button[hidden], .f22-result button[hidden], .f22-row[hidden]) { display: none; }
+    /* Mode owns the action set. [hidden] is reserved for per-sortie exceptions; changing
+       data-mode must never retain the picker row or require a second set of visibility flags. */
+    :root #ready-screen .console-actions button[data-console-modes] { display: none; }
+    :root #ready-screen[data-mode="program"] .console-actions button[data-console-modes~="program"]:not([hidden]),
+    :root #ready-screen[data-mode="pause"] .console-actions button[data-console-modes~="pause"]:not([hidden]),
+    :root #ready-screen[data-mode="debrief"] .console-actions button[data-console-modes~="debrief"]:not([hidden]),
+    :root #ready-screen[data-mode="intro"] .console-actions button[data-console-modes~="intro"]:not([hidden]) { display: flex; }
+    #ready-screen:not([data-mode="pause"]) #ready-mission-strip { display: none; }
     :root #ready-screen :is(#ready-install-hint, #ready-laptop-hint) { margin: 0 auto; color: var(--console-muted); font: 500 15px/1.3 var(--console-font); }
     :root #ready-screen #ready-replay { display: flex; align-items: center; justify-content: center; gap: 8px; max-width: none; min-height: 48px; margin: 0; font: 500 16px/1.2 var(--console-font); }
     :root #ready-screen #ready-replay[hidden] { display: none; }
@@ -5044,14 +5054,14 @@ Two engagements, then recover · H controls · R restarts</p>
           <button id="ready-start" class="console-primary" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-play"/></svg><span class="shell-action-label">Fly First Merge</span></button>
           <button id="ready-replay" type="button" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-replay"/></svg><span class="shell-action-label">Replay incident again</span></button>
           <div class="ready-secondary-actions console-actions">
-            <button id="ready-practice" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="shell-action-label">Practice</span></button>
-            <button id="ready-logbook" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-book"/></svg><span class="shell-action-label">Logbook</span></button>
-            <button id="ready-intro-replay" type="button" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-replay"/></svg><span class="shell-action-label">Replay valley intro</span></button>
-            <button id="ready-return" type="button" hidden title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-jet"/></svg><span class="shell-action-label">Aircraft</span></button>
-            <button id="ready-restart" type="button" hidden title="Restart sortie"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span class="shell-action-label">Restart</span></button>
-            <button id="ready-settings" type="button" title="Build __RELEASE_BUILD__ · verifying"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-gear"/></svg><span class="shell-action-label">Settings</span></button>
-            <button id="ready-report" type="button" disabled title="Report (F8)"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-flag"/></svg><span class="shell-action-label">Report</span></button>
-            <button id="ready-handoff" type="button" hidden disabled title="Call it a day and return to base"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-rtb"/></svg><span class="shell-action-label">RTB</span></button>
+            <button id="ready-practice" type="button" data-console-modes="program pause debrief intro"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="shell-action-label">Practice</span></button>
+            <button id="ready-logbook" type="button" data-console-modes="program pause debrief intro"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-book"/></svg><span class="shell-action-label">Logbook</span></button>
+            <button id="ready-intro-replay" type="button" data-console-modes="program intro" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-replay"/></svg><span class="shell-action-label">Replay valley intro</span></button>
+            <button id="ready-return" type="button" data-console-modes="pause debrief intro" title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-jet"/></svg><span class="shell-action-label">Aircraft</span></button>
+            <button id="ready-restart" type="button" data-console-modes="pause debrief" title="Restart sortie"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span class="shell-action-label">Restart</span></button>
+            <button id="ready-settings" type="button" data-console-modes="program pause debrief intro" title="Build __RELEASE_BUILD__ · verifying"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-gear"/></svg><span class="shell-action-label">Settings</span></button>
+            <button id="ready-report" type="button" data-console-modes="program pause debrief intro" disabled title="Report (F8)"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-flag"/></svg><span class="shell-action-label">Report</span></button>
+            <button id="ready-handoff" type="button" data-console-modes="pause" disabled title="Call it a day and return to base"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-rtb"/></svg><span class="shell-action-label">RTB</span></button>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <!--

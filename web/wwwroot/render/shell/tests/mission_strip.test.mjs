@@ -33,14 +33,19 @@ test("painting a different mission hides stale metrics without rebuilding contro
   const root = { querySelector: id => ({ "#ready-mission-mode": mode,
     "#ready-mission-clock": clock, "#ready-mission-engagements": engagements })[id] };
   paintMissionStrip(root, { attempt_elapsed_s: 0, engagements_won: 0, engagement_cap: 2 },
-    { visible: true, mode: "Guns Only" });
+    { mode: "Guns Only" });
   assert.equal(root.hidden, false);
   assert.equal(clock.number.textContent, "0:00");
   assert.equal(engagements.number.textContent, "0/2");
-  paintMissionStrip(root, {}, { visible: true, mode: "Circuits" });
+  paintMissionStrip(root, {}, { mode: "Circuits" });
   assert.equal(mode.textContent, "Circuits");
   assert.equal(clock.hidden, true);
   assert.equal(engagements.hidden, true);
-  paintMissionStrip(root, {}, { visible: false });
+  paintMissionStrip(root, {});
   assert.equal(root.hidden, true);
+  assert.equal(mode.parentElement.hidden, true);
+  paintMissionStrip(root, { attempt_elapsed_s: 12 });
+  assert.equal(root.hidden, false, "a clock alone is enough session evidence to show");
+  assert.equal(clock.hidden, false);
+  assert.equal(clock.number.textContent, "0:12");
 });

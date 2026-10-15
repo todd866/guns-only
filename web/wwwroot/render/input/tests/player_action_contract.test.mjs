@@ -378,10 +378,10 @@ test("every visible HTML button is wired through one auditable action surface", 
 test("pause-menu call-it-a-day is authoritative, deliberate, and observes acceptance", () => {
   assert.match(appSource,
     /const handoffActionAvailable = sessionPaused[\s\S]*?pauseReasons\.size === 1[\s\S]*?handoff\.available/,
-    "the pause action must remain hidden unless the current authoritative phase is AVAILABLE");
+    "the pause action must remain disabled unless the current authoritative phase is AVAILABLE");
   assert.match(appSource,
-    /readyHandoff\.hidden = !handoffActionAvailable[\s\S]*?readyHandoff\.disabled = !handoffActionAvailable/,
-    "visibility and enabled state must share the same authority gate");
+    /readyHandoff\.disabled = !handoffActionAvailable/,
+    "RTB must keep its authority gate even though pause always exposes the action");
   assert.match(appSource,
     /function requestCombatHandoffFromPause\(\)[\s\S]*?setPauseReason\("session", false\)[\s\S]*?const accepted = typedRequest\s*\? bridge\.RequestReturnToBase\(\) === true\s*: pressMappedKey\(code, "pause-handoff", knockItOffControl\.gkey\)[\s\S]*?if \(!accepted\)[\s\S]*?setPauseReason\("session", true\)[\s\S]*?if \(!typedRequest\) releaseMappedKey\(code, "pause-handoff"\)/,
     "the pause request must resume authority, observe typed acceptance, keep the key pulse on the legacy branch, restore pause on rejection, and release only a legacy press");
@@ -389,7 +389,7 @@ test("pause-menu call-it-a-day is authoritative, deliberate, and observes accept
     /function requestCombatHandoffFromNav\(\)[\s\S]*?const accepted = typedRequest\s*\? bridge\.RequestReturnToBase\(\) === true\s*: pressMappedKey\(code, "nav-rtb", knockItOffControl\.gkey\)[\s\S]*?if \(!accepted\)[\s\S]*?source: "navigation-button"[\s\S]*?return false[\s\S]*?if \(!typedRequest\) releaseMappedKey\(code, "nav-rtb"\)/,
     "the navigation action must observe typed acceptance, report rejection, and keep press/release on the bounded legacy branch");
   assert.match(indexSource,
-    /<button id="ready-handoff"[^>]*hidden[^>]*disabled[^>]*>[^]*?<span class="shell-action-label">RTB<\/span><\/button>/,
+    /<button id="ready-handoff"[^>]*data-console-modes="pause"[^>]*disabled[^>]*>[^]*?<span class="shell-action-label">RTB<\/span><\/button>/,
     "the mobile-safe pause action must start unavailable before authoritative state arrives");
   assert.match(appSource,
     /title: "F-22A vs Su-27S"[\s\S]*?controls: "Arrows fly[^\n]*\\nO calls it a day and starts RTB · G gear/,

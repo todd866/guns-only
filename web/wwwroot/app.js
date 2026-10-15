@@ -5144,7 +5144,7 @@ function renderPauseUi(state = latestState) {
   readyScreen.dataset.mode = (firstRunReady || practiceReady)
     ? "intro" : ready ? "program" : (finished || combatResult) ? "debrief" : "pause";
   paintMissionStrip(readyMissionStrip, state, {
-    visible: readyScreen.dataset.mode === "pause",
+    // Keep session values prepared; data-mode owns whether the strip is displayed.
     mode: selectedPracticeExercise ? practiceExercise(selectedPracticeExercise)?.title : brief.title,
     startSeconds: attemptStartSimSeconds,
   });
@@ -5253,7 +5253,7 @@ function renderPauseUi(state = latestState) {
       ? "Choose another mission" : "Replay valley intro";
   }
   if (readyRestart) {
-    readyRestart.hidden = ready || (finished && !!selectedPracticeExercise);
+    readyRestart.hidden = finished && !!selectedPracticeExercise;
     // The primary finished action may advance the programme before it launches. This utility
     // repeats the sortie which just ended, so giving both controls the old "Fly again" label hid
     // a real navigation decision from the pilot.
@@ -5261,11 +5261,11 @@ function renderPauseUi(state = latestState) {
       ? "Restart" : selectedPracticeExercise ? "Restart practice" : finished ? "Repeat sortie" : "Restart sortie";
   }
   if (readyReturn) {
-    readyReturn.hidden = ready && !selectedPracticeExercise;
+    readyReturn.hidden = firstRunReady;
     readyReturn.querySelector(".shell-action-label").textContent = "Aircraft";
   }
   if (readyHandoff) {
-    readyHandoff.hidden = !handoffActionAvailable;
+    // Pause always exposes RTB; authority controls whether it can be used.
     readyHandoff.disabled = !handoffActionAvailable;
   }
 
