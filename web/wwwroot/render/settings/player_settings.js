@@ -29,7 +29,7 @@ export const CONTROL_BINDINGS = Object.freeze([
 ]);
 
 const RESERVED_CODES = new Set([
-  "Escape", "Enter", "NumpadEnter", "Tab", "F1", "Backquote",
+  "Escape", "Enter", "NumpadEnter", "Tab", "F1", "Backquote", "F8",
   "KeyC", "KeyH", "KeyM", "KeyR", "KeyT",
   "KeyE", "KeyN", "KeyI", "TestFlightGearHornCutout",
   "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8",

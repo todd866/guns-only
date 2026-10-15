@@ -531,3 +531,28 @@ test("summary reports legacy flat objects separately and still reads modern chun
   });
   assert.equal(fetchCalls, 2);
 });
+
+test("summary credential cannot enumerate feedback reports", async () => {
+  await withEnvironment(async () => { throw new Error("must not access Blob"); }, async () => {
+    const response = responseRecorder();
+    await telemetryAdmin(request("/telemetry-admin?action=summary&prefix=reports/", { token: REPORT_TOKEN }), response);
+    assert.equal(response.statusCode, 400);
+    const raw = responseRecorder();
+    await telemetryAdmin(request("/telemetry-admin?action=list&prefix=reports/", { token: REPORT_TOKEN }), raw);
+    assert.equal(raw.statusCode, 401);
+  });
+});
+
+test("report support preserves retrieval of legacy flat telemetry paths", async () => {
+  const bytes = gzipSync('{"k":"st"}\n');
+  const blobUrl = "https://store.private.blob.vercel-storage.com/telemetry/legacy-session.jsonl.gz";
+  await withEnvironment(async () => new Response(bytes, { headers: {
+    "content-length": String(bytes.length), etag: '"legacy"',
+  } }), async () => {
+    const query = new URLSearchParams({ action: "get", url: blobUrl, expectedSize: String(bytes.length), etag: "legacy" });
+    const response = responseRecorder();
+    await telemetryAdmin(request(`/telemetry-admin?${query}`), response);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body, bytes);
+  });
+});

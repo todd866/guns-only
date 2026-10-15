@@ -116,7 +116,8 @@ function validateBlobUrl(raw) {
     || url.username
     || url.password
     || url.hash
-    || !/^\/(?:telemetry\/[^/]+\/[^/]+\.jsonl\.gz|reports\/\d{4}-\d{2}-\d{2}\/[A-Za-z0-9_-]{1,128}\.(?:json\.gz|jpg))$/.test(url.pathname)
+    || (!url.pathname.startsWith("/telemetry/")
+      && !/^\/reports\/\d{4}-\d{2}-\d{2}\/[A-Za-z0-9_-]{1,128}\.(?:json\.gz|jpg)$/.test(url.pathname))
   ) {
     throw new AdminRequestError(400, "url must identify one telemetry or feedback report object in Vercel Blob");
   }
@@ -755,6 +756,10 @@ function finishSummary({ page, chunksRead, compressedBytes, uncompressedBytes, r
 }
 
 async function summarizeOnePage(requestUrl) {
+  if (requestUrl.searchParams.has("prefix")
+      && !requestUrl.searchParams.get("prefix").startsWith("telemetry/")) {
+    throw new AdminRequestError(400, "summary prefix must start with telemetry/");
+  }
   const startedAt = Date.now();
   const page = await readOneListPage(requestUrl, {
     defaultLimit: 20,
@@ -901,7 +906,9 @@ module.exports = async function telemetryAdmin(request, response) {
       const result = await getOneChunk(requestUrl);
       response.setHeader("Content-Length", String(result.body.byteLength));
       response.setHeader("ETag", result.etag);
-      finish(response, 200, result.body, "application/gzip");
+      finish(response, 200, result.body,
+        new URL(requestUrl.searchParams.get("url")).pathname.endsWith(".jpg")
+          ? "image/jpeg" : "application/gzip");
       return;
     }
     if (action === "summary") {

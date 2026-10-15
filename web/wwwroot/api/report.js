@@ -1,15 +1,16 @@
 // Feedback report upload endpoint. This intentionally uses the Vercel Blob HTTP API so the
 // wwwroot deployment has no npm build step.
 const { promisify } = require("node:util");
-const { gzip } = require("node:zlib");
+const { gunzip } = require("node:zlib");
 
 const BLOB_API = "https://blob.vercel-storage.com";
 const STORAGE_DEADLINE_MS = 8_000;
 const MAX_WRITE_ATTEMPTS = 4;
-const MAX_REPORT_JSON_BYTES = 2 * 1024 * 1024;
+const MAX_REPORT_JSON_BYTES = 16 * 1024 * 1024;
+const MAX_REPORT_GZIP_BYTES = 1.5 * 1024 * 1024;
 const MAX_JPEG_BYTES = 1.5 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 4.2 * 1024 * 1024;
-const gzipAsync = promisify(gzip);
+const gunzipAsync = promisify(gunzip);
 const rateLimitBuckets = new Map();
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_DEFAULT_MAX = 30;
@@ -69,7 +70,9 @@ async function readJsonBody(request) {
       return JSON.parse(request.body.toString());
     }
     if (typeof request.body === "object") {
-      const encoded = JSON.stringify(request.body);
+      let encoded;
+      try { encoded = JSON.stringify(request.body); }
+      catch { throw new InvalidReportError(); }
       if (Buffer.byteLength(encoded) > MAX_REQUEST_BYTES) throw new RequestBodyTooLargeError();
       return request.body;
     }
@@ -87,7 +90,16 @@ async function readJsonBody(request) {
 
 function safeId(value) {
   return typeof value === "string" && value.length >= 16 && value.length <= 128
-    && /^[A-Za-z0-9._-]+$/.test(value) ? value : null;
+    && /^[A-Za-z0-9_-]+$/.test(value) ? value : null;
+}
+
+function decodeBase64(value, maxBytes) {
+  if (typeof value !== "string" || value.length === 0 || value.length % 4 !== 0
+    || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) throw new InvalidReportError();
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.length > maxBytes) throw new RequestBodyTooLargeError();
+  if (decoded.toString("base64") !== value) throw new InvalidReportError();
+  return decoded;
 }
 
 function reportDate(created) {
@@ -109,6 +121,12 @@ function rateLimited(request) {
   const key = clientIp(request);
   let bucket = rateLimitBuckets.get(key);
   if (!bucket || now - bucket.start >= RATE_LIMIT_WINDOW_MS) {
+    if (rateLimitBuckets.size >= 10_000) {
+      for (const [staleKey, stale] of rateLimitBuckets) {
+        if (now - stale.start >= RATE_LIMIT_WINDOW_MS) rateLimitBuckets.delete(staleKey);
+      }
+      if (rateLimitBuckets.size >= 10_000 && !rateLimitBuckets.has(key)) return true;
+    }
     bucket = { start: now, count: 0 };
     rateLimitBuckets.set(key, bucket);
   }
@@ -201,28 +219,40 @@ module.exports = async function report(request, response) {
 
   try {
     const payload = await readJsonBody(request);
-    const report = payload && payload.report;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)
+      || typeof payload.reportGzip !== "string" || typeof payload.jpeg !== "string") {
+      throw new InvalidReportError();
+    }
+    const reportCompressed = decodeBase64(payload.reportGzip, MAX_REPORT_GZIP_BYTES);
+    let report;
+    try {
+      const inflated = await gunzipAsync(reportCompressed, { maxOutputLength: MAX_REPORT_JSON_BYTES });
+      report = JSON.parse(inflated.toString("utf8"));
+    } catch (error) {
+      if (error && (error.code === "ERR_BUFFER_TOO_LARGE" || /maxOutputLength|maximum output/i.test(String(error.message)))) {
+        throw new RequestBodyTooLargeError();
+      }
+      throw new InvalidReportError();
+    }
     if (!report || typeof report !== "object" || Array.isArray(report)
-      || !safeId(report.id) || !reportDate(report.created)
-      || typeof payload.jpeg !== "string") throw new InvalidReportError();
-    const jpeg = Buffer.from(payload.jpeg, "base64");
-    if (!jpeg.length || jpeg.length > MAX_JPEG_BYTES || !jpeg.subarray(0, 2).equals(Buffer.from([0xff, 0xd8]))) {
+      || !safeId(report.id) || !reportDate(report.created)) throw new InvalidReportError();
+    const jpeg = decodeBase64(payload.jpeg, MAX_JPEG_BYTES);
+    if (!jpeg.length || !jpeg.subarray(0, 2).equals(Buffer.from([0xff, 0xd8]))) {
       throw new InvalidReportError();
     }
     const json = Buffer.from(JSON.stringify(report), "utf8");
     if (json.length > MAX_REPORT_JSON_BYTES) throw new RequestBodyTooLargeError();
     const path = `reports/${reportDate(report.created)}/${report.id}`;
-    const compressed = await gzipAsync(json, { level: 6 });
     const controller = new AbortController();
     const deadline = setTimeout(() => controller.abort(), STORAGE_DEADLINE_MS);
     try {
-      await writeWithRetry(`${path}.json.gz`, compressed, token, "application/gzip", controller.signal);
+      await writeWithRetry(`${path}.json.gz`, reportCompressed, token, "application/gzip", controller.signal);
       await writeWithRetry(`${path}.jpg`, jpeg, token, "image/jpeg", controller.signal);
     } finally { clearTimeout(deadline); }
     finish(response, 204);
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError) { finish(response, 413, "Report request is too large"); return; }
-    if (error instanceof InvalidReportError || error instanceof SyntaxError || error instanceof TypeError) {
+    if (error instanceof InvalidReportError || error instanceof SyntaxError) {
       finish(response, 400, "Report payload is invalid"); return;
     }
     console.error("report persistence failed:", error instanceof Error ? error.message : String(error));
@@ -231,4 +261,4 @@ module.exports = async function report(request, response) {
   }
 };
 
-module.exports._test = { MAX_JPEG_BYTES, MAX_REPORT_JSON_BYTES, MAX_REQUEST_BYTES };
+module.exports._test = { MAX_JPEG_BYTES, MAX_REPORT_JSON_BYTES, MAX_REPORT_GZIP_BYTES, MAX_REQUEST_BYTES };

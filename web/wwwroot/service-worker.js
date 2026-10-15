@@ -15,6 +15,7 @@ const CACHE = `guns-only-${RELEASE_BUILD}`;
 // a lie. They must fail honestly when the network is gone.
 const NEVER_CACHE = [
   /^\/telemetry(?:\/|$)/,
+  /^\/report(?:\/|$)/,
   /^\/telemetry-admin(?:\/|$)/,
   /^\/api(?:\/|$)/,
 ];
