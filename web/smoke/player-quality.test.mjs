@@ -103,9 +103,13 @@ test("the aircraft picker keeps every secondary action reachable on a small scre
         `${width}x${height}: choosing a poster moved Fly off screen (${primary.top}..${primary.bottom})`);
       const row = await page.locator(".ready-secondary-actions").evaluate((node) => {
         const box = node.getBoundingClientRect();
+        const mode = node.closest('#ready-screen').dataset.mode;
         return {
           scroll: node.scrollWidth, client: node.clientWidth,
-          buttons: [...node.querySelectorAll("button")].filter((button) => !button.hidden).map((button) => {
+          // Mode membership is CSS-owned; [hidden] only supplies per-sortie exceptions.
+          // Keep expected controls even if CSS accidentally collapses or hides them.
+          buttons: [...node.querySelectorAll("button")].filter((button) => !button.hidden
+            && button.dataset.consoleModes.split(' ').includes(mode)).map((button) => {
             const rect = button.getBoundingClientRect();
             return { label: button.textContent.trim(), left: rect.left, right: rect.right, width: rect.width };
           }),
@@ -116,7 +120,7 @@ test("the aircraft picker keeps every secondary action reachable on a small scre
       assert.ok(row.scroll <= row.client + 1,
         `${width}x${height}: secondary actions overflow ${row.scroll} > ${row.client}`);
       for (const button of row.buttons) {
-        assert.ok(button.width > 0, `${width}x${height}: "${button.label}" collapsed to zero width`);
+        assert.ok(button.width >= 44, `${width}x${height}: "${button.label}" needs a usable width (${button.width})`);
         assert.ok(button.left >= row.left - 1 && button.right <= row.right + 1,
           `${width}x${height}: "${button.label}" is clipped outside the action row`);
         assert.ok(button.left >= -1 && button.right <= width + 1,
@@ -125,6 +129,74 @@ test("the aircraft picker keeps every secondary action reachable on a small scre
     }
     assert.deepEqual(errors, []);
   } finally { await browser.close(); await site.close(); }
+});
+
+// Exercise every action set against the real cascade, including the seven-button pause row.
+// The live picker smoke above supplies selection/scroll coverage; these fixtures isolate sizing.
+test("every console mode keeps usable action targets in phone portrait and landscape", async () => {
+  const html = await readFile(new URL('../wwwroot/index.html', import.meta.url), 'utf8');
+  const styles = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+  const generic = html.match(/<div class="ready-secondary-actions console-actions">([\s\S]*?)<\/div>/)[1];
+  const result = html.match(/<div class="f22-actions console-actions">([\s\S]*?)<\/div>/)[1];
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  try {
+    for (const [width, height] of [[844, 390], [667, 375], [390, 844]]) {
+      const page = await browser.newPage({ viewport: { width, height }, hasTouch: true, isMobile: true });
+      try {
+        for (const [mode, ids] of [
+          ['program', ['practice', 'logbook', 'intro-replay', 'settings', 'report']],
+          ['pause', ['practice', 'logbook', 'return', 'restart', 'settings', 'report', 'handoff']],
+          ['debrief', ['practice', 'logbook', 'return', 'restart', 'settings', 'report']],
+          ['intro', ['practice', 'logbook', 'intro-replay', 'settings', 'report']],
+          ['f22', ['again', 'recover', 'logbook', 'aircraft', 'settings']],
+        ]) {
+          const f22 = mode === 'f22';
+          const expected = ids.map(id => `${f22 ? 'f22' : 'ready'}-${id}`);
+          const row = f22 ? `<section class="f22-result"><div class="f22-actions console-actions">${result}</div></section>`
+            : `<div class="ready-secondary-actions console-actions">${generic}</div>`;
+          await page.setContent(`<meta name="viewport" content="width=device-width,initial-scale=1">
+            <style>${styles}</style><div id="ready-screen" class="visible" data-mode="${f22 ? 'debrief' : mode}"
+              ${f22 ? 'data-f22-result="combat"' : ''}>
+              <div class="ready-card"><div class="ready-layout"><div class="ready-selector"></div>
+                <section class="ready-briefing console-surface">${row}</section></div></div></div>`);
+          const geometry = await page.evaluate((expected) => {
+            document.documentElement.classList.add('touch-mode', 'run-paused');
+            const mode = document.querySelector('#ready-screen').dataset.mode;
+            // Show the full authored set; intro's contextual alternative occupies one slot.
+            for (const button of document.querySelectorAll('button'))
+              button.hidden = button.id === 'ready-return' && mode === 'intro';
+            const labelFor = id => document.querySelector(`#${id} .shell-action-label`);
+            if (mode === 'intro') labelFor('ready-intro-replay').textContent = 'Choose another mission';
+            if (mode === 'debrief' && labelFor('ready-restart')) {
+              labelFor('ready-restart').textContent = 'Repeat sortie';
+              labelFor('ready-practice').textContent = 'Practise landing';
+            }
+            const row = document.querySelector('.console-actions');
+            const box = row.getBoundingClientRect();
+            return { left: box.left, right: box.right, scroll: row.scrollWidth, client: row.clientWidth,
+              visible: [...row.querySelectorAll('button')]
+                .filter(button => getComputedStyle(button).display !== 'none').map(button => button.id),
+              buttons: expected.map(id => {
+                const button = document.getElementById(id);
+                const rect = button.getBoundingClientRect();
+                const label = button.querySelector('.shell-action-label');
+                return { id, left: rect.left, right: rect.right, width: rect.width, height: rect.height,
+                  labelScroll: label.scrollWidth, labelWidth: label.clientWidth };
+              }) };
+          }, expected);
+          const context = `${mode} ${width}x${height}`;
+          assert.deepEqual(geometry.visible, expected, `${context}: mode action set changed`);
+          assert.ok(geometry.scroll <= geometry.client + 1, `${context}: action row overflows`);
+          for (const button of geometry.buttons) {
+            assert.ok(button.width >= 44 && button.height >= 44, `${context}: ${button.id} target collapsed`);
+            assert.ok(button.left >= Math.max(0, geometry.left) - 1
+              && button.right <= Math.min(width, geometry.right) + 1, `${context}: ${button.id} is clipped`);
+            assert.ok(button.labelScroll <= button.labelWidth + 1, `${context}: ${button.id} label overflows`);
+          }
+        }
+      } finally { await page.close(); }
+    }
+  } finally { await browser.close(); }
 });
 
 // Whatever else a small screen does to a brief, the action that starts the thing has to be on it.

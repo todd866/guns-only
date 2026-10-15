@@ -4048,7 +4048,7 @@
       #sortie-grade, #ready-controls, #ready-correction, #ready-start, #ready-hint,
       #ready-handoff, .ready-secondary-actions) { display: none; }
     :root #ready-screen[data-f22-result][data-mode="debrief"] {
-      /* Result ownership switches immediately; the console itself has the shared entrance. */
+      /* Result ownership switches immediately, including the card's first visible frame. */
       transition: none;
     }
     :root #ready-screen[data-f22-result][data-mode="debrief"] .ready-card {
@@ -4268,6 +4268,18 @@
     :root #ready-screen.visible:is([data-mode="pause"], [data-mode="program"], [data-mode="debrief"]) .ready-card {
       animation: console-enter 200ms ease-out both;
     }
+    /* Results must cover the HUD from their first frame, independently of the page scrim. */
+    :root #ready-screen[data-f22-result][data-mode="debrief"] {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    :root #ready-screen[data-f22-result][data-mode="debrief"] :is(.ready-card, .ready-briefing) {
+      background: var(--console-panel);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      animation: none;
+      opacity: 1;
+    }
     @keyframes console-enter {
       from { opacity: 0; transform: translateY(12px); }
       to { opacity: 1; transform: translateY(0); }
@@ -4340,10 +4352,10 @@
     /* The F-22 result owns its own Again; the console Resume must not reappear under it. */
     :root #ready-screen[data-f22-result] #ready-start.console-primary { display: none; }
     :root #ready-screen #ready-start.console-primary:disabled { color: var(--console-muted); border-color: var(--console-line); background: var(--console-panel); box-shadow: none; cursor: default; }
-    :root #ready-screen .console-actions { display: flex; flex-wrap: nowrap; gap: 0; width: 100%; max-width: none; padding: 0; margin: 0; border: 0; background: none; }
+    :root #ready-screen .console-actions { display: flex; flex-wrap: wrap; gap: 0; width: 100%; max-width: none; padding: 0; margin: 0; border: 0; background: none; }
     :root #ready-screen .console-actions button:not(.console-primary) {
       display: flex;
-      flex: 1 1 0;
+      flex: 1 0 5rem;
       flex-direction: column;
       align-items: center;
       justify-content: center;
@@ -4478,9 +4490,6 @@
       #ready-mission-mode { font-size: 22px; }
       .console-number { font-size: 22px; }
       .console-unit { font-size: 15px; }
-      :root #ready-screen .console-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-      :root #ready-screen .console-actions button:not(.console-primary) { min-height: 72px; gap: 8px; padding: 8px 3px; border-left: 0; font-size: 15px; }
-      :root #ready-screen .console-actions #ready-intro-replay { grid-column: span 2; }
       :root #ready-screen #ready-start.console-primary,
     :root #ready-screen .console-primary,
       :root #ready-screen #ready-start.console-primary:is(:hover, :focus-visible) { min-height: 60px; padding: 10px; font-size: 24px; }
@@ -4494,9 +4503,15 @@
       :root #ready-screen[data-f22-result] .f22-correction { font-size: 16px; }
       :root #ready-screen[data-f22-result] #f22-practice { max-width: 105px; padding: 6px; font-size: 15px; }
       :root #ready-screen[data-f22-result] #f22-practice .shell-icon { display: none; }
-      :root #ready-screen[data-f22-result] .f22-actions .console-primary { grid-column: 1 / -1; min-height: 60px; font-size: 24px; }
       :root #feedback-report.console-surface { padding: 8px; font-size: 15px; }
       :root #feedback-report .feedback-row { gap: 6px; }
+    }
+    /* Four usable targets per row in both phone orientations, including pause's seven actions. */
+    @media (max-width: 760px), (max-height: 500px) and (orientation: landscape) {
+      :root #ready-screen .console-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      :root #ready-screen .console-actions button:not(.console-primary) { min-height: 72px; gap: 8px; padding: 8px 3px; border-left: 0; font-size: 15px; }
+      :root #ready-screen .console-actions #ready-intro-replay { grid-column: span 2; }
+      :root #ready-screen[data-f22-result] .f22-actions .console-primary { grid-column: 1 / -1; min-height: 60px; font-size: 24px; }
     }
     @media (max-height: 500px) and (orientation: landscape) {
       :root #ready-screen[data-mode="program"] .ready-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 1fr); align-items: start; gap: 12px; }
