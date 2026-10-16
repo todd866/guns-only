@@ -50,6 +50,13 @@ public sealed class TimelineSecond {
 }
 public sealed record EngagementTension(int Engagement, double Seconds, double SimSeconds, double Mean, double Peak);
 public sealed record LabEvent(double Second, double SimSecond, string Kind, string Source, string Target, int Count);
+public sealed class WaveContact {
+    public int Wave { get; init; }
+    public double PreviousWinSimSecond { get; init; }
+    public double WarningSeconds { get; init; }
+    public double? FirstThreatSimSecond { get; set; }
+    public bool CanceledForRtb { get; set; }
+}
 public sealed class RunResult {
     public int SchemaVersion { get; init; } = 2;
     public int Beat { get; init; }
@@ -93,6 +100,7 @@ public sealed class RunResult {
     public double WaveScoreMultiplier { get; set; }
     public bool RtbBounceScheduled { get; set; }
     public bool RtbBounceSpawned { get; set; }
+    public List<WaveContact> WaveContacts { get; set; } = new();
     public Dictionary<string, double> PhaseSeconds { get; set; } = new();
     public Dictionary<string, double> SimPhaseSeconds { get; set; } = new();
     public List<EngagementTension> EngagementTensions { get; set; } = new();
@@ -152,6 +160,23 @@ public sealed class ExperienceObserver {
         double g = rotary ? 0 : s.Player.LastNz;
         double energy = position.Y + speed * speed / (2 * FlightModel.G0);
         (bool threat, double proximity, double closure) = rotary ? (false, 0, 0) : Threat(s);
+        // Keep arrival evidence separate from the broad action/dead-air proxy:
+        // pilot decisions cannot reset this win-to-physical-threat clock.
+        if (s.EscalatingWavesEnabled) {
+            int nextWave = s.EngagementsWon + 1;
+            if (s.IncomingWaveBearingRad is not null
+                && !result.WaveContacts.Any(w => w.Wave == nextWave))
+                result.WaveContacts.Add(new WaveContact {
+                    Wave = nextWave,
+                    PreviousWinSimSecond = s.TimeSeconds,
+                    WarningSeconds = s.OpponentReplacementSeconds,
+                });
+            foreach (var contact in result.WaveContacts.Where(w => w.FirstThreatSimSecond is null && !w.CanceledForRtb)) {
+                if (s.PlayerRtbActive || s.CombatHandoffRequested) contact.CanceledForRtb = true;
+                else if (s.EngagementNumber == contact.Wave && threat)
+                    contact.FirstThreatSimSecond = s.TimeSeconds;
+            }
+        }
         bool target = !rotary && s.SelectedOpponentAlive && s.PlayerWeaponsAuthorized && s.PlayerGun.GunSolution;
         string phase = Phase(s, threat);
         int dr = s.SortiePlayerRoundsFired - rounds, dh = s.SortiePlayerHits - given,

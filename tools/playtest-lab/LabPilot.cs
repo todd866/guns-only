@@ -5,8 +5,8 @@ using GunsOnly.Sim.Training;
 
 namespace GunsOnly.PlaytestLab;
 
-/// Adapts BanditPressureReport's pursuit/energy controller, with delayed observations
-/// as in FirstMergeOpeningAcceptanceTests. No writes to aircraft state or damage.
+/// Delayed HUD-cue pilots with pursuit/energy and terrain-escape fallbacks.
+/// Commands and trigger inputs use production gun assist; no aircraft-state or damage writes.
 public sealed class LabPilot {
     readonly string name;
     readonly ClonedPilotPolicy? clone;
@@ -38,7 +38,9 @@ public sealed class LabPilot {
         latency = (int)Math.Round((name == "novice" ? .8 + .6 * reaction : .15 + .15 * reaction) * AircraftSim.TickHz);
         handsOff = name == "novice" ? 2 + 3 * start : .3 + 1.2 * start;
         aimBias = (bias - .5) * (name == "novice" ? 4 : .3) * Math.PI / 180;
-        hud = new HudCuePilot(.20 + .1 * reaction, 1 + .35 * (seed % 8));
+        hud = name == "novice"
+            ? new HudCuePilot(.4 + .3 * reaction, .8 + 1.5 * start, aimBias, 8.0)
+            : new HudCuePilot(.20 + .1 * reaction, 1 + .35 * (seed % 8));
     }
 
     public IReadOnlyList<string> Drive(SimulationSession s, double? perceivedSeconds = null) {
@@ -66,11 +68,12 @@ public sealed class LabPilot {
             ammo,
             name));
         bool noviceDamageRtb = s.EscalatingWavesEnabled && name == "novice" && s.PlayerHealth < .999;
+        bool aceDamageRtb = s.EscalatingWavesEnabled && name == "ace" && s.PlayerHealth < .9;
         bool combatBudgetRtb = !s.EscalatingWavesEnabled || name == "clone";
-        if (s.ReturnToBaseAvailable && ((s.FiniteCombatComplete && stayOrGo) || noviceDamageRtb
+        if (s.ReturnToBaseAvailable && ((s.FiniteCombatComplete && stayOrGo) || noviceDamageRtb || aceDamageRtb
             || s.PlayerFuel.IsBingo || empty || (combatBudgetRtb && s.TimeSeconds >= rtbAfter))) {
             if (s.TryRequestReturnToBase(s.PlayerFuel.IsBingo ? MissionRtbReason.BingoFuel : MissionRtbReason.PilotKnockItOff))
-                decisions.Add("RTB:" + (s.FiniteCombatComplete ? "combat-complete" : s.PlayerFuel.IsBingo ? "bingo" : empty ? "ammo-empty" : noviceDamageRtb ? "damage" : "combat-budget"));
+                decisions.Add("RTB:" + (aceDamageRtb || noviceDamageRtb ? "damage" : s.PlayerFuel.IsBingo ? "bingo" : empty ? "ammo-empty" : s.FiniteCombatComplete ? (s.EngagementsWon >= 5 ? "wave-limit" : "combat-complete") : "combat-budget"));
         }
         if (s.PlayerRtbActive && !rtbObserved) {
             if (!decisions.Any(d => d.StartsWith("RTB:"))) decisions.Add("RTB:accept-mission-handoff");
@@ -97,6 +100,18 @@ public sealed class LabPilot {
             observations.Clear();
             if (targetId != 0) decisions.Add("target:acquire-successor");
             targetId = s.PlayerGun.SelectedTargetId;
+        }
+        if (name == "novice" && s.SelectedOpponentAlive
+            && ExperienceObserver.Clearance(s, s.Player.State.Position) > 220
+            && ExperienceObserver.Clearance(s, s.Player.State.Position + s.Player.State.VelocityVector() * 3) > 220) {
+            // The pursuit/terrain branch may have left a scripted command latched on
+            // the previous tick.  HUD input must own the aircraft once its cue path is
+            // valid, otherwise the novice can appear to aim while the old command wins.
+            s.Controls.ScriptedPilotOverride = null;
+            bool fire = hud.Drive(s);
+            Fire(s, fire && s.PlayerWeaponsAuthorized);
+            SetMode(fire ? "shoot" : "track-cue", decisionTime);
+            return decisions;
         }
         if (name == "ace" && ExperienceObserver.Clearance(s, s.Player.State.Position + s.Player.State.VelocityVector() * 8) > 600) {
             s.Controls.ScriptedPilotOverride = null;
@@ -194,7 +209,8 @@ public sealed class LabPilot {
 // Port of FirstMergeOpeningAcceptanceTests.HudPilot: delay the observed body-frame
 // cue, NOT a world cue projected into the pilot's future attitude. Preserve the
 // authored trim throttle during the opening instead of accelerating out of the shot.
-public sealed class HudCuePilot(double reactionSeconds, double handsOffSeconds) {
+public sealed class HudCuePilot(double reactionSeconds, double handsOffSeconds, double aimBiasRad = 0.0,
+    double sprayWindowDeg = 0.0) {
     readonly Queue<(double Up, double Right, bool Solution, double Range, bool Valid)> seen = new();
     readonly int latency = Math.Max(1, (int)Math.Round(reactionSeconds * AircraftSim.TickHz));
     double pitch, roll;
@@ -208,7 +224,8 @@ public sealed class HudCuePilot(double reactionSeconds, double handsOffSeconds) 
             range = to.Length;
             Vec3D cue = s.PlayerGun.HasLeadSolution ? s.PlayerGun.LeadDirection : to.Normalized();
             double cf = Math.Max(1e-6, cue.Dot(s.Player.BodyForward));
-            up = Math.Atan2(cue.Dot(s.Player.BodyUp), cf) * 180 / Math.PI;
+            up = Math.Atan2(cue.Dot(s.Player.BodyUp), cf) * 180 / Math.PI
+                - aimBiasRad * 180 / Math.PI;
             right = Math.Atan2(cue.Dot(s.Player.BodyRight), cf) * 180 / Math.PI;
             if (cue.Dot(s.Player.BodyForward) <= 0) {
                 up = Math.Sign(cue.Dot(s.Player.BodyUp) + 1e-9) * 90;
@@ -223,7 +240,9 @@ public sealed class HudCuePilot(double reactionSeconds, double handsOffSeconds) 
         if (picture.Valid && s.TimeSeconds >= handsOffSeconds) {
             targetRoll = Math.Clamp(.04 * picture.Right, -.35, .35);
             targetPitch = Math.Clamp(.045 * picture.Up, -.3, .6);
-            fire = picture.Solution && picture.Range < 900;
+            double sightError = Math.Sqrt(picture.Up * picture.Up + picture.Right * picture.Right);
+            fire = picture.Range < 900
+                && (picture.Solution || (sprayWindowDeg > 0.0 && sightError < sprayWindowDeg));
         }
         double step = 3 * SortieRunner.Dt;
         pitch += Math.Clamp(targetPitch - pitch, -step, step);

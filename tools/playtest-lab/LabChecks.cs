@@ -9,6 +9,8 @@ public static class LabChecks {
     public static void Run(ClonedPilotPolicy clone) {
         static void Require(bool value, string message) { if (!value) throw new Exception(message); }
         CheckStayOrGoPolicy();
+        CheckWaveArrivalClock();
+        CheckNoviceReleasesScriptedControl();
         CheckRtbAutopilotLifecycle();
         Require(Math.Abs(ExperienceObserver.SegmentDistance(new Vec3D(-100, 10, 0), new Vec3D(100, 10, 0)) - 10) < 1e-9,
             "Swept near-miss distance lost a fast passing round.");
@@ -98,6 +100,9 @@ public static class LabChecks {
             if (pilot == "ace") Require(joined.CompressionSimSeconds.GetValueOrDefault(8) > 0, "Recovery never exercised eligible compression.");
             Require(joined.Completed && joined.Landed, $"Runway join orbit regressed for {pilot}: {joined.Outcome}");
         }
+        var noviceGun = SortieRunner.Fly(new Options(Beat: 7, MaxSeconds: 180), "novice", 0, clone);
+        Require(noviceGun.RoundsFired > 0 && noviceGun.HitsGiven > 0,
+            $"Novice never used the production gun path: rounds={noviceGun.RoundsFired} hits={noviceGun.HitsGiven}.");
         Console.WriteLine("PASS: clone reference cases, deterministic/varied seeds, all 14 beats stage, timeout/partial-bin accounting, real near-miss passages, mixed-factor dual clocks, End without landing, compressed physical runway recovery, CLI validation.");
     }
     static void CheckStayOrGoPolicy() {
@@ -106,6 +111,9 @@ public static class LabChecks {
             bool bingo = false, int ammo = 100, bool ladder = true) =>
             new(ladder, waves, health, bingo, ammo, pilot);
         Require(!LabStayOrGoPolicy.ShouldRequestRtb(I("ace")), "Ace left the wave ladder after a completed wave.");
+        Require(!LabStayOrGoPolicy.ShouldRequestRtb(I("ace", waves: 4, health: .9)), "Ace rejected a light graze.");
+        Require(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", waves: 0, health: .89)), "Ace ignored damage before minimum completion.");
+        Require(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", waves: 5)), "Ace stayed beyond wave five.");
         Require(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", bingo: true)), "Ace ignored bingo fuel.");
         Require(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", ammo: 0)), "Ace ignored winchester.");
         Require(!LabStayOrGoPolicy.ShouldRequestRtb(I("novice", waves: 1)), "Novice left before two waves.");
@@ -114,6 +122,43 @@ public static class LabChecks {
         Require(LabStayOrGoPolicy.ShouldRequestRtb(I("clone", waves: 4)), "Clone policy changed.");
         Require(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", ladder: false)), "Legacy beat did not hand off to RTB.");
         Console.WriteLine("PASS: beat-7 lab stay-or-go policy");
+    }
+    static void CheckNoviceReleasesScriptedControl() {
+        var session = new SimulationSession(7);
+        session.Begin(); session.StepFixed();
+        var pilot = new LabPilot("novice", 0, null, 600);
+        // Model returning from search/terrain escape. The HUD's analog controls
+        // cannot take effect while the previous scripted command owns the jet.
+        session.Controls.ScriptedPilotOverride = new PilotCommand(1, 0, .9, 0);
+        pilot.Drive(session);
+        if (session.Controls.ScriptedPilotOverride is not null)
+            throw new Exception("Novice HUD control retained a stale scripted override.");
+        if (session.AssistedFlight)
+            throw new Exception("Novice silently enabled device auto-trigger instead of the ordinary gun assist.");
+    }
+    static void CheckWaveArrivalClock() {
+        var session = new SimulationSession(7);
+        session.ConfigureSortieSeed(7); session.Begin();
+        var observer = new ExperienceObserver(new Options(), "fixture", 7);
+        void Tick() {
+            observer.BeforeStep(session); session.StepFixed();
+            // Deliberately noisy decisions must NOT shorten measured ingress.
+            observer.Observe(session, new[] { "fixture:decision" });
+        }
+        Tick();
+        while (session.EngagementsWon < 2) {
+            if (session.LiveOpponentCount > 0) session.ForceOpponentDefeatForTest();
+            Tick();
+        }
+        double wonAt = session.TimeSeconds;
+        while (session.TimeSeconds - wonAt < 26) Tick();
+        var contact = observer.Finish(session, 0).WaveContacts.Single();
+        if (Math.Abs(contact.PreviousWinSimSecond - wonAt) > 1e-8
+            || contact.WarningSeconds < 20 - 1e-8 || contact.WarningSeconds > 24 + 1e-8
+            || contact.FirstThreatSimSecond is not double first
+            || first - wonAt < 20 - 1e-8 || first - wonAt > 30
+            || contact.CanceledForRtb)
+            throw new Exception("Wave arrival clock did not measure the real win-to-threat interval.");
     }
     static void CheckRtbAutopilotLifecycle() {
         static void Require(bool value, string message) { if (!value) throw new Exception(message); }

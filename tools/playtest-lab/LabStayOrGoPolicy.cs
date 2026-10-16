@@ -22,7 +22,9 @@ public static class LabStayOrGoPolicy {
         if (input.Pilot == "clone") return true;
         if (input.Pilot == "novice")
             return input.CompletedEngagements >= 2 || input.PlayerHealth < 0.999;
-        // The ace stays for the next contact until resources force a return.
-        return false;
+        // A light graze (at most 10% health) may be tolerated; meaningful damage
+        // ends the attempt immediately, including mid-wave. W5 is the last risk
+        // the lab ace elects to take, not an invitation to stay until shot down.
+        return input.PlayerHealth < .9 || input.CompletedEngagements >= 5;
     }
 }

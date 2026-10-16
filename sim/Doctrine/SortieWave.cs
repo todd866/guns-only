@@ -25,17 +25,19 @@ public sealed partial class FightDirector {
         var spawn = new SpawnSpec(skill,
             (int)(draw % (uint)BanditSkillProfile.For(skill).DoctrineCount), boss,
             $"wave {waveNumber}: committed formation",
-            Mount: waveNumber >= 4 ? BanditMount.Uprated : BanditMount.Baseline,
-            FormationSize: waveNumber == 3 ? 2 : waveNumber == 4 ? 3 : 4,
+            Mount: waveNumber >= 5 ? BanditMount.Uprated : BanditMount.Baseline,
+            FormationSize: waveNumber <= 4 ? 2 : 4,
             Committed: true,
-            WingSkill: waveNumber == 4 ? PilotSkill.Veteran : skill,
+            WingSkill: waveNumber <= 4 ? PilotSkill.Veteran : skill,
             WingMount: waveNumber >= 6 ? BanditMount.Uprated : BanditMount.Baseline);
-        // A short warning/turn interval precedes a physical 6–8 km ingress. Contact time
-        // depends on the player's turn and closure; validate it from the lab tapes.
-        double delay = 18 + WaveDraw(seed, waveNumber, 2) % 7;
+        // Twenty to twenty-four seconds to turn toward the warning; the lead then
+        // arrives inside visual/threat range, facing ownship. W3/4 add pilot pressure
+        // before W5 adds the uprated mount and four-ship spike. These are authored
+        // exercise choices, not changes to either aircraft's physical capabilities.
+        double delay = 20 + WaveDraw(seed, waveNumber, 2) % 5;
         double bearing = (45 + WaveDraw(seed, waveNumber, 3) % 91) * Math.PI / 180;
         if ((draw & 1) != 0) bearing = -bearing;
         return new(waveNumber, spawn, delay, bearing,
-            6000 + WaveDraw(seed, waveNumber, 4) % 2001, 1 + .5 * (waveNumber - 2));
+            1600 + WaveDraw(seed, waveNumber, 4) % 401, 1 + .5 * (waveNumber - 2));
     }
 }

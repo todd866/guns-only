@@ -18,17 +18,21 @@ public sealed class SortieWaveTests {
         Assert.Equal(3, wave3.Number);
         Assert.Equal(PilotSkill.Veteran, wave3.Spawn.Skill);
         Assert.Equal(2, wave3.Spawn.FormationSize);
-        Assert.InRange(wave3.DelaySeconds, 18.0, 24.0);
-        Assert.InRange(wave3.RangeM, 6_000.0, 8_000.0);
+        Assert.InRange(wave3.DelaySeconds, 20.0, 24.0);
+        Assert.InRange(wave3.RangeM, 1_600.0, 2_000.0);
         Assert.True(wave3.Spawn.Committed);
 
         Assert.Equal(4, wave4.Number);
         Assert.Equal(PilotSkill.Ace, wave4.Spawn.Skill);
-        Assert.Equal(3, wave4.Spawn.FormationSize);
+        Assert.Equal(2, wave4.Spawn.FormationSize);
+        Assert.Equal(BanditMount.Baseline, wave4.Spawn.Mount);
+        Assert.Equal(PilotSkill.Veteran, wave3.Spawn.WingSkill);
         Assert.Equal(PilotSkill.Veteran, wave4.Spawn.WingSkill);
 
         Assert.Equal(5, wave5.Number);
         Assert.Equal(4, wave5.Spawn.FormationSize);
+        Assert.Equal(BanditMount.Uprated, wave5.Spawn.Mount);
+        Assert.Equal(PilotSkill.Ace, wave5.Spawn.WingSkill);
         Assert.True(wave3.ScoreMultiplier < wave4.ScoreMultiplier);
         Assert.True(wave4.ScoreMultiplier < wave5.ScoreMultiplier);
     }
@@ -115,8 +119,10 @@ public sealed class SortieWaveTests {
         Assert.Equal(2, session.EngagementsWon);
         Assert.Equal(200.0, session.CombatScore);
         Assert.NotNull(session.IncomingWaveBearingRad);
+        Assert.Contains("NEW CONTACT", session.TransitionCue);
+        Assert.Contains("W3", session.TransitionCue);
         Assert.True(session.OpponentReplacementPending);
-        Assert.InRange(session.OpponentReplacementSeconds, 18.0, 24.0);
+        Assert.InRange(session.OpponentReplacementSeconds, 20.0, 24.0);
         Assert.Equal(1.5, session.WaveScoreMultiplier);
 
         // KNOCK IT OFF cancels the staged warning and the successor spawn.
@@ -164,6 +170,27 @@ public sealed class SortieWaveTests {
         Assert.Equal(PilotSkill.Veteran, session.LastDirectorSpawn.Value.Skill);
     }
 
+    [Fact]
+    public void EveryCohortSeedArrivesInsideThreatRangeWithinThirtySecondsOfWin() {
+        foreach (int seed in Enumerable.Range(0, 30)) {
+            var session = new SimulationSession();
+            session.ConfigureSortieSeed(seed);
+            session.StartBeat(Beats.ModernVisualMerge);
+            session.Begin();
+            ForceLastOpponentAndWaitForReport(session);
+            ForceLastOpponentAndWaitForReport(session);
+            double wonAt = session.TimeSeconds;
+            while (session.LiveOpponentCount == 0 && session.TimeSeconds - wonAt <= 30)
+                session.StepFixed();
+            Assert.Equal(3, session.EngagementNumber);
+            Assert.InRange(session.TimeSeconds - wonAt, 20 - 1e-8, 25);
+            Vec3D delta = session.Player.State.Position - session.Bandit.State.Position;
+            Assert.InRange(delta.Length, 0, 2500);
+            Assert.True(session.Bandit.State.ForwardDir().Dot(delta.Normalized())
+                >= Math.Cos(35 * Math.PI / 180), $"seed {seed}: contact faces away");
+        }
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(6)] // W4 Ace doctrine 2 must map into the Veteran's two doctrines
@@ -193,16 +220,16 @@ public sealed class SortieWaveTests {
         session.StepFixed((int)Math.Ceiling(session.OpponentReplacementSeconds
             * AircraftSim.TickHz) + 2);
 
-        Assert.Equal(3, session.LiveOpponentCount);
+        Assert.Equal(2, session.LiveOpponentCount);
         SpawnSpec w4 = Assert.IsType<SpawnSpec>(session.LastDirectorSpawn);
         Assert.Equal(PilotSkill.Ace, w4.Skill);
-        Assert.Equal(BanditMount.Uprated, w4.Mount);
+        Assert.Equal(BanditMount.Baseline, w4.Mount);
         Assert.Equal(PilotSkill.Veteran, w4.WingSkill);
         Assert.Equal(BanditMount.Baseline, w4.WingMount);
 
-        // Clear all three W4 actors through the same promotion path, then verify W5's
+        // Clear both W4 actors through the same promotion path, then verify W5's
         // four-ship escalation arrives with the rising score multiplier.
-        for (int remaining = 3; remaining > 0; remaining--) {
+        for (int remaining = 2; remaining > 0; remaining--) {
             session.ForceOpponentDefeatForTest();
             session.StepFixed();
             if (remaining > 1) {
@@ -307,12 +334,15 @@ public sealed class SortieWaveTests {
     }
 
     [Fact]
-    public void LabStayOrGoPolicyKeepsAceUntilResourcesAndLimitsNovice() {
+    public void LabStayOrGoPolicyLeavesOnDamageResourcesOrWaveLimit() {
         static LabStayOrGoPolicy.Inputs I(string pilot, int waves = 0,
             double health = 1.0, bool bingo = false, int ammo = 480) =>
             new(true, waves, health, bingo, ammo, pilot);
 
         Assert.False(LabStayOrGoPolicy.ShouldRequestRtb(I("ace")));
+        Assert.False(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", waves: 4, health: .9)));
+        Assert.True(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", health: .89)));
+        Assert.True(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", waves: 5)));
         Assert.True(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", bingo: true)));
         Assert.True(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", ammo: 0)));
         Assert.False(LabStayOrGoPolicy.ShouldRequestRtb(I("novice", waves: 1)));
