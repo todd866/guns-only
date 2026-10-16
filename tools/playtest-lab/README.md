@@ -60,10 +60,13 @@ or timeout must be inspected as possible controller failure before blaming missi
   lead cue, bounded analog stick movement, solution-gated firing, and terrain escape.
   The authored opening trim is retained. “Ace” names a good scripted control profile,
   not a guarantee of winning or a model of an expert human.
+  After two beat-7 wave wins, the lab ace adds bounded flight-path and terrain-clearance
+  feedback while turning for the next contact; the opening controller remains unchanged.
 
 An explicit integer PRNG varies reaction/hesitation/aim per seed. Seeds are paired
-between profiles, and do not mutate mission geometry, opponent skill, hits-to-kill,
-or the director. All pilots request RTB on combat completion, bingo, empty ammunition,
+between profiles. For beat 7, the configured seed also selects escalating-wave
+geometry/doctrine and the seeded RTB bounce; the first two authored engagements
+retain their normal setup. All pilots request RTB on combat completion, bingo, empty ammunition,
 or the combat-time budget, using `TryRequestReturnToBase`. They share a scripted
 recovery pilot based on the production recovery schedule and
 `RecoveryProfileFlightTests` pitch/speed feedback. Conventional runway navigation uses

@@ -91,7 +91,7 @@ public static class Program {
                     wallSeconds = wall.Elapsed.TotalSeconds, options = o,
                     notes = new[] {
                         "Experience proxies, not a claim to measure human feelings. 120 Hz production simulation; perceived-second bins preserve tick events and factor-weighted phase/dead-air durations. Perceived seconds = sum(fixed dt / pre-tick kernel factor); simulated seconds remain separate. Continuous factor-weighted experience, not exact browser frame timing or CPU WallSeconds. No renderer or wall-clock pacing.",
-                        "Fresh director per sortie; no progression imported. Seeds deterministically vary reaction latency, aim bias, and opening hands-off time; mission geometry/damage/AI rules stay authored. Paired seeds use the same perturbation draws for each pilot.",
+                        "Fresh director per sortie; no progression imported. Seeds deterministically vary pilot reaction latency, aim bias, opening hands-off time, escalating-wave geometry/doctrine, and seeded RTB bounce. Paired seeds use the same perturbation draws for each pilot.",
                         "Clone is the committed owner-pilot-clone policy (canonical features and reference-case validation), held at its training cadence of 20 Hz. Novice adapts BanditPressureReport's pursuit pilot. Ace adapts FirstMergeOpeningAcceptanceTests.HudPilot with delayed body-frame cue observations and bounded analog controls. Shared recovery and terrain escape use the existing scripted command seam; this is not a human usability study.",
                         $"Threat: live bandit within {o.ThreatRangeM:F0} m and nose within 35 degrees, or firing; includes wingmen. Gun target: selected live target with authorized ballistic solution. Dead air: no threat, no gun opportunity, no player shot, decision, spectacle or near miss. Initial begin is not counted as a decision.",
                         $"Shot near miss: unique hostile gun round's swept separation within {o.ShotMissM:F0} m outside its hit radius; counted only on passage, not repeated ticks. Ground near miss: entry below {o.GroundMissM:F0} m AGL with 25 m hysteresis, excluding configured recovery/contact. Explosions are labelled destruction/impact proxies from session events, not renderer effects.",
@@ -143,9 +143,9 @@ public static class SortieRunner {
         var watch = Stopwatch.StartNew();
         var s = new SimulationSession(o.Beat, serviceLifeCaptureEnabled: false);
         s.DecisionCaptureEnabled = false; // training recorder is unrelated to the experience tape
-        var pilot = new LabPilot(name, seed, clone, o.RtbAfterSeconds, o.EndAfterCombat,
-            escalatingWavesEnabled: o.Beat == 7);
+        var pilot = new LabPilot(name, seed, clone, o.RtbAfterSeconds, o.EndAfterCombat);
         var observer = new ExperienceObserver(o, name, seed);
+        s.ConfigureSortieSeed(seed);
         s.Begin();
         double perceivedSeconds = 0;
         for (int tick = 0; tick < o.MaxSeconds * AircraftSim.TickHz && s.Lifecycle == SimulationSession.LifecycleState.Active; tick++) {

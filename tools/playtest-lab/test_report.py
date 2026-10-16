@@ -27,6 +27,26 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(a["outcomes"], {"win": 1, "loss": 0, "crash": 1, "recovered": 0, "draw": 0})
         self.assertEqual(a["escalationPaired"], 2); self.assertEqual(a["escalationRisingPct"], 0)
 
+    def test_wave_and_active_dead_air_metrics_keep_raw_totals(self):
+        r = run(outcome="win")
+        r.update({"deadAirSeconds": 20, "simDeadAirSeconds": 40,
+                  "longestDeadAirSeconds": 20, "simLongestDeadAirSeconds": 40,
+                  "deadAirExcludingRtbAutopilotSeconds": 7,
+                  "simDeadAirExcludingRtbAutopilotSeconds": 14,
+                  "longestDeadAirExcludingRtbAutopilotSeconds": 6,
+                  "simLongestDeadAirExcludingRtbAutopilotSeconds": 12,
+                  "wavesWon": 4, "combatScore": 950, "rtbBounceSpawned": True})
+        a = report.aggregate([r])
+        self.assertEqual(a["deadAirSeconds"], 20)
+        self.assertEqual(a["deadAirExcludingRtbAutopilotSeconds"], 7)
+        self.assertEqual(a["longestDeadAirExcludingRtbAutopilotSeconds"], 6)
+        self.assertEqual(a["wavesWon"], 4); self.assertEqual(a["combatScore"], 950); self.assertEqual(a["bounceRuns"], 1)
+
+    def test_old_tapes_fallback_for_active_dead_air(self):
+        a = report.aggregate([run(outcome="win")])
+        self.assertEqual(a["deadAirExcludingRtbAutopilotSeconds"], a["deadAirSeconds"])
+        self.assertEqual(a["longestDeadAirExcludingRtbAutopilotSeconds"], a["longestDeadAirSeconds"])
+
     def test_all_censored_flag_and_paired_escalation(self):
         r1, r2 = run(outcome="incomplete"), run(seed=2, outcome="incomplete")
         self.assertTrue(any("all runs censored" in x for x in report.flags([r1, r2])))

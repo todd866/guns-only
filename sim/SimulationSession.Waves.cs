@@ -5,6 +5,7 @@ namespace GunsOnly.Sim;
 
 public sealed partial class SimulationSession {
     int _sortieSeed;
+    bool _sortieSeedConfigured;
     SortieWave? _incomingWave;
     double? _incomingWaveBearing;
     double _rtbBounceAt = double.PositiveInfinity;
@@ -21,6 +22,7 @@ public sealed partial class SimulationSession {
     public bool RtbBounceSpawned => _rtbBounceSpawned;
     public double WaveScoreMultiplier => _waveScoreMultiplier;
     public double CombatScore => _combatScore;
+    public int SortieSeed => _sortieSeed;
     // RTB still owns navigation during an interception, but both combatants may defend/fire.
     bool RecoveryCeasefire => (CombatHandoffRequested || PlayerRtbActive) && !RtbBounceActive;
 
@@ -28,9 +30,11 @@ public sealed partial class SimulationSession {
         if (Lifecycle != LifecycleState.Ready)
             throw new InvalidOperationException("Set the sortie seed before Begin.");
         _sortieSeed = seed;
+        _sortieSeedConfigured = true;
     }
 
     void ResetSortieWaves() {
+        if (!_sortieSeedConfigured) _sortieSeed = unchecked(_sortieSeed + 1);
         _incomingWave = null;
         _incomingWaveBearing = null;
         _rtbBounceAt = double.PositiveInfinity;

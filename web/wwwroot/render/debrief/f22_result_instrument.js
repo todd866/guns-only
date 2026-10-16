@@ -132,6 +132,8 @@ export function f22ResultInstrument(state, {
   const recovery = f22RecoveryDisposition(state);
   const won = count(state.engagements_won) ?? 0;
   const cap = count(state.engagement_cap) ?? 0;
+  const waves = state.escalating_waves === true;
+  const score = count(state.combat_score) ?? 0;
   const hits = count(state.sortie_hits) ?? 0;
   const rounds = count(state.sortie_rounds_fired) ?? 0;
   const clock = formatAttemptClock(durationSeconds);
@@ -183,8 +185,9 @@ export function f22ResultInstrument(state, {
     combat: Object.freeze({
       status: combat,
       symbol: COMBAT_SYMBOL[combat],
-      value: cap > 0 ? `${won}/${cap}` : "",
-      label: `${COMBAT_WORDS[combat]}${cap > 0 ? ` · ${won} of ${cap} engagements won` : ""}`,
+      value: waves ? `W${won} · ${score}` : cap > 0 ? `${won}/${cap}` : "",
+      label: waves ? `${won} waves won · ${score} points · ${COMBAT_WORDS[combat]}`
+        : `${COMBAT_WORDS[combat]}${cap > 0 ? ` · ${won} of ${cap} engagements won` : ""}`,
     }),
     recovery: Object.freeze({
       status: recovery,

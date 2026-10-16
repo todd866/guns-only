@@ -121,6 +121,8 @@ def aggregate(rs: list[dict]) -> dict:
     perceived = sum(durations) or 1
     dead = sum(timing(r, "deadAirSeconds", "simDeadAirSeconds") for r in rs)
     sim_dead = sum(_number(r.get("simDeadAirSeconds", r.get("deadAirSeconds", 0))) for r in rs)
+    measured_dead = sum(_number(r.get("deadAirExcludingRtbAutopilotSeconds", r.get("deadAirSeconds", 0))) for r in rs)
+    measured_sim_dead = sum(_number(r.get("simDeadAirExcludingRtbAutopilotSeconds", r.get("simDeadAirSeconds", 0))) for r in rs)
     paired = [(tension(r, 1), tension(r, 2)) for r in rs]
     paired = [(a, b) for a, b in paired if a is not None and b is not None]
     rising = [b > a for a, b in paired]
@@ -133,8 +135,13 @@ def aggregate(rs: list[dict]) -> dict:
             "meanFirstAction": sum(first_actions)/len(first_actions) if first_actions else None,
             "meanSimFirstAction": sum(sim_first_actions)/len(sim_first_actions) if sim_first_actions else None, "missingFirstAction": len(rs)-len(first_actions),
             "deadAirSeconds": dead, "simDeadAirSeconds": sim_dead,
+            "deadAirExcludingRtbAutopilotSeconds": measured_dead, "simDeadAirExcludingRtbAutopilotSeconds": measured_sim_dead,
             "longestDeadAirSeconds": max((timing(r, "longestDeadAirSeconds", "simLongestDeadAirSeconds") for r in rs), default=0),
             "simLongestDeadAirSeconds": max((_number(r.get("simLongestDeadAirSeconds", r.get("longestDeadAirSeconds", 0))) for r in rs), default=0),
+            "longestDeadAirExcludingRtbAutopilotSeconds": max((_number(r.get("longestDeadAirExcludingRtbAutopilotSeconds", r.get("longestDeadAirSeconds", 0))) for r in rs), default=0),
+            "simLongestDeadAirExcludingRtbAutopilotSeconds": max((_number(r.get("simLongestDeadAirExcludingRtbAutopilotSeconds", r.get("simLongestDeadAirSeconds", 0))) for r in rs), default=0),
+            "wavesWon": sum(float(r.get("wavesWon", 0)) for r in rs), "combatScore": sum(float(r.get("combatScore", 0)) for r in rs),
+            "bounceRuns": sum(bool(r.get("rtbBounceSpawned", False)) for r in rs),
             "meanLength": sum(durations)/len(durations) if durations else 0, "meanPerceivedLength": sum(durations)/len(durations) if durations else 0,
             "meanSimulatedLength": sum(simulated_duration(r) for r in rs)/len(rs) if rs else 0,
             "lengthSpread": (max(durations)-min(durations) if durations else 0),
@@ -213,13 +220,13 @@ def make_report(root: Path) -> tuple[dict, str]:
         lines.append(f"| {pilot} | {a['runs']} | {a['complete']} | {a['censored']} | {wr} | {a['meanPerceivedLength']:.1f}s | {a['meanSimulatedLength']:.1f}s | {sum(1 for x in fs if pilot in x)} |")
     lines += ["", f"Flag count: **{len(fs)}**", "", "## Reproduction", "", f"- Command: `{manifest.get('command','(not recorded)')}`", f"- Source commit: `{manifest.get('sourceCommit','(unknown)')}`", f"- Clone SHA-256: `{manifest.get('cloneSha256','(unknown)')}`", f"- Wall time: {manifest.get('wallSeconds','?')}s", f"- Configured max seconds: {manifest.get('maxSeconds','?')}", "", "## Notes", ""]
     lines += [f"- {x}" for x in manifest.get("notes", [])] or ["- No notes recorded"]
-    lines += ["", "## Pilot metrics", "", "Timing pairs are perceived / simulated; rates use perceived minutes.", "", "| pilot | kills | hits given/taken | near misses | decisions/min | first action | dead air perceived/sim (max) | perceived/sim sortie | combat share perceived/sim | outcome distribution | entropy | paired e1→e2 | rising | mean Δ |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|"]
+    lines += ["", "## Pilot metrics", "", "Timing pairs are perceived / simulated; rates use perceived minutes. Raw dead air includes deliberate RTB autopilot transit; the `active dead air` value excludes those ticks.", "", "| pilot | kills | hits given/taken | waves / score | bounce runs | near misses | decisions/min | first action | dead air raw active (max) | perceived/sim sortie | combat share perceived/sim | outcome distribution | entropy | paired e1→e2 | rising | mean Δ |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|"]
     for pilot, a in summaries.items():
         fa = "—" if a["meanFirstAction"] is None else f"{a['meanFirstAction']:.1f}s / {a['meanSimFirstAction']:.1f}s ({a['missingFirstAction']} missing)"
         dist = ", ".join(f"{o}:{a['outcomes'][o]}" for o in OUTCOMES)
         rising = "—" if a["escalationRisingPct"] is None else f"{a['escalationRisingPct']:.0f}%"
         delta = "—" if a["escalationMeanDelta"] is None else f"{a['escalationMeanDelta']:+.2f}"
-        lines.append(f"| {pilot} | {a['kills']:.0f} | {a['hitsGiven']:.0f}/{a['hitsTaken']:.0f} | {a['nearMisses']:.0f} | {a['decisionsPerMinute']:.2f} | {fa} | {a['deadAirSeconds']:.1f}s / {a['simDeadAirSeconds']:.1f}s (max {a['longestDeadAirSeconds']:.1f}s / {a['simLongestDeadAirSeconds']:.1f}s) | {a['meanPerceivedLength']:.1f}s / {a['meanSimulatedLength']:.1f}s | {a['combatShare']:.1f}% / {a['simCombatShare']:.1f}% | {dist} | {a['entropy']:.2f} | {a['escalationPaired']} | {rising} | {delta} |")
+        lines.append(f"| {pilot} | {a['kills']:.0f} | {a['hitsGiven']:.0f}/{a['hitsTaken']:.0f} | {a['wavesWon']:.0f} / {a['combatScore']:.0f} | {a['bounceRuns']} | {a['nearMisses']:.0f} | {a['decisionsPerMinute']:.2f} | {fa} | {a['deadAirSeconds']:.1f}s / {a['deadAirExcludingRtbAutopilotSeconds']:.1f}s (max {a['longestDeadAirSeconds']:.1f}s / {a['longestDeadAirExcludingRtbAutopilotSeconds']:.1f}s) | {a['meanPerceivedLength']:.1f}s / {a['meanSimulatedLength']:.1f}s | {a['combatShare']:.1f}% / {a['simCombatShare']:.1f}% | {dist} | {a['entropy']:.2f} | {a['escalationPaired']} | {rising} | {delta} |")
     lines += ["", "## Flags", ""]
     lines += [f"- {x}" for x in fs] if fs else ["- None"]
     lines += ["", "## Phase share", "", "Each cell is perceived / simulated.", "", "| pilot | " + " | ".join(PHASES) + " |", "|---|" + "---:|"*len(PHASES)]

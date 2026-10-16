@@ -684,11 +684,10 @@ public sealed partial class SimulationSession {
     }
 
     void ConfigureFormationLookaheadCadence() {
-        if (_beat.ContinuousCombat is null || _wingmen.Count != 1) return;
+        if (_beat.ContinuousCombat is null || _wingmen.Count < 1) return;
         ConfigureLookaheadCadence(_bandit, _primaryOpponentGunTargetId);
-        ConfigureLookaheadCadence(
-            _wingmen[0].Bandit,
-            _wingmen[0].PlayerGunTargetId);
+        foreach (Wingman wingman in _wingmen)
+            ConfigureLookaheadCadence(wingman.Bandit, wingman.PlayerGunTargetId);
     }
 
     static void ConfigureLookaheadCadence(IBandit bandit, long actorId) {

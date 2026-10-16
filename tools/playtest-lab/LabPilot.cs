@@ -18,15 +18,13 @@ public sealed class LabPilot {
     readonly List<string> decisions = new();
     readonly RecoveryPilot recovery = new();
     readonly HudCuePilot hud;
-    readonly bool escalatingWavesEnabled;
     bool trigger, rtbObserved, bingoObserved;
     string mode = "setup", candidateMode = "setup";
     double candidateSince, decisionTime;
+    double laterWaveDesiredAltitude = double.NaN;
     long targetId;
-    public LabPilot(string name, int seed, ClonedPilotPolicy? clone, int rtbAfter, bool endAfterCombat = false,
-        bool escalatingWavesEnabled = false) {
+    public LabPilot(string name, int seed, ClonedPilotPolicy? clone, int rtbAfter, bool endAfterCombat = false) {
         this.name = name; this.clone = clone; this.rtbAfter = rtbAfter; this.endAfterCombat = endAfterCombat;
-        this.escalatingWavesEnabled = escalatingWavesEnabled;
         casevac = new CasevacPilot(name, seed);
         // Explicit integer PRNG: reproducible on all .NET 8 hosts, no global RNG.
         uint state = unchecked((uint)seed + 0x9e3779b9u);
@@ -48,7 +46,7 @@ public sealed class LabPilot {
         decisionTime = perceivedSeconds ?? s.TimeSeconds;
         if (s.CasevacMission) { SetMode(casevac.Drive(s), decisionTime); return decisions; }
         if (!s.PlayerAlive) { Fire(s, false); return decisions; }
-        if (endAfterCombat && s.CanEndSortie && s.TryEndSortie()) {
+        if (endAfterCombat && s.FiniteCombatComplete && s.CanEndSortie && s.TryEndSortie()) {
             decisions.Add("End:combat-complete"); return decisions;
         }
         if (s.PlayerFuel.IsBingo && !bingoObserved) { bingoObserved = true; decisions.Add("bingo:acknowledge"); }
@@ -61,15 +59,16 @@ public sealed class LabPilot {
             catch (InvalidOperationException) { }
         }
         bool stayOrGo = LabStayOrGoPolicy.ShouldRequestRtb(new(
-            escalatingWavesEnabled,
-            s.EngagementNumber,
+            s.EscalatingWavesEnabled,
+            s.EngagementsWon,
             s.PlayerHealth,
             s.PlayerFuel.IsBingo,
             ammo,
             name));
-        bool noviceDamageRtb = escalatingWavesEnabled && name == "novice" && s.PlayerHealth < .999;
+        bool noviceDamageRtb = s.EscalatingWavesEnabled && name == "novice" && s.PlayerHealth < .999;
+        bool combatBudgetRtb = !s.EscalatingWavesEnabled || name == "clone";
         if (s.ReturnToBaseAvailable && ((s.FiniteCombatComplete && stayOrGo) || noviceDamageRtb
-            || s.PlayerFuel.IsBingo || empty || s.TimeSeconds >= rtbAfter)) {
+            || s.PlayerFuel.IsBingo || empty || (combatBudgetRtb && s.TimeSeconds >= rtbAfter))) {
             if (s.TryRequestReturnToBase(s.PlayerFuel.IsBingo ? MissionRtbReason.BingoFuel : MissionRtbReason.PilotKnockItOff))
                 decisions.Add("RTB:" + (s.FiniteCombatComplete ? "combat-complete" : s.PlayerFuel.IsBingo ? "bingo" : empty ? "ammo-empty" : "combat-budget"));
         }
@@ -77,8 +76,18 @@ public sealed class LabPilot {
             if (!decisions.Any(d => d.StartsWith("RTB:"))) decisions.Add("RTB:accept-mission-handoff");
             rtbObserved = true;
         }
-        bool recover = s.PlayerRtbActive || (!escalatingWavesEnabled && !s.OpponentPresent && !s.Beat.StartsOnCatapult)
-            || (!escalatingWavesEnabled && s.Beat.RecoveryCompletesSortie && s.LiveOpponentCount == 0);
+        bool bounceDefense = s.RtbBounceActive;
+        if ((!s.PlayerRtbActive || bounceDefense) && TryLaterWaveSafety(s)) return decisions;
+        if (!bounceDefense && name == "ace" && s.EscalatingWavesEnabled
+            && s.IncomingWaveBearingRad is double bearing && s.LiveOpponentCount == 0) {
+            double error = Math.IEEERemainder(bearing - s.Player.State.Chi, 2 * Math.PI);
+            double contactBank = Math.Clamp(error * 1.8, -60 * Math.PI / 180, 60 * Math.PI / 180);
+            double turnG = Math.Min(4, 1 / Math.Max(.5, Math.Cos(contactBank)));
+            s.Controls.ScriptedPilotOverride = new PilotCommand(turnG, contactBank, 1, 0);
+            Fire(s, false); SetMode("turn-contact", decisionTime); return decisions;
+        }
+        bool recover = !bounceDefense && (s.PlayerRtbActive || (!s.EscalatingWavesEnabled && !s.OpponentPresent && !s.Beat.StartsOnCatapult)
+            || (!s.EscalatingWavesEnabled && s.Beat.RecoveryCompletesSortie && s.LiveOpponentCount == 0));
         if (recover) {
             Fire(s, false);
             SetMode(recovery.Drive(s), decisionTime);
@@ -143,6 +152,31 @@ public sealed class LabPilot {
         Fire(s, shot && s.PlayerWeaponsAuthorized);
         SetMode(shot ? "shoot" : slow ? "energy-recovery" : angle > .2 ? "turn" : "pursue", decisionTime);
         return decisions;
+    }
+    bool TryLaterWaveSafety(SimulationSession s) {
+        // The opening pair is deliberately unchanged. Once the ladder has paid
+        // out two wins, preserve a competent pilot's flight path while turning
+        // or fighting; the existing 4G terrain escape is a last-resort guard.
+        if (name != "ace" || !s.EscalatingWavesEnabled || s.EngagementsWon < 2) return false;
+        AircraftState own = s.Player.State;
+        double clearance = ExperienceObserver.Clearance(s, own.Position);
+        double aheadClearance = ExperienceObserver.Clearance(s, own.Position + own.VelocityVector() * 3);
+        double ground = own.Position.Y - clearance;
+        if (!double.IsFinite(laterWaveDesiredAltitude))
+            laterWaveDesiredAltitude = Math.Clamp(Math.Max(own.Position.Y, ground + 2500), 2500, 10000);
+        double verticalSpeed = own.VelocityVector().Y;
+        double pulloutHeight = own.Speed * own.Speed / (9.81 * 5)
+            * (1 - Math.Cos(Math.Min(0, own.Gamma)));
+        bool warningRecovery = s.LiveOpponentCount == 0 && (own.Gamma < -5 * Math.PI / 180 || verticalSpeed < -20);
+        bool steepOrLow = warningRecovery || clearance < 500
+            || (verticalSpeed < 0 && Math.Min(clearance, aheadClearance) < pulloutHeight + 700);
+        if (!steepOrLow) return false;
+        double altitudeError = laterWaveDesiredAltitude - own.Position.Y;
+        double g = Math.Clamp(1 + altitudeError * .0008 - verticalSpeed * .018, 1, 8);
+        if (own.Gamma < -15 * Math.PI / 180) g = Math.Max(g, 6);
+        s.Controls.ScriptedPilotOverride = new PilotCommand(g, 0, 1, 0);
+        Fire(s, false); SetMode("later-wave-pullout", decisionTime);
+        return true;
     }
     void SetMode(string next, double seconds) {
         if (next != candidateMode) { candidateMode = next; candidateSince = seconds; }
