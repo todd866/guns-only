@@ -465,6 +465,7 @@ internal static class SnapshotProjection {
             + $"\"t\":{_simTimeMs / 1000.0:F4},"
             + $"\"tick\":{Session.Tick},"
             + $"\"time_compression_available\":{(Session.TimeCompressionAvailable ? "true" : "false")},"
+            + $"\"rtb_autopilot_active\":{(Session.RtbAutopilotActive ? "true" : "false")},"
             + $"\"time_compression_enabled\":{(Session.TimeCompressionPilotEnabled ? "true" : "false")},"
             + $"\"time_compression_eligible\":{(Session.TimeCompressionEligible ? "true" : "false")},"
             + $"\"time_compression_requested_factor\":{Session.TimeCompressionRequestedFactor},"
@@ -1344,6 +1345,7 @@ internal static class SnapshotProjection {
         TimeCompressionInhibitReason.FuelThreshold => "FUEL_THRESHOLD",
         TimeCompressionInhibitReason.ControlInput => "CONTROL_INPUT",
         TimeCompressionInhibitReason.RamTransition => "RAM_TRANSITION",
+        TimeCompressionInhibitReason.RecoveryFinal => "RECOVERY_FINAL",
         _ => "UNKNOWN"
     };
 
@@ -1866,6 +1868,8 @@ internal static class SnapshotProjection {
             // Finite F-22 combat result, separate from aircraft recovery. sortie_* is the frozen
             // contract this sortie was staged with; earned_* is what the stored rung opens next.
             + $"\"combat_complete\":{(Session.FiniteCombatComplete ? "true" : "false")},"
+            + $"\"can_end_sortie\":{(Session.CanEndSortie ? "true" : "false")},"
+            + $"\"sortie_ended_early\":{(Session.SortieEndedEarly ? "true" : "false")},"
             + $"\"engagement_cap\":{Session.FiniteEngagementCap},"
             + $"\"engagements_won\":{Session.EngagementsWon},"
             + $"\"bfm_opponent_skill\":{JsonString(Session.LastDirectorSpawn?.Skill.ToString().ToUpperInvariant() ?? "")},"

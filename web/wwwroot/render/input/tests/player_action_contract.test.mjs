@@ -130,6 +130,7 @@ const BRIDGE_ACTIONS = Object.freeze([
   { id: "wing-sweep-aft", bindingAction: "wingSweepAft", code: "Period", gkey: "WingSweepAft", behavior: "hold", help: "WING SWEEP FORWARD / AFT", consumer: /GKey\.WingSweepAft/, observable: /wing_sweep_command_deg/ },
   { id: "wing-sweep-auto", bindingAction: "wingSweepAuto", code: "Slash", gkey: "WingSweepAuto", behavior: "momentary", help: "WING SWEEP AUTO", consumer: /GKey\.WingSweepAuto/, observable: /wing_sweep_mode_code/ },
   { id: "hook-toggle", bindingAction: "hookToggle", code: "KeyU", gkey: "HookToggle", behavior: "momentary", help: "HOOK", consumer: /GKey\.HookToggle/, observable: /hook_down/ },
+  { id: "time-compression-toggle", bindingAction: "timeCompressionToggle", code: "KeyY", gkey: "TimeCompressionToggle", behavior: "momentary", help: "RTB COMPRESS", consumer: /GKey\.TimeCompressionToggle/, observable: /time_compression_factor/ },
   { id: "emergency-gear", code: "KeyE", gkey: "EmergencyGearRelease", behavior: "hold", help: "HOLD E", testAction: "emergencyGearRelease", consumer: /key == GKey\.EmergencyGearRelease/, observable: /gear_nose/ },
   { id: "horn-cutout", code: "TestFlightGearHornCutout", gkey: "GearHornCutout", behavior: "momentary", help: "GEAR HORN CUTOUT", testAction: "gearHornCutout", consumer: /GKey\.GearHornCutout/, observable: /gear_warning_horn/ },
   { id: "confirm-extension-failure", code: "KeyN", gkey: "ConfirmGearExtensionFailure", behavior: "momentary", help: "N · CONFIRM FAILED EXTENSION", testAction: "confirmGearFailure", consumer: /GKey\.ConfirmGearExtensionFailure/, observable: /MaintenanceScenarioJson\(\)/ },
@@ -394,6 +395,18 @@ test("pause-menu call-it-a-day is authoritative, deliberate, and observes accept
   assert.match(appSource,
     /title: "F-22A vs Su-27S"[\s\S]*?controls: "Arrows fly[^\n]*\\nO calls it a day and starts RTB · G gear/,
     "the F-22 briefing must name gear extension alongside the RTB action");
+});
+
+test("post-combat pause action can end the sortie without claiming a landing", () => {
+  assert.match(appSource,
+    /const endSortieAvailable = sessionPaused[\s\S]*?state\?\.can_end_sortie === true/,
+    "the pause action needs authoritative end-sortie eligibility");
+  assert.match(appSource,
+    /function requestCombatHandoffFromPause\(\)[\s\S]*?bridge\.EndSortie\(\)[\s\S]*?setPauseReason\("session", true\)/,
+    "End must observe typed bridge acceptance and restore pause on rejection");
+  assert.match(indexSource,
+    /<button id="ready-handoff"[^>]*>[\s\S]*?<span class="shell-action-label">RTB<\/span>/,
+    "End reuses the existing RTB pause slot");
 });
 
 test("touch pilots retain system commands but the live surface makes them contextual", () => {

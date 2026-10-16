@@ -56,13 +56,15 @@ public sealed class MeshNavSnapshotTests {
     }
 
     [Fact]
-    public void HotFrameLayoutIncludesMeshCarrierApproachAim9AndAssistDiagnosticsAtVersion34() {
+    public void HotFrameLayoutIncludesMeshCarrierApproachAim9AndAssistDiagnosticsAtVersion35() {
         string layoutJson = SnapshotHotFrame.LayoutJson();
         using JsonDocument document = JsonDocument.Parse(layoutJson);
         JsonElement root = document.RootElement;
-        Assert.Equal(34, root.GetProperty("layout_version").GetInt32());
+        Assert.Equal(35, root.GetProperty("layout_version").GetInt32());
         // Version 33 publishes the ungated lead solution beside the weapons-authorized flag;
-        // version 34 adds conventional-pattern and physical-runway recovery transport.
+        // version 34 adds conventional-pattern and physical-runway recovery transport;
+        // version 35 adds explicit RTB autopilot ownership.
+        Assert.Contains("rtb_autopilot_active", layoutJson, StringComparison.Ordinal);
         Assert.Contains("lead_solution_valid", layoutJson, StringComparison.Ordinal);
         Assert.Contains(
             "mesh_fuel_to_dest_lb",

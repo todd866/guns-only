@@ -909,8 +909,8 @@ public sealed partial class SimulationSession {
             PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
             UpdatePilotLateralCommitment(_detents.PilotRollIntent);
             PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
-            PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
-            PilotCommand padlockAssistedCommand = ApplyPlayerGunTargetPadlockRollAssist(
+            PilotCommand effectiveCommand = ApplyPilotPhysiology(RtbAutomationOr(assistedCommand));
+            PilotCommand padlockAssistedCommand = RtbAutopilotActive ? effectiveCommand : ApplyPlayerGunTargetPadlockRollAssist(
                 effectiveCommand, _detents.PilotRollIntent);
             PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
             PreparePlayerForPoweredTick();

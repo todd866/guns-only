@@ -7,7 +7,7 @@ public enum GKey {
     ConfirmGearExtensionFailure, InspectGearDownlocks, AutoGcasOverride,
     // Append-only bridge ABI: the browser dispatches these ordinals directly.
     WingSweepForward, WingSweepAft, WingSweepAuto,
-    HookToggle
+    HookToggle, TimeCompressionToggle
 }
 public enum KeyPhase { Idle, Held, DoubleHeld }
 

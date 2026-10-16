@@ -78,6 +78,17 @@ test("Knock It Off is remappable without creating a second action on O", () => {
   assert.equal(new Set(Object.values(rebound.bindings)).size, CONTROL_BINDINGS.length);
 });
 
+test("RTB time compression defaults to Y and remains uniquely rebindable", () => {
+  const original = normalisePlayerSettings();
+  assert.equal(original.bindings.timeCompressionToggle, "KeyY");
+  assert.equal(keyboardMapForSettings(original).get("KeyY"), 25);
+  const rebound = rebindControl(original, "timeCompressionToggle", "KeyL");
+  assert.equal(rebound.bindings.timeCompressionToggle, "KeyL");
+  assert.equal(rebound.bindings.knockItOff, "KeyO");
+  assert.equal(keyboardMapForSettings(rebound).get("KeyL"), 25);
+  assert.equal(new Set(Object.values(rebound.bindings)).size, CONTROL_BINDINGS.length);
+});
+
 test("first visit inherits reduced motion while an explicit saved choice always wins", () => {
   const reduce = () => ({ matches: true });
   const noReduce = () => ({ matches: false });

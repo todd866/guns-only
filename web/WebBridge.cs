@@ -219,6 +219,9 @@ public static partial class WebBridge {
     public static bool RequestReturnToBase() => Session.TryRequestReturnToBase();
 
     [JSExport]
+    public static bool EndSortie() => Session.TryEndSortie();
+
+    [JSExport]
     public static void SuppressPendingThrottleTap(bool increase) =>
         Session.SuppressPendingThrottleTap(increase);
 
