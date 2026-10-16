@@ -1,0 +1,7 @@
+ace    s000 loss          96.8s player    96.8s sim K1 H3/4 dead 14.3s 31x
+ace    s001 loss        1006.7s player  1006.8s sim K1 H3/3 dead 51.9s 42x
+ace    s002 loss         116.1s player   116.1s sim K1 H3/3 dead 14.2s 71x
+ace    s003 win          360.9s player   575.0s sim K1 H3/2 dead 93.2s 65x
+ace    s004 win          418.7s player   803.2s sim K1 H3/2 dead 83.2s 52x
+wrote /private/tmp/waves2-ace-probe2/report.md (5 runs, 6 flags)
+/private/tmp/waves2-ace-probe2

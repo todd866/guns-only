@@ -1,3 +1,87 @@
+# Iteration 2 validation
+
+Source: `7c19f0fb257d45cdf968d9a80880e1027cff46df`; the final 3 × 30 rerun and remaining verification are in progress. The current implementation is based on the committed source lineage;
+the final source/commit identifier will be filled in only after those checks pass.
+The [iteration2](iteration2/manifest.json) and baseline tapes remain preserved.
+[comparison.md](comparison.md) is not regenerated until the final 90-run cohort exists.
+All runs use seeds 0–29, the default land/RTB mode, a 3600-s censoring bound, and the
+original experience thresholds.
+
+## Changes and bot validity
+
+The continuation warning lasts 20–24 seconds. W3 is a single committed Veteran.
+W4 is a baseline-mounted Ace plus one baseline Veteran (two contacts total). W5 retains the four-Ace
+spike. The pending ReactiveBandit change is committed-only rejoin behaviour for
+contacts beyond 2,200 m and within 15,000 m, using the existing command and
+preserving terrain, energy, and ordinary guards. It addresses the stable 2.6–4 km
+orbit seen in mixed-pair ace seeds 21, 23, and 24. No gun, damage,
+aircraft-performance, opening-opponent, or game-assist constants changed.
+
+The lab ace requests RTB immediately below 90% health, even before minimum combat
+completion, and leaves on bingo, winchester, or five completed waves. The current
+three-hit player damage model makes the first hit exceed this light-damage allowance.
+A request does not erase rounds already in flight. The survival gate therefore
+counts completed survivable outcomes, not a request followed by destruction. The
+request count remains a separate diagnostic.
+
+The novice already received the game's full gun assist: `FightDirector.PitchAssist`
+is `(1, 1, true)` at every rung, and `ApplyGunneryPitchAssist` also processes scripted
+commands. The old delayed world-space pursuit controller rarely brought that aid
+into its capture envelope; its restrictive trigger produced 17 rounds and zero
+hits across 30 runs. This was a controller validity failure, not evidence for
+softening W1–W2.
+
+The repaired novice follows the production lead cue in body coordinates, with
+0.4–0.7 s reaction delay, 0.8–2.3 s initial hands-off delay, ±2° aim bias, and an
+8° sloppy trigger window inside 900 m. It uses ordinary analog/trigger inputs and
+the same gun assist as the player. It clears any previous scripted terrain/search
+command when resuming cue control. It does not enable device-specific automatic
+fire or write aircraft state, damage, or kills. The clone and ace opening control
+parameters remain unchanged. W1 requires a gun kill; the unchanged W2 is the
+authored defensive-survival lesson (`ObserveDefensiveLesson`), so two completed
+waves must not be described as two gun kills. The preserved calibration result is
+30/30 W1 kills and 23/30 W2 completions; all seven W2 failures end in destruction
+before that lesson completes. The final 90-run result remains pending.
+
+## Measurement and checks
+
+`waveContacts` records the actual previous-win tick, warning duration, and first
+physical threat tick at 120 Hz. The warning is sampled at tick end, so its
+remaining time can be 1/120 s below the authored duration; the warning gate allows
+only that sampling offset. The arrival clock does not reset on pilot decisions. Contacts
+canceled by an elective RTB are listed as canceled, not silently treated as arrivals;
+an uncanceled missing arrival fails the gate. The original dead-air definition
+and RTB-AP exclusion remain unchanged, including manual approach and wreck descent.
+Successful End is complete, not censored; an incomplete sortie remains in every
+denominator and length distribution. p50 is the median; p90 uses the lower observed
+order statistic at index `floor((n-1)*0.9)`.
+
+**109 xUnit, 27 Node, and 21 Python tests passed, plus the native lab self-test; five
+additional ReactiveBandit/leash checks are pending.**
+The xUnit selection is the same eight suites listed below, with an added all-30-seed
+arrival regression and updated W4/policy assertions. The lab self-test covers
+novice live gun hits, stale scripted-control release, damage/resource/wave-limit
+policy, and a separate ingress clock despite deliberately noisy pilot decisions.
+The saved-tape audit is `python3 analysis/playtest/2026-10-16-beat7-waves/audit_iteration2.py`.
+Logs are in [checks/iteration2](checks/iteration2/).
+
+Two complete 90-run calibration datasets are preserved: [Veteran-pair calibration](calibration-veteran-pair/manifest.json), source `dcd968f8`, and [mixed-pair calibration](calibration-mixed-pair/manifest.json), source `f196bc60`. Both directories were renamed only after completion, so each manifest retains its original launch path. The mixed-pair calibration recorded 9 wins, 17 losses, 3 incomplete runs, and 1 crash; its novice result remains 30/30 W1 and 23/30 W2. These calibration tapes are not pooled into the pending final 3 × 30. The historical rationale is calibration evidence, not a claim that the final source or final 90-run result is complete.
+
+The standing refuter's survival-measure objection was fixed. Its concern about
+using decision activity as an ingress proxy was addressed with the separate contact
+clock. The proposed device auto-trigger change was rejected after verifying that
+full gun assist already applies; the refuter accepted that distinction. No remaining
+material code objection was reported. The optional Cursor review was attempted
+through its guarded helper, which refused because it could not verify helper process
+identity in this sandbox; no bypass was used.
+
+The installed battery guard ran through the existing task-local state adapter,
+which preserves low-power holds. AC power admitted the jobs. The normal shared
+state path remains outside writable sandbox roots. No visible browser was used,
+and no UI, full-suite, deployment, push, or stamp claim is made.
+
+---
+
 # Beat 7 wave validation
 
 **108 xUnit, 27 Node and 14 Python tests passed; zero final failures.** The native

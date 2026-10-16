@@ -1,0 +1,3 @@
+iteration2 90 clock/counter/event/seed invariants passed Counter({'loss': 33, 'crash': 30, 'win': 24, 'incomplete': 2, 'recovered': 1})
+90 iteration-2 tapes passed; 36 physical arrivals within 30 s; 23 RTB cancellations.
+All 30 clone tapes unchanged apart from execution time/new empty wave field; all 30 ace opening summaries unchanged.
