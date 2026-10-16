@@ -101,6 +101,10 @@ the [v2 comparison](../../../analysis/playtest/2026-10-16-beat15-v2/comparison.m
 against targets. These encounter distances/times and town boundaries are provisional gameplay
 authoring, not changes to sourced Rapier physics.
 
+The V2 90-run cohort demonstrates envelope-only novice passes, physical drone kills, town ROE
+violations and direct debrief. Strict sight-window coverage, ≤30-second gaps and 60–90-second
+reattacks remain below target; the linked comparison keeps Phase 1 fun acceptance open.
+
 Times are **provisional pacing targets**, not rocket measurements. `H+0` is arrival at the first
 hunt lane; `L+0` is actual ignition/liftoff. Launch planning starts at sortie creation, independent
 of player progress. The H-relative timings below describe the reference route, not trigger gates.
