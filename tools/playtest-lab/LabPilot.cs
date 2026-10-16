@@ -70,7 +70,7 @@ public sealed class LabPilot {
         if (s.ReturnToBaseAvailable && ((s.FiniteCombatComplete && stayOrGo) || noviceDamageRtb
             || s.PlayerFuel.IsBingo || empty || (combatBudgetRtb && s.TimeSeconds >= rtbAfter))) {
             if (s.TryRequestReturnToBase(s.PlayerFuel.IsBingo ? MissionRtbReason.BingoFuel : MissionRtbReason.PilotKnockItOff))
-                decisions.Add("RTB:" + (s.FiniteCombatComplete ? "combat-complete" : s.PlayerFuel.IsBingo ? "bingo" : empty ? "ammo-empty" : "combat-budget"));
+                decisions.Add("RTB:" + (s.FiniteCombatComplete ? "combat-complete" : s.PlayerFuel.IsBingo ? "bingo" : empty ? "ammo-empty" : noviceDamageRtb ? "damage" : "combat-budget"));
         }
         if (s.PlayerRtbActive && !rtbObserved) {
             if (!decisions.Any(d => d.StartsWith("RTB:"))) decisions.Add("RTB:accept-mission-handoff");
