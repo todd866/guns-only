@@ -152,9 +152,15 @@ test("selected-target padlock roll hold stays a fixed-tick, safety-preemptible a
   assert.match(webBridgeSource,
     /SetPlayerGunTargetPadlockRollAssist\(bool selected\)[\s\S]*?Session\.SetPlayerGunTargetPadlockRollAssist\(selected\)/,
     "the browser may send only the discrete selected/tracked state");
-  assert.match(sessionSource,
-    /RapierAutomationOr\(_detents\.Command\)[\s\S]*?ApplyGunneryPitchAssist\(directedCommand\)[\s\S]*?ApplyPilotPhysiology\(assistedCommand\)[\s\S]*?ApplyPlayerGunTargetPadlockRollAssist\([\s\S]*?ApplyAutoGcas\(padlockAssistedCommand\)/,
-    "padlock SAS must follow the effective human or Rapier-directed path and remain below Auto-GCAS priority");
+  // RTB owns steering while engaged; handback restores the same fixed-tick padlock SAS.
+  // Check both combat and recovery paths independently, up to their actual physics step.
+  const padlockPaths = [...sessionSource.matchAll(
+    /PilotCommand directedCommand = RapierAutomationOr\(_detents\.Command\);(?:(?!_player\.Step\()[\s\S])*?_player\.Step\(flightCommand, FixedDeltaSeconds\);/g)]
+    .map(([path]) => path).filter(path => path.includes("ApplyPlayerGunTargetPadlockRollAssist"));
+  assert.equal(padlockPaths.length, 2, "combat and recovery must retain their fixed-tick padlock paths");
+  for (const path of padlockPaths) assert.match(path,
+    /ApplyGunneryPitchAssist\(directedCommand\);\s*PilotCommand effectiveCommand = ApplyPilotPhysiology\(RtbAutomationOr\(assistedCommand\)\);\s*PilotCommand padlockAssistedCommand = RtbAutopilotActive \? effectiveCommand : ApplyPlayerGunTargetPadlockRollAssist\(\s*effectiveCommand, _detents\.PilotRollIntent\);\s*PilotCommand flightCommand = ApplyAutoGcas\(padlockAssistedCommand\);/,
+    "RTB must bypass padlock only while engaged; physiology precedes SAS and Auto-GCAS retains final priority");
   assert.match(sessionSource,
     /_playerGunTargetPadlockRollAssistTargetId == _selectedPlayerGunTargetId/,
     "assist geometry must remain bound to the same authoritative gun-target identity");
