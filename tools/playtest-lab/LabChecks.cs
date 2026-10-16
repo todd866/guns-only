@@ -7,6 +7,7 @@ namespace GunsOnly.PlaytestLab;
 
 public static class LabChecks {
     public static void Run(ClonedPilotPolicy clone) {
+        PathfinderChecks.Run();
         static void Require(bool value, string message) { if (!value) throw new Exception(message); }
         Require(Math.Abs(ExperienceObserver.SegmentDistance(new Vec3D(-100, 10, 0), new Vec3D(100, 10, 0)) - 10) < 1e-9,
             "Swept near-miss distance lost a fast passing round.");
@@ -32,7 +33,7 @@ public static class LabChecks {
                 "Per-second deltas disagree with sortie totals.");
             Require(a.Timeline.All(x => x.Tension is >= 0 and <= 1), "Tension outside 0..1.");
         }
-        foreach (int invalid in new[] { 0, 15 }) {
+        foreach (int invalid in new[] { 0, 16 }) {
             bool rejected = false;
             try { Options.Parse(new[] { "--beat", invalid.ToString() }); } catch (ArgumentException) { rejected = true; }
             Require(rejected, "Unknown beat silently became Perch.");
@@ -46,7 +47,7 @@ public static class LabChecks {
         for (int i = 0; i < 125; i++) { partialObserver.BeforeStep(partialSession); partialSession.StepFixed(); partialObserver.Observe(partialSession, Array.Empty<string>()); }
         var partial = partialObserver.Finish(partialSession, 0);
         Require(partial.Timeline.Count == 2 && Math.Abs(partial.Timeline[1].Duration - 5 * SortieRunner.Dt) < 1e-10, "Final fractional second was dropped.");
-        foreach (int beat in Enumerable.Range(1, 14)) {
+        foreach (int beat in Enumerable.Range(1, 15)) {
             var staged = SortieRunner.Fly(new Options(Beat: beat, MaxSeconds: 1), "novice", 0, clone);
             Require(staged.Seconds > 0 && staged.Timeline.Count > 0, $"Beat {beat} produced no tape.");
         }
@@ -59,7 +60,7 @@ public static class LabChecks {
             var joined = SortieRunner.Fly(new Options(MaxSeconds: 2400), pilot, 1, clone);
             Require(joined.Completed && joined.Landed, $"Runway join orbit regressed for {pilot}: {joined.Outcome}");
         }
-        Console.WriteLine("PASS: clone reference cases, deterministic/varied seeds, all 14 beats stage, timeout/partial-bin accounting, real near-miss passages, physical runway recovery, CLI validation.");
+        Console.WriteLine("PASS: clone reference cases, deterministic/varied seeds, all 15 beats stage, timeout/partial-bin accounting, real near-miss passages, physical runway recovery, CLI validation.");
     }
     static int ShotPass(double crossM, bool relief) {
         // Instrument fixture only: these state writes never occur in SortieRunner.

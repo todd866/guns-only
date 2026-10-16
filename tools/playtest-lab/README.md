@@ -21,7 +21,7 @@ python3 -m unittest discover -s tools/playtest-lab -p 'test_*.py'
 python3 tools/playtest-lab/report.py analysis/playtest/2026-10-16-beat7
 ```
 
-`--beat` accepts every built-in id, 1–14, and rejects unknown ids. Other options:
+`--beat` accepts every built-in id, 1–15, and rejects unknown ids. Other options:
 `--pilots clone,novice,ace`, `--seeds 30`, `--start-seed 0`, `--max-seconds 3600`,
 `--rtb-after 600`, `--threat-km 2.5`, `--near-miss-m 25`, `--ground-m 100`, `--out DIR`.
 The time limit is an emergency bound, not an instruction to declare a sortie finished.
@@ -114,9 +114,72 @@ its committed manifest. It does not depend on xUnit or private telemetry dataset
 
 `--self-test` checks clone reference outputs, same/different-seed replays, timeout
 classification, duration/counter conservation, fast-round passages/hits/filtering,
-all 14 beat ids, and physical full-stop recoveries including formerly stuck novice/ace
+all 15 beat ids, and physical full-stop recoveries including formerly stuck novice/ace
 join cases, without teleporting the aircraft.
 The Python tests check metric/flag aggregation, paired escalation, partial bins,
 censoring, and parseable SVG. Run a small full sortie before large cohorts when
 changing a controller. Inspect the SVG as well as the summary: a green build is not
 evidence that a pilot can shoot or recover.
+
+## Pathfinders — beat 15
+
+```sh
+tools/playtest-lab/run --beat 15 --seeds 30 --out analysis/playtest/2026-10-16-beat15
+```
+
+Beat 15 defaults to `hunter-novice,hunter-ace,reckless`; these names are restricted
+by the CLI to beat 15. Each paired seed varies pilot reaction/start/aim and the
+production `FirstLight(seed)` relay drift. Spawn spacing, weather layers, hit
+volumes, ammunition and flight physics stay authored. The manifest records the
+source commit, runtime and lab/sim assembly hashes. Commit source before collecting
+a release-candidate cohort so its commit identifies the measured code.
+
+- **hunter-novice:** delayed, partial lead, lower power/bank limits, overshooting
+  passes and imperfect aim. A seeded 65% of profiles initially mistake envelopes
+  for the target; after a pass they attempt the gondola. The profile can fail.
+- **hunter-ace:** sets up altitude before the pass, anticipates ballistic cue motion,
+  maintains ram energy, cycles live relays and skips populated/unknown debris
+  footprints. On hard geometry it chooses a drone, if that capability exists.
+- **reckless:** uses the same navigation competence as the ace, fires more broadly
+  at forward contacts, and never consults the ROE classification.
+
+All three hunt using public `SetAnalogPitchControl`, `SetAnalogRollControl`,
+`SetAnalogThrottleControl`, `SetPlayerGunTargetSlot`, `FeedKey(Trigger)` and
+`TryRequestReturnToBase`. There is no state adoption, direct `Engage`, fabricated
+kill, QA pause, reload or forced finish in a cohort. The inherited recovery pilot
+still uses the lab's scripted command seam. An ace label is a control policy,
+not a validated human expert benchmark.
+
+**Phase 1 capability gap:** its four drones are mass only. The public Trigger
+route explicitly excludes Pathfinder from the legacy drone/formation sweep.
+The lab records `drone-release-rejected` for a *blocked policy choice*, with source
+`policy:capability-unavailable`; no release API call was made. Actual drone release
+and drone kill event classes are structurally unobserved in this build. This must
+remain visible in the verdict; adding a fake kill would defeat the experiment.
+
+| Pathfinder measure | Definition |
+|---|---|
+| Relay in view | Live relay within 30 km and a 60° body-nose cone; headless visibility proxy, not rendered perception. |
+| Gun window | Selected live gondola, range ≤900 m, authorized loaded gun, instantaneous ballistic sight solution. Uses the gun's conservative cue volume, not the HUD's 0.08 s qualification dwell. Dispersion/box contacts can kill without this cue. |
+| First window | First observed opening; null is missing, never zero. Target ≤20 s. |
+| Longest window gap | Longest hunt interval without a window, including leading/trailing edges. Target ≤30 s; censored hunts retain their observed gap. |
+| Pass | Selected live relay enters 6 km; closes on kill, outward exit beyond 6.5 km, or actual hunt egress/loss. A selected proximity encounter is a proxy for an attack pass. Open passes at observation cutoff are counted separately as censored. |
+| Envelope-only | Completed pass with physical envelope hits and no gondola kill. Percentage denominator is completed passes, including misses. Zero is absent teaching; >50% is a **provisional** dominance threshold. |
+| Passes/physical kill | Completed passes divided by gondola + drone kills, including ROE-invalid kills. Null when no kills. Safe kills are separate. |
+| ROE decisions | New footprint classifications per selected relay (`clear` or `skip-town`), counted once per classification transition. The reckless pilot makes none. |
+| Hunt length | Airborne start to actual RTB handoff or aircraft loss. Target 240–360 s. Route exhaustion, bingo, empty gun and a 600 s combat budget are distinct end reasons. This does not declare a completed/recovered sortie. |
+| Sortie length | Full production lifecycle to `Finished`, or censored emergency limit (default 3600 s), including shared scripted recovery. |
+| Outcome spread | Novice sometimes denies ≥1 sector; ace must not trivially deny every relay every run. Report physical denial, safe kills, full-sortie outcome and censoring separately. |
+
+The exact tape adds `pathfinder:` events for relay-in-view, gun-window-open/closed,
+envelope-hit, gondola-kill, sector-denied, ROE decision/violation, pass-ended/missed,
+blocked drone choice, bingo and egress. Hits use swept contact times, not rounded
+one-second bins. The report leads with headline targets and three evidence-backed
+problems, then per-minute opportunities, per-run metrics and the existing generic
+metrics/flags. Its hunt SVG shows one aligned row per run; tooltips retain event
+kind, target, source and exact timestamp. A quiet minute remains in the report.
+
+`--self-test` additionally checks deterministic hunter replays, physical envelope
+and ROE-violating gondola fixtures, pass/event conservation, missing-window
+censoring, all 15 beat IDs and the absence of synthetic drones. Fixture starting
+positions exist only in tests, never in the cohort runner.

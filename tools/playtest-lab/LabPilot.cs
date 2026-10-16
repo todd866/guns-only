@@ -11,6 +11,7 @@ public sealed class LabPilot {
     readonly string name;
     readonly ClonedPilotPolicy? clone;
     readonly CasevacPilot casevac;
+    readonly PathfinderPilot pathfinder;
     readonly int latency, rtbAfter;
     readonly double handsOff, aimBias;
     readonly Queue<(long Tick, AircraftState State, Vec3D Lead, bool Solution)> observations = new();
@@ -23,7 +24,8 @@ public sealed class LabPilot {
     long targetId;
     public LabPilot(string name, int seed, ClonedPilotPolicy? clone, int rtbAfter) {
         this.name = name; this.clone = clone; this.rtbAfter = rtbAfter;
-        casevac = new CasevacPilot(name, seed);
+        casevac = new CasevacPilot(name is "clone" or "novice" or "ace" ? name : "ace", seed);
+        pathfinder = new PathfinderPilot(name, seed, rtbAfter);
         // Explicit integer PRNG: reproducible on all .NET 8 hosts, no global RNG.
         uint state = unchecked((uint)seed + 0x9e3779b9u);
         // Avalanche adjacent integer seeds before drawing; otherwise several nearby
@@ -41,6 +43,7 @@ public sealed class LabPilot {
 
     public IReadOnlyList<string> Drive(SimulationSession s) {
         decisions.Clear();
+        if (s.Pathfinder is not null) return pathfinder.Drive(s);
         if (s.CasevacMission) { SetMode(casevac.Drive(s), s.TimeSeconds); return decisions; }
         if (!s.PlayerAlive) { Fire(s, false); return decisions; }
         if (s.PlayerFuel.IsBingo && !bingoObserved) { bingoObserved = true; decisions.Add("bingo:acknowledge"); }

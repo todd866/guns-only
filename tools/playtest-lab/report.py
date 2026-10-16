@@ -6,6 +6,11 @@ import argparse, gzip, html, json, math
 from collections import Counter, defaultdict
 from pathlib import Path
 
+try:
+    import pathfinder_report
+except ImportError:  # pragma: no cover - allows the generic report to stay standalone
+    pathfinder_report = None
+
 PHASES = ("setup", "transit", "merge", "fight", "defensive", "RTB", "approach", "landing", "dead", "finished")
 COLORS = {"setup":"#94a3b8", "transit":"#60a5fa", "merge":"#22d3ee", "fight":"#f59e0b", "defensive":"#ef4444", "RTB":"#a78bfa", "approach":"#c084fc", "landing":"#34d399", "dead":"#111827", "finished":"#64748b"}
 OUTCOMES = ("win", "loss", "crash", "recovered", "draw")
@@ -156,14 +161,20 @@ def make_report(root: Path) -> tuple[dict, str]:
     summaries = {}
     for pilot in sorted(by):
         summaries[pilot] = aggregate(by[pilot])
+    has_pf = bool(pathfinder_report and any(pathfinder_report.data(r) for r in runs))
+    pf_flags = pathfinder_report.flags(runs) if has_pf else []
+    pf_summaries = {pilot: pathfinder_report.aggregate(rs) for pilot, rs in by.items()} if has_pf else {}
     simulated_total = sum(run_duration(r) for r in runs)
     wall = float(manifest.get("wallSeconds") or 0)
     speed = "N/A" if wall <= 0 else f"{simulated_total/wall:.1f}×"
-    lines = [f"# Playtest Lab — beat {manifest.get('beat','?')}", "", f"Generated {manifest.get('date','?')} · {len(runs)} runs · seed {manifest.get('startSeed','?')} · {simulated_total:.1f}s simulated · {speed} wall speed", "", "## At a glance", "", "| pilot | runs | complete | censored | win rate | mean length | spread | flags |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
+    lines = [f"# Playtest Lab — beat {manifest.get('beat','?')}", "", f"Generated {manifest.get('date','?')} · {len(runs)} runs · seed {manifest.get('startSeed','?')} · {simulated_total:.1f}s simulated · {speed} wall speed"]
+    if has_pf:
+        lines += ["", pathfinder_report.markdown(runs, manifest)]
+    lines += ["", "## At a glance", "", "| pilot | runs | complete | censored | win rate | mean length | spread | flags |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for pilot, a in summaries.items():
         wr = "N/A" if a["winRate"] is None else f"{100*a['winRate']:.0f}%"
         lines.append(f"| {pilot} | {a['runs']} | {a['complete']} | {a['censored']} | {wr} | {a['meanLength']:.1f}s | {a['lengthSpread']:.1f}s | {sum(1 for x in fs if pilot in x)} |")
-    lines += ["", f"Flag count: **{len(fs)}**", "", "## Reproduction", "", f"- Command: `{manifest.get('command','(not recorded)')}`", f"- Source commit: `{manifest.get('sourceCommit','(unknown)')}`", f"- Clone SHA-256: `{manifest.get('cloneSha256','(unknown)')}`", f"- Wall time: {manifest.get('wallSeconds','?')}s", f"- Configured max seconds: {manifest.get('maxSeconds','?')}", "", "## Notes", ""]
+    lines += ["", f"Flag counts: **{len(fs)} generic; {len(pf_flags)} Pathfinder**", "", "## Reproduction", "", f"- Command: `{manifest.get('command','(not recorded)')}`", f"- Source commit: `{manifest.get('sourceCommit','(unknown)')}`", f"- Clone SHA-256: `{manifest.get('cloneSha256','(unknown)')}`", f"- Wall time: {manifest.get('wallSeconds','?')}s", f"- Configured max seconds: {manifest.get('maxSeconds','?')}", "", "## Notes", ""]
     lines += [f"- {x}" for x in manifest.get("notes", [])] or ["- No notes recorded"]
     lines += ["", "## Pilot metrics", "", "| pilot | kills | hits given/taken | near misses | decisions/min | first action | dead air (total/max) | outcome distribution | entropy | paired e1→e2 | rising | mean Δ |", "|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|"]
     for pilot, a in summaries.items():
@@ -184,14 +195,20 @@ def make_report(root: Path) -> tuple[dict, str]:
             ds = len(r.get("decisions", [])) if isinstance(r.get("decisions"), list) else float(r.get("decisions", 0)); dpm = 60*ds/(length or 1)
             e1, e2 = tension(r, 1), tension(r, 2); e = f"{e1:.2f} / {e2:.2f}" if e1 is not None and e2 is not None else "—"
             lines.append(f"| {r.get('seed','?')} | {r.get('outcome','incomplete')} | {length:.1f}s | {first} | {float(r.get('deadAirSeconds',0)):.1f}s | {float(r.get('longestDeadAirSeconds',0)):.1f}s | {dpm:.2f} | {e} | {r.get('kills',0)} | {r.get('roundsFired',0)} | {r.get('hitsGiven',0)}/{r.get('hitsTaken',0)} | {r.get('shotNearMisses',0)}/{r.get('groundNearMisses',0)} |")
-    lines += ["", "## Timeline strip", "", "![Per-run timeline strip](timeline.svg)", "", "The strip uses one row per run; phase colour, dead-air shading, event symbols, and the tension trace are defined in the SVG legend.", ""]
-    return {"manifest": manifest, "runs": len(runs), "flags": fs, "pilots": summaries}, "\n".join(lines)
+    timeline_note = ("The strip uses one row per run; Pathfinder event markers, gun-window bands, minute grid, and exact tooltip times are defined in the SVG legend."
+                     if has_pf else
+                     "The strip uses one row per run; phase colour, dead-air shading, event symbols, and the tension trace are defined in the SVG legend.")
+    lines += ["", "## Timeline strip", "", "![Per-run timeline strip](timeline.svg)", "", timeline_note, ""]
+    return {"manifest": manifest, "runs": len(runs), "flags": fs, "pilots": summaries,
+            "pathfinderFlags": pf_flags, "pathfinderPilots": pf_summaries}, "\n".join(lines)
 
 def main() -> None:
     ap = argparse.ArgumentParser(); ap.add_argument("output_dir", type=Path); args = ap.parse_args()
     summary, report = make_report(args.output_dir); (args.output_dir / "report.md").write_text(report, encoding="utf-8")
     (args.output_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True)+"\n", encoding="utf-8")
-    manifest = summary["manifest"]; runs = load_runs(args.output_dir, manifest); (args.output_dir / "timeline.svg").write_text(svg_strip(runs), encoding="utf-8")
-    print(f"wrote {args.output_dir / 'report.md'} ({len(runs)} runs, {len(summary['flags'])} flags)")
+    manifest = summary["manifest"]; runs = load_runs(args.output_dir, manifest)
+    svg = pathfinder_report.svg_timeline(runs) if pathfinder_report and any(pathfinder_report.data(r) for r in runs) else svg_strip(runs)
+    (args.output_dir / "timeline.svg").write_text(svg, encoding="utf-8")
+    print(f"wrote {args.output_dir / 'report.md'} ({len(runs)} runs, {len(summary['flags']) + len(summary.get('pathfinderFlags', []))} flags)")
 
 if __name__ == "__main__": main()

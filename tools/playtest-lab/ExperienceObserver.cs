@@ -41,7 +41,8 @@ public sealed class TimelineSecond {
 public sealed record EngagementTension(int Engagement, double Seconds, double Mean, double Peak);
 public sealed record LabEvent(double Second, string Kind, string Source, string Target, int Count);
 public sealed class RunResult {
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; init; } = 2;
+    public PathfinderMetrics? Pathfinder { get; set; }
     public int Beat { get; init; }
     public string Pilot { get; init; } = "";
     public int Seed { get; init; }
@@ -76,6 +77,7 @@ public sealed class RunResult {
 public sealed class ExperienceObserver {
     readonly Options options;
     readonly RunResult result;
+    readonly PathfinderObserver? pathfinder;
     readonly Dictionary<int, (double Seconds, double Sum, double Peak)> engagements = new();
     readonly HashSet<GunKill> hostileGuns = new();
     readonly HashSet<GunRound> authoritativeRounds = new();
@@ -97,6 +99,7 @@ public sealed class ExperienceObserver {
     public ExperienceObserver(Options options, string pilot, int seed) {
         this.options = options;
         result = new RunResult { Beat = options.Beat, Pilot = pilot, Seed = seed };
+        if (options.Beat == 15) pathfinder = new PathfinderObserver(result);
     }
     public void BeforeStep(SimulationSession s) {
         if (s.CasevacMission) return;
@@ -120,7 +123,9 @@ public sealed class ExperienceObserver {
         double g = rotary ? 0 : s.Player.LastNz;
         double energy = position.Y + speed * speed / (2 * FlightModel.G0);
         (bool threat, double proximity, double closure) = rotary ? (false, 0, 0) : Threat(s);
-        bool target = !rotary && s.SelectedOpponentAlive && s.PlayerWeaponsAuthorized && s.PlayerGun.GunSolution;
+        bool target = s.Pathfinder is not null ? PathfinderObserver.GunWindow(s)
+            : !rotary && s.SelectedOpponentAlive && s.PlayerWeaponsAuthorized && s.PlayerGun.GunSolution;
+        if (s.Pathfinder is not null) pathfinder?.Observe(s, decisions, time);
         string phase = Phase(s, threat);
         int dr = s.SortiePlayerRoundsFired - rounds, dh = s.SortiePlayerHits - given,
             dtaken = s.PlayerHitsTaken - taken, dk = s.KillCount - kills;
@@ -262,7 +267,7 @@ public sealed class ExperienceObserver {
         };
         if (!s.PlayerAlive) return "dead";
         if (s.RunwayWeightOnWheels || s.ConventionalRunwayPhase == RunwayRecoveryPhase.Rollout || s.Recovery == Carrier.Recovery.Trap) return "landing";
-        if (s.PlayerRtbActive || (!s.OpponentPresent && s.Beat.RecoveryCompletesSortie)) {
+        if (s.PlayerRtbActive || (s.Pathfinder is null && !s.OpponentPresent && s.Beat.RecoveryCompletesSortie)) {
             var g = s.ApproachGuidancePlan;
             if (s.ConventionalRunwayRecovery is { } recovery) {
                 var frame = recovery.Runway.Frame(s.Player.State.Position);
@@ -272,6 +277,7 @@ public sealed class ExperienceObserver {
             }
             return g.InGroove || g.ActivePatternLeg is ApproachPatternLeg.Base or ApproachPatternLeg.Final or ApproachPatternLeg.Threshold || s.Controls.ApproachMode ? "approach" : "RTB";
         }
+        if (s.Pathfinder is not null) return s.PlayerRtbActive ? "RTB" : "fight";
         if (s.TimeSeconds < 1) return "setup";
         if (s.LiveOpponentCount == 0) return "transit";
         if (threat && (!s.PlayerGun.GunSolution || s.PlayerHealth < .5)) return "defensive";
@@ -280,6 +286,7 @@ public sealed class ExperienceObserver {
     }
     public RunResult Finish(SimulationSession s, double wall) {
         Flush(s.CasevacMission);
+        pathfinder?.Finish(ticks * SortieRunner.Dt);
         result.Seconds = ticks * SortieRunner.Dt; result.WallSeconds = wall;
         result.Completed = s.Lifecycle == SimulationSession.LifecycleState.Finished;
         result.SimOutcome = s.Outcome.ToString(); result.TerminalState = s.PlayerTerminalState.ToString();

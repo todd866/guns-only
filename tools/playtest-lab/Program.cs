@@ -19,7 +19,7 @@ public sealed record Options(int Beat = 7, int Seeds = 30, int StartSeed = 0,
             string k = args[i];
             if (k == "--self-test") { o = o with { SelfTest = true }; continue; }
             if (k == "--help") {
-                Console.WriteLine("playtest-lab [--beat 1..14] [--seeds 30] [--start-seed 0] [--pilots clone,novice,ace] [--max-seconds 3600] [--rtb-after 600] [--threat-km 2.5] [--near-miss-m 25] [--ground-m 100] [--out DIR] [--self-test]");
+                Console.WriteLine("playtest-lab [--beat 1..15] [--seeds 30] [--start-seed 0] [--pilots clone,novice,ace | hunter-novice,hunter-ace,reckless] [--max-seconds 3600] [--rtb-after 600] [--threat-km 2.5] [--near-miss-m 25] [--ground-m 100] [--out DIR] [--self-test]");
                 Environment.Exit(0);
             }
             if (++i == args.Length) throw new ArgumentException($"Missing value for {k}");
@@ -38,13 +38,18 @@ public sealed record Options(int Beat = 7, int Seeds = 30, int StartSeed = 0,
                 _ => throw new ArgumentException($"Unknown option {k}")
             };
         }
+        if (o.Beat == 15 && !args.Contains("--pilots")) o = o with { Pilots = "hunter-novice,hunter-ace,reckless" };
+        if (o.Beat == 15 && o.PilotNames.Any(p => p is not ("hunter-novice" or "hunter-ace" or "reckless")))
+            throw new ArgumentException("Beat 15 uses hunter-novice, hunter-ace, or reckless.");
+        if (o.Beat != 15 && o.PilotNames.Any(p => p is "hunter-novice" or "hunter-ace" or "reckless"))
+            throw new ArgumentException("Pathfinder pilots require beat 15.");
         if (!Beats.IsBuiltInIndex(o.Beat) || o.Seeds < 1 || o.Seeds > 10000
             || o.StartSeed < 0 || o.StartSeed > int.MaxValue - o.Seeds
             || o.MaxSeconds < 1 || o.MaxSeconds > 14400 || o.RtbAfterSeconds < 1
             || !double.IsFinite(o.ThreatRangeM) || o.ThreatRangeM <= 0
             || !double.IsFinite(o.ShotMissM) || o.ShotMissM <= 0
             || !double.IsFinite(o.GroundMissM) || o.GroundMissM <= 0
-            || o.PilotNames.Any(p => p is not ("clone" or "novice" or "ace"))
+            || o.PilotNames.Any(p => p is not ("clone" or "novice" or "ace" or "hunter-novice" or "hunter-ace" or "reckless"))
             || o.PilotNames.Length != o.PilotNames.Distinct().Count())
             throw new ArgumentException("Invalid beat, pilot, seed count, time limit, or threshold; see --help.");
         return o;
@@ -83,10 +88,13 @@ public static class Program {
                 files.Add(rel);
                 // Checkpoint the manifest after every sortie; interrupted batches remain inspectable.
                 var manifest = new {
-                    schemaVersion = 1, date, beat = o.Beat, seeds = o.Seeds, startSeed = o.StartSeed,
+                    schemaVersion = 2, date, beat = o.Beat, seeds = o.Seeds, startSeed = o.StartSeed,
                     maxSeconds = o.MaxSeconds, rtbAfterSeconds = o.RtbAfterSeconds,
                     command = "tools/playtest-lab/run " + string.Join(' ', args.Select(Quote)),
                     sourceCommit, cloneSha256 = cloneHash,
+                    runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                    labAssemblySha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(Program).Assembly.Location))).ToLowerInvariant(),
+                    simAssemblySha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(SimulationSession).Assembly.Location))).ToLowerInvariant(),
                     wallSeconds = wall.Elapsed.TotalSeconds, options = o,
                     notes = new[] {
                         "Experience proxies, not a claim to measure human feelings. 120 Hz production simulation; per-second bins preserve tick events and exact phase/dead-air durations. No renderer or wall-clock pacing.",
@@ -97,7 +105,15 @@ public static class Program {
                         $"RTB choice: combat complete, bingo, empty gun, or {o.RtbAfterSeconds}s combat budget, through TryRequestReturnToBase. Recovery/navigation is a shared scripted pilot, with a conventional straight-in join, not learned owner behaviour or an overhead-pattern model. A {o.MaxSeconds}s limit is censored, never a win or fabricated landing.",
                         "Tension heuristic: 0.35 proximity + 0.15 positive closure (within threat range) + 0.25 threat + 0.15 damage-risk under threat + 0.10 low-clearance risk; clamped 0..1, near shots at least 0.85 and hits at least 0.95. Engagement means exclude RTB and terminal wreck descent. Phase percentages include wreck/debrief time.",
                         "Default native terrain is the session's authored/default surface, without the browser's streamed terrain atlas. Ground-clearance results describe that substrate. CASEVAC uses semantic navigation for all profiles; fixed-wing clone/gun/G metrics do not apply. Generic pilots attempt every built-in beat; specialist mission failures and timeouts remain visible."
-                    }, runs = files
+                    }.Concat(o.Beat == 15 ? new[] {
+                        "PATHFINDERS: paired seed also seeds FirstLight relay drift; spawn geometry, weather layers, weapons and damage remain authored. Hunter policies use public analog pitch/roll/throttle, target-slot selection, trigger and RTB; only the shared recovery controller retains the existing scripted seam.",
+                        "Hunt duration ends at actual RTB handoff or aircraft loss; full sortie includes physical recovery. No fixed 4–6 minute stop is imposed. Budget-triggered egress is a controller limit, not mission completion. Emergency maxSeconds censors the full sortie and any still-active hunt.",
+                        "Gun window: selected live gondola, authorized loaded gun, instantaneous ballistic sight solution (conservative cue; dispersion/box contacts can kill outside it), range <=900 m. The HUD-qualified GunSolution adds dwell and is not used to erase brief physical opportunities. Drought includes leading and trailing edge gaps in the hunt. A 900 m proximity-only QA check is not this metric.",
+                        "Pass: selected live relay enters 6000 m, finishes on kill, outward exit beyond 6500 m or actual egress/loss. Complete passes only; open passes at censor are separate. Envelope-only means physical envelope impacts but no gondola kill in that pass. Miss means no kill, including envelope-only. Ratios use all physical gondola/drone kills; safe kills are separate.",
+                        "Relay in view is a headless proxy: live relay within 30 km and 60 degrees of body nose. ROE decisions are new per-target footprint classifications, not servo ticks. A seeded 65% of novice profiles first favour the envelope, then try the gondola; ace skips populated/unknown footprints, retries hard geometry, and chooses drones when appropriate; reckless aims/fires without consulting ROE.",
+                        "DRONE CAPABILITY GAP: Phase 1 carries four drones as mass only and exposes no release route. Blocked drone policy choices are recorded as unavailable, not actual API calls or releases. Drone release/kill event classes are structurally unobserved; zero is not evidence that deployed drones fail.",
+                        "Envelope-only >50% is a provisional dominance flag; zero marks an absent teaching moment. This is an exploratory controller study, not a human fun verdict or a fully calibrated expert benchmark."
+                    } : Array.Empty<string>()), runs = files
                 };
                 string temp = Path.Combine(output, "manifest.json.tmp");
                 File.WriteAllText(temp, JsonSerializer.Serialize(manifest, new JsonSerializerOptions(Json) { WriteIndented = true }));
@@ -141,6 +157,7 @@ public static class SortieRunner {
     public static RunResult Fly(Options o, string name, int seed, ClonedPilotPolicy? clone) {
         var watch = Stopwatch.StartNew();
         var s = new SimulationSession(o.Beat, serviceLifeCaptureEnabled: false);
+        if (o.Beat == 15) s.StartBeat(() => Beats.RapierPathfinders(unchecked((uint)seed)));
         s.DecisionCaptureEnabled = false; // training recorder is unrelated to the experience tape
         var pilot = new LabPilot(name, seed, clone, o.RtbAfterSeconds);
         var observer = new ExperienceObserver(o, name, seed);
