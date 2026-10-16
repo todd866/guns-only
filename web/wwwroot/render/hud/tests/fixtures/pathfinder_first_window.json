@@ -3,11 +3,11 @@
   "gun_max_flight_s": 2.000,
   "gun_muzzle_velocity_mps": 1030.00,
   "mode": "FREE",
-  "pathfinder": {"selected_id":1,"envelope_radius_m":17.639,"sun_elevation_deg":-1.200,"relays":[{"id":1,"position":{"x":-54708.967,"y":20600.000,"z":-38.846},"gondola_position":{"x":-54708.967,"y":20569.361,"z":-38.846},"relay_active":true,"leak_fraction":0.000,"lift_loss_fraction":0.000,"debris":null},{"id":2,"position":{"x":-109701.810,"y":20600.000,"z":3964.652},"gondola_position":{"x":-109701.810,"y":20569.361,"z":3964.652},"relay_active":true,"leak_fraction":0.000,"lift_loss_fraction":0.000,"debris":null},{"id":3,"position":{"x":-159690.107,"y":20600.000,"z":19953.068},"gondola_position":{"x":-159690.107,"y":20569.361,"z":19953.068},"relay_active":true,"leak_fraction":0.000,"lift_loss_fraction":0.000,"debris":null}],"selected_footprint":{"centre":{"x":-50633.999,"y":192.000,"z":-251.684},"radius_m":782.500,"classification":"clear"}},
-  "range_m": 895.6,
-  "rapier_inlet_recovery": 0.972,
+  "pathfinder": {"selected_id":1,"drone_selected":false,"gun_drones_remaining":4,"envelope_radius_m":17.639,"sun_elevation_deg":-1.200,"relays":[{"id":1,"position":{"x":-51753.933,"y":20600.000,"z":-32.845},"gondola_position":{"x":-51753.933,"y":20569.361,"z":-32.845},"relay_active":true,"escaped":false,"leak_fraction":0.000,"lift_loss_fraction":0.000,"debris":null},{"id":2,"position":{"x":-79747.881,"y":20600.000,"z":70.113},"gondola_position":{"x":-79747.881,"y":20569.361,"z":70.113},"relay_active":true,"escaped":false,"leak_fraction":0.000,"lift_loss_fraction":0.000,"debris":null},{"id":3,"position":{"x":-107737.986,"y":20600.000,"z":260.319},"gondola_position":{"x":-107737.986,"y":20569.361,"z":260.319},"relay_active":true,"escaped":false,"leak_fraction":0.000,"lift_loss_fraction":0.000,"debris":null}],"selected_footprint":{"centre":{"x":-47678.964,"y":192.000,"z":-245.682},"radius_m":782.500,"classification":"clear"}},
+  "range_m": 898.9,
+  "rapier_inlet_recovery": 0.974,
   "rapier_mission_available": true,
   "recovery_platform": true,
-  "sample_seconds": 17.5833,
+  "sample_seconds": 14.8667,
   "wave_off": false
 }

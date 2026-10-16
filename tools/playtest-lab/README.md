@@ -134,28 +134,29 @@ volumes, ammunition and flight physics stay authored. The manifest records the
 source commit, runtime and lab/sim assembly hashes. Commit source before collecting
 a release-candidate cohort so its commit identifies the measured code.
 
-- **hunter-novice:** delayed, partial lead, lower power/bank limits, overshooting
-  passes and imperfect aim. A seeded 65% of profiles initially mistake envelopes
-  for the target; after a pass they attempt the gondola. The profile can fail.
+- **hunter-novice:** delayed sight tracking, lower power/bank limits, overshooting
+  passes and imperfect aim. The first encounter aims at the envelope centroid;
+  after an envelope-hit pass the pilot attempts the gondola. The profile can fail.
 - **hunter-ace:** sets up altitude before the pass, anticipates ballistic cue motion,
   maintains ram energy, cycles live relays and skips populated/unknown debris
-  footprints. On hard geometry it chooses a drone, if that capability exists.
+  footprints. On hard geometry it may release one gun drone through the public
+  Pathfinder action.
 - **reckless:** uses the same navigation competence as the ace, fires more broadly
   at forward contacts, and never consults the ROE classification.
 
 All three hunt using public `SetAnalogPitchControl`, `SetAnalogRollControl`,
-`SetAnalogThrottleControl`, `SetPlayerGunTargetSlot`, `FeedKey(Trigger)` and
+`SetAnalogThrottleControl`, `SetAnalogYawControl`, `SetPlayerGunTargetSlot`,
+`FeedKey(Trigger/Override)`, `TryReleasePathfinderDrone` and
 `TryRequestReturnToBase`. There is no state adoption, direct `Engage`, fabricated
 kill, QA pause, reload or forced finish in a cohort. The inherited recovery pilot
 still uses the lab's scripted command seam. An ace label is a control policy,
 not a validated human expert benchmark.
 
-**Phase 1 capability gap:** its four drones are mass only. The public Trigger
-route explicitly excludes Pathfinder from the legacy drone/formation sweep.
-The lab records `drone-release-rejected` for a *blocked policy choice*, with source
-`policy:capability-unavailable`; no release API call was made. Actual drone release
-and drone kill event classes are structurally unobserved in this build. This must
-remain visible in the verdict; adding a fake kill would defeat the experiment.
+**Phase 1 drone action:** the ace invokes the public Pathfinder release action at a
+selected relay. Store acceptance and drone gun kills come from the mission ledger;
+the lab does not inject a hit or convert a release into a kill. Rejected attempts are
+reported separately. Engagement records retain their source (`gun` by default), so
+drone kills remain distinct from the player's Pathfinder gun kills.
 
 | Pathfinder measure | Definition |
 |---|---|
@@ -163,17 +164,17 @@ remain visible in the verdict; adding a fake kill would defeat the experiment.
 | Gun window | Selected live gondola, range ≤900 m, authorized loaded gun, instantaneous ballistic sight solution. Uses the gun's conservative cue volume, not the HUD's 0.08 s qualification dwell. Dispersion/box contacts can kill without this cue. |
 | First window | First observed opening; null is missing, never zero. Target ≤20 s. |
 | Longest window gap | Longest hunt interval without a window, including leading/trailing edges. Target ≤30 s; censored hunts retain their observed gap. |
-| Pass | Selected live relay enters 6 km; closes on kill, outward exit beyond 6.5 km, or actual hunt egress/loss. A selected proximity encounter is a proxy for an attack pass. Open passes at observation cutoff are counted separately as censored. |
+| Pass | Selected live relay enters 6 km; closes on kill, selection change, outward exit beyond 6.5 km, or hunt completion/egress/loss. A selected proximity encounter is a proxy for an attack pass. Open passes at observation cutoff are counted separately as censored. |
 | Envelope-only | Completed pass with physical envelope hits and no gondola kill. Percentage denominator is completed passes, including misses. Zero is absent teaching; >50% is a **provisional** dominance threshold. |
 | Passes/physical kill | Completed passes divided by gondola + drone kills, including ROE-invalid kills. Null when no kills. Safe kills are separate. |
 | ROE decisions | New footprint classifications per selected relay (`clear` or `skip-town`), counted once per classification transition. The reckless pilot makes none. |
-| Hunt length | Airborne start to actual RTB handoff or aircraft loss. Target 240–360 s. Route exhaustion, bingo, empty gun and a 600 s combat budget are distinct end reasons. This does not declare a completed/recovered sortie. |
-| Sortie length | Full production lifecycle to `Finished`, or censored emergency limit (default 3600 s), including shared scripted recovery. |
+| Hunt length | Airborne start to relay resolution, the 300 s deadline, pilot RTB or loss. Target 240–360 s; mission completion goes straight to debrief. |
+| Sortie length | Phase 1 hunt to relay resolution/deadline and debrief transition; recovery is a later phase. Emergency maxSeconds censors an active hunt or lifecycle. |
 | Outcome spread | Novice sometimes denies ≥1 sector; ace must not trivially deny every relay every run. Report physical denial, safe kills, full-sortie outcome and censoring separately. |
 
 The exact tape adds `pathfinder:` events for relay-in-view, gun-window-open/closed,
 envelope-hit, gondola-kill, sector-denied, ROE decision/violation, pass-ended/missed,
-blocked drone choice, bingo and egress. Hits use swept contact times, not rounded
+accepted/rejected drone release, drone kill, deliberate loop start/end, bingo and hunt exit. Hits use swept contact times, not rounded
 one-second bins. The report leads with headline targets and three evidence-backed
 problems, then per-minute opportunities, per-run metrics and the existing generic
 metrics/flags. Its hunt SVG shows one aligned row per run; tooltips retain event

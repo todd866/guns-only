@@ -1,6 +1,6 @@
 # Rapier PATHFINDERS (design)
 
-Status: Owner-approved concept, 2026-10-16 · Design only · Branch `rapier/pathfinders`.
+Status: Owner-approved concept, 2026-10-16 · Phase 1 lab revision on `pathfinders/lab`.
 Grounding: `65b7d886`; references below describe that revision, including conflicts with older docs.
 Companion to the Rapier mission/ops, gun-drone and operations-economy documents.
 
@@ -22,14 +22,14 @@ sortie establish what is at stake. No opening lecture, villain speech or downran
 |---|---|
 | Priority | Exciting choices, readable set pieces and worthwhile partial success; physics earns the opportunities |
 | Flight regime | Hunt FL650–700 inside the requested FL560–700 operating band; nominal OFT-class dash ~M3.7, not a promised M4 |
-| Attack doctrine | One committed ascent pass; hunt along successive balloon lanes, never orbit a missed target |
+| Attack doctrine | One committed ascent pass; hunt along successive balloon lanes. A missed relay costs a wide reattack loop |
 | Balloon kill | Destroy the gondola; envelope punctures produce a slow sink with the relay still working |
 | Weapons | Ownship gun plus four carried gun-drones; one deliberate `F` release per drone, with a clear weapon selector |
 | Launch | Seeded uncertainty, visible preparation, bounded holds and real scrubs; never wait for the player to arrive |
 | Vehicle classes | Vesper-H: Starship-class return-to-pad booster; Vesper-M: Falcon-class downrange ship recovery |
 | Fallback | H offers booster denial on return; M offers none. Booster denial cannot recall an escaped payload |
 | Consequence | Ascent breakup before payload escape prevents the raid; lost relay sectors shrink/degrade a surviving raid |
-| Delivery | Phase 1 is the complete balloon hunt and recovery; no rocket, campaign sequel or promised future climax required |
+| Delivery | Phase 1 is the complete balloon hunt and direct debrief; recovery belongs to Phase 3 |
 | Default entry | Short start: airborne at FL650–700 at dawn, first balloon lane ahead; get to the exciting part fast. Buried-tube departure is an optional full-sortie variant |
 
 ## Existing hooks and boundaries
@@ -62,16 +62,49 @@ The existing gallery's proximity-triggered lethal balloon mines
 The historical 12 G/~M3.7 envelope is an acceptance question for current v2, not permission to
 retune shared physics. Phase 1 must demonstrate the requested altitude/speed lane with the live
 airframe; use its lower structural limit and adjust geometry. Gate: sustain FL650–700 at M3.5–3.8
-for ≥30 s into a valid gondola pass, then recover with the live reserve intact, at canonical fuel/
-four-drone mass and without exceeding 6.5 G. If that fails, Phase 1 release is blocked pending an
+for ≥30 s into valid gondola passes, retaining a live recovery reserve, at canonical fuel/
+four-drone mass and without exceeding 6.5 G. Physical recovery is a Phase 3 gate. If the hunt
+envelope fails, Phase 1 release is blocked pending an
 explicit envelope decision; do not substitute the FL450 gallery, a different jet or inflated thrust.
 
 ## Player-facing beats and clocks
 
+### Lab-driven revision — 2026-10-16
+
+The [first beat-15 cohort](../../../analysis/playtest/2026-10-16-beat15/report.md) found
+roughly 600 seconds without a gun window after the first relay. At M3.6 and the live
+6.5 G limit the Rapier's turn radius is about 19 km. Phase 1 therefore retains **three**
+relays in a forward, gently curving string: the first is 17 km from the short start,
+then two 28 km legs. First opportunity is near 15 seconds. Shared wind and seeded drift
+move relays slowly off that lane; hit volumes, thrust and structural limits are unchanged.
+Misses remain live for a costly wide loop (target 60–90 seconds), not an immediate orbit.
+
+Relay 1 teaches the large pale envelope/small dark gondola distinction. Envelope impacts
+produce visible sag and an `ENVELOPE` cue without denying the relay. The lab novice first
+aims at the envelope centroid; the ace uses the gondola. Relay 2's fixed fictional town
+districts block debris at the default first arrival, with a nominal H+85–110 second clear
+interval; seed drift and actual impact time determine authorization. Reckless fire retains
+physical denial but records ROE violations. A conservative pilot may wait or skip.
+
+`Q` selects GUN/DRONE; the existing `F` action fires or deliberately releases the selected
+weapon. Release inherits Rapier energy and debits the existing four-store inventory; the
+drone flies the existing airframe and fires its own swept projectiles at component volumes.
+This lab slice keeps the existing one-active-drone limit. It does not grant a synthetic kill
+or invoke the legacy formation wipe/egress. Four simultaneous actors remain later work.
+
+Phase 1 seals directly to debrief when all relays are denied/escaped or at the **300-second**
+hunt deadline. Recovery moves to Phase 3; the future full-mission timings below do not extend
+this slice. The lab target remains 4–6 minutes, but three clean forward passes can end earlier;
+do not pad success with idle flight to force that metric. Report first-window timing, raw and
+deliberate-loop gaps, outcome spread, envelope-only passes, ROE decisions and drone kills in
+the [v2 comparison](../../../analysis/playtest/2026-10-16-beat15-v2/comparison.md), including misses
+against targets. These encounter distances/times and town boundaries are provisional gameplay
+authoring, not changes to sourced Rapier physics.
+
 Times are **provisional pacing targets**, not rocket measurements. `H+0` is arrival at the first
 hunt lane; `L+0` is actual ignition/liftoff. Launch planning starts at sortie creation, independent
 of player progress. The H-relative timings below describe the reference route, not trigger gates.
-Default short-start hunt: 6–10 minutes including nearby recovery; optional full sortie: 20–30 minutes.
+Phase 1 short start: up to five minutes, direct debrief. Future full sortie: 20–30 minutes.
 Start airborne at FL650–700 at dawn with the first balloon lane ahead (owner doctrine: get to the
 exciting part fast). Keep buried launch as the optional full-sortie opening. The default short start
 uses an authored, physically achievable airborne state; no mid-sortie teleport, refuel or frozen
@@ -90,7 +123,7 @@ adversary clock.
 | Act 3 final, near end of that return | Landing burn over the pad, inside the SAM umbrella. A towering target, bright exhaust, a bad place for Rapier to be slow. One low pass; escape immediately, hit or miss |
 | Act 4, typically 4–8 min after exit decision | Turn home on remaining fuel. Surviving carried drones can screen real pursuers; spent drones cannot magically reappear. Recovery completes the sortie, while loss still preserves effects already achieved |
 
-Phase 1 ends its hunt after 4–6 minutes or an earlier pilot/bingo exit, then recovers. Its climax
+Phase 1 ends at resolution or its five-minute deadline, directly to debrief. Its climax
 is the last safe gondola window before drift or fuel closes the lane; it contains no launch tease.
 In the full mission, a genuine scrub ends the launch threat for this operation. Keep earned relay
 kills and return; do not spawn a replacement rocket to force a climax. Scrubs are rare on first play.
@@ -319,16 +352,16 @@ swept high-closure hits, sustained envelope-only fire, moving ROE boundaries and
 
 1. **PHASE 1 — Balloon hunt, independently fun and shippable.** Separate mission entry, three/six
    relay balloons, real gondola kills, drift/sink, debris ROE, four carried drones with explicit
-   release/weapon routing, hunt deadline, safe-kill contract, egress and recovery. Establish the
+   release/weapon routing, hunt deadline, safe-kill contract and direct debrief. Establish the
    FL650–700 flown envelope first. Initial engineering slice has one active drone; Phase 1 exit
-   scope includes the bounded four-actor path. No rocket dependency or linked-sequel dependency.
+   scope retains one active drone for the lab revision. No rocket dependency or linked-sequel dependency.
    Gate: standalone fun metrics, physical hit/ROE tests, HUD viewport review, perf and existing
-   Rapier/gallery/economy regressions. End cleanly with denied sectors and the recovered aircraft.
+   Rapier/gallery/economy regressions. End cleanly with denied and escaped sectors.
 2. **PHASE 2 — Launch and one pass.** Source/validate both class tables, add pad states, bounded
    uncertainty, 150 km plume and crossing prediction. Prove head-on and chase geometry, local
    breakup and miss→egress. Ship only once conservative players can reach the ascent pass;
    never solve a failed gate by buffing Rapier or pausing the rocket.
-3. **PHASE 3 — Return gamble and contested egress.** H high burn, low pad pass and bounded SAM
+3. **PHASE 3 — Return gamble, contested egress and recovery.** H high burn, low pad pass and bounded SAM
    model; M explicitly has no fallback. Physical drone screening and detection-driven pursuers.
    Gate: declining the gamble remains viable, booster denial leaves escaped payload intact,
    and return fuel/performance remain credible under the worst allowed actor/effect load.
@@ -337,5 +370,5 @@ swept high-closure hits, sustained envelope-only fire, moving ROE boundaries and
    deterministic manifests/reload, NoRaid bypass without evaluator/target construction, unchanged
    standalone beats, measured fun funnel and perf matrix.
 
-No code accompanies this design. Orbital pursuit, detailed orbital mechanics, new Rapier propulsion,
+Phase 1 implementation and lab evidence accompany this revision. Orbital pursuit, detailed orbital mechanics, new Rapier propulsion,
 real military launch-site reconstruction and a general campaign economy are outside this mission.

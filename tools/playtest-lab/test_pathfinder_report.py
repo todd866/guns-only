@@ -12,9 +12,11 @@ import report
 
 def run(pilot="hunter-ace", seed=1, *, first=12, gap=18, hunt=300, censored=False,
         passes=4, envelope=1, kills=2, relays=2, denied=0, events=None, attempts=1,
-        releases=1):
+        releases=1, non_loop_gap=None, loops=0):
     p = {
         "firstGunWindowSeconds": first, "longestGunWindowGapSeconds": gap,
+        "longestNonLoopGunWindowGapSeconds": gap if non_loop_gap is None else non_loop_gap,
+        "deliberateLoopSeconds": loops,
         "gunWindowSeconds": 16, "gunWindows": 3, "huntSeconds": hunt,
         "huntCensored": censored, "passes": passes, "envelopeOnlyPasses": envelope,
         "envelopeOnlyPassPct": 100 * envelope / passes if passes else None,
@@ -36,6 +38,13 @@ class PathfinderReportTests(unittest.TestCase):
         self.assertEqual(pf.aggregate([r])["envelopeOnlyPassPct"], None)
         self.assertEqual(pf.aggregate([r])["kills"], 0)
         self.assertTrue(any("Zero-kill" in x for x in pf.top_problems([r])))
+
+    def test_loop_excluded_gap_drives_target_flag_but_raw_gap_is_retained(self):
+        r = run(gap=90, non_loop_gap=18, loops=72)
+        self.assertFalse(any("drought" in x for x in pf.flags([r])))
+        a = pf.aggregate([r])
+        self.assertEqual(a["longestGunWindowGapSeconds"], 90)
+        self.assertEqual(a["longestNonLoopGunWindowGapSeconds"], 18)
 
     def test_censored_hunt_is_excluded_from_hunt_target_denominator(self):
         a = pf.aggregate([run(hunt=300), run(seed=2, hunt=999, censored=True)])

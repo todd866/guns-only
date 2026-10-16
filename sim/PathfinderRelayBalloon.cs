@@ -36,6 +36,8 @@ public sealed class PathfinderRelayBalloon {
     /// Fraction of the card's bounded puncture support deficit, not fraction of total gas lost.
     public double LiftLossFraction { get; private set; }
     public bool RelayActive { get; private set; } = true;
+    public bool Escaped { get; private set; }
+    public void Escape() { if (RelayActive) Escaped = true; }
     public PathfinderDebris? Debris { get; private set; }
 
     public PathfinderRelayBalloon(int id, Vec3D position, uint seed, IWindField wind, double groundY = 0) {
@@ -59,9 +61,9 @@ public sealed class PathfinderRelayBalloon {
     AircraftState StateAt(Vec3D position) => Carrier.StateFromVelocity(position, Velocity, PathfinderRelayCard.DryMassKg);
 
     public GunTarget[] GunTargets() {
-        _targets[0] = new(EnvelopeTargetId, StateAt(Position), RelayActive,
+        _targets[0] = new(EnvelopeTargetId, StateAt(Position), RelayActive && !Escaped,
             GunHitVolume.Sphere(PathfinderRelayCard.EnvelopeRadiusM), StructuralDamage: false);
-        _targets[1] = new(GondolaTargetId, GondolaState, RelayActive,
+        _targets[1] = new(GondolaTargetId, GondolaState, RelayActive && !Escaped,
             new GunHitVolume(PathfinderRelayCard.GondolaHalfExtentsM));
         return _targets;
     }
@@ -69,7 +71,7 @@ public sealed class PathfinderRelayBalloon {
     /// Returns true only for the first structural disable; punctures never deny a relay.
     public bool Hit(PathfinderBalloonComponent component) {
         if (!Enum.IsDefined(component)) throw new ArgumentOutOfRangeException(nameof(component));
-        if (!RelayActive) return false;
+        if (!RelayActive || Escaped) return false;
         if (component == PathfinderBalloonComponent.Envelope) {
             LeakFraction = Math.Min(1, LeakFraction + 0.25);
             return false;

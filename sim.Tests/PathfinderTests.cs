@@ -235,8 +235,8 @@ public sealed class PathfinderTests {
         var relative = mission.Balloons[0].GondolaPosition - session.Player.State.Position;
         var closure = session.Player.State.VelocityVector() - mission.Balloons[0].Velocity;
         double timeAtSpawnMach = (relative.Length - windowRangeM) / closure.Length;
-        Assert.InRange(timeAtSpawnMach, 15, 20);
-        Assert.True((mission.Balloons[1].Position - mission.Balloons[0].Position).Length > 45_000);
+        Assert.InRange(timeAtSpawnMach, 14, 20);
+        Assert.InRange((mission.Balloons[1].Position - mission.Balloons[0].Position).Length, 25_000, 35_000);
         session.Begin();
         double firstWindowSeconds = double.NaN;
         for (int tick = 1; tick <= 20 * AircraftSim.TickHz; tick++) {
@@ -246,7 +246,7 @@ public sealed class PathfinderTests {
                 break;
             }
         }
-        Assert.InRange(firstWindowSeconds, 15, 20);
+        Assert.InRange(firstWindowSeconds, 14, 20);
         AssertBrowserStartFixture(session, "pathfinder_first_window.json");
     }
 
@@ -278,21 +278,46 @@ public sealed class PathfinderTests {
         Assert.True(document.RootElement.GetProperty("ammo").GetInt32() > 0);
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void PathfinderDebriefUsesSafeContractAndKeepsEscapesOutOfDenialCount(bool violateRoe) {
+        var session = new SimulationSession(Beats.PathfinderBeatIndex);
+        session.Begin();
+        var mission = session.Pathfinder!;
+        mission.Engage(1, PathfinderBalloonComponent.Gondola);
+        if (violateRoe) mission.Engage(2, PathfinderBalloonComponent.Gondola);
+        mission.Step(session.Player.State, false, mission.Definition.HuntDeadlineSeconds);
+        session.Advance(Dt);
+        Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
+        Assert.Equal(violateRoe ? 2 : 1, mission.RelaySectorsDenied);
+        Assert.Equal(violateRoe ? 1 : 2, mission.RelaysEscaped);
+        using var document = JsonDocument.Parse(SnapshotProjection.BuildState(
+            session, Carrier.DeckConfiguration.Axial, 0, 0, false, null));
+        var root = document.RootElement;
+        var lines = root.GetProperty("rapier_economy_lines").EnumerateArray();
+        Assert.Equal(violateRoe ? 0 : 1, lines.Count(line => line.GetProperty("credits").GetInt32() == 90));
+        Assert.Equal(violateRoe ? 1 : 2, root.GetProperty("pathfinder").GetProperty("relays")
+            .EnumerateArray().Count(relay => relay.GetProperty("escaped").GetBoolean()));
+        double endedAt = session.TimeSeconds;
+        session.Advance(1);
+        Assert.Equal(endedAt, session.TimeSeconds);
+    }
+
     [Fact]
     public void PathfinderRoeViolationKeepsPhysicalDenialButSuppressesWholeContract() {
         var mission = new PathfinderMission(PathfinderMissionDefinition.FirstLight(42));
-        Assert.Equal(new[] { PathfinderFootprintClass.Clear, PathfinderFootprintClass.Clear,
-            PathfinderFootprintClass.Populated }, mission.Balloons.Select(mission.ClassifyKill).ToArray());
+        Assert.Equal(new[] { PathfinderFootprintClass.Clear, PathfinderFootprintClass.Populated,
+            PathfinderFootprintClass.Clear }, mission.Balloons.Select(mission.ClassifyKill).ToArray());
         var safe = mission.Engage(1, PathfinderBalloonComponent.Gondola);
         Assert.True(safe.KillRewardEligible);
         Assert.True(mission.ContractEarned);
-        var unsafeKill = mission.Engage(3, PathfinderBalloonComponent.Gondola);
+        var unsafeKill = mission.Engage(2, PathfinderBalloonComponent.Gondola);
         Assert.False(unsafeKill.KillRewardEligible);
         Assert.Equal(2, mission.RelaySectorsDenied);
         Assert.Equal(1, mission.RoeViolations);
         Assert.False(mission.ContractEarned);
         Assert.DoesNotContain(mission.EvaluateEconomy(Facts()).Lines, line => line.Category == "CONTRACT");
-        mission.Engage(3, PathfinderBalloonComponent.Gondola);
+        mission.Engage(2, PathfinderBalloonComponent.Gondola);
         Assert.Equal(1, mission.RoeViolations);
         Assert.Equal(2, mission.KillRecords.Count);
         Assert.Equal(PathfinderFootprintClass.Populated, mission.KillRecords[1].Classification);
@@ -304,7 +329,7 @@ public sealed class PathfinderTests {
         mission.Engage(1, PathfinderBalloonComponent.Envelope);
         Assert.False(mission.ContractEarned);
         mission.Engage(1, PathfinderBalloonComponent.Gondola);
-        mission.Engage(2, PathfinderBalloonComponent.Gondola);
+        mission.Engage(3, PathfinderBalloonComponent.Gondola);
         var line = Assert.Single(mission.EvaluateEconomy(Facts()).Lines, l => l.Category == "CONTRACT");
         Assert.Equal(90, line.Credits);
     }
@@ -355,7 +380,8 @@ public sealed class PathfinderTests {
         int rounds = session.PlayerGun.RoundsFired;
         session.FeedKey(GKey.Trigger, true);
         session.Advance(Dt);
-        Assert.True(session.PlayerGun.RoundsFired > rounds);
+        Assert.Equal(rounds, session.PlayerGun.RoundsFired); // completed Phase 1 freezes the gun
+        Assert.Equal(SimulationSession.LifecycleState.Finished, session.Lifecycle);
         Assert.Equal(1, mission.SelectedBalloonId); // no automatic target hop
     }
 

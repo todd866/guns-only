@@ -151,6 +151,42 @@ public sealed class RapierGunDrone {
     public bool InsideThreatVolume(in AircraftState contact) =>
         (contact.Position - Sim.State.Position).Length <= ThreatVolumeM;
 
+    /// Relay attack adapter: the generic fighter pursuit law aims the velocity vector at
+    /// a contact, which leaves the gun bore above a stationary gondola at high Mach.
+    /// This uses the same airframe, separation, turbine gate and physical projectiles,
+    /// but flies a lead-corrected body-axis command. It does not assign damage.
+    public void StepRelay(double dt, in AircraftState target, bool targetAlive, in Vec3D pickup) {
+        if (Phase != RapierGunDronePhase.Commit || !targetAlive || Gun.AmmoRemaining <= 0) {
+            Step(dt, target, targetAlive, pickup);
+            return;
+        }
+        var own = Sim.State;
+        double range = (target.Position - own.Position).Length;
+        double anticipation = Math.Min(.4, range / Math.Max(300, own.Speed) * .5);
+        var predictedOwn = own with { Position = own.Position + own.VelocityVector() * anticipation };
+        var predictedTarget = target with { Position = target.Position + target.VelocityVector() * anticipation };
+        var aim = GunKill.EvaluateBallisticLead(predictedOwn, predictedTarget, Gun.Profile, 1.4).LeadDirection;
+        double heading = Math.Atan2(aim.X, aim.Z);
+        double error = Math.IEEERemainder(heading - Sim.BodyYawRad, 2 * Math.PI);
+        double bank = Math.Clamp(Math.Atan(own.Speed / FlightModel.G0 * error * .2), -1.2, 1.2);
+        double up = Math.Atan2(aim.Dot(Sim.BodyUp), Math.Max(.2, aim.Dot(Sim.BodyForward)));
+        double q = .5 * Sim.AtmosphericState.DensityKgM3 * Sim.AirspeedMps * Sim.AirspeedMps;
+        double mach = Sim.AirspeedMps / Sim.AtmosphericState.SpeedOfSoundMps;
+        double alpha = Sim.AngleOfAttackRad + up - .08 * own.BodyRates.Q;
+        double g = q * _airframe.WingAreaM2
+            * (_airframe.ZeroLiftCoefficient + FlightModel.EffectiveClAlpha(_airframe, mach) * alpha)
+            / (own.Mass * FlightModel.G0);
+        if (range > 1500) {
+            double gamma = Math.Clamp((target.Position.Y - 5 - own.Position.Y) / (own.Speed * 3), -.08, .08);
+            g = (Math.Cos(own.Gamma) + own.Speed / FlightModel.G0 * .5 * (gamma - own.Gamma))
+                / Math.Max(.3, Math.Cos(own.Bank));
+        }
+        TurbineArmed = mach <= TurbineArmMach && own.Position.Y <= TurbineArmAltitudeM;
+        _lastCommand = new PilotCommand(Math.Clamp(g, -.5, _airframe.PositiveStructuralLimitG), bank, TurbineArmed ? .85 : 0, 0);
+        Sim.Step(_lastCommand, dt);
+        if (Sim.State.Position.Y < 5) Phase = RapierGunDronePhase.Lost;
+    }
+
     bool InsidePickup(in Vec3D pickup) {
         Vec3D delta = Sim.State.Position - pickup;
         double horizontal = Math.Sqrt(delta.X * delta.X + delta.Z * delta.Z);

@@ -1979,7 +1979,7 @@ internal static class SnapshotProjection {
         RapierJobKind target =
             Session.Beat.ScriptedIntercept?.Job
             ?? RapierJobKind.FormationIntercept;
-        RapierEconomicSortieSlip slip = RapierEconomicModel.Evaluate(
+        RapierEconomicSortieSlip slip = Session.PathfinderEconomy ?? RapierEconomicModel.Evaluate(
             new RapierEconomicSortieFacts(
                 EconomicMode: Session.Beat.MissionIdentity.EconomicMode,
                 Finished: finished,

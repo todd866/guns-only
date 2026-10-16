@@ -35,6 +35,8 @@ internal static class PathfinderSnapshotProjection {
         var json = new StringBuilder(4096);
         json.Append("\"pathfinder\":{");
         json.Append("\"selected_id\":").Append(mission.SelectedBalloonId).Append(',');
+        json.Append("\"drone_selected\":").Append(session.PathfinderDroneSelected ? "true" : "false").Append(',');
+        json.Append("\"gun_drones_remaining\":").Append(session.RapierDogfightingDronesRemaining).Append(',');
         json.Append("\"envelope_radius_m\":").Append(F(mission.Balloons.Count == 0
             ? 0.0 : PathfinderRelayCard.EnvelopeRadiusM)).Append(',');
         json.Append("\"sun_elevation_deg\":").Append(F(hot.SunElevationDegrees)).Append(',');
@@ -47,6 +49,7 @@ internal static class PathfinderSnapshotProjection {
                 .Append("\"position\":").Append(Point(relay.Position)).Append(',')
                 .Append("\"gondola_position\":").Append(Point(relay.GondolaPosition)).Append(',')
                 .Append("\"relay_active\":").Append(relay.RelayActive ? "true" : "false").Append(',')
+                .Append("\"escaped\":").Append(relay.Escaped ? "true" : "false").Append(',')
                 .Append("\"leak_fraction\":").Append(F(relay.LeakFraction)).Append(',')
                 .Append("\"lift_loss_fraction\":").Append(F(relay.LiftLossFraction)).Append(',')
                 .Append("\"debris\":");
@@ -65,13 +68,15 @@ internal static class PathfinderSnapshotProjection {
                 .Append(",\"classification\":").Append(SnapshotJson.JsonString(ClassToken(hot.Classification)))
                 .Append('}');
         json.Append("},");
-        AppendFlat(json, mission, hot);
+        AppendFlat(json, session, mission, hot);
         return json.ToString();
     }
 
-    static void AppendFlat(StringBuilder json, PathfinderMission mission, HotState hot) {
+    static void AppendFlat(StringBuilder json, SimulationSession session, PathfinderMission mission, HotState hot) {
         json.Append("\"pathfinder_present\":true,")
             .Append("\"pathfinder_selected_id\":").Append(hot.SelectedId).Append(',')
+            .Append("\"pathfinder_drone_selected\":").Append(session.PathfinderDroneSelected ? "true" : "false").Append(',')
+            .Append("\"pathfinder_gun_drones_remaining\":").Append(session.RapierDogfightingDronesRemaining).Append(',')
             .Append("\"pathfinder_sun_elevation_deg\":").Append(F(hot.SunElevationDegrees, 2)).Append(',')
             .Append("\"pathfinder_envelope_radius_m\":").Append(F(PathfinderRelayCard.EnvelopeRadiusM, 2)).Append(',')
             .Append("\"pathfinder_footprint_x\":").Append(F(hot.Centre.X, 3)).Append(',')
@@ -94,6 +99,7 @@ internal static class PathfinderSnapshotProjection {
                 .Append(JsonNumber(prefix + "_leak", relay?.LeakFraction ?? 0.0, 4))
                 .Append(JsonNumber(prefix + "_lift_loss", relay?.LiftLossFraction ?? 0.0, 4))
                 .Append(JsonBool(prefix + "_active", relay is not null && relay.RelayActive))
+                .Append(JsonBool(prefix + "_escaped", relay?.Escaped == true))
                 .Append(JsonBool(prefix + "_debris_present", relay?.Debris is not null))
                 .Append(JsonNumber(prefix + "_dx", debris.X, 3))
                 .Append(JsonNumber(prefix + "_dy", debris.Y, 3))

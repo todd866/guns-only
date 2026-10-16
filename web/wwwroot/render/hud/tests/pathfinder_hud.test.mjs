@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pathfinderHud, nextPathfinderSlot } from "../pathfinder_hud.js";
+import { pathfinderHud, nextPathfinderSlot, steeringCue } from "../pathfinder_hud.js";
 
 const relay = (id, live = true) => ({ id, relay_active: live, leak_fraction: 0,
   position: { x: 10, y: 20600, z: 30 },
@@ -14,7 +14,7 @@ test("one relay row distinguishes live/leaking from denied with symbols", () => 
   const input = state();
   input.pathfinder.relays[0].leak_fraction = 1;
   const hud = pathfinderHud(input);
-  assert.equal(hud.row, "◇◇◆  F GUN");
+  assert.equal(hud.row, "◇◇◆  R1 ↑  ENVELOPE  F GUN");
   assert.equal(hud.row.includes("\n"), false);
   assert.match(hud.label, /Relay 1: live; Relay 3: live; Relay 5: denied/);
 });
@@ -24,6 +24,48 @@ test("target anchor is the selected gondola, never its envelope", () => {
   input.pathfinder.selected_id = 3;
   assert.equal(pathfinderHud(input).target, input.pathfinder.relays[1].gondola_position);
   assert.notEqual(pathfinderHud(input).target.y, input.pathfinder.relays[1].position.y);
+});
+
+test("lane cue points at the selected forward relay and changes with heading", () => {
+  const input = state();
+  input.heading_deg = 0;
+  assert.equal(steeringCue(input, input.pathfinder.relays[0]), "↑");
+  input.heading_deg = -45;
+  assert.equal(steeringCue(input, input.pathfinder.relays[0]), "↗");
+  assert.equal(pathfinderHud(input).steering, "↗");
+  assert.match(pathfinderHud(input).row, /R1 ↗/);
+});
+
+test("envelope damage raises a compact ENVELOPE annunciator while the gondola remains live", () => {
+  const input = state();
+  input.pathfinder.relays[0].leak_fraction = 0.35;
+  const hud = pathfinderHud(input);
+  assert.equal(hud.envelopeHit, true);
+  assert.equal(hud.tag, "ENVELOPE");
+  assert.match(hud.row, /ENVELOPE/);
+  assert.equal(hud.target, input.pathfinder.relays[0].gondola_position);
+});
+
+test("weapon row exposes the selected gun-drone and remaining inventory", () => {
+  const input = state();
+  input.pathfinder_drone_selected = true;
+  input.pathfinder_gun_drones_remaining = 1;
+  const hud = pathfinderHud(input);
+  assert.equal(hud.droneSelected, true);
+  assert.equal(hud.droneCount, 1);
+  assert.match(hud.row, /F DRONE 1$/);
+});
+
+test("escaped relays are distinct from denied relays and leave the live target cycle", () => {
+  const input = state();
+  input.pathfinder.relays[0].escaped = true;
+  const hud = pathfinderHud(input);
+  assert.equal(hud.target, null);
+  assert.equal(hud.blocked, false);
+  assert.match(hud.row, /^×◇◆/);
+  assert.match(hud.label, /Relay 1: escaped/);
+  assert.deepEqual(hud.markers.map(marker => marker.id), [3]);
+  assert.equal(nextPathfinderSlot(input, { startFromNearest: true }), 1);
 });
 
 test("only a known clear footprint clears ROE; town and unknown stay blocked", () => {
@@ -40,7 +82,7 @@ test("kill clears the selected bracket without silently selecting another live r
   const input = state("populated");
   input.pathfinder.relays[0].relay_active = false;
   const hud = pathfinderHud(input);
-  assert.equal(hud.row, "◆◇◆  F GUN");
+  assert.equal(hud.row, "◆◇◆  LANE --  F GUN");
   assert.equal(hud.target, null);
   assert.equal(hud.blocked, false);
   assert.equal(hud.selectedId, 1);

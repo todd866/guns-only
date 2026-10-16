@@ -551,6 +551,7 @@ const touchTargetLabel = document.querySelector("#touch-target-label");
 const touchPadlockState = document.querySelector("#touch-padlock-state");
 const touchTargetNumber = document.querySelector("#touch-target-number");
 const touchFireButton = document.querySelector("#touch-fire");
+const touchPathfinderWeapon = document.querySelector("#touch-pathfinder-weapon");
 const touchCarrierRtbButton = document.querySelector("#touch-carrier-rtb");
 const portraitChips = document.querySelector("#portrait-chips");
 const fallbackStick = touchControls?.querySelector('[data-mobile-action="virtual-stick"]') ?? null;
@@ -3698,13 +3699,27 @@ function syncMobileControlProfile(state) {
     touchFireButton.textContent = touchFireVisibleLabel(state);
     if (firstRunMissileTracking) touchFireButton.textContent = "TRACK";
   }
+  if (touchPathfinderWeapon) {
+    const pathfinder = state?.pathfinder;
+    const droneSelected = typeof state?.pathfinder_drone_selected === "boolean"
+      ? state.pathfinder_drone_selected : pathfinder?.drone_selected === true;
+    const drones = Number(state?.pathfinder_gun_drones_remaining
+      ?? state?.rapier_gun_drones_remaining ?? pathfinder?.gun_drones_remaining);
+    touchPathfinderWeapon.hidden = casevac || !pathfinder;
+    touchPathfinderWeapon.innerHTML = droneSelected
+      ? `DRONE${Number.isFinite(drones) ? ` ${Math.max(0, Math.floor(drones))}` : ""}<br>Q`
+      : "GUN<br>Q";
+    touchPathfinderWeapon.setAttribute("aria-label",
+      droneSelected ? "Select Pathfinder internal gun" : "Select Pathfinder gun drone");
+    touchPathfinderWeapon.setAttribute("aria-pressed", String(droneSelected));
+  }
   if (touchGcasPaddle) {
     touchGcasPaddle.hidden = !profile.gcasOverride;
     if (casevac) touchGcasPaddle.hidden = true;
   }
   if (touchContextControls) {
     touchContextControls.hidden = casevac
-      || (!profile.gear && !profile.flaps && !f14WingSweep);
+      || (!profile.gear && !profile.flaps && !f14WingSweep && !state?.pathfinder);
   }
   syncPadlockUi();
   syncTouchPadlockState();
@@ -3947,10 +3962,10 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "rapier-pathfinders": Object.freeze({
     kicker: "Rapier · dawn relay hunt",
     title: "Pathfinders — First Light",
-    sortie: "Three relays · gondola kill · recover",
+    sortie: "Three relays · gondola kill · debrief",
     configuration: "FL650–700 · M3.6 · 360 rounds",
-    brief: "Deny a relay over clear ground, then recover. Envelope punctures only cause a slow sink; aim at the dark gondola. Amber ROE marks a blocked debris footprint.",
-    controls: "Arrows fly · W/S power · F gun · Tab relay · O home",
+    brief: "Resolve the three relays before the hunt deadline. Envelope punctures only cause a slow sink; aim at the dark gondola. Amber ROE marks a blocked debris footprint. Phase 1 ends in debrief; recovery is Phase 3.",
+    controls: "Arrows fly · W/S power · F fire · Q gun/drone · Tab relay",
   }),
   "rapier-intercept": Object.freeze({
     kicker: "Eastern corridor · Rapier operations",
@@ -11867,6 +11882,21 @@ function installMobileInput(view) {
     }, { passive: false });
   });
 
+  // PATHFINDERS weapon selector: the browser owns the same ordinal key as the keyboard Q
+  // shortcut, so mobile and desktop exercise one authoritative selection edge.
+  touchPathfinderWeapon?.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (touchPathfinderWeapon.hidden || frozen || suspended || document.hidden
+        || pauseReasons.size > 0 || !latestState?.pathfinder) return;
+    const code = "Touch:PathfinderWeapon";
+    if (!pressMappedKey(code, "touch:pathfinder-weapon", 25)) return;
+    releaseMappedKey(code, "touch:pathfinder-weapon");
+    touchPathfinderWeapon.classList.add("active");
+    window.setTimeout(() => touchPathfinderWeapon.classList.remove("active"), 140);
+  }, { passive: false });
+
   // Same reason as the pulse buttons above: this is a view control the pilot needs mid-pull.
   touchTargetCycleButton?.addEventListener("click", (event) => {
     event.preventDefault();
@@ -12197,6 +12227,14 @@ function installInput(view) {
       const enablingAudio = !playerSettings.audio;
       commitPlayerSettings({ ...playerSettings, audio: !playerSettings.audio });
       if (enablingAudio) view.hud.armAudio();
+      return;
+    }
+
+    // Q is intentionally reserved only inside PATHFINDERS: it pulses GKey.WeaponSelect and
+    // leaves the existing configurable flight bindings untouched in every other sortie.
+    if (event.code === "KeyQ" && latestState?.pathfinder && !keyMap.has(event.code)) {
+      event.preventDefault();
+      pressMappedKey(event.code, "keyboard", 25);
       return;
     }
 

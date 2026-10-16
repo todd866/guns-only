@@ -742,12 +742,15 @@ internal static class SnapshotHotFrame {
             Num($"pathfinder_r{relay + 1}_leak", 4);
             Num($"pathfinder_r{relay + 1}_lift_loss", 4);
             Bool($"pathfinder_r{relay + 1}_active");
+            Bool($"pathfinder_r{relay + 1}_escaped");
             Bool($"pathfinder_r{relay + 1}_debris_present");
             Num($"pathfinder_r{relay + 1}_dx", 3);
             Num($"pathfinder_r{relay + 1}_dy", 3);
             Num($"pathfinder_r{relay + 1}_dz", 3);
             Bool($"pathfinder_r{relay + 1}_landed");
         }
+        Bool("pathfinder_drone_selected");
+        Num("pathfinder_gun_drones_remaining", RawInteger);
         // Recovery-platform presence is distinct from the maritime-only carrier flag. Rapier's
         // fixed arresting strip emits the full recovery group with carrier=false.
         OpenBlock("recovery_platform", slots.Count);
@@ -1963,12 +1966,15 @@ internal static class SnapshotHotFrame {
                 w.Num($"pathfinder_r{relay + 1}_leak", balloon?.LeakFraction ?? 0.0, 4);
                 w.Num($"pathfinder_r{relay + 1}_lift_loss", balloon?.LiftLossFraction ?? 0.0, 4);
                 w.Bool($"pathfinder_r{relay + 1}_active", exists && balloon!.RelayActive);
+                w.Bool($"pathfinder_r{relay + 1}_escaped", exists && balloon!.Escaped);
                 w.Bool($"pathfinder_r{relay + 1}_debris_present", exists && balloon!.Debris is not null);
                 w.Num($"pathfinder_r{relay + 1}_dx", debrisPosition.X, 3);
                 w.Num($"pathfinder_r{relay + 1}_dy", debrisPosition.Y, 3);
                 w.Num($"pathfinder_r{relay + 1}_dz", debrisPosition.Z, 3);
                 w.Bool($"pathfinder_r{relay + 1}_landed", exists && balloon!.Debris?.Landed == true);
             }
+            w.Bool("pathfinder_drone_selected", session.PathfinderDroneSelected);
+            w.Num("pathfinder_gun_drones_remaining", session.RapierDogfightingDronesRemaining, RawInteger);
         }
 
         if (w.OpenBlock("recovery_platform", carrier is not null)) {

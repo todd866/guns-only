@@ -13,7 +13,8 @@ public static class PathfinderChecks {
             var r = ShotFixture(envelope);
             var p = r.Pathfinder!;
             Require(r.Timeline.Sum(t => t.RoundsFired) == r.RoundsFired, "Pathfinder rounds lost between bins.");
-            Require(p.DroneReleases == 0 && p.DroneKills == 0, "Mass-only drone fabricated a release or kill.");
+            Require(p.DroneReleases == 0 && p.DroneKills == 0,
+                "Gun-only fixture must not fabricate a drone release or kill.");
             Require(p.Passes == 1, "Physical encounter must count exactly once.");
             if (envelope) {
                 Require(p.EnvelopeHits > 0 && p.EnvelopeOnlyPasses == 1 && p.MissedPasses == 1 && p.SectorsDenied == 0,
@@ -28,6 +29,13 @@ public static class PathfinderChecks {
                     Require(r.Events.Count(e => e.Kind == "pathfinder:" + kind) == 1, "Kill event not unique: " + kind);
             }
         }
+        var droneMission = PathfinderMissionDefinition.FirstLight(42);
+        var droneLedger = new PathfinderMission(droneMission, droneMission.Weather);
+        var droneEngagement = droneLedger.Engage(1, PathfinderBalloonComponent.Gondola, "drone");
+        Require(droneEngagement.RelayDenied && droneEngagement.Source == "drone"
+            && droneLedger.DroneKills == 1
+            && droneLedger.KillRecords.Count(k => k.Source == "drone") == droneLedger.DroneKills,
+            "Drone source ledger must conserve source-tagged kills.");
         foreach (var name in new[] { "hunter-novice", "hunter-ace", "reckless" }) {
             var options = new Options(Beat: 15, MaxSeconds: 25, Pilots: name);
             var a = SortieRunner.Fly(options, name, 3, null);

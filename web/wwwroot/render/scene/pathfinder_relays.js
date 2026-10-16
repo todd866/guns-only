@@ -293,6 +293,10 @@ export function createPathfinderRelays() {
       const leak = THREE.MathUtils.clamp(Number(relay.leak_fraction) || 0, 0, 1);
       const liftLoss = THREE.MathUtils.clamp(Number(relay.lift_loss_fraction) || 0, 0, 1);
       const sag = THREE.MathUtils.clamp(leak * 0.22 + liftLoss * 0.16, 0, 0.34);
+      // Keep the teaching deformation inspectable alongside the mesh: HUD marks ENVELOPE,
+      // while this explicit value drives the pale envelope's vertical compression and drop.
+      slot.envelope.userData.pathfinderSag = sag;
+      slot.wrinkles.userData.pathfinderSag = sag;
       slot.envelope.position.y = -radius * sag * 0.22;
       slot.envelope.scale.set(1, 1, 1);
       slot.wrinkles.position.copy(slot.envelope.position);

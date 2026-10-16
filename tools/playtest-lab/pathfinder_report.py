@@ -12,14 +12,14 @@ from collections import Counter, defaultdict
 EVENT_KINDS = (
     "relay-in-view", "gun-window-open", "gun-window-closed", "envelope-hit",
     "gondola-kill", "drone-release", "drone-kill", "drone-release-rejected",
-    "roe-decision", "roe-violation", "sector-denied", "pass-missed", "pass-ended", "bingo", "egress",
+    "roe-decision", "roe-violation", "sector-denied", "pass-missed", "pass-ended", "loop-start", "loop-end", "bingo", "egress",
 )
 EVENT_COLOURS = {
     "relay-in-view": "#38bdf8", "gun-window-open": "#22c55e", "gun-window-closed": "#64748b",
     "envelope-hit": "#f59e0b", "gondola-kill": "#ef4444", "drone-release": "#a78bfa",
     "drone-kill": "#c084fc", "drone-release-rejected": "#f97316", "roe-violation": "#dc2626",
     "roe-decision": "#0ea5e9", "sector-denied": "#eab308", "pass-missed": "#fb7185", "pass-ended": "#94a3b8",
-    "bingo": "#facc15", "egress": "#14b8a6",
+    "bingo": "#facc15", "egress": "#14b8a6", "loop-start": "#f97316", "loop-end": "#fb923c",
 }
 TARGETS = {"firstGunWindowSeconds": 20.0, "longestGunWindowGapSeconds": 30.0,
            "huntSecondsLow": 240.0, "huntSecondsHigh": 360.0}
@@ -76,6 +76,8 @@ def aggregate(runs: list[dict]) -> dict:
         "firstGunWindowSamples": len(first), "firstGunWindowTargetPct": 100 * sum(x <= 20 for x in first) / len(ps) if ps else None,
         "longestGunWindowGapSeconds": max(gaps, default=0.0),
         "longestGunWindowGapMean": sum(gaps) / len(gaps) if gaps else None,
+        "longestNonLoopGunWindowGapSeconds": max((_num(p.get("longestNonLoopGunWindowGapSeconds")) for p in ps), default=0.0),
+        "deliberateLoopSeconds": sum(_num(p.get("deliberateLoopSeconds")) for p in ps),
         "gunWindows": windows, "gunWindowSeconds": window_seconds,
         "firstRangeWindowSeconds": (sum(_num(p["firstRangeWindowSeconds"]) for p in ps if p.get("firstRangeWindowSeconds") is not None) / sum(p.get("firstRangeWindowSeconds") is not None for p in ps)) if any(p.get("firstRangeWindowSeconds") is not None for p in ps) else None,
         "qualifiedGunWindowSeconds": sum(_num(p.get("qualifiedGunWindowSeconds")) for p in ps),
@@ -93,7 +95,8 @@ def aggregate(runs: list[dict]) -> dict:
         "allRelayRuns": sum(_num(p.get("relayCount")) > 0 and _num(p.get("sectorsDenied")) >= _num(p.get("relayCount")) for p in ps),
         "killDistribution": dict(sorted(Counter(int(_kills(p)) for p in ps).items())),
         "huntEndReasons": dict(Counter(p.get("huntEndReason", "unknown") for p in ps)),
-        "droneCapability": "structurally unobserved: Phase 1 has no player drone-release API",
+        "droneCapability": ("observed public release path" if sum(_num(p.get("droneReleases")) for p in ps) > 0
+                            else "public release path observed; no accepted releases in sample"),
     }
 
 
@@ -104,8 +107,10 @@ def flags(runs: list[dict]) -> list[str]:
         first = p.get("firstGunWindowSeconds")
         if first is None or _num(first) > TARGETS["firstGunWindowSeconds"]:
             found.append(f"first gun window >20s/missing: {who} seed {seed} ({'missing' if first is None else f'{_num(first):.1f}s'})")
-        if _num(p.get("longestGunWindowGapSeconds")) > TARGETS["longestGunWindowGapSeconds"]:
-            found.append(f"gun-window drought >30s: {who} seed {seed} ({_num(p.get('longestGunWindowGapSeconds')):.1f}s)")
+        raw_gap = _num(p.get("longestGunWindowGapSeconds"))
+        non_loop_gap = _num(p.get("longestNonLoopGunWindowGapSeconds"), raw_gap)
+        if non_loop_gap > TARGETS["longestGunWindowGapSeconds"]:
+            found.append(f"gun-window drought >30s excluding deliberate loops: {who} seed {seed} ({non_loop_gap:.1f}s; raw {raw_gap:.1f}s)")
         if not p.get("huntCensored", False) and p.get("huntSeconds") is not None and not 240 <= _num(p["huntSeconds"]) <= 360:
             found.append(f"hunt outside 4–6min: {who} seed {seed} ({_num(p['huntSeconds']):.1f}s)")
         if _num(p.get("passes")) and p.get("envelopeOnlyPassPct") is not None:
@@ -132,12 +137,12 @@ def top_problems(runs: list[dict]) -> list[str]:
     rejected = sum(_num(data(r).get("droneReleaseRejected")) for r in runs)
     if attempts and releases == 0:
         evidence.append((attempts, f"Blocked drone choices: {attempts:.0f} policy attempts produced 0 releases ({rejected:.0f} capability rejections). The current Phase 1 controller/API has not made a drone action available; resolve that before treating hard geometry as a design problem."))
-    drought = sum(max(0.0, _num(data(r).get("longestGunWindowGapSeconds")) - 30) for r in runs)
+    drought = sum(max(0.0, _num(data(r).get("longestNonLoopGunWindowGapSeconds"), _num(data(r).get("longestGunWindowGapSeconds"))) - 30) for r in runs)
     if drought:
-        evidence.append((drought, f"Sight-window drought: {sum(_num(data(r).get('longestGunWindowGapSeconds')) > 30 for r in runs)} of {len(runs)} runs exceeded 30s, with a worst gap of {max(_num(data(r).get('longestGunWindowGapSeconds')) for r in runs):.1f}s. {sum('combat-budget' in str(data(r).get('huntEndReason')) for r in runs)}/{len(runs)} hunts reached the controller combat budget. Compare the cue/proximity cross-check before attributing this entirely to mission pacing."))
+        evidence.append((drought, f"Sight-window drought: {sum(_num(data(r).get('longestNonLoopGunWindowGapSeconds'), _num(data(r).get('longestGunWindowGapSeconds'))) > 30 for r in runs)} of {len(runs)} runs exceeded 30s after excluding deliberate loops; raw worst gap was {max(_num(data(r).get('longestGunWindowGapSeconds')) for r in runs):.1f}s. Compare the cue/proximity cross-check before attributing this entirely to mission pacing."))
     zero = sum(_kills(data(r)) == 0 for r in runs if not data(r).get("huntCensored", False))
     if zero:
-        evidence.append((zero, f"Zero-kill/failure runs: {zero} hunts ending in egress/loss recorded no physical gondola/drone kill; inspect pass geometry and controller failure before assigning blame to mission pacing."))
+        evidence.append((zero, f"Zero-kill/failure runs: {zero} completed hunts recorded no physical gondola/drone kill; inspect pass geometry and controller failure before assigning blame to mission pacing."))
     envelope = [data(r) for r in runs if _num(data(r).get("passes"))]
     dominant = sum(_num(p.get("envelopeOnlyPassPct")) > 50 for p in envelope)
     if envelope and not any(_num(p.get("envelopeOnlyPasses")) for p in envelope):
@@ -241,17 +246,17 @@ def svg_timeline(runs: list[dict]) -> str:
 def markdown(runs: list[dict], manifest: dict | None = None) -> str:
     by = defaultdict(list)
     for r in runs: by[r.get("pilot", "?")].append(r)
-    lines = ["## Headline metrics vs targets", "", "| pilot | first sight window mean (samples/missing) | ≤20s | longest gap | ≤30s | hunt mean (ended/censored) | 4–6min | passes/physical kill | envelope-only | ROE decisions | physical/safe kills |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    lines = ["## Headline metrics vs targets", "", "| pilot | first sight window mean (samples/missing) | ≤20s | longest gap (raw / loop-excluded) | ≤30s | hunt mean (ended/censored) | 4–6min | passes/physical kill | envelope-only | ROE decisions | physical/safe kills |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for pilot, rs in sorted(by.items()):
-        a = aggregate(rs); first = f"— (0/{a['runs']} miss)" if a["firstGunWindowSeconds"] is None else f"{a['firstGunWindowSeconds']:.1f}s ({a['firstGunWindowSamples']}/{a['runs']-a['firstGunWindowSamples']} miss)"; gap = f"{a['longestGunWindowGapSeconds']:.1f}s"; hunt = f"— ({a['complete']}/{a['censored']})" if a["huntSecondsMean"] is None else f"{a['huntSecondsMean']:.1f}s ({a['complete']}/{a['censored']})"; pk = a["passes"] / a["kills"] if a["kills"] else "N/A"; ep = "N/A" if a["envelopeOnlyPassPct"] is None else f"{a['envelopeOnlyPassPct']:.0f}%"; first_target = "—" if a["firstGunWindowTargetPct"] is None else f"{a['firstGunWindowTargetPct']:.0f}%"; hunt_target = "—" if a["huntTargetPct"] is None else f"{a['huntTargetPct']:.0f}%"
+        a = aggregate(rs); first = f"— (0/{a['runs']} miss)" if a["firstGunWindowSeconds"] is None else f"{a['firstGunWindowSeconds']:.1f}s ({a['firstGunWindowSamples']}/{a['runs']-a['firstGunWindowSamples']} miss)"; gap = f"{a['longestGunWindowGapSeconds']:.1f}s / {a['longestNonLoopGunWindowGapSeconds']:.1f}s"; hunt = f"— ({a['complete']}/{a['censored']})" if a["huntSecondsMean"] is None else f"{a['huntSecondsMean']:.1f}s ({a['complete']}/{a['censored']})"; pk = a["passes"] / a["kills"] if a["kills"] else "N/A"; ep = "N/A" if a["envelopeOnlyPassPct"] is None else f"{a['envelopeOnlyPassPct']:.0f}%"; first_target = "—" if a["firstGunWindowTargetPct"] is None else f"{a['firstGunWindowTargetPct']:.0f}%"; hunt_target = "—" if a["huntTargetPct"] is None else f"{a['huntTargetPct']:.0f}%"
         lines.append(f"| {pilot} | {first} | {first_target} | {gap} | {'yes' if a['longestGunWindowGapSeconds'] <= 30 else 'no'} | {hunt} | {hunt_target} | {pk if isinstance(pk,str) else f'{pk:.2f}'} | {ep} | {a['roeDecisions']:.0f} | {a['kills']:.0f}/{a['safeKills']:.0f} |" )
     lines += ["", "Gun window = instantaneous ballistic sight cue at ≤900 m, with a live selected gondola and an authorized loaded gun. This conservative cue is distinct from proximity, the dwell-qualified HUD cue and actual dispersed rounds hitting the gondola box.", "", "## Fun verdict", "", "Top three evidence-backed problems:", ""] + [f"{i}. {x}" for i, x in enumerate(top_problems(runs), 1)]
     censored = sum(r.get("outcome") == "incomplete" for r in runs)
     limits = sorted(set(_num(r.get("seconds")) for r in runs if r.get("outcome") == "incomplete"))
     limit_text = ", ".join(f"{x:.0f}s" for x in limits)
-    lines += ["", "These are controller-observed experience proxies, not measured human feelings. Drought includes leading/trailing hunt edges. Phase 1 exposes no drone-release API; blocked choices are not failed release calls."]
+    lines += ["", "These are controller-observed experience proxies, not measured human feelings. Drought includes leading/trailing hunt edges; deliberate miss-and-loop intervals are reported separately when present. Drone releases and kills are counted only from the mission's public release and source-tagged gun engagement ledger."]
     if censored:
-        lines += ["", f"**Full-sortie limitation:** {censored}/{len(runs)} runs are censored at {limit_text}; completed sortie length and recovered win rate remain unknown. The inherited recovery controller has not established a completed Pathfinders recovery. Hunt duration ends separately at actual egress/loss; combat-budget egress is not mission completion."]
+        lines += ["", f"**Censoring limitation:** {censored}/{len(runs)} runs are censored at {limit_text}; the Phase 1 hunt/debrief transition was not observed before the emergency limit. Recovery is a later phase. Hunt duration ends separately at mission resolution/deadline or aircraft egress/loss."]
     lines += ["", "### Outcome spread", "", "| pilot | ≥1 denied / runs | all relays denied / runs | physical kills: runs | hunt end reasons |", "|---|---:|---:|---|---|"]
     for pilot, rs in sorted(by.items()):
         a = aggregate(rs)

@@ -111,7 +111,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     sequence: 15,
     aircraft: "Rapier",
     title: "Pathfinders — First Light",
-    shortObjective: "Deny relays over clear ground, then recover.",
+    shortObjective: "Deny relays over clear ground before the hunt closes.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,

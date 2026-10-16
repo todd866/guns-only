@@ -52,15 +52,16 @@ test("actual recovery and low inlet recovery still warn, including later in Path
   }
 });
 
-test("the live first-window crossing reaches the HUD gun envelope 15–20 seconds after spawn", () => {
+test("the live first-window crossing reaches the HUD gun envelope near 15 seconds after spawn", () => {
   const envelope = gunFunnelEnvelope(gunFunnelProfile(firstWindow));
-  assert.ok(firstWindow.sample_seconds >= 15 && firstWindow.sample_seconds <= 20);
+  assert.ok(firstWindow.sample_seconds >= 14 && firstWindow.sample_seconds <= 20);
   assert.ok(firstWindow.range_m <= envelope.farRangeM);
   assert.ok(firstWindow.range_m >= envelope.nearRangeM);
   assert.ok(start.range_m > envelope.farRangeM);
   assert.ok(threeSeconds.range_m > firstWindow.range_m);
   assert.equal(start.pathfinder.selected_id, firstWindow.pathfinder.selected_id);
   const [first, second, third] = start.pathfinder.relays;
-  assert.ok(Math.abs(second.position.x - first.position.x) > 45000);
-  assert.ok(Math.abs(third.position.x - second.position.x) >= 50000);
+  for (const gap of [second.position.x - first.position.x, third.position.x - second.position.x]) {
+    assert.ok(Math.abs(gap) >= 25000 && Math.abs(gap) <= 35000);
+  }
 });

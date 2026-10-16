@@ -107,6 +107,7 @@ export function decodeHotFrame(layout, hot, coldBase) {
       return {
         ...relay, position, gondola_position: gondolaPosition,
         relay_active: state[`pathfinder_r${n}_active`] === true,
+        escaped: state[`pathfinder_r${n}_escaped`] === true,
         leak_fraction: state[`pathfinder_r${n}_leak`],
         lift_loss_fraction: state[`pathfinder_r${n}_lift_loss`], debris,
       };
@@ -115,6 +116,10 @@ export function decodeHotFrame(layout, hot, coldBase) {
     state.pathfinder = {
       ...base,
       selected_id: state.pathfinder_selected_id,
+      drone_selected: typeof state.pathfinder_drone_selected === "boolean"
+        ? state.pathfinder_drone_selected : base.drone_selected === true,
+      gun_drones_remaining: Number.isFinite(state.pathfinder_gun_drones_remaining)
+        ? state.pathfinder_gun_drones_remaining : base.gun_drones_remaining,
       sun_elevation_deg: state.pathfinder_sun_elevation_deg,
       envelope_radius_m: state.pathfinder_envelope_radius_m,
       relays,

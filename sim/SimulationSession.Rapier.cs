@@ -430,6 +430,7 @@ public sealed partial class SimulationSession {
     }
 
     void StepRapierGunDrone(in AircraftState banditState, bool banditAlive) {
+        if (Pathfinder is not null) return; // Its relay adapter owns this actor exactly once.
         if (_rapierGunDrone is not { StillActive: true } drone) return;
 
         Vec3D pickup = RapierGunDrone.PickupPoint(_carrier?.Position ?? Vec3D.Zero);

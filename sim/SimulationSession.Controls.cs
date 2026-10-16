@@ -99,6 +99,12 @@ public sealed partial class SimulationSession {
         }
         if (key == GKey.KnockItOff && newPress)
             TryRequestReturnToBase(MissionRtbReason.PilotKnockItOff);
+        if (key == GKey.WeaponSelect && newPress)
+            SelectPathfinderWeapon(!PathfinderDroneSelected);
+        if (key == GKey.Trigger && Pathfinder is not null && PathfinderDroneSelected) {
+            if (newPress) TryReleasePathfinderDrone();
+            return;
+        }
         // Weapon release is an edge-triggered cockpit action. Latch a deliberate Rapier F tap so
         // a very short browser key-down/key-up pair cannot fall entirely between fixed ticks.
         if (key == GKey.Trigger && newPress && Pathfinder is null
@@ -302,7 +308,7 @@ public sealed partial class SimulationSession {
         GKey.PullUp or GKey.PushDown or GKey.RollLeft or GKey.RollRight
         or GKey.RudderLeft or GKey.RudderRight
         or GKey.ThrottleUp or GKey.ThrottleDown or GKey.Trigger
-        or GKey.Override or GKey.AutoGcasOverride or GKey.KnockItOff
+        or GKey.Override or GKey.AutoGcasOverride or GKey.KnockItOff or GKey.WeaponSelect
         or GKey.WingSweepForward or GKey.WingSweepAft or GKey.WingSweepAuto
         || IsPlayerSystemsAction(key);
 

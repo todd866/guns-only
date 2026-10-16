@@ -10,6 +10,7 @@ public sealed class PathfinderMissionDefinition {
     public uint Seed { get; }
     public bool Dawn => true;
     public int SafeKillQuota => 1;
+    public double HuntDeadlineSeconds => 300;
     public double GroundElevationM { get; }
     public WeatherProfile Weather { get; }
     public IReadOnlyList<PathfinderBalloonSpawn> Spawns { get; }
@@ -28,35 +29,49 @@ public sealed class PathfinderMissionDefinition {
         PopulatedAreas = Array.AsReadOnly(populatedAreas.ToArray());
     }
 
-    public static PathfinderMissionDefinition FirstLight(uint seed = 20261016) => new(seed,
-        new[] {
-            // Provisional pacing: 20 km from the short start puts the first gun window at
-            // ~18 s at M3.6. Later lanes retain their spacing; no adversary clock is delayed.
-            new PathfinderBalloonSpawn(1, new(-55_000, PathfinderRelayCard.FloatAltitudeM, 0)),
-            new PathfinderBalloonSpawn(2, new(-110_000, PathfinderRelayCard.FloatAltitudeM, 4000)),
-            new PathfinderBalloonSpawn(3, new(-160_000, PathfinderRelayCard.FloatAltitudeM, 20_000))
-        },
-        new[] { new PathfinderPopulatedArea("pathfinder.town.east-drift.v1", new[] {
-            new Vec3D(-158_000, 0, 14_000), new Vec3D(-149_000, 0, 14_000),
-            new Vec3D(-149_000, 0, 26_000), new Vec3D(-158_000, 0, 26_000)
-        }) },
-        new WeatherProfile(StandardAtmosphere1976.Instance, new LayeredWindField(new[] {
+    public static PathfinderMissionDefinition FirstLight(uint seed = 20261016) {
+        // Fictional encounter geometry, calibrated against the beat-15 lab (2026-10-16).
+        // A 6.5 G Rapier at M3.6 cannot chase laterally scattered targets. These 28 km
+        // legs curve gently; drift still demands an actual ballistic line-up.
+        var spawns = new[] {
+            new PathfinderBalloonSpawn(1, new(-52_000, PathfinderRelayCard.FloatAltitudeM, 0)),
+            new PathfinderBalloonSpawn(2, new(-80_000, PathfinderRelayCard.FloatAltitudeM, 100)),
+            new PathfinderBalloonSpawn(3, new(-108_000, PathfinderRelayCard.FloatAltitudeM, 300))
+        };
+        var weather = new WeatherProfile(StandardAtmosphere1976.Instance, new LayeredWindField(new[] {
             new WindVectorLevel(0, new Vec3D(4, 0, 1)),
             new WindVectorLevel(10_000, new Vec3D(10, 0, 0)),
             new WindVectorLevel(22_000, new Vec3D(18, 0, -3))
-        })), RapierLaunchSite.OperatingSurfaceElevationM);
+        }));
+        // Fixed town geography for every seed. Two populated districts leave a short clear
+        // corridor at nominal H+85..110 s. The first arrival (~41 s) is over a district;
+        // waiting means a real re-attack, not freezing the aircraft beside the balloon.
+        var nominal = new PathfinderRelayBalloon(2, spawns[1].Position, 20261016,
+            weather.Wind, RapierLaunchSite.OperatingSurfaceElevationM);
+        var footprint = nominal.PredictFootprint();
+        double west = footprint.Centre.X + nominal.Velocity.X * 85 - footprint.RadiusM;
+        double east = footprint.Centre.X + nominal.Velocity.X * 110 + footprint.RadiusM;
+        PathfinderPopulatedArea District(string id, double left, double right) => new(id, new[] {
+            new Vec3D(left, 0, footprint.Centre.Z - 2500), new Vec3D(right, 0, footprint.Centre.Z - 2500),
+            new Vec3D(right, 0, footprint.Centre.Z + 2500), new Vec3D(left, 0, footprint.Centre.Z + 2500)
+        });
+        return new(seed, spawns, new[] { District("pathfinder.town.west.v2", west - 8000, west),
+            District("pathfinder.town.east.v2", east, east + 8000) }, weather,
+            RapierLaunchSite.OperatingSurfaceElevationM);
+    }
 }
 
 public readonly record struct PathfinderEngagement(int BalloonId, PathfinderBalloonComponent Component,
     bool RelayDenied, PathfinderFootprint? Footprint, PathfinderFootprintClass Classification,
-    bool KillRewardEligible, double TimeSeconds);
+    bool KillRewardEligible, double TimeSeconds, string Source = "gun");
 
 /// Bounded Phase-1 hunt state and economy adapter. Generic fighter damage/egress never owns these
-/// relay sectors. Slice 1 carries the four drones as mass only; releases require the later router.
+/// relay sectors. Player and drone projectiles share component and ROE resolution.
 public sealed class PathfinderMission {
     readonly PathfinderRelayBalloon[] _balloons;
     readonly GunTarget[] _targets;
     readonly List<PathfinderEngagement> _killRecords = new(6);
+    bool _selectionPinned;
     public PathfinderMissionDefinition Definition { get; }
     public IReadOnlyList<PathfinderRelayBalloon> Balloons { get; }
     public GunKill Gun { get; } = new(ammo: 360, hitsToKill: 1, hitRadiusM: 1.4,
@@ -64,7 +79,12 @@ public sealed class PathfinderMission {
     public double ElapsedSeconds { get; private set; }
     public int SelectedBalloonId { get; private set; }
     public PathfinderRelayBalloon SelectedBalloon => _balloons.Single(b => b.Id == SelectedBalloonId);
-    public int RelaySectorsDenied => _balloons.Count(b => !b.RelayActive);
+    public int RelaySectorsDenied => _killRecords.Count;
+    public int RelaysEscaped => _balloons.Count(b => b.Escaped);
+    public bool Complete => _balloons.All(b => !b.RelayActive || b.Escaped);
+    public string EndReason => ElapsedSeconds >= Definition.HuntDeadlineSeconds ? "deadline" : "relays-resolved";
+    public int DroneReleases { get; private set; }
+    public int DroneKills => _killRecords.Count(k => k.Source == "drone");
     public int SafeKills { get; private set; }
     public int RoeViolations { get; private set; }
     public bool ContractEarned => SafeKills >= Definition.SafeKillQuota && RoeViolations == 0;
@@ -84,13 +104,14 @@ public sealed class PathfinderMission {
     public bool SelectBalloon(int id) {
         if (!_balloons.Any(b => b.Id == id)) return false;
         SelectedBalloonId = id;
+        _selectionPinned = true; // A deliberate Tab selection may be a relay behind us.
         return true;
     }
 
     public PathfinderFootprintClass ClassifyKill(PathfinderRelayBalloon balloon) =>
         balloon.PredictFootprint().Classify(Definition.PopulatedAreas);
 
-    public PathfinderEngagement Engage(int id, PathfinderBalloonComponent component) {
+    public PathfinderEngagement Engage(int id, PathfinderBalloonComponent component, string source = "gun") {
         var balloon = _balloons.Single(b => b.Id == id);
         PathfinderFootprint? footprint = component == PathfinderBalloonComponent.Gondola && balloon.RelayActive
             ? balloon.PredictFootprint() : null;
@@ -99,7 +120,7 @@ public sealed class PathfinderMission {
         bool eligible = killed && classification == PathfinderFootprintClass.Clear;
         if (eligible) SafeKills++;
         else if (killed) RoeViolations++;
-        var result = new PathfinderEngagement(id, component, killed, footprint, classification, eligible, ElapsedSeconds);
+        var result = new PathfinderEngagement(id, component, killed, footprint, classification, eligible, ElapsedSeconds, source);
         // At most six actors, each disabled once: repeated impacts cannot grow this ledger.
         if (killed) _killRecords.Add(result);
         LastEngagement = result;
@@ -128,6 +149,33 @@ public sealed class PathfinderMission {
         }
         foreach (var balloon in _balloons) balloon.Step(dt - elapsed);
         ElapsedSeconds += dt - elapsed;
+        if (ElapsedSeconds >= Definition.HuntDeadlineSeconds)
+            foreach (var balloon in _balloons) balloon.Escape();
+        // Preserve manual selection while the target is ahead. After a pass, point the
+        // existing steering cue down the lane; missed targets remain available for a loop.
+        var selectedDelta = SelectedBalloon.GondolaPosition - player.Position;
+        if (!SelectedBalloon.RelayActive || SelectedBalloon.Escaped
+            || (!_selectionPinned && selectedDelta.Length > 6500 && selectedDelta.Dot(player.VelocityVector()) < 0)) {
+            var position = player.Position;
+            var velocity = player.VelocityVector();
+            var next = _balloons.Where(b => b.RelayActive && !b.Escaped
+                && (b.Position - position).Dot(velocity) > 0)
+                .OrderBy(b => (b.Position - position).Length).FirstOrDefault();
+            if (next is not null) { SelectedBalloonId = next.Id; _selectionPinned = false; }
+        }
+    }
+
+    public void RecordDroneRelease() => DroneReleases++;
+
+    public void StepDroneGun(RapierGunDrone drone, int targetId, bool trigger, double dt) {
+        int count = 0;
+        foreach (var balloon in _balloons)
+            foreach (var target in balloon.GunTargets()) _targets[count++] = target;
+        drone.Gun.Step(trigger, drone.Sim.State, targetId * 2L + 1, _targets, dt,
+            requireLiveSelectedTarget: false);
+        foreach (var impact in drone.Gun.ImpactsThisStep)
+            Engage(checked((int)(impact.TargetId / 2)), impact.TargetId % 2 == 0
+                ? PathfinderBalloonComponent.Envelope : PathfinderBalloonComponent.Gondola, "drone");
     }
 
     public RapierEconomicSortieSlip EvaluateEconomy(in RapierEconomicSortieFacts facts) =>

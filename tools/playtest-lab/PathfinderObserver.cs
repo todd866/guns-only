@@ -10,6 +10,8 @@ public sealed class PathfinderMetrics {
     public double? FirstQualifiedGunWindowSeconds { get; set; }
     public double QualifiedGunWindowSeconds { get; set; }
     public double LongestGunWindowGapSeconds { get; set; }
+    public double LongestNonLoopGunWindowGapSeconds { get; set; }
+    public double DeliberateLoopSeconds { get; set; }
     public double GunWindowSeconds { get; set; }
     public int GunWindows { get; set; }
     public double HuntSeconds { get; set; }
@@ -30,7 +32,7 @@ public sealed class PathfinderMetrics {
     public int SectorsDenied { get; set; }
     public int RelayCount { get; set; }
     public int SafeKills { get; set; }
-    public string DroneCapability { get; set; } = "unavailable: Phase 1 carries mass only; no player release route";
+    public string DroneCapability { get; set; } = "public release route; kills are source-tagged gun engagements";
     public double? PassesPerKill => GondolaKills + DroneKills == 0 ? null : (double)Passes / (GondolaKills + DroneKills);
     public double? EnvelopeOnlyPassPct => Passes == 0 ? null : 100.0 * EnvelopeOnlyPasses / Passes;
 }
@@ -42,9 +44,9 @@ public sealed class PathfinderObserver {
     readonly HashSet<int> visible = new();
     readonly Dictionary<int, Pass> passes = new();
     readonly PathfinderMetrics metrics = new();
-    int killCursor, windowRelay;
-    bool window, ended, bingo;
-    double gap;
+    int killCursor, droneReleaseCursor, windowRelay, selectedRelay = -1;
+    bool window, ended, bingo, deliberateLoop;
+    double gap, nonLoopGap;
     sealed class Pass { public bool Envelope, Killed; public double Started; }
     public PathfinderObserver(RunResult result) { this.result = result; result.Pathfinder = metrics; }
     public static bool GunWindow(SimulationSession s) => s.Pathfinder is { } m
@@ -58,11 +60,28 @@ public sealed class PathfinderObserver {
         metrics.RelayCount = m.Balloons.Count;
         if (!ended && !bingo && s.PlayerFuel.IsBingo) { bingo = true; Event(time, "bingo"); }
         foreach (var d in decisions) {
-            if (d.StartsWith("roe:")) { metrics.RoeDecisions++; Event(time, "roe-decision", int.Parse(d.Split(':')[2]), source: d); }
-            if (d.StartsWith("drone:unavailable:")) {
-                metrics.DroneReleaseAttempts++; metrics.DroneReleaseRejected++;
-                Event(time, "drone-release-rejected", int.Parse(d.Split(':')[3]), source: "policy:capability-unavailable");
+            if (d.StartsWith("loop:start:")) {
+                deliberateLoop = true; nonLoopGap = 0;
+                Event(time, "loop-start", int.Parse(d.Split(':')[3]), source: "pilot");
+            } else if (d.StartsWith("loop:end:")) {
+                deliberateLoop = false; nonLoopGap = 0;
+                Event(time, "loop-end", int.Parse(d.Split(':')[3]), source: "pilot");
             }
+            if (d.StartsWith("roe:")) { metrics.RoeDecisions++; Event(time, "roe-decision", int.Parse(d.Split(':')[2]), source: d); }
+            if (d.StartsWith("drone:release:")) {
+                metrics.DroneReleaseAttempts++;
+                Event(time, "drone-release", int.Parse(d.Split(':')[3]), source: "gun");
+            } else if (d.StartsWith("drone:release-rejected:")) {
+                metrics.DroneReleaseAttempts++; metrics.DroneReleaseRejected++;
+                Event(time, "drone-release-rejected", int.Parse(d.Split(':')[3]), source: "gun");
+            }
+        }
+        // The mission counters are authoritative. A release is an input accepted by the
+        // production store/release path; a drone kill is credited only by its own gun
+        // engagement. Keep these separate from the player's Pathfinder gun ledger.
+        while (droneReleaseCursor < m.DroneReleases) {
+            droneReleaseCursor++;
+            metrics.DroneReleases++;
         }
         // Impacts are authoritative and can occur shortly after the shooter changes target.
         foreach (var impact in m.Gun.ImpactsThisStep) {
@@ -74,9 +93,11 @@ public sealed class PathfinderObserver {
         }
         while (killCursor < m.KillRecords.Count) {
             var k = m.KillRecords[killCursor++];
-            metrics.GondolaKills++;
+            bool drone = string.Equals(k.Source, "drone", StringComparison.OrdinalIgnoreCase);
+            if (drone) metrics.DroneKills++;
+            else metrics.GondolaKills++;
             if (passes.TryGetValue(k.BalloonId, out var pass)) pass.Killed = true;
-            Event(k.TimeSeconds, "gondola-kill", k.BalloonId, source: "gun");
+            Event(k.TimeSeconds, drone ? "drone-kill" : "gondola-kill", k.BalloonId, source: k.Source);
             Event(k.TimeSeconds, "sector-denied", k.BalloonId, source: "mission");
             if (!k.KillRewardEligible) Event(k.TimeSeconds, "roe-violation", k.BalloonId, source: k.Classification.ToString());
         }
@@ -84,6 +105,10 @@ public sealed class PathfinderObserver {
         if (ended) return;
         bool stop = s.PlayerRtbActive || !s.PlayerAlive || s.Lifecycle != SimulationSession.LifecycleState.Active;
         metrics.HuntSeconds = time;
+        if (selectedRelay != -1 && selectedRelay != m.SelectedBalloonId
+            && passes.TryGetValue(selectedRelay, out var changedPass))
+            ClosePass(selectedRelay, changedPass, time);
+        selectedRelay = m.SelectedBalloonId;
         if (!stop) {
             foreach (var b in m.Balloons) {
                 var delta = b.GondolaPosition - s.Player.State.Position;
@@ -108,11 +133,18 @@ public sealed class PathfinderObserver {
             metrics.FirstGunWindowSeconds ??= time;
         }
         window = nextWindow; windowRelay = nextRelay;
-        if (nextWindow) { metrics.GunWindowSeconds += SortieRunner.Dt; gap = 0; }
-        else { gap += SortieRunner.Dt; metrics.LongestGunWindowGapSeconds = Math.Max(metrics.LongestGunWindowGapSeconds, gap); }
+        if (nextWindow) { metrics.GunWindowSeconds += SortieRunner.Dt; gap = 0; nonLoopGap = 0; }
+        else {
+            gap += SortieRunner.Dt;
+            metrics.LongestGunWindowGapSeconds = Math.Max(metrics.LongestGunWindowGapSeconds, gap);
+            if (deliberateLoop) metrics.DeliberateLoopSeconds += SortieRunner.Dt;
+            else { nonLoopGap += SortieRunner.Dt; metrics.LongestNonLoopGunWindowGapSeconds = Math.Max(metrics.LongestNonLoopGunWindowGapSeconds, nonLoopGap); }
+        }
         if (stop) {
             metrics.HuntCensored = false;
-            metrics.HuntEndReason = !s.PlayerAlive ? "aircraft-lost" : decisions.FirstOrDefault(d => d.StartsWith("RTB:")) ?? s.ReturnToBaseReason.ToString();
+            metrics.HuntEndReason = m.Complete || time >= m.Definition.HuntDeadlineSeconds
+                ? m.EndReason
+                : !s.PlayerAlive ? "aircraft-lost" : decisions.FirstOrDefault(d => d.StartsWith("RTB:")) ?? s.ReturnToBaseReason.ToString();
             Event(time, "egress", source: metrics.HuntEndReason);
             foreach (var (id, p) in passes.ToArray()) ClosePass(id, p, time);
             ended = true;

@@ -42,6 +42,8 @@ test("leak exposes conforming wrinkles and deforms the pale envelope without mov
   const envelope = slot.getObjectByName("PATHFINDER_PALE_LEAKING_ENVELOPE");
   const positions = envelope.geometry.attributes.position.array;
   assert.equal(slot.getObjectByName("PATHFINDER_ENVELOPE_WRINKLES").visible, true);
+  assert.equal(envelope.userData.pathfinderSag, 0.3);
+  assert.equal(slot.getObjectByName("PATHFINDER_ENVELOPE_WRINKLES").userData.pathfinderSag, 0.3);
   assert.equal(envelope.scale.x, 1);
   assert.ok(Math.max(...positions) > 10);
   assert.ok(new Set(Array.from(positions).map((value) => value.toFixed(4))).size > 20);
