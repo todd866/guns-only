@@ -18,9 +18,30 @@ public sealed partial class SimulationSession {
     /// boundary: any unspent fast-time credit is discarded before another fixed tick can run.
     /// </summary>
     public void SetTimeCompressionEnabled(bool enabled) {
+        if (SupportsF22RtbCompression) {
+            if (!enabled) {
+                DisengageTimeCompression(TimeCompressionInhibitReason.PilotDisabled);
+                return;
+            }
+            if (_rtbAutopilotActive) return;
+            // Engagement transfers ownership, including any old scripted/analog
+            // command. Fresh input after this edge always returns control at 1x.
+            _timeCompressionPilotEnabled = true;
+            var safety = CaptureF22RtbCompressionSafety(engaging: true);
+            var reason = TimeCompressionPolicy.Evaluate(safety);
+            if (reason != TimeCompressionInhibitReason.None) {
+                DisengageTimeCompression(reason);
+                return;
+            }
+            _detents.ScriptedPilotOverride = null;
+            _detents.ClearAnalogPitchControl();
+            _detents.ClearAnalogRollControl();
+            _detents.ClearAnalogYawControl();
+            _rtbAutopilotActive = true;
+        }
         _timeCompressionPilotEnabled = enabled;
         if (!enabled) _timeCompressionAccumulatorSeconds = 0.0;
-        UpdateTimeCompressionDecision();
+        UpdateTimeCompressionDecision(engagingRtb: SupportsF22RtbCompression && enabled);
     }
 
     public bool ToggleTimeCompression() {
@@ -97,6 +118,8 @@ public sealed partial class SimulationSession {
             _playerF14WingSweepMode = F14WingSweepMode.Auto;
             _playerF14WingSweepAutoLatch = true;
         }
+        if (key == GKey.TimeCompressionToggle && newPress)
+            ToggleTimeCompression();
         if (key == GKey.KnockItOff && newPress)
             TryRequestReturnToBase(MissionRtbReason.PilotKnockItOff);
         // Weapon release is an edge-triggered cockpit action. Latch a deliberate Rapier F tap so
@@ -191,7 +214,7 @@ public sealed partial class SimulationSession {
             _detents.ClearAnalogRollControl();
             return;
         }
-        if (Math.Abs(value) > 0.02) {
+        if (Math.Abs(value) > (SupportsF22RtbCompression ? RtbCompressionControlDeadband : 0.02)) {
             DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
             ClaimRapierControl();
         }
@@ -218,7 +241,7 @@ public sealed partial class SimulationSession {
             _detents.ClearAnalogPitchControl();
             return;
         }
-        if (Math.Abs(value) > 0.02) {
+        if (Math.Abs(value) > (SupportsF22RtbCompression ? RtbCompressionControlDeadband : 0.02)) {
             DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
             ClaimRapierControl();
         }
@@ -235,7 +258,7 @@ public sealed partial class SimulationSession {
             _detents.ClearAnalogYawControl();
             return;
         }
-        if (Math.Abs(value) > 0.02) {
+        if (Math.Abs(value) > (SupportsF22RtbCompression ? RtbCompressionControlDeadband : 0.02)) {
             DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
             ClaimRapierControl();
         }
@@ -340,7 +363,7 @@ public sealed partial class SimulationSession {
                 : CasevacSemanticCommand.None);
     }
 
-    bool HasControlInputBeyondTrim() {
+    bool HasControlInputBeyondTrim(bool ignoreCombatAssists = false) {
         PilotCommand command = _detents.Command;
         return KeyActive(GKey.PullUp)
             || KeyActive(GKey.PushDown)
@@ -361,7 +384,7 @@ public sealed partial class SimulationSession {
             || KeyActive(GKey.FlapDown)
             || KeyActive(GKey.EmergencyGearRelease)
             || _triggerDown
-            || _assistedFlight
+            || (!ignoreCombatAssists && _assistedFlight)
             || _playerGunTargetPadlockRollAssistSelected
             || _padlockRollAssist.State.Active
             || _gunneryPitchAssistState.Active
@@ -453,7 +476,8 @@ public sealed partial class SimulationSession {
             && (establishedClimb || establishedCruise);
     }
 
-    TimeCompressionSafetyState CaptureTimeCompressionSafety() {
+    TimeCompressionSafetyState CaptureTimeCompressionSafety(bool engagingRtb = false) {
+        if (SupportsF22RtbCompression) return CaptureF22RtbCompressionSafety(engagingRtb);
         int contactFactorCap = ContactApproachFactorCap();
         int fuelFactorCap = TimeCompressionPolicy.FactorCapForLeadSeconds(
             SecondsUntilFuelThreshold());
@@ -502,7 +526,7 @@ public sealed partial class SimulationSession {
             ApproachFactorCap: approachFactorCap);
     }
 
-    void UpdateTimeCompressionDecision() {
+    void UpdateTimeCompressionDecision(bool engagingRtb = false) {
         if (_beat is null || _player is null
             || _fuel is null || _keys is null || _detents is null) {
             _timeCompressionSafetyFactorCap = 1;
@@ -511,11 +535,20 @@ public sealed partial class SimulationSession {
                 TimeCompressionInhibitReason.SessionInactive;
             return;
         }
-        TimeCompressionSafetyState safety = CaptureTimeCompressionSafety();
+        if (SupportsF22RtbCompression && !_timeCompressionPilotEnabled) {
+            _timeCompressionFactor = 1;
+            _timeCompressionAccumulatorSeconds = 0.0;
+            return; // retain the reason for the last explicit hand-back
+        }
+        TimeCompressionSafetyState safety = CaptureTimeCompressionSafety(engagingRtb);
         _timeCompressionSafetyFactorCap = Math.Clamp(
             safety.ApproachFactorCap, 1, TimeCompressionPolicy.PreferredFactor);
         _timeCompressionInhibitReason =
             TimeCompressionPolicy.Evaluate(safety);
+        if (SupportsF22RtbCompression && _timeCompressionInhibitReason != TimeCompressionInhibitReason.None) {
+            DisengageTimeCompression(_timeCompressionInhibitReason);
+            return;
+        }
         _timeCompressionFactor = TimeCompressionPolicy.SelectFactor(
             safety,
             Math.Min(_timeCompressionHostMaximumFactor,
@@ -525,6 +558,10 @@ public sealed partial class SimulationSession {
     }
 
     void DisengageTimeCompression(TimeCompressionInhibitReason reason) {
+        if (SupportsF22RtbCompression) {
+            _rtbAutopilotActive = false;
+            _timeCompressionPilotEnabled = false;
+        }
         _timeCompressionFactor = 1;
         _timeCompressionInhibitReason = reason;
         _timeCompressionAccumulatorSeconds = 0.0;

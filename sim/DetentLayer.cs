@@ -87,6 +87,10 @@ public sealed class DetentLayer {
     /// </summary>
     public double PilotRollIntent => Command.RollControl;
 
+    internal bool HasAnalogPitchOrRollInput(double deadband) =>
+        (_analogPitchControlActive && Math.Abs(_analogPitchControl) > deadband)
+        || (_analogRollControlActive && Math.Abs(_analogRollControl) > deadband);
+
     public void ClearAnalogRollControl() {
         _analogRollControl = 0.0;
         _analogRollControlActive = false;

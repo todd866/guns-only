@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+lab_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
+export PATH="$DOTNET_ROOT:$PATH"
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+if [ -z "${PLAYTEST_POWER_GUARD:-}" ] && [ -f "$HOME/.codex/power/battery_guard.py" ]; then
+    export PLAYTEST_POWER_GUARD="$HOME/.codex/power/battery_guard.py"
+fi
+if [ -n "${PLAYTEST_POWER_GUARD:-}" ]; then
+    python3 "$PLAYTEST_POWER_GUARD" run -- dotnet build "$lab_dir/GunsOnly.PlaytestLab.csproj" -c Release --nologo -p:UseSharedCompilation=false
+else
+    dotnet build "$lab_dir/GunsOnly.PlaytestLab.csproj" -c Release --nologo -p:UseSharedCompilation=false
+fi
+exec dotnet "$lab_dir/bin/Release/net8.0/GunsOnly.PlaytestLab.dll" "$@"

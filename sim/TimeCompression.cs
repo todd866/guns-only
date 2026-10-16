@@ -18,7 +18,8 @@ public enum TimeCompressionInhibitReason {
     Damage,
     FuelThreshold,
     ControlInput,
-    RamTransition
+    RamTransition,
+    RecoveryFinal
 }
 
 /// <summary>
@@ -39,7 +40,8 @@ internal readonly record struct TimeCompressionSafetyState(
     bool FuelThresholdOrLead,
     bool ControlInputBeyondTrim,
     bool RamTransitionLead,
-    int ApproachFactorCap);
+    int ApproachFactorCap,
+    bool RecoveryFinal = false);
 
 internal static class TimeCompressionPolicy {
     // This is the kernel's transit request, not a renderer performance cap. The host may offer a
@@ -135,6 +137,7 @@ internal static class TimeCompressionPolicy {
             return TimeCompressionInhibitReason.RamTransition;
         if (state.CatapultOrConfigurationTransition)
             return TimeCompressionInhibitReason.CatapultOrConfiguration;
+        if (state.RecoveryFinal) return TimeCompressionInhibitReason.RecoveryFinal;
         if (!state.EstablishedTransit)
             return TimeCompressionInhibitReason.TransitNotEstablished;
         return TimeCompressionInhibitReason.None;
