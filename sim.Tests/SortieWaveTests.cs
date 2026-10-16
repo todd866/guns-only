@@ -26,7 +26,7 @@ public sealed class SortieWaveTests {
         Assert.Equal(PilotSkill.Ace, wave4.Spawn.Skill);
         Assert.Equal(2, wave4.Spawn.FormationSize);
         Assert.Equal(BanditMount.Baseline, wave4.Spawn.Mount);
-        Assert.Equal(PilotSkill.Veteran, wave3.Spawn.WingSkill);
+        Assert.Equal(PilotSkill.Competent, wave3.Spawn.WingSkill);
         Assert.Equal(PilotSkill.Veteran, wave4.Spawn.WingSkill);
 
         Assert.Equal(5, wave5.Number);

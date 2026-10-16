@@ -39,6 +39,24 @@ class CompareWavesTests(unittest.TestCase):
         self.assertEqual(stats["rtb_request"], 1)
         self.assertEqual(stats["ace_survive_to_rtb"], 0)
 
+    def test_missing_completion_is_not_assumed_survival(self):
+        evidence = run("ace", 0)
+        del evidence["completed"]
+        self.assertFalse(compare_waves.row(evidence)["successful_end"])
+
+    def test_contact_clock_ignores_canceled_contact_but_counts_missing_live_arrival(self):
+        stats = compare_waves.aggregate([run("ace", 0, waveContacts=[
+            {"wave": 3, "previousWinSimSecond": 20, "warningSeconds": 20 - 1 / 120,
+             "firstThreatSimSecond": 40 - 1 / 120, "canceledForRtb": False},
+            {"wave": 4, "previousWinSimSecond": 100, "warningSeconds": 22,
+             "firstThreatSimSecond": None, "canceledForRtb": True},
+            {"wave": 5, "previousWinSimSecond": 200, "warningSeconds": 23,
+             "firstThreatSimSecond": None, "canceledForRtb": False},
+        ])])
+        self.assertEqual(stats["lead_count"], 1)
+        self.assertEqual(stats["lead_missing"], 1)
+        self.assertAlmostEqual(stats["lead_max"], 20 - 1 / 120)
+
     def test_explicit_missing_iteration2_is_rejected(self):
         with self.assertRaises(ValueError):
             compare_waves.comparison(Path("/missing/waves"), Path("/missing/base"), Path("/missing/iteration2"))

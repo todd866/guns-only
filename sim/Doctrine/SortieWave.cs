@@ -28,7 +28,7 @@ public sealed partial class FightDirector {
             Mount: waveNumber >= 5 ? BanditMount.Uprated : BanditMount.Baseline,
             FormationSize: waveNumber <= 4 ? 2 : 4,
             Committed: true,
-            WingSkill: waveNumber <= 4 ? PilotSkill.Veteran : skill,
+            WingSkill: waveNumber == 3 ? PilotSkill.Competent : waveNumber == 4 ? PilotSkill.Veteran : skill,
             WingMount: waveNumber >= 6 ? BanditMount.Uprated : BanditMount.Baseline);
         // Twenty to twenty-four seconds to turn toward the warning; the lead then
         // arrives inside visual/threat range, facing ownship. W3/4 add pilot pressure

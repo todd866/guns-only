@@ -31,7 +31,7 @@ def main():
         assert 0 <= run["longestDeadAirExcludingRtbAutopilotSeconds"] <= run["longestDeadAirSeconds"] + 1e-6
         assert 0 <= run["deadAirExcludingRtbAutopilotSeconds"] <= run["deadAirSeconds"] + 1e-6
         for contact in run["waveContacts"]:
-            assert 20 - 1e-7 <= contact["warningSeconds"] <= 30 + 1e-7
+            assert 20 - 1 / 120 - 1e-7 <= contact["warningSeconds"] <= 30 + 1e-7
             assert contact["previousWinSimSecond"] <= run["seconds"]
             if contact["canceledForRtb"]:
                 canceled += 1

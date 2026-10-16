@@ -138,7 +138,7 @@ def row(run, baseline=False):
                                 or str(e.get("kind", "")).endswith("->RTB"))),
                            default=float("inf"))
     rtb_request = rtb_requested_at < float("inf") and destroyed_at > rtb_requested_at
-    completed = bool(run.get("completed", True))
+    completed = bool(run.get("completed", False))
     landed = bool(run.get("landed", False))
     successful_end = completed and (outcome in {"win", "recovered"}
                                     or (landed and outcome not in {"loss", "crash", "draw"}))
@@ -291,8 +291,8 @@ def comparison(wave_path: Path, baseline_path: Path, iteration2_path: Path | Non
     def actual(value, suffix=""):
         return "N/A" if value is None else f"{value:.1f}{suffix}"
     warning_status = (ace_gate["warning_min"] is not None and ace_gate["warning_max"] is not None
-                      and 20 - 1e-7 <= ace_gate["warning_min"] <= 30 + 1e-7
-                      and 20 - 1e-7 <= ace_gate["warning_max"] <= 30 + 1e-7)
+                      and 20 - 1 / 120 - 1e-7 <= ace_gate["warning_min"] <= 30 + 1e-7
+                      and 20 - 1 / 120 - 1e-7 <= ace_gate["warning_max"] <= 30 + 1e-7)
     lead_status = ace_gate["lead_missing"] == 0 and ace_gate["lead_max"] is not None and ace_gate["lead_max"] <= 30
     lines = [
         "# Beat 7 wave cohort comparison", "",
@@ -311,6 +311,7 @@ def comparison(wave_path: Path, baseline_path: Path, iteration2_path: Path | Non
         f"| ace warning seconds min/max | {actual(ace_gate['warning_min'],'s')} / {actual(ace_gate['warning_max'],'s')} | 20–30s | {'PASS' if warning_status else 'MISS'} |",
         f"| ace win-to-first-threat max | {actual(ace_gate['lead_max'],'s')} ({ace_gate['lead_count']} observed; {ace_gate['lead_missing']} missing) | ≤30s, no missing | {'PASS' if lead_status else 'MISS'} |",
         "",
+        "Warnings are sampled at tick end (up to 1/120 s after creation); the authored 20 s lower bound permits that measurement offset. Survival requires a completed survivable outcome, not merely requesting RTB. [Metric definitions](validation.md).", "",
         "| pilot | cohort | mean perceived / sim | length <300 / 300–480 / >480 (p50/p90) | censored | combat share (pooled phase seconds) | max raw dead air | max active dead air (RTB AP excluded) | hits taken runs | successful terminal survival | loss/crash/win/draw/recovered/incomplete/discontinued | landed | waves mean/max | score mean | bounce actual |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
