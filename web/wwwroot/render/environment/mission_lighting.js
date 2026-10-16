@@ -12,10 +12,12 @@ export function missionLighting(state) {
     sunX: Math.sin(azimuth) * Math.cos(radians), sunY: Math.sin(radians),
     sunZ: -Math.cos(azimuth) * Math.cos(radians),
     dawn: 1,
-    fogLow: 0x182838, fogHigh: 0x263b53,
-    ambientSky: 0x809bc0, ambientGround: 0x101923, ambientIntensity: 0.24,
-    sunColor: 0xffd4a0, sunIntensity: 2.9,
-    haze: [0.032, 0.055, 0.09],
+    // Cool blue shadow under a warm limb. The previous near-black fog and ground
+    // ambient survived ACES as night, with no readable terrain form.
+    fogLow: 0x1a3d66, fogHigh: 0x245080,
+    ambientSky: 0x9aa6dc, ambientGround: 0x2a4c78, ambientIntensity: 0.52,
+    sunColor: 0xffc898, sunIntensity: 3.4,
+    haze: [0.055, 0.085, 0.16],
   };
 }
 
@@ -57,7 +59,7 @@ export function applyMissionLighting(view, state, sunDirection) {
   view.ambient.intensity = lighting.ambientIntensity;
   view.sun.color.set(lighting.sunColor);
   view.sun.intensity = lighting.sunIntensity;
-  view.renderer.toneMappingExposure = 1.02;
+  view.renderer.toneMappingExposure = 1.06;
   return true;
 }
 

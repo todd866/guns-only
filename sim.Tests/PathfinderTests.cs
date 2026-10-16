@@ -177,6 +177,9 @@ public sealed class PathfinderTests {
             Assert.False(session.Player.InletUnstarted);
             Assert.True(session.Player.InletFlowRecovery >= 0.90,
                 $"t={tick * Dt:F3}: inlet {session.Player.InletFlowRecovery:F3}, alpha {session.Player.AngleOfAttackRad * 180 / Math.PI:F2}");
+            // M3.6 spawn is already turbine-out. That is the quiet ram readout, not a banner.
+            Assert.DoesNotContain("TURBINE OFFLINE", session.TransitionCue, StringComparison.Ordinal);
+            Assert.DoesNotContain("RAM ONLY", session.TransitionCue, StringComparison.Ordinal);
         }
         AssertBrowserStartFixture(session, "pathfinder_three_seconds.json");
     }

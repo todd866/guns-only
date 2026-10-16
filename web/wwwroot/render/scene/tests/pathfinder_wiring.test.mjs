@@ -53,7 +53,7 @@ test("dawn sun is visible above the FL650 horizon while ground stays before sunr
   assert.equal(missionLighting({}), null);
   assert.match(sky, /uDawn: \{ value: 0 \}/);
   assert.match(sky, /direction.y \+ dip \* uDawn/);
-  assert.match(terrain, /lit = mix\(lit, lit \* vec3\(0.12, 0.19, 0.32\), uMissionDawn\)/);
+  assert.match(terrain, /lit = mix\(lit, lit \* vec3\(0.22, 0.34, 0.92\) \+ vec3\(0.012, 0.022, 0.055\), uMissionDawn\)/);
 });
 
 test("sun stays 120–160 degrees off every westbound hunt lane, front-lighting the balloons", async () => {

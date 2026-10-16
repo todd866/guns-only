@@ -31,9 +31,11 @@ function makeGlints() {
         brightness = sunlit * (1.0 - smoothstep(4.0, 10.0, diameterPx))
           * smoothstep(1500.0, 3000.0, rangeM)
           * (1.0 - smoothstep(74080.0, 83340.0, rangeM));
+        // Larger than the flight-path marker: a 7 px dot sat inside that symbol and
+        // read as no contact until the mesh itself resolved near 0.8 NM.
+        gl_PointSize = mix(24.0, 48.0, resolved) * pixelRatio;
         gl_Position = projectionMatrix * view;
         #include <logdepthbuf_vertex>
-        gl_PointSize = mix(7.0, 9.0, resolved) * pixelRatio;
       }`,
     fragmentShader: `
       #include <logdepthbuf_pars_fragment>
@@ -43,13 +45,16 @@ function makeGlints() {
         float r = length(p);
         // Far: soft warm dot. By 3 NM: a round, shaded envelope impostor,
         // handing off to the actual mesh before the 1.5 km gondola window.
-        float edge = mix(0.40, 0.82, resolved);
+        float edge = mix(0.78, 0.92, resolved);
         float alpha = (1.0 - smoothstep(edge, 1.0, r)) * brightness;
         if (alpha < 0.01) discard;
         #include <logdepthbuf_fragment>
         float dome = sqrt(max(0.0, 1.0 - r * r));
-        vec3 warm = mix(vec3(1.0, 0.86, 0.56),
-          mix(vec3(0.55, 0.30, 0.10), vec3(1.0, 0.90, 0.65), dome), resolved);
+        vec3 normal = normalize(vec3(p * 0.85, dome));
+        // Player-facing key: the sun is behind/right, so the near face is lit from the right.
+        float key = clamp(dot(normal, normalize(vec3(0.55, 0.28, 1.0))), 0.0, 1.0);
+        vec3 envelope = mix(vec3(0.42, 0.18, 0.08), vec3(1.0, 0.90, 0.68), key);
+        vec3 warm = mix(vec3(1.0, 0.94, 0.72), envelope, resolved);
         gl_FragColor = vec4(warm, alpha);
       }`,
   });
@@ -199,14 +204,14 @@ export function createPathfinderRelays() {
   const shared = {
     envelopeGeometry: new THREE.SphereGeometry(1, 18, 12),
     envelopeMaterial: new THREE.MeshStandardMaterial({
-      color: 0xe9e4d6, roughness: 0.82, metalness: 0.01,
-      emissive: 0xffd4a0, emissiveIntensity: 0.30,
+      color: 0xfff1d4, roughness: 0.58, metalness: 0.02,
+      emissive: 0xffe2b0, emissiveIntensity: 0.42,
       fog: false,
     }),
     wrinkleGeometry: makeWrinkleGeometry(),
     wrinkleMaterial: new THREE.LineBasicMaterial({ color: 0x8a8274, transparent: true, opacity: 0.55, fog: false }),
     gondolaGeometry: new THREE.BoxGeometry(5.6, 2.8, 4.2),
-    gondolaMaterial: new THREE.MeshStandardMaterial({ color: 0x171e22, roughness: 0.78, metalness: 0.2, fog: false }),
+    gondolaMaterial: new THREE.MeshStandardMaterial({ color: 0x0c1216, roughness: 0.86, metalness: 0.08, fog: false }),
     // Debris is prepared with the same dark material already used by live gondolas;
     // a first kill must not introduce a shader/material compile hitch.
     debrisMaterial: null,

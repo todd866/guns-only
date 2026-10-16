@@ -251,8 +251,10 @@ public sealed partial class SimulationSession {
     double _closureKts;
     double _closureSmooth;
     string _transitionCue = "";
-    // Highest ram cue already announced: 0 none, 1 light-up, 2 full ram, 3 turbine gone.
-    int _ramCueStage;
+    // Highest ram cue already announced: -1 not yet sampled, 0 none, 1 light-up,
+    // 2 full ram, 3 turbine gone. The first sample latches without a banner so an
+    // airborne ram-cruise start does not announce a handover the pilot did not fly.
+    int _ramCueStage = -1;
     double _transitionCueUntilMs = double.NegativeInfinity;
     double _splashCueUntilMs = double.NegativeInfinity;
     RapierMissionDirector? _rapierMissionDirector;
@@ -1397,7 +1399,7 @@ public sealed partial class SimulationSession {
         _timeCompressionFactor = 1;
         _timeCompressionInhibitReason =
             TimeCompressionInhibitReason.SessionInactive;
-        _ramCueStage = 0;
+        _ramCueStage = -1;
         _shotsTotal = 0;
         _shotsInWindow = 0;
         _killCount = 0;

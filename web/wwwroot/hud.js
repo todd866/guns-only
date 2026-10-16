@@ -3887,9 +3887,15 @@ class CombatHud {
       ctx.fillStyle = "rgba(255, 176, 32, 0.16)";
       ctx.fillRect(x, yOf(maxT), railWidth, yOf(1.0) - yOf(maxT));
     }
+    // Ram cruise is the normal high-Mach regime, not afterburner. Turbine thrust at
+    // zero with the ram stream lit must not paint the rail as an amber A/B alert.
+    const turbineLbf = Number(state.rapier_turbine_thrust_lbf);
+    const ramLbf = Number(state.rapier_ramjet_thrust_lbf);
+    const ramOnly = state.rapier_mission_available === true
+      && ramLbf > 10 && !(turbineLbf > 10);
     // Engine fill is actual output; the gap to the caret is the spool lag the pilot feels.
     const ey = yOf(eng);
-    ctx.fillStyle = eng > 1.005 ? AMBER : GREEN;
+    ctx.fillStyle = !ramOnly && eng > 1.005 ? AMBER : GREEN;
     ctx.fillRect(x + 1.5, ey, railWidth - 3, y + h - ey);
     ctx.strokeStyle = "rgba(77, 255, 136, 0.38)";
     ctx.lineWidth = 1;
@@ -3901,7 +3907,7 @@ class CombatHud {
       ctx.stroke();
     }
     const ly = yOf(thr);
-    ctx.fillStyle = thr > 1.005 ? AMBER : GREEN;
+    ctx.fillStyle = !ramOnly && thr > 1.005 ? AMBER : GREEN;
     ctx.beginPath();
     ctx.moveTo(x + railWidth + 1, ly);
     ctx.lineTo(x + railWidth + 8, ly - 4);
@@ -3958,7 +3964,11 @@ class CombatHud {
         x + railWidth / 2, y - 19);
     }
 
-    if (hasAfterburner && eng > 1.005) {
+    if (ramOnly) {
+      ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = GREEN_DIM;
+      ctx.fillText("RAM", x + railWidth / 2, y + h + 10);
+    } else if (hasAfterburner && eng > 1.005) {
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillStyle = AMBER;
       ctx.fillText("A/B", x + railWidth / 2, y + h + 10);

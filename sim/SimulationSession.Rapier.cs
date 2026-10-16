@@ -682,6 +682,12 @@ public sealed partial class SimulationSession {
             : mach >= Propulsion.TurboRamjetPerformanceMap.FullRamMach ? 2
             : mach >= Propulsion.TurboRamjetPerformanceMap.RamFadeStartMach ? 1
             : 0;
+        // Airborne starts (Pathfinders at M3.6) are already in ram cruise. Latch that
+        // stage onto the quiet engine readout; only a later upward crossing is an alert.
+        if (_ramCueStage < 0) {
+            _ramCueStage = stage;
+            return;
+        }
         if (stage <= _ramCueStage) return;
         _ramCueStage = stage;
         // Formatted from the constants, never hardcoded. These said M1.6 / M2.2 after the fade band

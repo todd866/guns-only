@@ -852,9 +852,10 @@ void main() {
     * pow(max(dot(normal, waterHalf), 0.0), 72.0) * 0.28;
   #endif
   lit = mix(lit, waterLit, waterMask);
-  // Same terrain shader, mission time-of-day grade. Low blue fill while the sun is below
-  // the ground horizon; airborne objects receive the existing directional key separately.
-  lit = mix(lit, lit * vec3(0.12, 0.19, 0.32), uMissionDawn);
+  // Same terrain shader, mission time-of-day grade. Cool blue shadow while the sun is
+  // below the ground horizon — lifted enough that relief stays readable, still clearly
+  // unlit. Airborne objects receive the existing directional key separately.
+  lit = mix(lit, lit * vec3(0.22, 0.34, 0.92) + vec3(0.012, 0.022, 0.055), uMissionDawn);
 
   // Aerial perspective: period haze whites the world out from altitude. Korea-modern thins
   // density toward cool sky blue. Ukraine retains a warm ground contribution but resolves toward

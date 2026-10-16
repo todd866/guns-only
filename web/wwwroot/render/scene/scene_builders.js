@@ -2967,30 +2967,40 @@ export function createDecisionSupportSky() {
         vec3 zenithWarm = mix(vec3(0.080, 0.170, 0.460), vec3(0.033, 0.072, 0.199), altitudeMix);
         vec3 horizon = mix(horizonCool, horizonWarm, uSoftWorld);
         vec3 zenith = mix(zenithCool, zenithWarm, uSoftWorld);
-        // First Light's warm horizon belongs to sunrise, not the whole sky. The
-        // westbound hunt sees blue twilight behind its front-lit relay envelopes.
+        // First Light's warm horizon belongs to sunrise, not the whole sky. The sun is
+        // ~140 deg off the westbound nose, so the forward view is twilight blue and the
+        // orange/pink limb sits on the eastern side (the right of the frame). Values are
+        // linear under ACES at exposure ~1.06: zenith near sRGB (30, 25, 120), not night.
         float dawnFacingSun = dot(direction.xz, uSunDirection.xz)
           / max(0.001, length(direction.xz) * length(uSunDirection.xz));
-        vec3 dawnHorizon = mix(vec3(0.025, 0.043, 0.075), vec3(0.28, 0.16, 0.105),
-          smoothstep(-0.15, 0.65, dawnFacingSun));
+        float sunward = smoothstep(-0.90, 0.28, dawnFacingSun);
+        vec3 dawnHorizon = mix(vec3(0.050, 0.078, 0.220), vec3(0.92, 0.30, 0.11), sunward);
         horizon = mix(horizon, dawnHorizon, uDawn);
-        zenith = mix(zenith, mix(vec3(0.018, 0.035, 0.085),
-          vec3(0.0015, 0.004, 0.018), altitudeMix), uDawn);
+        zenith = mix(zenith, mix(vec3(0.020, 0.028, 0.090),
+          vec3(0.032, 0.022, 0.160), altitudeMix), uDawn);
         // Soft world confines the warm band close to the horizon. At the cool 0.42 exponent a ray
         // 27 deg up still carries 28% of the near-white warm horizon, and ACES lifts that blend
         // into the top sRGB decile — which is why the Ukraine sky read as flat overcast grey no
-        // matter what the zenith colour was. Korea's cool curve is untouched.
-        float skyCurve = pow(aboveHorizon, mix(
+        // matter what the zenith colour was. Korea's cool curve is untouched. Dawn widens only
+        // the sunward limb so the orange is a band, then violet, not a one-pixel hairline.
+        float skyExponent = mix(
           mix(0.42, 0.28, altitudeMix),
           mix(0.18, 0.13, altitudeMix),
-          uSoftWorld));
+          uSoftWorld);
+        skyExponent = mix(skyExponent, mix(0.48, 0.78, sunward), uDawn);
+        float skyCurve = pow(aboveHorizon, skyExponent);
         vec3 color = mix(horizon, zenith, skyCurve);
 
         // A narrow, non-luminous horizon shoulder stays visible during unusual attitudes and over
         // the far-field sea. Soft-world widens it slightly into a painterly band.
-        float horizonShoulder = exp(-abs(direction.y) * mix(70.0, 48.0, uSoftWorld));
+        float horizonShoulder = exp(-abs(direction.y) * mix(
+          mix(70.0, 48.0, uSoftWorld), mix(26.0, 12.0, sunward), uDawn));
         color = mix(color, horizon * mix(1.08, 1.14, uSoftWorld),
           horizonShoulder * mix(0.38, 0.48, uSoftWorld));
+        // Pink just above the orange limb, sunward only. A straight orange-to-violet
+        // mix passes through grey; this keeps the dawn band pink instead.
+        float dawnPink = exp(-abs(direction.y - 0.055) * 20.0) * sunward * uDawn;
+        color = mix(color, vec3(0.70, 0.16, 0.22), dawnPink * 0.85);
 
         if (direction.y < 0.0) {
           vec3 belowCool = vec3(0.022, 0.075, 0.095);
