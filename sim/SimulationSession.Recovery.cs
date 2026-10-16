@@ -85,11 +85,12 @@ public sealed partial class SimulationSession {
     }
 
     void MaybeRequestBingoRtb() {
-        if (!_fuel.IsBingo
+        bool winchester = EscalatingWavesEnabled && OpponentPresent && _gunKill.AmmoRemaining == 0;
+        if ((!_fuel.IsBingo && !winchester)
             || PlayerRtbActive
             || _returnToBaseReason != MissionRtbReason.None)
             return;
-        TryRequestReturnToBase(MissionRtbReason.BingoFuel);
+        TryRequestReturnToBase(_fuel.IsBingo ? MissionRtbReason.BingoFuel : MissionRtbReason.Winchester);
     }
 
     /// <summary>

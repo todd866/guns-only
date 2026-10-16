@@ -229,7 +229,7 @@ public sealed class ReactiveBandit :
 
     readonly AircraftSim _sim;
     readonly AircraftParams _parameters;
-    readonly Vec3D _fightCentre;
+    Vec3D _fightCentre;
     readonly double _ceilingM;
     // Authoritative terrain, when the mission supplies one. Every floor number in this controller
     // is an offset above the LOCAL surface, not sea level; without terrain the surface is 0 and
@@ -426,7 +426,8 @@ public sealed class ReactiveBandit :
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
         BanditSkillProfile? profile = null, int? doctrineIndex = null,
         bool presenting = false, AircraftState? wingLead = null,
-        bool endPresentOnProximity = true) {
+        bool endPresentOnProximity = true, double? approachBearingRad = null,
+        double? approachRangeM = null) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         if (!double.IsFinite(speedMps) || speedMps <= 0.0)
@@ -434,14 +435,15 @@ public sealed class ReactiveBandit :
 
         int variation = (engagementNumber - 1) % 3;
         double side = (engagementNumber & 1) == 1 ? 1.0 : -1.0;
-        var forward = new Vec3D(System.Math.Sin(player.Chi), 0.0, System.Math.Cos(player.Chi));
-        var right = new Vec3D(System.Math.Cos(player.Chi), 0.0, -System.Math.Sin(player.Chi));
+        double approach = approachBearingRad ?? player.Chi;
+        var forward = new Vec3D(System.Math.Sin(approach), 0.0, System.Math.Cos(approach));
+        var right = new Vec3D(System.Math.Cos(approach), 0.0, -System.Math.Sin(approach));
         // The introduction opens INSIDE visual range. At the 3,716 m median firing range the
         // tapes recorded, an 11.3 m span subtends 0.17 deg — 1.1 px on a 390 px phone. There is
         // nothing to see, judge or lead, which is why 69% of visitor rounds were fired beyond the
         // gun's 2,060 m reach. At 1,000 m the contact is ~4 px and growing, and reads as an
         // aeroplane with an aspect. The join-up is the lesson; put them where seeing works.
-        double alongM = presenting ? 1000.0 : 2200.0 + variation * 220.0;
+        double alongM = approachRangeM ?? (presenting ? 1000.0 : 2200.0 + variation * 220.0);
         double offsetM = side * (560.0 + variation * 110.0);
         double altitudeOffsetM = variation switch { 0 => 120.0, 1 => -80.0, _ => 40.0 };
         // Keep the merge near ownship, but never spawn a fresh bandit above the believable combat
@@ -1005,6 +1007,12 @@ public sealed class ReactiveBandit :
     }
 
     public void Step(in ActorObservation player, double dt) {
+        // Later-wave commitment follows the observed fight, not the remote ingress spawn.
+        // Otherwise ClampAimToFightVolume parks the pressure ship 4.7 km from an empty origin
+        // while its partner attacks alone. Retain the ordinary finite chase/altitude guards.
+        if (_profile.CommitToFight && !CatastrophicallyDamaged
+            && Geometry.Range(State, player) <= AbandonChaseRangeM)
+            _fightCentre = player.Position;
         if (!double.IsFinite(dt) || dt <= 0.0)
             throw new System.ArgumentOutOfRangeException(nameof(dt));
 

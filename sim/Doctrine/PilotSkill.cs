@@ -60,7 +60,8 @@ public readonly record struct BanditSkillProfile(
     /// Firing on the solution instead of on the target is trigger discipline, and it is the one
     /// lever that moved conversion: range discipline and finisher retuning were both swept across
     /// 24 combinations and every cell stayed at 0 hits / 0.0% on-solution.
-    bool FiresOnBodyGate = true) {
+    bool FiresOnBodyGate = true,
+    bool CommitToFight = false) {
 
     /// The G the finisher's gains are scaled to (defaults to the tier's full acquire envelope).
     public double EffectiveFineTrackAuthorityG =>

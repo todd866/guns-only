@@ -48,6 +48,14 @@ public sealed partial class SimulationSession {
         TakeDirectorHitsCreditedThisEngagement();
         _fightDirector.CompleteDefensiveLesson();
         _bfmLessonOutcome = "passed";
+        if (EscalatingWavesEnabled) {
+            // Release the surviving exercise opponent without inventing a kill. Its actor stays
+            // in the detached presentation; the next wave receives a new identity and magazine.
+            _opponentTerminalState = AircraftTerminalState.SimulationBounded;
+            _nextOpponentSpawnAtMs = _simTimeMs + _beat.ContinuousCombat!.ReplacementDelaySeconds * 1000;
+            OnWaveWon();
+            return;
+        }
         _billedSortieComplete = true;
         RequestCombatHandoff(MissionRtbReason.PilotKnockItOff);
     }

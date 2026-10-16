@@ -485,7 +485,8 @@ public sealed record ContinuousCombatConfig(
     int MaximumFormationSize = 2,
     /// 0 means the gym never ends. A positive cap is the last engagement the director may
     /// stage: splash it and the sortie hands you to recovery instead of another merge.
-    int MaximumEngagements = 0);
+    int MaximumEngagements = 0,
+    bool EscalatingWaves = false);
 
 public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit, IExecutionLaw Law,
     List<(double T, PilotCommand Cmd)> BanditTimeline,
@@ -725,7 +726,10 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
         AircraftState initial = ReferenceEquals(air, BanditAir)
             ? authoredBandit : authoredBandit with { Mass = air.MassKg };
         return new ReactiveBandit(initial, air, skill, terrain,
-            profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
+            profile: spec is { Committed: true } committed
+                ? (committed.Boss ? BanditSkillProfile.Boss() : BanditSkillProfile.For(skill))
+                    with { DisengagesWhenLosing = false, CommitDominanceSeconds = 0, CommitToFight = true }
+                : spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
             doctrineIndex: spec?.DoctrineIndex);
     }
 
@@ -794,11 +798,16 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             speedMps: replacementSpeedMps,
             skill: skill,
             terrain: terrain,
-            profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
+            profile: spec is { Committed: true } committed
+                ? (committed.Boss ? BanditSkillProfile.Boss() : BanditSkillProfile.For(skill))
+                    with { DisengagesWhenLosing = false, CommitDominanceSeconds = 0, CommitToFight = true }
+                : spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
             doctrineIndex: spec?.DoctrineIndex,
             presenting: spec?.Sparring == true,
             wingLead: wingLead,
-            endPresentOnProximity: true);
+            endPresentOnProximity: true,
+            approachBearingRad: spec?.ApproachBearingRad,
+            approachRangeM: spec?.ApproachRangeM);
     }
 }
 
@@ -1678,9 +1687,10 @@ public static class Beats {
             // choreographed merge, but against a pair the opening pass is already a fight.
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(HoldFireThroughFirstPass: false),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
-            // Two billed merges, then the overhead is the ending. O and Bingo still knock it
-            // off early; that recovery is a discontinue, not a completed job.
-            ContinuousCombat: new ContinuousCombatConfig(MaximumEngagements: 2),
+            // Two familiar lessons earn the basic sortie; staying buys escalating waves.
+            // Fuel and ammunition persist. RTB and End remain the pilot's choice.
+            ContinuousCombat: new ContinuousCombatConfig(MaximumFormationSize: 4,
+                EscalatingWaves: true),
             // Fictional runway inside the shared theatre's 48 km stream, about 13 NM north of
             // the merge so the pavement is in the same picture as the terrain. Surveyed from the
             // same atlas records as the buried southwest strip it replaces: a 015° centreline
@@ -1733,6 +1743,7 @@ public static class Beats {
             FirstRunValley = new FirstRunValleyConfig(
                 FirstRunValleyRuntime.PopOutNorthM,
                 FirstRunValleyRuntime.DefaultAim9Rounds),
+            ContinuousCombat = new ContinuousCombatConfig(MaximumEngagements: 2),
             Mission = new MissionContract(
                 FirstRunValleyRuntime.MissionId,
                 MissionContentFamily.ModernPublicDataSurrogate,

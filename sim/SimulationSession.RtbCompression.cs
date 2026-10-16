@@ -39,7 +39,7 @@ public sealed partial class SimulationSession {
         && _conventionalRunwayRecovery is not null;
 
     public bool SortieEndedEarly => _sortieEndedEarly;
-    public bool CanEndSortie => SupportsF22RtbCompression && FiniteCombatComplete
+    public bool CanEndSortie => SupportsF22RtbCompression && (FiniteCombatComplete || EscalatingWavesEnabled)
         && Lifecycle is LifecycleState.Active or LifecycleState.Paused
         && _playerTerminalState == AircraftTerminalState.Flying;
 
@@ -47,7 +47,7 @@ public sealed partial class SimulationSession {
     public bool TryEndSortie() {
         if (!CanEndSortie) return false;
         _sortieEndedEarly = true;
-        _pendingOutcome = _outcome = SortieOutcome.Victory;
+        _pendingOutcome = _outcome = FiniteCombatComplete ? SortieOutcome.Victory : SortieOutcome.Discontinued;
         ClearHeldInput();
         _accumulatorSeconds = _timeCompressionAccumulatorSeconds = 0.0;
         Lifecycle = LifecycleState.Finished;
@@ -70,7 +70,7 @@ public sealed partial class SimulationSession {
 
     bool F22RtbEstablished() {
         // AP can acquire the recovery route from a turn; alignment is its job.
-        return (PlayerRtbActive || FiniteCombatComplete)
+        return (PlayerRtbActive || (!EscalatingWavesEnabled && FiniteCombatComplete))
             && _approachGuidance.Valid && _approachGuidance.GuidanceActive
             && _approachGuidance.Gates.Count > 0;
     }

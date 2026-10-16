@@ -954,6 +954,7 @@ public sealed partial class SimulationSession {
             return;
         }
         AdvanceCombatHandoffAtTickBoundary();
+        AdvanceSortieWaves();
         ObserveFirstRunValleyPopOut();
         // A sortie staged exactly at Bingo must safe the fight before this tick's weapon/AI
         // decisions. The second check after StepCore catches an in-tick fuel crossing.
@@ -1411,6 +1412,7 @@ public sealed partial class SimulationSession {
         _playerHitsTaken = 0;
         _engagementNumber = stagesOpponent ? 1 : 0;
         _billedSortieComplete = false;
+        ResetSortieWaves();
         _engagementCounters = default;
         _engagementReports.Clear();
         LastDirectorSpawn = openingSpawn;
