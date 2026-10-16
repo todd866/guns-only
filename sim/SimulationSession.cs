@@ -935,6 +935,7 @@ public sealed partial class SimulationSession {
     }
 
     void RunFixedTick() {
+        if (SupportsF22RtbCompression) UpdateTimeCompressionDecision();
         if (_casevacFlight is not null) {
             long sourceTick = checked(_tick + 1L);
             _casevacFlight.Advance(
@@ -1109,6 +1110,8 @@ public sealed partial class SimulationSession {
         }
         FinishPreviousRecoveryAttempt();
         _beat = setup;
+        _rtbAutopilotActive = false;
+        _rtbSteering = new RecoverySteering();
         StagePractice();
         // Canonical Rapier v2 carries zero design drones. An explicitly configured legacy
         // prototype count is additional stowed mass, so initialize that mission loadout before
@@ -1399,7 +1402,7 @@ public sealed partial class SimulationSession {
             : CombatHandoffPhase.Unavailable;
         _returnToBaseReason = MissionRtbReason.None;
         _sortieEndedEarly = false;
-        _rtbControlInputUntilTick = -1;
+        if (SupportsF22RtbCompression) _timeCompressionPilotEnabled = false;
         _reliefFighter = null;
         _reliefTargetingOpponentGuns.Clear();
         _reliefThreatState = default;
@@ -2023,7 +2026,7 @@ public sealed partial class SimulationSession {
 
         AircraftState previousPlayerState = _player.State;
         PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
-        PilotCommand effectiveCommand = ApplyPilotPhysiology(directedCommand);
+        PilotCommand effectiveCommand = ApplyPilotPhysiology(RtbAutomationOr(directedCommand));
         PilotCommand flightCommand = ApplyAutoGcas(effectiveCommand);
         PreparePlayerForPoweredTick();
         _player.Step(flightCommand, FixedDeltaSeconds);
@@ -2223,8 +2226,8 @@ public sealed partial class SimulationSession {
         PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
         UpdatePilotLateralCommitment(_detents.PilotRollIntent);
         PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
-        PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
-        PilotCommand padlockAssistedCommand = ApplyPlayerGunTargetPadlockRollAssist(
+        PilotCommand effectiveCommand = ApplyPilotPhysiology(RtbAutomationOr(assistedCommand));
+        PilotCommand padlockAssistedCommand = RtbAutopilotActive ? effectiveCommand : ApplyPlayerGunTargetPadlockRollAssist(
             effectiveCommand, _detents.PilotRollIntent);
         PilotCommand flightCommand = ApplyAutoGcas(padlockAssistedCommand);
         bool formationSweep = (_triggerDown || _rapierFormationSweepRequested)

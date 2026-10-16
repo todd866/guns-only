@@ -465,6 +465,7 @@ internal static class SnapshotProjection {
             + $"\"t\":{_simTimeMs / 1000.0:F4},"
             + $"\"tick\":{Session.Tick},"
             + $"\"time_compression_available\":{(Session.TimeCompressionAvailable ? "true" : "false")},"
+            + $"\"rtb_autopilot_active\":{(Session.RtbAutopilotActive ? "true" : "false")},"
             + $"\"time_compression_enabled\":{(Session.TimeCompressionPilotEnabled ? "true" : "false")},"
             + $"\"time_compression_eligible\":{(Session.TimeCompressionEligible ? "true" : "false")},"
             + $"\"time_compression_requested_factor\":{Session.TimeCompressionRequestedFactor},"

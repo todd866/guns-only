@@ -44,7 +44,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 34;
+    public const int LayoutVersion = 35;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -130,6 +130,7 @@ internal static class SnapshotHotFrame {
         Num("simulation_time_s", 3);
         Num("tick", RawInteger);
         Bool("time_compression_available");
+        Bool("rtb_autopilot_active");
         Bool("time_compression_enabled");
         Bool("time_compression_eligible");
         Num("time_compression_requested_factor", RawInteger);
@@ -1139,6 +1140,7 @@ internal static class SnapshotHotFrame {
         w.Num("simulation_time_s", simulationTimeSeconds, 3);
         w.Num("tick", session.Tick, RawInteger);
         w.Bool("time_compression_available", session.TimeCompressionAvailable);
+        w.Bool("rtb_autopilot_active", session.RtbAutopilotActive);
         w.Bool("time_compression_enabled", session.TimeCompressionPilotEnabled);
         w.Bool("time_compression_eligible", session.TimeCompressionEligible);
         w.Num("time_compression_requested_factor",

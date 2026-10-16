@@ -88,14 +88,17 @@ export class MeasuredTimeCompressionBudget {
 export function timeCompressionHudPresentation(state) {
   if (state?.time_compression_available !== true) return null;
   const factor = Math.max(1, Math.floor(Number(state.time_compression_factor) || 1));
-  if (factor > 1) {
+  const autopilotActive = state.rtb_autopilot_active === true;
+  if (factor > 1 || autopilotActive) {
+    const suffix = autopilotActive ? " AP" : "";
     return Object.freeze({
-      text: `▸▸ ${factor}×`,
+      text: `▸▸ ${factor}×${suffix}`,
       level: "active",
-      ariaLabel: `RTB time compression ${factor} times active`,
+      ariaLabel: `RTB time compression ${factor} times active${autopilotActive
+        ? ", autopilot flying" : ""}`,
     });
   }
-  // No idle-state chrome: the pill exists only while fast time is actually running
+  // No idle-state chrome: the cell exists only while fast time or AP is active
   // (owner direction 2026-07-29 — "don't show random shit like that").
   return null;
 }

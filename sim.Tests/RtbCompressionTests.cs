@@ -53,6 +53,8 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
     }
 
     static void Engage(SimulationSession s) {
+        s.SetTimeCompressionEnabled(true);
+        Assert.True(s.RtbAutopilotActive);
         int factor = s.Advance(0, 8);
         Assert.True(factor == 8, $"Expected 8x: {s.TimeCompressionInhibitReason}, cue={s.ApproachGuidancePlan.NextLabel}");
     }
@@ -63,6 +65,7 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
         var fast = CompletedRtb(seed);
         var normal = CompletedRtb(seed);
         Engage(fast);
+        Engage(normal); // Same AP and inputs; only the host's tick budget differs.
         long start = fast.Tick;
         for (int frame = 0; frame < 30; frame++) fast.Advance(1.0 / 60, 8);
         while (normal.Tick < fast.Tick) normal.Advance(SimulationSession.FixedDeltaSeconds, 1);
@@ -84,6 +87,8 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
         var s = CompletedRtb(); Engage(s);
         s.FeedKey(key, true); s.FeedKey(key, false);
         Assert.Equal(1, s.TimeCompressionFactor);
+        Assert.False(s.RtbAutopilotActive);
+        Assert.False(s.TimeCompressionPilotEnabled);
         long before = s.Tick;
         Assert.Equal(1, s.Advance(SimulationSession.FixedDeltaSeconds, 8));
         Assert.Equal(before + 1, s.Tick);
@@ -93,7 +98,7 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
     [InlineData(true)] [InlineData(false)]
     public void AnalogPitchAndRollBeyondDeadbandHandBack(bool pitch) {
         var s = CompletedRtb(); Engage(s);
-        if (pitch) s.SetAnalogPitchControl(.03); else s.SetAnalogRollControl(.03);
+        if (pitch) s.SetAnalogPitchControl(.09); else s.SetAnalogRollControl(.09);
         Assert.Equal(1, s.TimeCompressionFactor);
         Assert.Equal(1, s.Advance(SimulationSession.FixedDeltaSeconds, 8));
         s.StepFixed(10);
@@ -103,8 +108,95 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
     [Fact]
     public void AnalogJitterInsideDeadbandDoesNotHandBack() {
         var s = CompletedRtb(); Engage(s);
-        s.SetAnalogPitchControl(.001); s.SetAnalogRollControl(.001);
+        s.SetAnalogPitchControl(.04); s.SetAnalogRollControl(.04);
         Assert.Equal(8, s.Advance(SimulationSession.FixedDeltaSeconds, 8));
+    }
+
+    [Theory]
+    [InlineData(true)] [InlineData(false)]
+    public void EngageTransfersOldStickAndScriptedCommandToAutopilot(bool keyboard) {
+        var s = CompletedRtb();
+        Assert.False(s.RtbAutopilotActive);
+        Assert.Equal(1, s.Advance(0, 8));
+        s.SetAnalogPitchControl(.3);
+        s.Controls.ScriptedPilotOverride = new PilotCommand(2, .3, .5, 0);
+        s.StepFixed(); // Leave a filtered, non-trim command in the detent layer.
+        if (keyboard) {
+            s.FeedKey(GKey.TimeCompressionToggle, true);
+            s.FeedKey(GKey.TimeCompressionToggle, false);
+        } else s.SetTimeCompressionEnabled(true);
+        Assert.True(s.RtbAutopilotActive);
+        Assert.Null(s.Controls.ScriptedPilotOverride);
+        Assert.Equal(8, s.Advance(0, 8));
+        s.StepFixed(120);
+        Assert.True(s.RtbAutopilotActive);
+        Assert.Equal(8, s.TimeCompressionFactor);
+    }
+
+    [Fact]
+    public void StickDisengagesUntilOneKeyPressAndReturnsPlayerControlAtOneTimes() {
+        var s = CompletedRtb(); Engage(s);
+        s.SetAnalogRollControl(.5);
+        Assert.False(s.RtbAutopilotActive);
+        Assert.False(s.TimeCompressionPilotEnabled);
+        long tick = s.Tick;
+        Assert.Equal(1, s.Advance(SimulationSession.FixedDeltaSeconds, 8));
+        Assert.Equal(tick + 1, s.Tick);
+        Assert.True(s.Player.LastAppliedCommand.RollControl > .1);
+        s.SetAnalogRollControl(0);
+        s.StepFixed(120);
+        Assert.Equal(1, s.Advance(0, 8));
+        s.FeedKey(GKey.TimeCompressionToggle, true);
+        Assert.True(s.RtbAutopilotActive);
+        Assert.Equal(8, s.Advance(0, 8));
+    }
+
+    [Fact]
+    public void HeldKeyAcrossEngagementHandsBackOnNextTick() {
+        var s = CompletedRtb();
+        s.FeedKey(GKey.RollRight, true);
+        s.FeedKey(GKey.TimeCompressionToggle, true);
+        Assert.True(s.RtbAutopilotActive); // Y is an engagement edge, never a hidden inhibit.
+        s.StepFixed(); // Holding the stick still expresses pilot ownership.
+        Assert.False(s.RtbAutopilotActive);
+        Assert.False(s.TimeCompressionPilotEnabled);
+        Assert.Equal(TimeCompressionInhibitReason.ControlInput, s.TimeCompressionInhibitReason);
+    }
+
+    [Fact]
+    public void AutoGcasLeadDropsBothOwnersBeforeTheNextTick() {
+        var s = CompletedRtb(); Engage(s);
+        var state = s.AutoGcas with { Prediction = s.AutoGcas.Prediction with {
+            Valid = true, TimeAvailableToAvoidGroundImpactSeconds = 10
+        } };
+        typeof(SimulationSession).GetField("_autoGcasState",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.SetValue(s, state);
+        Assert.Equal(1, s.Advance(0, 8));
+        Assert.False(s.RtbAutopilotActive);
+        Assert.False(s.TimeCompressionPilotEnabled);
+        Assert.Equal(TimeCompressionInhibitReason.AutoGcas, s.TimeCompressionInhibitReason);
+        s.SetTimeCompressionEnabled(true);
+        Assert.False(s.RtbAutopilotActive); // A retry cannot override an uncleared boundary.
+    }
+
+    [Fact]
+    public void AutopilotStateProjectsThroughColdAndHotSnapshotsAndResets() {
+        var s = CompletedRtb(); Engage(s);
+        using var json = JsonDocument.Parse(SnapshotProjection.BuildState(s, Carrier.DeckConfiguration.Angled, 0, 0, false, null));
+        Assert.True(json.RootElement.GetProperty("rtb_autopilot_active").GetBoolean());
+        using var layout = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
+        var slot = layout.RootElement.GetProperty("blocks").EnumerateArray()
+            .SelectMany(b => b.GetProperty("slots").EnumerateArray())
+            .Single(x => x.GetProperty("name").GetString() == "rtb_autopilot_active");
+        var frame = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(frame, s, 0, 0, false);
+        Assert.Equal(1, frame[slot.GetProperty("index").GetInt32()]);
+        s.SetAnalogPitchControl(.2);
+        SnapshotHotFrame.Fill(frame, s, 0, 0, false);
+        Assert.Equal(0, frame[slot.GetProperty("index").GetInt32()]);
+        s.Restart();
+        Assert.False(s.RtbAutopilotActive);
+        Assert.False(s.TimeCompressionPilotEnabled);
     }
 
     [Fact]
@@ -132,6 +224,10 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
         Assert.Equal(1, s.Advance(SimulationSession.FixedDeltaSeconds, 8));
         Assert.Equal(tick + 1, s.Tick);
         Assert.Equal(TimeCompressionInhibitReason.RecoveryFinal, s.TimeCompressionInhibitReason);
+        Assert.False(s.RtbAutopilotActive);
+        Assert.False(s.TimeCompressionPilotEnabled);
+        // Transit AP leaves landing configuration to the player after hand-back.
+        Assert.Equal(LandingGearHandle.Up, s.PlayerSystems.GearHandle);
     }
 
     [Fact]
@@ -146,13 +242,15 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
 
     [Theory]
     [InlineData(true)] [InlineData(false)]
-    public void MisalignmentOrBankRequiresManualFlight(bool bank) {
+    public void AutopilotAcquiresRecoveryRouteFromMisalignmentOrBank(bool bank) {
         var s = CompletedRtb(); Engage(s);
         var own = s.Player.State;
         s.Player.AdoptExternalKinematics(new AircraftState(own.Position, own.Speed, 0,
             own.Chi + (bank ? 0 : .2), bank ? .2 : 0, own.Mass));
-        Assert.Equal(1, s.Advance(0, 8));
-        Assert.Equal(TimeCompressionInhibitReason.TransitNotEstablished, s.TimeCompressionInhibitReason);
+        Assert.Equal(8, s.Advance(0, 8));
+        Assert.True(s.RtbAutopilotActive);
+        s.StepFixed();
+        Assert.NotEqual(new PilotCommand(1, 0, .85, 0), s.Player.LastAppliedCommand);
     }
 
     [Fact]
@@ -236,14 +334,19 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
     }
 
     [Fact]
-    public void ClearingThreatAllowsAutomaticReengagement() {
+    public void ClearingThreatRequiresOneExplicitReengagement() {
         var s = CompletedRtb(0, completeCombat: false); Engage(s);
         var quiet = s.Player.State;
         s.Player.AdoptExternalKinematics(quiet with {
             Position = s.Bandit.State.Position + new Vec3D(0, 0, -9000)
         });
         Assert.Equal(1, s.Advance(0, 8));
+        Assert.False(s.RtbAutopilotActive);
+        Assert.False(s.TimeCompressionPilotEnabled);
         s.Player.AdoptExternalKinematics(quiet);
+        Assert.Equal(1, s.Advance(0, 8));
+        s.FeedKey(GKey.TimeCompressionToggle, true);
+        Assert.True(s.RtbAutopilotActive);
         Assert.Equal(8, s.Advance(0, 8));
     }
 
@@ -270,6 +373,10 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.SetValue(s, plan);
         Assert.Equal(1, s.Advance(0, 8));
         Assert.Equal(TimeCompressionInhibitReason.RecoveryFinal, s.TimeCompressionInhibitReason);
+        Assert.False(s.RtbAutopilotActive);
+        Assert.False(s.TimeCompressionPilotEnabled);
+        // Transit AP leaves landing configuration to the player after hand-back.
+        Assert.Equal(LandingGearHandle.Up, s.PlayerSystems.GearHandle);
     }
 
     [Fact]

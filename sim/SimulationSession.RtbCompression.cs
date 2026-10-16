@@ -8,8 +8,27 @@ namespace GunsOnly.Sim;
 public sealed partial class SimulationSession {
     public const double RtbCompressionThreatRangeM = 10_000.0;
     public const double RtbCompressionFinalRangeM = 3.0 * 1852.0;
-    public const double RtbCompressionControlDeadband = 0.02;
-    long _rtbControlInputUntilTick = -1;
+    // Input design deadband, not an airframe constant.
+    public const double RtbCompressionControlDeadband = 0.08;
+    bool _rtbAutopilotActive;
+    RecoverySteering _rtbSteering = new();
+    public bool RtbAutopilotActive => _rtbAutopilotActive;
+
+    PilotCommand RtbAutomationOr(in PilotCommand pilotCommand) {
+        if (!_rtbAutopilotActive) return pilotCommand;
+        _rtbSteering.Drive(this, configureForLanding: false);
+        return _rtbSteering.Command;
+    }
+
+    // Only pilot intent counts. Filtered detent commands, flight-path hold and AP's
+    // own bank/G demands must never be mistaken for a fresh control input.
+    static readonly GKey[] RtbPilotKeys = Enum.GetValues<GKey>()
+        .Where(IsPilotActuatedAction).ToArray();
+
+    bool RtbPilotInputActive() =>
+        _detents.HasAnalogPitchOrRollInput(RtbCompressionControlDeadband)
+        || _detents.ScriptedPilotOverride is not null
+        || RtbPilotKeys.Any(KeyActive);
     bool _sortieEndedEarly;
 
     // Mission identity also supports custom seeded lab fixtures based on beat 7. Do not enable
@@ -50,21 +69,13 @@ public sealed partial class SimulationSession {
     }
 
     bool F22RtbEstablished() {
-        // There is no F-22 route autopilot. Use the published recovery cue, never synthesize
-        // flight controls or snap kinematics for fast time. Recheck alignment every fixed tick.
-        if (!(PlayerRtbActive || FiniteCombatComplete)
-            || !_approachGuidance.Valid || !_approachGuidance.GuidanceActive
-            || _approachGuidance.Gates.Count == 0) return false;
-        AircraftState state = _player.State;
-        WorldApproachGate cue = _approachGuidance.Gates[0];
-        double bearing = Math.Atan2(cue.EastM - state.Position.X, cue.NorthM - state.Position.Z);
-        double error = Math.IEEERemainder(bearing - state.Chi, 2.0 * Math.PI);
-        const double deg = Math.PI / 180.0;
-        return Math.Abs(error) <= 5.0 * deg
-            && Math.Abs(state.Bank) <= 5.0 * deg;
+        // AP can acquire the recovery route from a turn; alignment is its job.
+        return (PlayerRtbActive || FiniteCombatComplete)
+            && _approachGuidance.Valid && _approachGuidance.GuidanceActive
+            && _approachGuidance.Gates.Count > 0;
     }
 
-    TimeCompressionSafetyState CaptureF22RtbCompressionSafety() {
+    TimeCompressionSafetyState CaptureF22RtbCompressionSafety(bool engaging = false) {
         bool threat = (_opponentTerminalState == AircraftTerminalState.Flying
                 && _bandit is not null && RtbContactThreat(_bandit.State))
             || _wingmen.Any(w => w.StillFighting && RtbContactThreat(w.Bandit.State))
@@ -93,10 +104,7 @@ public sealed partial class SimulationSession {
             AutoGcasActivityOrLead: SecondsUntilAutoGcasBoundary() <= TimeCompressionPolicy.BoundaryLeadSeconds,
             DamagePresent: _playerTerminalState != AircraftTerminalState.Flying,
             FuelThresholdOrLead: false,
-            ControlInputBeyondTrim: _tick <= _rtbControlInputUntilTick
-                || _detents.HasAnalogPitchOrRollInput(RtbCompressionControlDeadband)
-                || _detents.ScriptedPilotOverride is not null
-                || HasControlInputBeyondTrim(ignoreCombatAssists: true),
+            ControlInputBeyondTrim: !engaging && RtbPilotInputActive(),
             RamTransitionLead: false,
             ApproachFactorCap: F22RtbOnFinal() ? 1 : TimeCompressionPolicy.PreferredFactor,
             RecoveryFinal: F22RtbOnFinal());

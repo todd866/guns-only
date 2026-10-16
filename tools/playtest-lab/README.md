@@ -69,16 +69,17 @@ recovery pilot based on the production recovery schedule and
 `RecoveryProfileFlightTests` pitch/speed feedback. Conventional runway navigation uses
 a documented outbound/inbound cross-track join and straight-in final, with a missed
 approach retry; it is not an overhead-pattern human pilot model.
-The recovery pilot requests `SetTimeCompressionEnabled(true)`. On settled transit
-segments aligned with the first published approach cue, it releases pitch/roll and
-clears the scripted override; it holds throttle rather than repeating its setter.
-It resumes steering when alignment, speed or flight path needs correction. The
-kernel alone grants compression and rechecks threats, configuration, controls and
-final-approach guards. Outside 14 km horizontal runway range it flies the published moving ingress cue;
-at 14 km it hands back to the lab's straight-in recovery adapter. That cutoff is
-a controller modeling choice, so baseline deltas include this route change as
-well as time weighting.
-Compression is not a new autopilot and may be intermittent as the cue advances.
+The recovery pilot requests `SetTimeCompressionEnabled(true)` on RTB and after
+any safety drop. Successful engagement transfers control to the kernel's RTB
+autopilot; the lab writes no stick, throttle or scripted command while AP is
+active, even if the host caps its factor. A cleared drop is retried on the next
+pilot update. The shared `RecoverySteering` controller follows the published
+moving ingress cue outside 14 km, then the established straight-in join. AP
+leaves configuration to the player and yields at threats, final (~3 NM),
+configuration change, AUTO-GCAS lead, or fresh pilot input beyond an 8% deadband.
+Manual lab recovery resumes after a drop using the same steering module. Route
+and control ownership change versus earlier cohorts, so baseline deltas include
+trajectory differences as well as time weighting.
 Gear/hook/flap commands and actual runway/carrier contact remain normal session inputs.
 Beat 13 uses shared CASEVAC navigation controls for every profile; it never feeds the
 fighter clone into a rotary-wing vehicle. G is null there.

@@ -8,6 +8,7 @@ namespace GunsOnly.PlaytestLab;
 public static class LabChecks {
     public static void Run(ClonedPilotPolicy clone) {
         static void Require(bool value, string message) { if (!value) throw new Exception(message); }
+        CheckRtbAutopilotLifecycle();
         Require(Math.Abs(ExperienceObserver.SegmentDistance(new Vec3D(-100, 10, 0), new Vec3D(100, 10, 0)) - 10) < 1e-9,
             "Swept near-miss distance lost a fast passing round.");
         // Two moving objects are swept by their simultaneous WORLD-axis relative
@@ -88,6 +89,42 @@ public static class LabChecks {
         }
         Console.WriteLine("PASS: clone reference cases, deterministic/varied seeds, all 14 beats stage, timeout/partial-bin accounting, real near-miss passages, mixed-factor dual clocks, End without landing, compressed physical runway recovery, CLI validation.");
     }
+    static void CheckRtbAutopilotLifecycle() {
+        static void Require(bool value, string message) { if (!value) throw new Exception(message); }
+        // Test fixture only; measured sorties below always fly from their authored state.
+        var s = new SimulationSession(7, serviceLifeCaptureEnabled: false);
+        s.Begin();
+        Require(s.TryRequestReturnToBase(), "RTB fixture did not accept return.");
+        for (int i = 0; i < 1200 && !s.PlayerRtbActive; i++) s.StepFixed();
+        var runway = s.ConventionalRunwayRecovery!.Runway;
+        s.Player.AdoptExternalKinematics(new AircraftState(
+            runway.Threshold - runway.Forward * 30000 + new Vec3D(0, 3000, 0),
+            220, 0, runway.HeadingRad, 0, s.Player.State.Mass));
+        s.StepFixed(120);
+        var pilot = new LabPilot("ace", 0, null, 600);
+        pilot.Drive(s);
+        Require(s.RtbAutopilotActive, "Lab did not engage RTB AP.");
+        for (int i = 0; i < 120; i++) {
+            pilot.Drive(s);
+            Require(s.Controls.ScriptedPilotOverride is null, "Lab kept steering during AP.");
+            Require(s.Advance(0, 8) == 8, "Lab input dropped active AP.");
+            s.StepFixed();
+        }
+        var quiet = s.Player.State;
+        s.Player.AdoptExternalKinematics(quiet with {
+            Position = s.Bandit.State.Position + new Vec3D(0, 0, -9000)
+        });
+        Require(s.Advance(0, 8) == 1 && !s.RtbAutopilotActive, "Threat did not drop lab AP.");
+        pilot.Drive(s);
+        Require(!s.RtbAutopilotActive, "Lab overrode an uncleared threat.");
+        s.Player.AdoptExternalKinematics(quiet);
+        pilot.Drive(s);
+        Require(s.RtbAutopilotActive && s.Controls.ScriptedPilotOverride is null,
+            "Lab did not re-engage and release controls after threat cleared.");
+        Require(s.Advance(0, 8) == 8, "Lab retry did not restore compression.");
+        Console.WriteLine("PASS: lab RTB AP engage, hands-off, threat drop, blocked retry, cleared retry.");
+    }
+
     static void CheckClocks(RunResult r) {
         static void Near(double actual, double expected, string label) {
             if (Math.Abs(actual - expected) > 1e-6) throw new Exception($"{label}: {actual} != {expected}");
