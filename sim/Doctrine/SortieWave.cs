@@ -24,9 +24,9 @@ public sealed partial class FightDirector {
         bool boss = waveNumber >= 7 && draw % 4 == 0;
         var spawn = new SpawnSpec(skill,
             (int)(draw % (uint)BanditSkillProfile.For(skill).DoctrineCount), boss,
-            $"wave {waveNumber}: committed formation",
+            $"wave {waveNumber}: committed contact",
             Mount: waveNumber >= 5 ? BanditMount.Uprated : BanditMount.Baseline,
-            FormationSize: waveNumber <= 4 ? 2 : 4,
+            FormationSize: waveNumber == 3 ? 1 : waveNumber == 4 ? 2 : 4,
             Committed: true,
             WingSkill: waveNumber == 3 ? PilotSkill.Competent : waveNumber == 4 ? PilotSkill.Veteran : skill,
             WingMount: waveNumber >= 6 ? BanditMount.Uprated : BanditMount.Baseline);

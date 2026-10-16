@@ -17,7 +17,7 @@ public sealed class SortieWaveTests {
 
         Assert.Equal(3, wave3.Number);
         Assert.Equal(PilotSkill.Veteran, wave3.Spawn.Skill);
-        Assert.Equal(2, wave3.Spawn.FormationSize);
+        Assert.Equal(1, wave3.Spawn.FormationSize);
         Assert.InRange(wave3.DelaySeconds, 20.0, 24.0);
         Assert.InRange(wave3.RangeM, 1_600.0, 2_000.0);
         Assert.True(wave3.Spawn.Committed);
@@ -152,7 +152,7 @@ public sealed class SortieWaveTests {
     }
 
     [Fact]
-    public void ScheduledWaveThreeArrivesAsACommittedTwoShipFormation() {
+    public void ScheduledWaveThreeArrivesAsACommittedVeteran() {
         var session = new SimulationSession();
         session.ConfigureSortieSeed(7);
         session.StartBeat(Beats.ModernVisualMerge);
@@ -164,8 +164,8 @@ public sealed class SortieWaveTests {
         session.StepFixed(warningTicks);
 
         Assert.Equal(3, session.EngagementNumber);
-        Assert.Equal(2, session.LiveOpponentCount);
-        Assert.Equal(2, session.LastDirectorSpawn!.Value.FormationSize);
+        Assert.Equal(1, session.LiveOpponentCount);
+        Assert.Equal(1, session.LastDirectorSpawn!.Value.FormationSize);
         Assert.True(session.LastDirectorSpawn.Value.Committed);
         Assert.Equal(PilotSkill.Veteran, session.LastDirectorSpawn.Value.Skill);
     }
@@ -204,17 +204,12 @@ public sealed class SortieWaveTests {
         ForceLastOpponentAndWaitForReport(session);
         session.StepFixed((int)Math.Ceiling(session.OpponentReplacementSeconds
             * AircraftSim.TickHz) + 2);
-        Assert.Equal(2, session.LiveOpponentCount);
+        Assert.Equal(1, session.LiveOpponentCount);
         Assert.False(session.PlayerRtbActive);
         Assert.Equal(SortieOutcome.None, session.PendingOutcome);
 
-        // W3 is a committed 2v1: remove the leader, verify promotion, then remove the
-        // promoted wingman to complete the engagement and schedule W4.
-        session.ForceOpponentDefeatForTest();
-        session.StepFixed();
-        Assert.Empty(session.Wingmen); // promoted actor is now the primary
-        Assert.Equal(1, session.LiveOpponentCount);
-        Assert.Equal(AircraftCapability.Su27SSurrogate, session.CurrentBanditCapability);
+        // W3 keeps the Veteran's danger without a simultaneous second gun stream.
+        // Promotion is exercised below on W4's mixed-tier pair.
         session.ForceOpponentDefeatForTest();
         WaitForNextReport(session, expectedReports: 3);
         session.StepFixed((int)Math.Ceiling(session.OpponentReplacementSeconds

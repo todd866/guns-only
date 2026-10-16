@@ -202,6 +202,9 @@ public sealed class ReactiveBandit :
     /// leash does not: that leash measures from the bandit's spawn, so a fight the player drags
     /// downrange can open indefinitely while both aircraft sit "inside the arena".
     const double ReengageRangeM = 3500.0;
+    // Committed wave survivors can settle into a steady orbit just outside visual threat
+    // range. A positive opening rate is not required to bring that fight back to the player.
+    const double CommittedReengageRangeM = 2200.0;
     /// Past this the player has left, not extended, and the bandit holds its arena instead of
     /// tail-chasing across the theatre. Real telemetry made the case: a recorded sortie wanders to
     /// 346 NM on a return to base, and a re-engage rule written only in terms of "point at the
@@ -1036,6 +1039,10 @@ public sealed class ReactiveBandit :
 
         _terrainRecoveryActive = false;
         bool lowTarget = IsLowTarget(player);
+        double playerRangeM = Geometry.Range(State, player);
+        bool committedRejoin = _profile.CommitToFight
+            && playerRangeM > CommittedReengageRangeM
+            && playerRangeM <= AbandonChaseRangeM;
         if (!lowTarget) _lowAttackActive = false;
         bool hasLowAttackPlan = TryLowAttackPlan(player, out LowAttackPlan lowAttackPlan);
         double ownClearanceM = State.Position.Y
@@ -1119,8 +1126,9 @@ public sealed class ReactiveBandit :
                 LastCommand = LowBlockPerchCommand(player);
                 Tactic = BanditTactic.Return;
                 RecordSingleCandidateDecision(LastCommand);
-            } else if ((Tactic == BanditTactic.Return || IsOpeningBeyondReengageRange(player))
-                && Geometry.Range(State, player) > ReengageRangeM) {
+            } else if (committedRejoin
+                || ((Tactic == BanditTactic.Return || IsOpeningBeyondReengageRange(player))
+                    && playerRangeM > ReengageRangeM)) {
                 // CONTAINMENT NEVER OUTRANKS AN ACTUAL ENGAGEMENT.
                 //
                 // The range guard is the whole point. Below it this branch fired whenever the
@@ -1168,7 +1176,7 @@ public sealed class ReactiveBandit :
                 // A fresh support order extends the ordinary abandon ceiling enough to recover
                 // the reproduced 13 NM mutual-support gap, but the separate finite support guard
                 // still rejects a coordinator that keeps refreshing while the player departs.
-                LastCommand = sharedFightSupport
+                LastCommand = committedRejoin || sharedFightSupport
                         || (leashRangeM > ReengageRangeM
                             && leashRangeM <= AbandonChaseRangeM)
                     ? ReengageCommand(player)
