@@ -95,7 +95,7 @@ public static class Program {
                         "Clone is the committed owner-pilot-clone policy (canonical features and reference-case validation), held at its training cadence of 20 Hz. Novice adapts BanditPressureReport's pursuit pilot. Ace adapts FirstMergeOpeningAcceptanceTests.HudPilot with delayed body-frame cue observations and bounded analog controls. Shared recovery and terrain escape use the existing scripted command seam; this is not a human usability study.",
                         $"Threat: live bandit within {o.ThreatRangeM:F0} m and nose within 35 degrees, or firing; includes wingmen. Gun target: selected live target with authorized ballistic solution. Dead air: no threat, no gun opportunity, no player shot, decision, spectacle or near miss. Initial begin is not counted as a decision.",
                         $"Shot near miss: unique hostile gun round's swept separation within {o.ShotMissM:F0} m outside its hit radius; counted only on passage, not repeated ticks. Ground near miss: entry below {o.GroundMissM:F0} m AGL with 25 m hysteresis, excluding configured recovery/contact. Explosions are labelled destruction/impact proxies from session events, not renderer effects.",
-                        $"RTB choice: combat complete, bingo, empty gun, or {o.RtbAfterSeconds}s combat budget, through TryRequestReturnToBase. Recovery/navigation follows the published RTB cue, releases steering during eligible 8x transit, then uses a conventional straight-in join. This is not learned owner behaviour or an overhead-pattern model. End-after-combat={o.EndAfterCombat}: TryEndSortie at the first eligible pilot update, without recovery credit. A {o.MaxSeconds} simulated-second limit is censored, never a win or fabricated landing.",
+                        $"RTB choice through TryRequestReturnToBase: escalating beat 7 ace stays until bingo/empty gun; novice goes after two wins or any damage; clone and other beats retain completion/resources/{o.RtbAfterSeconds}s combat budget. RTB interception temporarily resumes combat. Recovery/navigation follows the published RTB cue, releases steering during eligible 8x transit, then uses a conventional straight-in join. This is not learned owner behaviour or an overhead-pattern model. End-after-combat={o.EndAfterCombat}: TryEndSortie after minimum combat completion, without recovery credit. A {o.MaxSeconds} simulated-second limit is censored, never a win or fabricated landing.",
                         "Tension heuristic: 0.35 proximity + 0.15 positive closure (within threat range) + 0.25 threat + 0.15 damage-risk under threat + 0.10 low-clearance risk; clamped 0..1, near shots at least 0.85 and hits at least 0.95. Engagement means exclude RTB and terminal wreck descent. Phase percentages include wreck/debrief time.",
                         "Default native terrain is the session's authored/default surface, without the browser's streamed terrain atlas. Ground-clearance results describe that substrate. CASEVAC uses semantic navigation for all profiles; fixed-wing clone/gun/G metrics do not apply. Generic pilots attempt every built-in beat; specialist mission failures and timeouts remain visible."
                     }, runs = files
@@ -139,9 +139,12 @@ public static class Program {
 
 public static class SortieRunner {
     public const double Dt = 1.0 / AircraftSim.TickHz;
-    public static RunResult Fly(Options o, string name, int seed, ClonedPilotPolicy? clone) {
+    // Optional only for in-process self-tests: production CLI calls the default
+    // constructor so beat 7 always exercises the live escalating-wave contract.
+    internal static RunResult Fly(Options o, string name, int seed, ClonedPilotPolicy? clone,
+        Func<SimulationSession>? sessionFactory = null) {
         var watch = Stopwatch.StartNew();
-        var s = new SimulationSession(o.Beat, serviceLifeCaptureEnabled: false);
+        var s = sessionFactory?.Invoke() ?? new SimulationSession(o.Beat, serviceLifeCaptureEnabled: false);
         s.DecisionCaptureEnabled = false; // training recorder is unrelated to the experience tape
         var pilot = new LabPilot(name, seed, clone, o.RtbAfterSeconds, o.EndAfterCombat);
         var observer = new ExperienceObserver(o, name, seed);

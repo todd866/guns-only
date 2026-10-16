@@ -968,6 +968,11 @@ public sealed partial class SimulationSession {
         // The retiring primary keeps falling as a detached wreck exactly as it would in a duel.
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
         _bandit = next.Bandit;
+        if (LastDirectorSpawn is { } formationSpawn)
+            LastDirectorSpawn = formationSpawn with {
+                Skill = next.Skill, Mount = formationSpawn.WingMount ?? formationSpawn.Mount,
+                Boss = false, Machine = next.Skill == PilotSkill.Machine,
+            };
         // Promotion is an irreversible combat event. A sparring wingman left in presentation
         // mode ignores every tactical command and flies its 15-degree setup turn indefinitely.
         _bandit.EndPresentation();

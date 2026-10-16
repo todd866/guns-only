@@ -24,6 +24,8 @@ public class BfmFlightAcceptanceTests(ITestOutputHelper output) {
             return beat with { Player = beat.Player with {
                 Speed = beat.Player.Speed + (seed - 1.5) * 3,
                 Chi = seed * 0.05,
+            }, ContinuousCombat = beat.ContinuousCombat! with {
+                EscalatingWaves = false,
             } };
         });
         session.SetAssistedFlight(true);

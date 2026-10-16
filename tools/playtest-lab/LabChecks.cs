@@ -77,13 +77,23 @@ public static class LabChecks {
             var staged = SortieRunner.Fly(new Options(Beat: beat, MaxSeconds: 1), "novice", 0, clone);
             Require(staged.Seconds > 0 && staged.Timeline.Count > 0, $"Beat {beat} produced no tape.");
         }
-        var recovery = SortieRunner.Fly(new Options(MaxSeconds: 600, RtbAfterSeconds: 1), "ace", 0, clone);
+        static SimulationSession FiniteF22() {
+            var session = new SimulationSession(7, serviceLifeCaptureEnabled: false);
+            BeatSetup finite = Beats.ModernVisualMerge() with {
+                ContinuousCombat = Beats.ModernVisualMerge().ContinuousCombat! with {
+                    EscalatingWaves = false, MaximumEngagements = 2
+                }
+            };
+            session.StartBeat(() => finite);
+            return session;
+        }
+        var recovery = SortieRunner.Fly(new Options(MaxSeconds: 600, RtbAfterSeconds: 1), "ace", 0, clone, FiniteF22);
         Require(recovery.Completed && recovery.Landed && recovery.Outcome == "recovered",
             $"The shared pilot did not fly a physical full stop: {recovery.Outcome} {recovery.LandingDetail}");
         // Regressions from the first cohort: a fixed join waypoint could be orbited
         // forever after both high-altitude novice combat and a successful ace opening.
         foreach (string pilot in new[] { "novice", "ace" }) {
-            var joined = SortieRunner.Fly(new Options(MaxSeconds: 2400), pilot, 1, clone);
+            var joined = SortieRunner.Fly(new Options(MaxSeconds: 2400), pilot, 1, clone, FiniteF22);
             CheckClocks(joined);
             if (pilot == "ace") Require(joined.CompressionSimSeconds.GetValueOrDefault(8) > 0, "Recovery never exercised eligible compression.");
             Require(joined.Completed && joined.Landed, $"Runway join orbit regressed for {pilot}: {joined.Outcome}");

@@ -17,7 +17,9 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
             UsesNeutralMergeBandit = false, UsesReactiveBandit = false,
             VisualMergeEvaluation = null,
             Combat = source.CombatRules with { OpponentHitsToDefeat = 1 },
-            ContinuousCombat = source.ContinuousCombat! with { MaximumEngagements = 1, MaximumFormationSize = 1 },
+            ContinuousCombat = source.ContinuousCombat! with {
+                MaximumEngagements = 1, MaximumFormationSize = 1, EscalatingWaves = false,
+            },
         };
         var s = new SimulationSession(serviceLifeCaptureEnabled: false);
         s.StartBeat(() => beat);
@@ -278,7 +280,13 @@ public sealed class RtbCompressionTests(ITestOutputHelper output) {
 
     [Fact]
     public void EndCannotSkipUnfinishedCombatOrGrantRecoveryForRtbChoice() {
-        var s = new SimulationSession(7); s.Begin();
+        var s = new SimulationSession();
+        s.StartBeat(() => Beats.ModernVisualMerge() with {
+            ContinuousCombat = Beats.ModernVisualMerge().ContinuousCombat! with {
+                EscalatingWaves = false,
+            },
+        });
+        s.Begin();
         Assert.False(s.TryEndSortie());
         Assert.True(s.TryRequestReturnToBase());
         Assert.False(s.TryEndSortie());

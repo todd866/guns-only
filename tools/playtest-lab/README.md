@@ -66,8 +66,10 @@ or timeout must be inspected as possible controller failure before blaming missi
 An explicit integer PRNG varies reaction/hesitation/aim per seed. Seeds are paired
 between profiles. For beat 7, the configured seed also selects escalating-wave
 geometry/doctrine and the seeded RTB bounce; the first two authored engagements
-retain their normal setup. All pilots request RTB on combat completion, bingo, empty ammunition,
-or the combat-time budget, using `TryRequestReturnToBase`. They share a scripted
+retain their normal setup. On escalating beat 7 the ace stays until bingo or empty
+ammunition; the novice requests RTB after two wins or any damage. The clone retains
+its completion/resource/600-second budget policy. Other beats retain their existing
+completion/resource/budget policy. Requests use `TryRequestReturnToBase`. They share a scripted
 recovery pilot based on the production recovery schedule and
 `RecoveryProfileFlightTests` pitch/speed feedback. Conventional runway navigation uses
 a documented outbound/inbound cross-track join and straight-in final, with a missed
@@ -98,6 +100,7 @@ The report repeats the thresholds and provenance so the numbers travel with thei
 | Gun target | Live selected target, authorized player weapon, ballistic `GunSolution`. A distant contact alone is not a shot opportunity. |
 | Meaningful action | Threat, gun opportunity, player firing, stable controller decision, spectacle or near miss. Staging/initial target selection does not count. |
 | Dead air | Every 120 Hz tick lacking all the above. Total and longest contiguous durations are exact to one tick, including wreck descent until debrief. |
+| Dead air excluding RTB AP | The same counter, excluding only ticks with actual RTB autopilot ownership and no active interception. Warning/turn time, combat gaps, manual recovery and wreck descent remain eligible. |
 | Decisions | Tactical mode changes stable for 0.5 s, successor target acquisition, bingo acknowledgement, RTB choice/acceptance. These are controller decisions, not every servo update or human cognitive workload. |
 | Shot near miss | A unique hostile gun round's swept relative-world separation passes within Y m but outside its effective hit radius. Count once on recession; exclude impact rounds and relief-targeted rounds. |
 | Ground near miss | Entry below Z m clearance, reset above Z+25 m; exclude configured approach/contact and terminal wrecks. The native session terrain/default ground is used, not browser-streamed atlas geometry. |
