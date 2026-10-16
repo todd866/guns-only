@@ -77,6 +77,8 @@ def aggregate(runs: list[dict]) -> dict:
         "longestGunWindowGapSeconds": max(gaps, default=0.0),
         "longestGunWindowGapMean": sum(gaps) / len(gaps) if gaps else None,
         "gunWindows": windows, "gunWindowSeconds": window_seconds,
+        "firstRangeWindowSeconds": (sum(_num(p["firstRangeWindowSeconds"]) for p in ps if p.get("firstRangeWindowSeconds") is not None) / sum(p.get("firstRangeWindowSeconds") is not None for p in ps)) if any(p.get("firstRangeWindowSeconds") is not None for p in ps) else None,
+        "qualifiedGunWindowSeconds": sum(_num(p.get("qualifiedGunWindowSeconds")) for p in ps),
         "huntSecondsMean": sum(hunt) / len(hunt) if hunt else None,
         "huntSecondsSamples": len(hunt), "huntTargetPct": 100 * sum(240 <= x <= 360 for x in hunt) / len(hunt) if hunt else None,
         "passes": passes, "envelopeOnlyPasses": envelope, "envelopeOnlyPassPct": envelope_pct,
@@ -132,12 +134,14 @@ def top_problems(runs: list[dict]) -> list[str]:
         evidence.append((attempts, f"Blocked drone choices: {attempts:.0f} policy attempts produced 0 releases ({rejected:.0f} capability rejections). The current Phase 1 controller/API has not made a drone action available; resolve that before treating hard geometry as a design problem."))
     drought = sum(max(0.0, _num(data(r).get("longestGunWindowGapSeconds")) - 30) for r in runs)
     if drought:
-        evidence.append((drought, f"Gun-window opportunity drought: {sum(_num(data(r).get('longestGunWindowGapSeconds')) > 30 for r in runs)} of {len(runs)} runs exceeded 30s, with {drought:.1f}s total excess gap."))
+        evidence.append((drought, f"Sight-window drought: {sum(_num(data(r).get('longestGunWindowGapSeconds')) > 30 for r in runs)} of {len(runs)} runs exceeded 30s, with a worst gap of {max(_num(data(r).get('longestGunWindowGapSeconds')) for r in runs):.1f}s. {sum('combat-budget' in str(data(r).get('huntEndReason')) for r in runs)}/{len(runs)} hunts reached the controller combat budget. Compare the cue/proximity cross-check before attributing this entirely to mission pacing."))
     zero = sum(_kills(data(r)) == 0 for r in runs if not data(r).get("huntCensored", False))
     if zero:
         evidence.append((zero, f"Zero-kill/failure runs: {zero} hunts ending in egress/loss recorded no physical gondola/drone kill; inspect pass geometry and controller failure before assigning blame to mission pacing."))
     envelope = [data(r) for r in runs if _num(data(r).get("passes"))]
     dominant = sum(_num(p.get("envelopeOnlyPassPct")) > 50 for p in envelope)
+    if envelope and not any(_num(p.get("envelopeOnlyPasses")) for p in envelope):
+        evidence.append((len(envelope), f"Wrong-shot teaching is absent: 0 envelope-only passes across {sum(_num(p.get('passes')) for p in envelope):.0f} completed passes in {len(envelope)} runs. These controllers mostly miss or hit a gondola; the experiment has not demonstrated the intended envelope-puncture lesson."))
     if dominant: evidence.append((dominant, f"Wrong-shot teaching moment dominates: {dominant} of {len(envelope)} runs exceeded 50% envelope-only passes."))
     if not evidence: evidence.append((0, "No top-three friction signal crossed the configured evidence thresholds in this sample."))
     evidence.sort(key=lambda x: (-x[0], x[1]))
@@ -178,24 +182,43 @@ def minute_events(runs: list[dict]) -> list[dict]:
 
 
 def svg_timeline(runs: list[dict]) -> str:
-    width, left, row = 1240, 190, 25
-    maximum = max((_num(data(r).get("huntSeconds")) for r in runs), default=1.0)
-    maximum = max(1.0, maximum)
-    scale = (width - left - 20) / maximum
-    height = 63 + row * len(runs)
-    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">', f'<rect width="{width}" height="{height}" fill="#f8fafc"/>']
+    width, left, right, row, top = 1240, 170, 80, 25, 84
+    maximum = max(1.0, max((_num(data(r).get("huntSeconds")) for r in runs), default=1.0))
+    scale = (width - left - right) / maximum
+    height = top + row * len(runs) + 6
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="Pathfinders hunt timelines">', f'<rect width="{width}" height="{height}" fill="#f8fafc"/>']
+
+    def marker(kind, x, y):
+        color = EVENT_COLOURS.get(kind, "#0f172a")
+        if kind in {"gondola-kill", "drone-kill"}:
+            return f'<path d="M{x:.2f},{y-4:.2f}l4,7h-8z" fill="{color}"/>'
+        if kind in {"drone-release", "drone-release-rejected", "sector-denied"}:
+            return f'<path d="M{x:.2f},{y-4:.2f}l4,4-4,4-4-4z" fill="{color}"/>'
+        if kind in {"pass-missed", "roe-violation"}:
+            return f'<path d="M{x-3:.2f},{y-3:.2f}l6,6m-6,0l6,-6" stroke="{color}" stroke-width="1.5"/>'
+        if kind in {"roe-decision", "envelope-hit"}:
+            return f'<rect x="{x-3:.2f}" y="{y-3:.2f}" width="6" height="6" fill="{color}"/>'
+        if kind in {"egress", "bingo", "gun-window-open", "gun-window-closed", "pass-ended"}:
+            return f'<path d="M{x:.2f},{y-4:.2f}v8" stroke="{color}" stroke-width="2"/>'
+        return f'<circle cx="{x:.2f}" cy="{y:.2f}" r="3" fill="{color}"/>'
+
     x, legend_y = 4, 18
     for kind in EVENT_KINDS:
         label = kind.replace("-", " ")
         item_width = 27 + len(label) * 5.2
-        if x + item_width > width - 20:
-            x, legend_y = 4, 34
-        out += [f'<rect x="{x}" y="{legend_y-8}" width="8" height="8" fill="{EVENT_COLOURS[kind]}"/>', f'<text x="{x+11}" y="{legend_y}" font-family="sans-serif" font-size="10" fill="#0f172a">{html.escape(label)}</text>']
+        if x + item_width > width - 20: x, legend_y = 4, legend_y + 17
+        out += [marker(kind, x+4, legend_y-4), f'<text x="{x+11}" y="{legend_y}" font-family="sans-serif" font-size="10" fill="#0f172a">{html.escape(label)}</text>']
         x += item_width
-    out.append('<text x="4" y="53" font-family="sans-serif" font-size="10" fill="#475569">one row/run · exact event seconds in tooltips · ● event marker · ◆ decision/kill · green band = gun window · vertical grid = minute</text>')
+    out.append('<text x="4" y="56" font-family="sans-serif" font-size="10" fill="#475569">one row/run · exact event times in tooltips · green band = sight window · grid = minute · K = physical kills</text>')
+    for sec in range(0, int(maximum) + 1, 60):
+        ex = left + sec * scale
+        out.append(f'<path d="M{ex:.2f},{top-5}v{height-top}" stroke="#cbd5e1" stroke-width=".5"/><text x="{ex:.2f}" y="75" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#475569">{sec//60}m</text>')
+    priority = {"pass-ended":0, "sector-denied":1, "relay-in-view":2, "roe-decision":3, "gondola-kill":8, "drone-kill":8, "roe-violation":9}
     for i, r in enumerate(runs):
-        y = 60 + i * row; p = data(r); label = html.escape(f"{r.get('pilot','?')} · {r.get('seed','?')}")
-        out.append(f'<text x="4" y="{y+13}" font-family="sans-serif" font-size="10" fill="#0f172a">{label}</text><rect x="{left}" y="{y}" width="{maximum*scale:.2f}" height="15" fill="#e2e8f0"/>')
+        y = top + i * row; p = data(r)
+        length = _num(p.get("huntSeconds"))
+        label = html.escape(f"{r.get('pilot','?')} · {r.get('seed','?')}")
+        out.append(f'<text x="4" y="{y+13}" font-family="sans-serif" font-size="11" fill="#0f172a">{label}</text><rect x="{left}" y="{y}" width="{length*scale:.2f}" height="17" fill="#e2e8f0" fill-opacity=".65"/>')
         events = sorted(_events(r), key=_event_time)
         opened = {}
         for e in events:
@@ -204,19 +227,13 @@ def svg_timeline(runs: list[dict]) -> str:
             elif kind == "gun-window-closed":
                 start = opened.pop(e.get("target", ""), None)
                 if start is not None and _event_time(e) > start:
-                    out.append(f'<rect x="{left + start * scale:.2f}" y="{y+2}" width="{(_event_time(e)-start)*scale:.2f}" height="11" fill="#22c55e" opacity=".30"><title>gun window {start:.3f}s–{_event_time(e):.3f}s · target={html.escape(str(e.get("target", "")))}</title></rect>')
-        for e in events:
+                    out.append(f'<rect x="{left + start * scale:.2f}" y="{y+2}" width="{max(.7, (_event_time(e)-start)*scale):.2f}" height="13" fill="#22c55e" opacity=".5"><title>gun window {start:.3f}s–{_event_time(e):.3f}s · target={html.escape(str(e.get("target", "")))}</title></rect>')
+        for e in sorted(events, key=lambda e: priority.get(str(e.get("kind", "")).removeprefix("pathfinder:"), 4)):
             kind = str(e.get("kind", "")).removeprefix("pathfinder:"); t = _event_time(e); ex = left + t * scale
             title = html.escape(f"t={t:.3f}s · {kind} · target={e.get('target','')} · source={e.get('source','')} · count={e.get('count',1)}")
-            if kind in {"gondola-kill", "drone-kill", "drone-release", "drone-release-rejected", "roe-violation", "sector-denied"}:
-                marker = f'<path d="M{ex:.2f},{y+3.5}l4,4-4,4-4-4z" fill="{EVENT_COLOURS.get(kind, "#0f172a")}"/>'
-            else:
-                marker = f'<circle cx="{ex:.2f}" cy="{y+7.5}" r="3.5" fill="{EVENT_COLOURS.get(kind, "#0f172a")}"/>'
-            out.append(f'<g><title>{title}</title>{marker}</g>')
-        out.append(f'<text x="{width-4}" y="{y+12}" text-anchor="end" font-family="sans-serif" font-size="9" fill="#475569">{_num(p.get("huntSeconds")):.0f}s</text>')
-    for sec in range(0, int(maximum) + 1, 60):
-        ex = left + sec * scale
-        out.append(f'<path d="M{ex:.2f},55v{height-55}" stroke="#cbd5e1" stroke-width=".5"/><text x="{ex+2:.2f}" y="54" font-family="sans-serif" font-size="9" fill="#475569">{sec}s</text>')
+            offset = 4 if kind in {"gondola-kill", "drone-kill", "roe-violation"} else 13 if kind in {"pass-ended", "pass-missed", "roe-decision"} else 8
+            out.append(f'<g><title>{title}</title>{marker(kind, ex, y+offset)}</g>')
+        out.append(f'<text x="{width-8}" y="{y+13}" text-anchor="end" font-family="monospace" font-size="10" fill="#475569">K{int(_kills(p))} {length:.0f}s</text>')
     out.append('</svg>')
     return ''.join(out)
 
@@ -224,11 +241,17 @@ def svg_timeline(runs: list[dict]) -> str:
 def markdown(runs: list[dict], manifest: dict | None = None) -> str:
     by = defaultdict(list)
     for r in runs: by[r.get("pilot", "?")].append(r)
-    lines = ["## Pathfinder hunt", "", "These are observable hunt and controller proxies; they do not measure human emotion.", "Gun-window drought is the longest no-window stretch, including leading and trailing edges up to actual RTB/death or observation censor.", "Drone releases and drone kills are structurally unobserved in Phase 1 because no player release API exists; rejected policy choices are reported separately.", "", "### Headline metrics vs targets", "", "| pilot | first sight window mean (samples/missing) | ≤20s | longest gap | ≤30s | hunt mean (ended/censored) | 4–6min | passes/physical kill | envelope-only | ROE decisions | physical/safe kills |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    lines = ["## Headline metrics vs targets", "", "| pilot | first sight window mean (samples/missing) | ≤20s | longest gap | ≤30s | hunt mean (ended/censored) | 4–6min | passes/physical kill | envelope-only | ROE decisions | physical/safe kills |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for pilot, rs in sorted(by.items()):
         a = aggregate(rs); first = f"— (0/{a['runs']} miss)" if a["firstGunWindowSeconds"] is None else f"{a['firstGunWindowSeconds']:.1f}s ({a['firstGunWindowSamples']}/{a['runs']-a['firstGunWindowSamples']} miss)"; gap = f"{a['longestGunWindowGapSeconds']:.1f}s"; hunt = f"— ({a['complete']}/{a['censored']})" if a["huntSecondsMean"] is None else f"{a['huntSecondsMean']:.1f}s ({a['complete']}/{a['censored']})"; pk = a["passes"] / a["kills"] if a["kills"] else "N/A"; ep = "N/A" if a["envelopeOnlyPassPct"] is None else f"{a['envelopeOnlyPassPct']:.0f}%"; first_target = "—" if a["firstGunWindowTargetPct"] is None else f"{a['firstGunWindowTargetPct']:.0f}%"; hunt_target = "—" if a["huntTargetPct"] is None else f"{a['huntTargetPct']:.0f}%"
         lines.append(f"| {pilot} | {first} | {first_target} | {gap} | {'yes' if a['longestGunWindowGapSeconds'] <= 30 else 'no'} | {hunt} | {hunt_target} | {pk if isinstance(pk,str) else f'{pk:.2f}'} | {ep} | {a['roeDecisions']:.0f} | {a['kills']:.0f}/{a['safeKills']:.0f} |" )
-    lines += ["", "Gun window = instantaneous ballistic sight cue at ≤900 m, with a live selected gondola and an authorized loaded gun. This conservative cue is distinct from proximity, the dwell-qualified HUD cue and actual dispersed rounds hitting the gondola box.", "", "### Fun verdict", "", "Top three evidence-backed problems:", ""] + [f"{i}. {x}" for i, x in enumerate(top_problems(runs), 1)]
+    lines += ["", "Gun window = instantaneous ballistic sight cue at ≤900 m, with a live selected gondola and an authorized loaded gun. This conservative cue is distinct from proximity, the dwell-qualified HUD cue and actual dispersed rounds hitting the gondola box.", "", "## Fun verdict", "", "Top three evidence-backed problems:", ""] + [f"{i}. {x}" for i, x in enumerate(top_problems(runs), 1)]
+    censored = sum(r.get("outcome") == "incomplete" for r in runs)
+    limits = sorted(set(_num(r.get("seconds")) for r in runs if r.get("outcome") == "incomplete"))
+    limit_text = ", ".join(f"{x:.0f}s" for x in limits)
+    lines += ["", "These are controller-observed experience proxies, not measured human feelings. Drought includes leading/trailing hunt edges. Phase 1 exposes no drone-release API; blocked choices are not failed release calls."]
+    if censored:
+        lines += ["", f"**Full-sortie limitation:** {censored}/{len(runs)} runs are censored at {limit_text}; completed sortie length and recovered win rate remain unknown. The inherited recovery controller has not established a completed Pathfinders recovery. Hunt duration ends separately at actual egress/loss; combat-budget egress is not mission completion."]
     lines += ["", "### Outcome spread", "", "| pilot | ≥1 denied / runs | all relays denied / runs | physical kills: runs | hunt end reasons |", "|---|---:|---:|---|---|"]
     for pilot, rs in sorted(by.items()):
         a = aggregate(rs)
@@ -241,9 +264,9 @@ def markdown(runs: list[dict], manifest: dict | None = None) -> str:
         first_range = [data(r)["firstRangeWindowSeconds"] for r in rs if data(r).get("firstRangeWindowSeconds") is not None]
         range_text = f"{sum(first_range)/len(first_range):.1f}s / {len(rs)-len(first_range)}" if first_range else f"— / {len(rs)}"
         lines.append(f"| {pilot} | {range_text} | {sum(_num(data(r).get('gunWindowSeconds')) for r in rs):.3f} | {sum(_num(data(r).get('qualifiedGunWindowSeconds')) for r in rs):.3f} | {sum(_kills(data(r)) for r in rs):.0f} |")
-    lines += ["", "### Opportunities/events by minute", "", "| pilot | minute | opportunity s | gun window s | relay | opens/closes | envelope | kills | ROE decisions | ROE violations | denied/missed |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    lines += ["", "### Opportunities/events by minute", "", "| pilot | minute | sight-window s | relay | opens/closes | envelope | kills | ROE decisions | ROE violations | denied/missed |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for b in minute_events(runs):
-        lines.append(f"| {b['pilot']} | {b['minute']} | {b.get('opportunitySeconds', 0):.1f} | {b.get('gunWindowSeconds', 0):.1f} | {b.get('relay-in-view', 0)} | {b.get('gun-window-open', 0)}/{b.get('gun-window-closed', 0)} | {b.get('envelope-hit', 0)} | {b.get('gondola-kill', 0) + b.get('drone-kill', 0)} | {b.get('roe-decision', 0)} | {b.get('roe-violation', 0)} | {b.get('sector-denied', 0)}/{b.get('pass-missed', 0)} |")
+        lines.append(f"| {b['pilot']} | {b['minute']} | {b.get('opportunitySeconds', 0):.3f} | {b.get('relay-in-view', 0)} | {b.get('gun-window-open', 0)}/{b.get('gun-window-closed', 0)} | {b.get('envelope-hit', 0)} | {b.get('gondola-kill', 0) + b.get('drone-kill', 0)} | {b.get('roe-decision', 0)} | {b.get('roe-violation', 0)} | {b.get('sector-denied', 0)}/{b.get('pass-missed', 0)} |")
     lines += ["", "### Per-run Pathfinder metrics", "", "| pilot | seed | first window | longest gap | hunt s | censored | passes | envelope-only | physical/safe kills | drone attempts/releases/rejected | ROE decisions/violations |", "|---|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|"]
     for r in runs:
         p = data(r); first = "—" if p.get("firstGunWindowSeconds") is None else f"{_num(p['firstGunWindowSeconds']):.1f}"; lines.append(f"| {r.get('pilot','?')} | {r.get('seed','?')} | {first} | {_num(p.get('longestGunWindowGapSeconds')):.1f} | {_num(p.get('huntSeconds')):.1f} | {'yes' if p.get('huntCensored', False) else 'no'} | {_num(p.get('passes')):.0f} | {_num(p.get('envelopeOnlyPasses')):.0f} | {_kills(p):.0f}/{_num(p.get('safeKills')):.0f} | {_num(p.get('droneReleaseAttempts')):.0f}/{_num(p.get('droneReleases')):.0f}/{_num(p.get('droneReleaseRejected')):.0f} | {_num(p.get('roeDecisions')):.0f}/{_num(p.get('roeViolations')):.0f} |")

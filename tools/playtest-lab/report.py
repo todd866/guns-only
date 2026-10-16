@@ -198,7 +198,7 @@ def make_report(root: Path) -> tuple[dict, str]:
     timeline_note = ("The strip uses one row per run; Pathfinder event markers, gun-window bands, minute grid, and exact tooltip times are defined in the SVG legend."
                      if has_pf else
                      "The strip uses one row per run; phase colour, dead-air shading, event symbols, and the tension trace are defined in the SVG legend.")
-    lines += ["", "## Timeline strip", "", "![Per-run timeline strip](timeline.svg)", "", timeline_note, ""]
+    lines += ["", "## Timeline strip", "", ("[Full hunt timeline](timeline.svg)" if has_pf else "![Per-run timeline strip](timeline.svg)"), "", timeline_note, ""]
     return {"manifest": manifest, "runs": len(runs), "flags": fs, "pilots": summaries,
             "pathfinderFlags": pf_flags, "pathfinderPilots": pf_summaries}, "\n".join(lines)
 
