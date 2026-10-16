@@ -18,12 +18,15 @@ public sealed class LabPilot {
     readonly List<string> decisions = new();
     readonly RecoveryPilot recovery = new();
     readonly HudCuePilot hud;
+    readonly bool escalatingWavesEnabled;
     bool trigger, rtbObserved, bingoObserved;
     string mode = "setup", candidateMode = "setup";
     double candidateSince, decisionTime;
     long targetId;
-    public LabPilot(string name, int seed, ClonedPilotPolicy? clone, int rtbAfter, bool endAfterCombat = false) {
+    public LabPilot(string name, int seed, ClonedPilotPolicy? clone, int rtbAfter, bool endAfterCombat = false,
+        bool escalatingWavesEnabled = false) {
         this.name = name; this.clone = clone; this.rtbAfter = rtbAfter; this.endAfterCombat = endAfterCombat;
+        this.escalatingWavesEnabled = escalatingWavesEnabled;
         casevac = new CasevacPilot(name, seed);
         // Explicit integer PRNG: reproducible on all .NET 8 hosts, no global RNG.
         uint state = unchecked((uint)seed + 0x9e3779b9u);
@@ -49,8 +52,24 @@ public sealed class LabPilot {
             decisions.Add("End:combat-complete"); return decisions;
         }
         if (s.PlayerFuel.IsBingo && !bingoObserved) { bingoObserved = true; decisions.Add("bingo:acknowledge"); }
-        bool empty = s.OpponentPresent && s.PlayerGun.AmmoRemaining == 0;
-        if (s.ReturnToBaseAvailable && (s.FiniteCombatComplete || s.PlayerFuel.IsBingo || empty || s.TimeSeconds >= rtbAfter)) {
+        bool empty = false;
+        int ammo = int.MaxValue;
+        if (s.OpponentPresent) {
+            // Some specialist beats expose an opponent rail without staging a
+            // player gun graph. Treat that as “ammo unknown”, not winchester.
+            try { ammo = s.PlayerGun.AmmoRemaining; empty = ammo == 0; }
+            catch (InvalidOperationException) { }
+        }
+        bool stayOrGo = LabStayOrGoPolicy.ShouldRequestRtb(new(
+            escalatingWavesEnabled,
+            s.EngagementNumber,
+            s.PlayerHealth,
+            s.PlayerFuel.IsBingo,
+            ammo,
+            name));
+        bool noviceDamageRtb = escalatingWavesEnabled && name == "novice" && s.PlayerHealth < .999;
+        if (s.ReturnToBaseAvailable && ((s.FiniteCombatComplete && stayOrGo) || noviceDamageRtb
+            || s.PlayerFuel.IsBingo || empty || s.TimeSeconds >= rtbAfter)) {
             if (s.TryRequestReturnToBase(s.PlayerFuel.IsBingo ? MissionRtbReason.BingoFuel : MissionRtbReason.PilotKnockItOff))
                 decisions.Add("RTB:" + (s.FiniteCombatComplete ? "combat-complete" : s.PlayerFuel.IsBingo ? "bingo" : empty ? "ammo-empty" : "combat-budget"));
         }
@@ -58,8 +77,8 @@ public sealed class LabPilot {
             if (!decisions.Any(d => d.StartsWith("RTB:"))) decisions.Add("RTB:accept-mission-handoff");
             rtbObserved = true;
         }
-        bool recover = s.PlayerRtbActive || (!s.OpponentPresent && !s.Beat.StartsOnCatapult)
-            || (s.Beat.RecoveryCompletesSortie && s.LiveOpponentCount == 0);
+        bool recover = s.PlayerRtbActive || (!escalatingWavesEnabled && !s.OpponentPresent && !s.Beat.StartsOnCatapult)
+            || (!escalatingWavesEnabled && s.Beat.RecoveryCompletesSortie && s.LiveOpponentCount == 0);
         if (recover) {
             Fire(s, false);
             SetMode(recovery.Drive(s), decisionTime);

@@ -143,7 +143,8 @@ public static class SortieRunner {
         var watch = Stopwatch.StartNew();
         var s = new SimulationSession(o.Beat, serviceLifeCaptureEnabled: false);
         s.DecisionCaptureEnabled = false; // training recorder is unrelated to the experience tape
-        var pilot = new LabPilot(name, seed, clone, o.RtbAfterSeconds, o.EndAfterCombat);
+        var pilot = new LabPilot(name, seed, clone, o.RtbAfterSeconds, o.EndAfterCombat,
+            escalatingWavesEnabled: o.Beat == 7);
         var observer = new ExperienceObserver(o, name, seed);
         s.Begin();
         double perceivedSeconds = 0;

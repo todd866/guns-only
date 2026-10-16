@@ -8,6 +8,7 @@ namespace GunsOnly.PlaytestLab;
 public static class LabChecks {
     public static void Run(ClonedPilotPolicy clone) {
         static void Require(bool value, string message) { if (!value) throw new Exception(message); }
+        CheckStayOrGoPolicy();
         CheckRtbAutopilotLifecycle();
         Require(Math.Abs(ExperienceObserver.SegmentDistance(new Vec3D(-100, 10, 0), new Vec3D(100, 10, 0)) - 10) < 1e-9,
             "Swept near-miss distance lost a fast passing round.");
@@ -88,6 +89,21 @@ public static class LabChecks {
             Require(joined.Completed && joined.Landed, $"Runway join orbit regressed for {pilot}: {joined.Outcome}");
         }
         Console.WriteLine("PASS: clone reference cases, deterministic/varied seeds, all 14 beats stage, timeout/partial-bin accounting, real near-miss passages, mixed-factor dual clocks, End without landing, compressed physical runway recovery, CLI validation.");
+    }
+    static void CheckStayOrGoPolicy() {
+        static void Require(bool value, string message) { if (!value) throw new Exception(message); }
+        static LabStayOrGoPolicy.Inputs I(string pilot, int waves = 2, double health = 1,
+            bool bingo = false, int ammo = 100, bool ladder = true) =>
+            new(ladder, waves, health, bingo, ammo, pilot);
+        Require(!LabStayOrGoPolicy.ShouldRequestRtb(I("ace")), "Ace left the wave ladder after a completed wave.");
+        Require(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", bingo: true)), "Ace ignored bingo fuel.");
+        Require(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", ammo: 0)), "Ace ignored winchester.");
+        Require(!LabStayOrGoPolicy.ShouldRequestRtb(I("novice", waves: 1)), "Novice left before two waves.");
+        Require(LabStayOrGoPolicy.ShouldRequestRtb(I("novice")), "Novice stayed after two waves.");
+        Require(LabStayOrGoPolicy.ShouldRequestRtb(I("novice", waves: 1, health: .98)), "Novice ignored damage.");
+        Require(LabStayOrGoPolicy.ShouldRequestRtb(I("clone", waves: 4)), "Clone policy changed.");
+        Require(LabStayOrGoPolicy.ShouldRequestRtb(I("ace", ladder: false)), "Legacy beat did not hand off to RTB.");
+        Console.WriteLine("PASS: beat-7 lab stay-or-go policy");
     }
     static void CheckRtbAutopilotLifecycle() {
         static void Require(bool value, string message) { if (!value) throw new Exception(message); }
