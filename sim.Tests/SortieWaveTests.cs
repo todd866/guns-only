@@ -164,10 +164,13 @@ public sealed class SortieWaveTests {
         Assert.Equal(PilotSkill.Veteran, session.LastDirectorSpawn.Value.Skill);
     }
 
-    [Fact]
-    public void W4AndW5FormationEscalationUsesLeadAndWingDoctrine() {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)] // W4 Ace doctrine 2 must map into the Veteran's two doctrines
+    [InlineData(7)]
+    public void W4AndW5FormationEscalationUsesLeadAndWingDoctrine(int seed) {
         var session = new SimulationSession();
-        session.ConfigureSortieSeed(7);
+        session.ConfigureSortieSeed(seed);
         session.StartBeat(Beats.ModernVisualMerge);
         session.Begin();
         ForceLastOpponentAndWaitForReport(session);
@@ -205,6 +208,8 @@ public sealed class SortieWaveTests {
             if (remaining > 1) {
                 Assert.Equal(PilotSkill.Veteran, session.LastDirectorSpawn!.Value.Skill);
                 Assert.Equal(BanditMount.Baseline, session.LastDirectorSpawn.Value.Mount);
+                Assert.Equal(w4.DoctrineIndex % BanditSkillProfile.For(PilotSkill.Veteran).DoctrineCount,
+                    session.LastDirectorSpawn.Value.DoctrineIndex);
                 Assert.Equal(AircraftCapability.Su27SSurrogate, session.CurrentBanditCapability);
             }
         }

@@ -619,8 +619,11 @@ public sealed partial class SimulationSession {
         if (extra == 0) return;
 
         CombatConfig combat = _beat.CombatRules;
-        SpawnSpec wingSpec = spec with { Skill = spec.WingSkill ?? spec.Skill,
-            Mount = spec.WingMount ?? spec.Mount, Boss = false };
+        PilotSkill wingSkill = spec.WingSkill ?? spec.Skill;
+        SpawnSpec wingSpec = spec with { Skill = wingSkill,
+            Mount = spec.WingMount ?? spec.Mount, Boss = false,
+            // Mixed-tier formations cannot inherit a lead-only doctrine index.
+            DoctrineIndex = spec.DoctrineIndex % BanditSkillProfile.For(wingSkill).DoctrineCount };
         AircraftParams air = _beat.BanditAirForMount(wingSpec.Skill, wingSpec.Mount);
         for (int index = 0; index < extra; index++) {
             IBandit wing = _beat.FirstRunValley is not null && _bandit is not null
@@ -971,6 +974,7 @@ public sealed partial class SimulationSession {
         if (LastDirectorSpawn is { } formationSpawn)
             LastDirectorSpawn = formationSpawn with {
                 Skill = next.Skill, Mount = formationSpawn.WingMount ?? formationSpawn.Mount,
+                DoctrineIndex = formationSpawn.DoctrineIndex % BanditSkillProfile.For(next.Skill).DoctrineCount,
                 Boss = false, Machine = next.Skill == PilotSkill.Machine,
             };
         // Promotion is an irreversible combat event. A sparring wingman left in presentation
