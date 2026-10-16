@@ -79,3 +79,33 @@ test("app captures after synchronous scene/HUD update and skips authority advanc
   const worker = await readFile(new URL("../../../service-worker.js", import.meta.url), "utf8");
   assert.ok(worker.includes('/^\\/report(?:\\/|$)/'), "report capability must never enter the offline cache");
 });
+
+test("Enter pressed before the screenshot is ready sends once it is", async () => {
+  const previousWindow = global.window, previousDocument = global.document;
+  const window = new Element(), trigger = new Element(), dialog = new Element();
+  const note = new Element(), send = new Element(), cancel = new Element(), output = new Element(), form = new Element();
+  global.window = window;
+  global.document = { activeElement: new Element() };
+  dialog.querySelector = selector => ({ form, input: note, output,
+    '[data-action="send"]': send, '[data-action="cancel"]': cancel })[selector];
+  form.requestSubmit = () => { form.submission = form.emit("submit"); };
+  const requests = [];
+  const transport = { enabled: true, async submit(id, body) { requests.push({ id, body }); return "Sent"; } };
+  try {
+    const ui = createReportUi({ dialog, trigger, transport, canCapture: () => true, setPaused() {} });
+    await window.emit("keydown", { code: "F8" });
+    let resolveShot;
+    ui.capture(() => ({ report: { id: "12345678-1234-4321-1234-123456789012" },
+      screenshot: new Promise(resolve => { resolveShot = resolve; }) }));
+    assert.equal(send.disabled, true);
+    note.value = "fast typist";
+    await window.emit("keydown", { code: "Enter" });
+    assert.equal(requests.length, 0);
+    resolveShot(new Blob([new Uint8Array([255, 216])], { type: "image/jpeg" }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await form.submission;
+    assert.equal(requests.length, 1);
+  } finally {
+    global.window = previousWindow; global.document = previousDocument;
+  }
+});

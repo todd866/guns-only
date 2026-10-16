@@ -4048,8 +4048,7 @@
       #sortie-grade, #ready-controls, #ready-correction, #ready-start, #ready-hint,
       #ready-handoff, .ready-secondary-actions) { display: none; }
     :root #ready-screen[data-f22-result][data-mode="debrief"] {
-      /* The live HUD remains behind the combat result. Show an opaque first frame,
-         rather than fading its banners and target data through the instrument rows. */
+      /* Result ownership switches immediately, including the card's first visible frame. */
       transition: none;
     }
     :root #ready-screen[data-f22-result][data-mode="debrief"] .ready-card {
@@ -4190,25 +4189,417 @@
     .feedback-row output { flex: 1; font-family: var(--flow-font-data); }
     .feedback-row [hidden] { display: none; }
     .feedback-row :is(input, button):focus-visible { outline: 2px solid var(--flow-accent); outline-offset: 1px; }
+    /* Owner-picked A: three pause rows; illustrated picker + the same console; four result
+       instruments + actions. All shell surfaces share these tokens and 24-unit line symbols. */
+    :root {
+      --console-font: "Avenir Next", "Segoe UI", Arial, sans-serif;
+      --console-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --console-ink: #fff9ef;
+      --console-muted: #d5d9df;
+      --console-accent: #f4cf83;
+      --console-good: #9aefba;
+      --console-bad: #ff9c8d;
+      --console-line: #63707c;
+      --console-panel: #141b23;
+      --console-raised: #24303b;
+      --console-surface: linear-gradient(180deg, rgba(30, 39, 49, .97), rgba(10, 15, 21, .98));
+      --console-key: linear-gradient(180deg, #526170, #303d49 48%, #1a242e);
+      --console-shadow: inset 0 1px 0 #a3aeb8, 0 16px 40px rgb(0 0 0 / .45);
+      --console-backdrop: radial-gradient(ellipse at 50% 35%, transparent 20%, rgb(2 5 9 / .52) 100%),
+        linear-gradient(rgb(3 7 12 / .18), rgb(3 7 12 / .32));
+      --console-radius: 4px;
+    }
+    :is(#ready-screen, #settings-screen, #feedback-report) {
+      --flow-font-display: var(--console-font);
+      --flow-ink: var(--console-ink);
+      --flow-ink-muted: var(--console-muted);
+      --flow-ink-faint: var(--console-muted);
+      --flow-panel: var(--console-panel);
+      --flow-panel-raised: var(--console-raised);
+      --flow-line: var(--console-line);
+      --flow-accent: var(--console-good);
+      color: var(--console-ink);
+      font-family: var(--console-font);
+      font-size: 18px;
+    }
+    .shell-symbols { position: absolute; overflow: hidden; pointer-events: none; }
+    .shell-icon { display: inline-block; width: 24px; height: 24px; flex: 0 0 auto; vertical-align: middle; }
+    :is(#ready-screen, #settings-screen, #feedback-report) .console-surface {
+      border: 1px solid var(--console-line);
+      border-top-color: #b5bec6;
+      border-radius: var(--console-radius);
+      background: var(--console-surface);
+      box-shadow: var(--console-shadow);
+      color: var(--console-ink);
+      font-family: var(--console-font);
+      text-shadow: none;
+    }
+    :root #ready-screen:is([data-mode="pause"], [data-mode="program"], [data-mode="debrief"]) {
+      place-items: end center;
+      padding: calc(var(--safe-top) + 24px) calc(var(--safe-right) + 28px)
+        calc(var(--safe-bottom) + 28px) calc(var(--safe-left) + 28px);
+      background-color: transparent;
+      background-image: var(--console-backdrop);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      transition: none;
+    }
+    :root #ready-screen[data-mode="program"] {
+      background-image: var(--console-backdrop), url("./art/menu-hangar.webp");
+      background-size: cover;
+      background-position: center;
+    }
+    :root #ready-screen:is([data-mode="pause"], [data-mode="program"], [data-f22-result]) .ready-card {
+      width: min(1160px, 100%);
+      height: auto;
+      max-height: 100%;
+      min-height: 0;
+      justify-content: flex-start;
+      border: 0;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+      overflow: auto;
+      overscroll-behavior: contain;
+      font-family: var(--console-font);
+      text-shadow: none;
+    }
+    :root #ready-screen[data-f22-result][data-mode="debrief"] .ready-card { width: min(900px, 100%); }
+    :root #ready-screen.visible:is([data-mode="pause"], [data-mode="program"], [data-mode="debrief"]) .ready-card {
+      animation: console-enter 200ms ease-out both;
+    }
+    /* Results must cover the HUD from their first frame, independently of the page scrim. */
+    :root #ready-screen[data-f22-result][data-mode="debrief"] {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    :root #ready-screen[data-f22-result][data-mode="debrief"] :is(.ready-card, .ready-briefing) {
+      background: var(--console-panel);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      animation: none;
+      opacity: 1;
+    }
+    @keyframes console-enter {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      :root #ready-screen .ready-card { animation: none; }
+    }
+    :root #ready-screen:is([data-mode="pause"], [data-mode="program"], [data-f22-result]) .ready-layout {
+      display: flex;
+      flex-direction: column;
+      flex: 0 0 auto;
+      min-height: 0;
+      gap: 16px;
+      overflow: visible;
+    }
+    :root #ready-screen:is([data-mode="pause"], [data-mode="program"], [data-f22-result]) .ready-menu-header {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      border: 0;
+    }
+    :root #ready-screen:is([data-mode="pause"], [data-mode="program"], [data-f22-result]) .ready-briefing {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      flex: 0 0 auto;
+      gap: 10px;
+      padding: 12px;
+      overflow: visible;
+      text-align: left;
+    }
+    .console-strip { display: flex; align-items: center; gap: 24px; min-height: 70px; padding: 0 12px 10px; border-bottom: 1px solid var(--console-line); }
+    .console-strip[hidden], .console-metric[hidden] { display: none; }
+    .console-metric { display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 0; }
+    .console-mission { flex: 1; justify-content: flex-start; }
+    #ready-mission-mode { font: 650 26px/1.15 var(--console-font); overflow-wrap: anywhere; }
+    .console-number { font: 600 28px/1.1 var(--console-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .console-unit { color: var(--console-muted); font: 500 16px/1.2 var(--console-font); }
+    :root #ready-screen #ready-start.console-primary,
+    :root #ready-screen[data-mode="program"] #ready-start.console-primary:is(:hover, :focus-visible),
+    :root #ready-screen[data-f22-result] .f22-actions .console-primary,
+    :root #ready-screen .console-primary,
+    :root #ready-screen #ready-start.console-primary:is(:hover, :focus-visible) {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      max-width: none;
+      min-height: 72px;
+      margin: 0;
+      padding: 12px 16px;
+      border: 1px solid var(--console-accent);
+      border-top-color: #ffe7b5;
+      border-radius: var(--console-radius);
+      color: #241b0b;
+      background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / .3);
+      font: 650 28px/1.2 var(--console-font);
+      letter-spacing: 0;
+      text-transform: none;
+      text-shadow: none;
+      outline: none;
+      cursor: pointer;
+    }
+    /* The F-22 result owns its own Again; the console Resume must not reappear under it. */
+    :root #ready-screen[data-f22-result] #ready-start.console-primary { display: none; }
+    :root #ready-screen #ready-start.console-primary:disabled { color: var(--console-muted); border-color: var(--console-line); background: var(--console-panel); box-shadow: none; cursor: default; }
+    :root #ready-screen .console-actions { display: flex; flex-wrap: wrap; gap: 0; width: 100%; max-width: none; padding: 0; margin: 0; border: 0; background: none; }
+    :root #ready-screen .console-actions button:not(.console-primary) {
+      display: flex;
+      flex: 1 0 5rem;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      width: auto;
+      min-width: 0;
+      min-height: 86px;
+      padding: 10px 6px;
+      margin: 0;
+      border: 0;
+      border-left: 1px solid var(--console-line);
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+      color: var(--console-ink);
+      font: 550 18px/1.2 var(--console-font);
+      letter-spacing: 0;
+      text-transform: none;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      text-shadow: none;
+      cursor: pointer;
+    }
+    :root #ready-screen .console-actions button:first-child { border-left: 0; }
+    :root #ready-screen .console-actions button:not(.console-primary):hover { background: var(--console-raised); }
+    :root #ready-screen .console-actions button:disabled { color: var(--console-muted); opacity: .6; cursor: default; }
+    :root #ready-screen :is(button, a, summary):focus-visible,
+    :root #ready-screen #ready-start.console-primary:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -4px; }
+    :root #ready-screen .ready-domain-tabs { display: none; }
+    :root #ready-screen[data-mode="program"] .ready-domain-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0; width: min(420px, 100%); margin: 0 auto; padding: 0; border: 1px solid var(--console-line); border-radius: var(--console-radius); overflow: hidden; }
+    :root #ready-screen[data-mode="program"] .ready-domain-tabs button { min-width: 0; min-height: 54px; padding: 10px; margin: 0; border: 0; border-radius: 0; color: var(--console-muted); background: var(--console-panel); font: 600 20px/1.2 var(--console-font); letter-spacing: 0; }
+    :root #ready-screen[data-mode="program"] .ready-domain-tabs button + button { border-left: 1px solid var(--console-line); }
+    :root #ready-screen[data-mode="program"] .ready-domain-tabs button[aria-pressed="true"] { color: var(--console-accent); background: var(--console-key); box-shadow: inset 0 -3px var(--console-accent); }
+    :root #ready-screen[data-mode="program"] .ready-selector { flex: 0 0 auto; min-width: 0; padding: 0; overflow: visible; }
+    :root #ready-screen[data-mode="program"] .ready-mission-groups {
+      display: grid;
+      grid-template-columns: none;
+      grid-auto-flow: column;
+      grid-auto-columns: clamp(210px, 22vw, 270px);
+      justify-content: start;
+      gap: 16px;
+      padding: 3px;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      background: none;
+      overflow-x: auto;
+      scroll-snap-type: x proximity;
+      touch-action: pan-x pinch-zoom;
+    }
+    :root #ready-screen[data-mode="program"] .sortie-option { min-width: 0; scroll-snap-align: center; }
+    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+      height: clamp(230px, 38dvh, 410px);
+      min-height: 230px;
+      aspect-ratio: auto;
+      padding: 18px;
+      gap: 6px;
+      opacity: 1;
+      filter: none;
+      border: 1px solid var(--console-line);
+      border-radius: var(--console-radius);
+    }
+    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]::before { opacity: 1; background: linear-gradient(transparent 28%, rgb(4 8 13 / .4) 55%, rgb(4 8 13 / .98)); }
+    :root #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] { border-color: var(--console-accent); box-shadow: 0 0 0 2px var(--console-accent); }
+    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number { color: var(--console-muted); font: 600 16px/1.2 var(--console-font); letter-spacing: 0; }
+    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong { color: var(--console-ink); font: 650 30px/1.05 var(--console-font); letter-spacing: 0; }
+    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+      display: block;
+      position: relative;
+      z-index: 2;
+      inset: auto;
+      width: auto;
+      height: auto;
+      margin: 0;
+      clip: auto;
+      overflow: visible;
+      color: var(--console-muted);
+      font: 500 15px/1.3 var(--console-font);
+      letter-spacing: 0;
+      text-transform: none;
+      white-space: normal;
+    }
+    :root #ready-screen[data-f22-result] .f22-result { gap: 0; border: 0; border-radius: 0; background: none; font: 600 24px/1.2 var(--console-data); }
+    :root #ready-screen[data-f22-result] .f22-row { grid-template-columns: 4rem minmax(0, 1fr) auto; min-height: 74px; gap: 16px; padding: 10px 12px; border-bottom: 1px solid var(--console-line); background: none; }
+    :root #ready-screen[data-f22-result] .f22-tag { color: var(--console-muted); font: 550 15px/1.2 var(--console-font); letter-spacing: 0; }
+    :root #ready-screen[data-f22-result] .f22-value { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+    :root #ready-screen[data-f22-result] #f22-combat { display: flex; align-items: center; gap: 10px; }
+    :root #ready-screen[data-f22-result] .f22-sym { margin: 0; width: 28px; height: 28px; }
+    :root #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value) { font-size: 28px; white-space: nowrap; }
+    :root #ready-screen[data-f22-result] #f22-opponent { font: 600 22px/1.3 var(--console-font); }
+    :root #ready-screen[data-f22-result] .f22-correction { color: var(--console-muted); font: 500 18px/1.3 var(--console-font); }
+    :root #ready-screen[data-f22-result] .f22-detail { padding: 12px; background: var(--console-panel); color: var(--console-muted); font: 500 16px/1.4 var(--console-font); }
+    :root #ready-screen[data-f22-result] .f22-result button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; color: var(--console-ink); font: 550 18px/1.2 var(--console-font); }
+    :root #ready-screen[data-f22-result] .f22-info { min-width: 48px; }
+    :root #ready-screen[data-f22-result] .f22-actions { padding-top: 12px; }
+    :root #ready-screen[data-f22-result] .f22-actions .console-primary { flex: 1.5 1 0; width: auto; min-height: 72px; font-size: 28px; }
+    :root #ready-screen[data-f22-result] [data-status="lost"] > .f22-sym { color: var(--console-bad); }
+    :root #ready-screen[data-f22-result] [data-status="open"] > .f22-sym { color: var(--console-muted); }
+    /* Keep the result instrument's action ownership; generic actions must never leak through. */
+    :root #ready-screen[data-f22-result] :is(#ready-start, .ready-secondary-actions),
+    :root #ready-screen :is(.console-actions button[hidden], .f22-result button[hidden], .f22-row[hidden]) { display: none; }
+    /* Mode owns the action set. [hidden] is reserved for per-sortie exceptions; changing
+       data-mode must never retain the picker row or require a second set of visibility flags. */
+    :root #ready-screen .console-actions button[data-console-modes] { display: none; }
+    :root #ready-screen[data-mode="program"] .console-actions button[data-console-modes~="program"]:not([hidden]),
+    :root #ready-screen[data-mode="pause"] .console-actions button[data-console-modes~="pause"]:not([hidden]),
+    :root #ready-screen[data-mode="debrief"] .console-actions button[data-console-modes~="debrief"]:not([hidden]),
+    :root #ready-screen[data-mode="intro"] .console-actions button[data-console-modes~="intro"]:not([hidden]) { display: flex; }
+    #ready-screen:not([data-mode="pause"]) #ready-mission-strip { display: none; }
+    :root #ready-screen :is(#ready-install-hint, #ready-laptop-hint) { margin: 0 auto; color: var(--console-muted); font: 500 15px/1.3 var(--console-font); }
+    :root #ready-screen #ready-replay { display: flex; align-items: center; justify-content: center; gap: 8px; max-width: none; min-height: 48px; margin: 0; font: 500 16px/1.2 var(--console-font); }
+    :root #ready-screen #ready-replay[hidden] { display: none; }
+    :root #settings-screen { background: var(--console-backdrop); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+    :root #settings-screen .settings-card { font-size: 18px; }
+    :root #settings-screen :is(.settings-toggle, .settings-range, .settings-binding th, .settings-binding td, .settings-card button) { font-family: var(--console-font); font-size: 15px; }
+    :root #settings-screen .settings-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; }
+    :root #settings-screen .settings-disclosure > summary::after { content: none; }
+    :root #settings-screen .settings-disclosure > summary .disclosure-icon { margin-left: auto; transform: rotate(90deg); }
+    :root #settings-screen .settings-disclosure:not([open]) > summary .disclosure-icon { transform: none; }
+    :root #feedback-report.console-surface { padding: 12px; color: var(--console-ink); background: var(--console-surface); border-color: var(--console-line); box-shadow: var(--console-shadow); font: 500 18px/1.2 var(--console-font); }
+    :root #feedback-report::backdrop { background: var(--console-backdrop); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+    :root #feedback-report .feedback-glyph { display: flex; color: var(--console-accent); }
+    :root #feedback-report [data-action="send"] { color: var(--console-accent); border-color: var(--console-accent); background: var(--console-key); }
+    :root #feedback-report button { display: inline-flex; align-items: center; justify-content: center; }
+    :root #feedback-report button[hidden] { display: none; }
+    @media (max-width: 760px) {
+      :root #ready-screen:is([data-mode="pause"], [data-mode="program"], [data-mode="debrief"]) { padding: calc(var(--safe-top) + 10px) calc(var(--safe-right) + 10px) calc(var(--safe-bottom) + 12px) calc(var(--safe-left) + 10px); }
+      :root #ready-screen:is([data-mode="pause"], [data-mode="program"], [data-f22-result]) .ready-briefing { padding: 8px; gap: 8px; }
+      .console-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; min-height: 70px; padding: 4px 4px 12px; }
+      .console-mission { grid-column: 1 / -1; }
+      .console-metric { justify-content: flex-start; gap: 6px; }
+      #ready-mission-mode { font-size: 22px; }
+      .console-number { font-size: 22px; }
+      .console-unit { font-size: 15px; }
+      :root #ready-screen #ready-start.console-primary,
+    :root #ready-screen .console-primary,
+      :root #ready-screen #ready-start.console-primary:is(:hover, :focus-visible) { min-height: 60px; padding: 10px; font-size: 24px; }
+      :root #ready-screen[data-mode="program"] .ready-mission-groups { grid-auto-columns: min(72vw, 270px); gap: 12px; }
+      :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] { height: clamp(230px, 34dvh, 340px); padding: 14px; }
+      :root #ready-screen[data-mode="program"] .ready-domain-tabs button { min-height: 48px; font-size: 18px; }
+      :root #ready-screen[data-f22-result] .f22-row { grid-template-columns: 2.8rem minmax(0, 1fr) auto; gap: 8px; min-height: 64px; padding: 10px 4px; }
+      :root #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value) { font-size: 20px; }
+      :root #ready-screen[data-f22-result] #f22-row-gun > .f22-datum .shell-icon { width: 20px; }
+      :root #ready-screen[data-f22-result] #f22-opponent { font-size: 18px; }
+      :root #ready-screen[data-f22-result] .f22-correction { font-size: 16px; }
+      :root #ready-screen[data-f22-result] #f22-practice { max-width: 105px; padding: 6px; font-size: 15px; }
+      :root #ready-screen[data-f22-result] #f22-practice .shell-icon { display: none; }
+      :root #feedback-report.console-surface { padding: 8px; font-size: 15px; }
+      :root #feedback-report .feedback-row { gap: 6px; }
+    }
+    /* Four usable targets per row in both phone orientations, including pause's seven actions. */
+    @media (max-width: 760px), (max-height: 500px) and (orientation: landscape) {
+      :root #ready-screen .console-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      :root #ready-screen .console-actions button:not(.console-primary) { min-height: 72px; gap: 8px; padding: 8px 3px; border-left: 0; font-size: 15px; }
+      :root #ready-screen .console-actions #ready-intro-replay { grid-column: span 2; }
+      :root #ready-screen[data-f22-result] .f22-actions .console-primary { grid-column: 1 / -1; min-height: 60px; font-size: 24px; }
+    }
+    @media (max-height: 500px) and (orientation: landscape) {
+      :root #ready-screen[data-mode="program"] .ready-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 1fr); align-items: start; gap: 12px; }
+      :root #ready-screen[data-mode="program"] .ready-mission-groups { grid-auto-columns: minmax(200px, 1fr); }
+      :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] { height: 260px; }
+    }
   </style>
   <link rel="stylesheet" href="./render/onboarding/pilot_notebook.css">
   <link rel="stylesheet" href="./render/input/touch_fighter_layout.css">
 </head>
 <body>
+  <svg class="shell-symbols" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="shell-play" viewBox="0 0 24 24">
+    <path vector-effect="non-scaling-stroke" d="M8.5 6.2v11.6L18.8 12 8.5 6.2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="shell-reticle" viewBox="0 0 24 24">
+    <circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <path vector-effect="non-scaling-stroke" d="M12 2.4v3.3M12 18.3v3.3M2.4 12h3.3M18.3 12h3.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="shell-book" viewBox="0 0 24 24">
+    <path vector-effect="non-scaling-stroke" d="M4.2 4.8h6.1c.8 0 1.7.7 1.7 1.6V19.4c0-.7-.8-1.2-1.7-1.2H4.2V4.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <path vector-effect="non-scaling-stroke" d="M19.8 4.8h-6.1c-.8 0-1.7.7-1.7 1.6V19.4c0-.7.8-1.2 1.7-1.2h6.1V4.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <path vector-effect="non-scaling-stroke" d="M14.4 8.2h3.2M14.4 11h3.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="shell-jet" viewBox="0 0 24 24">
+    <path vector-effect="non-scaling-stroke" d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="shell-restart" viewBox="0 0 24 24">
+    <path vector-effect="non-scaling-stroke" d="M19.2 12a7.2 7.2 0 1 1-2.1-5.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    <path vector-effect="non-scaling-stroke" d="M16.2 3.4v3.6h-3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="shell-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="m9 3 .6 2.3-2 1.2-2.3-.6-3 5.2L4 12l-1.7.9 3 5.2 2.3-.6 2 1.2L9 21h6l-.6-2.3 2-1.2 2.3.6 3-5.2L20 12l1.7-.9-3-5.2-2.3.6-2-1.2L15 3Z"/><circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="3"/></g></symbol>
+  <symbol id="shell-rtb" viewBox="0 0 24 24">
+    <path vector-effect="non-scaling-stroke" d="M12 4.2v10.2M8.4 11.2 12 15.2l3.6-4M5 19h14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="shell-clock" viewBox="0 0 24 24">
+    <circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="7.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <path vector-effect="non-scaling-stroke" d="M12 8v4.4l2.6 1.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="shell-mark" viewBox="0 0 24 24">
+    <path vector-effect="non-scaling-stroke" d="M12 3.6 19.6 12 12 20.4 4.4 12 12 3.6z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="shell-check" viewBox="0 0 24 24">
+    <path vector-effect="non-scaling-stroke" d="M5 12.5 9.2 17 19 7.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="shell-info" viewBox="0 0 24 24">
+    <circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="7.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <path vector-effect="non-scaling-stroke" d="M12 11v5.2M12 8h.01" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="shell-chevron" viewBox="0 0 24 24">
+    <path vector-effect="non-scaling-stroke" d="M9 6.5 15 12l-6 5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="shell-arrow" viewBox="0 0 24 24">
+    <path vector-effect="non-scaling-stroke" d="M4 12h15M14 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="shell-replay" viewBox="0 0 24 24">
+    <circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="7.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <path vector-effect="non-scaling-stroke" d="M10.2 8.7v6.6l5.4-3.3-5.4-3.3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="shell-flag" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M5 21V3h13l-3 4 3 4H5"/></g></symbol>
+  <symbol id="shell-close" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="m6 6 12 12M18 6 6 18"/></g></symbol>
+  <symbol id="shell-minus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M5 12h14"/></g></symbol>
+  <symbol id="shell-pause" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M8 5v14M16 5v14"/></g></symbol>
+  <symbol id="shell-audio" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M3 9h4l5-4v14l-5-4H3ZM16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14"/></g></symbol>
+  <symbol id="shell-eye" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="3"/></g></symbol>
+  <symbol id="shell-keyboard" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect vector-effect="non-scaling-stroke" x="2" y="5" width="20" height="14" rx="2"/><path vector-effect="non-scaling-stroke" d="M6 9h.1M10 9h.1M14 9h.1M18 9h.1M6 12h.1M10 12h.1M14 12h.1M18 12h.1M7 16h10"/></g></symbol>
+  <symbol id="shell-share" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M12 15V3m-4 4 4-4 4 4M5 11v10h14V11"/></g></symbol>
+  <symbol id="shell-music" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M9 17V5l11-2v12M9 8l11-2"/><ellipse vector-effect="non-scaling-stroke" cx="6" cy="18" rx="3" ry="2"/><ellipse vector-effect="non-scaling-stroke" cx="17" cy="16" rx="3" ry="2"/></g></symbol>
+  <symbol id="shell-radio" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect vector-effect="non-scaling-stroke" x="3" y="7" width="18" height="14" rx="2"/><path vector-effect="non-scaling-stroke" d="m6 7 12-5M14 12h4m-4 4h4"/><circle vector-effect="non-scaling-stroke" cx="8" cy="14" r="2"/></g></symbol>
+  <symbol id="shell-captions" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M4 4h16v13H9l-5 4ZM7 8h10M7 12h7"/></g></symbol>
+  <symbol id="shell-text" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M4 5h16M12 5v15M8 20h8"/></g></symbol>
+  <symbol id="shell-controls" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M7 3v18M17 3v18M3 8h8M13 16h8"/></g></symbol>
+  <symbol id="shell-pulse" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path vector-effect="non-scaling-stroke" d="M2 12h5l3-8 4 16 3-8h5"/></g></symbol>
+</svg>
   <canvas id="scene" tabindex="0" aria-label="Air combat simulation view"></canvas>
   <canvas id="hud" aria-hidden="true"></canvas>
   <div id="view-status" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off" hidden>SOLO · ROOM NOT CONFIGURED</div>
-  <dialog id="feedback-report" aria-label="Feedback report">
+  <dialog class="console-surface" id="feedback-report" aria-label="Feedback report">
     <form method="dialog" class="feedback-row">
-      <span class="feedback-glyph" title="Sends this frame (scene + HUD), your note, full simulation state, up to 120 seconds of local telemetry and inputs, settings, build/revision, URL, device/GPU, performance, camera and the last 50 warnings/errors. Failed sends are saved locally and retried, independent of Share flight diagnostics." aria-label="Report collection details">⚑</span>
+      <span class="feedback-glyph" title="Sends this frame (scene + HUD), your note, full simulation state, up to 120 seconds of local telemetry and inputs, settings, build/revision, URL, device/GPU, performance, camera and the last 50 warnings/errors. Failed sends are saved locally and retried, independent of Share flight diagnostics." aria-label="Report collection details"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-flag"/></svg></span>
       <input type="text" placeholder="What's wrong?" aria-label="What's wrong?" maxlength="2000" autocomplete="off">
       <output hidden aria-live="polite"></output>
       <button id="feedback-send" type="submit" data-action="send">Send</button>
-      <button id="feedback-cancel" type="button" data-action="cancel" aria-label="Cancel report" title="Cancel (Esc)">✕</button>
+      <button id="feedback-cancel" type="button" data-action="cancel" aria-label="Cancel report" title="Cancel (Esc)"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-close"/></svg></button>
     </form>
   </dialog>
-  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)" title="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">ESC · PAUSE</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>
+  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)" title="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">ESC · PAUSE</span><span class="pause-mobile" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-pause"/></svg></span></button>
   <output id="flight-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></output>
   <section id="rapier-radio" aria-label="Optional radio captions" hidden>
     <output id="rapier-radio-text" role="status" aria-live="polite" aria-atomic="true"></output>
@@ -4498,10 +4889,6 @@
 
       <div class="ready-layout">
         <section id="ready-selector" class="ready-selector" aria-label="Mission selection">
-          <div class="ready-domain-tabs" aria-label="Operating domain">
-            <button type="button" data-domain-filter="military" aria-pressed="true">MILITARY</button>
-            <button type="button" data-domain-filter="civilian" aria-pressed="false">CIVILIAN</button>
-          </div>
           <div class="ready-group-heading ready-program-heading">
             <div>
               <h2>Missions</h2>
@@ -4598,7 +4985,16 @@
           </div>
         </section>
 
-        <section class="ready-briefing" aria-label="Selected sortie briefing">
+        <section class="ready-briefing console-surface" aria-label="Selected sortie briefing">
+          <div class="ready-domain-tabs" role="group" aria-label="Operating domain">
+            <button type="button" data-domain-filter="military" aria-pressed="true">Military</button>
+            <button type="button" data-domain-filter="civilian" aria-pressed="false">Civilian</button>
+          </div>
+          <div id="ready-mission-strip" class="console-strip" aria-label="Current sortie" hidden>
+            <div class="console-metric console-mission"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-mark"/></svg><span id="ready-mission-mode"></span></div>
+            <div id="ready-mission-clock" class="console-metric" hidden title="Mission clock"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-clock"/></svg><span class="console-number"></span><span class="console-unit">time</span></div>
+            <div id="ready-mission-engagements" class="console-metric" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="console-number"></span><span class="console-unit">engagements</span></div>
+          </div>
           <div id="ready-kicker">F-22A · two engagements</div>
           <h2 id="ready-title">Guns Only</h2>
           <p id="ready-brief">Complete two gun engagements, then return to the runway, land and stop.</p>
@@ -4611,31 +5007,31 @@
           <section id="f22-result" class="f22-result" hidden aria-label="Sortie result">
             <div class="f22-row" id="f22-row-combat">
               <span class="f22-tag" aria-hidden="true">FIGHT</span>
-              <span class="f22-value" id="f22-combat" role="img"><b class="f22-sym" id="f22-combat-symbol"></b><span id="f22-combat-value"></span></span>
-              <span class="f22-datum" id="f22-recovery" role="img"><span class="f22-tag" aria-hidden="true">LAND</span><b class="f22-sym" id="f22-recovery-symbol"></b></span>
+              <span class="f22-value" id="f22-combat" role="img"><svg class="shell-icon f22-sym" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use id="f22-combat-symbol" href="#shell-minus"/></svg><span id="f22-combat-value"></span></span>
+              <span class="f22-datum" id="f22-recovery" role="img"><span class="f22-tag" aria-hidden="true">LAND</span><svg class="shell-icon f22-sym" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use id="f22-recovery-symbol" href="#shell-minus"/></svg></span>
             </div>
             <div class="f22-row" id="f22-row-gun">
               <span class="f22-tag" aria-hidden="true">GUN</span>
               <span class="f22-value" id="f22-gun"></span>
-              <span class="f22-datum" id="f22-clock"></span>
+              <span class="f22-datum"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-clock"/></svg><span id="f22-clock"></span></span>
             </div>
             <div class="f22-row" id="f22-row-opponent">
               <span class="f22-tag" aria-hidden="true">OPP</span>
               <span class="f22-value" id="f22-opponent"></span>
-              <button class="f22-datum f22-info" id="f22-opponent-info" type="button" aria-expanded="false" aria-controls="f22-opponent-detail" aria-label="Opponent and next milestone">ⓘ</button>
+              <button class="f22-datum f22-info" id="f22-opponent-info" type="button" aria-expanded="false" aria-controls="f22-opponent-detail" aria-label="Opponent and next milestone"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-info"/></svg></button>
             </div>
             <p class="f22-detail" id="f22-opponent-detail" hidden></p>
             <div class="f22-row" id="f22-row-correction">
-              <span class="f22-tag f22-tag-sym" aria-hidden="true">▸</span>
+              <svg class="shell-icon f22-tag-sym" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-chevron"/></svg>
               <span class="f22-value f22-correction" id="f22-correction"></span>
-              <button class="f22-datum" id="f22-practice" type="button">Practice</button>
+              <button class="f22-datum" id="f22-practice" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="shell-action-label">Practice</span></button>
             </div>
-            <div class="f22-actions">
-              <button id="f22-again" class="f22-primary" type="button">Again</button>
-              <button id="f22-recover" type="button" hidden title="Continue this aircraft into the runway recovery">Recover</button>
-              <button id="f22-logbook" type="button">Logbook</button>
-              <button id="f22-aircraft" type="button" title="Choose another aircraft">Aircraft</button>
-              <button id="f22-settings" type="button" aria-label="Settings" title="Settings">⚙</button>
+            <div class="f22-actions console-actions">
+              <button id="f22-again" class="f22-primary console-primary" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span class="shell-action-label">Again</span></button>
+              <button id="f22-recover" type="button" hidden title="Continue this aircraft into the runway recovery"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-rtb"/></svg><span class="shell-action-label">Recover</span></button>
+              <button id="f22-logbook" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-book"/></svg><span class="shell-action-label">Logbook</span></button>
+              <button id="f22-aircraft" type="button" title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-jet"/></svg><span class="shell-action-label">Aircraft</span></button>
+              <button id="f22-settings" type="button" aria-label="Settings" title="Settings"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-gear"/></svg><span class="shell-action-label">Settings</span></button>
             </div>
           </section>
           <p id="ready-correction" class="ready-correction" hidden></p>
@@ -4672,17 +5068,17 @@
           <p id="ready-controls" class="ready-controls">Arrows fly · W/S power · F guns · V padlock · Tab target
 Two engagements, then recover · H controls · R restarts</p>
           <div id="ready-route-notice" class="ready-route-notice" role="status" hidden></div>
-          <button id="ready-start" type="button">Fly First Merge</button>
-          <button id="ready-replay" type="button" hidden>Replay incident again</button>
-          <div class="ready-secondary-actions">
-            <button id="ready-practice" type="button"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.6v2.6M8 11.8v2.6M1.6 8h2.6M11.8 8h2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span class="shell-action-label">Practice</span></button>
-            <button id="ready-logbook" type="button"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 2.6h4.1C7.6 2.6 8 3.6 8 3.6V13s-.4-.8-1.8-.8H2.2ZM13.8 2.6H9.7C8.4 2.6 8 3.6 8 3.6V13s.4-.8 1.8-.8h4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg><span class="shell-action-label">Logbook</span></button>
-            <button id="ready-intro-replay" type="button" hidden><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 3.1v9.8l7.4-4.9Z" fill="currentColor"/></svg><span class="shell-action-label">Replay valley intro</span></button>
-            <button id="ready-return" type="button" hidden title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.1 9.2 5.4h3.7L10.4 7.6l.9 4.8L8 10.5 4.7 12.4l.9-4.8L3.1 5.4h3.7z" fill="currentColor"/></svg><span class="shell-action-label">Aircraft</span></button>
-            <button id="ready-restart" type="button" hidden title="Restart sortie"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M11.2 1.8v3.2H8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="shell-action-label">Restart</span></button>
-            <button id="ready-report" type="button" disabled title="Report (F8)"><span class="shell-icon" aria-hidden="true">⚑</span><span class="shell-action-label">Report</span></button>
-            <button id="ready-settings" type="button" title="Build __RELEASE_BUILD__ · verifying"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6.2 1.1h3.6l.5 1.7 1.6.7 1.5-1 2 2-1 1.5.7 1.6 1.7.5v3.6l-1.7.5-.7 1.6 1 1.5-2 2-1.5-1-1.6.7-.5 1.7H6.2l-.5-1.7-1.6-.7-1.5 1-2-2 1-1.5-.7-1.6-1.7-.5V6.6l1.7-.5.7-1.6-1-1.5 2-2 1.5 1 1.6-.7zM8 6.1a1.9 1.9 0 1 0 .01 3.8A1.9 1.9 0 0 0 8 6.1z"/></svg><span class="shell-action-label">Settings</span></button>
-            <button id="ready-handoff" type="button" hidden disabled title="Call it a day and return to base"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2v7.2M5.2 7.2 8 10.4l2.8-3.2M3 13.2h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="shell-action-label">RTB</span></button>
+          <button id="ready-start" class="console-primary" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-play"/></svg><span class="shell-action-label">Fly First Merge</span></button>
+          <button id="ready-replay" type="button" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-replay"/></svg><span class="shell-action-label">Replay incident again</span></button>
+          <div class="ready-secondary-actions console-actions">
+            <button id="ready-practice" type="button" data-console-modes="program pause debrief intro"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="shell-action-label">Practice</span></button>
+            <button id="ready-logbook" type="button" data-console-modes="program pause debrief intro"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-book"/></svg><span class="shell-action-label">Logbook</span></button>
+            <button id="ready-intro-replay" type="button" data-console-modes="program intro" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-replay"/></svg><span class="shell-action-label">Replay valley intro</span></button>
+            <button id="ready-return" type="button" data-console-modes="pause debrief intro" title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-jet"/></svg><span class="shell-action-label">Aircraft</span></button>
+            <button id="ready-restart" type="button" data-console-modes="pause debrief" title="Restart sortie"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span class="shell-action-label">Restart</span></button>
+            <button id="ready-settings" type="button" data-console-modes="program pause debrief intro" title="Build __RELEASE_BUILD__ · verifying"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-gear"/></svg><span class="shell-action-label">Settings</span></button>
+            <button id="ready-report" type="button" data-console-modes="program pause debrief intro" disabled title="Report (F8)"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-flag"/></svg><span class="shell-action-label">Report</span></button>
+            <button id="ready-handoff" type="button" data-console-modes="pause" disabled title="Call it a day and return to base"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-rtb"/></svg><span class="shell-action-label">RTB</span></button>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <!--
@@ -4692,7 +5088,7 @@ Two engagements, then recover · H controls · R restarts</p>
             this only when it applies (html.ios-browser-tab) and hides it for good once tapped.
           -->
           <button id="ready-install-hint" type="button" hidden>
-            <span aria-hidden="true">⤴</span> Full screen: Share → Add to Home Screen
+            <svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-share"/></svg> Full screen: Share → Add to Home Screen
           </button>
           <!--
             Laptop-first doctrine, phone-width only: flight controls, the tactical map, and the
@@ -4701,7 +5097,7 @@ Two engagements, then recover · H controls · R restarts</p>
             default; the phone-width media query and app.js's dismissed-flag check control it.
           -->
           <button id="ready-laptop-hint" type="button">
-            <span aria-hidden="true">⌨</span> Best on a laptop with a keyboard or gamepad.
+            <svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-keyboard"/></svg> Best on a laptop with a keyboard or gamepad.
           </button>
           <div id="ready-build-row" hidden>
             <output id="ready-build" data-state="checking" hidden>Build __RELEASE_BUILD__ · verifying</output>
@@ -4713,38 +5109,38 @@ Two engagements, then recover · H controls · R restarts</p>
   </div>
 
   <section id="settings-screen" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-hidden="true" inert>
-    <div class="settings-card">
+    <div class="settings-card console-surface">
       <h2 id="settings-title" class="visually-hidden">Settings</h2>
       <div class="settings-sections">
         <div class="settings-section" role="group" aria-label="Audio">
-          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Audio"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.4 6.2h2.2L8.2 3.4v9.2L4.6 9.8H2.4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M10.2 6.1a2.6 2.6 0 0 1 0 3.8M11.8 4.6a4.6 4.6 0 0 1 0 6.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><span>Sound</span><input id="setting-audio" type="checkbox" role="switch"></label>
-          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Music</span><input id="setting-music" type="checkbox" role="switch"></label>
-          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Interface sounds</span><input id="setting-interface-sounds" type="checkbox" role="switch"></label>
-          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Radio voices</span><input id="setting-radio-voice" type="checkbox" role="switch"></label>
-          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Radio captions</span><input id="setting-radio-captions" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Audio"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-audio"/></svg></span><span>Sound</span><input id="setting-audio" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-music"/></svg></span><span>Music</span><input id="setting-music" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-audio"/></svg></span><span>Interface sounds</span><input id="setting-interface-sounds" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-radio"/></svg></span><span>Radio voices</span><input id="setting-radio-voice" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-captions"/></svg></span><span>Radio captions</span><input id="setting-radio-captions" type="checkbox" role="switch"></label>
         </div>
         <div class="settings-section" role="group" aria-label="Picture">
-          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Picture"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.4 8S3.8 4.2 8 4.2 14.6 8 14.6 8 12.2 11.8 8 11.8 1.4 8 1.4 8Z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="1.7" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></span><span>High-contrast HUD</span><input id="setting-high-contrast" type="checkbox" role="switch"></label>
-          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Reduce motion</span><input id="setting-reduced-motion" type="checkbox" role="switch"></label>
-          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"></span><span>Larger interface text</span><input id="setting-large-text" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Picture"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-eye"/></svg></span><span>High-contrast HUD</span><input id="setting-high-contrast" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-pause"/></svg></span><span>Reduce motion</span><input id="setting-reduced-motion" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-text"/></svg></span><span>Larger interface text</span><input id="setting-large-text" type="checkbox" role="switch"></label>
         </div>
         <div class="settings-section" role="group" aria-label="Aircraft">
-          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Aircraft"><svg class="shell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.1 9.2 5.4h3.7L10.4 7.6l.9 4.8L8 10.5 4.7 12.4l.9-4.8L3.1 5.4h3.7z" fill="currentColor"/></svg></span><span>Auto-GCAS backstop</span><input id="setting-autogcas" type="checkbox" role="switch"></label>
-          <label class="settings-toggle settings-touch-only" title="Replaces the throttle lever with the THR/YAW stick; FIRE moves inboard"><span class="settings-glyph" aria-hidden="true"></span><span>Touch rudder stick</span><input id="setting-touch-rudder-stick" type="checkbox" role="switch"></label>
-          <label class="settings-range" for="setting-tilt-sensitivity"><span class="settings-glyph" aria-hidden="true"></span><span>Tilt sensitivity</span><span class="settings-datum"><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1" aria-valuetext="1.00×"><output id="setting-tilt-sensitivity-value" for="setting-tilt-sensitivity">1.00×</output></span></label>
-          <label class="settings-toggle" title="Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards unsent automatic diagnostics; reports you send remain queued. Minimal shell-health (boot and fatal signals, device class) remains always-on."><span class="settings-glyph" aria-hidden="true"></span><span>Share flight diagnostics</span><input id="setting-telemetry-sharing" type="checkbox" role="switch"></label>
+          <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Aircraft"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-jet"/></svg></span><span>Auto-GCAS backstop</span><input id="setting-autogcas" type="checkbox" role="switch"></label>
+          <label class="settings-toggle settings-touch-only" title="Replaces the throttle lever with the THR/YAW stick; FIRE moves inboard"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-controls"/></svg></span><span>Touch rudder stick</span><input id="setting-touch-rudder-stick" type="checkbox" role="switch"></label>
+          <label class="settings-range" for="setting-tilt-sensitivity"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-controls"/></svg></span><span>Tilt sensitivity</span><span class="settings-datum"><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1" aria-valuetext="1.00×"><output id="setting-tilt-sensitivity-value" for="setting-tilt-sensitivity">1.00×</output></span></label>
+          <label class="settings-toggle" title="Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards unsent automatic diagnostics; reports you send remain queued. Minimal shell-health (boot and fatal signals, device class) remains always-on."><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-pulse"/></svg></span><span>Share flight diagnostics</span><input id="setting-telemetry-sharing" type="checkbox" role="switch"></label>
         </div>
       </div>
       <details id="settings-keyboard-bindings" class="settings-disclosure" open>
-        <summary><span aria-hidden="true">⌨</span> Keyboard</summary>
+        <summary><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-keyboard"/></svg> Keyboard<svg class="shell-icon disclosure-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-chevron"/></svg></summary>
         <table class="settings-keys" aria-label="Keyboard flight controls">
           <colgroup><col><col class="settings-key-column"><col><col class="settings-key-column"></colgroup>
           <tbody id="settings-bindings"></tbody>
         </table>
       </details>
       <div class="settings-actions">
-        <button id="settings-reset-bindings" type="button" title="Reset keyboard controls">Reset keys</button>
-        <button id="settings-close" type="button" title="Close settings (Escape)">Done</button>
+        <button id="settings-reset-bindings" type="button" title="Reset keyboard controls"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span>Reset keys</span></button>
+        <button id="settings-close" type="button" title="Close settings (Escape)"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-check"/></svg><span>Done</span></button>
       </div>
     </div>
   </section>

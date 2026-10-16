@@ -88,7 +88,7 @@ test("first run is a deliberate Ready interlock and Fire visibly names its live 
     /const firstRunReady = firstRunAutostartPending && ready && !finished;/,
     "settings, help, and background holds must not relabel staged intro authority as the picker");
   assert.match(app,
-    /else if \(firstRunReady\)[\s\S]*readyStart\.textContent = "Enter valley"/,
+    /else if \(firstRunReady\)[\s\S]*readyStartLabel\.textContent = "Enter valley"/,
     "the first aircraft clock must wait behind an explicit pilot action");
   assert.doesNotMatch(app,
     /firstRunAutostartPending = true;\s*autoLaunchPending = true/,

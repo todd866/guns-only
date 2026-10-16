@@ -231,6 +231,13 @@ function setText(element, value) {
   if (element && element.textContent !== value) element.textContent = value;
 }
 
+function setStatusSymbol(element, status) {
+  const icon = status === "complete" || status === "recovered" ? "check"
+    : status === "lost" ? "close" : "minus";
+  const href = `#shell-${icon}`;
+  if (element && element.getAttribute("href") !== href) element.setAttribute("href", href);
+}
+
 function setLabel(element, label) {
   if (!element) return;
   if (element.getAttribute("aria-label") !== label) element.setAttribute("aria-label", label);
@@ -248,12 +255,12 @@ export function paintF22ResultInstrument(root, model) {
   const $ = (id) => root.querySelector(`#${id}`);
   const combat = $("f22-combat");
   combat.dataset.status = model.combat.status;
-  setText($("f22-combat-symbol"), model.combat.symbol);
+  setStatusSymbol($("f22-combat-symbol"), model.combat.status);
   setText($("f22-combat-value"), model.combat.value);
   setLabel(combat, model.combat.label);
   const recovery = $("f22-recovery");
   recovery.dataset.status = model.recovery.status;
-  setText($("f22-recovery-symbol"), model.recovery.symbol);
+  setStatusSymbol($("f22-recovery-symbol"), model.recovery.status);
   setLabel(recovery, model.recovery.label);
   const gun = $("f22-gun");
   setText(gun, model.gun.value);
@@ -273,7 +280,7 @@ export function paintF22ResultInstrument(root, model) {
     setText($("f22-correction"), model.correction.text);
     const practice = $("f22-practice");
     practice.hidden = !model.correction.practiceExercise;
-    setText(practice, model.correction.practiceLabel);
+    setText(practice.querySelector(".shell-action-label"), model.correction.practiceLabel);
   }
   $("f22-recover").hidden = !model.actions.recover;
 }

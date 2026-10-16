@@ -27,7 +27,7 @@ test("desktop flight chrome advertises Escape pause and the H quicklook repeats 
   assert.match(indexSource,
     /class="pause-desktop"[^>]*>ESC · PAUSE<\/span>/u);
   assert.match(indexSource,
-    /class="pause-mobile"[^>]*>Ⅱ<\/span>/u,
+    /class="pause-mobile"[^>]*><svg[^>]*>[\s\S]*?<use href="#shell-pause"\/>[\s\S]*?<\/span>/u,
     "touch keeps a compact 44px pause target without advertising an unavailable key");
   assert.equal((hudSource.match(/ESC  PAUSE \/ MENU/g) ?? []).length, 2,
     "wide and compact H quicklooks must both expose the pause/menu lifecycle key");
@@ -72,4 +72,23 @@ test("every standalone shell shares one canonical Three.js module identity", asy
     assert.doesNotMatch(source, /vendor\/three\.module\.js\?v=/u,
       `${sourcePath} must not create a second Three.js module identity`);
   }
+});
+
+test("console icons share resolvable line symbols across pause, result, settings and report", () => {
+  const symbols = new Map([...indexSource.matchAll(/<symbol id="(shell-[^"]+)"[^>]*>([\s\S]*?)<\/symbol>/g)]
+    .map(match => [match[1], match[2]]));
+  const references = [...indexSource.matchAll(/<use\b[^>]*href="#(shell-[^"]+)"/g)];
+  assert.ok(references.length > 30);
+  for (const [, name] of references) assert.ok(symbols.has(name), `${name} must resolve`);
+  for (const [name, source] of symbols) {
+    assert.match(source, /stroke-width="1\.5"/, `${name} uses the shared line weight`);
+    assert.doesNotMatch(source, /stroke-width="(?!1\.5")/);
+  }
+  for (const [id, symbol] of [
+    ["ready-settings", "gear"], ["f22-settings", "gear"], ["ready-report", "flag"],
+    ["ready-return", "jet"], ["f22-aircraft", "jet"], ["feedback-cancel", "close"],
+  ]) assert.match(indexSource, new RegExp(`id="${id}"[^>]*>[\\s\\S]*?<use href="#shell-${symbol}"`));
+  const consoleMarkup = indexSource.slice(indexSource.indexOf('<div id="ready-screen"'),
+    indexSource.indexOf('  <!--\n    The title card is gone.'));
+  assert.doesNotMatch(consoleMarkup, />[⚑⚙ⓘⅡ✕]<(?:\/span|\/button)/);
 });

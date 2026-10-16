@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
-  f22CombatDisposition, f22RecoveryDisposition, f22ResultInstrument, formatAttemptClock,
+  f22CombatDisposition, f22RecoveryDisposition, f22ResultInstrument, formatAttemptClock, paintF22ResultInstrument,
 } from "../f22_result_instrument.js";
 
 // Both fixtures are written by sim.Tests F22FiniteSortieTests from the real kernel projection.
@@ -133,3 +133,31 @@ for (const terminal of ["DESTROYED_AIRBORNE", "IMPACTED"]) {
     assert.equal(f22CombatDisposition({ ...state, combat_complete: false }), "lost");
   });
 }
+
+test("result painting preserves shared SVGs while status, practice and recovery actions change", async () => {
+  const nodes = new Map();
+  const node = (id) => {
+    if (!nodes.has(id)) nodes.set(id, {
+      dataset: {}, textContent: "", attributes: {}, hidden: false,
+      getAttribute(name) { return this.attributes[name]; },
+      setAttribute(name, value) { this.attributes[name] = value; },
+      querySelector(selector) { return node(`${id} ${selector}`); },
+    });
+    return nodes.get(id);
+  };
+  const root = { querySelector: node };
+  const state = await fixture("f22_combat_complete.json");
+  paintF22ResultInstrument(root, f22ResultInstrument(state, { phase: "combat" }));
+  assert.equal(node("#f22-combat-symbol").getAttribute("href"), "#shell-check");
+  assert.equal(node("#f22-recovery-symbol").getAttribute("href"), "#shell-minus");
+  assert.equal(node("#f22-recover").hidden, false);
+  paintF22ResultInstrument(root, f22ResultInstrument({ ...state, sortie_outcome: "DEFEAT" },
+    { phase: "final", correction: "Close before firing", practiceExercise: "gunnery", practiceLabel: "Practise guns" }));
+  assert.equal(node("#f22-recovery-symbol").getAttribute("href"), "#shell-close");
+  assert.equal(node("#f22-recovery-symbol").textContent, "");
+  assert.equal(node("#f22-recover").hidden, true);
+  assert.equal(node("#f22-practice .shell-action-label").textContent, "Practise guns");
+  assert.equal(node("#f22-practice").textContent, "");
+  paintF22ResultInstrument(root, null);
+  assert.equal(root.hidden, true);
+});

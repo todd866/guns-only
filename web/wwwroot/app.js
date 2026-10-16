@@ -7,6 +7,7 @@ import { attemptDurationSeconds } from "./render/shell/attempt_duration.js?v=__R
 import { beginMissionCloudEntry } from "./render/shell/mission_cloud_entry.js?v=__RELEASE_BUILD__";
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
 import { attemptElapsedSeconds, attemptStartSeconds } from "./render/progression/attempt_clock.js";
+import { paintMissionStrip } from "./render/shell/mission_strip.js";
 import { isF22Sortie } from "./render/debrief/f22_sortie_result.js";
 import {
   f22ResultInstrument, paintF22ResultInstrument,
@@ -561,6 +562,7 @@ const targetStickHelp = document.querySelector("#target-stick-help");
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
 const readyScreen = document.querySelector("#ready-screen");
+const readyMissionStrip = document.querySelector("#ready-mission-strip");
 const sortieGrade = document.querySelector("#sortie-grade");
 const sortieGradeKills = document.querySelector("#sortie-grade-kills");
 const sortieGradeAccuracy = document.querySelector("#sortie-grade-accuracy");
@@ -600,6 +602,7 @@ const readyProgramStatuses = [...document.querySelectorAll("[data-program-status
 const readyDomainButtons = [...document.querySelectorAll("[data-domain-filter]")];
 const readyProgramProgress = document.querySelector("#ready-program-progress");
 const readyStart = document.querySelector("#ready-start");
+const readyStartLabel = readyStart.querySelector(".shell-action-label");
 const readyReplay = document.querySelector("#ready-replay");
 const readyHandoff = document.querySelector("#ready-handoff");
 const readyIntroReplay = document.querySelector("#ready-intro-replay");
@@ -5140,6 +5143,11 @@ function renderPauseUi(state = latestState) {
   if (readyCorrection) readyCorrection.hidden = true;
   readyScreen.dataset.mode = (firstRunReady || practiceReady)
     ? "intro" : ready ? "program" : (finished || combatResult) ? "debrief" : "pause";
+  paintMissionStrip(readyMissionStrip, state, {
+    // Keep session values prepared; data-mode owns whether the strip is displayed.
+    mode: selectedPracticeExercise ? practiceExercise(selectedPracticeExercise)?.title : brief.title,
+    startSeconds: attemptStartSimSeconds,
+  });
   paintSortieGrade(finished && !selectedPracticeExercise ? state : null);
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
   const casevacReady = ready && selectedBeat === 13;
@@ -5245,7 +5253,7 @@ function renderPauseUi(state = latestState) {
       ? "Choose another mission" : "Replay valley intro";
   }
   if (readyRestart) {
-    readyRestart.hidden = ready || (finished && !!selectedPracticeExercise);
+    readyRestart.hidden = finished && !!selectedPracticeExercise;
     // The primary finished action may advance the programme before it launches. This utility
     // repeats the sortie which just ended, so giving both controls the old "Fly again" label hid
     // a real navigation decision from the pilot.
@@ -5253,11 +5261,11 @@ function renderPauseUi(state = latestState) {
       ? "Restart" : selectedPracticeExercise ? "Restart practice" : finished ? "Repeat sortie" : "Restart sortie";
   }
   if (readyReturn) {
-    readyReturn.hidden = ready && !selectedPracticeExercise;
+    readyReturn.hidden = firstRunReady;
     readyReturn.querySelector(".shell-action-label").textContent = "Aircraft";
   }
   if (readyHandoff) {
-    readyHandoff.hidden = !handoffActionAvailable;
+    // Pause always exposes RTB; authority controls whether it can be used.
     readyHandoff.disabled = !handoffActionAvailable;
   }
 
@@ -5287,7 +5295,7 @@ function renderPauseUi(state = latestState) {
         || result?.correction || exercise.correction;
       readyCorrection.hidden = !readyCorrection.textContent;
     }
-    readyStart.textContent = finished ? "Repeat practice" : "Start practice";
+    readyStartLabel.textContent = finished ? "Repeat practice" : "Start practice";
     readyHint.textContent = "Practice results are saved locally and do not count as a full sortie.";
   } else if (finished) {
     const result = sortieResultCopy(state);
@@ -5389,10 +5397,10 @@ function renderPauseUi(state = latestState) {
                 ? resultFacts.join(" · ")
                 : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
     readyReplay.hidden = casevac || !incidentReplay?.clip;
-    readyReplay.textContent = "Replay";
+    readyReplay.querySelector(".shell-action-label").textContent = "Replay";
     // No qualification, so the debrief offers the only two things that make sense: go again, or
     // pick the other aircraft.
-    readyStart.textContent = "Fly again";
+    readyStartLabel.textContent = "Fly again";
     if (readyControls) readyControls.textContent = carrierHandoff
       ? `${result.reserveMarginLb === null
         ? "Recovery reserve result unavailable"
@@ -5434,7 +5442,7 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     if (readyControls) readyControls.textContent = mobileControls
       ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll"
       : `ARROWS fly · W/S power · ${rtbBinding} return to base · H controls`;
-    readyStart.textContent = "Enter valley";
+    readyStartLabel.textContent = "Enter valley";
     readyHint.textContent = background
       ? "Return to the game to enter the valley"
       : mobileControls ? "Tap Enter valley when ready" : "Press Enter when ready";
@@ -5465,7 +5473,7 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
           ? keyboardControls
           : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`;
     }
-    readyStart.textContent = `Fly ${brief.title}`;
+    readyStartLabel.textContent = `Fly ${brief.title}`;
     readyHint.textContent = background
       ? "Return to the game to fly"
       : mobileControls ? "Tap Fly to launch" : "Press Enter to fly";
@@ -5483,7 +5491,7 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     if (readySortieLabel) readySortieLabel.textContent = "";
     if (readyConfigLabel) readyConfigLabel.textContent = "";
     if (readyControls) readyControls.textContent = "";
-    readyStart.textContent = "Resume";
+    readyStartLabel.textContent = "Resume";
     readyHint.textContent = "";
   }
 
@@ -5529,10 +5537,10 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     || routeBlocked || comingSoon || blockers.length > 0
     || ((ready || finished) && background)
     || (arenaAwaitingMatch && arenaRequestBusy);
-  if (routeBlocked) readyStart.textContent = "Unavailable in this build";
-  else if (comingSoon) readyStart.textContent = "Coming soon";
+  if (routeBlocked) readyStartLabel.textContent = "Unavailable in this build";
+  else if (comingSoon) readyStartLabel.textContent = "Coming soon";
   else if (arenaAwaitingMatch) {
-    readyStart.textContent = arenaMatchState === "unavailable"
+    readyStartLabel.textContent = arenaMatchState === "unavailable"
       ? "Retry matchmaking"
       : arenaMatchState === "completing"
         ? "Recording result…"
