@@ -1,0 +1,46 @@
+Discovered 2817 tests; running 108 in process.
+CURVE O1 seed=0 kills=1 time=3.65
+CURVE O1 seed=1 kills=1 time=4.12
+CURVE O1 seed=2 kills=1 time=4.48
+CURVE O1 seed=3 kills=1 time=4.75
+CURVE O1 seed=4 kills=1 time=5.07
+CURVE O1 seed=5 kills=1 time=5.48
+CURVE O1 seed=6 kills=1 time=5.77
+CURVE O1 seed=7 kills=1 time=6.22
+Completed 50 tests...
+CURVE O2 seed=0 kills=1 time=7.93
+CURVE O2 seed=1 kills=1 time=8.11
+opening separation 1203 m; after 8 s primary moved 1845 m, wingman 1786 m
+CURVE O2 seed=2 kills=1 time=8.52
+CURVE O2 seed=3 kills=1 time=9.01
+CURVE O2 seed=4 kills=1 time=9.41
+CURVE O2 seed=5 kills=1 time=9.92
+CURVE O2 seed=6 kills=1 time=10.47
+Native 16-tick batch (8x / 60 Hz): 1920 ticks / 120 frames; median=3.257 ms p95=3.712 ms max=5.230 ms. Renderer/WASM excluded.
+CURVE O2 seed=7 kills=0 time=45.00
+CURVE O3 seed=0 kills=1 time=7.97
+CURVE O3 seed=1 kills=1 time=8.40
+CURVE O3 seed=2 kills=1 time=8.92
+CURVE O3 seed=3 kills=0 time=45.00
+CURVE O3 seed=4 kills=1 time=9.98
+Completed 100 tests...
+CURVE O3 seed=5 kills=0 time=45.00
+CURVE O3 seed=6 kills=0 time=45.00
+CURVE O3 seed=7 kills=1 time=10.48
+O1 seed=0 kills=1 hits=3 D1=True
+O1 seed=1 kills=1 hits=3 D1=True
+O1 seed=2 kills=1 hits=3 D1=True
+O1 seed=3 kills=1 hits=3 D1=True
+O1 seed=4 kills=1 hits=3 D1=True
+O1 seed=5 kills=1 hits=3 D1=True
+O1 seed=6 kills=1 hits=3 D1=True
+O1 seed=7 kills=1 hits=3 D1=True
+Run { Lesson = 1, Seed = 0, Breaking = False, Time = 5.891666666666631, Lost = True, Result = failed, Rounds = 35, Hits = 3, Range = 623.5666255269049 }
+Run { Lesson = 1, Seed = 1, Breaking = False, Time = 9.016666666666607, Lost = True, Result = failed, Rounds = 63, Hits = 3, Range = 396.76970070085645 }
+Run { Lesson = 1, Seed = 2, Breaking = False, Time = 9.19166666666662, Lost = True, Result = failed, Rounds = 63, Hits = 3, Range = 371.9861897367227 }
+Run { Lesson = 1, Seed = 3, Breaking = False, Time = 9.04166666666661, Lost = True, Result = failed, Rounds = 63, Hits = 3, Range = 372.1197485406109 }
+Run { Lesson = 1, Seed = 0, Breaking = True, Time = 12.008333333333493, Lost = False, Result = passed, Rounds = 27, Hits = 0, Range = 1383.446909035961 }
+Run { Lesson = 1, Seed = 1, Breaking = True, Time = 12.008333333333493, Lost = False, Result = passed, Rounds = 27, Hits = 0, Range = 1349.8076898149563 }
+Run { Lesson = 1, Seed = 2, Breaking = True, Time = 12.008333333333493, Lost = False, Result = passed, Rounds = 27, Hits = 0, Range = 1315.5356073817277 }
+Run { Lesson = 1, Seed = 3, Breaking = True, Time = 12.008333333333493, Lost = False, Result = passed, Rounds = 27, Hits = 0, Range = 1279.013709907289 }
+Passed 108; failed 0; skipped 0; total 108.

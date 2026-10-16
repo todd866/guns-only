@@ -1,0 +1,14 @@
+  Determining projects to restore...
+CSSM_ModuleLoad(): One or more parameters passed to a function were not valid.
+  All projects are up-to-date for restore.
+  GunsOnly.Sim -> /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/bin/Release/net8.0/GunsOnly.Sim.dll
+  GunsOnly.PlaytestLab -> /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/tools/playtest-lab/bin/Release/net8.0/GunsOnly.PlaytestLab.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:09.58
+novice s000 recovered    239.0s player   737.8s sim K0 H0/1 dead 79.7s 77x
+wrote /tmp/beat7-damage-label-replay/report.md (1 runs, 4 flags)
+/tmp/beat7-damage-label-replay

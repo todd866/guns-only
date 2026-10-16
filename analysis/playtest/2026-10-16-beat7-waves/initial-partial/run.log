@@ -1,0 +1,90 @@
+  Determining projects to restore...
+CSSM_ModuleLoad(): One or more parameters passed to a function were not valid.
+  All projects are up-to-date for restore.
+  GunsOnly.Sim -> /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/bin/Release/net8.0/GunsOnly.Sim.dll
+  GunsOnly.PlaytestLab -> /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/tools/playtest-lab/bin/Release/net8.0/GunsOnly.PlaytestLab.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:03.61
+clone  s000 crash         50.8s player    50.8s sim K0 H0/0 dead 37.5s 50x
+clone  s001 crash         51.2s player    51.2s sim K0 H0/0 dead 37.7s 115x
+clone  s002 crash         50.9s player    50.9s sim K0 H0/0 dead 37.4s 137x
+clone  s003 crash         50.6s player    50.6s sim K0 H0/0 dead 37.4s 148x
+clone  s004 crash         50.9s player    50.9s sim K0 H0/0 dead 37.4s 134x
+clone  s005 crash         50.8s player    50.8s sim K0 H0/0 dead 37.5s 141x
+clone  s006 crash         50.9s player    50.9s sim K0 H0/0 dead 37.4s 155x
+clone  s007 crash         49.7s player    49.8s sim K0 H0/0 dead 36.9s 156x
+clone  s008 crash         50.8s player    50.8s sim K0 H0/0 dead 37.5s 157x
+clone  s009 crash         50.6s player    50.6s sim K0 H0/0 dead 37.4s 152x
+clone  s010 crash         51.0s player    51.0s sim K0 H0/0 dead 37.6s 153x
+clone  s011 crash         50.2s player    50.2s sim K0 H0/0 dead 37.1s 146x
+clone  s012 crash         51.6s player    51.6s sim K0 H0/0 dead 38.0s 148x
+clone  s013 crash         49.7s player    49.7s sim K0 H0/0 dead 36.9s 153x
+clone  s014 crash         50.6s player    50.6s sim K0 H0/0 dead 37.4s 149x
+clone  s015 crash         50.8s player    50.8s sim K0 H0/0 dead 37.4s 127x
+clone  s016 crash         51.0s player    51.0s sim K0 H0/0 dead 37.5s 115x
+clone  s017 crash         51.0s player    51.0s sim K0 H0/0 dead 37.5s 82x
+clone  s018 crash         51.0s player    51.0s sim K0 H0/0 dead 37.6s 82x
+clone  s019 crash         50.9s player    50.9s sim K0 H0/0 dead 37.5s 58x
+clone  s020 crash         50.9s player    50.9s sim K0 H0/0 dead 37.5s 82x
+clone  s021 crash         51.6s player    51.6s sim K0 H0/0 dead 38.0s 129x
+clone  s022 crash         50.9s player    50.9s sim K0 H0/0 dead 37.5s 141x
+clone  s023 crash         50.8s player    50.8s sim K0 H0/0 dead 37.4s 139x
+clone  s024 crash         51.0s player    51.0s sim K0 H0/0 dead 37.6s 147x
+clone  s025 crash         51.0s player    51.0s sim K0 H0/0 dead 37.5s 140x
+clone  s026 crash         51.0s player    51.0s sim K0 H0/0 dead 37.6s 146x
+clone  s027 crash         51.0s player    51.0s sim K0 H0/0 dead 37.5s 141x
+clone  s028 crash         51.2s player    51.2s sim K0 H0/0 dead 37.7s 142x
+clone  s029 crash         51.0s player    51.0s sim K0 H0/0 dead 37.6s 147x
+novice s000 recovered    239.0s player   737.8s sim K0 H0/1 dead 79.7s 158x
+novice s001 incomplete  2829.2s player  3600.0s sim K0 H0/0 dead 923.3s 198x
+novice s002 loss         521.6s player   521.6s sim K0 H0/3 dead 172.5s 86x
+novice s003 recovered    885.0s player  1735.9s sim K0 H0/2 dead 198.8s 102x
+novice s004 recovered    138.8s player   369.0s sim K0 H0/1 dead 58.9s 51x
+novice s005 incomplete  3557.1s player  3600.0s sim K0 H0/0 dead 1380.2s 77x
+novice s006 incomplete  2812.4s player  3600.0s sim K0 H0/0 dead 2380.4s 73x
+novice s007 incomplete  2878.1s player  3600.0s sim K0 H0/0 dead 308.4s 78x
+novice s008 incomplete  2824.0s player  3600.0s sim K0 H0/0 dead 484.9s 121x
+novice s009 loss        2894.5s player  3019.6s sim K0 H0/3 dead 894.0s 99x
+novice s010 incomplete  2962.4s player  3600.0s sim K0 H0/0 dead 628.6s 143x
+novice s011 incomplete  2813.5s player  3600.0s sim K0 H0/0 dead 838.6s 110x
+novice s012 incomplete  3450.1s player  3600.0s sim K0 H0/0 dead 2128.1s 76x
+novice s013 loss        2940.4s player  3177.6s sim K0 H0/3 dead 535.0s 81x
+novice s014 incomplete  2840.3s player  3600.0s sim K0 H0/0 dead 991.7s 165x
+novice s015 loss         359.1s player   381.0s sim K0 H0/3 dead 92.8s 46x
+novice s016 incomplete  3504.1s player  3600.0s sim K0 H0/0 dead 650.3s 114x
+novice s017 incomplete  2819.8s player  3600.0s sim K0 H0/0 dead 1253.2s 169x
+novice s018 incomplete  3574.3s player  3600.0s sim K0 H0/0 dead 2114.4s 171x
+novice s019 incomplete  2814.0s player  3600.0s sim K0 H0/0 dead 1181.1s 137x
+novice s020 incomplete  3474.4s player  3600.0s sim K0 H0/0 dead 1587.2s 122x
+novice s021 incomplete  2813.0s player  3600.0s sim K0 H0/0 dead 723.4s 144x
+novice s022 incomplete  2814.5s player  3600.0s sim K0 H0/0 dead 982.8s 150x
+novice s023 incomplete  2808.6s player  3600.0s sim K0 H0/0 dead 772.9s 187x
+novice s024 loss          73.9s player    73.9s sim K0 H0/3 dead 40.0s 58x
+novice s025 recovered    279.1s player  1227.3s sim K0 H0/1 dead 129.3s 178x
+novice s026 loss         521.6s player   521.6s sim K0 H0/3 dead 112.9s 48x
+novice s027 incomplete  3571.5s player  3600.0s sim K0 H0/0 dead 855.8s 137x
+novice s028 incomplete  3394.2s player  3600.0s sim K0 H0/0 dead 1166.6s 108x
+novice s029 incomplete  2852.6s player  3600.0s sim K0 H0/0 dead 745.0s 117x
+ace    s000 loss         337.5s player   337.5s sim K1 H3/3 dead 74.3s 66x
+ace    s001 loss         252.1s player   252.1s sim K1 H3/3 dead 50.0s 73x
+ace    s002 loss         269.2s player   269.2s sim K1 H3/4 dead 33.4s 75x
+ace    s003 loss         493.8s player   493.8s sim K3 H3/6 dead 32.0s 79x
+ace    s004 loss         151.3s player   151.3s sim K1 H3/3 dead 32.5s 72x
+ace    s005 loss         387.0s player   387.0s sim K1 H3/3 dead 35.8s 70x
+playtest-lab: System.ArgumentOutOfRangeException: Specified argument was out of the range of valid values. (Parameter 'doctrineIndex')
+   at GunsOnly.Sim.Doctrine.ReactiveBandit..ctor(AircraftState initial, AircraftParams parameters, PilotSkill skill, ITerrainSurface terrain, Int32 engagementNumber, Nullable`1 profile, Nullable`1 doctrineIndex, Boolean presenting, Boolean endPresentOnProximity) in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/Doctrine/ReactiveBandit.cs:line 367
+   at GunsOnly.Sim.Doctrine.ReactiveBandit.SpawnForMerge(AircraftState& player, AircraftParams parameters, Int32 engagementNumber, Double speedMps, PilotSkill skill, ITerrainSurface terrain, Nullable`1 profile, Nullable`1 doctrineIndex, Boolean presenting, Nullable`1 wingLead, Boolean endPresentOnProximity, Nullable`1 approachBearingRad, Nullable`1 approachRangeM) in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/Doctrine/ReactiveBandit.cs:line 525
+   at GunsOnly.Sim.Doctrine.BeatSetup.CreateNextBandit(AircraftState& player, Int32 engagementNumber, ITerrainSurface terrain, Nullable`1 spec, Nullable`1 wingLead) in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/Doctrine/Beats.cs:line 795
+   at GunsOnly.Sim.SimulationSession.StageWingmen(SpawnSpec& spec, Int32 engagementNumber) in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/SimulationSession.Opponents.cs:line 626
+   at GunsOnly.Sim.SimulationSession.StageContinuousOpponent(SpawnSpec directorSpawn, Int32 nextEngagement) in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/SimulationSession.Opponents.cs:line 1233
+   at GunsOnly.Sim.SimulationSession.TrySpawnContinuousOpponent(Double completedTimeMs) in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/SimulationSession.Opponents.cs:line 1220
+   at GunsOnly.Sim.SimulationSession.FinishTerminalIfResolved(Double completedTimeMs) in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/SimulationSession.Recovery.cs:line 774
+   at GunsOnly.Sim.SimulationSession.StepTerminalPhase() in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/SimulationSession.Recovery.cs:line 975
+   at GunsOnly.Sim.SimulationSession.StepCore() in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/SimulationSession.cs:line 2187
+   at GunsOnly.Sim.SimulationSession.RunFixedTick() in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/SimulationSession.cs:line 989
+   at GunsOnly.PlaytestLab.SortieRunner.Fly(Options o, String name, Int32 seed, ClonedPilotPolicy clone) in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/tools/playtest-lab/Program.cs:line 163
+   at GunsOnly.PlaytestLab.Program.Main(String[] args) in /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/tools/playtest-lab/Program.cs:line 79

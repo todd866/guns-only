@@ -30,8 +30,8 @@ public sealed partial class FightDirector {
             Committed: true,
             WingSkill: waveNumber == 4 ? PilotSkill.Veteran : skill,
             WingMount: waveNumber >= 6 ? BanditMount.Uprated : BanditMount.Baseline);
-        // A short warning/turn interval plus a physical 6–8 km ingress gives ~45–60 s to
-        // engagement at ordinary pursuit speeds. Closure is real, never a frozen countdown.
+        // A short warning/turn interval precedes a physical 6–8 km ingress. Contact time
+        // depends on the player's turn and closure; validate it from the lab tapes.
         double delay = 18 + WaveDraw(seed, waveNumber, 2) % 7;
         double bearing = (45 + WaveDraw(seed, waveNumber, 3) % 91) * Math.PI / 180;
         if ((draw & 1) != 0) bearing = -bearing;

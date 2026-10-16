@@ -1,0 +1,2 @@
+land-autopilot 90 clock/counter/event/seed invariants passed Counter({'loss': 35, 'crash': 30, 'incomplete': 20, 'recovered': 4, 'draw': 1})
+90 wave tapes: provenance, earned-score, RTB exclusions, default land mode passed; 30 clone tapes and 30 ace opening summaries unchanged; 66 pre-fix tapes replay identically excluding execution time.
