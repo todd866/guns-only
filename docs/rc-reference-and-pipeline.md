@@ -91,3 +91,31 @@ The source now includes a roof, door framing and a five-metre drive-through lane
 Next slot sequence: execute export → validate actual GLBs → repair failures → render the fixed review views → load the same exported buggy in Three.js → compare silhouette, wheel contact, reflections/material colour and suspension readability with the approved concept. Reject a rounded-box result even if geometry tests pass. Then wire the hangar slice, validate clear driving paths and perform the actual low-chase capture. Only after this slice clears the visual bar should its asset kit extend to housing and the lab.
 
 Additional primary reference evidence: [RVGL General documentation](https://re-volt.gitlab.io/rvgl-docs/general.html) documents Save Replay / View Replay, a replays directory, and video LimitFPS / LimitLatency options. Record those settings alongside V-Sync and macOS HighDPI before matched capture; keep both saved replay and video. Their existence is documented, but no replay has yet been captured or parsed. This supports a repeatable future comparison without claiming high-frequency telemetry is available from race-result CSV.
+
+## Export and reference setup update
+
+Original Blender exports now exist and pass the contract: buggy 15,188 triangles,
+22 primitives, 7 materials, 416,836 bytes; hangar 21,216 triangles, 37 primitives,
+10 materials, 590,456 bytes. Editable sources are under `assets/rc/models/`;
+shipping GLBs and provenance are under `web/wwwroot/rc/assets/`. Validation receipt:
+`evidence/rc-pipeline/asset-validation.json`.
+The explicit `?assets=blender` mode now loads both assets atomically, replaces the
+prototype hangar visuals, and adds transformed furniture proxies to driving and
+camera collision. Browser appearance/gameplay validation is still pending; the
+default remains the previously tested prototype.
+
+Purchased GOG data was checksum-tested and extracted successfully with Homebrew
+innoextract 1.9_14. Homebrew also upgraded Boost from 1.90.0_1 to 1.92.0.
+Private installation: `~/Applications/RVGL.app` and
+`~/Library/Application Support/RVGL`. No purchased files were copied into this repo.
+Normal RVGL launch rendered the profile-creation screen without a security override.
+The earlier unsigned-bundle inspection was not an OS launch refusal.
+
+Computer Use did not establish working gameplay input. A state read took 1336.2472s
+and returned only the RVGL window/menu. The subsequent single F11 plus screenshot
+call took 249.4829s and returned: "Computer Use is not active for
+'/Users/iantodd/Applications/RVGL.app'. You first must call `get_app_state` to get
+the latest state before doing other Computer Use actions."
+The screenshot did not run and visible input was not confirmed. Ian requested that
+this stalled route stop; no further UI attempts or approvals are queued.
+Direct driving/reference comparison remains unverified.

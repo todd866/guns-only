@@ -1,0 +1,7 @@
+{
+  "generator": "tools/rc/blender/build_assets.py",
+  "blender": "5.2.0 LTS",
+  "license": "MIT (original authored geometry/materials)",
+  "external_assets": [],
+  "concept_usage": "reference only; never a mesh conversion"
+}

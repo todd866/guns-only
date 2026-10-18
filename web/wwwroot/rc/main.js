@@ -1,7 +1,10 @@
 import * as T from '../vendor/three.module.js';
-import {buildings,solids,aircraft,obstacles,collisionSolids,ramps,checkpoints,createCar,stepCar,resetCar} from './sim.mjs';
+import {buildings,solids,aircraft,obstacles,collisionSolids,ramps,checkpoints,createCar,stepCar,resetCar,BASE_COURSE} from './sim.mjs';
 import { MotorAudio } from './audio.js';
 const audio=new MotorAudio();
+const liveSolids=[...collisionSolids],hangarFallback=[];
+const liveCourse={...BASE_COURSE,solids:liveSolids};
+let assetState='prototype';
 const $=id=>document.getElementById(id),canvas=$('view');
 const renderer=new T.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
 const scene=new T.Scene();scene.background=new T.Color('#b2c6c5');scene.fog=new T.Fog('#b2c6c5',65,150);
@@ -29,7 +32,7 @@ for(const o of obstacles){
  if(o.kind==='barrier')for(const dx of [-.8,0,.8])box(o.x+dx,.45,o.z-.26,.3,.2,.025,'#d4a848');
 }
 for(let i=0;i<180;i++){const x=Math.sin(i*91.7)*55,z=Math.cos(i*38.2)*45;if(Math.abs(x)>8&&!(x>25&&x<49))box(x,.12,z,.06,.24,.07,'#6c7953');}
-for(const b of buildings){if(b.kind==='house'){
+for(const b of buildings){const firstChild=scene.children.length;if(b.kind==='house'){
  box(b.x,2.5,b.z,b.w,5,b.d,'#c1b49a');const roof=new T.Mesh(new T.ConeGeometry(6.15,2,4),material('#686e68'));roof.rotation.y=Math.PI/4;roof.position.set(b.x,5.8,b.z);roof.castShadow=true;scene.add(roof);
  for(const dx of [-2.5,2.5])for(const z of [b.z-4.02,b.z+4.02])box(b.x+dx,2.6,z,1.3,1.7,.06,'#49636a');box(b.x,1.1,b.z+4.04,1.2,2.2,.08,'#58655f');box(b.x,5.7,b.z,1,.3,1,'#7f8176');
  }else{
@@ -39,7 +42,7 @@ for(const b of buildings){if(b.kind==='house'){
  sign(b.kind==='lab'?'09 / RESTRICTED':'HANGAR 02',b.x,b.h-1,b.z-b.d/2-.24,6).rotation.y=Math.PI;
  box(b.x,.03,b.z,b.w,.06,b.d,'#9ca59b');
  for(const x of [b.x-6,b.x+6])box(x,b.h-.3,b.z,.15,.12,b.d-2,'#e6d5ad');
- }}
+ }if(b.kind==='hangar')hangarFallback.push(...scene.children.slice(firstChild));}
 function plane(x,z){const g=new T.Group();g.position.set(x,1.2,z);scene.add(g);sphere(0,0,0,1,'#acb5ad',g,1,.7,4.7);box(0,0,.6,10,.16,2,'#929f96',g);box(0,.1,3.6,4,.13,1,'#919e94',g);box(0,1,3.7,.15,2,1.8,'#77867f',g);sphere(0,.55,-1.4,.75,'#354e58',g,.65,.7,1.8);for(const dx of [-1,1])box(dx,-.85,1,.2,.7,.2,'#263032',g);}
 for(const a of aircraft)plane(a.x,a.z);
 for(const r of ramps){const g=new T.BufferGeometry();const x=r.w/2,z=r.d/2,h=r.h;g.setAttribute('position',new T.Float32BufferAttribute([-x,0,z,x,0,z,x,h,-z,-x,0,z,x,h,-z,-x,h,-z],3));g.computeVertexNormals();const m=new T.Mesh(g,new T.MeshStandardMaterial({color:'#bc8b50',side:T.DoubleSide,roughness:.9}));m.position.set(r.x,.015,r.z);m.receiveShadow=true;scene.add(m);for(const dx of [-x+.12,x-.12]){const rail=box(r.x+dx,h/2+.025,r.z,.12,.035,Math.hypot(r.d,h),'#ead099');rail.rotation.x=Math.atan2(h,r.d);}}
@@ -52,9 +55,14 @@ let car=new T.Group();scene.add(car);const shell=box(0,.15,0,.44,.16,.75,'#e6a53
 let wheels=[];for(const x of [-.29,.29])for(const z of [-.25,.25]){const pivot=new T.Group();pivot.position.set(x,-.08,z);car.add(pivot);const wheel=new T.Mesh(new T.CylinderGeometry(.15,.15,.13,16),material('#202a2a'));wheel.rotation.z=Math.PI/2;wheel.castShadow=true;pivot.add(wheel);const hub=sphere(0,0,0,.08,'#b1b6a8',pivot,.9,1,1);wheels.push({pivot,wheel,front:z<0});}
 // Explicit local acceptance mode; default stays on the last tested art until GLB validation.
 if(new URLSearchParams(location.search).get('assets')==='blender'){
- import('./assets.js').then(({loadBuggyAsset})=>loadBuggyAsset('./assets/buggy.glb')).then(asset=>{
-  scene.remove(car);car=asset.car;wheels=asset.wheels;scene.add(car);
- }).catch(error=>{console.error('RC Blender asset rejected:',error);$('brief').hidden=false;$('brief').textContent='Blender asset unavailable or invalid. See console; default prototype remains loaded.';});
+ assetState='loading';
+ import('./assets.js').then(async({loadBuggyAsset,loadHangarAsset})=>{
+  const [buggy,hangar]=await Promise.all([loadBuggyAsset('./assets/buggy.glb'),loadHangarAsset('./assets/hangar-slice.glb')]);
+  // Commit the complete visual/collision set together; a failed load retains the prototype.
+  scene.remove(car);car=buggy.car;wheels=buggy.wheels;scene.add(car,hangar.hangar);
+  for(const node of hangarFallback)node.visible=false;
+  liveSolids.push(...hangar.collision);assetState='blender';
+ }).catch(error=>{assetState='failed';console.error('RC Blender asset rejected:',error);$('brief').hidden=false;$('brief').textContent='Blender asset unavailable or invalid. See console; default prototype remains loaded.';});
 }
 const gates=checkpoints.slice(0,-1).map(([x,z],i)=>{const g=new T.Group();g.position.set(x,0,z);scene.add(g);for(const dx of [-2.5,2.5]){box(dx,.7,0,.12,1.4,.12,'#ffcd65',g);box(dx,1.2,0,.5,.25,.05,'#ffcd65',g);}g.userData.label=sign(String(i+1).padStart(2,'0'),x,1.8,z,1.5);return g;});
 let s=createCar(),paused=true,keys=new Set(),acc=0,last=performance.now(),best=0;try{best=Number(localStorage.getItem('guns-only.rc.best'))||0;}catch{}
@@ -69,14 +77,14 @@ function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=i
 const desired=new T.Vector3(),target=new T.Vector3(),map=$('map').getContext('2d');
 function drawMap(){map.clearRect(0,0,180,160);const point=(x,z)=>[90+x*1.35,80+z*1.5];map.fillStyle='#91a99c';for(const b of buildings){const [x,y]=point(b.x-b.w/2,b.z-b.d/2);map.fillRect(x,y,b.w*1.35,b.d*1.5);}map.strokeStyle='#e8bf66';map.setLineDash([3,4]);map.beginPath();checkpoints.forEach(([x,z],i)=>{const p=point(x,z);i?map.lineTo(...p):map.moveTo(...p);});map.stroke();map.setLineDash([]);const p=point(...checkpoints[s.gate]);map.fillStyle='#ffcc66';map.beginPath();map.arc(...p,4,0,Math.PI*2);map.fill();map.fillStyle='#fff';map.beginPath();map.arc(...point(s.x,s.z),3,0,Math.PI*2);map.fill();}
 let reported=false;
-function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){acc+=dt;while(acc>=1/120){stepCar(s,{throttle:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),steer:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),brake:keys.has('Space')});acc-=1/120;}}
+function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){acc+=dt;while(acc>=1/120){stepCar(s,{throttle:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),steer:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),brake:keys.has('Space')},1/120,liveCourse);acc-=1/120;}}
  audio.update(s.speed,paused);car.position.set(s.x,s.y,s.z);car.rotation.set(s.pitch,-s.yaw,s.roll,'YXZ');for(const w of wheels){w.pivot.rotation.y=w.front?-s.steer*.45:0;w.wheel.rotation.x=s.travel/.15;w.pivot.position.y=-.08+Math.sin(s.travel*22)*Math.min(.012,s.speed*.002);}
  desired.set(s.x-Math.sin(s.yaw)*(2.4+s.speed*.035),s.y+1.05,s.z+Math.cos(s.yaw)*(2.4+s.speed*.035));// Keep the low chase camera in front of walls when backing into a building.
- for(let t=.1;t<=1;t+=.1){const x=s.x+(desired.x-s.x)*t,z=s.z+(desired.z-s.z)*t,y=s.y+(desired.y-s.y)*t;if(collisionSolids.some(b=>y>(b.minY??0)&&y<b.h&&Math.abs(x-b.x)<b.w/2+.1&&Math.abs(z-b.z)<b.d/2+.1)){desired.set(s.x+(desired.x-s.x)*Math.max(.1,t-.1),y,s.z+(desired.z-s.z)*Math.max(.1,t-.1));break;}}
+ for(let t=.1;t<=1;t+=.1){const x=s.x+(desired.x-s.x)*t,z=s.z+(desired.z-s.z)*t,y=s.y+(desired.y-s.y)*t;if(liveSolids.some(b=>y>(b.minY??0)&&y<b.h&&Math.abs(x-b.x)<b.w/2+.1&&Math.abs(z-b.z)<b.d/2+.1)){desired.set(s.x+(desired.x-s.x)*Math.max(.1,t-.1),y,s.z+(desired.z-s.z)*Math.max(.1,t-.1));break;}}
  camera.position.lerp(desired,1-Math.exp(-dt*7));target.set(s.x+Math.sin(s.yaw)*1.4,s.y+.27,s.z-Math.cos(s.yaw)*1.4);camera.lookAt(target);
  gates.forEach((g,i)=>{g.visible=i===(s.gate===checkpoints.length-1?0:s.gate);g.userData.label.visible=g.visible;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
  $('speed').textContent=Math.round(s.speed*3.6);$('clock').textContent=format(s.time);$('gate').textContent=`${Math.min(s.gate+1,checkpoints.length)}/${checkpoints.length} · ${checkpoints[s.gate][2]}`;$('secret').textContent=`◇ ${s.found}/3`;drawMap();renderer.render(scene,camera);
  if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>Back at the motor pool.</h1><p>${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/3</p><button id="again">Run again</button> <button id="explore">Keep exploring</button>`;pause(true);$('again').onclick=()=>{s=createCar();reported=false;result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;pause(false);};}
  requestAnimationFrame(frame);}
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
-window.__gunsOnlyRC={snapshot:()=>({...s,seen:[...s.seen],paused}),renderer:()=>renderer.info.render};requestAnimationFrame(frame);
+window.__gunsOnlyRC={snapshot:()=>({...s,seen:[...s.seen],paused,assets:assetState}),renderer:()=>renderer.info.render};requestAnimationFrame(frame);
