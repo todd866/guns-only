@@ -69,3 +69,15 @@ Original script geometry/materials: repository MIT. Image concept: built-in gene
 ## Milestone and next gate
 
 Completed: original concept, asset contract, source Blender authoring/export path, GLB validation code with tests, opt-in loader, deterministic handling course/replay/telemetry harness and baseline. **Not yet completed:** Blender-generated meshes/GLBs, renders, visual approval, full shell integration, direct reference play or matched recordings. MD3 retains the heavy slot. Next coordinated milestone is one exported/validated buggy plus hangar slice and actual engine screenshots, then a matched manoeuvre comparison after legitimate reference data is available.
+
+## Purchase/setup and entitlement follow-up
+
+Public official-store receipt saved in `evidence/rc-pipeline/store-check.json` at 2026-10-18 02:37 UTC. Steam US: **USD 5.99**, Windows only (`mac=false`, `linux=false`). GOG public offers: **USD 5.09 (US)** / **AUD 6.79 (AU)**. These are observed public regional prices, not Ian's verified account-region checkout quote. The GOG offer was marked as ending 18 October 2026 09:59 EEST; recheck before any payment. No purchase or cart action occurred.
+
+A background entitlement check could not proceed: Chrome's ordinary UI automation rejected `visible:false` with “Capability is not available: visibility”; the hidden in-app browser fallback returned “Browser is not available: iab”. No Steam/GOG tab was already open, and Steam/GOG were not running in the app inventory. Nothing was foregrounded or logged into. Do not interpret public page template text such as “in library” or local install absence as account ownership evidence.
+
+For this Mac, GOG's **Windows Offline Backup Game Installer** is the documented extraction route: download all installer parts to one folder, use Mac Source Ports Extractor on the `.exe`, and place extracted game data in `~/Library/Application Support/RVGL`. Do not download the Galaxy bootstrap installer. RVGL's macOS build is Universal 2 (Apple Silicon/Intel); the commercial Windows executable itself is not native Mac software. Mac Source Ports documents the RVGL bundle as ad-hoc signed/not notarized; no security bypass or launch has been attempted. Steam data could be copied from an owned Windows installation, but this session has not verified an ordinary Mac Steam download path for its Windows-only depot. Thus GOG is the better documented fresh-purchase path if ownership cannot be established.
+
+Sources: [GOG product](https://www.gog.com/en/game/revolt), [Steam product](https://store.steampowered.com/app/287310/ReVolt/), [Mac Source Ports Re-Volt setup](https://www.macsourceports.com/game/revolt/), [offline installer extraction FAQ](https://www.macsourceports.com/faq/). Private reference play does not grant redistribution rights; original data stays outside the project.
+
+Source-only mesh refinement after concept review: sculpted eight-point body cross-sections replace rectangular sections, and staggered individual tread blocks replace full-width tire bars. Python syntax passes. Geometry budgets and visual appearance remain unverified until Blender export/render gets the slot.

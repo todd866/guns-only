@@ -1,0 +1,39 @@
+{
+  "checked_at_utc": "2026-10-18T02:37:06.690550+00:00",
+  "gog_public_offers": [
+    {
+      "price": "6.79",
+      "priceCurrency": "AUD",
+      "areaServed": "AU",
+      "url": "https://www.gog.com/en/game/revolt?currencyCode=AUD&countryCode=AU"
+    },
+    {
+      "price": "5.09",
+      "priceCurrency": "USD",
+      "areaServed": "US",
+      "url": "https://www.gog.com/en/game/revolt?currencyCode=USD&countryCode=US"
+    }
+  ],
+  "steam_us": {
+    "287310": {
+      "success": true,
+      "data": {
+        "price_overview": {
+          "currency": "USD",
+          "initial": 599,
+          "final": 599,
+          "discount_percent": 0,
+          "initial_formatted": "",
+          "final_formatted": "$5.99"
+        },
+        "platforms": {
+          "windows": true,
+          "mac": false,
+          "linux": false
+        }
+      }
+    }
+  },
+  "account_entitlement": "not verified; hidden UI unavailable",
+  "checkout": "not opened; public price is not final account-region checkout price"
+}

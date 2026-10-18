@@ -105,13 +105,21 @@ def tube(name, points, radius, colour, parent, resolution=2):
 
 def loft(name, sections, colour, parent):
     # Cross sections (forward Y, half-width X, bottom Z, top Z).
-    verts = [(x, y, z) for y, w, lo, hi in sections for x, z in [(-w, lo), (w, lo), (w, hi), (-w, hi)]]
-    faces = [(0, 3, 2, 1)]
+    # Eight-point shoulders produce a tapered polycarbonate section instead of a box.
+    verts = []
+    for y, w, lo, hi in sections:
+        h = hi-lo
+        verts.extend((x,y,z) for x,z in [
+            (-w*.72,lo),(w*.72,lo),(w,lo+h*.22),(w,hi-h*.28),
+            (w*.66,hi),(-w*.66,hi),(-w,hi-h*.28),(-w,lo+h*.22)])
+    sides = 8
+    faces = [tuple(reversed(range(sides)))]
     for j in range(len(sections)-1):
-        for i in range(4):
-            faces.append((j*4+i, j*4+(i+1)%4, (j+1)*4+(i+1)%4, (j+1)*4+i))
-    k = (len(sections)-1)*4
-    faces.append((k, k+1, k+2, k+3))
+        for i in range(sides):
+            faces.append((j*sides+i,j*sides+(i+1)%sides,
+                          (j+1)*sides+(i+1)%sides,(j+1)*sides+i))
+    k = (len(sections)-1)*sides
+    faces.append(tuple(range(k,k+sides)))
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
     mesh.update()
@@ -157,8 +165,10 @@ def buggy():
                 o.rotation_euler.x = -a
         for j in range(20):
             a = j*math.pi/10
-            o = box('Tread_'+name, (0,math.sin(a)*.147,math.cos(a)*.147), (.14,.032,.015), 'rubber', spin, .002)
-            o.rotation_euler.x = -a
+            for side in (-1,1):
+                phase=a+side*.055
+                o = box('Tread_'+name, (side*.038,math.sin(phase)*.147,math.cos(phase)*.147), (.05,.028,.017), 'rubber', spin, 0)
+                o.rotation_euler.x = -phase
         side = -1 if x < 0 else 1
         for dy in (-.06,.06):
             tube('Wishbone_'+name, [(side*.09,y+dy,.01),(x,y,-.07)], .008, 'alloy', body)
