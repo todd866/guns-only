@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {parseGLB,validateDocument} from './validate-assets.mjs';
+const doc=()=>({nodes:[{name:'test',mesh:0}],scenes:[{nodes:[0]}],meshes:[{primitives:[{attributes:{POSITION:0}}]}],accessors:[{count:3,min:[0,0,0],max:[1,1,1]}],materials:[]});
+const spec={required_nodes:['test'],max_bytes:1000,max_materials:1,max_triangles:1,max_extent_m:[2,2,2]};
+test('geometry budget measures transformed bounds and triangle count',()=>{assert.equal(validateDocument(doc(),spec,500).triangles,1);const d=doc();d.nodes[0].scale=[3,1,1];assert.throws(()=>validateDocument(d,spec,500),/extent/);});
+test('missing required nodes, external payload and malformed GLB reject',()=>{assert.throws(()=>validateDocument(doc(),{...spec,required_nodes:['absent']},500),/missing/);const d=doc();d.buffers=[{uri:'https://example.com/unknown.bin'}];assert.throws(()=>validateDocument(d,spec,500),/external/);assert.throws(()=>parseGLB(Buffer.alloc(20)),/magic/);});

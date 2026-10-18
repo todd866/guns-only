@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "units": "metres",
+  "blender_axes": {"up":"+Z","forward":"+Y","right":"+X"},
+  "gltf_axes": {"up":"+Y","forward":"-Z","right":"+X"},
+  "buggy": {
+    "file":"buggy.glb", "max_triangles":18000, "max_materials":9, "max_bytes":2500000,
+    "required_nodes":["RC_Root","Body","Steer_FL","Steer_FR","Steer_RL","Steer_RR","Wheel_FL","Wheel_FR","Wheel_RL","Wheel_RR","COLLISION_body"],
+    "max_extent_m":[0.85,0.9,1.1],
+    "wheel_radius_m":0.15,"wheelbase_m":0.5,"track_m":0.58,
+    "origin":"simulation centre 0.23 m above level ground",
+    "wheel_pivots":"FL/FR local (±0.29, -0.08, -0.25) in glTF; RL/RR z=+0.25",
+    "motion":"Steer_* rotate local Y; Wheel_* rotate local X. Never animate the root scale."
+  },
+  "hangar": {
+    "file":"hangar-slice.glb", "max_triangles":90000, "max_materials":12, "max_bytes":7000000,
+    "required_nodes":["Hangar_Root","Floor","Truss_00","Workbench","Toolbox","COLLISION_workbench","COLLISION_toolbox"],
+    "max_extent_m":[19,9,23],
+    "clear_corridor":"local x from -2.5 to +2.5, whole 22 m depth; preserve 2.6 m half-door width",
+    "origin":"floor centre; place at world (38,0,-8)"
+  },
+  "materials":"glTF metallic-roughness PBR; authored solids/vertex colours initially, no baked lighting; opaque except explicitly reviewed canopy",
+  "collision":"named COLLISION_* proxy meshes; hidden in render, read as geometry bounds; never infer chassis collision from cosmetic antennas",
+  "lod":"LOD0 first. Do not make extra LODs until measured triangle/fragment cost warrants them. Preserve pivots at every LOD.",
+  "provenance":"original authored script meshes and materials under repository MIT; concept image is reference only, no proprietary source geometry or textures",
+  "validation":"mesh counts and bounds from actual GLB accessors, required node names, no missing external buffers/textures, uniform unit roots, opaque collision markers"
+}
