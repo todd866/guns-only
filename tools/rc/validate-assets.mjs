@@ -19,6 +19,7 @@ export function validateDocument(doc,contract,bytes){
   for(const c of node.children??[])visit(c,world);
  }
  for(const n of doc.scenes[doc.scene??0].nodes)visit(n,new Matrix4());
+ if(contract.max_primitives!==undefined)assert.ok(primitives<=contract.max_primitives,`primitive budget ${primitives}`);
  assert.ok(triangles<=contract.max_triangles,`triangle budget ${triangles}`);const extent=bounds.getSize(new Vector3()).toArray();extent.forEach((v,i)=>assert.ok(v>0&&v<=contract.max_extent_m[i],`axis ${i} extent ${v}`));
  if(positions.RC_Root){for(const [name,x,z] of [['FL',-.29,-.25],['FR',.29,-.25],['RL',-.29,.25],['RR',.29,.25]]){const p=positions['Steer_'+name];assert.ok(p.every((v,i)=>Math.abs(v-[x,-.08,z][i])<.001),`bad wheel pivot ${name}: ${p}`);}}
  return {triangles,primitives,materials:(doc.materials??[]).length,bytes,extent,positions};

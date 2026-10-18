@@ -5,3 +5,5 @@ Generated with the built-in image generation tool on 2026-10-18. Exact prompt: `
 Library: `libfile_708fd36444988191ba5b87e883166032`.
 
 Use the sculpted shell, exposed suspension, tires, scale cues and material palette as visual targets. Do not treat inconsistent generated views as measured engineering drawings. The authoring script and asset contract own geometry/pivots and remain pending real Blender export/inspection.
+
+Ian approved this visual direction: “yeah that looks great”. This approval is the target for subsequent Blender/gameplay comparison, not acceptance of the existing greybox or automatically generated meshes.

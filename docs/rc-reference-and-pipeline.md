@@ -81,3 +81,13 @@ For this Mac, GOG's **Windows Offline Backup Game Installer** is the documented 
 Sources: [GOG product](https://www.gog.com/en/game/revolt), [Steam product](https://store.steampowered.com/app/287310/ReVolt/), [Mac Source Ports Re-Volt setup](https://www.macsourceports.com/game/revolt/), [offline installer extraction FAQ](https://www.macsourceports.com/faq/). Private reference play does not grant redistribution rights; original data stays outside the project.
 
 Source-only mesh refinement after concept review: sculpted eight-point body cross-sections replace rectangular sections, and staggered individual tread blocks replace full-width tire bars. Python syntax passes. Geometry budgets and visual appearance remain unverified until Blender export/render gets the slot.
+
+## Art-direction approval and queued review
+
+Ian explicitly approved `buggy-hangar-v1.png`: “yeah that looks great”. Preserve the orange/ivory sculpted buggy, exposed suspension, graphite chassis, knobby tires, orange wing and maintenance-hangar direction. Approval applies to that reference, not the existing procedural game or unrendered Blender source.
+
+The source now includes a roof, door framing and a five-metre drive-through lane. Editable Blender files are saved before an export-only bake/batch stage groups static geometry by parent and material, preserving wheel pivots and collision/semantic nodes. Chosen primitive caps are 32 for the buggy and 72 for the hangar; actual counts remain pending. `render_review.py` prepares fixed hero/front/side buggy views and lane/workbench/structure hangar views. Its renders must be labelled Blender review renders, never in-engine proof.
+
+Next slot sequence: execute export → validate actual GLBs → repair failures → render the fixed review views → load the same exported buggy in Three.js → compare silhouette, wheel contact, reflections/material colour and suspension readability with the approved concept. Reject a rounded-box result even if geometry tests pass. Then wire the hangar slice, validate clear driving paths and perform the actual low-chase capture. Only after this slice clears the visual bar should its asset kit extend to housing and the lab.
+
+Additional primary reference evidence: [RVGL General documentation](https://re-volt.gitlab.io/rvgl-docs/general.html) documents Save Replay / View Replay, a replays directory, and video LimitFPS / LimitLatency options. Record those settings alongside V-Sync and macOS HighDPI before matched capture; keep both saved replay and video. Their existence is documented, but no replay has yet been captured or parsed. This supports a repeatable future comparison without claiming high-frequency telemetry is available from race-result CSV.

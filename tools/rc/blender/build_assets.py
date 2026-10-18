@@ -148,7 +148,7 @@ def buggy():
         box('NoseLamp', (side*.14,.366,.10), (.065,.022,.025), 'ivory', body)
         box('WingMount', (side*.15,-.34,.18), (.016,.035,.12), 'alloy', body)
         box('WingEndplate', (side*.245,-.37,.25), (.016,.15,.065), 'shell', body)
-    box('RearWing', (0,-.37,.23), (.51,.13,.02), 'graphite', body)
+    box('RearWing', (0,-.37,.23), (.51,.13,.02), 'shell', body)
     tube('FrontBumper', [(-.20,.43,.02),(0,.47,.005),(.20,.43,.02)], .014, 'graphite', body)
     tube('ReceiverWhip', [(.1,-.18,.18),(.1,-.2,.4),(.105,-.24,.59)], .003, 'graphite', body)
     box('NoseStripe', (0,.29,.157), (.055,.17,.006), 'ivory', body, .001)
@@ -198,6 +198,13 @@ def hangar():
         for x in (-5,5):
             box('LampHousing',(x,y,7.5),(2.8,.5,.12),'graphite',truss,.015)
             box('LampDiffuser',(x,y,7.42),(2.6,.34,.03),'light',truss,.005)
+    box('RoofSkin',(0,0,8.08),(18.2,22.2,.12),'teal',root,.01)
+    for y in (-10.9,10.9):
+        for x in (-5.8,5.8):
+            box('DoorSidePanel',(x,y,4),(6.4,.15,8),'teal',root,.01)
+        box('DoorLintel',(0,y,6.5),(5.2,.22,3),'teal',root,.01)
+        for x in (-2.6,2.6):
+            box('DoorTrack',(x,y,2.5),(.14,.25,5),'alloy',root,.01)
     for x in (-8.9,8.9):
         box('WallPanel',(x,0,4),(.12,22,8),'teal',root,.008)
         for j in range(44):
@@ -229,6 +236,36 @@ def hangar():
     return root
 
 
+def prepare_export(root):
+    """Bake and batch an export copy in memory AFTER saving the editable .blend.
+
+    The authored file retains separate suspension, tread and structural pieces.
+    Animated pivot empties and collision/semantic nodes stay intact in the GLB.
+    """
+    bpy.ops.object.select_all(action='DESELECT')
+    geometry=[o for o in root.children_recursive if o.type in {'MESH','CURVE'}]
+    for o in geometry:
+        o.select_set(True)
+    if geometry:
+        bpy.context.view_layer.objects.active=geometry[0]
+        bpy.ops.object.convert(target='MESH')
+    groups={}
+    for o in root.children_recursive:
+        if o.type!='MESH' or o.name.startswith('COLLISION_') or o.name=='Floor':
+            continue
+        key=(o.parent.name,tuple(m.name for m in o.data.materials))
+        groups.setdefault(key,[]).append(o)
+    for (parent_name,materials),objects in groups.items():
+        if len(objects)<2:
+            continue
+        bpy.ops.object.select_all(action='DESELECT')
+        for o in objects:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active=objects[0]
+        bpy.ops.object.join()
+        bpy.context.object.name=f'Mesh_{parent_name}_{materials[0]}'
+
+
 def export(root,out,name):
     bpy.ops.object.select_all(action='DESELECT')
     members=[root,*root.children_recursive]
@@ -236,6 +273,11 @@ def export(root,out,name):
         o.select_set(True)
     bpy.context.view_layer.objects.active=root
     bpy.ops.wm.save_as_mainfile(filepath=str(out/(name+'.blend')))
+    prepare_export(root)
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in [root,*root.children_recursive]:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active=root
     bpy.ops.export_scene.gltf(filepath=str(out/(name+'.glb')),export_format='GLB',use_selection=True,export_apply=True,export_extras=True,export_yup=True,export_cameras=False,export_lights=False)
 
 
