@@ -1,3 +1,4 @@
+import { openRC } from "./rc/host.js";
 import { buildReportPayload, createReportHistory, frameTimeStats, REPORT_JSON_BYTES } from "./render/feedback/report_payload.js";
 import { captureReportFrame } from "./render/feedback/report_capture.js";
 import { createReportTransport } from "./render/feedback/report_transport.js";
@@ -5572,6 +5573,8 @@ function applyBridgePause() {
   bridge.SetPaused(shouldPause);
   bridgePauseApplied = shouldPause;
 }
+
+document.getElementById("ready-rc")?.addEventListener("click", () => openRC(active => setPauseReason("rc", active)));
 
 function setPauseReason(reason, active) {
   const wasPaused = pauseReasons.size > 0;
