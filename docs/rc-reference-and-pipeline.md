@@ -119,3 +119,31 @@ the latest state before doing other Computer Use actions."
 The screenshot did not run and visible input was not confirmed. Ian requested that
 this stalled route stop; no further UI attempts or approvals are queued.
 Direct driving/reference comparison remains unverified.
+
+## In-engine checkpoint (validated local entry)
+
+The default `/rc/` entry now loads the original GLBs; `?assets=prototype` retains the
+fallback for diagnosis. Fixed the apron hiding the exported floor markings by
+aligning hangar visual and driving-floor height at 0.04 m. Added local tyre-contact
+shadow coverage, material environment lighting, service lights and a lower, closer
+chase camera. Load failures retain the usable prototype controls.
+
+Actual full keyboard-driven browser lap: 39.1583 simulation seconds, 204.20 m,
+all ten gates, zero impacts, one specimen found, zero page errors. Hardware renderer:
+ANGLE Metal / Apple M5. Final normal-entry hangar run: 19.154 wall seconds,
+96.79 m, zero impacts/errors, grounded at centre height 0.27 m. Twenty focused
+simulation, host, handling and asset tests pass. Captures are actual Three.js output:
+`evidence/rc-blender-hangar.png`, `evidence/rc-blender-finish.png`; receipts are
+`evidence/rc-blender-smoke.json` (lap) and `evidence/rc-blender-final-smoke.json`.
+
+Start the portable local preview with `bin/rc-preview`, then open
+`http://127.0.0.1:8878/rc/`. Existing shell entry remains the RC button with its
+mission pause/restore ownership. This turn did not rebuild or run the full WASM
+flight shell. Reproduce keyboard route QA using `tools/rc/check-gameplay.cjs`,
+setting PLAYWRIGHT_MODULE and CHROMIUM_PATH for the installed runtime if necessary.
+
+Remaining visual limits: housing, aircraft and containment still use the initial
+simple procedural models. The new buggy/hangar improve the scene but do not yet
+match the approved concept's finish. Suspension remains an authored arcade
+approximation rather than independent physical wheel suspension. No direct
+RVGL driving comparison has been measured.

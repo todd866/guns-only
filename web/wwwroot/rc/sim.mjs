@@ -34,7 +34,7 @@ export const aircraftSolids=aircraft.flatMap(({x,z})=>[
 export const collisionSolids=[...solids,...aircraftSolids,...obstacles];
 export function overlapsCarHeight(y,solid){return y+.4>(solid.minY??0)&&y-.23<solid.h;}
 export const ramps=[{x:22,z:-24,w:4,d:7,h:1.1},{x:12,z:30,w:7,d:4,h:.8}];
-export function ground(x,z){let h=0;for(const r of ramps)if(Math.abs(x-r.x)<r.w/2&&Math.abs(z-r.z)<r.d/2)h=Math.max(h,r.h*(.5-(z-r.z)/r.d));return h;}
+export function ground(x,z){let h=Math.abs(x-38)<9&&Math.abs(z+8)<11?.04:0;for(const r of ramps)if(Math.abs(x-r.x)<r.w/2&&Math.abs(z-r.z)<r.d/2)h=Math.max(h,r.h*(.5-(z-r.z)/r.d));return h;}
 export const BASE_COURSE={ground,solids:collisionSolids,checkpoints,secrets:[33,38,43].map(x=>({x,z:25})),bounds:{x:58,z:48}};
 export function createCar(){return {x:0,z:5,y:.23,vx:0,vz:0,vy:0,yaw:0,steer:0,pitch:0,roll:0,speed:0,grounded:true,time:0,gate:0,running:false,finished:false,hits:0,found:0,seen:[],travel:0};}
 export function resetCar(s,course=BASE_COURSE){const p=course.checkpoints[Math.max(0,s.gate-1)];Object.assign(s,{x:p[0],z:p[1],y:course.ground(p[0],p[1])+.23,vx:0,vz:0,vy:0,yaw:0});if(s.running)s.time+=3;}

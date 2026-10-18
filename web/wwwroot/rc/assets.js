@@ -15,7 +15,7 @@ export async function loadBuggyAsset(url){
 
 // Prepared for the reviewed hangar replacement; no scene/course mutation until callers
 // have loaded the complete asset set. Proxies use the exact placement of the visuals.
-export async function loadHangarAsset(url,position={x:38,y:0,z:-8}){
+export async function loadHangarAsset(url,position={x:38,y:.04,z:-8}){
  const {proxySolid}=await import('./asset-collision.mjs');
  const gltf=await new GLTFLoader().loadAsync(url),hangar=gltf.scene;
  for(const name of ['Hangar_Root','Floor','Truss_00','Workbench','Toolbox','COLLISION_workbench','COLLISION_toolbox'])

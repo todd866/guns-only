@@ -9,7 +9,12 @@ const $=id=>document.getElementById(id),canvas=$('view');
 const renderer=new T.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
 const scene=new T.Scene();scene.background=new T.Color('#b2c6c5');scene.fog=new T.Fog('#b2c6c5',65,150);
 const camera=new T.PerspectiveCamera(63,1,.06,210);
-scene.add(new T.HemisphereLight(0xd5edf1,0x5a624a,2.3));const sun=new T.DirectionalLight(0xffd6a0,3.2);sun.position.set(-30,55,-25);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-65,right:65,top:55,bottom:-55,near:1,far:150});sun.shadow.bias=-.0003;scene.add(sun);
+scene.add(new T.HemisphereLight(0xd5edf1,0x5a624a,1.5));const sun=new T.DirectionalLight(0xffd6a0,3.2);sun.position.set(-30,55,-25);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-65,right:65,top:55,bottom:-55,near:1,far:150});sun.shadow.bias=-.0003;scene.add(sun);
+// Local shadow coverage keeps tyre contact legible at RC scale.
+const contactSun=new T.DirectionalLight(0xffe4bd,.65);contactSun.castShadow=true;contactSun.shadow.mapSize.set(1024,1024);Object.assign(contactSun.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:.1,far:30});contactSun.shadow.bias=-.00015;contactSun.shadow.normalBias=.015;scene.add(contactSun,contactSun.target);
+const studio=new T.Scene();studio.background=new T.Color('#879b9f');
+for(const [x,y,z,w,h,d,c] of [[0,6,0,10,.1,10,0xffe9cc],[-5,2,0,.1,4,8,0x536b70],[5,3,0,.1,3,6,0xdceeff]]){const m=new T.Mesh(new T.BoxGeometry(w,h,d),new T.MeshBasicMaterial({color:c}));m.position.set(x,y,z);studio.add(m);}
+const pmrem=new T.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(studio,.05).texture;scene.environmentIntensity=.45;pmrem.dispose();studio.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
 const mats=new Map();function material(c,glow=false){const key=c+glow;if(!mats.has(key))mats.set(key,new T.MeshStandardMaterial({color:c,roughness:.8,...(glow?{emissive:c,emissiveIntensity:.8}:{})}));return mats.get(key);}
 function box(x,y,z,w,h,d,color,parent=scene){const m=new T.Mesh(new T.BoxGeometry(w,h,d),material(color));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
 function sphere(x,y,z,r,color,parent=scene,sx=1,sy=1,sz=1){const m=new T.Mesh(new T.SphereGeometry(r,14,10),material(color));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;parent.add(m);return m;}
@@ -53,16 +58,19 @@ for(let x=-55;x<57;x+=4)for(const z of [-47,47]){box(x,1.2,z,.08,2.4,.08,'#646f6
 sign('RAPIER / MOTOR POOL',0,2.6,7,5);sign('QUARTERS',-6,1.4,-18,3);sign('FLIGHT LINE →',6,1.1,-35,3);
 let car=new T.Group();scene.add(car);const shell=box(0,.15,0,.44,.16,.75,'#e6a53c',car);box(0,.3,.04,.33,.20,.32,'#273d45',car);box(0,.22,.39,.55,.05,.15,'#253436',car);box(0,.43,.29,.016,.45,.016,'#313d3b',car);for(const x of [-.15,.15])box(x,.19,-.39,.10,.06,.025,'#fff4be',car);
 let wheels=[];for(const x of [-.29,.29])for(const z of [-.25,.25]){const pivot=new T.Group();pivot.position.set(x,-.08,z);car.add(pivot);const wheel=new T.Mesh(new T.CylinderGeometry(.15,.15,.13,16),material('#202a2a'));wheel.rotation.z=Math.PI/2;wheel.castShadow=true;pivot.add(wheel);const hub=sphere(0,0,0,.08,'#b1b6a8',pivot,.9,1,1);wheels.push({pivot,wheel,front:z<0});}
-// Explicit local acceptance mode; default stays on the last tested art until GLB validation.
-if(new URLSearchParams(location.search).get('assets')==='blender'){
- assetState='loading';
+// Validated original assets are the normal entry; prototype remains an explicit diagnostic fallback.
+if(new URLSearchParams(location.search).get('assets')!=='prototype'){
+ assetState='loading';$('start').disabled=true;
  import('./assets.js').then(async({loadBuggyAsset,loadHangarAsset})=>{
   const [buggy,hangar]=await Promise.all([loadBuggyAsset('./assets/buggy.glb'),loadHangarAsset('./assets/hangar-slice.glb')]);
   // Commit the complete visual/collision set together; a failed load retains the prototype.
   scene.remove(car);car=buggy.car;wheels=buggy.wheels;scene.add(car,hangar.hangar);
+  const floor=hangar.hangar.getObjectByName('Floor');floor.material=material('#9ca59b').clone();floor.material.roughness=.68;
+  for(const z of [-14,-2]){const lamp=new T.SpotLight(0xffd29a,110,22,1.1,.75,1.4);lamp.position.set(35,6,z);lamp.target.position.set(38,0,z+2);scene.add(lamp,lamp.target);}
+  sign('02 / ENGINEERING',38,4.3,-19.2,4).rotation.y=Math.PI;
   for(const node of hangarFallback)node.visible=false;
   liveSolids.push(...hangar.collision);assetState='blender';
- }).catch(error=>{assetState='failed';console.error('RC Blender asset rejected:',error);$('brief').hidden=false;$('brief').textContent='Blender asset unavailable or invalid. See console; default prototype remains loaded.';});
+ }).catch(error=>{assetState='failed';console.error('RC Blender asset rejected:',error);$('brief').hidden=false;const warning=document.createElement('p');warning.textContent='Asset loading failed; prototype fallback is available.';$('brief').append(warning);}).finally(()=>{$('start').disabled=false;});
 }
 const gates=checkpoints.slice(0,-1).map(([x,z],i)=>{const g=new T.Group();g.position.set(x,0,z);scene.add(g);for(const dx of [-2.5,2.5]){box(dx,.7,0,.12,1.4,.12,'#ffcd65',g);box(dx,1.2,0,.5,.25,.05,'#ffcd65',g);}g.userData.label=sign(String(i+1).padStart(2,'0'),x,1.8,z,1.5);return g;});
 let s=createCar(),paused=true,keys=new Set(),acc=0,last=performance.now(),best=0;try{best=Number(localStorage.getItem('guns-only.rc.best'))||0;}catch{}
@@ -78,8 +86,9 @@ const desired=new T.Vector3(),target=new T.Vector3(),map=$('map').getContext('2d
 function drawMap(){map.clearRect(0,0,180,160);const point=(x,z)=>[90+x*1.35,80+z*1.5];map.fillStyle='#91a99c';for(const b of buildings){const [x,y]=point(b.x-b.w/2,b.z-b.d/2);map.fillRect(x,y,b.w*1.35,b.d*1.5);}map.strokeStyle='#e8bf66';map.setLineDash([3,4]);map.beginPath();checkpoints.forEach(([x,z],i)=>{const p=point(x,z);i?map.lineTo(...p):map.moveTo(...p);});map.stroke();map.setLineDash([]);const p=point(...checkpoints[s.gate]);map.fillStyle='#ffcc66';map.beginPath();map.arc(...p,4,0,Math.PI*2);map.fill();map.fillStyle='#fff';map.beginPath();map.arc(...point(s.x,s.z),3,0,Math.PI*2);map.fill();}
 let reported=false;
 function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){acc+=dt;while(acc>=1/120){stepCar(s,{throttle:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),steer:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),brake:keys.has('Space')},1/120,liveCourse);acc-=1/120;}}
+ contactSun.position.set(s.x-4,s.y+8,s.z-5);contactSun.target.position.set(s.x,s.y,s.z);
  audio.update(s.speed,paused);car.position.set(s.x,s.y,s.z);car.rotation.set(s.pitch,-s.yaw,s.roll,'YXZ');for(const w of wheels){w.pivot.rotation.y=w.front?-s.steer*.45:0;w.wheel.rotation.x=s.travel/.15;w.pivot.position.y=-.08+Math.sin(s.travel*22)*Math.min(.012,s.speed*.002);}
- desired.set(s.x-Math.sin(s.yaw)*(2.4+s.speed*.035),s.y+1.05,s.z+Math.cos(s.yaw)*(2.4+s.speed*.035));// Keep the low chase camera in front of walls when backing into a building.
+ desired.set(s.x-Math.sin(s.yaw)*(1.85+s.speed*.035),s.y+.78,s.z+Math.cos(s.yaw)*(1.85+s.speed*.035));// Keep the low chase camera in front of walls when backing into a building.
  for(let t=.1;t<=1;t+=.1){const x=s.x+(desired.x-s.x)*t,z=s.z+(desired.z-s.z)*t,y=s.y+(desired.y-s.y)*t;if(liveSolids.some(b=>y>(b.minY??0)&&y<b.h&&Math.abs(x-b.x)<b.w/2+.1&&Math.abs(z-b.z)<b.d/2+.1)){desired.set(s.x+(desired.x-s.x)*Math.max(.1,t-.1),y,s.z+(desired.z-s.z)*Math.max(.1,t-.1));break;}}
  camera.position.lerp(desired,1-Math.exp(-dt*7));target.set(s.x+Math.sin(s.yaw)*1.4,s.y+.27,s.z-Math.cos(s.yaw)*1.4);camera.lookAt(target);
  gates.forEach((g,i)=>{g.visible=i===(s.gate===checkpoints.length-1?0:s.gate);g.userData.label.visible=g.visible;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});

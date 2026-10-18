@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+printf 'Blacksite RC: http://127.0.0.1:8878/rc/\n'
+exec python3 -m http.server 8878 --bind 127.0.0.1 --directory "$root/web/wwwroot"
