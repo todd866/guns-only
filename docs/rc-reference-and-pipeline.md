@@ -147,3 +147,24 @@ simple procedural models. The new buggy/hangar improve the scene but do not yet
 match the approved concept's finish. Suspension remains an authored arcade
 approximation rather than independent physical wheel suspension. No direct
 RVGL driving comparison has been measured.
+
+## Art review queued after screenshot rejection
+
+The parent inspected the actual capture and rejected it as polished art. Preserve
+`30ab8ec9` as the functional baseline. A source-only pass is isolated behind
+`/rc/?art=review`; default appearance is unchanged. It proposes richer burnt-orange
+shell paint, darker neutral concrete with physically thinner low-contrast joints,
+reduced ambient wash, and a shadow-casting service light. The car-following light
+moves below the hangar roof during review so the roof does not extinguish its
+contact shadows. The existing large black floor joints are covered by a continuous
+review surface. No claim of visual improvement is made until rendered inspection.
+Aircraft and housing geometry remain unchanged and visibly unfinished.
+
+Next free-slot acceptance: compare identical hangar and buggy views with baseline
+and approved concept; inspect orange paint, tyre-ground contact, floor lines,
+metal/rubber separation and interior/exterior exposure. Reject if still washed out.
+Then run the full flight shell: load a flight mission, open its real RC menu entry,
+verify flight pauses, drive, exit with O, confirm the original mission and focus
+resume; repeat entry/exit and check errors and duplicate frames. Existing host unit
+coverage does not substitute for this full-shell check. No full-shell build or
+browser run was performed while Energybar owned the slot.

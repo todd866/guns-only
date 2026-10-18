@@ -5,6 +5,7 @@ const audio=new MotorAudio();
 const liveSolids=[...collisionSolids],hangarFallback=[];
 const liveCourse={...BASE_COURSE,solids:liveSolids};
 let assetState='prototype';
+const artReview=new URLSearchParams(location.search).get('art')==='review';
 const $=id=>document.getElementById(id),canvas=$('view');
 const renderer=new T.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
 const scene=new T.Scene();scene.background=new T.Color('#b2c6c5');scene.fog=new T.Fog('#b2c6c5',65,150);
@@ -69,7 +70,9 @@ if(new URLSearchParams(location.search).get('assets')!=='prototype'){
   for(const z of [-14,-2]){const lamp=new T.SpotLight(0xffd29a,110,22,1.1,.75,1.4);lamp.position.set(35,6,z);lamp.target.position.set(38,0,z+2);scene.add(lamp,lamp.target);}
   sign('02 / ENGINEERING',38,4.3,-19.2,4).rotation.y=Math.PI;
   for(const node of hangarFallback)node.visible=false;
-  liveSolids.push(...hangar.collision);assetState='blender';
+  liveSolids.push(...hangar.collision);
+  if(artReview){const {applyArtReview}=await import('./art-review.js');applyArtReview({scene,car,hangar:hangar.hangar,renderer,sun,contactSun});}
+  assetState='blender';
  }).catch(error=>{assetState='failed';console.error('RC Blender asset rejected:',error);$('brief').hidden=false;const warning=document.createElement('p');warning.textContent='Asset loading failed; prototype fallback is available.';$('brief').append(warning);}).finally(()=>{$('start').disabled=false;});
 }
 const gates=checkpoints.slice(0,-1).map(([x,z],i)=>{const g=new T.Group();g.position.set(x,0,z);scene.add(g);for(const dx of [-2.5,2.5]){box(dx,.7,0,.12,1.4,.12,'#ffcd65',g);box(dx,1.2,0,.5,.25,.05,'#ffcd65',g);}g.userData.label=sign(String(i+1).padStart(2,'0'),x,1.8,z,1.5);return g;});
@@ -86,7 +89,7 @@ const desired=new T.Vector3(),target=new T.Vector3(),map=$('map').getContext('2d
 function drawMap(){map.clearRect(0,0,180,160);const point=(x,z)=>[90+x*1.35,80+z*1.5];map.fillStyle='#91a99c';for(const b of buildings){const [x,y]=point(b.x-b.w/2,b.z-b.d/2);map.fillRect(x,y,b.w*1.35,b.d*1.5);}map.strokeStyle='#e8bf66';map.setLineDash([3,4]);map.beginPath();checkpoints.forEach(([x,z],i)=>{const p=point(x,z);i?map.lineTo(...p):map.moveTo(...p);});map.stroke();map.setLineDash([]);const p=point(...checkpoints[s.gate]);map.fillStyle='#ffcc66';map.beginPath();map.arc(...p,4,0,Math.PI*2);map.fill();map.fillStyle='#fff';map.beginPath();map.arc(...point(s.x,s.z),3,0,Math.PI*2);map.fill();}
 let reported=false;
 function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){acc+=dt;while(acc>=1/120){stepCar(s,{throttle:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),steer:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),brake:keys.has('Space')},1/120,liveCourse);acc-=1/120;}}
- contactSun.position.set(s.x-4,s.y+8,s.z-5);contactSun.target.position.set(s.x,s.y,s.z);
+ contactSun.position.set(s.x-4,s.y+(artReview&&Math.abs(s.x-38)<9&&Math.abs(s.z+8)<11?4:8),s.z-5);contactSun.target.position.set(s.x,s.y,s.z);
  audio.update(s.speed,paused);car.position.set(s.x,s.y,s.z);car.rotation.set(s.pitch,-s.yaw,s.roll,'YXZ');for(const w of wheels){w.pivot.rotation.y=w.front?-s.steer*.45:0;w.wheel.rotation.x=s.travel/.15;w.pivot.position.y=-.08+Math.sin(s.travel*22)*Math.min(.012,s.speed*.002);}
  desired.set(s.x-Math.sin(s.yaw)*(1.85+s.speed*.035),s.y+.78,s.z+Math.cos(s.yaw)*(1.85+s.speed*.035));// Keep the low chase camera in front of walls when backing into a building.
  for(let t=.1;t<=1;t+=.1){const x=s.x+(desired.x-s.x)*t,z=s.z+(desired.z-s.z)*t,y=s.y+(desired.y-s.y)*t;if(liveSolids.some(b=>y>(b.minY??0)&&y<b.h&&Math.abs(x-b.x)<b.w/2+.1&&Math.abs(z-b.z)<b.d/2+.1)){desired.set(s.x+(desired.x-s.x)*Math.max(.1,t-.1),y,s.z+(desired.z-s.z)*Math.max(.1,t-.1));break;}}
