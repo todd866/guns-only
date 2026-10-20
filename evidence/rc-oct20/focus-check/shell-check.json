@@ -1,0 +1,121 @@
+{
+  "realKeyboard": true,
+  "fullLap": false,
+  "errors": [],
+  "requestsFailed": [
+    {
+      "url": "http://127.0.0.1:50138/report",
+      "error": {
+        "errorText": "net::ERR_ABORTED"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:50138/telemetry",
+      "error": {
+        "errorText": "net::ERR_ABORTED"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:50138/telemetry",
+      "error": {
+        "errorText": "net::ERR_ABORTED"
+      }
+    }
+  ],
+  "cycles": [
+    {
+      "before": {
+        "time": 1.008,
+        "mission": "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+        "phase": "PAUSED"
+      },
+      "during": {
+        "time": 1.008,
+        "mission": "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+        "phase": "PAUSED"
+      },
+      "exited": {
+        "time": 1.008,
+        "mission": "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+        "phase": "PAUSED"
+      },
+      "resumed": {
+        "time": 1.225,
+        "mission": "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+        "phase": "ACTIVE"
+      },
+      "car": {
+        "x": 0,
+        "z": -8.62602167599885,
+        "y": 0.23,
+        "vx": 0,
+        "vz": -5.705154011187908,
+        "vy": 0.014558219178082477,
+        "yaw": 0,
+        "steer": 0,
+        "pitch": 0,
+        "roll": 0,
+        "speed": 5.705154011187908,
+        "grounded": true,
+        "time": 2.1916666666666615,
+        "gate": 1,
+        "running": true,
+        "finished": false,
+        "hits": 0,
+        "found": 0,
+        "seen": [],
+        "travel": 13.626021675998855,
+        "paused": false,
+        "assets": "blender"
+      }
+    },
+    {
+      "before": {
+        "time": 1.242,
+        "mission": "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+        "phase": "PAUSED"
+      },
+      "during": {
+        "time": 1.242,
+        "mission": "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+        "phase": "PAUSED"
+      },
+      "exited": {
+        "time": 1.242,
+        "mission": "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+        "phase": "PAUSED"
+      },
+      "resumed": {
+        "time": 1.508,
+        "mission": "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+        "phase": "ACTIVE"
+      },
+      "car": {
+        "x": 0,
+        "z": -10.691575582920779,
+        "y": 0.23,
+        "vx": 0,
+        "vz": -7.166491921742759,
+        "vy": 0.014558219178082477,
+        "yaw": 0,
+        "steer": 0,
+        "pitch": 0,
+        "roll": 0,
+        "speed": 7.166491921742759,
+        "grounded": true,
+        "time": 2.2166666666666615,
+        "gate": 1,
+        "running": true,
+        "finished": false,
+        "hits": 0,
+        "found": 0,
+        "seen": [],
+        "travel": 15.691575582920768,
+        "paused": false,
+        "assets": "blender"
+      }
+    }
+  ],
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+  "passed": true
+}

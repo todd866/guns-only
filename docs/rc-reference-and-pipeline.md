@@ -168,3 +168,51 @@ verify flight pauses, drive, exit with O, confirm the original mission and focus
 resume; repeat entry/exit and check errors and duplicate frames. Existing host unit
 coverage does not substitute for this full-shell check. No full-shell build or
 browser run was performed while Energybar owned the slot.
+
+## October 20 original base-model milestone
+
+The isolated review route now loads original Blender aircraft and quarters GLBs as
+part of the same atomic asset set as the buggy and hangar. Editable sources are in
+`assets/rc/models/`; authoring code is `tools/rc/blender/base_models.py`. Aircraft
+include swept wings, canopy hoops, tyres/hubs, servicing panels and an exhaust;
+quarters include pitched roofs, standing seams, framed windows, sills, doors,
+gutters and chimneys. No purchased data or external textures were used. The
+repository MIT license covers these original models and materials.
+
+Regenerate with Blender in background mode, limited to two threads:
+`blender --background --factory-startup --threads 2 --python tools/rc/blender/build_assets.py -- --out /tmp/rc-model-export --only aircraft,quarters`.
+Run `node tools/rc/validate-assets.mjs web/wwwroot/rc/assets` after copying only the
+requested reviewed exports. The contract now checks all named model entries.
+
+Baseline remains available at `/rc/`; review at `/rc/?art=review`. The real flight
+shell also propagates `?art=review` to its RC menu entry. Before/after hangar captures
+and measured browser receipts live in `evidence/rc-oct20/`. These are rendered game
+frames, not the approved concept image. The artwork is improved but remains a
+stylised procedural first version; the containment interior is still simple, and
+there is no independent rigid-body suspension or seamless in-world vehicle swap.
+
+The actual .NET flight shell published locally to `/tmp/rc-oct20-shell`. The first
+Python-server browser attempt failed fetching a local WASM file. A dedicated Node
+server then booted successfully and the integrated keyboard lap exposed an exit
+focus race: shell pause rendering queued focus after the iframe restored it. The
+host now restores the RC entry focus in the next task, after shell focus microtasks.
+`tools/rc/check-shell.cjs` tests the real published shell, a full keyboard lap,
+paused flight time, mission identity, focus restoration, frame disposal, resumed
+flight time, and a second entry/exit. It blocks external HTTP requests and closes
+its own browser/server in `finally`. Set `RC_SHELL_ROOT` to the published wwwroot
+and `PLAYWRIGHT_MODULE`/`CHROMIUM_PATH` to installed tooling; run under heavy-slot.
+
+Final acceptance: full real-shell keyboard lap 39.200 simulation seconds,
+204.62 m, all 10 gates, 0 impacts,
+1 specimen discovered; both entry/exit/resume cycles passed. No browser
+page errors. Hardware renderer: ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version). Twenty focused Node tests pass.
+Local report/telemetry POSTs have no backend in this static preview; aborted local
+requests are retained in the receipt, and no external requests were allowed.
+No production gate, public deployment or push was run. The final .NET assembly
+publish was reused for final static RC edits; only the edited RC files were copied
+into that disposable local preview. Original flight assembly source was unchanged.
+
+Local play: `bin/rc-preview`, then `http://127.0.0.1:8878/rc/?art=review`.
+Full-shell preview: `python3 -m http.server 8897 --bind 127.0.0.1 --directory /tmp/rc-oct20-shell/wwwroot`,
+then `http://127.0.0.1:8897/?art=review`; start a flight, Escape, RC base, Start.
+Exit with O, then Escape to resume. The QA browsers and servers have been closed.

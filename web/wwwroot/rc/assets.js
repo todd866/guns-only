@@ -29,3 +29,10 @@ export async function loadHangarAsset(url,position={x:38,y:.04,z:-8}){
  });
  return {hangar,collision};
 }
+
+export async function loadStaticAsset(url,rootName){
+ const {scene}=await new GLTFLoader().loadAsync(url);
+ if(!scene.getObjectByName(rootName))throw Error(`Invalid base asset: missing ${rootName}`);
+ scene.traverse(node=>{if(node.isMesh){node.castShadow=true;node.receiveShadow=true;}});
+ return scene;
+}

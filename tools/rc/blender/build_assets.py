@@ -284,9 +284,15 @@ def export(root,out,name):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--out',type=Path,required=True)
+    parser.add_argument('--only',default='buggy,hangar-slice')
     args=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
     out=args.out.resolve();out.mkdir(parents=True,exist_ok=True)
-    for name,builder in [('buggy',buggy),('hangar-slice',hangar)]:
+    # Imported only after this module is loaded; shared authoring primitives.
+    sys.path.insert(0,str(Path(__file__).parent))
+    from base_models import aircraft,quarters
+    builders={'buggy':buggy,'hangar-slice':hangar,'aircraft':aircraft,'quarters':quarters}
+    for name in args.only.split(','):
+        builder=builders[name]
         bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
         root=builder()
         bpy.context.scene.unit_settings.system='METRIC'

@@ -25,5 +25,5 @@ export function validateDocument(doc,contract,bytes){
  return {triangles,primitives,materials:(doc.materials??[]).length,bytes,extent,positions};
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)){
- const dir=process.argv[2];assert.ok(dir,'usage: node tools/rc/validate-assets.mjs ASSET_DIRECTORY');const contract=JSON.parse(fs.readFileSync(new URL('./asset-contract.json',import.meta.url)));const report={};for(const name of ['buggy','hangar']){const spec=contract[name],bytes=fs.readFileSync(path.join(dir,spec.file));report[name]=validateDocument(parseGLB(bytes),spec,bytes.length);}console.log(JSON.stringify(report,null,2));
+ const dir=process.argv[2];assert.ok(dir,'usage: node tools/rc/validate-assets.mjs ASSET_DIRECTORY');const contract=JSON.parse(fs.readFileSync(new URL('./asset-contract.json',import.meta.url)));const report={};for(const name of Object.keys(contract).filter(key=>contract[key]?.file)){const spec=contract[name],bytes=fs.readFileSync(path.join(dir,spec.file));report[name]=validateDocument(parseGLB(bytes),spec,bytes.length);}console.log(JSON.stringify(report,null,2));
 }

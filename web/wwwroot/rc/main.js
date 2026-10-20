@@ -2,7 +2,7 @@ import * as T from '../vendor/three.module.js';
 import {buildings,solids,aircraft,obstacles,collisionSolids,ramps,checkpoints,createCar,stepCar,resetCar,BASE_COURSE} from './sim.mjs';
 import { MotorAudio } from './audio.js';
 const audio=new MotorAudio();
-const liveSolids=[...collisionSolids],hangarFallback=[];
+const liveSolids=[...collisionSolids],hangarFallback=[],housingFallback=[],aircraftFallback=[];
 const liveCourse={...BASE_COURSE,solids:liveSolids};
 let assetState='prototype';
 const artReview=new URLSearchParams(location.search).get('art')==='review';
@@ -23,7 +23,7 @@ function sign(text,x,y,z,width=4){const c=document.createElement('canvas');c.wid
 // Deterministic original surface grain at toy-eye distance; no downloaded textures.
 for(const [color,repeat] of [['#555f60',18],['#8b9389',12],['#7d8766',30],['#9ca59b',8]]){
  const c=document.createElement('canvas');c.width=c.height=128;const ctx=c.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,128,128);let seed=717;
- for(let i=0;i<3000;i++){seed=(seed*1664525+1013904223)>>>0;const x=seed%128;seed=(seed*1664525+1013904223)>>>0;const y=seed%128;ctx.fillStyle=i%2?'#ffffff16':'#00000014';ctx.fillRect(x,y,1,1);}
+ for(let i=0;i<3000;i++){seed=(seed*1664525+1013904223)>>>0;const x=(artReview?seed>>>16:seed)%128;seed=(seed*1664525+1013904223)>>>0;const y=(artReview?seed>>>16:seed)%128;ctx.fillStyle=artReview?(i%2?'#ffffff08':'#00000008'):(i%2?'#ffffff16':'#00000014');ctx.fillRect(x,y,1,1);}
  const tex=new T.CanvasTexture(c);tex.wrapS=tex.wrapT=T.RepeatWrapping;tex.repeat.set(repeat,repeat);tex.colorSpace=T.SRGBColorSpace;material(color).map=tex;material(color).color.set('#ffffff');
 }
 box(0,-.2,0,130,.4,110,'#7d8766');
@@ -48,8 +48,8 @@ for(const b of buildings){const firstChild=scene.children.length;if(b.kind==='ho
  sign(b.kind==='lab'?'09 / RESTRICTED':'HANGAR 02',b.x,b.h-1,b.z-b.d/2-.24,6).rotation.y=Math.PI;
  box(b.x,.03,b.z,b.w,.06,b.d,'#9ca59b');
  for(const x of [b.x-6,b.x+6])box(x,b.h-.3,b.z,.15,.12,b.d-2,'#e6d5ad');
- }if(b.kind==='hangar')hangarFallback.push(...scene.children.slice(firstChild));}
-function plane(x,z){const g=new T.Group();g.position.set(x,1.2,z);scene.add(g);sphere(0,0,0,1,'#acb5ad',g,1,.7,4.7);box(0,0,.6,10,.16,2,'#929f96',g);box(0,.1,3.6,4,.13,1,'#919e94',g);box(0,1,3.7,.15,2,1.8,'#77867f',g);sphere(0,.55,-1.4,.75,'#354e58',g,.65,.7,1.8);for(const dx of [-1,1])box(dx,-.85,1,.2,.7,.2,'#263032',g);}
+ }if(b.kind==='house')housingFallback.push(...scene.children.slice(firstChild));if(b.kind==='hangar')hangarFallback.push(...scene.children.slice(firstChild));}
+function plane(x,z){const g=new T.Group();g.position.set(x,1.2,z);scene.add(g);sphere(0,0,0,1,'#acb5ad',g,1,.7,4.7);box(0,0,.6,10,.16,2,'#929f96',g);box(0,.1,3.6,4,.13,1,'#919e94',g);box(0,1,3.7,.15,2,1.8,'#77867f',g);sphere(0,.55,-1.4,.75,'#354e58',g,.65,.7,1.8);for(const dx of [-1,1])box(dx,-.85,1,.2,.7,.2,'#263032',g);aircraftFallback.push(g);}
 for(const a of aircraft)plane(a.x,a.z);
 for(const r of ramps){const g=new T.BufferGeometry();const x=r.w/2,z=r.d/2,h=r.h;g.setAttribute('position',new T.Float32BufferAttribute([-x,0,z,x,0,z,x,h,-z,-x,0,z,x,h,-z,-x,h,-z],3));g.computeVertexNormals();const m=new T.Mesh(g,new T.MeshStandardMaterial({color:'#bc8b50',side:T.DoubleSide,roughness:.9}));m.position.set(r.x,.015,r.z);m.receiveShadow=true;scene.add(m);for(const dx of [-x+.12,x-.12]){const rail=box(r.x+dx,h/2+.025,r.z,.12,.035,Math.hypot(r.d,h),'#ead099');rail.rotation.x=Math.atan2(h,r.d);}}
 // Secret lab: three original containment specimens, reachable through the hangar service doors.
@@ -62,8 +62,9 @@ let wheels=[];for(const x of [-.29,.29])for(const z of [-.25,.25]){const pivot=n
 // Validated original assets are the normal entry; prototype remains an explicit diagnostic fallback.
 if(new URLSearchParams(location.search).get('assets')!=='prototype'){
  assetState='loading';$('start').disabled=true;
- import('./assets.js').then(async({loadBuggyAsset,loadHangarAsset})=>{
+ import('./assets.js').then(async({loadBuggyAsset,loadHangarAsset,loadStaticAsset})=>{
   const [buggy,hangar]=await Promise.all([loadBuggyAsset('./assets/buggy.glb'),loadHangarAsset('./assets/hangar-slice.glb')]);
+  const base=artReview?await Promise.all([loadStaticAsset('./assets/aircraft.glb','Aircraft_Root'),loadStaticAsset('./assets/quarters.glb','Quarters_Root')]):null;
   // Commit the complete visual/collision set together; a failed load retains the prototype.
   scene.remove(car);car=buggy.car;wheels=buggy.wheels;scene.add(car,hangar.hangar);
   const floor=hangar.hangar.getObjectByName('Floor');floor.material=material('#9ca59b').clone();floor.material.roughness=.68;
@@ -71,6 +72,7 @@ if(new URLSearchParams(location.search).get('assets')!=='prototype'){
   sign('02 / ENGINEERING',38,4.3,-19.2,4).rotation.y=Math.PI;
   for(const node of hangarFallback)node.visible=false;
   liveSolids.push(...hangar.collision);
+  if(base){for(const node of [...housingFallback,...aircraftFallback])node.visible=false;for(const a of aircraft){const model=base[0].clone(true);model.position.set(a.x,0,a.z);scene.add(model);liveSolids.push({x:a.x,z:a.z-2.6,w:.3,d:.45,h:.75,minY:0});}for(const b of buildings.filter(b=>b.kind==='house')){const model=base[1].clone(true);model.position.set(b.x,0,b.z);scene.add(model);}}
   if(artReview){const {applyArtReview}=await import('./art-review.js');applyArtReview({scene,car,hangar:hangar.hangar,renderer,sun,contactSun});}
   assetState='blender';
  }).catch(error=>{assetState='failed';console.error('RC Blender asset rejected:',error);$('brief').hidden=false;const warning=document.createElement('p');warning.textContent='Asset loading failed; prototype fallback is available.';$('brief').append(warning);}).finally(()=>{$('start').disabled=false;});

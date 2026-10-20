@@ -75,5 +75,35 @@
     "reference": "assets/rc/concepts/buggy-hangar-v1.png",
     "approval": "yeah that looks great",
     "scope": "visual direction only; no approval of current gameplay assets"
+  },
+  "aircraft": {
+    "file": "aircraft.glb",
+    "max_triangles": 25000,
+    "max_materials": 10,
+    "max_bytes": 2000000,
+    "max_primitives": 12,
+    "required_nodes": [
+      "Aircraft_Root"
+    ],
+    "max_extent_m": [
+      10.2,
+      3.5,
+      9.5
+    ]
+  },
+  "quarters": {
+    "file": "quarters.glb",
+    "max_triangles": 25000,
+    "max_materials": 10,
+    "max_bytes": 2000000,
+    "max_primitives": 12,
+    "required_nodes": [
+      "Quarters_Root"
+    ],
+    "max_extent_m": [
+      9,
+      7,
+      9
+    ]
   }
 }
