@@ -1,0 +1,31 @@
+{
+  "generator": "tools/rc/blender/districts/bx.py",
+  "blender": "5.2.0 LTS",
+  "license": "MIT (original procedural geometry and flat PBR materials)",
+  "external_assets": [],
+  "reference_game_assets": "none; no Re-Volt/RVGL model, texture or data was read",
+  "district": "bx",
+  "version": 1,
+  "editable_source": "assets/rc/districts/bx.blend",
+  "lap_length_m": 317.05,
+  "gates": 10,
+  "ai_nodes": 51,
+  "ai_spacing_m": 6.22,
+  "visual_triangles": 110127,
+  "collision_triangles": 2608,
+  "collision_meshes": 201,
+  "materials": 24,
+  "lettering": "mesh text from Blender's bundled UI font (no textures)",
+  "reference_photos": "look matched to 12 CC BY 2.0 USAF photos of the Nellis AFB Exchange (2015 remodel), kept privately; no photo pixels, logos or tenant marks are in the asset (docs/research/area51-nellis-photo-reference.md)",
+  "cultural_references": "fictional, kid-safe; docs/research/area51-usaf-nellis-vegas-references.md section A; section B avoided (no Exchange/AAFES mark, no USAF symbol, no real brands)",
+  "interior_lighting": "materials carry emission = albedo x 0.5 (warm), ceiling 0.78, troffers 1.0: the store lighting, since the game sun is shadowed by the ceiling",
+  "vertex_ao": {
+    "raw_min": 0.0,
+    "raw_max": 1.0,
+    "floor": 0.38,
+    "distance_m": 1.6,
+    "samples": 24
+  },
+  "vertex_ao_method": "Cycles AO bake to per-corner BYTE_COLOR attribute \"AO\", exported as COLOR_0; remapped to floor..1. Real bake, no painted shading. Decals, the ceiling and troffers are left at 1.0 (not baked).",
+  "glb_bytes": 7031808
+}
