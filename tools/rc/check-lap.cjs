@@ -7,7 +7,7 @@ const path=require('node:path');const ROOT=path.resolve(__dirname,'../../web/www
 try{await new Promise(r=>setTimeout(r,800));browser=await chromium.launch({headless:true,channel:'chromium',executablePath:process.env.CHROMIUM_PATH});
 const page=await browser.newPage({viewport:{width:1280,height:800}});const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
 await page.goto(`http://127.0.0.1:${PORT}/rc/${process.env.Q||''}`);await page.waitForFunction(()=>['blender','failed'].includes(window.__gunsOnlyRC?.snapshot().assets),null,{timeout:30000});
-await page.locator('#start').click();const held=new Set();const pts=[[0,0],[0,-22],[0,-36],[22,-36],[38,-23],[38,-8],[38,22],[38,35],[12,35],[0,0]];
+await page.locator('#start').click();const held=new Set();const pts=await page.evaluate(()=>window.__gunsOnlyRC.checkpoints());
 let st,shots=new Set(),t0=Date.now(),frames=[];
 while(Date.now()-t0<90000){st=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());
  for(const g of [1,3,5,6,8])if(st.gate===g&&!shots.has(g)){shots.add(g);await page.screenshot({path:`${OUT}/gate${g}.png`});}

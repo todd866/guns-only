@@ -3,10 +3,16 @@ import {buildings,solids,aircraft,obstacles,collisionSolids,ramps,checkpoints,ba
 import {createSession,stepSession,recover,readout} from './physics/session.mjs';
 import {VISUAL_SCALE,BUGGY} from './physics/car.mjs';
 import {addBox} from './physics/world.mjs';
+import {courseFromGlb} from './physics/district.mjs';
+import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { MotorAudio } from './audio.js';
 const audio=new MotorAudio();
 const liveSolids=[...collisionSolids],hangarFallback=[],housingFallback=[],aircraftFallback=[];
-const course=baseCourse();
+// ?track=<district> drives an exported Blender district; no track = the prototype base route.
+const track=(new URLSearchParams(location.search).get('track')||'').match(/^[a-z0-9-]+$/)?.[0]??null;
+let district=null;
+if(track){const buffer=await (await fetch(`./assets/districts/${track}.glb`)).arrayBuffer();district={course:courseFromGlb(buffer),gltf:await new GLTFLoader().parseAsync(buffer,'./assets/districts/')};}
+const course=district?.course??baseCourse(),cps=course.checkpoints;
 // Asset collision proxies join the triangle world the car drives on.
 function addSolid(b){liveSolids.push(b);addBox(course.world,b.x,b.z,b.w,b.d,b.minY??0,b.h);}
 let assetState='prototype';
@@ -31,6 +37,8 @@ for(const [color,repeat] of [['#555f60',18],['#8b9389',12],['#7d8766',30],['#9ca
  for(let i=0;i<3000;i++){seed=(seed*1664525+1013904223)>>>0;const x=(artReview?seed>>>16:seed)%128;seed=(seed*1664525+1013904223)>>>0;const y=(artReview?seed>>>16:seed)%128;ctx.fillStyle=artReview?(i%2?'#ffffff08':'#00000008'):(i%2?'#ffffff16':'#00000014');ctx.fillRect(x,y,1,1);}
  const tex=new T.CanvasTexture(c);tex.wrapS=tex.wrapT=T.RepeatWrapping;tex.repeat.set(repeat,repeat);tex.colorSpace=T.SRGBColorSpace;material(color).map=tex;material(color).color.set('#ffffff');
 }
+let aliens=[];
+if(!track){
 box(0,-.2,0,130,.4,110,'#7d8766');
 box(0,.008,0,7,.025,90,'#555f60');box(22,.01,-36,48,.025,8,'#555f60');box(38,.01,1,9,.025,80,'#657072');box(20,.01,34,44,.025,8,'#555f60');box(20,.008,-8,60,.02,30,'#8b9389');
 for(let z=-42;z<45;z+=5)box(0,.03,z,.10,.015,2,'#ded4ad');for(let x=5;x<45;x+=5)box(x,.035,34,2,.015,.1,'#ded4ad');
@@ -58,31 +66,37 @@ function plane(x,z){const g=new T.Group();g.position.set(x,1.2,z);scene.add(g);s
 for(const a of aircraft)plane(a.x,a.z);
 for(const r of ramps){const g=new T.BufferGeometry();const x=r.w/2,z=r.d/2,h=r.h;g.setAttribute('position',new T.Float32BufferAttribute([-x,0,z,x,0,z,x,h,-z,-x,0,z,x,h,-z,-x,h,-z],3));g.computeVertexNormals();const m=new T.Mesh(g,new T.MeshStandardMaterial({color:'#bc8b50',side:T.DoubleSide,roughness:.9}));m.position.set(r.x,.015,r.z);m.receiveShadow=true;scene.add(m);for(const dx of [-x+.12,x-.12]){const rail=box(r.x+dx,h/2+.025,r.z,.12,.035,Math.hypot(r.d,h),'#ead099');rail.rotation.x=Math.atan2(h,r.d);}}
 // Secret lab: three original containment specimens, reachable through the hangar service doors.
-const aliens=[];for(const [i,x] of [33,38,43].entries()){
+for(const [i,x] of [33,38,43].entries()){
  box(x,.12,25,1.7,.24,1.7,'#334e4b');const tube=new T.Mesh(new T.CylinderGeometry(.8,.8,2.6,20,1,true),new T.MeshPhysicalMaterial({color:'#72ffce',transparent:true,opacity:.18,roughness:.15,side:T.DoubleSide,depthWrite:false}));tube.position.set(x,1.55,25);scene.add(tube);const a=new T.Group();a.position.set(x,.4,25);scene.add(a);sphere(0,1.35,0,.42,'#99b99e',a,1.1,1.3,.9);sphere(0,.6,0,.35,'#779882',a,.7,1.4,.7);for(const side of [-1,1]){sphere(side*.19,1.4,-.31,.14,'#152a28',a,1,1.4,.4);box(side*.14,.12,0,.12,.5,.13,'#779882',a);box(side*.34,.6,0,.09,.6,.10,'#779882',a);}aliens.push(a);const light=new T.PointLight('#70ffc5',8,5);light.position.set(x,2,25);scene.add(light);sign('SPECIMEN '+(i+1),x,2.9,25,1.8);}
 for(let x=-55;x<57;x+=4)for(const z of [-47,47]){box(x,1.2,z,.08,2.4,.08,'#646f66');box(x,1.8,z,4,.035,.035,'#9ca89c');box(x,.6,z,4,.035,.035,'#9ca89c');}
 sign('RAPIER / MOTOR POOL',0,2.6,7,5);sign('QUARTERS',-6,1.4,-18,3);sign('FLIGHT LINE →',6,1.1,-35,3);
+}else{
+ // District visuals: VIS_* meshes render; collision and markers stay invisible.
+ const root=district.gltf.scene;root.traverse(o=>{if(/^(COL_|GATE_|START_|AI_|PICKUP_|SPEC_|CAM_)/.test(o.name))o.visible=false;else if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});scene.add(root);
+ scene.background=new T.Color('#a9d4ee');scene.fog=new T.Fog('#a9d4ee',80,260);
+}
 let car=new T.Group();scene.add(car);const shell=box(0,.15,0,.44,.16,.75,'#e6a53c',car);box(0,.3,.04,.33,.20,.32,'#273d45',car);box(0,.22,.39,.55,.05,.15,'#253436',car);box(0,.43,.29,.016,.45,.016,'#313d3b',car);for(const x of [-.15,.15])box(x,.19,-.39,.10,.06,.025,'#fff4be',car);
 let wheels=[];for(const x of [-.29,.29])for(const z of [-.25,.25]){const pivot=new T.Group();pivot.position.set(x,-.08,z);car.add(pivot);const wheel=new T.Mesh(new T.CylinderGeometry(.15,.15,.13,16),material('#202a2a'));wheel.rotation.z=Math.PI/2;wheel.castShadow=true;pivot.add(wheel);const hub=sphere(0,0,0,.08,'#b1b6a8',pivot,.9,1,1);wheels.push({pivot,wheel,front:z<0});}
 // Validated original assets are the normal entry; prototype remains an explicit diagnostic fallback.
 if(new URLSearchParams(location.search).get('assets')!=='prototype'){
  assetState='loading';$('start').disabled=true;
  import('./assets.js').then(async({loadBuggyAsset,loadHangarAsset,loadStaticAsset})=>{
-  const [buggy,hangar]=await Promise.all([loadBuggyAsset('./assets/buggy.glb'),loadHangarAsset('./assets/hangar-slice.glb')]);
-  const base=artReview?await Promise.all([loadStaticAsset('./assets/aircraft.glb','Aircraft_Root'),loadStaticAsset('./assets/quarters.glb','Quarters_Root')]):null;
+  const [buggy,hangar]=await Promise.all([loadBuggyAsset('./assets/buggy.glb'),track?null:loadHangarAsset('./assets/hangar-slice.glb')]);
+  const base=artReview&&!track?await Promise.all([loadStaticAsset('./assets/aircraft.glb','Aircraft_Root'),loadStaticAsset('./assets/quarters.glb','Quarters_Root')]):null;
   // Commit the complete visual/collision set together; a failed load retains the prototype.
-  scene.remove(car);car=buggy.car;wheels=buggy.wheels;scene.add(car,hangar.hangar);
+  scene.remove(car);car=buggy.car;wheels=buggy.wheels;scene.add(car);
+  if(hangar){scene.add(hangar.hangar);
   const floor=hangar.hangar.getObjectByName('Floor');floor.material=material('#9ca59b').clone();floor.material.roughness=.68;
   for(const z of [-14,-2]){const lamp=new T.SpotLight(0xffd29a,110,22,1.1,.75,1.4);lamp.position.set(35,6,z);lamp.target.position.set(38,0,z+2);scene.add(lamp,lamp.target);}
   sign('02 / ENGINEERING',38,4.3,-19.2,4).rotation.y=Math.PI;
   for(const node of hangarFallback)node.visible=false;
-  hangar.collision.forEach(addSolid);
+  hangar.collision.forEach(addSolid);}
   if(base){for(const node of [...housingFallback,...aircraftFallback])node.visible=false;for(const a of aircraft){const model=base[0].clone(true);model.position.set(a.x,0,a.z);scene.add(model);addSolid({x:a.x,z:a.z-2.6,w:.3,d:.45,h:.75,minY:0});}for(const b of buildings.filter(b=>b.kind==='house')){const model=base[1].clone(true);model.position.set(b.x,0,b.z);scene.add(model);}}
-  if(artReview){const {applyArtReview}=await import('./art-review.js');applyArtReview({scene,car,hangar:hangar.hangar,renderer,sun,contactSun});}
+  if(artReview&&hangar){const {applyArtReview}=await import('./art-review.js');applyArtReview({scene,car,hangar:hangar.hangar,renderer,sun,contactSun});}
   assetState='blender';
  }).catch(error=>{assetState='failed';console.error('RC Blender asset rejected:',error);$('brief').hidden=false;const warning=document.createElement('p');warning.textContent='Asset loading failed; prototype fallback is available.';$('brief').append(warning);}).finally(()=>{$('start').disabled=false;});
 }
-const gates=checkpoints.slice(0,-1).map(([x,z],i)=>{const g=new T.Group();g.position.set(x,0,z);scene.add(g);for(const dx of [-2.5,2.5]){box(dx,.7,0,.12,1.4,.12,'#ffcd65',g);box(dx,1.2,0,.5,.25,.05,'#ffcd65',g);}g.userData.label=sign(String(i+1).padStart(2,'0'),x,1.8,z,1.5);return g;});
+const gates=cps.slice(0,-1).map(([x,z,,half=2.5],i)=>{const g=new T.Group(),m=course.gates?.[i];g.position.set(x,m?m.pos[1]:0,z);if(m)g.rotation.y=Math.atan2(-m.forward[0],-m.forward[2]);scene.add(g);for(const dx of [-half,half]){box(dx,.7,0,.12,1.4,.12,'#ffcd65',g);box(dx,1.2,0,.5,.25,.05,'#ffcd65',g);}g.userData.label=sign(String(i+1).padStart(2,'0'),x,(m?m.pos[1]:0)+1.8,z,1.5);return g;});
 let mode='kid';try{if(localStorage.getItem('guns-only.rc.mode')==='bigKid')mode='bigKid';}catch{}
 let s=createSession(course,{mode}),paused=true,keys=new Set(),acc=0,last=performance.now(),best=0;try{best=Number(localStorage.getItem('guns-only.rc.best'))||0;}catch{}
 const format=t=>`${Math.floor(t/60)}:${(t%60).toFixed(2).padStart(5,'0')}`;
@@ -96,7 +110,9 @@ window.addEventListener('keydown',e=>{if(['KeyW','KeyS','KeyA','KeyD','Space','A
 for(const button of document.querySelectorAll('[data-key]')){button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);keys.add(button.dataset.key);};for(const event of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(event,()=>keys.delete(button.dataset.key));}
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}window.addEventListener('resize',resize);resize();camera.position.set(0,2,8);
 const desired=new T.Vector3(),target=new T.Vector3(),map=$('map').getContext('2d');
-function drawMap(){map.clearRect(0,0,180,160);const point=(x,z)=>[90+x*1.35,80+z*1.5];map.fillStyle='#91a99c';for(const b of buildings){const [x,y]=point(b.x-b.w/2,b.z-b.d/2);map.fillRect(x,y,b.w*1.35,b.d*1.5);}map.strokeStyle='#e8bf66';map.setLineDash([3,4]);map.beginPath();checkpoints.forEach(([x,z],i)=>{const p=point(x,z);i?map.lineTo(...p):map.moveTo(...p);});map.stroke();map.setLineDash([]);const p=point(...checkpoints[s.gate]);map.fillStyle='#ffcc66';map.beginPath();map.arc(...p,4,0,Math.PI*2);map.fill();map.fillStyle='#fff';map.beginPath();map.arc(...point(s.car.pos[0],s.car.pos[2]),3,0,Math.PI*2);map.fill();}
+// Minimap fits the route's bounding box.
+const mapBox=(()=>{const xs=cps.map(c=>c[0]),zs=cps.map(c=>c[1]),cx=(Math.min(...xs)+Math.max(...xs))/2,cz=(Math.min(...zs)+Math.max(...zs))/2,k=Math.min(150/(Math.max(...xs)-Math.min(...xs)+10),130/(Math.max(...zs)-Math.min(...zs)+10));return track?{cx,cz,k}:{cx:0,cz:0,k:null};})();
+function drawMap(){map.clearRect(0,0,180,160);const point=mapBox.k?(x,z)=>[90+(x-mapBox.cx)*mapBox.k,80+(z-mapBox.cz)*mapBox.k]:(x,z)=>[90+x*1.35,80+z*1.5];map.fillStyle='#91a99c';if(!track)for(const b of buildings){const [x,y]=point(b.x-b.w/2,b.z-b.d/2);map.fillRect(x,y,b.w*1.35,b.d*1.5);}map.strokeStyle='#e8bf66';map.setLineDash([3,4]);map.beginPath();cps.forEach(([x,z],i)=>{const p=point(x,z);i?map.lineTo(...p):map.moveTo(...p);});map.stroke();map.setLineDash([]);const p=point(cps[s.gate][0],cps[s.gate][1]);map.fillStyle='#ffcc66';map.beginPath();map.arc(...p,4,0,Math.PI*2);map.fill();map.fillStyle='#fff';map.beginPath();map.arc(...point(s.car.pos[0],s.car.pos[2]),3,0,Math.PI*2);map.fill();}
 let reported=false;
 function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){acc+=dt;while(acc>=1/120){stepSession(s,{throttle:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),steer:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),brake:keys.has('Space')},1/120);acc-=1/120;}}
  const r=readout(s),c=s.car,p=BUGGY;
@@ -109,9 +125,9 @@ function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){a
  const ray=[desired.x-eye[0],desired.y-eye[1],desired.z-eye[2]],dist=Math.hypot(...ray),hit=course.world.raycast(eye,ray.map(v=>v/dist),dist);
  if(hit){const k=Math.max(.15,hit.dist-.12)/dist;desired.set(eye[0]+ray[0]*k,eye[1]+ray[1]*k,eye[2]+ray[2]*k);}
  camera.position.lerp(desired,1-Math.exp(-dt*7));target.set(r.x+Math.sin(r.yaw)*.8,r.y+.15,r.z-Math.cos(r.yaw)*.8);camera.lookAt(target);
- gates.forEach((g,i)=>{g.visible=i===(s.gate===checkpoints.length-1?0:s.gate);g.userData.label.visible=g.visible;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
- $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);$('gate').textContent=`${Math.min(s.gate+1,checkpoints.length)}/${checkpoints.length} · ${checkpoints[s.gate][2]}`;$('secret').textContent=`◇ ${s.found}/3`;drawMap();renderer.render(scene,camera);
+ gates.forEach((g,i)=>{g.visible=i===(s.gate===cps.length-1?0:s.gate);g.userData.label.visible=g.visible;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
+ $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);$('gate').textContent=`${Math.min(s.gate+1,cps.length)}/${cps.length} · ${cps[s.gate][2]}`;$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();renderer.render(scene,camera);
  if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>Back at the motor pool.</h1><p>${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/3</p><button id="again">Run again</button> <button id="explore">Keep exploring</button>`;pause(true);$("again").onclick=()=>{s=createSession(course,{mode});reported=false;result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;pause(false);};}
  requestAnimationFrame(frame);}
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
-window.__gunsOnlyRC={snapshot:()=>({...readout(s),time:s.time,gate:s.gate,running:s.running,finished:s.finished,hits:s.hits,found:s.found,seen:[...s.seen],travel:s.travel,recoveries:s.recoveries,mode,paused,assets:assetState}),renderer:()=>renderer.info.render};requestAnimationFrame(frame);
+window.__gunsOnlyRC={snapshot:()=>({...readout(s),time:s.time,gate:s.gate,running:s.running,finished:s.finished,hits:s.hits,found:s.found,seen:[...s.seen],travel:s.travel,recoveries:s.recoveries,mode,paused,assets:assetState}),renderer:()=>renderer.info.render,checkpoints:()=>cps.map(c=>[c[0],c[1]])};requestAnimationFrame(frame);
