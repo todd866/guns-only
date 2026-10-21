@@ -4,18 +4,21 @@
 // player; in Big Kid they just drive.
 import { createSession, stepSession, readout, recover } from './session.mjs';
 import { add, sub, scale, dot, len, rotate } from './math.mjs';
+import { createPickups, stepPickups, modifiers, use, rivalWants } from './pickups.mjs';
 
 export const SKILL = { cruise: 0.78, ace: 0.95 };
 
 export function createRace(course, { mode = 'kid', opponents = 3 } = {}) {
   const grid = course.grid ?? gridBehind(course.start, opponents + 1);
-  const player = createSession({ ...course, start: grid[0] }, { mode });
+  // The player starts at the back, as in Re-Volt: the chase camera sees the car, and there
+  // are rivals to overtake from the first second.
+  const slots = grid.slice(0, opponents + 1), player = createSession({ ...course, start: slots.at(-1) }, { mode });
   const line = racingLine(course);
-  const rivals = grid.slice(1, opponents + 1).map((slot, i) => ({
+  const rivals = slots.slice(0, -1).map((slot, i) => ({
     session: createSession({ ...course, start: slot }, { mode: 'bigKid' }),
     skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i,
   }));
-  return { course, mode, player, rivals, line };
+  return { course, mode, player, rivals, line, pickups: createPickups(course), events: [] };
 }
 
 // Racing line: AI nodes if authored, else the lap gates.
@@ -52,10 +55,19 @@ export function driveInput(race, rival) {
   let target = line[rival.node % n], i = rival.node;
   while (Math.hypot(target[0] - r.x, target[1] - r.z) < look && i < rival.node + n) target = line[++i % n];
   const want = Math.atan2(target[0] - r.x, -(target[1] - r.z)), err = Math.atan2(Math.sin(want - r.yaw), Math.cos(want - r.yaw));
-  // Corner speed from the turn coming up: the angle between the next two legs.
-  const a = line[rival.node % n], b = line[(rival.node + 1) % n], c = line[(rival.node + 2) % n];
-  const turn = Math.abs(Math.atan2(Math.sin(Math.atan2(c[0] - b[0], c[1] - b[1]) - Math.atan2(b[0] - a[0], b[1] - a[1])), Math.cos(Math.atan2(c[0] - b[0], c[1] - b[1]) - Math.atan2(b[0] - a[0], b[1] - a[1]))));
-  let vmax = Math.max(3, (13 - turn * 6) * rival.skill) * (1 - Math.min(0.6, Math.abs(err)));
+  // Speed profile: each upcoming corner allows a speed from its turn angle; the car may carry
+  // more speed while it still has room to brake down to it (v² = vc² + 2·a·d).
+  const BRAKE = 5.5, top = 13 * rival.skill;
+  let vmax = top, dist = Math.hypot(line[rival.node % n][0] - r.x, line[rival.node % n][1] - r.z);
+  for (let k = 0; k < 4; k++) {
+    const a = line[(rival.node + k - 1 + n) % n], b = line[(rival.node + k) % n], c = line[(rival.node + k + 1) % n];
+    const h1 = Math.atan2(b[0] - a[0], b[1] - a[1]), h2 = Math.atan2(c[0] - b[0], c[1] - b[1]);
+    const turn = Math.abs(Math.atan2(Math.sin(h2 - h1), Math.cos(h2 - h1)));
+    const vc = Math.max(3.5, top * (1 - turn / Math.PI * 1.5));
+    vmax = Math.min(vmax, Math.sqrt(vc * vc + 2 * BRAKE * dist));
+    dist += Math.hypot(c[0] - b[0], c[1] - b[1]);
+  }
+  vmax *= 1 - Math.min(0.6, Math.abs(err));
   if (race.mode === 'kid') {
     // Rubber band: ease off once ahead of the player and all but wait two gates up the road;
     // push a little when behind. Nobody disappears over the horizon on a six-year-old.
@@ -67,14 +79,25 @@ export function driveInput(race, rival) {
   return { throttle: r.forwardSpeed < vmax ? 1 : r.forwardSpeed > vmax + 1.5 ? -0.6 : 0.2, steer };
 }
 
+// Effects (zoom, oil, a balloon spin) ride on the step input; a spinning car's controls are dead.
+function withEffects(race, car, input) {
+  const m = modifiers(race.pickups, car);
+  return m.spinning ? { boost: 1, gripScale: 0.5 } : { ...input, boost: m.boost, gripScale: m.gripScale };
+}
+
 export function stepRace(race, playerInput, dt = 1 / 120) {
-  stepSession(race.player, playerInput, dt);
+  const pk = race.pickups, cars = [race.player.car, ...race.rivals.map(r => r.session.car)];
+  if (playerInput.fire) use(pk, race.player.car);
+  stepSession(race.player, withEffects(race, race.player.car, playerInput), dt);
   for (const rival of race.rivals) {
-    stepSession(rival.session, driveInput(race, rival), dt);
+    // Kid mode: rivals never aim balloons or oil at the player, only at each other.
+    if (rivalWants(pk, rival.session.car, race.mode === 'kid' ? cars.slice(1) : cars)) use(pk, rival.session.car);
+    stepSession(rival.session, withEffects(race, rival.session.car, driveInput(race, rival)), dt);
     // A rival on its roof gets the same R a kid would press.
     if (rotate(rival.session.car.q, [0, 1, 0])[1] < 0.2 && rival.session.car.speed < 0.5) { rival.stuck = (rival.stuck || 0) + dt; if (rival.stuck > 1.5) { rival.stuck = 0; recover(rival.session); } }
   }
-  bump([race.player, ...race.rivals.map(r => r.session)].map(s => s.car));
+  bump(cars);
+  race.events.push(...stepPickups(pk, cars, race.course.world, dt));
 }
 
 // Car-to-car: body spheres against body spheres, equal-mass impulses with a little bounce.

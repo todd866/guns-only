@@ -71,4 +71,6 @@ export function buildBaseWorld(){
  return w;
 }
 let cached=null;
-export function baseCourse(){return {world:cached??=buildBaseWorld(),checkpoints,secrets,start:{pos:[0,0,5],yaw:0}};}
+// Pickup crates along the prototype route.
+export const pickupSpots=[[0,-12],[1.5,-30],[12,-36],[38,-15],[38,12],[25,35]].map(([x,z])=>({pos:[x,.15,z]}));
+export function baseCourse(){return {world:cached??=buildBaseWorld(),checkpoints,secrets,pickups:pickupSpots,start:{pos:[0,0,5],yaw:0}};}

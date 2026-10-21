@@ -91,7 +91,8 @@ function substep(car, input, world, dt) {
   // Throttle opposite to motion brakes first, then reverses (RC-transmitter behaviour).
   const braking = !!input.brake || (throttle !== 0 && vFwd * throttle < -0.3);
   let drive = 0;
-  if (!braking && throttle > 0) drive = throttle * p.driveForce * Math.max(0, 1 - vFwd / p.topSpeed);
+  const boost = input.boost ?? 1;   // zoom pickup: more push and a higher top end
+  if (!braking && throttle > 0) drive = throttle * p.driveForce * boost * Math.max(0, 1 - vFwd / (p.topSpeed * boost));
   if (!braking && throttle < 0) drive = throttle * p.driveForce * 0.6 * Math.max(0, 1 + vFwd / p.reverseSpeed);
   const grip = input.gripScale ?? 1;
 
