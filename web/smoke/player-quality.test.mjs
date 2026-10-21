@@ -211,7 +211,7 @@ test("every production brief keeps its primary action on screen when a phone is 
   const ROUTES = [
     { id: "aircraft picker", url: "?menu=1&audioQa=silent&server=off", action: "#ready-start" },
     { id: "Cobra Canyon", url: "cobra-lab/?audioQa=silent&server=off", action: "#mission-brief-start" },
-    { id: "Weekend Ride", url: "weekend-ride/?audioQa=silent&server=off", action: "#ride-brief-start" },
+    { id: "Area 51½", url: "rc/?audioQa=silent", action: "#start" },
     { id: "Fire Boss", url: "okanagan/?audioQa=silent", action: "#start" },
   ];
   // 844x390 is a large phone on its side; 667x375 is a small one, and the tighter height is where
