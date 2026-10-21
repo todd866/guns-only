@@ -123,7 +123,7 @@ function poseCar(group,wheelSet,c){group.position.set(...c.pos);group.quaternion
 // Rivals wear aggressor-squadron colours (Nellis nod): ghost blue, desert tan, splinter grey, flanker blue, arctic white.
 const RIVAL_PAINT=['#5d7fa3','#c9a46c','#8c969c','#3f5f8a','#dfe6ea'];let rivalVis=[],rivalSource=null;
 function syncRivals(){if(rivalSource===car&&rivalVis.length===race.rivals.length)return;rivalVis.forEach(v=>scene.remove(v.group));rivalSource=car;
- rivalVis=race.rivals.map((_,i)=>{const group=car.clone(true);group.traverse(o=>{if(o.isMesh&&o.material?.color){const hsl={};o.material.color.getHSL(hsl);if(hsl.s>.35){o.material=o.material.clone();o.material.color.set(RIVAL_PAINT[i%5]);}}});scene.add(group);
+ rivalVis=race.rivals.map((_,i)=>{const group=car.clone(true);group.traverse(o=>{if(o.isMesh&&o.material?.color){const hsl={};o.material.color.getHSL(hsl);if(hsl.s>.35&&hsl.l>.3){o.material=o.material.clone();o.material.color.set(RIVAL_PAINT[i%5]);}}});scene.add(group);
   const named=['FL','FR','RL','RR'].map(n=>({pivot:group.getObjectByName('Steer_'+n),wheel:group.getObjectByName('Wheel_'+n),front:n[0]==='F'}));
   return {group,wheels:named.every(w=>w.pivot&&w.wheel)?named:[]};});}
 // Pickup presentation: gift crates, balloons, oil puddles, bubble shields.
