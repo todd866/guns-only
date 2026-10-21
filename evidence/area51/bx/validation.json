@@ -1,23 +1,23 @@
 {
   "file": "web/wwwroot/rc/assets/districts/bx.glb",
-  "checked_at": "2026-10-21T06:43:56.583Z",
+  "checked_at": "2026-10-21T13:00:56.515Z",
   "ok": true,
   "errors": [],
   "warnings": [],
-  "bytes": 7031808,
+  "bytes": 7144272,
   "materials": 24,
-  "visual_triangles": 110127,
+  "visual_triangles": 111362,
   "visual_primitives": 24,
   "vis_primitives_with_color0": 24,
-  "collision_triangles": 2608,
-  "collision_meshes": 201,
+  "collision_triangles": 2856,
+  "collision_meshes": 216,
   "collision_open_meshes": 0,
   "collision_surface_triangles": {
     "carpet": 12,
-    "concrete": 300,
+    "concrete": 312,
     "metal": 1764,
     "tile": 48,
-    "wood": 484
+    "wood": 720
   },
   "gates": [
     {
@@ -98,11 +98,95 @@
   "specimens": [
     "SPEC_01"
   ],
+  "coins": [
+    {
+      "name": "COIN_01",
+      "at": [
+        1,
+        0.55,
+        -27.6
+      ],
+      "lift_m": 0.25,
+      "surface": "wood",
+      "line_m": 17.37,
+      "hint": "stockroom shortcut: on the pallet deck, beside the specimen jar"
+    },
+    {
+      "name": "COIN_02",
+      "at": [
+        -41.9,
+        0.3,
+        15
+      ],
+      "lift_m": 0.3,
+      "surface": "tile",
+      "line_m": 13.9,
+      "hint": "halfway down the last HOUSEWARES aisle"
+    },
+    {
+      "name": "COIN_03",
+      "at": [
+        -6,
+        0.3,
+        31.2
+      ],
+      "lift_m": 0.3,
+      "surface": "tile",
+      "line_m": 7.4,
+      "hint": "behind the CHALLENGE COINS counter, of course"
+    },
+    {
+      "name": "COIN_04",
+      "at": [
+        27,
+        0.3,
+        -8.5
+      ],
+      "lift_m": 0.3,
+      "surface": "tile",
+      "line_m": 10.5,
+      "hint": "food court: between the four-tops, out through the MILITARY CLEARANCE racks"
+    },
+    {
+      "name": "COIN_05",
+      "at": [
+        48.2,
+        0.3,
+        31.2
+      ],
+      "lift_m": 0.3,
+      "surface": "tile",
+      "line_m": 16.22,
+      "hint": "DESERT MART: behind the PCS moving-box pallet"
+    }
+  ],
   "camera_hints": [
     "CAM_checkout_lane",
     "CAM_stockroom_doors",
     "CAM_stockroom_ramp",
     "CAM_table_tunnel"
+  ],
+  "alt_routes": [
+    {
+      "name": "runway",
+      "nodes": 15,
+      "length_m": 38.92,
+      "start": "AI_019",
+      "end": "AI_032",
+      "min_width_m": 0.8,
+      "max_height_m": 0.71,
+      "bypassed_m": 79.35
+    },
+    {
+      "name": "stockroom",
+      "nodes": 30,
+      "length_m": 77.95,
+      "start": "AI_017",
+      "end": "AI_034",
+      "min_width_m": 1.18,
+      "max_height_m": 0.3,
+      "bypassed_m": 103.95
+    }
   ],
   "budget": {
     "visualTriangles": 250000,
@@ -124,6 +208,25 @@
       12
     ],
     "aiMaxTurnDeg": 75,
+    "coins": 5,
+    "coinMaxLift": 0.6,
+    "coinOffLine": 1.5,
+    "altEndOnLine": 1,
+    "altMinWidth": 0.55,
+    "altMinNodes": 4,
+    "walkable": [
+      "asphalt",
+      "concrete",
+      "tile",
+      "wood",
+      "carpet",
+      "gymfloor",
+      "rubber",
+      "metal",
+      "gravel",
+      "grass",
+      "dirt"
+    ],
     "trapStep": [
       0.025,
       0.25
@@ -136,7 +239,8 @@
       "tile",
       "wood",
       "carpet",
-      "gymfloor"
+      "gymfloor",
+      "rubber"
     ],
     "toyClearance": 0.45
   }

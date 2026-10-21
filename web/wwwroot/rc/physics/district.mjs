@@ -60,7 +60,7 @@ export function surfaceOf(name) {
 
 export function courseFromGlb(buffer) {
   const glb = parseGlb(buffer), world = createWorld(4);
-  const gates = [], starts = [], ai = [], pickups = [], secrets = [], cams = [];
+  const gates = [], starts = [], ai = [], pickups = [], secrets = [], cams = [], coins = [], altMap = new Map();
   let colTris = 0;
   walkNodes(glb, (n, m) => {
     const name = n.name || '', pos = apply(m, [0, 0, 0]);
@@ -86,6 +86,11 @@ export function courseFromGlb(buffer) {
     else if (name.startsWith('PICKUP_')) pickups.push(marker);
     else if (name.startsWith('SPEC_')) secrets.push(marker);
     else if (name.startsWith('CAM_')) cams.push(marker);
+    else if (/^COIN_\d+/.test(name)) coins.push(marker);
+    else if (/^(ALT_[A-Za-z0-9]+|SHORTCUT)_\d+/.test(name)) {
+      const key = name.startsWith('SHORTCUT') ? 'ALT_shortcut' : name.replace(/_\d+.*$/, '');
+      if (!altMap.has(key)) altMap.set(key, []); altMap.get(key).push(marker);
+    }
   });
   const byNum = (a, b) => parseInt(a.name.match(/\d+/)[0]) - parseInt(b.name.match(/\d+/)[0]);
   gates.sort(byNum); starts.sort(byNum); ai.sort(byNum);
@@ -96,8 +101,9 @@ export function courseFromGlb(buffer) {
   // One lap: cross GATE_00 to start the clock, every gate in order, GATE_00 again to finish.
   const lap = [...gates, gates[0]];
   return {
-    world, gates, ai, pickups, cams, colTris,
-    checkpoints: lap.map(g => [g.pos[0], g.pos[2], g.name, Math.max(1.2, g.halfWidth)]),
+    alts: [...altMap].map(([name, ms]) => ({ name, nodes: ms.sort((a, b) => +a.name.match(/(\d+)\D*$/)[1] - +b.name.match(/(\d+)\D*$/)[1]).map(m => [m.pos[0], m.pos[2], m.halfWidth || 0.6]) })),
+    world, gates, ai, pickups, cams, colTris, coins: coins.sort(byNum).map(c => ({ name: c.name, x: c.pos[0], y: c.pos[1], z: c.pos[2] })),
+    checkpoints: lap.map(g => [g.pos[0], g.pos[2], g.name, Math.max(1.2, g.halfWidth), [g.forward[0], g.forward[2]]]),
     secrets: secrets.map(s => ({ x: s.pos[0], z: s.pos[2], y: s.pos[1] })),
     start: { pos: starts[0].pos, yaw: yawOf(starts[0].forward) },
     grid: starts.map(s => ({ pos: s.pos, yaw: yawOf(s.forward) })),

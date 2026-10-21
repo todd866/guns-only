@@ -127,3 +127,12 @@ test('a rubber trampoline throws the car higher than concrete', () => {
   const rubber = peak('rubber'), concrete = peak('concrete');
   assert.ok(rubber > concrete + 0.1, `rubber ${rubber.toFixed(2)} concrete ${concrete.toFixed(2)}`);
 });
+
+test('kid mode unsticks a car wedged against a wall with the throttle held; Big Kid does not', () => {
+  for (const [mode, unsticks] of [['kid', true], ['bigKid', false]]) {
+    const w = createWorld(); w.addQuad([-20, 0, -20], [-20, 0, 20], [20, 0, 20], [20, 0, -20], 'asphalt'); addBox(w, 0, -3, 4, 0.3, 0, 1);
+    const s = createSession({ world: w, checkpoints: [[0, 5, 'a'], [0, -10, 'b']], secrets: [], start: { pos: [0, 0, 5], yaw: 0 } }, { mode });
+    s.gate = 1; run(s, { throttle: 1 }, 120 * 5);
+    assert.equal(s.recoveries > 0, unsticks, `${mode} recoveries ${s.recoveries}`);
+  }
+});

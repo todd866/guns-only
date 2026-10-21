@@ -7,26 +7,35 @@ import { add, sub, scale, dot, len, rotate } from './math.mjs';
 import { createPickups, stepPickups, modifiers, use, rivalWants } from './pickups.mjs';
 
 export const SKILL = { cruise: 0.78, ace: 0.95 };
+// Aggressor-squadron callsigns, one per rival paint scheme (ghost, desert, splinter, flanker, arctic).
+export const CALLSIGNS = ['GHOST', 'SANDY', 'SPLINTER', 'FLANKER', 'FROSTY'];
 
-export function createRace(course, { mode = 'kid', opponents = 3 } = {}) {
+export function createRace(course, { mode = 'kid', opponents = 3, roam = false } = {}) {
   const grid = course.grid ?? gridBehind(course.start, opponents + 1);
   // The player starts at the back, as in Re-Volt: the chase camera sees the car, and there
   // are rivals to overtake from the first second.
   const slots = grid.slice(0, opponents + 1), player = createSession({ ...course, start: slots.at(-1) }, { mode });
   const line = racingLine(course);
   const rivals = slots.slice(0, -1).map((slot, i) => ({
-    session: createSession({ ...course, start: slot }, { mode: 'bigKid' }),
-    skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i,
+    session: Object.assign(createSession({ ...course, start: slot }, { mode: 'bigKid' }), { autoUnstick: true }),
+    skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i, callsign: CALLSIGNS[i % CALLSIGNS.length],
   }));
   // Retreat: once a race the bugle sounds and every rival stops for the flag. The player can
   // stand to attention too, or keep driving (nobody tells the kid off).
-  return { course, mode, player, rivals, line, pickups: createPickups(course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: 18, length: 5 } };
+  if (roam) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
+  return { course, mode, roam, player, rivals, line, alts: altRoutes(course, line), pickups: createPickups(course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: 18, length: 5 } };
 }
 
 // Racing line: AI nodes if authored, else the lap gates.
 function racingLine(course) {
   const pts = course.ai?.length ? course.ai.map(a => [a.pos[0], a.pos[2], a.halfWidth || 2]) : course.checkpoints.map(c => [c[0], c[1], c[3] ?? 2.4]);
   return pts;
+}
+
+// ALT_<name>_NNN skill routes: each enters and leaves the main line at its nearest node.
+function altRoutes(course, line) {
+  const nearest = ([x, z]) => line.reduce((b, p, i) => Math.hypot(p[0] - x, p[1] - z) < Math.hypot(line[b][0] - x, line[b][1] - z) ? i : b, 0);
+  return (course.alts ?? []).map(a => ({ name: a.name, nodes: a.nodes, entry: nearest(a.nodes[0]), exit: (nearest(a.nodes.at(-1)) + 1) % line.length }));
 }
 
 // Prototype courses have one start; line the rest up behind it, two abreast.
@@ -56,23 +65,30 @@ export function placeOf(race, s) {
 }
 
 export function driveInput(race, rival) {
-  const s = rival.session, r = readout(s), line = race.line, n = line.length;
+  const s = rival.session, r = readout(s), n = race.line.length;
+  // Skill routes: aces branch onto an ALT line at its entry node and rejoin at its exit.
+  if (!rival.alt && rival.skill >= 0.9) for (const a of race.alts) if (rival.node % n === a.entry && !rival.altBanned?.has(a.name)) { rival.alt = a; rival.altNode = 0; }
+  const onAlt = !!rival.alt, line = onAlt ? rival.alt.nodes : race.line, m = line.length;
+  const at = i => onAlt ? line[Math.max(0, Math.min(i, m - 1))] : line[((i % m) + m) % m];
+  let node = onAlt ? rival.altNode : rival.node;
   // Advance along the line once a node is close or behind us.
-  for (let k = 0; k < n; k++) {
-    const p = line[rival.node % n], dx = p[0] - r.x, dz = p[1] - r.z;
+  for (let k = 0; k < m; k++) {
+    const p = at(node), dx = p[0] - r.x, dz = p[1] - r.z;
     const ahead = dx * Math.sin(r.yaw) - dz * Math.cos(r.yaw);
-    if (Math.hypot(dx, dz) < Math.max(1.5, p[2] * 0.8) || (ahead < 0 && Math.hypot(dx, dz) < 6)) rival.node++; else break;
+    if (Math.hypot(dx, dz) < Math.max(onAlt ? 0.9 : 1.5, p[2] * 0.8) || (ahead < 0 && Math.hypot(dx, dz) < (onAlt ? 2 : 6))) node++; else break;
   }
-  const look = 1.6 + r.speed * 0.35;
-  let target = line[rival.node % n], i = rival.node;
-  while (Math.hypot(target[0] - r.x, target[1] - r.z) < look && i < rival.node + n) target = line[++i % n];
+  if (onAlt) { rival.altNode = node; if (node >= m - 1) { rival.node = rival.alt.exit; rival.alt = null; } } else rival.node = node;
+  // Careful on a skill route: shorter look-ahead, lower top speed.
+  const look = onAlt ? 1 + r.speed * 0.2 : 1.6 + r.speed * 0.35;
+  let target = at(node), i = node;
+  while (Math.hypot(target[0] - r.x, target[1] - r.z) < look && i < node + m) target = at(++i);
   const want = Math.atan2(target[0] - r.x, -(target[1] - r.z)), err = Math.atan2(Math.sin(want - r.yaw), Math.cos(want - r.yaw));
   // Speed profile: each upcoming corner allows a speed from its turn angle; the car may carry
   // more speed while it still has room to brake down to it (v² = vc² + 2·a·d).
-  const BRAKE = 5.5, top = 13 * rival.skill;
-  let vmax = top, dist = Math.hypot(line[rival.node % n][0] - r.x, line[rival.node % n][1] - r.z);
+  const BRAKE = 5.5, top = (onAlt ? 5.5 : 13) * rival.skill;
+  let vmax = top, dist = Math.hypot(at(node)[0] - r.x, at(node)[1] - r.z);
   for (let k = 0; k < 4; k++) {
-    const a = line[(rival.node + k - 1 + n) % n], b = line[(rival.node + k) % n], c = line[(rival.node + k + 1) % n];
+    const a = at(node + k - 1), b = at(node + k), c = at(node + k + 1);
     const h1 = Math.atan2(b[0] - a[0], b[1] - a[1]), h2 = Math.atan2(c[0] - b[0], c[1] - b[1]);
     const turn = Math.abs(Math.atan2(Math.sin(h2 - h1), Math.cos(h2 - h1)));
     const vc = Math.max(3.5, top * (1 - turn / Math.PI * 1.5));
@@ -80,7 +96,8 @@ export function driveInput(race, rival) {
     dist += Math.hypot(c[0] - b[0], c[1] - b[1]);
   }
   vmax *= 1 - Math.min(0.6, Math.abs(err));
-  if (race.mode === 'kid') {
+  if (race.roam) vmax *= 0.75;   // free drive: rivals cruise round as traffic
+  else if (race.mode === 'kid') {
     // Rubber band: ease off once ahead of the player and all but wait two gates up the road;
     // push a little when behind. Nobody disappears over the horizon on a six-year-old.
     const gap = progress(s) - progress(race.player);
@@ -104,6 +121,15 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   if (playerInput.fire) use(pk, race.player.car);
   stepSession(race.player, withEffects(race, race.player.car, playerInput), dt);
   for (const rival of race.rivals) {
+    // After any recovery the rival is back at a gate: drop a half-driven skill route and resume the
+    // main line from the node nearest where it now stands (otherwise it steers at its old target).
+    if (rival.session.recoveries !== (rival.lastRec ?? 0)) {
+      // A failed skill route is not retried: no teleport loops in front of a six-year-old.
+      if (rival.alt) (rival.altBanned ??= new Set()).add(rival.alt.name);
+      rival.lastRec = rival.session.recoveries; rival.alt = null;
+      const [x, , z] = rival.session.car.pos;
+      rival.node = race.line.reduce((b, p, i) => Math.hypot(p[0] - x, p[1] - z) < Math.hypot(race.line[b][0] - x, race.line[b][1] - z) ? i : b, 0);
+    }
     // Kid mode: rivals never aim balloons or oil at the player, only at each other.
     if (rivalWants(pk, rival.session.car, race.mode === 'kid' ? cars.slice(1) : cars)) use(pk, rival.session.car);
     stepSession(rival.session, withEffects(race, rival.session.car, driveInput(race, rival)), dt);

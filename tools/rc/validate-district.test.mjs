@@ -4,7 +4,8 @@ import {splitGLB, validateDistrict, openEdges} from './validate-district.mjs';
 
 // Minimal synthetic district: a 50 m-radius circular lap (glTF +Y up), one closed asphalt
 // slab under it, one VIS triangle with COLOR_0. Deliberately hand-made, not an export.
-function district({gateOrder = null, dropTri = false, surface = 'asphalt', starts = 4, kerb = null, canopy = null} = {}) {
+function district({gateOrder = null, dropTri = false, surface = 'asphalt', starts = 4, kerb = null, canopy = null,
+  coins = 5, coinLift = .3, coinOnLine = false, alt = null} = {}) {
   const R = 50, nodes = [], floats = [], idx = [];
   const quatY = phi => [0, Math.sin(phi / 2), 0, Math.cos(phi / 2)];
   const at = th => ({t: [R * Math.cos(th), 0, R * Math.sin(th)], r: quatY(Math.PI - th)}); // -Z = d/dθ
@@ -14,6 +15,13 @@ function district({gateOrder = null, dropTri = false, surface = 'asphalt', start
   for (let k = 1; k <= starts; k++) { const p = at(-0.04 * k); nodes.push({name: `START_${k}`, translation: [p.t[0], 0, p.t[2]], rotation: p.r}); }
   for (let k = 0; k < 6; k++) nodes.push({name: `PICKUP_${k}`, translation: at(k + .5).t.map((v, i) => i === 1 ? .3 : v)});
   nodes.push({name: 'SPEC_01', translation: [0, .2, 0]});
+  // Optional skill shortcut: ALT_test_NNN through the given [x, y, z] points.
+  (alt ?? []).forEach((p, k) => nodes.push({name: `ALT_test_${String(k).padStart(3, '0')}`, translation: p, scale: [.4, 1, 1]}));
+  // Challenge coins on a 30 m ring, 20 m inside the lap; optionally lifted or dropped on the line.
+  for (let k = 1; k <= coins; k++) {
+    const th = 2 * Math.PI * k / 5 + .3, r = coinOnLine && k === 1 ? R : 30;
+    nodes.push({name: `COIN_${String(k).padStart(2, '0')}`, translation: [r * Math.cos(th), k === 2 ? coinLift : .3, r * Math.sin(th)], extras: {hint: 'test'}});
+  }
   // Closed box 130 x 0.3 x 130 (12 triangles).
   const s = 65, c = [[-s, -.3, -s], [s, -.3, -s], [s, -.3, s], [-s, -.3, s], [-s, 0, -s], [s, 0, -s], [s, 0, s], [-s, 0, s]];
   // Optional vertical kerb block beside the line at theta = 0 (radially 54-55 m, kerb m tall).
@@ -99,10 +107,36 @@ test('rubber and gravel are valid collision surfaces', () => {
 });
 
 test('interior floors carry a racing line; grass does not', () => {
-  for (const surface of ['tile', 'wood', 'carpet', 'gymfloor']) assert.doesNotMatch(check({surface}).errors.join('\n'), /not on clear road/);
+  for (const surface of ['tile', 'wood', 'carpet', 'gymfloor', 'rubber']) assert.doesNotMatch(check({surface}).errors.join('\n'), /not on clear road/);
 });
 
 test('a table top above toy clearance is overhead; a low block on the line is not', () => {
   assert.doesNotMatch(check({canopy: [.72, .76]}).errors.join('\n'), /not on clear road|wedge-trap/);
   assert.match(check({canopy: [.1, .2]}).errors.join('\n'), /not on clear road/);
+});
+
+test('exactly five challenge coins, each reachable from the floor and off the racing line', () => {
+  const ok = check();
+  assert.equal(ok.coins.length, 5);
+  assert.ok(ok.coins.every(c => c.lift_m === .3 && c.line_m > 19));
+  assert.match(check({coins: 4}).errors.join('\n'), /challenge coins 4 != 5/);
+  assert.match(check({coins: 6}).errors.join('\n'), /challenge coins 6 != 5/);
+  assert.match(check({coinLift: .9}).errors.join('\n'), /COIN_02 floats 0.9 m/);
+  assert.doesNotMatch(check({coinLift: .55}).errors.join('\n'), /COIN_02/);
+  assert.match(check({coinOnLine: true}).errors.join('\n'), /COIN_01 is \d.* m from the racing line/);
+});
+
+test('skill shortcuts: ends on the line, no gate bypassed, walkable and wide enough', () => {
+  const R = 50, on = th => [R * Math.cos(th), 0, R * Math.sin(th)], deg = d => d * Math.PI / 180;
+  const chord = (a, b, n = 4) => [...Array(n + 1).keys()].map(k => { const t = k / n, p = on(deg(a)), q = on(deg(b));
+    return [p[0] + (q[0] - p[0]) * t, 0, p[2] + (q[2] - p[2]) * t]; });
+  const good = check({alt: chord(9, 36)});
+  assert.deepEqual(good.errors, []);
+  assert.equal(good.alt_routes.length, 1);
+  assert.ok(good.alt_routes[0].min_width_m >= 1.1 && good.alt_routes[0].bypassed_m > 20);
+  assert.match(check({alt: chord(9, 63)}).errors.join('\n'), /ALT_test bypasses GATE_01/);
+  const off = chord(9, 36); off[0] = [off[0][0] - 3, 0, off[0][2]];
+  assert.match(check({alt: off}).errors.join('\n'), /ALT_test starts 3 m from the racing line/);
+  const loose = chord(9, 36); loose.splice(2, 0, [70, 0, 0]);
+  assert.match(check({alt: loose}).errors.join('\n'), /ALT_test not over walkable collision/);
 });
