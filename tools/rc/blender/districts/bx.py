@@ -994,7 +994,7 @@ def stockroom():
     words('black', 'DO NOT OPEN (PLEASE)', .06, (-1.0, 31.0, ph + .25), 270, max_w=1.1, out=.002)
     col('wood', 'specimen_crate', aabb(-1.6, -.4, 31.0, 31.45, ph, ph + .6))
     # Pallet jack and a lone box pile: the stockroom chicane.
-    jx, jy = -13.5, 27.0
+    jx, jy = -13.5, 26.4                   # parked against the south stacks, not in the lane
     vis('jack', 'red').add(aabb(jx - .35, jx + .35, jy - .35, jy + .35, .05, .55))
     for s in (-1, 1):
         vis('jack', 'steel').add(aabb(jx + .4, jx + 1.6, jy + s * .25 - .08, jy + s * .25 + .08, .03, .09))
@@ -1002,7 +1002,7 @@ def stockroom():
     vis('jack', 'black').add(aabb(jx - .85, jx - .75, jy - .03, jy + .03, .5, 1.2))
     vis('jack', 'black').add(aabb(jx - .85, jx - .75, jy - .2, jy + .2, 1.15, 1.2))
     col('metal', 'pallet_jack', aabb(jx - .9, jx + 1.6, jy - .4, jy + .4, -.3, 1.2), {'note': 'tines read as part of the wall'})
-    for i, (bx, by) in enumerate(((13.5, 30.2), (-24.0, 30.3))):
+    for i, (bx, by) in enumerate(((13.5, 30.95), (-22.0, 30.95))):     # flush with the racking
         for k in range(3):
             vis('boxes', 'cardboard').add(aabb(bx - .5 + k * .02, bx + .5 - k * .02, by - .55, by + .55, k * .5, k * .5 + .48))
         col('wood', f'box_pile_{i}', aabb(bx - .5, bx + .5, by - .55, by + .55, -.3, 1.45))
@@ -1063,6 +1063,16 @@ def race_markers():
         marker(f'PICKUP_{k:02d}', at, extras={'route': 'shortcut' if k > 8 else 'main'}, display='SPHERE')
     marker('SPEC_01', (1.0, 28.65, .3 + .22), extras={'hint': 'stockroom shortcut: on the pallet deck at the top of the box ramp'},
            display='CUBE')
+    # The stockroom shortcut's intended line: leaves the toy aisle, through the swinging doors,
+    # over the box ramp and pallet deck (specimen), out the second doors, rejoins before GATE_06.
+    sc = [(-33, 16), (-31, 17.2), (-30, 19), (-30, 21.5), (-30, 24), (-29.6, 26.2), (-28, 27.9), (-25, 28.6), (-21, 28.6),
+          (-17, 28.6), (-13, 28.6), (-9, 28.65), (-6, 28.65), (-3.5, 28.65), (-1, 28.65), (1, 28.65), (3.5, 28.65), (6, 28.65),
+          (9, 28.65), (12.5, 28.65), (16, 28.65), (19, 28.65), (21.6, 28.4), (23.4, 27.6), (24, 26), (24, 24), (24, 22.2),
+          (25, 20.6), (26.8, 19.5), (28.8, 19)]
+    for k, (x, y) in enumerate(sc):
+        q = sc[min(k + 1, len(sc) - 1)] if k + 1 < len(sc) else (x + 1, y)
+        hw = 1.6 if 23.5 < y < 25.5 or (-31 < x < -29 and y > 21) else 1.8
+        marker(f'SHORTCUT_{k:03d}', (x, y, 0), (q[0] - x, q[1] - y), (hw, 1, 1), {'route': 'stockroom shortcut'}, 'SINGLE_ARROW')
     marker('CAM_table_tunnel', (41.5, 9.6, .45), (0, -1), extras={'note': 'low chase hint under the mess tables'})
     marker('CAM_checkout_lane', (12, -24, .5), (0, -1), extras={'note': 'checkout lane 3, counters both sides'})
     marker('CAM_stockroom_doors', (-30, 22.5, .5), (0, 1), extras={'note': 'swinging doors into the stockroom'})
