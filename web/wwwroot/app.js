@@ -5575,6 +5575,8 @@ function applyBridgePause() {
 }
 
 document.getElementById("ready-rc")?.addEventListener("click", () => openRC(active => setPauseReason("rc", active)));
+const sortieRC = document.getElementById("sortie-rc");
+sortieRC?.addEventListener("click", () => openRC(active => setPauseReason("rc", active), sortieRC));
 
 function setPauseReason(reason, active) {
   const wasPaused = pauseReasons.size > 0;

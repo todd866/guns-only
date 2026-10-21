@@ -10,8 +10,10 @@ import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { MotorAudio } from './audio.js';
 const audio=new MotorAudio();
 const liveSolids=[...collisionSolids],hangarFallback=[],housingFallback=[],aircraftFallback=[];
-// ?track=<district> drives an exported Blender district; no track = the prototype base route.
-const track=(new URLSearchParams(location.search).get('track')||'').match(/^[a-z0-9-]+$/)?.[0]??null;
+// ?track=<district> drives an exported Blender district.
+// Default is Liberty Loop; ?track=base is the original greybox base route.
+const trackParam=new URLSearchParams(location.search).get('track')??'housing';
+const track=trackParam==='base'?null:trackParam.match(/^[a-z0-9-]+$/)?.[0]??'housing';
 let district=null;
 if(track){const buffer=await (await fetch(`./assets/districts/${track}.glb`)).arrayBuffer();district={course:courseFromGlb(buffer),gltf:await new GLTFLoader().parseAsync(buffer,'./assets/districts/')};}
 const course=district?.course??baseCourse(),cps=course.checkpoints;
