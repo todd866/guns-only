@@ -147,3 +147,19 @@ Free roam between districts waits until the districts themselves are fun.
   pickups (Afterburner, Water Balloon, Hydraulic Leak, Chaff); the retreat event.
 - **M4 Shell:** Area 51½ replaces Weekend Ride on the selector; base-map track select.
 - **M5+:** School, Flight Line, Offices, Commissary, the secret lab.
+
+## Next direction: free roam, Forza Horizon style (owner, 2026-10-21)
+
+Forza Horizon 5 is the target player's favourite game, so Area 51½ becomes a small open world:
+
+- **Hub (`hub.glb`):** all of Little Nellie AFB, compressed like FH5's Mexico (about 30 s across at toy
+  speed). Base roads link the housing streets, the BX car park and doors, the school, the flight line
+  apron and the Area 51½ fence. Free driving, no laps.
+- **Events:** glowing rings, as `EVENT_<id>` empties. Street races run on hub roads; their gates are
+  `RACE_<id>_GATE_NN`, with their own `RACE_<id>_AI_NNN` line. Door events load an interior track
+  (`?track=bx|school|housing`), and finishing returns you to the hub at that door (`?track=hub&from=bx`).
+- **Discovery:** challenge coins and aliens spread across the hub, landmark boards, and later a
+  progress level that unlocks more cars (FH5's collection loop).
+- **Skill shortcuts (owner):** harder but faster ALT routes that need braking and throttle control.
+  Falling off drops you onto the slower main route, never into a trap. Each has its own driving line,
+  and ace rivals take them.
