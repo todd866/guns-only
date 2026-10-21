@@ -68,6 +68,14 @@ New: kid-mode assists (auto-right, steering/traction assist, guide ribbon, no re
 penalty), AI opponents, pickups, the school/offices/PX/housing districts, the secret-area
 unlock, and a brighter, friendlier art direction for the whole base.
 
+## Nellis as the cultural reference (owner, 2026-10-21)
+
+When in doubt, use Nellis AFB: an overall cultural reference, not a 1:1 copy. That means desert
+base housing (stucco, tile roofs, xeriscape, block walls), a rugged mountain backdrop and a
+generic Las Vegas skyline on the horizon. It brings Red Flag, the aggressor squadrons (rival cars
+can wear aggressor camo), the Weapons School and the aerobatic-team home base, and the real Area
+51 out on the range. The base name and every sign stay fictional.
+
 ## USAF flavour (owner, 2026-10-21: "plenty of USAF cultural references")
 
 It's an Air Force base, so it's the BX, not the PX. The jokes are for the parents; the kid gets
