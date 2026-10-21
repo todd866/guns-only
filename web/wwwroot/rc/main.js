@@ -25,6 +25,7 @@ function addSolid(b){liveSolids.push(b);addBox(course.world,b.x,b.z,b.w,b.d,b.mi
 let assetState='prototype';
 const artReview=new URLSearchParams(location.search).get('art')==='review';
 const $=id=>document.getElementById(id),canvas=$('view');
+for(const a of document.querySelectorAll('#tracks a'))a.setAttribute('aria-current',String(a.dataset.track===track));
 if(districtError&&!district){const note=document.createElement('p');note.textContent='Liberty Loop did not download, so this race uses the motor pool route. Reload to try again.';$('brief')?.append(note);}
 const renderer=new T.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
 const scene=new T.Scene();scene.background=new T.Color('#b2c6c5');scene.fog=new T.Fog('#b2c6c5',65,150);
