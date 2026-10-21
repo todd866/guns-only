@@ -87,6 +87,8 @@ sign('RAPIER / MOTOR POOL',0,2.6,7,5);sign('QUARTERS',-6,1.4,-18,3);sign('FLIGHT
 let car=new T.Group();scene.add(car);const shell=box(0,.15,0,.44,.16,.75,'#e6a53c',car);box(0,.3,.04,.33,.20,.32,'#273d45',car);box(0,.22,.39,.55,.05,.15,'#253436',car);box(0,.43,.29,.016,.45,.016,'#313d3b',car);for(const x of [-.15,.15])box(x,.19,-.39,.10,.06,.025,'#fff4be',car);
 let wheels=[];for(const x of [-.29,.29])for(const z of [-.25,.25]){const pivot=new T.Group();pivot.position.set(x,-.08,z);car.add(pivot);const wheel=new T.Mesh(new T.CylinderGeometry(.15,.15,.13,16),material('#202a2a'));wheel.rotation.z=Math.PI/2;wheel.castShadow=true;pivot.add(wheel);const hub=sphere(0,0,0,.08,'#b1b6a8',pivot,.9,1,1);wheels.push({pivot,wheel,front:z<0});}
 // Validated original assets are the normal entry; prototype remains an explicit diagnostic fallback.
+// Start stays disabled in the HTML until the page below is wired, so an early click is never lost.
+if(new URLSearchParams(location.search).get('assets')==='prototype')queueMicrotask(()=>{$('start').disabled=false;});
 if(new URLSearchParams(location.search).get('assets')!=='prototype'){
  assetState='loading';$('start').disabled=true;
  import('./assets.js').then(async({loadBuggyAsset,loadHangarAsset,loadStaticAsset})=>{

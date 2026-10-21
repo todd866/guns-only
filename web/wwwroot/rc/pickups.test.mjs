@@ -40,3 +40,12 @@ test('a full race with pickups stays sane and rivals still finish', () => {
   assert.ok(race.rivals.every(r => r.session.finished), race.rivals.map(r => r.session.gate).join(','));
   assert.ok(used > 0, 'rivals used pickups');
 });
+
+test('kid mode: rival balloons and oil never catch the player', () => {
+  const world = flat(), kid = createCar(undefined, [0, 0.13, -3.5], 0), rival = createCar(undefined, [0, 0.13, 0], 0), pk = createPickups({});
+  pk.held.set(rival, 'balloon'); use(pk, rival);
+  let hitKid = false; for (let i = 0; i < 240; i++) hitKid ||= stepPickups(pk, [rival, kid], world, 1 / 120, kid).some(e => e.car === kid);
+  assert.equal(hitKid, false); assert.equal(modifiers(pk, kid).spinning, false);
+  pk.slicks.push({ pos: [...kid.pos], life: 5, owner: rival }); stepPickups(pk, [rival, kid], world, 1 / 120, kid);
+  assert.equal(modifiers(pk, kid).gripScale, 1);
+});

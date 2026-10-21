@@ -160,25 +160,22 @@ export const PRODUCTION_ROUTES = Object.freeze([
     },
   }),
   Object.freeze({
-    id: "weekend-ride",
-    path: "/weekend-ride/",
+    // Area 51½ replaced Weekend Ride on the front door (2026-10-21). Ready = the district and the
+    // buggy loaded and Start is live; the brief must not be showing a download fallback note.
+    id: "area-51",
+    path: "/rc/",
     search: "?audioQa=silent",
-    isReady: () => document.querySelector("#status")?.dataset.ready === "true"
-      && document.querySelector("#ride-brief")?.hidden === false
-      && window.__gunsOnlyWeekendAuthority?.phase === "paused",
+    isReady: () => window.__gunsOnlyRC?.snapshot().assets === "blender"
+      && document.querySelector("#start")?.disabled === false,
     verify: async (page) => {
       const route = await page.evaluate(() => ({
-        status: document.querySelector("#status span")?.textContent?.trim() ?? "",
-        briefVisible: document.querySelector("#ride-brief")?.hidden === false,
-        title: document.querySelector("#ride-brief-title")?.textContent?.trim() ?? "",
-        phase: window.__gunsOnlyWeekendAuthority?.phase ?? "",
-        aircraftId: window.__gunsOnlyWeekendAuthority?.player_aircraft_id ?? "",
+        brief: document.querySelector("#brief")?.textContent ?? "",
+        gates: window.__gunsOnlyRC?.checkpoints().length ?? 0,
+        line: window.__gunsOnlyRC?.line().length ?? 0,
       }));
-      assert.equal(route.status, "READY · REVIEW SESSION BRIEF");
-      assert.equal(route.briefVisible, true, "Weekend Ride Ready brief is not visible");
-      assert.equal(route.title, "Two laps, then bring it in");
-      assert.equal(route.phase, "paused", "Weekend Ride authority is running behind Ready");
-      assert.equal(route.aircraftId, "vehicle.yzf-r1.track-day.v1");
+      assert.equal(route.brief.includes("did not download"), false, "Area 51½ fell back to the base route");
+      assert.equal(route.gates, 9, "Liberty Loop should have 8 steerpoints plus the finish");
+      assert.ok(route.line > 20, "Liberty Loop racing line missing");
     },
   }),
   Object.freeze({

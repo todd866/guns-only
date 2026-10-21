@@ -113,7 +113,7 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   for (const s of [race.player, ...race.rivals.map(r => r.session)])
     if (s.finished && !race.finishOrder.includes(s)) race.finishOrder.push(s);
   bump(cars);
-  race.events.push(...stepPickups(pk, cars, race.course.world, dt));
+  race.events.push(...stepPickups(pk, cars, race.course.world, dt, race.mode === 'kid' ? race.player.car : null));
 }
 
 // Car-to-car: body spheres against body spheres, equal-mass impulses with a little bounce.
