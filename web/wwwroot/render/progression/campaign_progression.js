@@ -164,6 +164,21 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     title: "Weekend Ride",
     shortObjective: "Open helmet-view lapping on the painted 10,000 ft Rapier-strip circuit; end the ride when ready and review the session.",
     qualification: "",
+    // Owner, 2026-10-21: Area 51½ replaces the driving slot on the front door. The route and
+    // its code stay for development behind ?preview=1.
+    releaseState: EXPERIENCE_RELEASE_STATE.PREVIEW,
+    visible: false,
+    blocker: "Replaced on the front door by Area 51½ (owner direction 2026-10-21)",
+  }),
+  experience({
+    id: "area-51",
+    mission: null,
+    sequence: 11,
+    route: "/rc/",
+    aircraft: "RC buggy",
+    title: "Area 51½",
+    shortObjective: "Race toy RC buggies round a desert air base: pickups, rivals, steerpoints and a hidden alien.",
+    qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,
     blocker: "",

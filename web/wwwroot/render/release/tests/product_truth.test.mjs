@@ -45,17 +45,18 @@ test("the browser and installed-app descriptions match the six production experi
   assert.match(catalogue, /data-domain-filter="civilian"/);
   assert.match(catalogue, /Top Gun/);
   assert.match(catalogue, /data-program-node="cobra-lab"/);
-  assert.match(catalogue, /data-program-node="weekend-ride"/);
+  assert.match(catalogue, /data-program-node="area-51"/);
+  assert.doesNotMatch(catalogue, /data-program-node="weekend-ride"/);
   assert.match(catalogue, /data-program-node="top-gun"/);
   assert.match(catalogue, /data-program-node="okanagan-fireboss"/);
   assert.match(catalogue, /art\/jet-cobra-generated-v4\.webp/);
-  assert.match(catalogue, /art\/bike-yzf-r1\.webp/);
+  assert.match(catalogue, /art\/area51-rc\.webp/);
   assert.match(catalogue, /art\/jet-f14\.webp/);
   assert.match(catalogue, /art\/aircraft-fireboss\.webp/);
   assert.match(manifest.description, /F-22 guns-only dogfighting/);
   assert.match(manifest.description, /Rapier high-altitude balloon intercept/);
   assert.match(manifest.description, /AH-1G Cobra Canyon/);
-  assert.match(manifest.description, /YZF-R1 Weekend Ride/);
+  assert.match(manifest.description, /Area 51½ RC racing/);
   assert.match(manifest.description, /Top Gun ACM/);
   assert.match(manifest.description, /Okanagan Fire Boss/);
   assert.doesNotMatch(catalogue, /Seven flight experiences/);
@@ -174,7 +175,7 @@ test("the evergreen status matrix covers the executable experience catalog", asy
     "first-merge",
     "rapier-intercept",
     "cobra-lab",
-    "weekend-ride",
+    "area-51",
     "top-gun",
     "okanagan-fireboss",
   ]);

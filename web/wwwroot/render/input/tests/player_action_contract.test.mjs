@@ -275,6 +275,8 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["feedback-send", /createReportUi\(\{\s*dialog: document\.querySelector\("#feedback-report"\)/],
     ["feedback-cancel", /createReportUi\(\{\s*dialog: document\.querySelector\("#feedback-report"\)/],
     ["pause-button", /pauseButton\?\.addEventListener\("click", toggleSessionPause\)/],
+    // Area 51½ from pause/debrief: opens the RC frame over the paused shell (rc/host.js).
+    ["ready-rc", /getElementById\("ready-rc"\)\?\.addEventListener\("click", \(\) => openRC\(/],
     ["incident-replay-play", /incidentReplayPlay\?\.addEventListener\("click"/],
     ["incident-replay-event-jump", /incidentReplayEventJump\?\.addEventListener\("click"/],
     ["incident-replay-skip", /incidentReplaySkip\?\.addEventListener\("click", skipIncidentReplay\)/],
@@ -753,8 +755,8 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     "the Rapier full mission must always be selectable");
   assert.ok(nodeIds.includes("cobra-lab"),
     "Cobra Canyon must be selectable from the Ready aircraft picker");
-  assert.ok(nodeIds.includes("weekend-ride"),
-    "Weekend Ride must be selectable from the Ready aircraft picker");
+  assert.ok(nodeIds.includes("area-51"),
+    "Area 51½ must be selectable from the Ready aircraft picker");
   assert.match(appSource,
     /function shellProgramEntry[\s\S]*?if \(experience\s*&&\s*experience\.mission == null/,
     "a missing program query must not treat null experience as a standalone card");
