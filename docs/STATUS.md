@@ -1,8 +1,9 @@
 # Current product status
 
 Updated: 2026-10-21.
-Production: Build 387, revision `8b618797de5ee24f097656ee114370545dfdb84f`.
-Next candidate: Build 388, not deployed — Area 51½ gets its second track, the BX: a 317 m race through a big-box base exchange modelled on real Nellis BX interior photos (gondola aisles, electronics islands, toy aisle with model jets, food-court table tunnel, checkout lanes, stockroom shortcut with the alien on a pallet deck). The brief gains a Liberty Loop / The BX selector.
+Production: Build 388, revision `ac6c4fe834a3c545824c3a4562376315664f120a`.
+Next candidate: Build 388, not deployed — hotfix: guns-only.com/rc (no trailing slash) loaded Area 51½ unstyled and inert because its relative asset URLs resolved to the site root; the page now pins <base href="/rc/">.
+Shipped 2026-10-21: Build 388 — Area 51½ gets its second track, the BX (a big-box base exchange from real Nellis BX photos), with a Liberty Loop / The BX selector.
 Shipped 2026-10-21: Build 387 — Area 51½ replaces Weekend Ride on the front door: a Re-Volt-style toy RC racer on a fictional Nellis-flavoured base (rigid-body buggy physics, kid mode by default, AI rivals, cartoon pickups, Liberty Loop housing district).
 Shipped 2026-10-16: Build 386 — hands-off F-22 RTB autopilot (Y, 8×), End after combat, and the playtest lab.
 Shipped 2026-10-16: Build 385 — every menu shares one bottom console (illustrated aircraft cards, a pause mission strip of mode · clock · engagements, gold Resume/Fly/Again, one line-icon set across pause, picker, debrief, settings and the report card); distant terrain fades into the sky colour along the view ray instead of a white wall; the horizon shoulder is narrower; Enter pressed before a report screenshot finishes encoding now sends when it lands.
@@ -12,7 +13,7 @@ Shipped 2026-10-14: Build 380 — a slow-link release upgrade no longer bricks b
 Shipped 2026-10-14: Build 379 — the F-22 RTB reads: chevrons tilt toward the eye and hold a minimum angular size (visible from above and from 10+ NM); fight chrome drops once knock-it-off hands bandits to relief; a Waze-style next-fix row (arrow · NM · fix · height · energy) under the heading tape; V padlocks the runway threshold (FIELD); land recovery says HOME, not BOAT; the full gun assist stays on at every difficulty rung (owner: "keep gun assist").
 Shipped 2026-10-13: Build 378 — the stranger gets a fight in seconds: fresh visits go straight to the F-22; rung-0 opens on a trackable slow lead (first hit ~3.4 s in the real-touch receipt); one assisted control contract per phone and a target-independent neutral stick; alternating offensive/defensive BFM ladder (O1→D1→O2→D2→O3→D3→neutral→Ace pair, spec docs/grok-overhaul/design/f22-bfm-ladder.md); phone touch layout (FIRE under the left thumb, throttle lever, LIMIT in portrait) with a HUD/control occupied-area contract; short-final landing practice; runway haze; first-merge receipt smoke; load-proof frame gate.
 Shipped 2026-10-01: Build 373 — the F-22 bandit fights: the rung-0 present ends (12 s cap, proximity latch restored, a finished present starts the fight), the chase uses afterburner after a sustained stall, and solution-disciplined tiers throw budgeted pressure bursts ([PR #111](https://github.com/todd866/guns-only/pull/111), `sim.Tests/BanditPressureReport.cs`). Carries the undeployed Build 372 player loop: sortie-steady opponent level and aim assist, recovery-aware debriefs, practice suggestions, briefing and HUD-overlap fixes ([player-loop audit](audits/2026-09-26-player-loop.md)).
-Live production is Build 387, revision `8b618797de5ee24f097656ee114370545dfdb84f`. This checkout stamps `RELEASE_BUILD` 387 in `web/wwwroot/render/release/release_identity.js`.
+Live production is Build 388, revision `ac6c4fe834a3c545824c3a4562376315664f120a`. This checkout stamps `RELEASE_BUILD` 388 in `web/wwwroot/render/release/release_identity.js`.
 Build-by-build narrative, moved verbatim: [status narrative through Build 372](history/status-narrative-through-build-372.md).
 
 ## Focus
