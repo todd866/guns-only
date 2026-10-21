@@ -1,6 +1,7 @@
 import * as T from '../vendor/three.module.js';
 import {buildings,solids,aircraft,obstacles,collisionSolids,ramps,checkpoints,baseCourse} from './sim.mjs';
-import {createSession,stepSession,recover,readout} from './physics/session.mjs';
+import {recover,readout} from './physics/session.mjs';
+import {createRace,stepRace,progress} from './physics/race.mjs';
 import {VISUAL_SCALE,BUGGY} from './physics/car.mjs';
 import {addBox} from './physics/world.mjs';
 import {courseFromGlb} from './physics/district.mjs';
@@ -98,36 +99,47 @@ if(new URLSearchParams(location.search).get('assets')!=='prototype'){
 }
 const gates=cps.slice(0,-1).map(([x,z,,half=2.5],i)=>{const g=new T.Group(),m=course.gates?.[i];g.position.set(x,m?m.pos[1]:0,z);if(m)g.rotation.y=Math.atan2(-m.forward[0],-m.forward[2]);scene.add(g);for(const dx of [-half,half]){box(dx,.7,0,.12,1.4,.12,'#ffcd65',g);box(dx,1.2,0,.5,.25,.05,'#ffcd65',g);}g.userData.label=sign(String(i+1).padStart(2,'0'),x,(m?m.pos[1]:0)+1.8,z,1.5);return g;});
 let mode='kid';try{if(localStorage.getItem('guns-only.rc.mode')==='bigKid')mode='bigKid';}catch{}
-let s=createSession(course,{mode}),paused=true,keys=new Set(),acc=0,last=performance.now(),best=0;try{best=Number(localStorage.getItem('guns-only.rc.best'))||0;}catch{}
+// ?rivals=0 for a solo time trial.
+const rivalCount=Math.max(0,Math.min(5,Number(new URLSearchParams(location.search).get('rivals')??3)));
+let race=createRace(course,{mode,opponents:rivalCount}),s=race.player,paused=true,keys=new Set(),acc=0,last=performance.now(),best=0;try{best=Number(localStorage.getItem('guns-only.rc.best'))||0;}catch{}
 const format=t=>`${Math.floor(t/60)}:${(t%60).toFixed(2).padStart(5,'0')}`;
 function pause(value){paused=value;if(!value)audio.start();keys.clear();$('pause').textContent=paused?'Resume · Esc':'Pause · Esc';}
 $('start').onclick=()=>{audio.start();$('brief').hidden=true;pause(false);canvas.focus();};$('pause').onclick=()=>pause(!paused);$('reset').onclick=()=>recover(s);
-function setMode(m){mode=s.mode=s.assist.mode=m;$('mode').textContent=m==='kid'?'Kid · B':'Big Kid · B';try{localStorage.setItem('guns-only.rc.mode',m);}catch{}}
+function setMode(m){mode=race.mode=s.mode=s.assist.mode=m;$('mode').textContent=m==='kid'?'Kid · B':'Big Kid · B';try{localStorage.setItem('guns-only.rc.mode',m);}catch{}}
 $('mode').onclick=()=>setMode(mode==='kid'?'bigKid':'kid');setMode(mode);
 function exit(){if(window.parent!==window)window.parent.postMessage({type:'guns-only-rc-exit'},location.origin);else location.href='../';}
 $('exit').onclick=exit;
 window.addEventListener('keydown',e=>{if(['KeyW','KeyS','KeyA','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){e.preventDefault();keys.add(e.code);}if(e.repeat)return;if(e.code==='Escape')pause(!paused);if(e.code==='KeyR')recover(s);if(e.code==='KeyB')setMode(mode==='kid'?'bigKid':'kid');if(e.code==='KeyO')exit();});window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>pause(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)pause(true);});
 for(const button of document.querySelectorAll('[data-key]')){button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);keys.add(button.dataset.key);};for(const event of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(event,()=>keys.delete(button.dataset.key));}
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}window.addEventListener('resize',resize);resize();camera.position.set(0,2,8);
+// Pose a drawn car from its physics body. Wheels follow the suspension: the centre sits
+// restLength−compression below its attach point.
+function poseCar(group,wheelSet,c){group.position.set(...c.pos);group.quaternion.set(...c.q);group.scale.setScalar(VISUAL_SCALE);
+ wheelSet.forEach((w,i)=>{const ws=c.wheels[i];w.pivot.rotation.y=w.front?-c.steer:0;w.wheel.rotation.x=ws.spin;w.pivot.position.y=-(BUGGY.restLength-ws.compression)/VISUAL_SCALE;});}
+// Rivals are tinted clones of whichever buggy is current (prototype, then the Blender asset).
+const RIVAL_HUES=[.55,.33,.8,.12,.95];let rivalVis=[],rivalSource=null;
+function syncRivals(){if(rivalSource===car&&rivalVis.length===race.rivals.length)return;rivalVis.forEach(v=>scene.remove(v.group));rivalSource=car;
+ rivalVis=race.rivals.map((_,i)=>{const group=car.clone(true);group.traverse(o=>{if(o.isMesh&&o.material?.color){const hsl={};o.material.color.getHSL(hsl);if(hsl.s>.35){o.material=o.material.clone();o.material.color.offsetHSL(RIVAL_HUES[i%5],0,0);}}});scene.add(group);
+  const named=['FL','FR','RL','RR'].map(n=>({pivot:group.getObjectByName('Steer_'+n),wheel:group.getObjectByName('Wheel_'+n),front:n[0]==='F'}));
+  return {group,wheels:named.every(w=>w.pivot&&w.wheel)?named:[]};});}
+const place=()=>1+race.rivals.filter(rv=>progress(rv.session)>progress(s)).length;
 const desired=new T.Vector3(),target=new T.Vector3(),map=$('map').getContext('2d');
 // Minimap fits the route's bounding box.
 const mapBox=(()=>{const xs=cps.map(c=>c[0]),zs=cps.map(c=>c[1]),cx=(Math.min(...xs)+Math.max(...xs))/2,cz=(Math.min(...zs)+Math.max(...zs))/2,k=Math.min(150/(Math.max(...xs)-Math.min(...xs)+10),130/(Math.max(...zs)-Math.min(...zs)+10));return track?{cx,cz,k}:{cx:0,cz:0,k:null};})();
 function drawMap(){map.clearRect(0,0,180,160);const point=mapBox.k?(x,z)=>[90+(x-mapBox.cx)*mapBox.k,80+(z-mapBox.cz)*mapBox.k]:(x,z)=>[90+x*1.35,80+z*1.5];map.fillStyle='#91a99c';if(!track)for(const b of buildings){const [x,y]=point(b.x-b.w/2,b.z-b.d/2);map.fillRect(x,y,b.w*1.35,b.d*1.5);}map.strokeStyle='#e8bf66';map.setLineDash([3,4]);map.beginPath();cps.forEach(([x,z],i)=>{const p=point(x,z);i?map.lineTo(...p):map.moveTo(...p);});map.stroke();map.setLineDash([]);const p=point(cps[s.gate][0],cps[s.gate][1]);map.fillStyle='#ffcc66';map.beginPath();map.arc(...p,4,0,Math.PI*2);map.fill();map.fillStyle='#fff';map.beginPath();map.arc(...point(s.car.pos[0],s.car.pos[2]),3,0,Math.PI*2);map.fill();}
 let reported=false;
-function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){acc+=dt;while(acc>=1/120){stepSession(s,{throttle:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),steer:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),brake:keys.has('Space')},1/120);acc-=1/120;}}
+function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){acc+=dt;while(acc>=1/120){stepRace(race,{throttle:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),steer:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),brake:keys.has('Space')},1/120);acc-=1/120;}}
  const r=readout(s),c=s.car,p=BUGGY;
  contactSun.position.set(r.x-4,r.y+(artReview&&Math.abs(r.x-38)<9&&Math.abs(r.z+8)<11?4:8),r.z-5);contactSun.target.position.set(r.x,r.y,r.z);
- audio.update(r.speed,paused);car.position.set(r.x,r.y,r.z);car.quaternion.set(...c.q);car.scale.setScalar(VISUAL_SCALE);
- // Wheels follow the suspension: centre sits restLength−compression below its attach point.
- wheels.forEach((w,i)=>{const ws=c.wheels[i];w.pivot.rotation.y=w.front?-c.steer:0;w.wheel.rotation.x=ws.spin;w.pivot.position.y=-(p.restLength-ws.compression)/VISUAL_SCALE;});
+ audio.update(r.speed,paused);poseCar(car,wheels,c);syncRivals();race.rivals.forEach((rv,i)=>poseCar(rivalVis[i].group,rivalVis[i].wheels,rv.session.car));
  // Low chase camera behind the heading; pulled in front of any wall between it and the car.
  const back=1.05+r.speed*.03,eye=[r.x,r.y+.12,r.z];desired.set(r.x-Math.sin(r.yaw)*back,r.y+.42,r.z+Math.cos(r.yaw)*back);
  const ray=[desired.x-eye[0],desired.y-eye[1],desired.z-eye[2]],dist=Math.hypot(...ray),hit=course.world.raycast(eye,ray.map(v=>v/dist),dist);
  if(hit){const k=Math.max(.15,hit.dist-.12)/dist;desired.set(eye[0]+ray[0]*k,eye[1]+ray[1]*k,eye[2]+ray[2]*k);}
  camera.position.lerp(desired,1-Math.exp(-dt*7));target.set(r.x+Math.sin(r.yaw)*.8,r.y+.15,r.z-Math.cos(r.yaw)*.8);camera.lookAt(target);
  gates.forEach((g,i)=>{g.visible=i===(s.gate===cps.length-1?0:s.gate);g.userData.label.visible=g.visible;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
- $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);$('gate').textContent=`${Math.min(s.gate+1,cps.length)}/${cps.length} · ${cps[s.gate][2]}`;$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();renderer.render(scene,camera);
- if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>Back at the motor pool.</h1><p>${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/3</p><button id="again">Run again</button> <button id="explore">Keep exploring</button>`;pause(true);$("again").onclick=()=>{s=createSession(course,{mode});reported=false;result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;pause(false);};}
+ $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);$('gate').textContent=`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${Math.min(s.gate+1,cps.length)}/${cps.length} · ${cps[s.gate][2]}`;$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();renderer.render(scene,camera);
+ if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>${race.rivals.length?['You won!','Second place!','Third place!','Fourth place!','Fifth place!','Sixth place!'][place()-1]:'Lap complete!'}</h1><p>${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/${course.secrets.length}</p><button id="again">Run again</button> <button id="explore">Keep exploring</button>`;pause(true);$("again").onclick=()=>{s=(race=createRace(course,{mode,opponents:rivalCount})).player;reported=false;result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;pause(false);};}
  requestAnimationFrame(frame);}
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
 window.__gunsOnlyRC={snapshot:()=>({...readout(s),time:s.time,gate:s.gate,running:s.running,finished:s.finished,hits:s.hits,found:s.found,seen:[...s.seen],travel:s.travel,recoveries:s.recoveries,mode,paused,assets:assetState}),renderer:()=>renderer.info.render,checkpoints:()=>cps.map(c=>[c[0],c[1]])};requestAnimationFrame(frame);
