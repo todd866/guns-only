@@ -121,6 +121,13 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   if (playerInput.fire) use(pk, race.player.car);
   stepSession(race.player, withEffects(race, race.player.car, playerInput), dt);
   for (const rival of race.rivals) {
+    // After any recovery the rival is back at a gate: drop a half-driven skill route and resume the
+    // main line from the node nearest where it now stands (otherwise it steers at its old target).
+    if (rival.session.recoveries !== (rival.lastRec ?? 0)) {
+      rival.lastRec = rival.session.recoveries; rival.alt = null;
+      const [x, , z] = rival.session.car.pos;
+      rival.node = race.line.reduce((b, p, i) => Math.hypot(p[0] - x, p[1] - z) < Math.hypot(race.line[b][0] - x, race.line[b][1] - z) ? i : b, 0);
+    }
     // Kid mode: rivals never aim balloons or oil at the player, only at each other.
     if (rivalWants(pk, rival.session.car, race.mode === 'kid' ? cars.slice(1) : cars)) use(pk, rival.session.car);
     stepSession(rival.session, withEffects(race, rival.session.car, driveInput(race, rival)), dt);

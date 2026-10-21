@@ -177,6 +177,9 @@ function startRace(){race=createRace(course,{mode,opponents:rivalCount});s=race.
 function drawRoam(now){const roam=race.roam;raceRing.visible=roam;ringSign.visible=roam;ringSign.quaternion.copy(camera.quaternion);raceRing.children[0].rotation.z=now*.0015;
  gates.forEach(g=>{g.visible=!roam;});
  // The ring arms after 30 m of free driving, so leaving the start grid never starts a race by accident.
+ // A recovery (R or auto-unstick) puts the car on the start line, inside the ring: re-arm instead
+ // of starting a race the player never asked for.
+ if(s.recoveries!==drawRoam.rec){drawRoam.rec=s.recoveries;roamArmedAt=s.travel+30;}
  const armed=s.travel>roamArmedAt;raceRing.children[0].material.emissiveIntensity=armed?1.1:.25;
  if(roam&&armed&&!paused&&Math.hypot(s.car.pos[0]-ringPos[0],s.car.pos[2]-ringPos[2])<1.6)startRace();}
 // Challenge coins (Re-Volt's stars): spinning gold discs; ones banked on an earlier visit show as
