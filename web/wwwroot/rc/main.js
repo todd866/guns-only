@@ -162,7 +162,9 @@ function drawPickups(now){const pk=race.pickups;
  const held=pk.held.get(s.car);$('item').textContent=held?`${ICON[held]} · F`:'';$('item').hidden=!held;}
 // Kid mode driving line (Forza-style): green go, yellow hold, red brake. B (Big Kid) hides it.
 const drivingLine=createRacingLine(scene,race.line,course.world);
-function drawLine(now){const show=mode==='kid'&&!s.finished&&!race.roam;drivingLine.mesh.visible=show;if(show)drivingLine.update(s.car.pos,s.car.speed,now/1000);}
+// Skill shortcuts get their own (narrower) line, so you can see the hard way through.
+const altLines=(course.alts??[]).map(a=>createRacingLine(scene,a.nodes,course.world,{closed:false,width:.34}));
+function drawLine(now){const show=mode==='kid'&&!s.finished&&!race.roam;drivingLine.mesh.visible=show;if(show)drivingLine.update(s.car.pos,s.car.speed,now/1000);for(const l of altLines){l.mesh.visible=show;if(show)l.update(s.car.pos,s.car.speed,now/1000);}}
 const place=()=>placeOf(race,s);
 // The RACE ring sits on the start line during free drive; driving into it lines everyone up.
 const ringPos=course.gates?.[0]?.pos??[cps[0][0],0,cps[0][1]],ringFwd=course.gates?.[0]?.forward??[0,0,-1];
