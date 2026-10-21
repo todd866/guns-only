@@ -87,66 +87,7 @@ def col(surface, label, part, extras=None):
 
 # ---------------------------------------------------------------- the lap
 
-class Route:
-    """Closed polyline with filleted corners, sampled every 0.25 m. at(d) -> (p, tangent, left)."""
-
-    def __init__(self, corners, radii, step=.25):
-        n = len(corners)
-        arcs = []
-        for i in range(n):
-            a, b, c = corners[i - 1], corners[i], corners[(i + 1) % n]
-            l1, l2 = math.dist(a, b), math.dist(b, c)
-            u1 = ((b[0] - a[0]) / l1, (b[1] - a[1]) / l1)
-            u2 = ((c[0] - b[0]) / l2, (c[1] - b[1]) / l2)
-            th = math.acos(max(-1.0, min(1.0, u1[0] * u2[0] + u1[1] * u2[1])))
-            left = u1[0] * u2[1] - u1[1] * u2[0] > 0
-            r = radii[i]
-            tl = r * math.tan(th / 2)
-            s = (b[0] - u1[0] * tl, b[1] - u1[1] * tl)
-            nrm = (-u1[1], u1[0]) if left else (u1[1], -u1[0])
-            arcs.append({'s': s, 'e': (b[0] + u2[0] * tl, b[1] + u2[1] * tl), 'c': (s[0] + nrm[0] * r, s[1] + nrm[1] * r),
-                         'r': r, 'th': th, 'left': left, 'tl': tl, 'next': l2})
-        for i, a in enumerate(arcs):
-            assert a['tl'] + arcs[(i + 1) % n]['tl'] <= a['next'] + 1e-6, f'corner {i} radii do not fit'
-        pts = []
-        for i, a in enumerate(arcs):
-            a0 = math.atan2(a['s'][1] - a['c'][1], a['s'][0] - a['c'][0])
-            sg = 1 if a['left'] else -1
-            m = max(2, math.ceil(a['r'] * a['th'] / step))
-            pts += [(a['c'][0] + a['r'] * math.cos(a0 + sg * a['th'] * k / m), a['c'][1] + a['r'] * math.sin(a0 + sg * a['th'] * k / m))
-                    for k in range(m)]
-            s2 = arcs[(i + 1) % n]['s']
-            m = max(1, math.ceil(math.dist(a['e'], s2) / step))
-            pts += [(a['e'][0] + (s2[0] - a['e'][0]) * k / m, a['e'][1] + (s2[1] - a['e'][1]) * k / m) for k in range(m)]
-        self.pts = pts
-        self.cum = [0.0]
-        for i in range(1, len(pts) + 1):
-            self.cum.append(self.cum[-1] + math.dist(pts[i - 1], pts[i % len(pts)]))
-        self.length = self.cum[-1]
-        self.d0 = 0.0
-
-    def nearest(self, q):
-        best = min(range(len(self.pts)), key=lambda i: math.dist(self.pts[i], q))
-        return (self.cum[best] - self.d0) % self.length
-
-    def at(self, d):
-        d = (d + self.d0) % self.length
-        lo, hi = 0, len(self.cum) - 1
-        while hi - lo > 1:
-            mid = (lo + hi) // 2
-            if self.cum[mid] <= d:
-                lo = mid
-            else:
-                hi = mid
-        a, b = self.pts[lo], self.pts[(lo + 1) % len(self.pts)]
-        seg = self.cum[lo + 1] - self.cum[lo]
-        t = (d - self.cum[lo]) / seg
-        p = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
-        tx, ty = (b[0] - a[0]) / seg, (b[1] - a[1]) / seg
-        return p, (tx, ty), (-ty, tx)
-
-    def dist(self, q):
-        return min(math.dist(p, q) for p in self.pts)
+Route = C.Route
 
 
 CORNERS = [(-28, -38.6), (-28, 0), (-37, 2.5), (-47, -.5), (-47, 16), (-19, 16), (-19, -8), (14, -8), (14, 19),
@@ -625,13 +566,15 @@ def mannequin(cx, cy, facing, colour):
 def soft_goods():
     # The solid block inside the U: shop walls 2.6 m tall, dressed on all three driven faces.
     bx0, bx1, by0, by1 = -15.5, 10.5, -1, 24
-    vis('softblock', 'wall').add(aabb(bx0, bx1, by0, by1, 0, 2.6))
-    vis('softblock', 'header').add(aabb(bx0 - .03, bx1 + .03, by0 - .03, by1, 2.6, 2.9))
-    col('concrete', 'soft_block', aabb(bx0, bx1, by0, by1, -.3, 2.9))
+    # The block is split by the RUNWAY passage (y 15.8 .. 19.8, see runway()).
+    for i, (ya, yb) in enumerate(((by0, RUNWAY_Y[0]), (RUNWAY_Y[1], by1))):
+        vis('softblock', 'wall').add(aabb(bx0, bx1, ya, yb, 0, 2.6))
+        vis('softblock', 'header').add(aabb(bx0 - .03, bx1 + .03, ya - (.03 if i == 0 else 0), yb + (.03 if i == 0 else 0), 2.6, 2.9))
+        col('concrete', f'soft_block_{i}', aabb(bx0, bx1, ya, yb, -.3, 2.9))
     words('black', "WOMEN'S BLOUSES", .17, (-9, by0 - .03, 2.75), 270, max_w=4, out=.003)
     words('black', "MEN'S DRESS BLUES", .17, (3.5, by0 - .03, 2.75), 270, max_w=4, out=.003)
     words('black', 'MORALE PATCHES', .17, (bx0 - .03, 8, 2.75), 180, max_w=4, out=.003)
-    words('black', 'FLIGHT SUITS', .17, (bx0 - .03, 18, 2.75), 180, max_w=4, out=.003)
+    words('black', 'FLIGHT SUITS', .17, (bx0 - .03, 22, 2.75), 180, max_w=3.5, out=.003)
     words('black', 'FIT TO FLY', .17, (bx1 + .03, 4, 2.75), 0, max_w=4, out=.003)
     # South face: the photo's black wall shelving of folded blouses with an orange header.
     gondola('blouses', -14.8, -3.2, by0 - .6, by0, header=None, sides=(False, True), kind='blouses', endcaps=(False, False))
@@ -652,11 +595,11 @@ def soft_goods():
                 vis('patches', m).add((v, [(4, 3, 2, 1, 0)]), kind='flag')
     words('white', 'MORALE PATCHES', .2, (bx0 - .06, 8, 2.05), 180, max_w=3, out=.012)
     words('header', '3 FOR $10 · NO, THE CAT ONE IS NOT REGULATION', .065, (bx0 - .06, 8, .6), 180, max_w=6, out=.012)
-    vis('suits', 'steel').add(aabb(bx0 - .55, bx0 - .5, 14, 22, 1.55, 1.58))
-    for k in range(16):
-        y = 14.3 + k * .48
+    vis('suits', 'steel').add(aabb(bx0 - .55, bx0 - .5, 20.4, 23.6, 1.55, 1.58))
+    for k in range(6):
+        y = 20.7 + k * .48
         vis('suits', ['olive', 'green', 'olive', 'navy'][k % 4]).add(aabb(bx0 - .62, bx0 - .4, y - .2, y + .2, .35, 1.5))
-    col('metal', 'flight_suits', aabb(bx0 - .7, bx0, 14, 22, -.3, 1.6))
+    col('metal', 'flight_suits', aabb(bx0 - .7, bx0, 20.4, 23.6, -.3, 1.6))
     # East face: shoe wall (black shelves, shoe boxes), orange slat wall above, "FIT TO FLY".
     gondola('shoes_u', bx1, bx1 + .55, 1, 12, sides=(True, False), kind='shoes', endcaps=(False, False), h=1.9)
     # Opposite the east leg: the long shoe wall that closes the U from the food court.
@@ -671,12 +614,12 @@ def soft_goods():
     racks = [(-22.3, 12.5), (-22.3, 7.0), (-22.3, 1.8), (-16.6, -4.5), (-6, -4.6), (6, -4.6), (16.5, -3.6), (16.6, 6.6)]
     for i, (x, y) in enumerate(racks):
         round_rack(x, y, f'round_rack_{i}', ['red', 'blue', 'green', 'magenta', 'header', 'navy', 'white', 'orange'][i])
-    for i, (x, y, f, m) in enumerate(((-0.5, -3.8, 270, 'red'), (.3, -3.8, 270, 'navy'), (11.6, 15.8, 180, 'magenta'))):
+    for i, (x, y, f, m) in enumerate(((-0.5, -3.8, 270, 'red'), (.3, -3.8, 270, 'navy'), (11.6, 13.3, 180, 'magenta'))):
         mannequin(x, y, f, m)
     vis('manikins', 'white').add(aabb(-1.2, 1.0, -4.4, -3.2, 0, .3))
     vis('manikins', 'black').add(aabb(-1.21, 1.01, -4.41, -3.19, 0, .05))
     col('wood', 'mannequin_deck', aabb(-1.2, 1.0, -4.4, -3.2, -.3, .3), {'note': '30 cm platform: a wall, not a step'})
-    col('wood', 'mannequin_n', box(11.6, 15.8, -.3, .6, .6, 2.2))
+    col('wood', 'mannequin_n', box(11.6, 13.3, -.3, .6, .6, 2.2))
     # Military clearance rail against the TV wall's soft-goods face.
     vis('clear', 'steel').add(aabb(-23.4, -23.0, -7.5, -2.5, 1.5, 1.53))
     for k in range(10):
@@ -1023,6 +966,52 @@ def stockroom():
     # Strip-lit stockroom gets no troffers over the racking (handled in ceiling()).
 
 
+RUNWAY_Y = (15.8, 19.8)
+RUN_H, RUN_W = .6, .8
+# Careful line across the passage: ramp toe, ramp top, a dogleg pair (brake), kicker, gap, stage.
+RUNWAY_PTS = [(-15.4, 17.8), (-12.4, 17.8), (-5.6, 17.8), (-4.0, 16.6), (-.5, 16.6), (1.9, 16.6), (2.6, 16.6), (3.8, 16.6),
+              (7.0, 16.6), (9.0, 17.0), (10.5, 17.0), (13.5, 17.0)]
+
+
+def runway():
+    """FLIGHT SUIT RUNWAY (ALT_runway): a fashion runway through a passage cut across the soft-goods
+    block, 0.6 m high and 0.8 m wide: ramp up, a dogleg (brake), a kicker over a 0.8 m gap (keep
+    your speed), the stage, ramp down onto the U's east leg. The passage is closed at floor level
+    by the stage, so a car that falls off (0.6 m onto laminate) can only drive back out the way it
+    came: a dead end, never a trap, and never faster than the U."""
+    P = RUNWAY_PTS
+    ya, yb = RUNWAY_Y
+    part = C.flanked_ramp(P[0], P[1], RUN_W, RUN_H, .5)
+    vis('runway', 'black').add(part)
+    C.col('wood', 'runway_ramp_up', part, {'note': 'skill shortcut ramp'})
+    C.walkway('runway_a', [P[1], P[2], P[3], P[4], P[6]], RUN_W, RUN_H, 'wood', 'black', group='runway')
+    kick = C.wedge(P[5], P[6], RUN_W, RUN_H, .12)
+    vis('runway', 'header').add(kick)
+    C.col('wood', 'runway_kicker', kick, {'note': '12 cm kicker before the gap'})
+    C.walkway('runway_b', [(P[6][0] + .8, P[6][1]), P[8], (8.2, 16.7)], RUN_W, RUN_H, 'wood', 'black', group='runway')
+    # The stage closes the passage at floor level; the runway lands on it and ramps down outside.
+    sx0 = 7.8
+    vis('runway', 'black').add(aabb(sx0, 10.5, ya, yb, 0, RUN_H))
+    vis('runway', 'white').add(aabb(sx0 - .01, 10.51, ya, yb, RUN_H - .03, RUN_H))
+    C.col('wood', 'runway_stage', aabb(sx0, 10.5, ya, yb, -.3, RUN_H), {'note': 'stage: closes the passage at floor level'})
+    part = C.flanked_ramp(P[11], P[10], RUN_W, RUN_H, .5)
+    vis('runway', 'black').add(part)
+    C.col('wood', 'runway_ramp_down', part, {'note': 'skill shortcut ramp'})
+    # Runway lights along both edges and the catwalk sign over the passage mouth.
+    for a, b in ((P[1], P[2]), (P[4], P[5]), ((P[6][0] + .8, P[6][1]), P[8])):
+        n = int(math.dist(a, b) / .5)
+        for k in range(n + 1):
+            x = a[0] + (b[0] - a[0]) * k / max(n, 1)
+            y = a[1] + (b[1] - a[1]) * k / max(n, 1)
+            for sg in (-1, 1):
+                vis('decal', 'hivis').add(box(x, y + sg * (RUN_W / 2 - .05), RUN_H, .06, .06, .02))
+    vis('signs', 'magenta').add(aabb(-15.53, -15.5, ya, yb, 2.0, 2.6))
+    words('white', 'FLIGHT SUIT RUNWAY', .2, (-15.53, (ya + yb) / 2, 2.38), 180, max_w=3.8, out=.003)
+    words('header', 'NO RUNNING · YES DRIVING', .09, (-15.53, (ya + yb) / 2, 2.12), 180, max_w=3.8, out=.003)
+    vis('runway', 'header').add(aabb(-15.5, 10.5, ya, ya + .05, 2.6, 2.9))
+    vis('runway', 'header').add(aabb(-15.5, 10.5, yb - .05, yb, 2.6, 2.9))
+
+
 # ---------------------------------------------------------------- race metadata
 
 def half_width_at(p):
@@ -1063,16 +1052,31 @@ def race_markers():
         marker(f'PICKUP_{k:02d}', at, extras={'route': 'shortcut' if k > 8 else 'main'}, display='SPHERE')
     marker('SPEC_01', (1.0, 28.65, .3 + .22), extras={'hint': 'stockroom shortcut: on the pallet deck at the top of the box ramp'},
            display='CUBE')
-    # The stockroom shortcut's intended line: leaves the toy aisle, through the swinging doors,
-    # over the box ramp and pallet deck (specimen), out the second doors, rejoins before GATE_06.
-    sc = [(-33, 16), (-31, 17.2), (-30, 19), (-30, 21.5), (-30, 24), (-29.6, 26.2), (-28, 27.9), (-25, 28.6), (-21, 28.6),
-          (-17, 28.6), (-13, 28.6), (-9, 28.65), (-6, 28.65), (-3.5, 28.65), (-1, 28.65), (1, 28.65), (3.5, 28.65), (6, 28.65),
-          (9, 28.65), (12.5, 28.65), (16, 28.65), (19, 28.65), (21.6, 28.4), (23.4, 27.6), (24, 26), (24, 24), (24, 22.2),
-          (25, 20.6), (26.8, 19.5), (28.8, 19)]
-    for k, (x, y) in enumerate(sc):
-        q = sc[min(k + 1, len(sc) - 1)] if k + 1 < len(sc) else (x + 1, y)
-        hw = 1.6 if 23.5 < y < 25.5 or (-31 < x < -29 and y > 21) else 1.8
-        marker(f'SHORTCUT_{k:03d}', (x, y, 0), (q[0] - x, q[1] - y), (hw, 1, 1), {'route': 'stockroom shortcut'}, 'SINGLE_ARROW')
+    # Skill shortcuts (ALT_<name>_NNN): the stockroom (box ramp, pallet deck) and the runway.
+    ai_xy = [ROUTE.at(k * step)[0] for k in range(count)]
+    sc = [(-33, 16), (-31, 17.2), (-30, 19), (-30, 21.5), (-30, 24), (-29.6, 26.2), (-28, 27.9), (-25, 28.6), (-21, 28.6), (-17, 28.6),
+          (-13, 28.6), (-9, 28.65), (-6, 28.65), (-3.5, 28.65), (-1, 28.65), (1, 28.65), (3.5, 28.65), (6, 28.65), (9, 28.65),
+          (12.5, 28.65), (16, 28.65), (19, 28.65), (21.6, 28.4), (23.4, 27.6), (24, 26), (24, 24), (24, 22.2), (25, 20.6),
+          (26.8, 19.5), (28.8, 19)]
+    sc_speed = [4.5 if (x < -27 and 20 < y < 27.5) or (x > 21 and 21 < y < 28.5) else 5 if -5 < x < 7 else 7 for x, y in sc]
+    sc_speed[0] = sc_speed[-1] = 6
+    C.alt_route('stockroom', sc, ai_xy, sc_speed, half=1.6)
+    rw = [(-24, 16), (-18.0, 17.6)] + RUNWAY_PTS[:6] + [(2.54, 16.6)] + RUNWAY_PTS[7:] + [(17.5, 19)]
+    C.alt_route('runway', rw, ai_xy, [7, 4.5, 4, 3.8, 2.2, 2.2, 4.0, 4.8, 5.0, 4.2, 3.8, 3.0, 3.2, 3.5, 6], half=RUN_W / 2, gaps={8})
+    # Challenge coins: off the line, each one a small detour (driven by tools/rc/coins-reachable.test.mjs).
+    sc_in = [(-33, 16), (-31, 17.2), (-30, 19), (-30, 21.5), (-30, 24), (-29.6, 26.2), (-28, 27.9), (-25, 28.6), (-21, 28.6),
+             (-17, 28.6), (-13, 28.6), (-9, 28.65), (-6, 28.65), (-3.5, 28.4)]
+    sc_out = [(3.5, 28.4), (6, 28.65), (9, 28.65), (12.5, 28.65), (16, 28.65), (19, 28.65), (21.6, 28.4), (23.4, 27.6), (24, 26),
+              (24, 24), (24, 22.2), (25, 20.6), (26.8, 19.5), (28.8, 19)]
+    C.coin(1, (1.0, 27.6, .3 + .25), sc_in, sc_out, 'stockroom shortcut: on the pallet deck, beside the specimen jar')
+    C.coin(2, (-41.9, -15, .3), [(-28, -26), (-33, -23.5), (-41.9, -22.5)], [(-41.9, -7.8), (-44.5, -2)],
+           'halfway down the last HOUSEWARES aisle')
+    C.coin(3, (-6, -31.2, .3), [(-28, -32), (-24, -31.2), (-14, -31.2)], [(-1.5, -30.8), (-3, -24.5), (-14, -23.5), (-24, -23)],
+           'behind the CHALLENGE COINS counter, of course')
+    C.coin(4, (27, 8.5, .3), [(22, 19), (26.5, 16.5)], [(27, .5), (27, -7), (27, -12), (27, -16.5)],
+           'food court: between the four-tops, out through the MILITARY CLEARANCE racks')
+    C.coin(5, (48.2, -31.2, .3), [(41.5, -10), (44.5, -17), (49.6, -23), (49.8, -28.6)],
+           [(45.9, -31.2), (45.9, -26.5), (45.6, -22), (40, -18.5)], 'DESERT MART: behind the PCS moving-box pallet')
     marker('CAM_table_tunnel', (41.5, 9.6, .45), (0, -1), extras={'note': 'low chase hint under the mess tables'})
     marker('CAM_checkout_lane', (12, -24, .5), (0, -1), extras={'note': 'checkout lane 3, counters both sides'})
     marker('CAM_stockroom_doors', (-30, 22.5, .5), (0, 1), extras={'note': 'swinging doors into the stockroom'})
@@ -1126,6 +1130,7 @@ def build():
     concourse()
     mural()
     stockroom()
+    runway()
     gates, ai_step, ai_count, widths = race_markers()
     tight = clearance_report(widths)
     C.ROOT['district'] = 'bx'
@@ -1150,6 +1155,7 @@ def shots():
         ('food-court-wide', (20.5, -10, 1.7), (46, 14, 1.0), 20),
         ('stockroom-shortcut', (-27, 28.2, .45), (8, 28.6, .55), 20),
         ('checkout', (12, -21.5, .4), (12, -40, .8), 20),
+        ('runway', (-19.5, 18.2, 1.2), (6, 16.8, .4), 20),
     ]
 
 

@@ -54,7 +54,7 @@ C.PALETTE.update({
 LOOP = C.RoundedLoop(70, 42, 24)
 ROAD, KERB, PARK, WALK = 3.5, 3.85, 5.0, 6.5
 Z_KERB, Z_LAWN, Z_WALK, Z_TURF, Z_DRIVE = .10, .10, .11, .115, .115
-GATE_D = [0, 40, 80, 120, 160, 196, 230, 378]
+GATE_D = [0, 40, 80, 120, 160, 196, 212, 378]
 
 
 def L(part, gx, fy, s):
@@ -590,6 +590,39 @@ def plywood_ramp(cx, y_lo, y_hi, y_back, h=.4, top=1.8, flank=.8):
     col('wood', 'plywood_ramp', (v, faces), {'note': '40 cm tabletop kicker on the shortcut; no vertical faces'})
 
 
+WALL_H, WALL_W = .7, .8              # garden wall: 70 cm above the yard, 80 cm wide cap
+WALL_PTS = [(20, 25.0), (20, 21.5), (20, 13.5), (20, 11), (22.6, 11), (26.0, 11), (26.8, 11), (27.9, 11), (33.4, 11), (36.6, 11.0)]
+
+
+def garden_wall_run():
+    """GARDEN WALL RUN (ALT_wall): up a plywood ramp in the N2/N3 side yard, along the cap of a
+    70 cm CMU garden wall, a 90-degree corner (brake hard), a kicker over a 0.8 m gap in the wall
+    (keep your speed up), then down a ramp into the backyard green and out through S3's garage.
+    It replaces the green's north block wall east of x = 19.6. Falling off drops 0.7 m onto yard
+    gravel or turf: both lead back to the street (or on into the green shortcut), never a trap."""
+    P = WALL_PTS
+    z = Z_LAWN
+    part = C.flanked_ramp(P[0], P[1], WALL_W, WALL_H, .5, z0=z)
+    vis('wallrun', 'plywood').add(part)
+    col('wood', 'wall_ramp_up', part, {'note': 'skill shortcut ramp'})
+    C.walkway('garden_wall_a', [P[1], P[2], P[3], P[4], P[6]], WALL_W, z + WALL_H, 'concrete', 'cmu', group='wallrun')
+    kick = C.wedge(P[5], P[6], WALL_W, z + WALL_H, .12)
+    vis('wallrun', 'plywood').add(kick)
+    col('wood', 'wall_kicker', kick, {'note': '12 cm kicker before the gap'})
+    C.walkway('garden_wall_b', [(P[6][0] + .8, P[6][1]), P[8]], WALL_W, z + WALL_H, 'concrete', 'cmu', group='wallrun')
+    part = C.flanked_ramp(P[9], P[8], WALL_W, WALL_H, .5, z0=z)
+    vis('wallrun', 'plywood').add(part)
+    col('wood', 'wall_ramp_down', part, {'note': 'skill shortcut ramp'})
+    for (ax, ay), (bx, by) in ((P[1], P[3]), (P[3], P[5]), ((P[6][0] + .8, P[6][1]), P[8])):   # cap stripes
+        n = int(math.dist((ax, ay), (bx, by)) / .7)
+        for k in range(n):
+            u = (k + .5) / n
+            cx, cy = ax + (bx - ax) * u, ay + (by - ay) * u
+            vis('decal', 'paint' if k % 2 else 'trim').add(box(cx, cy, z + WALL_H, .55, .1, .004, math.atan2(by - ay, bx - ax) + math.pi / 2))
+    sign('wall_run', 17.6, 26.2, 90, 1.2, .5, .6, [('GARDEN WALL RUN', .1, 'door_red', .08), ('NO SKATEBOARDS. TOYS OK.', .06, 'rubber', -.1)],
+         posts=2, post='trunk')
+
+
 # ---------------------------------------------------------------- USAF / Nellis / Vegas dressing
 
 def water_tower(cx, cy):
@@ -869,6 +902,25 @@ def race_markers():
         marker(f'PICKUP_{k:02d}', at, extras={'route': 'shortcut' if k > 7 else 'main'}, display='SPHERE')
     marker('SPEC_01', (30, 0, Z_TURF + .22), extras={'hint': 'under the backyard trampoline, off the shortcut'},
            display='CUBE')
+    # Challenge coins: off the line, each one a small detour (driven by tools/rc/coins-reachable.test.mjs).
+    shortcut_out = [(38.75, -14), (38.75, -26), (38.75, -38)]
+    C.coin(1, (38.75, 32.4, Z_DRIVE + .4 + .25), [(38.75, 41), (38.75, 36)], [(38.75, 26), (38.75, 14), (38.75, 0)] + shortcut_out,
+           'shortcut: on the crest of the plywood kicker')
+    C.coin(2, (-34, 5, Z_TURF + .25), [(38.75, 41), (38.75, 34), (38.75, 24), (38.75, 12), (36, 4), (30, -6.5), (0, -8), (-20, -8),
+                                       (-28, -8), (-34, -3)],
+           [(-34, 8.6), (-26, 8.6), (-10, 8.6), (4, 6.5), (10, -7), (30, -6.5), (38.75, -4)] + shortcut_out,
+           'backyard green: under the swing set, far end')
+    C.coin(3, (84.2, 44, Z_LAWN + .25), [(70, 30), (76, 40), (80, 44)], [(88, 44), (84, 38), (76, 34), (70, 28)],
+           'under the water tower, between its legs')
+    C.coin(4, (-36, -61.6, Z_LAWN + .25), [(-46, -42), (-45, -50), (-43, -61.6)], [(-28, -61.6), (-26, -52), (-22, -42)],
+           'behind the Janet bus')
+    C.coin(5, (46, -57.8, Z_LAWN + .25), [(38, -42), (40, -50), (42, -57.8)], [(50, -57.8), (52, -50), (54, -42)],
+           'behind the Defenders booth')
+    # Skill shortcut: the garden wall run, from the north street to the south street.
+    ai_xy = [LOOP.at(k * step)[0] for k in range(count)]
+    wall = [(20, 42), (20, 31)] + WALL_PTS[:6] + [(26.74, 11)] + WALL_PTS[7:] + [(38.75, 7), (38.75, -2), (38.75, -14), (38.75, -26), (38.75, -36.5), (36, -41), (31.9, -42)]
+    speeds = [7, 7, 5, 4.8, 3.5, 2.0, 3.2, 5.2, 5.2, 4.8, 4.5, 4.5, 6, 7.5, 7.5, 7.5, 5.5, 5.5, 7]
+    C.alt_route('wall', wall, ai_xy, speeds, half=WALL_W / 2, gaps={8})
     marker('CAM_garage_tunnel', (38.75, 28.0, .5), (0, -1), extras={'note': 'optional low chase hint through N3 garage'})
     return gates, step, count
 
@@ -897,7 +949,7 @@ def build():
     turf_patch(-49.8, 49.8, -10.8, 10.8, 'green')
     for y in (11, -11):
         tag = 'n' if y > 0 else 's'
-        block_wall((-50, y), (36.0, y), f'wall_green_{tag}_w')
+        block_wall((-50, y), (19.2 if y > 0 else 36.0, y), f'wall_green_{tag}_w')
         block_wall((41.5, y), (50, y), f'wall_green_{tag}_e')
     block_wall((-50, -11), (-50, 11), 'wall_green_w')
     block_wall((50, -11), (50, 11), 'wall_green_e')
@@ -908,6 +960,7 @@ def build():
     kiddie_pool(-2, -4)
     swing_set(-34, 5)
     plywood_ramp(38.75, 34.0, 32.4, 31.0)
+    garden_wall_run()
     bike(-12, 52, .5)
     hoop(18.5, 51.5)
     flag(0, -62)
@@ -948,6 +1001,7 @@ def shots():
         ('backyard-shortcut', (38.0, -6.5, .7), (38.75, 20, 1.1), 24),
         ('entrance-dressing', (16, -47.2, 1.1), (22, -56, 1.3), 28),
         ('kerb-closeup', (-30, -39.3, .09), (-37, -38.45, .05), 34),
+        ('garden-wall-run', (15.5, 29.5, 2.2), (29, 11, .3), 24),
     ]
 
 

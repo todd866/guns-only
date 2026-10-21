@@ -7,11 +7,19 @@ import {parseGLB} from './validate-assets.mjs';
 export const SURFACES = ['asphalt', 'concrete', 'grass', 'dirt', 'wood', 'gymfloor', 'carpet', 'metal', 'tile', 'rubber', 'gravel'];
 export const BUDGET = {visualTriangles: 250000, collisionTriangles: 40000, materials: 24, bytes: 12 * 1024 * 1024,
   gates: [8, 12], starts: 4, pickups: [6, 10], specs: 1, aiSpacing: [4, 12], aiMaxTurnDeg: 75,
+  // Challenge coins (COIN_01..COIN_05): reachable by a toy car (floor within coinMaxLift below
+  // the coin) and off the main racing line (a car on the line must not collect one by accident).
+  coins: 5, coinMaxLift: 0.6, coinOffLine: 1.5,
+  // Skill shortcuts (ALT_<name>_NNN): both ends on the racing line, no gate bypassed, every node
+  // and midpoint over walkable collision with at least altMinWidth of level surface across it.
+  altEndOnLine: 1.0, altMinWidth: 0.55, altMinNodes: 4,
+  walkable: ['asphalt', 'concrete', 'tile', 'wood', 'carpet', 'gymfloor', 'rubber', 'metal', 'gravel', 'grass', 'dirt'],
   // Lateral sweeps either side of the racing line: a vertical rise in this band is too tall to
   // roll over and too short to read as a wall, so a toy wheel wedges on it (the v1 kerb bug).
   trapStep: [0.025, 0.25], sweepBeyondHalfWidth: 4, sweepStep: 0.02,
   // Floors a racing line may run on (interiors: polished concrete is `tile`, laminate is `wood`).
-  drivable: ['asphalt', 'concrete', 'tile', 'wood', 'carpet', 'gymfloor'],
+  // Playground rubber (poured / mulch) is driven on in the School.
+  drivable: ['asphalt', 'concrete', 'tile', 'wood', 'carpet', 'gymfloor', 'rubber'],
   // A collision mesh lying wholly this far above the line (a table top) is overhead, not an
   // obstacle: the toy car (about 0.25 m tall) drives under it.
   toyClearance: 0.45};
@@ -189,7 +197,7 @@ export function validateDistrict(doc, bin, bytes, budget = BUDGET) {
 
   const reGate = /^GATE_(\d{2})$/, reAI = /^AI_(\d{3})$/, reStart = /^START_(\d)$/;
   const gates = byPrefix(reGate), ai = byPrefix(reAI), starts = byPrefix(reStart);
-  const pickups = byPrefix(/^PICKUP_/), specs = byPrefix(/^SPEC_/);
+  const pickups = byPrefix(/^PICKUP_/), specs = byPrefix(/^SPEC_/), coins = byPrefix(/^COIN_/);
   contiguous(gates, reGate, 'GATE', true);
   contiguous(ai, reAI, 'AI', true);
   contiguous(starts, reStart, 'START', false);
@@ -197,6 +205,11 @@ export function validateDistrict(doc, bin, bytes, budget = BUDGET) {
   if (starts.length !== budget.starts) err(`start slots ${starts.length} != ${budget.starts}`);
   if (pickups.length < budget.pickups[0] || pickups.length > budget.pickups[1]) err(`pickup count ${pickups.length} outside ${budget.pickups}`);
   if (specs.length < budget.specs) err(`need >= ${budget.specs} SPEC_* specimen spot`);
+  if (coins.length !== budget.coins) err(`challenge coins ${coins.length} != ${budget.coins} (COIN_01..COIN_0${budget.coins})`);
+  coins.forEach((n, i) => {
+    if (n.name !== `COIN_${String(i + 1).padStart(2, '0')}`) err(`COIN numbering not COIN_01..COIN_0${budget.coins} at ${n.name}`);
+    if (n.node.mesh !== undefined) err(`${n.name} must be an empty`);
+  });
 
   // Racing line: ordered, evenly spaced, closes the loop, no reversals.
   let lap = 0;
@@ -250,7 +263,7 @@ export function validateDistrict(doc, bin, bytes, budget = BUDGET) {
   // Every racing-line node and midpoint must sit on clear, drivable collision: the first
   // surface under a ray from 3 m above is a road-level drivable floor with nothing overhead
   // below toy clearance.
-  const surfaceTally = {}, offRoad = [], traps = [];
+  const surfaceTally = {}, offRoad = [], traps = [], coinReport = [];
   let sweepSamples = 0;
   const cast = col.length ? makeCaster(col) : () => null;
   if (col.length && ai.length) {
@@ -284,12 +297,78 @@ export function validateDistrict(doc, bin, bytes, budget = BUDGET) {
     }
     if (traps.length) err(`wedge-trap steps (${budget.trapStep[0] * 100}-${budget.trapStep[1] * 100} cm) beside the racing line: ${traps.slice(0, 6).join(', ')}${traps.length > 6 ? ` … (${traps.length})` : ''}`);
     if (offRoad.length) err(`racing line not on clear road at ${offRoad.slice(0, 6).join(', ')}${offRoad.length > 6 ? ' …' : ''}`);
+    for (const n of coins) {
+      const hit = cast([n.pos[0], n.pos[1] + .05, n.pos[2]]);
+      if (!hit) err(`${n.name} has no collision floor beneath it`);
+      else if (n.pos[1] - hit.y > budget.coinMaxLift) err(`${n.name} floats ${r2(n.pos[1] - hit.y)} m above ${hit.name} (max ${budget.coinMaxLift} m: a toy car cannot reach it)`);
+      const pr = ai.length >= 10 ? project(n.pos) : null;
+      coinReport.push({name: n.name, at: n.pos.map(r2), lift_m: hit ? r2(n.pos[1] - hit.y) : null, surface: hit?.surface ?? null,
+        line_m: pr ? r2(pr.d) : null, hint: n.node.extras?.hint ?? null});
+      if (pr && pr.d < budget.coinOffLine) err(`${n.name} is ${r2(pr.d)} m from the racing line (coins go off the line, >= ${budget.coinOffLine} m)`);
+    }
     for (const n of [...starts, ...pickups, ...specs]) {
       const hit = cast([n.pos[0], n.pos[1] + .05, n.pos[2]]);
       if (!hit) err(`${n.name} has no collision floor beneath it`);
       else if (n.pos[1] - hit.y > 1.5) warn(`${n.name} floats ${r2(n.pos[1] - hit.y)} m above ${hit.name}`);
     }
   }
+  // Skill shortcuts.
+  const altReport = [];
+  const altGroups = {};
+  for (const n of nodes) { const m = /^ALT_([A-Za-z0-9]+)_(\d{3})$/.exec(n.name); if (m) (altGroups[m[1]] ??= []).push({k: Number(m[2]), n}); }
+  for (const [name, list] of Object.entries(altGroups)) {
+    list.sort((a, b) => a.k - b.k);
+    const pts = list.map(e => e.n);
+    list.forEach((e, i) => { if (e.k !== i) err(`ALT_${name} numbering not contiguous at ${e.n.name}`); if (e.n.node.mesh !== undefined) err(`${e.n.name} must be an empty`); });
+    if (pts.length < budget.altMinNodes) { err(`ALT_${name} has ${pts.length} nodes (< ${budget.altMinNodes})`); continue; }
+    const rep = {name, nodes: pts.length, length_m: 0, start: null, end: null, min_width_m: Infinity, max_height_m: 0, bypassed_m: null};
+    for (let i = 0; i + 1 < pts.length; i++) rep.length_m += len(sub(pts[i + 1].pos, pts[i].pos));
+    const nearAI = p => ai.reduce((b, a) => { const d = Math.hypot(a.pos[0] - p[0], a.pos[2] - p[2]); return !b || d < b.d ? {d, a} : b; }, null);
+    if (ai.length >= 10) {
+      const a = nearAI(pts[0].pos), b = nearAI(pts[pts.length - 1].pos);
+      rep.start = a.a.name; rep.end = b.a.name;
+      if (a.d > budget.altEndOnLine) err(`ALT_${name} starts ${r2(a.d)} m from the racing line (max ${budget.altEndOnLine})`);
+      if (b.d > budget.altEndOnLine) err(`ALT_${name} ends ${r2(b.d)} m from the racing line (max ${budget.altEndOnLine})`);
+      if (gates.length) {
+        const s0 = project(gates[0].pos).s, at = p => ((project(p).s - s0) % lap + lap) % lap;
+        const sa = at(pts[0].pos), sb = at(pts[pts.length - 1].pos), span = ((sb - sa) % lap + lap) % lap;
+        rep.bypassed_m = r2(span);
+        for (const g of gates) {
+          const sg = ((at(g.pos) - sa) % lap + lap) % lap;
+          if (sg > .5 && sg < span - .5) err(`ALT_${name} bypasses ${g.name}`);
+        }
+      }
+    }
+    const probe = (label, p, dir) => {
+      const hit = cast([p[0], p[1] + .5, p[2]], p[1] + budget.toyClearance);
+      if (!hit || !budget.walkable.includes(hit.surface) || Math.abs(hit.y - p[1]) > .08) {
+        err(`ALT_${name} not over walkable collision at ${label}: ${hit ? hit.name + '@' + r2(hit.y) : 'void'} (node y ${r2(p[1])})`);
+        return;
+      }
+      const side = [-dir[2], 0, dir[0]];
+      let width = 0;
+      for (const sg of [1, -1]) {
+        let o = 0;
+        for (let d = .01; d <= .6; d += .01) {
+          const h = cast([p[0] + side[0] * d * sg, hit.y + .5, p[2] + side[2] * d * sg], hit.y + budget.toyClearance);
+          if (!h || Math.abs(h.y - hit.y) > .05) break;
+          o = d;
+        }
+        width += o;
+      }
+      rep.min_width_m = Math.min(rep.min_width_m, r2(width));
+      rep.max_height_m = Math.max(rep.max_height_m, r2(hit.y));
+      if (width < budget.altMinWidth) err(`ALT_${name} only ${r2(width)} m wide at ${label} (min ${budget.altMinWidth})`);
+    };
+    pts.forEach((n, i) => {
+      const nxt = pts[Math.min(i + 1, pts.length - 1)], prv = pts[Math.max(i - 1, 0)];
+      probe(n.name, n.pos, flat(sub(nxt.pos, prv.pos)));
+      if (i + 1 < pts.length && !n.node.extras?.gap) probe(n.name + '+', n.pos.map((v, k) => (v + nxt.pos[k]) / 2), flat(sub(nxt.pos, n.pos)));
+    });
+    rep.length_m = r2(rep.length_m);
+    altReport.push(rep);
+  }
+
   const surfaces = {};
   for (const c of col) surfaces[c.surface] = (surfaces[c.surface] ?? 0) + c.tris.length;
   return {
@@ -299,8 +378,8 @@ export function validateDistrict(doc, bin, bytes, budget = BUDGET) {
     gates: gateReport, start_slots: starts.map(s => s.name), ai_nodes: ai.length,
     ai_spacing_m: seg.length ? {min: r2(Math.min(...seg)), max: r2(Math.max(...seg))} : null,
     lap_length_m: r2(lap), lap_time_s_at_8_to_10_mps: lap ? [r2(lap / 10), r2(lap / 8)] : null,
-    racing_line_surface_probes: surfaceTally, lateral_sweep_samples: sweepSamples, wedge_trap_steps: traps.length, pickups: pickups.length, specimens: specs.map(s => s.name),
-    camera_hints: byPrefix(/^CAM_/).map(n => n.name), budget,
+    racing_line_surface_probes: surfaceTally, lateral_sweep_samples: sweepSamples, wedge_trap_steps: traps.length, pickups: pickups.length, specimens: specs.map(s => s.name), coins: coinReport,
+    camera_hints: byPrefix(/^CAM_/).map(n => n.name), alt_routes: altReport, budget,
   };
 }
 

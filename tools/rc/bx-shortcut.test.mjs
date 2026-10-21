@@ -1,4 +1,4 @@
-// Drives the BX stockroom shortcut (SHORTCUT_NNN empties in bx.glb) with the real car physics,
+// Drives the BX stockroom shortcut (ALT_stockroom_NNN empties in bx.glb, formerly SHORTCUT_NNN) with the real car physics,
 // in kid and Big Kid modes: it must reach the rejoin point without a >2 s stall and collect the
 // specimen on the pallet deck. Pure pursuit on the authored nodes, throttle capped at ~5 m/s.
 import test from 'node:test';
@@ -16,7 +16,7 @@ const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + b
 function shortcutNodes() {
   const out = [];
   walkNodes(parseGlb(arrayBuffer), (n, m) => {
-    const k = /^SHORTCUT_(\d{3})$/.exec(n.name ?? '');
+    const k = /^ALT_stockroom_(\d{3})$/.exec(n.name ?? '');
     if (k) out.push({ i: Number(k[1]), x: m[12], z: m[14], half: Math.hypot(m[0], m[1], m[2]) });
   });
   return out.sort((a, b) => a.i - b.i);
@@ -42,7 +42,7 @@ function drive(mode) {
   return { reached: target >= nodes.length, t, worstStall, found: s.found, hits: s.hits, at: [r.x, r.z], target, nodes: nodes.length };
 }
 
-test('bx.glb carries an ordered SHORTCUT_NNN line', () => {
+test('bx.glb carries an ordered ALT_stockroom_NNN line', () => {
   const nodes = shortcutNodes();
   assert.ok(nodes.length >= 10);
   nodes.forEach((n, i) => { assert.equal(n.i, i); assert.ok(n.half > .5); });
