@@ -1,0 +1,27 @@
+{
+  "generator": "tools/rc/blender/districts/housing.py",
+  "blender": "5.2.0 LTS",
+  "license": "MIT (original procedural geometry and flat PBR materials)",
+  "external_assets": [],
+  "reference_game_assets": "none; no Re-Volt/RVGL model, texture or data was read",
+  "district": "housing",
+  "editable_source": "assets/rc/districts/housing.blend",
+  "lap_length_m": 406.8,
+  "gates": 8,
+  "ai_nodes": 51,
+  "ai_spacing_m": 7.98,
+  "houses": 8,
+  "visual_triangles": 88238,
+  "collision_triangles": 16436,
+  "collision_meshes": 157,
+  "materials": 21,
+  "vertex_ao": {
+    "raw_min": 0.0,
+    "raw_max": 1.0,
+    "floor": 0.38,
+    "distance_m": 1.6,
+    "samples": 24
+  },
+  "vertex_ao_method": "Cycles AO bake to per-corner BYTE_COLOR attribute \"AO\", exported as COLOR_0; remapped to floor..1. Real bake, no painted shading.",
+  "glb_bytes": 3939940
+}
