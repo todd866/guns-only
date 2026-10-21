@@ -76,6 +76,14 @@ generic Las Vegas skyline on the horizon. It brings Red Flag, the aggressor squa
 can wear aggressor camo), the Weapons School and the aerobatic-team home base, and the real Area
 51 out on the range. The base name and every sign stay fictional.
 
+**Real photos first** (owner): when in doubt, look at real photos of Nellis and the Strip before
+inventing anything. The reference board is `docs/research/area51-nellis-photo-reference.md`, and
+the private images are in `~/.local/state/area51-reference/`.
+
+**Next level: the BX.** Race through the base exchange (the Air Force's PX), modelled closely on
+the real Nellis BX's layout and look: aisles, departments, the food court and a stockroom
+shortcut. No Exchange or store brand marks.
+
 ## USAF flavour (owner, 2026-10-21: "plenty of USAF cultural references")
 
 It's an Air Force base, so it's the BX, not the PX. The jokes are for the parents; the kid gets

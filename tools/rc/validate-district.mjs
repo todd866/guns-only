@@ -4,9 +4,12 @@ import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {parseGLB} from './validate-assets.mjs';
 
-export const SURFACES = ['asphalt', 'concrete', 'grass', 'dirt', 'wood', 'gymfloor', 'carpet', 'metal', 'tile'];
+export const SURFACES = ['asphalt', 'concrete', 'grass', 'dirt', 'wood', 'gymfloor', 'carpet', 'metal', 'tile', 'rubber', 'gravel'];
 export const BUDGET = {visualTriangles: 250000, collisionTriangles: 40000, materials: 24, bytes: 12 * 1024 * 1024,
-  gates: [8, 12], starts: 4, pickups: [6, 10], specs: 1, aiSpacing: [4, 12], aiMaxTurnDeg: 75};
+  gates: [8, 12], starts: 4, pickups: [6, 10], specs: 1, aiSpacing: [4, 12], aiMaxTurnDeg: 75,
+  // Lateral sweeps either side of the racing line: a vertical rise in this band is too tall to
+  // roll over and too short to read as a wall, so a toy wheel wedges on it (the v1 kerb bug).
+  trapStep: [0.025, 0.25], sweepBeyondHalfWidth: 4, sweepStep: 0.02};
 
 export function splitGLB(bytes) {
   const doc = parseGLB(bytes);
@@ -82,12 +85,27 @@ export function openEdges(tris) {
   return open;
 }
 
+// Downward ray caster over all COL triangles, bucketed on a uniform XZ grid.
+export function makeCaster(col, cell = 2) {
+  const grid = new Map(), k = (i, j) => i * 100003 + j;
+  for (const c of col) for (const t of c.tris) {
+    const x0 = Math.floor(Math.min(t[0][0], t[1][0], t[2][0]) / cell), x1 = Math.floor(Math.max(t[0][0], t[1][0], t[2][0]) / cell);
+    const z0 = Math.floor(Math.min(t[0][2], t[1][2], t[2][2]) / cell), z1 = Math.floor(Math.max(t[0][2], t[1][2], t[2][2]) / cell);
+    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
+      const key = k(i, j);
+      if (!grid.has(key)) grid.set(key, []);
+      grid.get(key).push({t, c});
+    }
+  }
+  return from => castDown(grid.get(k(Math.floor(from[0] / cell), Math.floor(from[2] / cell))) ?? [], from);
+}
+
 // First collision surface hit by a vertical ray cast down from `from` (+Y up).
-export function castDown(col, from) {
+export function castDown(items, from) {
   let best = null;
-  for (const c of col) {
-    if (from[0] < c.min[0] || from[0] > c.max[0] || from[2] < c.min[2] || from[2] > c.max[2]) continue;
-    for (const [a, b, d] of c.tris) {
+  for (const {t, c} of items) {
+    {
+      const [a, b, d] = t;
       const x = from[0], z = from[2];
       const det = (b[2] - d[2]) * (a[0] - d[0]) + (d[0] - b[0]) * (a[2] - d[2]);
       if (Math.abs(det) < 1e-12) continue;
@@ -224,20 +242,42 @@ export function validateDistrict(doc, bin, bytes, budget = BUDGET) {
 
   // Every racing-line node and midpoint must sit on clear, drivable collision: the first
   // surface under a ray from 3 m above is road-level asphalt/concrete with nothing overhead.
-  const surfaceTally = {}, offRoad = [];
+  const surfaceTally = {}, offRoad = [], traps = [];
+  let sweepSamples = 0;
+  const cast = col.length ? makeCaster(col) : () => null;
   if (col.length && ai.length) {
     const probes = [];
     ai.forEach((n, i) => { probes.push([n.name, n.pos]); const b = ai[(i + 1) % ai.length].pos; probes.push([n.name + '+', n.pos.map((v, k) => (v + b[k]) / 2)]); });
     gates.forEach(g => probes.push([g.name, g.pos]));
     for (const [name, p] of probes) {
-      const hit = castDown(col, [p[0], p[1] + 3, p[2]]);
+      const hit = cast([p[0], p[1] + 3, p[2]]);
       const key = hit ? hit.surface : 'none';
       surfaceTally[key] = (surfaceTally[key] ?? 0) + 1;
       if (!hit || !['asphalt', 'concrete'].includes(hit.surface) || Math.abs(hit.y - p[1]) > .06) offRoad.push(`${name}:${hit ? hit.name + '@' + r2(hit.y) : 'void'}`);
     }
+    // Lateral sweeps at every AI node: from the line outwards to half width + 4 m each side.
+    for (const n of ai) {
+      const f = fwd(n), side = [-f[2], 0, f[0]], reach = halfWidth(n) + budget.sweepBeyondHalfWidth;
+      for (const dir of [1, -1]) {
+        let prev = null;
+        for (let o = 0; o <= reach; o += budget.sweepStep) {
+          const q = [n.pos[0] + side[0] * o * dir, n.pos[1] + 3, n.pos[2] + side[2] * o * dir];
+          const hit = cast(q);
+          sweepSamples++;
+          if (prev && hit) {
+            const rise = Math.abs(hit.y - prev.y);
+            if (rise > budget.trapStep[0] && rise < budget.trapStep[1])
+              traps.push(`${n.name}${dir > 0 ? 'L' : 'R'}@${r2(o)}m:${r2(rise * 100)}cm(${prev.name}->${hit.name})`);
+          }
+          if (hit && hit.y - n.pos[1] > budget.trapStep[1]) break;    // reached a real wall
+          prev = hit;
+        }
+      }
+    }
+    if (traps.length) err(`wedge-trap steps (${budget.trapStep[0] * 100}-${budget.trapStep[1] * 100} cm) beside the racing line: ${traps.slice(0, 6).join(', ')}${traps.length > 6 ? ` … (${traps.length})` : ''}`);
     if (offRoad.length) err(`racing line not on clear road at ${offRoad.slice(0, 6).join(', ')}${offRoad.length > 6 ? ' …' : ''}`);
     for (const n of [...starts, ...pickups, ...specs]) {
-      const hit = castDown(col, [n.pos[0], n.pos[1] + .05, n.pos[2]]);
+      const hit = cast([n.pos[0], n.pos[1] + .05, n.pos[2]]);
       if (!hit) err(`${n.name} has no collision floor beneath it`);
       else if (n.pos[1] - hit.y > 1.5) warn(`${n.name} floats ${r2(n.pos[1] - hit.y)} m above ${hit.name}`);
     }
@@ -251,7 +291,7 @@ export function validateDistrict(doc, bin, bytes, budget = BUDGET) {
     gates: gateReport, start_slots: starts.map(s => s.name), ai_nodes: ai.length,
     ai_spacing_m: seg.length ? {min: r2(Math.min(...seg)), max: r2(Math.max(...seg))} : null,
     lap_length_m: r2(lap), lap_time_s_at_8_to_10_mps: lap ? [r2(lap / 10), r2(lap / 8)] : null,
-    racing_line_surface_probes: surfaceTally, pickups: pickups.length, specimens: specs.map(s => s.name),
+    racing_line_surface_probes: surfaceTally, lateral_sweep_samples: sweepSamples, wedge_trap_steps: traps.length, pickups: pickups.length, specimens: specs.map(s => s.name),
     camera_hints: byPrefix(/^CAM_/).map(n => n.name), budget,
   };
 }

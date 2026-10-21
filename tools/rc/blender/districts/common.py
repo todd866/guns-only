@@ -19,7 +19,7 @@ from pathlib import Path
 import bpy
 import bmesh
 
-SURFACES = ('asphalt', 'concrete', 'grass', 'dirt', 'wood', 'gymfloor', 'carpet', 'metal', 'tile')
+SURFACES = ('asphalt', 'concrete', 'grass', 'dirt', 'wood', 'gymfloor', 'carpet', 'metal', 'tile', 'rubber', 'gravel')
 
 PALETTE = {}      # name -> (hex, metallic, roughness); filled by the district
 _MATS = {}
@@ -259,6 +259,60 @@ def polygon_slab(pts, z0, z1):
     return v, f
 
 
+def frustum(c, r0, r1, h, n=12, axis='Z'):
+    m = _axis_map(axis)
+    v = []
+    for r, z in ((r0, 0), (r1, h), (r0, 0), (r1, h)):
+        v += [tuple(c[k] + m(r * math.cos(2 * math.pi * i / n), r * math.sin(2 * math.pi * i / n), z)[k]
+                    for k in range(3)) for i in range(n)]
+    f = [(i, (i + 1) % n, n + (i + 1) % n, n + i) for i in range(n)]
+    f += [tuple(2 * n + i for i in reversed(range(n))), tuple(3 * n + i for i in range(n))]
+    return v, f, [True] * n + [False, False]
+
+
+def text2d(body, size, align='CENTER', bold=0.0):
+    """Flat mesh lettering from Blender's bundled UI font, in the local XY plane, centred
+    vertically on the cap height. Returns (verts2d, faces, width)."""
+    cu = bpy.data.curves.new('lettering', 'FONT')
+    cu.body = body
+    cu.size = size
+    cu.align_x = align
+    cu.align_y = 'CENTER'
+    cu.resolution_u = 2
+    cu.offset = bold * size
+    ob = bpy.data.objects.new('lettering', cu)
+    bpy.context.collection.objects.link(ob)
+    bpy.context.view_layer.update()
+    ev = ob.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    me = ev.to_mesh()
+    v = [(p.co.x, p.co.y) for p in me.vertices]
+    f = [tuple(p.vertices) for p in me.polygons]
+    ev.to_mesh_clear()
+    bpy.data.objects.remove(ob)
+    bpy.data.curves.remove(cu)
+    w = (max(p[0] for p in v) - min(p[0] for p in v)) if v else 0
+    return v, f, w
+
+
+def place_flat(v2, faces, centre, facing_deg, up=1.0, out=.01, scale=1.0, dx=0.0, dy=0.0):
+    """Stand 2D geometry upright at centre, front face looking toward facing_deg (world XY)."""
+    a = math.radians(facing_deg)
+    n = (math.cos(a), math.sin(a))
+    right = (-n[1], n[0])          # up x n, so right x up = n (front face toward viewer)
+    verts = [(centre[0] + right[0] * (x * scale + dx) + n[0] * out,
+              centre[1] + right[1] * (x * scale + dx) + n[1] * out,
+              centre[2] + (y * scale + dy) * up) for x, y in v2]
+    return verts, faces
+
+
+def place_on_cylinder(v2, faces, c, radius, zc, theta_deg):
+    """Wrap 2D lettering round a vertical cylinder, centred at theta (outward reading)."""
+    t0 = math.radians(theta_deg)
+    verts = [(c[0] + radius * math.cos(t0 + x / radius), c[1] + radius * math.sin(t0 + x / radius), zc + y)
+             for x, y in v2]
+    return verts, faces
+
+
 def transform(part, fn):
     out = [fn(p) for p in part[0]]
     return (out, *part[1:])
@@ -355,6 +409,26 @@ def ring_slab(loop, off_in, off_out, z0, z1):
             kk = (k + 1) % 4
             f.append((4 * i + k, 4 * i + kk, 4 * j + kk, 4 * j + k))
     return v, f
+
+
+def ring_profile(loop, section):
+    """Sweep a closed cross-section [(offset, z), ...] around the loop: a closed ring."""
+    rings = [loop.ring(o) for o, _ in section]
+    n, k = len(loop.params), len(section)
+    v = [(rings[j][i][0], rings[j][i][1], section[j][1]) for i in range(n) for j in range(k)]
+    f = [(i * k + j, i * k + (j + 1) % k, ((i + 1) % n) * k + (j + 1) % k, ((i + 1) % n) * k + j)
+         for i in range(n) for j in range(k)]
+    return v, f
+
+
+def rolled_kerb(o0, o1, rise, bottom, steps=6):
+    """Mountable (rolled) kerb section from offset o0 (z=0, road) to o1 (z=rise): smoothstep,
+    so there is no vertical face anywhere on the road edge."""
+    top = []
+    for i in range(steps + 1):
+        u = i / steps
+        top.append((o0 + (o1 - o0) * u, rise * (3 * u * u - 2 * u ** 3)))
+    return [(o0, bottom)] + top + [(o1, bottom)]
 
 
 def ring_sheet(loop, offs, z):
@@ -516,7 +590,7 @@ def render_glb(glb, out, shots, res=(1280, 720), samples=24):
         pass
     bg = world.node_tree.nodes.get('Background')
     bg.inputs['Color'].default_value = (.42, .62, .95, 1)
-    bg.inputs['Strength'].default_value = 1.1
+    bg.inputs['Strength'].default_value = 1.5
     sun_data = bpy.data.lights.new('Sun', 'SUN')
     sun_data.energy = 3.6
     sun_data.color = (1, .93, .82)
