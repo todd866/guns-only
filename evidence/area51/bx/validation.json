@@ -1,0 +1,143 @@
+{
+  "file": "web/wwwroot/rc/assets/districts/bx.glb",
+  "checked_at": "2026-10-21T06:20:10.021Z",
+  "ok": true,
+  "errors": [],
+  "warnings": [],
+  "bytes": 7026476,
+  "materials": 24,
+  "visual_triangles": 110127,
+  "visual_primitives": 24,
+  "vis_primitives_with_color0": 24,
+  "collision_triangles": 2608,
+  "collision_meshes": 201,
+  "collision_open_meshes": 0,
+  "collision_surface_triangles": {
+    "carpet": 12,
+    "concrete": 300,
+    "metal": 1764,
+    "tile": 48,
+    "wood": 484
+  },
+  "gates": [
+    {
+      "name": "GATE_00",
+      "track_m": 0,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_01",
+      "track_m": 36.43,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_02",
+      "track_m": 52.33,
+      "half_width_m": 2
+    },
+    {
+      "name": "GATE_03",
+      "track_m": 73.15,
+      "half_width_m": 1.47
+    },
+    {
+      "name": "GATE_04",
+      "track_m": 86.26,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_05",
+      "track_m": 100.96,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_06",
+      "track_m": 225.45,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_07",
+      "track_m": 248.93,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_08",
+      "track_m": 269.86,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_09",
+      "track_m": 291.39,
+      "half_width_m": 1.52
+    }
+  ],
+  "start_slots": [
+    "START_1",
+    "START_2",
+    "START_3",
+    "START_4"
+  ],
+  "ai_nodes": 51,
+  "ai_spacing_m": {
+    "min": 5.66,
+    "max": 6.22
+  },
+  "lap_length_m": 311.38,
+  "lap_time_s_at_8_to_10_mps": [
+    31.14,
+    38.92
+  ],
+  "racing_line_surface_probes": {
+    "tile": 84,
+    "wood": 21,
+    "carpet": 7
+  },
+  "lateral_sweep_samples": 25906,
+  "wedge_trap_steps": 0,
+  "pickups": 10,
+  "specimens": [
+    "SPEC_01"
+  ],
+  "camera_hints": [
+    "CAM_checkout_lane",
+    "CAM_stockroom_doors",
+    "CAM_stockroom_ramp",
+    "CAM_table_tunnel"
+  ],
+  "budget": {
+    "visualTriangles": 250000,
+    "collisionTriangles": 40000,
+    "materials": 24,
+    "bytes": 12582912,
+    "gates": [
+      8,
+      12
+    ],
+    "starts": 4,
+    "pickups": [
+      6,
+      10
+    ],
+    "specs": 1,
+    "aiSpacing": [
+      4,
+      12
+    ],
+    "aiMaxTurnDeg": 75,
+    "trapStep": [
+      0.025,
+      0.25
+    ],
+    "sweepBeyondHalfWidth": 4,
+    "sweepStep": 0.02,
+    "drivable": [
+      "asphalt",
+      "concrete",
+      "tile",
+      "wood",
+      "carpet",
+      "gymfloor"
+    ],
+    "toyClearance": 0.45
+  }
+}

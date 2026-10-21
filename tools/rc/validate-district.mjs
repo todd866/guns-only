@@ -9,7 +9,12 @@ export const BUDGET = {visualTriangles: 250000, collisionTriangles: 40000, mater
   gates: [8, 12], starts: 4, pickups: [6, 10], specs: 1, aiSpacing: [4, 12], aiMaxTurnDeg: 75,
   // Lateral sweeps either side of the racing line: a vertical rise in this band is too tall to
   // roll over and too short to read as a wall, so a toy wheel wedges on it (the v1 kerb bug).
-  trapStep: [0.025, 0.25], sweepBeyondHalfWidth: 4, sweepStep: 0.02};
+  trapStep: [0.025, 0.25], sweepBeyondHalfWidth: 4, sweepStep: 0.02,
+  // Floors a racing line may run on (interiors: polished concrete is `tile`, laminate is `wood`).
+  drivable: ['asphalt', 'concrete', 'tile', 'wood', 'carpet', 'gymfloor'],
+  // A collision mesh lying wholly this far above the line (a table top) is overhead, not an
+  // obstacle: the toy car (about 0.25 m tall) drives under it.
+  toyClearance: 0.45};
 
 export function splitGLB(bytes) {
   const doc = parseGLB(bytes);
@@ -85,7 +90,8 @@ export function openEdges(tris) {
   return open;
 }
 
-// Downward ray caster over all COL triangles, bucketed on a uniform XZ grid.
+// Downward ray caster over all COL triangles, bucketed on a uniform XZ grid. With `below`, meshes
+// whose lowest point is above `below` are ignored (overhead geometry the car passes under).
 export function makeCaster(col, cell = 2) {
   const grid = new Map(), k = (i, j) => i * 100003 + j;
   for (const c of col) for (const t of c.tris) {
@@ -97,13 +103,14 @@ export function makeCaster(col, cell = 2) {
       grid.get(key).push({t, c});
     }
   }
-  return from => castDown(grid.get(k(Math.floor(from[0] / cell), Math.floor(from[2] / cell))) ?? [], from);
+  return (from, below = Infinity) => castDown(grid.get(k(Math.floor(from[0] / cell), Math.floor(from[2] / cell))) ?? [], from, below);
 }
 
 // First collision surface hit by a vertical ray cast down from `from` (+Y up).
-export function castDown(items, from) {
+export function castDown(items, from, below = Infinity) {
   let best = null;
   for (const {t, c} of items) {
+    if (c.min && c.min[1] > below) continue;
     {
       const [a, b, d] = t;
       const x = from[0], z = from[2];
@@ -241,7 +248,8 @@ export function validateDistrict(doc, bin, bytes, budget = BUDGET) {
   }
 
   // Every racing-line node and midpoint must sit on clear, drivable collision: the first
-  // surface under a ray from 3 m above is road-level asphalt/concrete with nothing overhead.
+  // surface under a ray from 3 m above is a road-level drivable floor with nothing overhead
+  // below toy clearance.
   const surfaceTally = {}, offRoad = [], traps = [];
   let sweepSamples = 0;
   const cast = col.length ? makeCaster(col) : () => null;
@@ -250,10 +258,10 @@ export function validateDistrict(doc, bin, bytes, budget = BUDGET) {
     ai.forEach((n, i) => { probes.push([n.name, n.pos]); const b = ai[(i + 1) % ai.length].pos; probes.push([n.name + '+', n.pos.map((v, k) => (v + b[k]) / 2)]); });
     gates.forEach(g => probes.push([g.name, g.pos]));
     for (const [name, p] of probes) {
-      const hit = cast([p[0], p[1] + 3, p[2]]);
+      const hit = cast([p[0], p[1] + 3, p[2]], p[1] + budget.toyClearance);
       const key = hit ? hit.surface : 'none';
       surfaceTally[key] = (surfaceTally[key] ?? 0) + 1;
-      if (!hit || !['asphalt', 'concrete'].includes(hit.surface) || Math.abs(hit.y - p[1]) > .06) offRoad.push(`${name}:${hit ? hit.name + '@' + r2(hit.y) : 'void'}`);
+      if (!hit || !budget.drivable.includes(hit.surface) || Math.abs(hit.y - p[1]) > .06) offRoad.push(`${name}:${hit ? hit.name + '@' + r2(hit.y) : 'void'}`);
     }
     // Lateral sweeps at every AI node: from the line outwards to half width + 4 m each side.
     for (const n of ai) {
@@ -262,7 +270,7 @@ export function validateDistrict(doc, bin, bytes, budget = BUDGET) {
         let prev = null;
         for (let o = 0; o <= reach; o += budget.sweepStep) {
           const q = [n.pos[0] + side[0] * o * dir, n.pos[1] + 3, n.pos[2] + side[2] * o * dir];
-          const hit = cast(q);
+          const hit = cast(q, n.pos[1] + budget.toyClearance);
           sweepSamples++;
           if (prev && hit) {
             const rise = Math.abs(hit.y - prev.y);
