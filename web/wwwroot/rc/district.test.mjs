@@ -64,3 +64,15 @@ test('bad districts are rejected loudly', () => {
   assert.throws(() => courseFromGlb(glb([{ name: 'COL_grass_a', quad: [0, 0, 1, 1, 0] }, { name: 'GATE_00' }, { name: 'START_1' }])), /GATE_00/);
   assert.throws(() => courseFromGlb(glb([{ name: 'GATE_00' }, { name: 'GATE_01' }, { name: 'START_1' }])), /COL_/);
 });
+
+test('COIN_ markers become challenge coins a car collects by driving through', () => {
+  const c = courseFromGlb(glb([
+    { name: 'COL_asphalt_ground', quad: [-30, -30, 30, 30, 0] },
+    { name: 'GATE_00', t: [0, 0, 0], s: [3, 1, 1] }, { name: 'GATE_01', t: [0, 0, -20], s: [3, 1, 1] },
+    { name: 'START_1', t: [0, 0, 4] }, { name: 'COIN_02', t: [0, 0.2, -8] }, { name: 'COIN_01', t: [10, 0.2, 10] },
+  ]));
+  assert.deepEqual(c.coins.map(k => k.name), ['COIN_01', 'COIN_02']);
+  const s = createSession(c, { mode: 'kid' });
+  for (let i = 0; i < 240; i++) stepSession(s, { throttle: 1 });
+  assert.deepEqual(s.coins, ['COIN_02']);
+});

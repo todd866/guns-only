@@ -7,6 +7,8 @@ import { add, sub, scale, dot, len, rotate } from './math.mjs';
 import { createPickups, stepPickups, modifiers, use, rivalWants } from './pickups.mjs';
 
 export const SKILL = { cruise: 0.78, ace: 0.95 };
+// Aggressor-squadron callsigns, one per rival paint scheme (ghost, desert, splinter, flanker, arctic).
+export const CALLSIGNS = ['GHOST', 'SANDY', 'SPLINTER', 'FLANKER', 'FROSTY'];
 
 export function createRace(course, { mode = 'kid', opponents = 3 } = {}) {
   const grid = course.grid ?? gridBehind(course.start, opponents + 1);
@@ -16,7 +18,7 @@ export function createRace(course, { mode = 'kid', opponents = 3 } = {}) {
   const line = racingLine(course);
   const rivals = slots.slice(0, -1).map((slot, i) => ({
     session: Object.assign(createSession({ ...course, start: slot }, { mode: 'bigKid' }), { autoUnstick: true }),
-    skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i,
+    skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i, callsign: CALLSIGNS[i % CALLSIGNS.length],
   }));
   // Retreat: once a race the bugle sounds and every rival stops for the flag. The player can
   // stand to attention too, or keep driving (nobody tells the kid off).

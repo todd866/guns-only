@@ -8,7 +8,7 @@ export function createSession(course, { mode = 'kid', params = BUGGY } = {}) {
   const { pos, yaw } = course.start;
   const car = createCar(params, [pos[0], groundBelow(course.world, pos) + rideHeight(params), pos[2]], yaw);
   return { course, car, assist: createAssist(mode), mode, time: 0, gate: 0, running: false, finished: false,
-    hits: 0, found: 0, seen: [], travel: 0, recoveries: 0, stuckTime: 0, autoUnstick: mode === 'kid' };
+    hits: 0, found: 0, seen: [], coins: [], travel: 0, recoveries: 0, stuckTime: 0, autoUnstick: mode === 'kid' };
 }
 
 // Spawn and recovery stand on whatever the world has under that point.
@@ -33,6 +33,9 @@ export function stepSession(s, raw, dt = 1 / 120) {
     s.gate++;
     if (s.gate === cps.length) { s.running = false; s.finished = true; s.gate = cps.length - 1; }
   }
+  // Challenge coins: collected by driving through them (within 0.7 m, any height the car reaches).
+  for (const c of s.course.coins ?? [])
+    if (!s.coins.includes(c.name) && Math.hypot(x - c.x, z - c.z) < 0.7 && Math.abs(s.car.pos[1] - c.y) < 0.8) s.coins.push(c.name);
   s.course.secrets.forEach((p, i) => {
     if (low && !s.seen.includes(i) && Math.hypot(x - p.x, z - p.z) < 3.3) { s.seen.push(i); s.found++; }
   });
