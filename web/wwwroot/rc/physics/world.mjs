@@ -6,7 +6,7 @@ import { sub, cross, dot, norm, scale, add, len } from './math.mjs';
 export const SURFACES = {
   asphalt: { grip: 1.0, roll: 0.02 }, concrete: { grip: 1.0, roll: 0.02 }, wood: { grip: 0.95, roll: 0.025 },
   metal: { grip: 0.8, roll: 0.02 }, tile: { grip: 0.72, roll: 0.02 }, gymfloor: { grip: 0.55, roll: 0.015 },
-  carpet: { grip: 0.9, roll: 0.07 }, grass: { grip: 0.72, roll: 0.09 }, dirt: { grip: 0.8, roll: 0.06 },
+  carpet: { grip: 0.9, roll: 0.07 }, rubber: { grip: 1.0, roll: 0.03, bounce: 2.2 }, grass: { grip: 0.72, roll: 0.09 }, dirt: { grip: 0.8, roll: 0.06 },
 };
 
 export function createWorld(cell = 4) {

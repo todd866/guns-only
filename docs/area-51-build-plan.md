@@ -137,8 +137,13 @@ Free roam between districts waits until the districts themselves are fun.
   ground height.
   Open: the tuning is unplayed by a human. Body roll is mild (roll centre 0.6). The chase camera is
   new and untested on flips.
-- **M2 Housing:** Blender district pipeline with collision and metadata, Base Housing driveable
+- **M2 Housing: driving 2026-10-21.** Liberty Loop (`?track=housing`): a real-keyboard headless
+  lap finished in 56.8 s with 0 hits, and rivals lap it in 34–38 s on the physics. v2 under way:
+  rolled curbs (the 12 cm vertical kerb trapped a car cutting a corner), a rubber trampoline,
+  USAF set dressing.
+- **M2 (original goal):** Blender district pipeline with collision and metadata, Base Housing driveable
   with gates.
-- **M3 Race:** AI opponents and pickups on Housing.
+- **M3 Race: done 2026-10-21.** AI rivals with corner braking, kid rubber-banding and bumping;
+  pickups (Afterburner, Water Balloon, Hydraulic Leak, Chaff); the retreat event.
 - **M4 Shell:** Area 51½ replaces Weekend Ride on the selector; base-map track select.
 - **M5+:** School, Flight Line, Offices, Commissary, the secret lab.

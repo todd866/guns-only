@@ -119,3 +119,11 @@ test('energy does not grow: a 60 s bumpy drive stays bounded', () => {
   for (let i = 0; i < 120 * 60; i++) { stepSession(s, { throttle: 1, steer: Math.sin(i / 90) }); maxAng = Math.max(maxAng, Math.hypot(...s.car.ang)); }
   assert.ok(Number.isFinite(s.car.pos[0]) && s.car.speed < 16 && maxAng < 60, `speed ${s.car.speed} ang ${maxAng}`);
 });
+
+test('a rubber trampoline throws the car higher than concrete', () => {
+  const peak = surface => { const w = createWorld(); w.addQuad([-20, 0, -20], [-20, 0, 20], [20, 0, 20], [20, 0, -20], surface);
+    const s = at([0, 0, 0], 0, 'bigKid', { world: w, checkpoints: [[90, 90, 'x']], secrets: [] }); s.car.pos[1] = 0.9;
+    let top = 0, falling = false; for (let i = 0; i < 360; i++) { stepSession(s, {}); if (s.car.vel[1] > 0.1) falling = true; if (falling) top = Math.max(top, s.car.pos[1]); } return top; };
+  const rubber = peak('rubber'), concrete = peak('concrete');
+  assert.ok(rubber > concrete + 0.1, `rubber ${rubber.toFixed(2)} concrete ${concrete.toFixed(2)}`);
+});

@@ -104,8 +104,9 @@ function substep(car, input, world, dt) {
     contacts++;
     const compression = reach - hit.dist, vAttach = pointVelocity(car, attach);
     const rate = -dot(vAttach, up);
-    const bump = compression > p.bumpAt;
-    const springF = Math.max(0, p.spring * compression + (bump ? p.bumpSpring * (compression - p.bumpAt) + p.bumpDamper * Math.max(0, rate) : 0) + p.damper * rate);
+    const bump = compression > p.bumpAt, bounce = (SURFACES[hit.surface] || SURFACES.concrete).bounce ?? 1;
+    // A bouncy surface (trampoline) is a stiffer, nearly undamped spring under the wheel.
+    const springF = Math.max(0, p.spring * bounce * compression + (bump ? p.bumpSpring * (compression - p.bumpAt) + p.bumpDamper * Math.max(0, rate) / bounce : 0) + p.damper * rate / (bounce * bounce));
     ws.contact = true; ws.compression = compression; ws.surface = hit.surface;
     addForce(scale(up, springF), attach);
 

@@ -7,11 +7,12 @@ const path=require('node:path');const ROOT=path.resolve(__dirname,'../../web/www
 try{await new Promise(r=>setTimeout(r,800));browser=await chromium.launch({headless:true,channel:'chromium',executablePath:process.env.CHROMIUM_PATH});
 const page=await browser.newPage({viewport:{width:1280,height:800}});const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
 await page.goto(`http://127.0.0.1:${PORT}/rc/${process.env.Q||''}`);await page.waitForFunction(()=>['blender','failed'].includes(window.__gunsOnlyRC?.snapshot().assets),null,{timeout:30000});
-await page.locator('#start').click();const held=new Set();const pts=await page.evaluate(()=>window.__gunsOnlyRC.checkpoints());
+await page.locator('#start').click();const held=new Set();// Follow the racing line (AI nodes on districts, gates on the prototype) with a 3 m lookahead.
+const pts=await page.evaluate(()=>window.__gunsOnlyRC.line());let node=0;
 let st,shots=new Set(),t0=Date.now(),frames=[];
 while(Date.now()-t0<90000){st=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());
  for(const g of [1,3,5,6,8])if(st.gate===g&&!shots.has(g)){shots.add(g);await page.screenshot({path:`${OUT}/gate${g}.png`});}
- if(st.finished)break;const p=pts[st.gate];const a=Math.atan2(p[0]-st.x,-(p[1]-st.z));const e=Math.atan2(Math.sin(a-st.yaw),Math.cos(a-st.yaw));
+ if(st.finished)break;while(Math.hypot(pts[node%pts.length][0]-st.x,pts[node%pts.length][1]-st.z)<3)node++;const p=pts[node%pts.length];const a=Math.atan2(p[0]-st.x,-(p[1]-st.z));const e=Math.atan2(Math.sin(a-st.yaw),Math.cos(a-st.yaw));
  const want=new Set();if(st.speed<(Math.abs(e)>.5?3:7))want.add('KeyW');if(e>.08)want.add('KeyD');if(e<-.08)want.add('KeyA');
  for(const k of held)if(!want.has(k)){await page.keyboard.up(k);held.delete(k);}for(const k of want)if(!held.has(k)){await page.keyboard.down(k);held.add(k);}
  if(process.env.FIRE&&st.item)await page.keyboard.press('KeyF');

@@ -18,7 +18,9 @@ export function createRace(course, { mode = 'kid', opponents = 3 } = {}) {
     session: createSession({ ...course, start: slot }, { mode: 'bigKid' }),
     skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i,
   }));
-  return { course, mode, player, rivals, line, pickups: createPickups(course), events: [] };
+  // Retreat: once a race the bugle sounds and every rival stops for the flag. The player can
+  // stand to attention too, or keep driving (nobody tells the kid off).
+  return { course, mode, player, rivals, line, pickups: createPickups(course), events: [], clock: 0, retreat: { at: 18, length: 5 } };
 }
 
 // Racing line: AI nodes if authored, else the lap gates.
@@ -42,6 +44,8 @@ export function progress(s) {
   const seg = Math.hypot(next[0] - prev[0], next[1] - prev[1]) || 1, left = Math.hypot(next[0] - s.car.pos[0], next[1] - s.car.pos[2]);
   return s.finished ? cps.length + 1 : g + Math.max(0, 1 - left / seg);
 }
+
+export const retreatActive = race => race.clock >= race.retreat.at && race.clock < race.retreat.at + race.retreat.length;
 
 export function driveInput(race, rival) {
   const s = rival.session, r = readout(s), line = race.line, n = line.length;
@@ -75,7 +79,7 @@ export function driveInput(race, rival) {
     vmax *= gap > 2 ? 0 : gap > 0 ? Math.max(0.1, 1 - gap * 0.45) : Math.min(1.15, 1 - gap * 0.08);
   }
   const steer = Math.max(-1, Math.min(1, err * 2.2));
-  if (vmax < 0.5) return { throttle: 0, brake: true, steer };
+  if (vmax < 0.5 || retreatActive(race)) return { throttle: 0, brake: true, steer };
   return { throttle: r.forwardSpeed < vmax ? 1 : r.forwardSpeed > vmax + 1.5 ? -0.6 : 0.2, steer };
 }
 
@@ -87,6 +91,7 @@ function withEffects(race, car, input) {
 
 export function stepRace(race, playerInput, dt = 1 / 120) {
   const pk = race.pickups, cars = [race.player.car, ...race.rivals.map(r => r.session.car)];
+  if (race.player.running) race.clock += dt;
   if (playerInput.fire) use(pk, race.player.car);
   stepSession(race.player, withEffects(race, race.player.car, playerInput), dt);
   for (const rival of race.rivals) {

@@ -37,7 +37,7 @@ handling punishing a small child.
    ramp, cafeteria tables to drive under.
 3. **HQ offices:** under desks, rolling chairs as moving obstacles, a copier, a mail-cart
    shortcut.
-4. **Commissary / PX:** supermarket aisles and stacked cans to knock over (our own nod to a
+4. **Commissary / BX:** supermarket aisles and stacked cans to knock over (our own nod to a
    Re-Volt classic, with original art).
 5. **Flight line:** hangars, under parked jets (existing collision already handles wings vs
    gear), a runway drag strip, tugs crossing.
@@ -67,3 +67,24 @@ original Blender buggy/hangar/aircraft/quarters, flight-shell pause/resume entry
 New: kid-mode assists (auto-right, steering/traction assist, guide ribbon, no recovery
 penalty), AI opponents, pickups, the school/offices/PX/housing districts, the secret-area
 unlock, and a brighter, friendlier art direction for the whole base.
+
+## USAF flavour (owner, 2026-10-21: "plenty of USAF cultural references")
+
+It's an Air Force base, so it's the BX, not the PX. The jokes are for the parents; the kid gets
+bright signs and silly moments. Use no real unit insignia, seals or official logos, and give the
+base a fictional name.
+
+In the game:
+- **Pickups:** Afterburner (boost), Water Balloon, Hydraulic Leak (oil slick) and Chaff (shield).
+- **Gates are steerpoints.** A win is "Sierra Hotel!", a loss is "Next sortie!".
+- **Retreat:** once a race the bugle sounds and every rival stops for the flag. The kid can keep
+  driving.
+
+On the backlog:
+- **Set dressing:** PCS moving trucks and boxes, the reflective PT belt, "Yard of the Month",
+  quiet-hours and 15 MPH signs, a gate-guard static jet, squadron rocks, a Security Forces
+  "Defenders" booth, a water tower, and a "Flightline → / Area 51½: NO" sign.
+- **Collectibles:** challenge coins, as Re-Volt's stars.
+- **Flight line:** a FOD-walk mini-game, crew chiefs, the wing commander's reserved parking spot
+  as a shortcut, and the golf course built before the runway.
+- **Area 51½:** Janet-style flights and "Dreamland" signage.
