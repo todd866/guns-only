@@ -74,12 +74,14 @@ Node naming in that GLB is the contract:
 | Prefix | Meaning |
 |---|---|
 | `VIS_*` | rendered geometry |
-| `COL_<surface>_*` | collision-only mesh, hidden at load. Surfaces: `asphalt concrete grass dirt wood gymfloor carpet metal tile` |
+| `COL_<surface>_*` | collision-only mesh, hidden at load. Surfaces: `asphalt concrete grass dirt wood gymfloor carpet metal tile rubber gravel` |
 | `GATE_NN` | empty; position + forward (−Z) = gate centre and direction, scale.x = half width |
 | `START_N` | grid slots, player first |
 | `AI_NNN` | racing-line nodes in order, scale.x = usable half width |
 | `PICKUP_*` | pickup spawn points |
 | `SPEC_*` | hidden alien specimen locations |
+| `COIN_NN` | challenge coins, exactly `COIN_01`..`COIN_05` per district (Re-Volt's stars). Each sits off the racing line (>= 1.5 m from it) with collision floor no more than 0.6 m below it, so a toy car can drive through it (collected within 0.7 m, `physics/session.mjs`). Extras: `hint`, and `approach_xy` / `return_xy` (Blender XY waypoints from the line to the coin and back) for the driven test |
+| `ALT_<name>_NNN` | skill-shortcut racing lines, ordered from `000`; scale.x = half width; extras `speed` (careful driver's m/s for that node) and `gap: true` on the node before a jump gap. First and last nodes sit on the main racing line (within 1 m of an `AI_` node) and no `GATE` lies in the bypassed stretch. Every node and midpoint is over walkable collision with >= 0.55 m of level surface across it. Falling off lands on floor that is, or leads back to, the slower main route |
 | `CAM_*` | optional camera hints for tight interiors |
 
 Units are metres at real scale, Blender +Z up, glTF export +Y up. Visuals bake ambient
@@ -99,6 +101,18 @@ contract.
 5. **Area 51½ secret lab**, unlocked by specimens.
 
 Each district is its own level, picked from a cartoon base map (Re-Volt's track select).
+
+**Skill shortcuts** (owner, 2026-10-21): every district has at least one elevated `ALT_` route
+that is narrow (0.8 m), has a braking zone (a dogleg) and a jump (a 12 cm kicker over a 0.8 m
+gap), and beats the main line for a careful driver while a flat-out driver falls off. Falls drop
+0.6-0.7 m onto floor; where the floor under the route would itself be a short cut, it is a dead
+end that opens only back onto the main route. Housing: GARDEN WALL RUN (`ALT_wall`). BX: the
+stockroom (`ALT_stockroom`, formerly `SHORTCUT_NNN`) and the FLIGHT SUIT RUNWAY through the
+soft-goods block (`ALT_runway`). School: the library diagonal (`ALT_library`) and the PLANTER RUN
+across the flagpole planter (`ALT_planter`).
+
+Checks: `tools/rc/validate-district.mjs` (coins, ALT geometry), `tools/rc/coins-reachable.test.mjs`
+and `tools/rc/alt-routes.test.mjs` (both drive the real car physics through `tools/rc/drive-path.mjs`).
 Free roam between districts waits until the districts themselves are fun.
 
 ## Racing systems (after the car feels right)
@@ -146,4 +160,25 @@ Free roam between districts waits until the districts themselves are fun.
 - **M3 Race: done 2026-10-21.** AI rivals with corner braking, kid rubber-banding and bumping;
   pickups (Afterburner, Water Balloon, Hydraulic Leak, Chaff); the retreat event.
 - **M4 Shell:** Area 51½ replaces Weekend Ride on the selector; base-map track select.
-- **M5+:** School, Flight Line, Offices, Commissary, the secret lab.
+- **M5 School: built 2026-10-21.** LITTLE NELLIE ELEMENTARY (`?track=school`,
+  `tools/rc/blender/districts/school.py`): lobby, locker hallway, science pocket (ALIEN BIOLOGY 101
+  specimen), library shortcut, gym (gymfloor, parachute), cafeteria table tunnel, rubber-mulch
+  playground with a racing-slide tabletop jump, monkey bars, sandbox, front walk with the planter
+  run. Evidence in `evidence/area51/school/`. Not yet on the brief's track list (`index.html`).
+- **M6+:** Flight Line, Offices, Commissary, the secret lab.
+
+## Next direction: free roam, Forza Horizon style (owner, 2026-10-21)
+
+Forza Horizon 5 is the target player's favourite game, so Area 51½ becomes a small open world:
+
+- **Hub (`hub.glb`):** all of Little Nellie AFB, compressed like FH5's Mexico (about 30 s across at toy
+  speed). Base roads link the housing streets, the BX car park and doors, the school, the flight line
+  apron and the Area 51½ fence. Free driving, no laps.
+- **Events:** glowing rings, as `EVENT_<id>` empties. Street races run on hub roads; their gates are
+  `RACE_<id>_GATE_NN`, with their own `RACE_<id>_AI_NNN` line. Door events load an interior track
+  (`?track=bx|school|housing`), and finishing returns you to the hub at that door (`?track=hub&from=bx`).
+- **Discovery:** challenge coins and aliens spread across the hub, landmark boards, and later a
+  progress level that unlocks more cars (FH5's collection loop).
+- **Skill shortcuts (owner):** harder but faster ALT routes that need braking and throttle control.
+  Falling off drops you onto the slower main route, never into a trap. Each has its own driving line,
+  and ace rivals take them.

@@ -8,7 +8,7 @@ export function createSession(course, { mode = 'kid', params = BUGGY } = {}) {
   const { pos, yaw } = course.start;
   const car = createCar(params, [pos[0], groundBelow(course.world, pos) + rideHeight(params), pos[2]], yaw);
   return { course, car, assist: createAssist(mode), mode, time: 0, gate: 0, running: false, finished: false,
-    hits: 0, found: 0, seen: [], travel: 0, recoveries: 0 };
+    hits: 0, found: 0, seen: [], coins: [], travel: 0, recoveries: 0, stuckTime: 0, autoUnstick: mode === 'kid' };
 }
 
 // Spawn and recovery stand on whatever the world has under that point.
@@ -20,14 +20,23 @@ export function stepSession(s, raw, dt = 1 / 120) {
   stepCar(s.car, assistInput(s.assist, s.car, raw, dt), s.course.world, dt);
   s.travel += len(sub(s.car.pos, before));
   if (s.car.wallImpact > 1.5) s.hits++;
+  // Wedged against a pole or a rival with the throttle held: after 2.5 s, hop back to the last
+  // steerpoint (free in kid mode). Six-year-olds do not reverse out of corners.
+  const pushing = Math.abs(raw.throttle || 0) > 0.4 && s.car.speed < 0.3 && s.car.grounded;
+  s.stuckTime = pushing ? s.stuckTime + dt : 0;
+  if (s.autoUnstick && s.stuckTime > 2.5) { s.stuckTime = 0; recover(s); }
   if (s.running) s.time += dt;
   const [x, , z] = s.car.pos, low = !!above(s, 1.6);
   const cps = s.course.checkpoints, g = cps[s.gate];
-  if (!s.finished && low && Math.hypot(x - g[0], z - g[1]) < (g[3] ?? 2.4)) {
+  // Free drive (roam): no gates and no clock; coins and specimens still count.
+  if (!s.roam && !s.finished && low && Math.hypot(x - g[0], z - g[1]) < (g[3] ?? 2.4)) {
     if (!s.running) { s.running = true; s.time = 0; }
     s.gate++;
     if (s.gate === cps.length) { s.running = false; s.finished = true; s.gate = cps.length - 1; }
   }
+  // Challenge coins: collected by driving through them (within 0.7 m, any height the car reaches).
+  for (const c of s.course.coins ?? [])
+    if (!s.coins.includes(c.name) && Math.hypot(x - c.x, z - c.z) < 0.7 && Math.abs(s.car.pos[1] - c.y) < 0.8) s.coins.push(c.name);
   s.course.secrets.forEach((p, i) => {
     if (low && !s.seen.includes(i) && Math.hypot(x - p.x, z - p.z) < 3.3) { s.seen.push(i); s.found++; }
   });

@@ -8,6 +8,8 @@ and exports one GLB that follows the node-naming contract in docs/area-51-build-
   COL_<surface>_*    collision-only closed meshes, no material
   GATE_NN            empty, local -Z (Blender +Y) = race direction, scale.x = half width
   START_N, AI_NNN, PICKUP_*, SPEC_*, CAM_*   empties
+  COIN_01..COIN_05   challenge coins, off the racing line (see coin())
+  ALT_<name>_NNN     skill-shortcut racing lines (see alt_route())
 
 All geometry is original and procedural. No downloads, no reference-game data.
 Blender is +Z up; the glTF exporter converts to +Y up.
@@ -154,6 +156,153 @@ def marker(name, at, heading=None, scale=(1, 1, 1), extras=None, display='PLAIN_
     for k, v in (extras or {}).items():
         o[k] = v
     return o
+
+
+class Route:
+    """Closed polyline with filleted corners, sampled every 0.25 m. at(d) -> (p, tangent, left).
+    Interiors (BX, School) author their lap as corners + fillet radii."""
+
+    def __init__(self, corners, radii, step=.25):
+        n = len(corners)
+        arcs = []
+        for i in range(n):
+            a, b, c = corners[i - 1], corners[i], corners[(i + 1) % n]
+            l1, l2 = math.dist(a, b), math.dist(b, c)
+            u1 = ((b[0] - a[0]) / l1, (b[1] - a[1]) / l1)
+            u2 = ((c[0] - b[0]) / l2, (c[1] - b[1]) / l2)
+            th = math.acos(max(-1.0, min(1.0, u1[0] * u2[0] + u1[1] * u2[1])))
+            left = u1[0] * u2[1] - u1[1] * u2[0] > 0
+            r = radii[i]
+            tl = r * math.tan(th / 2)
+            s = (b[0] - u1[0] * tl, b[1] - u1[1] * tl)
+            nrm = (-u1[1], u1[0]) if left else (u1[1], -u1[0])
+            arcs.append({'s': s, 'e': (b[0] + u2[0] * tl, b[1] + u2[1] * tl), 'c': (s[0] + nrm[0] * r, s[1] + nrm[1] * r),
+                         'r': r, 'th': th, 'left': left, 'tl': tl, 'next': l2})
+        for i, a in enumerate(arcs):
+            assert a['tl'] + arcs[(i + 1) % n]['tl'] <= a['next'] + 1e-6, f'corner {i} radii do not fit'
+        pts = []
+        for i, a in enumerate(arcs):
+            a0 = math.atan2(a['s'][1] - a['c'][1], a['s'][0] - a['c'][0])
+            sg = 1 if a['left'] else -1
+            m = max(2, math.ceil(a['r'] * a['th'] / step))
+            pts += [(a['c'][0] + a['r'] * math.cos(a0 + sg * a['th'] * k / m), a['c'][1] + a['r'] * math.sin(a0 + sg * a['th'] * k / m))
+                    for k in range(m)]
+            s2 = arcs[(i + 1) % n]['s']
+            m = max(1, math.ceil(math.dist(a['e'], s2) / step))
+            pts += [(a['e'][0] + (s2[0] - a['e'][0]) * k / m, a['e'][1] + (s2[1] - a['e'][1]) * k / m) for k in range(m)]
+        self.pts = pts
+        self.cum = [0.0]
+        for i in range(1, len(pts) + 1):
+            self.cum.append(self.cum[-1] + math.dist(pts[i - 1], pts[i % len(pts)]))
+        self.length = self.cum[-1]
+        self.d0 = 0.0
+
+    def nearest(self, q):
+        best = min(range(len(self.pts)), key=lambda i: math.dist(self.pts[i], q))
+        return (self.cum[best] - self.d0) % self.length
+
+    def at(self, d):
+        d = (d + self.d0) % self.length
+        lo, hi = 0, len(self.cum) - 1
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            if self.cum[mid] <= d:
+                lo = mid
+            else:
+                hi = mid
+        a, b = self.pts[lo], self.pts[(lo + 1) % len(self.pts)]
+        seg = self.cum[lo + 1] - self.cum[lo]
+        t = (d - self.cum[lo]) / seg
+        p = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+        tx, ty = (b[0] - a[0]) / seg, (b[1] - a[1]) / seg
+        return p, (tx, ty), (-ty, tx)
+
+    def dist(self, q):
+        return min(math.dist(p, q) for p in self.pts)
+
+
+def coin(k, at, approach, ret=None, hint=''):
+    """Challenge coin COIN_NN (Re-Volt's stars): five per district, off the racing line.
+
+    approach / ret: Blender XY waypoints from the racing line to the coin and back again, so the
+    driven test (tools/rc/coins-reachable.test.mjs) drives the same way a kid would. ret defaults
+    to the approach reversed. Exported as flat [x0, y0, x1, y1, ...] lists in the node extras."""
+    ex = {'hint': hint, 'approach_xy': [round(float(v), 3) for p in approach for v in p]}
+    if ret:
+        ex['return_xy'] = [round(float(v), 3) for p in ret for v in p]
+    return marker(f'COIN_{k:02d}', at, extras=ex, display='CIRCLE')
+
+
+# ---------------------------------------------------------------- skill shortcuts (ALT_<name>_NNN)
+
+_BVH = None
+
+
+def col_height(x, y, z_from=6.0):
+    """Height of the first collision surface below (x, y, z_from). Call after all COL_* exist."""
+    global _BVH
+    if _BVH is None:
+        from mathutils.bvhtree import BVHTree
+        verts, polys = [], []
+        for o in _COLS:
+            mw = o.matrix_world
+            base = len(verts)
+            verts += [tuple(mw @ v.co) for v in o.data.vertices]
+            polys += [tuple(base + i for i in p.vertices) for p in o.data.polygons]
+        _BVH = BVHTree.FromPolygons(verts, polys)
+    from mathutils import Vector
+    hit = _BVH.ray_cast(Vector((x, y, z_from)), Vector((0, 0, -1)), 50)
+    return hit[0].z if hit[0] is not None else 0.0
+
+
+def flanked_ramp(lo, hi, w, h, flank, z0=0.0):
+    """Closed ramp from lo (at z0) up to hi (z0 + h), top width w, with sloped flanks so no
+    vertical face stands on the floor except the high end (which abuts a walkway or deck)."""
+    dx, dy = hi[0] - lo[0], hi[1] - lo[1]
+    n = math.hypot(dx, dy)
+    px, py = -dy / n, dx / n
+    a, b = w / 2, w / 2 + flank
+    v = [(lo[0] - px * b, lo[1] - py * b, z0), (lo[0] + px * b, lo[1] + py * b, z0),
+         (hi[0] - px * b, hi[1] - py * b, z0), (hi[0] + px * b, hi[1] + py * b, z0),
+         (hi[0] - px * a, hi[1] - py * a, z0 + h), (hi[0] + px * a, hi[1] + py * a, z0 + h)]
+    return v, [(0, 4, 5, 1), (0, 2, 4), (1, 5, 3), (2, 3, 5, 4), (0, 1, 3, 2)]
+
+
+def walkway(label, pts, w, top, surface, mat, base=-.3, group='skill'):
+    """Narrow raised walkway along a polyline (closed boxes per segment, an octagon pad at each
+    joint so a dogleg has no notch). Returns nothing; collision is tagged `surface`."""
+    for i in range(len(pts) - 1):
+        p, q = pts[i], pts[i + 1]
+        vis(group, mat).add(beam(p, q, w, max(base, 0.0), top - max(base, 0.0)))
+        col(surface, f'{label}_{i}', beam(p, q, w, base, top - base), {'note': 'skill shortcut walkway'})
+    for i, p in enumerate(pts[1:-1], start=1):
+        oct_ = [(p[0] + w / 2 * 1.08 * math.cos(math.pi / 8 + k * math.pi / 4), p[1] + w / 2 * 1.08 * math.sin(math.pi / 8 + k * math.pi / 4))
+                for k in range(8)]
+        vis(group, mat).add(polygon_slab(oct_, max(base, 0.0), top))
+        col(surface, f'{label}_joint{i}', polygon_slab(oct_, base, top))
+
+
+def alt_route(name, pts, ai_xy, speeds, half=.4, gaps=(), snap=3.0, z_from=None):
+    """Ordered skill-shortcut empties ALT_<name>_NNN (scale.x = half width; extras: speed = the
+    careful driver's target in m/s, gap = the next segment jumps a gap). The first and last
+    points are snapped onto the nearest main racing-line node (AI_*). Heights come from the
+    collision below each point (call after all geometry is built)."""
+    pts = list(pts)
+    for end in (0, -1):
+        q = min(ai_xy, key=lambda a: math.dist(a, pts[end]))
+        assert math.dist(q, pts[end]) <= snap, f'ALT_{name} end {pts[end]} is {math.dist(q, pts[end]):.2f} m from the line'
+        pts[end] = q
+    assert len(speeds) == len(pts), (name, len(speeds), len(pts))
+    out = []
+    for k, (x, y) in enumerate(pts):
+        q = pts[k + 1] if k + 1 < len(pts) else (2 * x - pts[k - 1][0], 2 * y - pts[k - 1][1])
+        z = col_height(x, y, z_from if z_from is not None else 6.0)
+        ex = {'route': name, 'speed': float(speeds[k])}
+        if k in gaps:
+            ex['gap'] = True
+        marker(f'ALT_{name}_{k:03d}', (x, y, z), (q[0] - x, q[1] - y), (half, 1, 1), ex, 'SINGLE_ARROW')
+        out.append((x, y, z))
+    return out
 
 
 # ---------------------------------------------------------------- primitives (world coords)

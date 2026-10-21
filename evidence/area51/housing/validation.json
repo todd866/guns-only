@@ -1,25 +1,25 @@
 {
   "file": "web/wwwroot/rc/assets/districts/housing.glb",
-  "checked_at": "2026-10-21T05:37:09.113Z",
+  "checked_at": "2026-10-21T13:00:56.379Z",
   "ok": true,
   "errors": [],
   "warnings": [],
-  "bytes": 7051736,
+  "bytes": 7131780,
   "materials": 24,
-  "visual_triangles": 135487,
+  "visual_triangles": 136462,
   "visual_primitives": 24,
   "vis_primitives_with_color0": 24,
-  "collision_triangles": 19508,
-  "collision_meshes": 218,
+  "collision_triangles": 19712,
+  "collision_meshes": 231,
   "collision_open_meshes": 0,
   "collision_surface_triangles": {
     "asphalt": 1536,
-    "concrete": 11016,
+    "concrete": 11172,
     "grass": 48,
     "gravel": 5376,
-    "metal": 660,
+    "metal": 684,
     "rubber": 140,
-    "wood": 732
+    "wood": 756
   },
   "gates": [
     {
@@ -54,7 +54,7 @@
     },
     {
       "name": "GATE_06",
-      "track_m": 229.67,
+      "track_m": 211.67,
       "half_width_m": 3.5
     },
     {
@@ -88,8 +88,82 @@
   "specimens": [
     "SPEC_01"
   ],
+  "coins": [
+    {
+      "name": "COIN_01",
+      "at": [
+        38.75,
+        0.76,
+        -32.4
+      ],
+      "lift_m": 0.25,
+      "surface": "wood",
+      "line_m": 9.6,
+      "hint": "shortcut: on the crest of the plywood kicker"
+    },
+    {
+      "name": "COIN_02",
+      "at": [
+        -34,
+        0.37,
+        -5
+      ],
+      "lift_m": 0.25,
+      "surface": "grass",
+      "line_m": 36,
+      "hint": "backyard green: under the swing set, far end"
+    },
+    {
+      "name": "COIN_03",
+      "at": [
+        84.2,
+        0.35,
+        -44
+      ],
+      "lift_m": 0.25,
+      "surface": "gravel",
+      "line_m": 22.31,
+      "hint": "under the water tower, between its legs"
+    },
+    {
+      "name": "COIN_04",
+      "at": [
+        -36,
+        0.35,
+        61.6
+      ],
+      "lift_m": 0.25,
+      "surface": "gravel",
+      "line_m": 19.6,
+      "hint": "behind the Janet bus"
+    },
+    {
+      "name": "COIN_05",
+      "at": [
+        46,
+        0.35,
+        57.8
+      ],
+      "lift_m": 0.25,
+      "surface": "gravel",
+      "line_m": 15.85,
+      "hint": "behind the Defenders booth"
+    }
+  ],
   "camera_hints": [
     "CAM_garage_tunnel"
+  ],
+  "alt_routes": [
+    {
+      "name": "wall",
+      "nodes": 19,
+      "length_m": 105.29,
+      "start": "AI_028",
+      "end": "AI_047",
+      "min_width_m": 0.8,
+      "max_height_m": 0.91,
+      "bypassed_m": 151.22
+    }
   ],
   "budget": {
     "visualTriangles": 250000,
@@ -111,11 +185,40 @@
       12
     ],
     "aiMaxTurnDeg": 75,
+    "coins": 5,
+    "coinMaxLift": 0.6,
+    "coinOffLine": 1.5,
+    "altEndOnLine": 1,
+    "altMinWidth": 0.55,
+    "altMinNodes": 4,
+    "walkable": [
+      "asphalt",
+      "concrete",
+      "tile",
+      "wood",
+      "carpet",
+      "gymfloor",
+      "rubber",
+      "metal",
+      "gravel",
+      "grass",
+      "dirt"
+    ],
     "trapStep": [
       0.025,
       0.25
     ],
     "sweepBeyondHalfWidth": 4,
-    "sweepStep": 0.02
+    "sweepStep": 0.02,
+    "drivable": [
+      "asphalt",
+      "concrete",
+      "tile",
+      "wood",
+      "carpet",
+      "gymfloor",
+      "rubber"
+    ],
+    "toyClearance": 0.45
   }
 }
