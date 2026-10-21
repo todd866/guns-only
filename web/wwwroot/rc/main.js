@@ -122,11 +122,13 @@ const gates=cps.slice(0,-1).map(([x,z,,half=2.5],i)=>{const g=new T.Group(),m=co
 let mode='kid';try{if(localStorage.getItem('guns-only.rc.mode')==='bigKid')mode='bigKid';}catch{}
 // ?rivals=0 for a solo time trial.
 const rivalCount=Math.max(0,Math.min(5,Number(new URLSearchParams(location.search).get('rivals')??3)));
-let race=createRace(course,{mode,opponents:rivalCount}),s=race.player,paused=true,keys=new Set(),acc=0,last=performance.now(),best=0;try{best=Number(localStorage.getItem('guns-only.rc.best'))||0;}catch{}
+// Free drive first (Forza Horizon style); drive into the RACE ring to start a race.
+const startRoam=new URLSearchParams(location.search).get('mode')!=='race';
+let race=createRace(course,{mode,opponents:rivalCount,roam:startRoam}),s=race.player,paused=true,keys=new Set(),acc=0,last=performance.now(),best=0;try{best=Number(localStorage.getItem('guns-only.rc.best'))||0;}catch{}
 const format=t=>`${Math.floor(t/60)}:${(t%60).toFixed(2).padStart(5,'0')}`;
 function pause(value){paused=value;if(!value)audio.start();keys.clear();$('pause').textContent=paused?'Resume · Esc':'Pause · Esc';}
 let lastThrottle=0;
-$('start').onclick=()=>{audio.start();$('brief').hidden=true;pause(false);startCountdown();canvas.focus();};$('pause').onclick=()=>pause(!paused);$('reset').onclick=()=>recover(s);
+$('start').onclick=()=>{audio.start();$('brief').hidden=true;pause(false);if(!race.roam)startCountdown();canvas.focus();};$('pause').onclick=()=>pause(!paused);$('reset').onclick=()=>recover(s);
 function setMode(m){mode=race.mode=s.mode=s.assist.mode=m;s.autoUnstick=m==='kid';$('mode').textContent=m==='kid'?'Kid · B':'Big Kid · B';try{localStorage.setItem('guns-only.rc.mode',m);}catch{}}
 $('mode').onclick=()=>setMode(mode==='kid'?'bigKid':'kid');setMode(mode);
 function exit(){if(window.parent!==window)window.parent.postMessage({type:'guns-only-rc-exit'},location.origin);else location.href='../';}
@@ -160,8 +162,21 @@ function drawPickups(now){const pk=race.pickups;
  const held=pk.held.get(s.car);$('item').textContent=held?`${ICON[held]} · F`:'';$('item').hidden=!held;}
 // Kid mode driving line (Forza-style): green go, yellow hold, red brake. B (Big Kid) hides it.
 const drivingLine=createRacingLine(scene,race.line,course.world);
-function drawLine(now){const show=mode==='kid'&&!s.finished;drivingLine.mesh.visible=show;if(show)drivingLine.update(s.car.pos,s.car.speed,now/1000);}
+function drawLine(now){const show=mode==='kid'&&!s.finished&&!race.roam;drivingLine.mesh.visible=show;if(show)drivingLine.update(s.car.pos,s.car.speed,now/1000);}
 const place=()=>placeOf(race,s);
+// The RACE ring sits on the start line during free drive; driving into it lines everyone up.
+const ringPos=course.gates?.[0]?.pos??[cps[0][0],0,cps[0][1]],ringFwd=course.gates?.[0]?.forward??[0,0,-1];
+const raceRing=new T.Group();raceRing.position.set(ringPos[0],ringPos[1],ringPos[2]);raceRing.rotation.y=Math.atan2(-ringFwd[0],-ringFwd[2]);
+{const r=new T.Mesh(new T.TorusGeometry(1.1,.09,12,40),new T.MeshStandardMaterial({color:'#ff3fb4',emissive:'#ff2fa0',emissiveIntensity:1.1,roughness:.4}));r.position.y=1.15;raceRing.add(r);}
+scene.add(raceRing);const ringSign=sign('RACE ▸',ringPos[0],ringPos[1]+2.55,ringPos[2],1.4);
+let roamArmedAt=30;
+function goRoam(){roamArmedAt=s.travel+30;race.roam=true;for(const x of [race.player,...race.rivals.map(r=>r.session)])x.roam=true;}
+function startRace(){race=createRace(course,{mode,opponents:rivalCount});s=race.player;reported=false;Object.assign(sfx,{gate:0,coins:0,held:false,air:0,retreat:false,finished:false});startCountdown();}
+function drawRoam(now){const roam=race.roam;raceRing.visible=roam;ringSign.visible=roam;ringSign.quaternion.copy(camera.quaternion);raceRing.children[0].rotation.z=now*.0015;
+ gates.forEach(g=>{g.visible=!roam;});
+ // The ring arms after 30 m of free driving, so leaving the start grid never starts a race by accident.
+ const armed=s.travel>roamArmedAt;raceRing.children[0].material.emissiveIntensity=armed?1.1:.25;
+ if(roam&&armed&&!paused&&Math.hypot(s.car.pos[0]-ringPos[0],s.car.pos[2]-ringPos[2])<1.6)startRace();}
 // Challenge coins (Re-Volt's stars): spinning gold discs; ones banked on an earlier visit show as
 // faint ghosts. Banked coins live in this browser only (a per-viewer convenience).
 const COIN_KEY=`guns-only.rc.coins.${track??'base'}`;let banked=new Set();try{banked=new Set(JSON.parse(localStorage.getItem(COIN_KEY)||'[]'));}catch{}
@@ -207,8 +222,8 @@ function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;
  if(hit){const k=Math.max(.15,hit.dist-.12)/dist;desired.set(eye[0]+ray[0]*k,eye[1]+ray[1]*k,eye[2]+ray[2]*k);}
  camera.position.lerp(desired,1-Math.exp(-dt*7));target.set(r.x+Math.sin(r.yaw)*.8,r.y+.15,r.z-Math.cos(r.yaw)*.8);camera.lookAt(target);
  gates.forEach((g,i)=>{const next=i===(s.gate===cps.length-1?0:s.gate);g.userData.arch.material=next?archLit:archMat;g.userData.label.visible=next;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
- $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);drawPickups(now);drawLine(now);drawCoins(now);drawTags();$('gate').textContent=`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${Math.min(s.gate+1,cps.length)}/${cps.length} · ${/^GATE_/.test(cps[s.gate][2])?(s.gate===cps.length-1?'Finish':`Steerpoint ${s.gate+1}`):cps[s.gate][2]}`;$('banner').hidden=!retreatActive(race);$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();renderer.render(scene,camera);
- if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>${race.rivals.length?['Sierra Hotel! You won!','Second place. Good hustle, Airman!','Third place. On the podium!','Fourth place. Next sortie!','Fifth place. Next sortie!','Sixth place. Next sortie!'][place()-1]:'Lap complete!'}</h1><p>${race.rivals.length?standings()+'<br>':''}${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/${course.secrets.length}${course.coins?.length?` · Coins ${banked.size}/${course.coins.length}`:''}</p><button id="again">Run again</button> <button id="explore">Keep exploring</button>`;pause(true);$("again").onclick=()=>{s=(race=createRace(course,{mode,opponents:rivalCount})).player;reported=false;Object.assign(sfx,{gate:0,coins:0,held:false,air:0,retreat:false,finished:false});startCountdown();result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;pause(false);};}
+ $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);drawPickups(now);drawLine(now);drawRoam(now);drawCoins(now);drawTags();$('gate').textContent=race.roam?'FREE DRIVE · drive into the RACE ring':`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${Math.min(s.gate+1,cps.length)}/${cps.length} · ${/^GATE_/.test(cps[s.gate][2])?(s.gate===cps.length-1?'Finish':`Steerpoint ${s.gate+1}`):cps[s.gate][2]}`;$('banner').hidden=!retreatActive(race);$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();renderer.render(scene,camera);
+ if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>${race.rivals.length?['Sierra Hotel! You won!','Second place. Good hustle, Airman!','Third place. On the podium!','Fourth place. Next sortie!','Fifth place. Next sortie!','Sixth place. Next sortie!'][place()-1]:'Lap complete!'}</h1><p>${race.rivals.length?standings()+'<br>':''}${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/${course.secrets.length}${course.coins?.length?` · Coins ${banked.size}/${course.coins.length}`:''}</p><button id="again">Run again</button> <button id="explore">Free drive</button>`;pause(true);$("again").onclick=()=>{s=(race=createRace(course,{mode,opponents:rivalCount})).player;reported=false;Object.assign(sfx,{gate:0,coins:0,held:false,air:0,retreat:false,finished:false});startCountdown();result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;goRoam();pause(false);};}
  requestAnimationFrame(frame);}
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
 window.__gunsOnlyRC={audio:()=>Object.keys(audio.samples||{}),line:()=>race.line.map(p=>[p[0],p[1]]),snapshot:()=>({...readout(s),time:s.time,gate:s.gate,running:s.running,finished:s.finished,hits:s.hits,found:s.found,seen:[...s.seen],travel:s.travel,recoveries:s.recoveries,mode,paused,assets:assetState,item:race.pickups.held.get(s.car)??null,place:place()}),renderer:()=>renderer.info.render,checkpoints:()=>cps.map(c=>[c[0],c[1]])};requestAnimationFrame(frame);

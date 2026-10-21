@@ -10,7 +10,7 @@ export const SKILL = { cruise: 0.78, ace: 0.95 };
 // Aggressor-squadron callsigns, one per rival paint scheme (ghost, desert, splinter, flanker, arctic).
 export const CALLSIGNS = ['GHOST', 'SANDY', 'SPLINTER', 'FLANKER', 'FROSTY'];
 
-export function createRace(course, { mode = 'kid', opponents = 3 } = {}) {
+export function createRace(course, { mode = 'kid', opponents = 3, roam = false } = {}) {
   const grid = course.grid ?? gridBehind(course.start, opponents + 1);
   // The player starts at the back, as in Re-Volt: the chase camera sees the car, and there
   // are rivals to overtake from the first second.
@@ -22,7 +22,8 @@ export function createRace(course, { mode = 'kid', opponents = 3 } = {}) {
   }));
   // Retreat: once a race the bugle sounds and every rival stops for the flag. The player can
   // stand to attention too, or keep driving (nobody tells the kid off).
-  return { course, mode, player, rivals, line, alts: altRoutes(course, line), pickups: createPickups(course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: 18, length: 5 } };
+  if (roam) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
+  return { course, mode, roam, player, rivals, line, alts: altRoutes(course, line), pickups: createPickups(course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: 18, length: 5 } };
 }
 
 // Racing line: AI nodes if authored, else the lap gates.
@@ -95,7 +96,8 @@ export function driveInput(race, rival) {
     dist += Math.hypot(c[0] - b[0], c[1] - b[1]);
   }
   vmax *= 1 - Math.min(0.6, Math.abs(err));
-  if (race.mode === 'kid') {
+  if (race.roam) vmax *= 0.75;   // free drive: rivals cruise round as traffic
+  else if (race.mode === 'kid') {
     // Rubber band: ease off once ahead of the player and all but wait two gates up the road;
     // push a little when behind. Nobody disappears over the horizon on a six-year-old.
     const gap = progress(s) - progress(race.player);

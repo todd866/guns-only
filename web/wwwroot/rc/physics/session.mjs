@@ -28,7 +28,8 @@ export function stepSession(s, raw, dt = 1 / 120) {
   if (s.running) s.time += dt;
   const [x, , z] = s.car.pos, low = !!above(s, 1.6);
   const cps = s.course.checkpoints, g = cps[s.gate];
-  if (!s.finished && low && Math.hypot(x - g[0], z - g[1]) < (g[3] ?? 2.4)) {
+  // Free drive (roam): no gates and no clock; coins and specimens still count.
+  if (!s.roam && !s.finished && low && Math.hypot(x - g[0], z - g[1]) < (g[3] ?? 2.4)) {
     if (!s.running) { s.running = true; s.time = 0; }
     s.gate++;
     if (s.gate === cps.length) { s.running = false; s.finished = true; s.gate = cps.length - 1; }
