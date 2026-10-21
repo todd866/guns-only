@@ -2,7 +2,7 @@
 
 Updated: 2026-10-21.
 Production: Build 387, revision `8b618797de5ee24f097656ee114370545dfdb84f`.
-Next candidate: Build 387, not deployed — Area 51½ gets its second track, the BX: a 317 m race through a big-box base exchange modelled on real Nellis BX interior photos (gondola aisles, electronics islands, toy aisle with model jets, food-court table tunnel, checkout lanes, stockroom shortcut with the alien on a pallet deck). The brief gains a Liberty Loop / The BX selector.
+Next candidate: Build 388, not deployed — Area 51½ gets its second track, the BX: a 317 m race through a big-box base exchange modelled on real Nellis BX interior photos (gondola aisles, electronics islands, toy aisle with model jets, food-court table tunnel, checkout lanes, stockroom shortcut with the alien on a pallet deck). The brief gains a Liberty Loop / The BX selector.
 Shipped 2026-10-21: Build 387 — Area 51½ replaces Weekend Ride on the front door: a Re-Volt-style toy RC racer on a fictional Nellis-flavoured base (rigid-body buggy physics, kid mode by default, AI rivals, cartoon pickups, Liberty Loop housing district).
 Shipped 2026-10-16: Build 386 — hands-off F-22 RTB autopilot (Y, 8×), End after combat, and the playtest lab.
 Shipped 2026-10-16: Build 385 — every menu shares one bottom console (illustrated aircraft cards, a pause mission strip of mode · clock · engagements, gold Resume/Fly/Again, one line-icon set across pause, picker, debrief, settings and the report card); distant terrain fades into the sky colour along the view ray instead of a white wall; the horizon shoulder is narrower; Enter pressed before a report screenshot finishes encoding now sends when it lands.
