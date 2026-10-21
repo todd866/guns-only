@@ -1,0 +1,120 @@
+{
+  "schema": 1,
+  "dt": 0.008333333333333333,
+  "epistemic": "Measured from this authored simulation only; not Re-Volt parity",
+  "reference": {
+    "status": "blocked_no_installed_game_data",
+    "measurements": null
+  },
+  "cases": {
+    "acceleration": {
+      "metrics": {
+        "maxSpeedMps": 11,
+        "maxCentreHeightM": 0.23,
+        "airSeconds": 0,
+        "maxLateralSpeedMps": 0,
+        "impacts": 0,
+        "endSpeedMps": 11,
+        "distanceM": 49.417162965332665,
+        "secondsTo9Mps": 0.875
+      },
+      "sha256": "7322bd0c421a2b71753f5753913defb4fd59c8f6a6e3f6b59cb215b063c3bc17",
+      "ticks": 600
+    },
+    "brake": {
+      "metrics": {
+        "maxSpeedMps": 11,
+        "maxCentreHeightM": 0.23,
+        "airSeconds": 0,
+        "maxLateralSpeedMps": 0,
+        "impacts": 0,
+        "endSpeedMps": 0.0000675863358866104,
+        "distanceM": 18.20503390873724,
+        "stopDistanceM": 1.7567327797609877,
+        "stopSeconds": 0.6749999999999998
+      },
+      "sha256": "d15cb3f4225339896b43339f639db62b190885264b9d9ec2d176755c91fac0b0",
+      "ticks": 480
+    },
+    "reverse": {
+      "metrics": {
+        "maxSpeedMps": 4.5,
+        "maxCentreHeightM": 0.23,
+        "airSeconds": 0,
+        "maxLateralSpeedMps": 0,
+        "impacts": 0,
+        "endSpeedMps": 4.5,
+        "distanceM": 21.6830304924645
+      },
+      "sha256": "699bd057b5042f7830b1e5ad0740e066c4ae7cd1521345c6443241bb18464685",
+      "ticks": 600
+    },
+    "turn": {
+      "metrics": {
+        "maxSpeedMps": 11,
+        "maxCentreHeightM": 0.23,
+        "airSeconds": 0,
+        "maxLateralSpeedMps": 2.239382821777349,
+        "impacts": 0,
+        "endSpeedMps": 6.030529313202728,
+        "distanceM": 38.5752553447204,
+        "meanTurnRadiusM": 3.4603882090669598,
+        "yawChangeRad": 4.2652050134546675
+      },
+      "sha256": "b36b72bbe3c508a5b6a753cf98586b4af36d155bc8310564959eb1555f2a7466",
+      "ticks": 600
+    },
+    "drift": {
+      "metrics": {
+        "maxSpeedMps": 11.000000007314277,
+        "maxCentreHeightM": 0.23,
+        "airSeconds": 0,
+        "maxLateralSpeedMps": 1.141894047623893,
+        "impacts": 0,
+        "endSpeedMps": 11,
+        "distanceM": 35.90602246890886
+      },
+      "sha256": "bee6efca242162047fd3b9064bc9f137b3e41644c382207f52e64569d5eecb2e",
+      "ticks": 570
+    },
+    "jump": {
+      "metrics": {
+        "maxSpeedMps": 11,
+        "maxCentreHeightM": 0.8324467906902702,
+        "airSeconds": 0.36666666666666664,
+        "maxLateralSpeedMps": 0,
+        "impacts": 0,
+        "endSpeedMps": 11,
+        "distanceM": 38.41716296533244
+      },
+      "sha256": "0207449f9bec191991625a85407071b460200d9843655882374b47861b46eb28",
+      "ticks": 480
+    },
+    "wall": {
+      "metrics": {
+        "maxSpeedMps": 11,
+        "maxCentreHeightM": 0.23,
+        "airSeconds": 0,
+        "maxLateralSpeedMps": 0,
+        "impacts": 1,
+        "endSpeedMps": 0.04359354505304999,
+        "distanceM": 15.007264394731337
+      },
+      "sha256": "247fe0d186d8df0fe30ee247c404f137b3de5c9f7235bd8c77d88ebb7d680cf7",
+      "ticks": 360
+    },
+    "ripple": {
+      "metrics": {
+        "maxSpeedMps": 10.936598590355134,
+        "maxCentreHeightM": 0.307939141997722,
+        "airSeconds": 1.5416666666666667,
+        "maxLateralSpeedMps": 0,
+        "impacts": 0,
+        "endSpeedMps": 10.936598590355134,
+        "distanceM": 28.62460792416631
+      },
+      "sha256": "7e66437f426b1b111ea6bff510b9694f752648e2ceb49770644524b6eaba320f",
+      "ticks": 480
+    }
+  }
+}

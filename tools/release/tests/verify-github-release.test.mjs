@@ -467,7 +467,7 @@ test("warming the edge did not weaken the readiness assertions", async () => {
 
   // One route table, two consumers: a route added for warming but not for asserting (or the
   // reverse) is exactly how this class of bug comes back.
-  for (const id of ["f22", "rapier-intercept", "cobra-lab", "weekend-ride"]) {
+  for (const id of ["f22", "rapier-intercept", "cobra-lab", "area-51"]) {
     assert.ok(table.includes(`id: "${id}"`), `production-routes lost ${id}`);
   }
   for (const consumer of [smoke, warm]) {

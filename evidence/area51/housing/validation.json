@@ -1,0 +1,121 @@
+{
+  "file": "web/wwwroot/rc/assets/districts/housing.glb",
+  "checked_at": "2026-10-21T05:37:09.113Z",
+  "ok": true,
+  "errors": [],
+  "warnings": [],
+  "bytes": 7051736,
+  "materials": 24,
+  "visual_triangles": 135487,
+  "visual_primitives": 24,
+  "vis_primitives_with_color0": 24,
+  "collision_triangles": 19508,
+  "collision_meshes": 218,
+  "collision_open_meshes": 0,
+  "collision_surface_triangles": {
+    "asphalt": 1536,
+    "concrete": 11016,
+    "grass": 48,
+    "gravel": 5376,
+    "metal": 660,
+    "rubber": 140,
+    "wood": 732
+  },
+  "gates": [
+    {
+      "name": "GATE_00",
+      "track_m": 0,
+      "half_width_m": 3.5
+    },
+    {
+      "name": "GATE_01",
+      "track_m": 40,
+      "half_width_m": 3.5
+    },
+    {
+      "name": "GATE_02",
+      "track_m": 79.85,
+      "half_width_m": 3.5
+    },
+    {
+      "name": "GATE_03",
+      "track_m": 119.84,
+      "half_width_m": 3.5
+    },
+    {
+      "name": "GATE_04",
+      "track_m": 159.67,
+      "half_width_m": 3.5
+    },
+    {
+      "name": "GATE_05",
+      "track_m": 195.67,
+      "half_width_m": 3.5
+    },
+    {
+      "name": "GATE_06",
+      "track_m": 229.67,
+      "half_width_m": 3.5
+    },
+    {
+      "name": "GATE_07",
+      "track_m": 377.34,
+      "half_width_m": 3.5
+    }
+  ],
+  "start_slots": [
+    "START_1",
+    "START_2",
+    "START_3",
+    "START_4"
+  ],
+  "ai_nodes": 51,
+  "ai_spacing_m": {
+    "min": 7.94,
+    "max": 7.98
+  },
+  "lap_length_m": 406.13,
+  "lap_time_s_at_8_to_10_mps": [
+    40.61,
+    50.77
+  ],
+  "racing_line_surface_probes": {
+    "asphalt": 110
+  },
+  "lateral_sweep_samples": 36130,
+  "wedge_trap_steps": 0,
+  "pickups": 9,
+  "specimens": [
+    "SPEC_01"
+  ],
+  "camera_hints": [
+    "CAM_garage_tunnel"
+  ],
+  "budget": {
+    "visualTriangles": 250000,
+    "collisionTriangles": 40000,
+    "materials": 24,
+    "bytes": 12582912,
+    "gates": [
+      8,
+      12
+    ],
+    "starts": 4,
+    "pickups": [
+      6,
+      10
+    ],
+    "specs": 1,
+    "aiSpacing": [
+      4,
+      12
+    ],
+    "aiMaxTurnDeg": 75,
+    "trapStep": [
+      0.025,
+      0.25
+    ],
+    "sweepBeyondHalfWidth": 4,
+    "sweepStep": 0.02
+  }
+}

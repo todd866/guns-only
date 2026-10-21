@@ -1,0 +1,28 @@
+{
+  "state": {
+    "x": 38.08221605530935,
+    "z": -10.349184291880718,
+    "y": 0.27,
+    "vx": -0.19141773430753725,
+    "vz": 4.591807133501133,
+    "vy": 0.014558219178081755,
+    "yaw": 3.2176130829550478,
+    "steer": 0.09308337317823234,
+    "pitch": 5.176454706073485e-11,
+    "roll": -0.0183036053146097,
+    "speed": 4.595795197817166,
+    "grounded": true,
+    "time": 18.283333333332937,
+    "gate": 6,
+    "running": true,
+    "finished": false,
+    "hits": 0,
+    "found": 0,
+    "seen": [],
+    "travel": 96.24427623862846,
+    "paused": false,
+    "assets": "blender"
+  },
+  "errors": [],
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)"
+}

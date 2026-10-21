@@ -3955,6 +3955,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     brief: "Four points hold the valley and you start with one. Each hostile point is locked by a fortified gun pit that friendly ground fire cannot break — destroy it, clear the remaining troops, then cover the friendly lift while it captures. Holding more points than the enemy bleeds their tickets to zero and decides the battle. Then return to Camp Ember and settle on the pad to close the sortie. Press M for the map.",
     controls: "W/S collective · arrows cyclic · A/D yaw · Tab / LB target · F / RB gunner · M tactical map · Camp Ember pad to rearm and recover",
   }),
+  "area-51": Object.freeze({
+    kicker: "Off duty · base housing",
+    title: "Area 51½",
+    sortie: "RC buggy · Liberty Loop · three rivals · pickups",
+    configuration: "1:10 toy buggy · rigid-body four-wheel physics · kid mode on (B toggles Big Kid)",
+    brief: "Race toy RC buggies round the base. Grab gift crates for Afterburner, Water Balloons, Hydraulic Leaks and Chaff, hit every steerpoint, and find the alien someone hid in the housing area. Stand to attention at Retreat, or don't.",
+    controls: "W/S throttle/brake · A/D steer · Space brake · F fire pickup · R recover · B kid/Big Kid · Esc pause · O exit",
+  }),
   "weekend-ride": Object.freeze({
     kicker: "Off duty · 10,000 ft runway",
     title: "Weekend Ride",

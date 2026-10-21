@@ -45,7 +45,6 @@ test("production standalones inherit saved mute and retain silent QA on catalogu
 
     for (const route of [
       { path: "cobra-lab/", selector: "#mission-brief-exit", program: "cobra-lab" },
-      { path: "weekend-ride/", selector: "#ride-brief-return", program: "weekend-ride" },
       { path: "okanagan/", selector: '#sortie-menu a[href*="program="]', program: "okanagan-fireboss" },
     ]) {
       await page.goto(`${site.url}${route.path}?audioQa=silent&throwaway=1`, {
