@@ -3047,6 +3047,9 @@
       background-image: image-set(url("./art/jet-cobra-generated-v4.webp") type("image/webp"));
     }
 
+    #ready-screen .sortie-choice[data-aircraft="rc"] {
+      background-image: image-set(url("./art/area51-rc.webp") type("image/webp"));
+    }
     #ready-screen .sortie-choice[data-aircraft="bike"] {
       background-image: image-set(url("./art/bike-yzf-r1.webp") type("image/webp"));
     }
@@ -4931,10 +4934,11 @@
               </button>
             </div>
             <div class="sortie-option" data-domain="civilian" data-selected="false" data-program-state="available">
-              <button type="button" class="sortie-choice" data-aircraft="bike" data-program-node="weekend-ride" aria-pressed="false">
-                <span class="sortie-number">WEEKEND RIDE <b data-program-status="weekend-ride"></b></span>
-                <strong>YZF-R1</strong>
-                <small class="sortie-contract">Two laps · cool down · pit stop</small>
+              <!-- Area 51½ replaced Weekend Ride here (2026-10-21); /weekend-ride/ still exists. -->
+              <button type="button" class="sortie-choice" data-aircraft="rc" id="sortie-rc" aria-pressed="false" title="Race toy RC cars round the base. Kid mode on by default.">
+                <span class="sortie-number">AREA 51½</span>
+                <strong>RC Racer</strong>
+                <small class="sortie-contract">Race · pickups · find the alien</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="civilian" data-selected="false" data-program-state="available">
@@ -5071,6 +5075,7 @@ Two engagements, then recover · H controls · R restarts</p>
           <button id="ready-start" class="console-primary" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-play"/></svg><span class="shell-action-label">Fly First Merge</span></button>
           <button id="ready-replay" type="button" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-replay"/></svg><span class="shell-action-label">Replay incident again</span></button>
           <div class="ready-secondary-actions console-actions">
+            <button id="ready-rc" type="button" data-console-modes="program pause debrief intro" title="Race RC cars around the base"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#shell-reticle"/></svg><span class="shell-action-label">Area 51½</span></button>
             <button id="ready-practice" type="button" data-console-modes="program pause debrief intro"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="shell-action-label">Practice</span></button>
             <button id="ready-logbook" type="button" data-console-modes="program pause debrief intro"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-book"/></svg><span class="shell-action-label">Logbook</span></button>
             <button id="ready-intro-replay" type="button" data-console-modes="program intro" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-replay"/></svg><span class="shell-action-label">Replay valley intro</span></button>

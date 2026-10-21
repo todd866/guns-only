@@ -1,0 +1,28 @@
+✔ world-space elevated proxy retains its underside and absolute top (1.675375ms)
+✔ malformed bounds cannot enter the live collision course (0.653041ms)
+✔ straight-line handling targets (0.507042ms)
+✔ ramp and ripple stay within a toy-scale envelope (0.08ms)
+✔ solid wall is not crossed (0.763375ms)
+✔ input-tape segmentation does not alter fixed-tick replay (2.57875ms)
+✔ geometry budget measures transformed bounds and triangle count (1.522ms)
+✔ missing required nodes, external payload and malformed GLB reject (0.427167ms)
+✔ RC entry owns only its pause, rejects foreign exits, restores focus and disposes frame (2.401125ms)
+✔ fixed input tape is deterministic, acceleration capped, braking works (9.044459ms)
+✔ steer sign follows car heading; reverse is bounded (6.884417ms)
+✔ collision resolves outside house (0.645292ms)
+✔ ramp launches and gravity lands the car (2.374875ms)
+✔ full route driven by steering controller finishes without teleporting (21.613541ms)
+✔ recovery penalizes timing; secrets require proximity (0.183583ms)
+✔ ground car drives beneath hangar wing while gear remains solid (2.762792ms)
+✔ airborne car hits wing slab; ground car hits low fuselage (1.334666ms)
+✔ bollards and crates block without sealing the road (0.619ms)
+✔ side entry onto ramp cannot create an extreme vertical impulse (1.942125ms)
+✔ flying over a checkpoint or specimen does not count (0.1075ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 130.649125
