@@ -11,12 +11,24 @@ export function createSession(course, { mode = 'kid', params = BUGGY } = {}) {
     hits: 0, found: 0, seen: [], coins: [], travel: 0, recoveries: 0, stuckTime: 0, autoUnstick: mode === 'kid' };
 }
 
+// A gate counts when you are within its radius, or (for district gates that carry a direction)
+// when this step crossed the gate line inside its width: a car cutting wide still went through.
+function throughGate(a, b, g) {
+  if (Math.hypot(b[0] - g[0], b[2] - g[1]) < (g[3] ?? 2.4)) return true;
+  const f = g[4]; if (!f || !a) return false;
+  const d0 = (a[0] - g[0]) * f[0] + (a[2] - g[1]) * f[1], d1 = (b[0] - g[0]) * f[0] + (b[2] - g[1]) * f[1];
+  if (!(d0 < 0 && d1 >= 0)) return false;
+  const t = d0 / (d0 - d1), x = a[0] + (b[0] - a[0]) * t, z = a[2] + (b[2] - a[2]) * t;
+  return Math.abs((x - g[0]) * -f[1] + (z - g[1]) * f[0]) < (g[3] ?? 2.4) + 1.5;
+}
+
 // Spawn and recovery stand on whatever the world has under that point.
 function groundBelow(world, pos) { const hit = world.raycast([pos[0], pos[1] + 20, pos[2]], [0, -1, 0], 40); return hit ? hit.point[1] : pos[1]; }
 const above = (s, maxDrop) => s.course.world.raycast(s.car.pos, [0, -1, 0], maxDrop);
 
 export function stepSession(s, raw, dt = 1 / 120) {
   const before = [...s.car.pos];
+  s.prevPos = before;
   stepCar(s.car, assistInput(s.assist, s.car, raw, dt), s.course.world, dt);
   s.travel += len(sub(s.car.pos, before));
   if (s.car.wallImpact > 1.5) s.hits++;
@@ -29,7 +41,7 @@ export function stepSession(s, raw, dt = 1 / 120) {
   const [x, , z] = s.car.pos, low = !!above(s, 1.6);
   const cps = s.course.checkpoints, g = cps[s.gate];
   // Free drive (roam): no gates and no clock; coins and specimens still count.
-  if (!s.roam && !s.finished && low && Math.hypot(x - g[0], z - g[1]) < (g[3] ?? 2.4)) {
+  if (!s.roam && !s.finished && low && throughGate(s.prevPos, s.car.pos, g)) {
     if (!s.running) { s.running = true; s.time = 0; }
     s.gate++;
     if (s.gate === cps.length) { s.running = false; s.finished = true; s.gate = cps.length - 1; }
@@ -44,11 +56,23 @@ export function stepSession(s, raw, dt = 1 / 120) {
 
 // R: back to the last gate passed, facing the next one. Free in kid mode, +3 s in Big Kid.
 export function recover(s) {
+  if (s.roam) return recoverInPlace(s);
   const cps = s.course.checkpoints, last = cps[Math.max(0, s.gate - 1)], next = cps[Math.min(cps.length - 1, s.gate)];
   const yaw = s.gate === 0 ? s.course.start.yaw : Math.atan2(next[0] - last[0], -(next[1] - last[1]));
   placeCar(s.car, [last[0], groundBelow(s.course.world, [last[0], 0, last[1]]) + rideHeight(s.car.params) + 0.02, last[1]], yaw);
   s.recoveries++;
   if (s.running && !MODES[s.mode].freeRecovery) s.time += 3;
+}
+
+// Free drive: back onto the nearest racing-line point where you are, facing along the line,
+// never all the way home to the start (that is also where the RACE ring sits).
+function recoverInPlace(s) {
+  const pts = s.course.ai?.length ? s.course.ai.map(a => [a.pos[0], a.pos[2]]) : s.course.checkpoints.map(c => [c[0], c[1]]);
+  const [x, , z] = s.car.pos, n = pts.length;
+  const i = pts.reduce((b, p, k) => Math.hypot(p[0] - x, p[1] - z) < Math.hypot(pts[b][0] - x, pts[b][1] - z) ? k : b, 0);
+  const p = pts[i], q = pts[(i + 1) % n], yaw = Math.atan2(q[0] - p[0], -(q[1] - p[1]));
+  placeCar(s.car, [p[0], groundBelow(s.course.world, [p[0], 0, p[1]]) + rideHeight(s.car.params) + 0.02, p[1]], yaw);
+  s.recoveries++;
 }
 
 // Flat readout for HUD, camera and tests.

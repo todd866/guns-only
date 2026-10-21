@@ -177,6 +177,9 @@ function startRace(){race=createRace(course,{mode,opponents:rivalCount});s=race.
 function drawRoam(now){const roam=race.roam;raceRing.visible=roam;ringSign.visible=roam;ringSign.quaternion.copy(camera.quaternion);raceRing.children[0].rotation.z=now*.0015;
  gates.forEach(g=>{g.visible=!roam;});
  // The ring arms after 30 m of free driving, so leaving the start grid never starts a race by accident.
+ // A recovery (R or auto-unstick) puts the car on the start line, inside the ring: re-arm instead
+ // of starting a race the player never asked for.
+ if(s.recoveries!==drawRoam.rec){drawRoam.rec=s.recoveries;roamArmedAt=s.travel+30;}
  const armed=s.travel>roamArmedAt;raceRing.children[0].material.emissiveIntensity=armed?1.1:.25;
  if(roam&&armed&&!paused&&Math.hypot(s.car.pos[0]-ringPos[0],s.car.pos[2]-ringPos[2])<1.6)startRace();}
 // Challenge coins (Re-Volt's stars): spinning gold discs; ones banked on an earlier visit show as
@@ -201,7 +204,7 @@ const mapBox=(()=>{const xs=cps.map(c=>c[0]),zs=cps.map(c=>c[1]),cx=(Math.min(..
 function drawMap(){map.clearRect(0,0,180,160);const point=mapBox.k?(x,z)=>[90+(x-mapBox.cx)*mapBox.k,80+(z-mapBox.cz)*mapBox.k]:(x,z)=>[90+x*1.35,80+z*1.5];map.fillStyle='#91a99c';if(!track)for(const b of buildings){const [x,y]=point(b.x-b.w/2,b.z-b.d/2);map.fillRect(x,y,b.w*1.35,b.d*1.5);}map.strokeStyle='#e8bf66';map.setLineDash([3,4]);map.beginPath();cps.forEach(([x,z],i)=>{const p=point(x,z);i?map.lineTo(...p):map.moveTo(...p);});map.stroke();map.setLineDash([]);const p=point(cps[s.gate][0],cps[s.gate][1]);map.fillStyle='#ffcc66';map.beginPath();map.arc(...p,4,0,Math.PI*2);map.fill();map.fillStyle='#fff';map.beginPath();map.arc(...point(s.car.pos[0],s.car.pos[2]),3,0,Math.PI*2);map.fill();}
 let reported=false;
 // 3-2-1-GO: nobody moves until GO (Re-Volt start).
-let countdown=0,lastBeep=0;function startCountdown(){countdown=3.2;lastBeep=4;}
+let countdown=-1,lastBeep=0;function startCountdown(){countdown=2.999;lastBeep=4;}
 const sfx={gate:0,coins:0,held:false,air:0,retreat:false,finished:false};
 function soundEvents(r,c){if(s.gate!==sfx.gate){if(s.gate>sfx.gate)audio.gate();sfx.gate=s.gate;}
  if(s.coins.length>sfx.coins){audio.coin();sfx.coins=s.coins.length;}

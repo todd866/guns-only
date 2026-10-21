@@ -37,3 +37,11 @@ test('places follow finish order: a rival who finished first stays ahead', () =>
   race.player.finished = true; stepRace(race, {});
   assert.ok(placeOf(race, race.player) > placeOf(race, race.rivals[0].session));
 });
+
+test('a rival recovered mid-shortcut drops the shortcut and resumes the main line', () => {
+  const race = createRace(course, { mode: 'bigKid', opponents: 1 }), rv = race.rivals[0];
+  rv.alt = { nodes: [[50, 50, 1], [60, 60, 1]], exit: 3 }; rv.altNode = 1;
+  rv.session.recoveries++; stepRace(race, {});
+  assert.equal(rv.alt, null);
+  assert.ok(rv.node >= 0 && rv.node < race.line.length);
+});
