@@ -7,7 +7,7 @@ import {VISUAL_SCALE,BUGGY} from './physics/car.mjs';
 import {addBox} from './physics/world.mjs';
 import {courseFromGlb} from './physics/district.mjs';
 import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
-import {LIGHTING,isIndoor,applyLighting,followSun,clearcoat,studioEnvironment,createEffects} from './visuals.js';
+import {LIGHTING,isIndoor,applyLighting,followSun,clearcoat,studioEnvironment,createEffects,createRacingLine} from './visuals.js';
 import { SoundKit } from './audio.js';
 const audio=new SoundKit();
 const liveSolids=[...collisionSolids],hangarFallback=[],housingFallback=[],aircraftFallback=[];
@@ -158,12 +158,9 @@ function drawPickups(now){const pk=race.pickups;
  pk.slicks.forEach((o,i)=>{const m=fxMesh('o'+i,()=>{const d=new T.Mesh(new T.CircleGeometry(.5,20),oilMat);d.rotation.x=-Math.PI/2;return d;});m.position.set(o.pos[0],o.pos[1]-.12,o.pos[2]);});
  [race.player.car,...race.rivals.map(r=>r.session.car)].forEach((c,i)=>{if(modifiers(pk,c).shielded)fxMesh('s'+i,()=>new T.Mesh(new T.SphereGeometry(.34,20,14),bubbleMat)).position.set(...c.pos);});
  const held=pk.held.get(s.car);$('item').textContent=held?`${ICON[held]} · F`:'';$('item').hidden=!held;}
-// Kid mode: one bold arrow floating over the car, pointing at the next steerpoint.
-const arrowShape=new T.Shape();arrowShape.moveTo(0,.16);arrowShape.lineTo(.12,0);arrowShape.lineTo(.05,0);arrowShape.lineTo(.05,-.12);arrowShape.lineTo(-.05,-.12);arrowShape.lineTo(-.05,0);arrowShape.lineTo(-.12,0);arrowShape.closePath();
-const arrowGeo=new T.ExtrudeGeometry(arrowShape,{depth:.03,bevelEnabled:true,bevelThickness:.008,bevelSize:.008,bevelSegments:2});arrowGeo.rotateX(-Math.PI/2);arrowGeo.center();
-const arrow=new T.Mesh(arrowGeo,new T.MeshStandardMaterial({color:'#ffd23f',emissive:'#ff9a1f',emissiveIntensity:.6,roughness:.4}));arrow.scale.setScalar(.7);scene.add(arrow);
-function drawArrow(now){const show=mode==='kid'&&!s.finished&&!paused;arrow.visible=show;if(!show)return;const p=s.car.pos,g=cps[s.gate];
- arrow.position.set(p[0],p[1]+.5+Math.sin(now*.005)*.02,p[2]);arrow.rotation.set(-.75,Math.atan2(-(g[0]-p[0]),-(g[1]-p[2])),0,'YXZ');}
+// Kid mode driving line (Forza-style): green go, yellow hold, red brake. B (Big Kid) hides it.
+const drivingLine=createRacingLine(scene,race.line,course.world);
+function drawLine(now){const show=mode==='kid'&&!s.finished;drivingLine.mesh.visible=show;if(show)drivingLine.update(s.car.pos,s.car.speed,now/1000);}
 const place=()=>placeOf(race,s);
 // Challenge coins (Re-Volt's stars): spinning gold discs; ones banked on an earlier visit show as
 // faint ghosts. Banked coins live in this browser only (a per-viewer convenience).
@@ -210,7 +207,7 @@ function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;
  if(hit){const k=Math.max(.15,hit.dist-.12)/dist;desired.set(eye[0]+ray[0]*k,eye[1]+ray[1]*k,eye[2]+ray[2]*k);}
  camera.position.lerp(desired,1-Math.exp(-dt*7));target.set(r.x+Math.sin(r.yaw)*.8,r.y+.15,r.z-Math.cos(r.yaw)*.8);camera.lookAt(target);
  gates.forEach((g,i)=>{const next=i===(s.gate===cps.length-1?0:s.gate);g.userData.arch.material=next?archLit:archMat;g.userData.label.visible=next;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
- $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);drawPickups(now);drawArrow(now);drawCoins(now);drawTags();$('gate').textContent=`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${Math.min(s.gate+1,cps.length)}/${cps.length} · ${/^GATE_/.test(cps[s.gate][2])?(s.gate===cps.length-1?'Finish':`Steerpoint ${s.gate+1}`):cps[s.gate][2]}`;$('banner').hidden=!retreatActive(race);$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();renderer.render(scene,camera);
+ $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);drawPickups(now);drawLine(now);drawCoins(now);drawTags();$('gate').textContent=`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${Math.min(s.gate+1,cps.length)}/${cps.length} · ${/^GATE_/.test(cps[s.gate][2])?(s.gate===cps.length-1?'Finish':`Steerpoint ${s.gate+1}`):cps[s.gate][2]}`;$('banner').hidden=!retreatActive(race);$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();renderer.render(scene,camera);
  if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>${race.rivals.length?['Sierra Hotel! You won!','Second place. Good hustle, Airman!','Third place. On the podium!','Fourth place. Next sortie!','Fifth place. Next sortie!','Sixth place. Next sortie!'][place()-1]:'Lap complete!'}</h1><p>${race.rivals.length?standings()+'<br>':''}${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/${course.secrets.length}${course.coins?.length?` · Coins ${banked.size}/${course.coins.length}`:''}</p><button id="again">Run again</button> <button id="explore">Keep exploring</button>`;pause(true);$("again").onclick=()=>{s=(race=createRace(course,{mode,opponents:rivalCount})).player;reported=false;Object.assign(sfx,{gate:0,coins:0,held:false,air:0,retreat:false,finished:false});startCountdown();result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;pause(false);};}
  requestAnimationFrame(frame);}
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
