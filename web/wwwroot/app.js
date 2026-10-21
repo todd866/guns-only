@@ -5567,10 +5567,13 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
 
   renderF22ResultInstrument(state, { finished, combatResult });
 
-  if (showScreen && !settingsPaused && !reportUi.active && !wasScreenVisible) queueMicrotask(focusReadyScreen);
-  else if (showScreen && !settingsPaused && !reportUi.active && startWasDisabled && !readyStart.disabled)
+  // While the Area 51½ frame is open it owns the keyboard; the Ready screen must not take focus
+  // back every frame (the frame's blur handler would pause the race).
+  const focusOwned = settingsPaused || reportUi.active || pauseReasons.has("rc");
+  if (showScreen && !focusOwned && !wasScreenVisible) queueMicrotask(focusReadyScreen);
+  else if (showScreen && !focusOwned && startWasDisabled && !readyStart.disabled)
     queueMicrotask(focusReadyScreen);
-  else if (showScreen && !settingsPaused && !reportUi.active && !readyScreen.contains(document.activeElement))
+  else if (showScreen && !focusOwned && !readyScreen.contains(document.activeElement))
     queueMicrotask(focusReadyScreen);
   renderTopGunPresentationTheme(state);
 }

@@ -26,6 +26,8 @@ const NEVER_CACHE = [
 // cached FULL bundle answers a Range request perfectly well. A successfully admitted terrain page
 // costs one extra background fetch rather than requiring a range-aware cache layer.
 const TERRAIN_BUNDLE = /\.terrain(\?|$)/;
+// Area 51½ district models are several MB; on a slow link the 8 s body deadline would abort them.
+const LARGE_ASSET = /\.glb$/;
 const MAX_RUNTIME_PRIME_URLS = 768;
 // A failed whole-page prime must not restart for every small Range request. Five minutes is long
 // enough to prevent a streaming sortie from repeatedly downloading the same multi-megabyte page,
@@ -496,12 +498,12 @@ async function cachedTerrainBundle(url, cacheName = CACHE) {
   return cachedResponse(bare.href, cacheName);
 }
 
-function fetchWithCacheWrite(request, { basicOnly = false } = {}) {
+function fetchWithCacheWrite(request, { basicOnly = false, deadline = NETWORK_DEADLINE_MS } = {}) {
   // An unversioned URL can be satisfied by the browser HTTP cache with bytes from an older
   // build, and a plain fetch would then persist those stale bytes into this build's cache.
   // Unversioned assets therefore revalidate; ?v=BUILD URLs are immutable per build and skip it.
   const versioned = new URL(request.url).searchParams.has("v");
-  return fetchComplete(request, versioned ? {} : { cache: "no-cache" }).then(async (response) => {
+  return fetchComplete(request, versioned ? {} : { cache: "no-cache" }, deadline).then(async (response) => {
     let cacheWrite = Promise.resolve();
     const manifest = await readManifest();
     const path = new URL(request.url).pathname;
@@ -576,7 +578,7 @@ self.addEventListener("fetch", (event) => {
     const cached = await cachedResponse(request, cacheName);
     if (cached) return { response: cached, cacheWrite: Promise.resolve() };
     if (cacheName !== CACHE) { await diagnostic("release-cache-miss", request); throw new Error("Saved release asset unavailable"); }
-    try { return await fetchWithCacheWrite(request, { basicOnly: true }); }
+    try { return await fetchWithCacheWrite(request, { basicOnly: true, deadline: LARGE_ASSET.test(url.pathname) ? 60_000 : NETWORK_DEADLINE_MS }); }
     catch (error) { await diagnostic("cache-miss", request); throw error; }
   })();
   event.respondWith(task.then(result => result.response));

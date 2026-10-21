@@ -1,6 +1,6 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
 import { baseCourse } from './sim.mjs';
-import { createRace, stepRace, progress, bump } from './physics/race.mjs';
+import { createRace, stepRace, progress, bump, placeOf } from './physics/race.mjs';
 import { createCar } from './physics/car.mjs';
 
 const course = baseCourse();
@@ -28,4 +28,12 @@ test('cars bump apart and do not overlap', () => {
   a.vel = [1, 0, 0]; b.vel = [-1, 0, 0];
   bump([a, b]);
   assert.ok(Math.abs(a.pos[0] - b.pos[0]) > 0.1); assert.ok(a.vel[0] < 0 && b.vel[0] > 0);
+});
+
+test('places follow finish order: a rival who finished first stays ahead', () => {
+  const race = createRace(course, { mode: 'bigKid', opponents: 3 });
+  for (let i = 0; i < 120 * 90 && !race.rivals[0].session.finished; i++) stepRace(race, {});
+  assert.ok(race.rivals[0].session.finished);
+  race.player.finished = true; stepRace(race, {});
+  assert.ok(placeOf(race, race.player) > placeOf(race, race.rivals[0].session));
 });

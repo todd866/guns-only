@@ -20,7 +20,7 @@ export function createRace(course, { mode = 'kid', opponents = 3 } = {}) {
   }));
   // Retreat: once a race the bugle sounds and every rival stops for the flag. The player can
   // stand to attention too, or keep driving (nobody tells the kid off).
-  return { course, mode, player, rivals, line, pickups: createPickups(course), events: [], clock: 0, retreat: { at: 18, length: 5 } };
+  return { course, mode, player, rivals, line, pickups: createPickups(course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: 18, length: 5 } };
 }
 
 // Racing line: AI nodes if authored, else the lap gates.
@@ -46,6 +46,14 @@ export function progress(s) {
 }
 
 export const retreatActive = race => race.clock >= race.retreat.at && race.clock < race.retreat.at + race.retreat.length;
+
+// 1-based place: finished cars by finish order, then everyone else by lap progress.
+export function placeOf(race, s) {
+  const done = race.finishOrder.indexOf(s);
+  if (done >= 0) return done + 1;
+  const others = [race.player, ...race.rivals.map(r => r.session)].filter(o => o !== s);
+  return 1 + others.filter(o => race.finishOrder.includes(o) || progress(o) > progress(s)).length;
+}
 
 export function driveInput(race, rival) {
   const s = rival.session, r = readout(s), line = race.line, n = line.length;
@@ -92,6 +100,7 @@ function withEffects(race, car, input) {
 export function stepRace(race, playerInput, dt = 1 / 120) {
   const pk = race.pickups, cars = [race.player.car, ...race.rivals.map(r => r.session.car)];
   if (race.player.running) race.clock += dt;
+  race.t += dt;
   if (playerInput.fire) use(pk, race.player.car);
   stepSession(race.player, withEffects(race, race.player.car, playerInput), dt);
   for (const rival of race.rivals) {
@@ -101,6 +110,8 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
     // A rival on its roof gets the same R a kid would press.
     if (rotate(rival.session.car.q, [0, 1, 0])[1] < 0.2 && rival.session.car.speed < 0.5) { rival.stuck = (rival.stuck || 0) + dt; if (rival.stuck > 1.5) { rival.stuck = 0; recover(rival.session); } }
   }
+  for (const s of [race.player, ...race.rivals.map(r => r.session)])
+    if (s.finished && !race.finishOrder.includes(s)) race.finishOrder.push(s);
   bump(cars);
   race.events.push(...stepPickups(pk, cars, race.course.world, dt));
 }

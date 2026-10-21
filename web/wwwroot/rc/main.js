@@ -1,7 +1,7 @@
 import * as T from '../vendor/three.module.js';
 import {buildings,solids,aircraft,obstacles,collisionSolids,ramps,checkpoints,baseCourse} from './sim.mjs';
 import {recover,readout} from './physics/session.mjs';
-import {createRace,stepRace,progress,retreatActive} from './physics/race.mjs';
+import {createRace,stepRace,placeOf,retreatActive} from './physics/race.mjs';
 import {modifiers} from './physics/pickups.mjs';
 import {VISUAL_SCALE,BUGGY} from './physics/car.mjs';
 import {addBox} from './physics/world.mjs';
@@ -13,15 +13,19 @@ const liveSolids=[...collisionSolids],hangarFallback=[],housingFallback=[],aircr
 // ?track=<district> drives an exported Blender district.
 // Default is Liberty Loop; ?track=base is the original greybox base route.
 const trackParam=new URLSearchParams(location.search).get('track')??'housing';
-const track=trackParam==='base'?null:trackParam.match(/^[a-z0-9-]+$/)?.[0]??'housing';
-let district=null;
-if(track){const buffer=await (await fetch(`./assets/districts/${track}.glb`)).arrayBuffer();district={course:courseFromGlb(buffer),gltf:await new GLTFLoader().parseAsync(buffer,'./assets/districts/')};}
+let track=trackParam==='base'?null:trackParam.match(/^[a-z0-9-]+$/)?.[0]??'housing';
+// A failed download (offline, slow link) falls back to the built-in base route rather than
+// leaving a page with no working buttons.
+let district=null,districtError=null;
+async function loadDistrict(name){const res=await fetch(`./assets/districts/${name}.glb`);if(!res.ok)throw Error(`district ${name}: HTTP ${res.status}`);const buffer=await res.arrayBuffer();return {course:courseFromGlb(buffer),gltf:await new GLTFLoader().parseAsync(buffer,'./assets/districts/')};}
+if(track){for(let attempt=0;attempt<2&&!district;attempt++){try{district=await loadDistrict(track);}catch(error){districtError=error;console.error('Area 51½ district load failed',error);}}if(!district)track=null;}
 const course=district?.course??baseCourse(),cps=course.checkpoints;
 // Asset collision proxies join the triangle world the car drives on.
 function addSolid(b){liveSolids.push(b);addBox(course.world,b.x,b.z,b.w,b.d,b.minY??0,b.h);}
 let assetState='prototype';
 const artReview=new URLSearchParams(location.search).get('art')==='review';
 const $=id=>document.getElementById(id),canvas=$('view');
+if(districtError&&!district){const note=document.createElement('p');note.textContent='Liberty Loop did not download, so this race uses the motor pool route. Reload to try again.';$('brief')?.append(note);}
 const renderer=new T.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
 const scene=new T.Scene();scene.background=new T.Color('#b2c6c5');scene.fog=new T.Fog('#b2c6c5',65,150);
 const camera=new T.PerspectiveCamera(63,1,.06,210);
@@ -114,6 +118,7 @@ $('mode').onclick=()=>setMode(mode==='kid'?'bigKid':'kid');setMode(mode);
 function exit(){if(window.parent!==window)window.parent.postMessage({type:'guns-only-rc-exit'},location.origin);else location.href='../';}
 $('exit').onclick=exit;
 window.addEventListener('keydown',e=>{if(['KeyW','KeyS','KeyA','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){e.preventDefault();keys.add(e.code);}if(e.repeat)return;if(e.code==='Escape')pause(!paused);if(e.code==='KeyR')recover(s);if(e.code==='KeyF'||e.code==='Enter')fireQueued=true;if(e.code==='KeyB')setMode(mode==='kid'?'bigKid':'kid');if(e.code==='KeyO')exit();});window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>pause(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)pause(true);});
+$('touch-fire')?.addEventListener('pointerdown',e=>{e.preventDefault();fireQueued=true;});
 for(const button of document.querySelectorAll('[data-key]')){button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);keys.add(button.dataset.key);};for(const event of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(event,()=>keys.delete(button.dataset.key));}
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}window.addEventListener('resize',resize);resize();camera.position.set(0,2,8);
 // Pose a drawn car from its physics body. Wheels follow the suspension: the centre sits
@@ -147,7 +152,7 @@ function drawRibbon(now){const line=race.line,n=line.length,show=mode==='kid'&&!
  // Walk the polyline from the car in 0.8 m steps, starting at the nearest node's next leg.
  let a=[x,z],i=best+1,left=.8+((now*.002)%.8);for(const m of ribbon){let b=line[i%n];let d=Math.hypot(b[0]-a[0],b[1]-a[1]);while(d<left){left-=d;a=[b[0],b[1]];i++;b=line[i%n];d=Math.hypot(b[0]-a[0],b[1]-a[1]);}
   a=[a[0]+(b[0]-a[0])*left/d,a[1]+(b[1]-a[1])*left/d];left=.8;const hit=course.world.raycast([a[0],s.car.pos[1]+1.5,a[1]],[0,-1,0],4);m.position.set(a[0],(hit?hit.point[1]:0)+.03,a[1]);}}
-const place=()=>1+race.rivals.filter(rv=>progress(rv.session)>progress(s)).length;
+const place=()=>placeOf(race,s);
 const desired=new T.Vector3(),target=new T.Vector3(),map=$('map').getContext('2d');
 // Minimap fits the route's bounding box.
 const mapBox=(()=>{const xs=cps.map(c=>c[0]),zs=cps.map(c=>c[1]),cx=(Math.min(...xs)+Math.max(...xs))/2,cz=(Math.min(...zs)+Math.max(...zs))/2,k=Math.min(150/(Math.max(...xs)-Math.min(...xs)+10),130/(Math.max(...zs)-Math.min(...zs)+10));return track?{cx,cz,k}:{cx:0,cz:0,k:null};})();
