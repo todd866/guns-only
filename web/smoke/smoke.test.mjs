@@ -897,7 +897,8 @@ test("the published Cobra Hold the Bridge route boots authority and takes a Tab 
   }
 });
 
-test("the published Weekend Ride route boots and accepts throttle input", async () => {
+// Weekend Ride left the front door for Area 51½ on 2026-10-21; it stays a preview route.
+test("the published Weekend Ride preview route boots and accepts throttle input", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
   const site = await serveStatic(WWWROOT);
@@ -909,7 +910,7 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}weekend-ride/?audioQa=silent`, {
+    await page.goto(`${site.url}weekend-ride/?preview=1&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(45000),
     });
