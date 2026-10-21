@@ -2,7 +2,7 @@
 
 Updated: 2026-10-21.
 Production: Build 389, revision `66e352db64038c861c77c664291d772bb1a4b376`.
-Next candidate: Build 389, not deployed — Area 51½ grows up: free drive by default with a RACE ring (Forza Horizon style), a Forza-style driving line, Re-Volt skill shortcuts on every track (harder, faster, fall off onto the slow road), a third track (Little Nellie Elementary: slippery gym, cafeteria tables, the playground slide), challenge coins, aggressor callsigns, real CC0/CC-BY RC recordings, 3-2-1-GO, inflatable arches, car-following shadows, dust and skid marks.
+Next candidate: Build 390, not deployed — Area 51½ grows up: free drive by default with a RACE ring (Forza Horizon style), a Forza-style driving line, Re-Volt skill shortcuts on every track (harder, faster, fall off onto the slow road), a third track (Little Nellie Elementary: slippery gym, cafeteria tables, the playground slide), challenge coins, aggressor callsigns, real CC0/CC-BY RC recordings, 3-2-1-GO, inflatable arches, car-following shadows, dust and skid marks.
 Shipped 2026-10-22: Build 389 — hotfix: guns-only.com/rc without a trailing slash now loads Area 51½ (the page pins <base href="/rc/">).
 Shipped 2026-10-21: Build 388 — Area 51½ gets its second track, the BX (a big-box base exchange from real Nellis BX photos), with a Liberty Loop / The BX selector.
 Shipped 2026-10-21: Build 387 — Area 51½ replaces Weekend Ride on the front door: a Re-Volt-style toy RC racer on a fictional Nellis-flavoured base (rigid-body buggy physics, kid mode by default, AI rivals, cartoon pickups, Liberty Loop housing district).
