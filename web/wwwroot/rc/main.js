@@ -1,9 +1,14 @@
 import * as T from '../vendor/three.module.js';
-import {buildings,solids,aircraft,obstacles,collisionSolids,ramps,checkpoints,createCar,stepCar,resetCar,BASE_COURSE} from './sim.mjs';
+import {buildings,solids,aircraft,obstacles,collisionSolids,ramps,checkpoints,baseCourse} from './sim.mjs';
+import {createSession,stepSession,recover,readout} from './physics/session.mjs';
+import {VISUAL_SCALE,BUGGY} from './physics/car.mjs';
+import {addBox} from './physics/world.mjs';
 import { MotorAudio } from './audio.js';
 const audio=new MotorAudio();
 const liveSolids=[...collisionSolids],hangarFallback=[],housingFallback=[],aircraftFallback=[];
-const liveCourse={...BASE_COURSE,solids:liveSolids};
+const course=baseCourse();
+// Asset collision proxies join the triangle world the car drives on.
+function addSolid(b){liveSolids.push(b);addBox(course.world,b.x,b.z,b.w,b.d,b.minY??0,b.h);}
 let assetState='prototype';
 const artReview=new URLSearchParams(location.search).get('art')==='review';
 const $=id=>document.getElementById(id),canvas=$('view');
@@ -71,34 +76,42 @@ if(new URLSearchParams(location.search).get('assets')!=='prototype'){
   for(const z of [-14,-2]){const lamp=new T.SpotLight(0xffd29a,110,22,1.1,.75,1.4);lamp.position.set(35,6,z);lamp.target.position.set(38,0,z+2);scene.add(lamp,lamp.target);}
   sign('02 / ENGINEERING',38,4.3,-19.2,4).rotation.y=Math.PI;
   for(const node of hangarFallback)node.visible=false;
-  liveSolids.push(...hangar.collision);
-  if(base){for(const node of [...housingFallback,...aircraftFallback])node.visible=false;for(const a of aircraft){const model=base[0].clone(true);model.position.set(a.x,0,a.z);scene.add(model);liveSolids.push({x:a.x,z:a.z-2.6,w:.3,d:.45,h:.75,minY:0});}for(const b of buildings.filter(b=>b.kind==='house')){const model=base[1].clone(true);model.position.set(b.x,0,b.z);scene.add(model);}}
+  hangar.collision.forEach(addSolid);
+  if(base){for(const node of [...housingFallback,...aircraftFallback])node.visible=false;for(const a of aircraft){const model=base[0].clone(true);model.position.set(a.x,0,a.z);scene.add(model);addSolid({x:a.x,z:a.z-2.6,w:.3,d:.45,h:.75,minY:0});}for(const b of buildings.filter(b=>b.kind==='house')){const model=base[1].clone(true);model.position.set(b.x,0,b.z);scene.add(model);}}
   if(artReview){const {applyArtReview}=await import('./art-review.js');applyArtReview({scene,car,hangar:hangar.hangar,renderer,sun,contactSun});}
   assetState='blender';
  }).catch(error=>{assetState='failed';console.error('RC Blender asset rejected:',error);$('brief').hidden=false;const warning=document.createElement('p');warning.textContent='Asset loading failed; prototype fallback is available.';$('brief').append(warning);}).finally(()=>{$('start').disabled=false;});
 }
 const gates=checkpoints.slice(0,-1).map(([x,z],i)=>{const g=new T.Group();g.position.set(x,0,z);scene.add(g);for(const dx of [-2.5,2.5]){box(dx,.7,0,.12,1.4,.12,'#ffcd65',g);box(dx,1.2,0,.5,.25,.05,'#ffcd65',g);}g.userData.label=sign(String(i+1).padStart(2,'0'),x,1.8,z,1.5);return g;});
-let s=createCar(),paused=true,keys=new Set(),acc=0,last=performance.now(),best=0;try{best=Number(localStorage.getItem('guns-only.rc.best'))||0;}catch{}
+let mode='kid';try{if(localStorage.getItem('guns-only.rc.mode')==='bigKid')mode='bigKid';}catch{}
+let s=createSession(course,{mode}),paused=true,keys=new Set(),acc=0,last=performance.now(),best=0;try{best=Number(localStorage.getItem('guns-only.rc.best'))||0;}catch{}
 const format=t=>`${Math.floor(t/60)}:${(t%60).toFixed(2).padStart(5,'0')}`;
 function pause(value){paused=value;if(!value)audio.start();keys.clear();$('pause').textContent=paused?'Resume · Esc':'Pause · Esc';}
-$('start').onclick=()=>{audio.start();$('brief').hidden=true;pause(false);canvas.focus();};$('pause').onclick=()=>pause(!paused);$('reset').onclick=()=>resetCar(s);
+$('start').onclick=()=>{audio.start();$('brief').hidden=true;pause(false);canvas.focus();};$('pause').onclick=()=>pause(!paused);$('reset').onclick=()=>recover(s);
+function setMode(m){mode=s.mode=s.assist.mode=m;$('mode').textContent=m==='kid'?'Kid · B':'Big Kid · B';try{localStorage.setItem('guns-only.rc.mode',m);}catch{}}
+$('mode').onclick=()=>setMode(mode==='kid'?'bigKid':'kid');setMode(mode);
 function exit(){if(window.parent!==window)window.parent.postMessage({type:'guns-only-rc-exit'},location.origin);else location.href='../';}
 $('exit').onclick=exit;
-window.addEventListener('keydown',e=>{if(['KeyW','KeyS','KeyA','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){e.preventDefault();keys.add(e.code);}if(e.repeat)return;if(e.code==='Escape')pause(!paused);if(e.code==='KeyR')resetCar(s);if(e.code==='KeyO')exit();});window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>pause(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)pause(true);});
+window.addEventListener('keydown',e=>{if(['KeyW','KeyS','KeyA','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){e.preventDefault();keys.add(e.code);}if(e.repeat)return;if(e.code==='Escape')pause(!paused);if(e.code==='KeyR')recover(s);if(e.code==='KeyB')setMode(mode==='kid'?'bigKid':'kid');if(e.code==='KeyO')exit();});window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>pause(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)pause(true);});
 for(const button of document.querySelectorAll('[data-key]')){button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);keys.add(button.dataset.key);};for(const event of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(event,()=>keys.delete(button.dataset.key));}
 function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}window.addEventListener('resize',resize);resize();camera.position.set(0,2,8);
 const desired=new T.Vector3(),target=new T.Vector3(),map=$('map').getContext('2d');
-function drawMap(){map.clearRect(0,0,180,160);const point=(x,z)=>[90+x*1.35,80+z*1.5];map.fillStyle='#91a99c';for(const b of buildings){const [x,y]=point(b.x-b.w/2,b.z-b.d/2);map.fillRect(x,y,b.w*1.35,b.d*1.5);}map.strokeStyle='#e8bf66';map.setLineDash([3,4]);map.beginPath();checkpoints.forEach(([x,z],i)=>{const p=point(x,z);i?map.lineTo(...p):map.moveTo(...p);});map.stroke();map.setLineDash([]);const p=point(...checkpoints[s.gate]);map.fillStyle='#ffcc66';map.beginPath();map.arc(...p,4,0,Math.PI*2);map.fill();map.fillStyle='#fff';map.beginPath();map.arc(...point(s.x,s.z),3,0,Math.PI*2);map.fill();}
+function drawMap(){map.clearRect(0,0,180,160);const point=(x,z)=>[90+x*1.35,80+z*1.5];map.fillStyle='#91a99c';for(const b of buildings){const [x,y]=point(b.x-b.w/2,b.z-b.d/2);map.fillRect(x,y,b.w*1.35,b.d*1.5);}map.strokeStyle='#e8bf66';map.setLineDash([3,4]);map.beginPath();checkpoints.forEach(([x,z],i)=>{const p=point(x,z);i?map.lineTo(...p):map.moveTo(...p);});map.stroke();map.setLineDash([]);const p=point(...checkpoints[s.gate]);map.fillStyle='#ffcc66';map.beginPath();map.arc(...p,4,0,Math.PI*2);map.fill();map.fillStyle='#fff';map.beginPath();map.arc(...point(s.car.pos[0],s.car.pos[2]),3,0,Math.PI*2);map.fill();}
 let reported=false;
-function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){acc+=dt;while(acc>=1/120){stepCar(s,{throttle:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),steer:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),brake:keys.has('Space')},1/120,liveCourse);acc-=1/120;}}
- contactSun.position.set(s.x-4,s.y+(artReview&&Math.abs(s.x-38)<9&&Math.abs(s.z+8)<11?4:8),s.z-5);contactSun.target.position.set(s.x,s.y,s.z);
- audio.update(s.speed,paused);car.position.set(s.x,s.y,s.z);car.rotation.set(s.pitch,-s.yaw,s.roll,'YXZ');for(const w of wheels){w.pivot.rotation.y=w.front?-s.steer*.45:0;w.wheel.rotation.x=s.travel/.15;w.pivot.position.y=-.08+Math.sin(s.travel*22)*Math.min(.012,s.speed*.002);}
- desired.set(s.x-Math.sin(s.yaw)*(1.85+s.speed*.035),s.y+.78,s.z+Math.cos(s.yaw)*(1.85+s.speed*.035));// Keep the low chase camera in front of walls when backing into a building.
- for(let t=.1;t<=1;t+=.1){const x=s.x+(desired.x-s.x)*t,z=s.z+(desired.z-s.z)*t,y=s.y+(desired.y-s.y)*t;if(liveSolids.some(b=>y>(b.minY??0)&&y<b.h&&Math.abs(x-b.x)<b.w/2+.1&&Math.abs(z-b.z)<b.d/2+.1)){desired.set(s.x+(desired.x-s.x)*Math.max(.1,t-.1),y,s.z+(desired.z-s.z)*Math.max(.1,t-.1));break;}}
- camera.position.lerp(desired,1-Math.exp(-dt*7));target.set(s.x+Math.sin(s.yaw)*1.4,s.y+.27,s.z-Math.cos(s.yaw)*1.4);camera.lookAt(target);
+function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){acc+=dt;while(acc>=1/120){stepSession(s,{throttle:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),steer:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),brake:keys.has('Space')},1/120);acc-=1/120;}}
+ const r=readout(s),c=s.car,p=BUGGY;
+ contactSun.position.set(r.x-4,r.y+(artReview&&Math.abs(r.x-38)<9&&Math.abs(r.z+8)<11?4:8),r.z-5);contactSun.target.position.set(r.x,r.y,r.z);
+ audio.update(r.speed,paused);car.position.set(r.x,r.y,r.z);car.quaternion.set(...c.q);car.scale.setScalar(VISUAL_SCALE);
+ // Wheels follow the suspension: centre sits restLength−compression below its attach point.
+ wheels.forEach((w,i)=>{const ws=c.wheels[i];w.pivot.rotation.y=w.front?-c.steer:0;w.wheel.rotation.x=ws.spin;w.pivot.position.y=-(p.restLength-ws.compression)/VISUAL_SCALE;});
+ // Low chase camera behind the heading; pulled in front of any wall between it and the car.
+ const back=1.05+r.speed*.03,eye=[r.x,r.y+.12,r.z];desired.set(r.x-Math.sin(r.yaw)*back,r.y+.42,r.z+Math.cos(r.yaw)*back);
+ const ray=[desired.x-eye[0],desired.y-eye[1],desired.z-eye[2]],dist=Math.hypot(...ray),hit=course.world.raycast(eye,ray.map(v=>v/dist),dist);
+ if(hit){const k=Math.max(.15,hit.dist-.12)/dist;desired.set(eye[0]+ray[0]*k,eye[1]+ray[1]*k,eye[2]+ray[2]*k);}
+ camera.position.lerp(desired,1-Math.exp(-dt*7));target.set(r.x+Math.sin(r.yaw)*.8,r.y+.15,r.z-Math.cos(r.yaw)*.8);camera.lookAt(target);
  gates.forEach((g,i)=>{g.visible=i===(s.gate===checkpoints.length-1?0:s.gate);g.userData.label.visible=g.visible;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
- $('speed').textContent=Math.round(s.speed*3.6);$('clock').textContent=format(s.time);$('gate').textContent=`${Math.min(s.gate+1,checkpoints.length)}/${checkpoints.length} · ${checkpoints[s.gate][2]}`;$('secret').textContent=`◇ ${s.found}/3`;drawMap();renderer.render(scene,camera);
- if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>Back at the motor pool.</h1><p>${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/3</p><button id="again">Run again</button> <button id="explore">Keep exploring</button>`;pause(true);$('again').onclick=()=>{s=createCar();reported=false;result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;pause(false);};}
+ $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);$('gate').textContent=`${Math.min(s.gate+1,checkpoints.length)}/${checkpoints.length} · ${checkpoints[s.gate][2]}`;$('secret').textContent=`◇ ${s.found}/3`;drawMap();renderer.render(scene,camera);
+ if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>Back at the motor pool.</h1><p>${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/3</p><button id="again">Run again</button> <button id="explore">Keep exploring</button>`;pause(true);$("again").onclick=()=>{s=createSession(course,{mode});reported=false;result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;pause(false);};}
  requestAnimationFrame(frame);}
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
-window.__gunsOnlyRC={snapshot:()=>({...s,seen:[...s.seen],paused,assets:assetState}),renderer:()=>renderer.info.render};requestAnimationFrame(frame);
+window.__gunsOnlyRC={snapshot:()=>({...readout(s),time:s.time,gate:s.gate,running:s.running,finished:s.finished,hits:s.hits,found:s.found,seen:[...s.seen],travel:s.travel,recoveries:s.recoveries,mode,paused,assets:assetState}),renderer:()=>renderer.info.render};requestAnimationFrame(frame);

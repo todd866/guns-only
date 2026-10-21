@@ -1,4 +1,7 @@
-// Original fictional RC dynamics; SI units. No Re-Volt/RVGL code or data.
+// Prototype base route data (boxes, ramps, gates). The car physics lives in ./physics/.
+// Original; no Re-Volt/RVGL code or data.
+import { createWorld, addBox } from './physics/world.mjs';
+import { cross, sub, dot } from './physics/math.mjs';
 export const checkpoints = [[0,0,'Motor pool'],[0,-22,'Housing'],[0,-36,'Quarters exit'],[22,-36,'Flight line'],[38,-23,'Hangar approach'],[38,-8,'Hangar 02'],[38,22,'Containment'],[38,35,'Service exit'],[12,35,'Drain shortcut'],[0,0,'Finish']];
 export const buildings = [
  ...[-15,15].flatMap(x=>[-12,-26].map(z=>({x,z,w:8,d:8,h:5,kind:'house'}))),
@@ -35,29 +38,37 @@ export const collisionSolids=[...solids,...aircraftSolids,...obstacles];
 export function overlapsCarHeight(y,solid){return y+.4>(solid.minY??0)&&y-.23<solid.h;}
 export const ramps=[{x:22,z:-24,w:4,d:7,h:1.1},{x:12,z:30,w:7,d:4,h:.8}];
 export function ground(x,z){let h=Math.abs(x-38)<9&&Math.abs(z+8)<11?.04:0;for(const r of ramps)if(Math.abs(x-r.x)<r.w/2&&Math.abs(z-r.z)<r.d/2)h=Math.max(h,r.h*(.5-(z-r.z)/r.d));return h;}
-export const BASE_COURSE={ground,solids:collisionSolids,checkpoints,secrets:[33,38,43].map(x=>({x,z:25})),bounds:{x:58,z:48}};
-export function createCar(){return {x:0,z:5,y:.23,vx:0,vz:0,vy:0,yaw:0,steer:0,pitch:0,roll:0,speed:0,grounded:true,time:0,gate:0,running:false,finished:false,hits:0,found:0,seen:[],travel:0};}
-export function resetCar(s,course=BASE_COURSE){const p=course.checkpoints[Math.max(0,s.gate-1)];Object.assign(s,{x:p[0],z:p[1],y:course.ground(p[0],p[1])+.23,vx:0,vz:0,vy:0,yaw:0});if(s.running)s.time+=3;}
-export function stepCar(s,input,dt=1/120,course=BASE_COURSE){
- const surface=course.ground;
- const throttle=Math.max(-1,Math.min(1,input.throttle||0));const steer=Math.max(-1,Math.min(1,input.steer||0));
- s.steer+=(steer-s.steer)*Math.min(1,dt*9);
- const fx=Math.sin(s.yaw),fz=-Math.cos(s.yaw),rx=Math.cos(s.yaw),rz=Math.sin(s.yaw);
- let forward=s.vx*fx+s.vz*fz,side=s.vx*rx+s.vz*rz;
- const grounded=s.y<=surface(s.x,s.z)+.25;
- if(grounded){forward+=throttle*(forward*throttle<0?24:13)*dt;forward*=Math.exp(-(input.brake?6:.55)*dt);forward=Math.max(-4.5,Math.min(11,forward));side*=Math.exp(-(input.brake?2.1:11)*dt);s.yaw+=s.steer*forward*.52/(1+Math.abs(forward)*.10)*dt;}
- s.vx=fx*forward+rx*side;s.vz=fz*forward+rz*side;
- const oldX=s.x,oldZ=s.z;
- s.x+=s.vx*dt;s.z+=s.vz*dt;s.vy-=9.81*dt;s.y+=s.vy*dt;
- const floor=surface(s.x,s.z)+.23;
- if(s.y<floor){s.vy=Math.min(3.2,Math.max(0,(floor-s.y)*26));s.y=floor;s.grounded=true;}else s.grounded=s.y<floor+.035;
- for(const b of course.solids){if(!overlapsCarHeight(s.y,b))continue;const dx=s.x-b.x,dz=s.z-b.z,ox=b.w/2+.23-Math.abs(dx),oz=b.d/2+.23-Math.abs(dz);if(ox>0&&oz>0){if(ox<oz){s.x+=Math.sign(dx||1)*ox;s.vx*=-.28;}else{s.z+=Math.sign(dz||1)*oz;s.vz*=-.28;}if(s.speed>2)s.hits++;}}
- if(Math.abs(s.x)>course.bounds.x){s.x=Math.sign(s.x)*course.bounds.x;s.vx*=-.3;}if(Math.abs(s.z)>course.bounds.z){s.z=Math.sign(s.z)*course.bounds.z;s.vz*=-.3;}
- s.speed=Math.hypot(s.vx,s.vz);s.travel+=Math.hypot(s.x-oldX,s.z-oldZ);
- const front=surface(s.x+fx*.32,s.z+fz*.32),back=surface(s.x-fx*.32,s.z-fz*.32);
- s.pitch+=(Math.atan2(front-back,.64)-s.pitch)*Math.min(1,dt*12);
- s.roll+=(-s.steer*forward*.018-s.roll)*Math.min(1,dt*8);
- if(s.running)s.time+=dt;
- const gate=course.checkpoints[s.gate];if(!s.finished&&s.y<surface(s.x,s.z)+1.6&&Math.hypot(s.x-gate[0],s.z-gate[1])<2.4){if(!s.running){s.running=true;s.time=0;}s.gate++;if(s.gate===course.checkpoints.length){s.running=false;s.finished=true;s.gate=course.checkpoints.length-1;}}
- for(const [i,p] of course.secrets.entries())if(s.y<2&&!s.seen.includes(i)&&Math.hypot(s.x-p.x,s.z-p.z)<3.3){s.seen.push(i);s.found++;}
+export const HANGAR_FLOOR={x:38,z:-8,w:18,d:22,h:.04};
+export const secrets=[33,38,43].map(x=>({x,z:25}));
+export const bounds={x:58,z:48};
+
+// Quad with winding flipped if needed so its normal faces `out`.
+function quad(world,a,b,c,d,out,surface){
+ const n=cross(sub(b,a),sub(c,a));
+ if(dot(n,out)<0)world.addQuad(a,d,c,b,surface);else world.addQuad(a,b,c,d,surface);
 }
+export function buildBaseWorld(){
+ const w=createWorld(4),B=bounds;
+ quad(w,[-B.x-2,0,-B.z-2],[B.x+2,0,-B.z-2],[B.x+2,0,B.z+2],[-B.x-2,0,B.z+2],[0,1,0],'asphalt');
+ // Hangar floor slab with chamfered edges, so the toy rolls on instead of hitting a step.
+ const f=HANGAR_FLOOR,x0=f.x-f.w/2,x1=f.x+f.w/2,z0=f.z-f.d/2,z1=f.z+f.d/2,c=.3,h=f.h;
+ quad(w,[x0,h,z0],[x1,h,z0],[x1,h,z1],[x0,h,z1],[0,1,0],'concrete');
+ quad(w,[x0,h,z1],[x1,h,z1],[x1+c,0,z1+c],[x0-c,0,z1+c],[0,1,1],'concrete');
+ quad(w,[x0,h,z0],[x1,h,z0],[x1+c,0,z0-c],[x0-c,0,z0-c],[0,1,-1],'concrete');
+ quad(w,[x1,h,z0],[x1,h,z1],[x1+c,0,z1+c],[x1+c,0,z0-c],[1,1,0],'concrete');
+ quad(w,[x0,h,z0],[x0,h,z1],[x0-c,0,z1+c],[x0-c,0,z0-c],[-1,1,0],'concrete');
+ // Plywood ramps rise toward −z and drop off at the top.
+ for(const r of ramps){
+  const x0=r.x-r.w/2,x1=r.x+r.w/2,zl=r.z+r.d/2,zh=r.z-r.d/2;
+  quad(w,[x0,0,zl],[x1,0,zl],[x1,r.h,zh],[x0,r.h,zh],[0,r.d,r.h],'wood');
+  quad(w,[x0,0,zh],[x1,0,zh],[x1,r.h,zh],[x0,r.h,zh],[0,0,-1],'wood');
+  for(const [x,o] of [[x0,-1],[x1,1]]){const a=[x,0,zl],b=[x,0,zh],t=[x,r.h,zh];if(dot(cross(sub(b,a),sub(t,a)),[o,0,0])<0)w.addTri(a,t,b,'wood');else w.addTri(a,b,t,'wood');}
+ }
+ for(const s of collisionSolids)addBox(w,s.x,s.z,s.w,s.d,s.minY??0,s.h,'concrete');
+ // Perimeter walls.
+ addBox(w,0,-B.z-.5,2*B.x+2,1,0,1.5);addBox(w,0,B.z+.5,2*B.x+2,1,0,1.5);
+ addBox(w,-B.x-.5,0,1,2*B.z,0,1.5);addBox(w,B.x+.5,0,1,2*B.z,0,1.5);
+ return w;
+}
+let cached=null;
+export function baseCourse(){return {world:cached??=buildBaseWorld(),checkpoints,secrets,start:{pos:[0,0,5],yaw:0}};}
