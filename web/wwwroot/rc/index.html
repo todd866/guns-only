@@ -8,5 +8,5 @@
 <script type="module" src="main.js"></script><script>
 // Boot watchdog: if the game has not started in 12 s (slow link, an updating offline cache, a
 // failed file), say so and offer a reload instead of leaving a dead page.
-setTimeout(function(){if(window.__gunsOnlyRC)return;var d=document.createElement('div');d.setAttribute('style','position:fixed;inset:auto 0 0 0;padding:18px;background:#111f25;color:#f4f1df;font:16px system-ui;text-align:center;z-index:9');d.innerHTML='Area 51\u00bd is still loading. The base is busy updating. <a href="" style="color:#ffce73">Reload</a>';document.body.append(d);},12000);
+setTimeout(function(){if(window.__gunsOnlyRC)return;var d=document.createElement('div');var t=setInterval(function(){if(window.__gunsOnlyRC){d.remove();clearInterval(t);}},1000);d.setAttribute('style','position:fixed;inset:auto 0 0 0;padding:18px;background:#111f25;color:#f4f1df;font:16px system-ui;text-align:center;z-index:9');d.innerHTML='Area 51\u00bd is still loading. The base is busy updating. <a href="#" onclick="location.reload();return false" style="color:#ffce73">Reload</a>';document.body.append(d);},12000);
 </script></body></html>

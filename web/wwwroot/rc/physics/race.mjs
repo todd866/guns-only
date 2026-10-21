@@ -67,7 +67,7 @@ export function placeOf(race, s) {
 export function driveInput(race, rival) {
   const s = rival.session, r = readout(s), n = race.line.length;
   // Skill routes: aces branch onto an ALT line at its entry node and rejoin at its exit.
-  if (!rival.alt && rival.skill >= 0.9) for (const a of race.alts) if (rival.node % n === a.entry) { rival.alt = a; rival.altNode = 0; }
+  if (!rival.alt && rival.skill >= 0.9) for (const a of race.alts) if (rival.node % n === a.entry && !rival.altBanned?.has(a.name)) { rival.alt = a; rival.altNode = 0; }
   const onAlt = !!rival.alt, line = onAlt ? rival.alt.nodes : race.line, m = line.length;
   const at = i => onAlt ? line[Math.max(0, Math.min(i, m - 1))] : line[((i % m) + m) % m];
   let node = onAlt ? rival.altNode : rival.node;
@@ -85,7 +85,7 @@ export function driveInput(race, rival) {
   const want = Math.atan2(target[0] - r.x, -(target[1] - r.z)), err = Math.atan2(Math.sin(want - r.yaw), Math.cos(want - r.yaw));
   // Speed profile: each upcoming corner allows a speed from its turn angle; the car may carry
   // more speed while it still has room to brake down to it (v² = vc² + 2·a·d).
-  const BRAKE = 5.5, top = (onAlt ? 8 : 13) * rival.skill;
+  const BRAKE = 5.5, top = (onAlt ? 5.5 : 13) * rival.skill;
   let vmax = top, dist = Math.hypot(at(node)[0] - r.x, at(node)[1] - r.z);
   for (let k = 0; k < 4; k++) {
     const a = at(node + k - 1), b = at(node + k), c = at(node + k + 1);
@@ -124,6 +124,8 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
     // After any recovery the rival is back at a gate: drop a half-driven skill route and resume the
     // main line from the node nearest where it now stands (otherwise it steers at its old target).
     if (rival.session.recoveries !== (rival.lastRec ?? 0)) {
+      // A failed skill route is not retried: no teleport loops in front of a six-year-old.
+      if (rival.alt) (rival.altBanned ??= new Set()).add(rival.alt.name);
       rival.lastRec = rival.session.recoveries; rival.alt = null;
       const [x, , z] = rival.session.car.pos;
       rival.node = race.line.reduce((b, p, i) => Math.hypot(p[0] - x, p[1] - z) < Math.hypot(race.line[b][0] - x, race.line[b][1] - z) ? i : b, 0);

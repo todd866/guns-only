@@ -103,7 +103,7 @@ export function courseFromGlb(buffer) {
   return {
     alts: [...altMap].map(([name, ms]) => ({ name, nodes: ms.sort((a, b) => +a.name.match(/(\d+)\D*$/)[1] - +b.name.match(/(\d+)\D*$/)[1]).map(m => [m.pos[0], m.pos[2], m.halfWidth || 0.6]) })),
     world, gates, ai, pickups, cams, colTris, coins: coins.sort(byNum).map(c => ({ name: c.name, x: c.pos[0], y: c.pos[1], z: c.pos[2] })),
-    checkpoints: lap.map(g => [g.pos[0], g.pos[2], g.name, Math.max(1.2, g.halfWidth)]),
+    checkpoints: lap.map(g => [g.pos[0], g.pos[2], g.name, Math.max(1.2, g.halfWidth), [g.forward[0], g.forward[2]]]),
     secrets: secrets.map(s => ({ x: s.pos[0], z: s.pos[2], y: s.pos[1] })),
     start: { pos: starts[0].pos, yaw: yawOf(starts[0].forward) },
     grid: starts.map(s => ({ pos: s.pos, yaw: yawOf(s.forward) })),
