@@ -15,7 +15,7 @@ export function createRace(course, { mode = 'kid', opponents = 3 } = {}) {
   const slots = grid.slice(0, opponents + 1), player = createSession({ ...course, start: slots.at(-1) }, { mode });
   const line = racingLine(course);
   const rivals = slots.slice(0, -1).map((slot, i) => ({
-    session: createSession({ ...course, start: slot }, { mode: 'bigKid' }),
+    session: Object.assign(createSession({ ...course, start: slot }, { mode: 'bigKid' }), { autoUnstick: true }),
     skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i,
   }));
   // Retreat: once a race the bugle sounds and every rival stops for the flag. The player can

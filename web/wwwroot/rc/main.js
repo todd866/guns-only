@@ -7,6 +7,7 @@ import {VISUAL_SCALE,BUGGY} from './physics/car.mjs';
 import {addBox} from './physics/world.mjs';
 import {courseFromGlb} from './physics/district.mjs';
 import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
+import {LIGHTING,isIndoor,applyLighting,followSun,clearcoat,studioEnvironment,createEffects} from './visuals.js';
 import { MotorAudio } from './audio.js';
 const audio=new MotorAudio();
 const liveSolids=[...collisionSolids],hangarFallback=[],housingFallback=[],aircraftFallback=[];
@@ -30,12 +31,16 @@ if(districtError&&!district){const note=document.createElement('p');note.textCon
 const renderer=new T.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
 const scene=new T.Scene();scene.background=new T.Color('#b2c6c5');scene.fog=new T.Fog('#b2c6c5',65,150);
 const camera=new T.PerspectiveCamera(63,1,.06,210);
-scene.add(new T.HemisphereLight(0xd5edf1,0x5a624a,1.5));const sun=new T.DirectionalLight(0xffd6a0,3.2);sun.position.set(-30,55,-25);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-65,right:65,top:55,bottom:-55,near:1,far:150});sun.shadow.bias=-.0003;scene.add(sun);
+const hemi=new T.HemisphereLight(0xd5edf1,0x5a624a,1.5);scene.add(hemi);const sun=new T.DirectionalLight(0xffd6a0,3.2);sun.position.set(-30,55,-25);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-65,right:65,top:55,bottom:-55,near:1,far:150});sun.shadow.bias=-.0003;scene.add(sun);
 // Local shadow coverage keeps tyre contact legible at RC scale.
 const contactSun=new T.DirectionalLight(0xffe4bd,.65);contactSun.castShadow=true;contactSun.shadow.mapSize.set(1024,1024);Object.assign(contactSun.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:.1,far:30});contactSun.shadow.bias=-.00015;contactSun.shadow.normalBias=.015;scene.add(contactSun,contactSun.target);
 const studio=new T.Scene();studio.background=new T.Color('#879b9f');
 for(const [x,y,z,w,h,d,c] of [[0,6,0,10,.1,10,0xffe9cc],[-5,2,0,.1,4,8,0x536b70],[5,3,0,.1,3,6,0xdceeff]]){const m=new T.Mesh(new T.BoxGeometry(w,h,d),new T.MeshBasicMaterial({color:c}));m.position.set(x,y,z);studio.add(m);}
 const pmrem=new T.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(studio,.05).texture;scene.environmentIntensity=.45;pmrem.dispose();studio.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
+// Districts get the polished presentation: per-track lighting, a car-following sun shadow, and a
+// brighter studio environment for clear-coat reflections.
+if(track){applyLighting({renderer,hemi,sun,contactSun},isIndoor(track)?LIGHTING.indoor:LIGHTING.outdoor);scene.environment=studioEnvironment(renderer);scene.environmentIntensity=.6;scene.add(sun.target);}
+const fx=createEffects(scene);
 const mats=new Map();function material(c,glow=false){const key=c+glow;if(!mats.has(key))mats.set(key,new T.MeshStandardMaterial({color:c,roughness:.8,...(glow?{emissive:c,emissiveIntensity:.8}:{})}));return mats.get(key);}
 function box(x,y,z,w,h,d,color,parent=scene){const m=new T.Mesh(new T.BoxGeometry(w,h,d),material(color));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
 function sphere(x,y,z,r,color,parent=scene,sx=1,sy=1,sz=1){const m=new T.Mesh(new T.SphereGeometry(r,14,10),material(color));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;parent.add(m);return m;}
@@ -96,7 +101,7 @@ if(new URLSearchParams(location.search).get('assets')!=='prototype'){
   const [buggy,hangar]=await Promise.all([loadBuggyAsset('./assets/buggy.glb'),track?null:loadHangarAsset('./assets/hangar-slice.glb')]);
   const base=artReview&&!track?await Promise.all([loadStaticAsset('./assets/aircraft.glb','Aircraft_Root'),loadStaticAsset('./assets/quarters.glb','Quarters_Root')]):null;
   // Commit the complete visual/collision set together; a failed load retains the prototype.
-  scene.remove(car);car=buggy.car;wheels=buggy.wheels;scene.add(car);
+  scene.remove(car);car=buggy.car;wheels=buggy.wheels;if(track)clearcoat(car);scene.add(car);
   if(hangar){scene.add(hangar.hangar);
   const floor=hangar.hangar.getObjectByName('Floor');floor.material=material('#9ca59b').clone();floor.material.roughness=.68;
   for(const z of [-14,-2]){const lamp=new T.SpotLight(0xffd29a,110,22,1.1,.75,1.4);lamp.position.set(35,6,z);lamp.target.position.set(38,0,z+2);scene.add(lamp,lamp.target);}
@@ -116,7 +121,7 @@ let race=createRace(course,{mode,opponents:rivalCount}),s=race.player,paused=tru
 const format=t=>`${Math.floor(t/60)}:${(t%60).toFixed(2).padStart(5,'0')}`;
 function pause(value){paused=value;if(!value)audio.start();keys.clear();$('pause').textContent=paused?'Resume · Esc':'Pause · Esc';}
 $('start').onclick=()=>{audio.start();$('brief').hidden=true;pause(false);canvas.focus();};$('pause').onclick=()=>pause(!paused);$('reset').onclick=()=>recover(s);
-function setMode(m){mode=race.mode=s.mode=s.assist.mode=m;$('mode').textContent=m==='kid'?'Kid · B':'Big Kid · B';try{localStorage.setItem('guns-only.rc.mode',m);}catch{}}
+function setMode(m){mode=race.mode=s.mode=s.assist.mode=m;s.autoUnstick=m==='kid';$('mode').textContent=m==='kid'?'Kid · B':'Big Kid · B';try{localStorage.setItem('guns-only.rc.mode',m);}catch{}}
 $('mode').onclick=()=>setMode(mode==='kid'?'bigKid':'kid');setMode(mode);
 function exit(){if(window.parent!==window)window.parent.postMessage({type:'guns-only-rc-exit'},location.origin);else location.href='../';}
 $('exit').onclick=exit;
@@ -164,7 +169,9 @@ let reported=false;
 function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){acc+=dt;while(acc>=1/120){stepRace(race,{throttle:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),steer:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),brake:keys.has('Space'),fire:fireQueued},1/120);fireQueued=false;acc-=1/120;}}
  const r=readout(s),c=s.car,p=BUGGY;
  contactSun.position.set(r.x-4,r.y+(artReview&&Math.abs(r.x-38)<9&&Math.abs(r.z+8)<11?4:8),r.z-5);contactSun.target.position.set(r.x,r.y,r.z);
- audio.update(r.speed,paused);poseCar(car,wheels,c);syncRivals();race.rivals.forEach((rv,i)=>poseCar(rivalVis[i].group,rivalVis[i].wheels,rv.session.car));
+ audio.update(r.speed,paused);if(track)followSun(sun,car.position);
+ if(!paused){for(const cc of [c,...race.rivals.map(rv=>rv.session.car)])fx.carFeedback(cc,dt);for(const e of race.events.splice(0))if(e.type==='splash')fx.splash(e.car?.pos??e.pos);}fx.update(dt);
+ poseCar(car,wheels,c);syncRivals();race.rivals.forEach((rv,i)=>poseCar(rivalVis[i].group,rivalVis[i].wheels,rv.session.car));
  // Low chase camera behind the heading; pulled in front of any wall between it and the car.
  const back=1.05+r.speed*.03,eye=[r.x,r.y+.12,r.z];desired.set(r.x-Math.sin(r.yaw)*back,r.y+.42,r.z+Math.cos(r.yaw)*back);
  const ray=[desired.x-eye[0],desired.y-eye[1],desired.z-eye[2]],dist=Math.hypot(...ray),hit=course.world.raycast(eye,ray.map(v=>v/dist),dist);
