@@ -11,7 +11,7 @@ test("the remote production matrix covers every promoted player entry", () => {
     "rapier-intercept",
     "top-gun",
     "cobra-lab",
-    "weekend-ride",
+    "area-51",
     "okanagan-fireboss",
   ]);
   assert.equal(new Set(ids).size, ids.length, "production route ids must be unique");
@@ -162,7 +162,7 @@ test("first-run route proves cold authority and an authority-matched gorge", asy
 
 test("standalone routes require their Ready brief and paused or cold authority", async () => {
   const cobra = route("cobra-lab");
-  const weekend = route("weekend-ride");
+  const rc = route("area-51");
 
   await cobra.verify(pageReturning({
     status: "READY · REVIEW FLIGHT BRIEF",
@@ -173,22 +173,15 @@ test("standalone routes require their Ready brief and paused or cold authority",
     authorityTick: -1,
     vehiclePresent: true,
   }));
-  await weekend.verify(pageReturning({
-    status: "READY · REVIEW SESSION BRIEF",
-    briefVisible: true,
-    title: "Two laps, then bring it in",
-    phase: "paused",
-    aircraftId: "vehicle.yzf-r1.track-day.v1",
-  }));
+  await rc.verify(pageReturning({ brief: "Small car. Big secret.", gates: 9, line: 51 }));
 
   await assert.rejects(() => cobra.verify(pageReturning({
     status: "HOLD THE BRIDGE · AH-1G ONLINE",
     briefVisible: false,
   })), /READY · REVIEW FLIGHT BRIEF/);
-  await assert.rejects(() => weekend.verify(pageReturning({
-    status: "YZF-R1 ACTIVE",
-    briefVisible: false,
-  })), /READY · REVIEW SESSION BRIEF/);
+  await assert.rejects(() => rc.verify(pageReturning({
+    brief: "Liberty Loop did not download, so this race uses the motor pool route.", gates: 10, line: 10,
+  })), /fell back to the base route/);
   await assert.rejects(() => cobra.verify(pageReturning({
     status: "READY · REVIEW FLIGHT BRIEF",
     briefVisible: true,
@@ -198,13 +191,6 @@ test("standalone routes require their Ready brief and paused or cold authority",
     authorityTick: 0,
     vehiclePresent: true,
   })), /Ready advanced mission authority/);
-  await assert.rejects(() => weekend.verify(pageReturning({
-    status: "READY · REVIEW SESSION BRIEF",
-    briefVisible: true,
-    title: "Two laps, then bring it in",
-    phase: "active",
-    aircraftId: "vehicle.yzf-r1.track-day.v1",
-  })), /authority is running behind Ready/);
 });
 
 test("Okanagan Ready proves its selected contract, reserve and cold authority", async () => {

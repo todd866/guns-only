@@ -158,7 +158,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "weekend-ride",
     mission: null,
-    sequence: 11,
+    sequence: 15,
     route: "/weekend-ride/",
     aircraft: "YZF-R1",
     title: "Weekend Ride",

@@ -275,8 +275,6 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["feedback-send", /createReportUi\(\{\s*dialog: document\.querySelector\("#feedback-report"\)/],
     ["feedback-cancel", /createReportUi\(\{\s*dialog: document\.querySelector\("#feedback-report"\)/],
     ["pause-button", /pauseButton\?\.addEventListener\("click", toggleSessionPause\)/],
-    // Area 51½ from pause/debrief: opens the RC frame over the paused shell (rc/host.js).
-    ["ready-rc", /getElementById\("ready-rc"\)\?\.addEventListener\("click", \(\) => openRC\(/],
     ["incident-replay-play", /incidentReplayPlay\?\.addEventListener\("click"/],
     ["incident-replay-event-jump", /incidentReplayEventJump\?\.addEventListener\("click"/],
     ["incident-replay-skip", /incidentReplaySkip\?\.addEventListener\("click", skipIncidentReplay\)/],

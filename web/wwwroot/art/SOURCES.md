@@ -157,6 +157,19 @@ These images are no longer in the tree; the filenames were reused by v3.
   identify public-data / fictional silhouettes only; neither source is an engineering drawing,
 film still, Paramount mark, or official livery.
 
+### Area 51½ picker — CURRENT
+
+- Created: 2026-10-21 as an in-engine frame, not an image-generation output: the shipped Area 51½
+  page rendered headless (`tools/rc/card-art.cjs`, 900×1600, HUD hidden) on the Liberty Loop
+  district with three rivals. Every model in it is original Blender geometry from this repository.
+- Exact selected source: `tools/assets/generators/menu-posters/sources/area51-rc.png`,
+  152,190 bytes, SHA-256
+  `0bf296f0da9b713a50164edfb65ce84cc378c85cb81354a9df142d1360b719ea`.
+- Exact output recipe: rerun with `node tools/assets/generators/menu-posters/render.mjs area51-rc`
+  (cwebp 1.6.0, q 82).
+- Epistemic label: `fiction`. Little Nellie AFB, its signs and the buggies are invented.
+- Rights status: project-made; no third-party asset is embedded.
+
 ### Okanagan Fire Boss picker — CURRENT
 
 - Created: 2026-08-15 with the built-in OpenAI ImageGen workflow, then visually rejected and
@@ -224,6 +237,7 @@ table further down stays the single place a filename is bound to a hash.
 | `jet-f22.webp` | 900×1600 | 19334 | `203d4b601bbe39e6d2c03d3c28ccc953c9867bb08935aef045f487fe79d32297` | F-22A picker poster |
 | `jet-rapier.webp` | 900×1600 | 21572 | `29699bb08e1878465d1cb21adc07da83f3e7b4479dbe8d57a375a74c05d3ec5b` | Superseded Rapier SVG poster |
 | `jet-cobra.webp` | 900×1600 | 23000 | `2789e1aa005cb61482b032cee38913f93704abc047d2f630f0d98cafca616e1b` | AH-1G Cobra picker poster |
+| `area51-rc.webp` | 900×1600 | 25722 | `7b5a091512325876fc8ed79401a744e04e41f3f27e26b3fe2b8f65a5402d36a8` | Area 51½ picker poster; in-engine frame |
 | `bike-yzf-r1.webp` | 900×1600 | 31680 | `a42fe42d802e3f3b1ae61fe5b70567226aab2ad28b84349d57c38d6fa4618869` | Weekend Ride picker poster |
 | `jet-f14.webp` | 900×900 | 14886 | `e67c8ed4413eabf7bca198847e1be0bb64f61270c6c0e90b158852f00251d85e` | Top Gun F-14A picker vector render |
 | `jet-mig-28.webp` | 900×900 | 13344 | `bc768c8e5aaee8437dd425879cc0d9d4b0f6a7dcfcc1fdc3a23c76db279d3212` | Top Gun MiG-28 aggressor vector render |

@@ -36,7 +36,8 @@ function hit(pk, car) {
   return true;
 }
 
-export function stepPickups(pk, cars, world, dt) {
+// `immune`: kid mode's player — rival balloons pass by and slicks do not grab.
+export function stepPickups(pk, cars, world, dt, immune = null) {
   for (const e of pk.effects.values()) for (const k in e) e[k] = Math.max(0, e[k] - dt);
   for (const spot of pk.spots) {
     spot.ready = Math.max(0, spot.ready - dt);
@@ -48,7 +49,7 @@ export function stepPickups(pk, cars, world, dt) {
   for (const b of pk.balloons) {
     b.vel[1] -= 9.81 * dt; const next = add(b.pos, scale(b.vel, dt)), d = sub(next, b.pos), dl = len(d);
     const wall = dl > 0 && world.raycast(b.pos, scale(d, 1 / dl), dl);
-    const target = cars.find(c => c !== b.owner && len(sub(c.pos, next)) < 0.35);
+    const target = cars.find(c => c !== b.owner && c !== immune && len(sub(c.pos, next)) < 0.35);
     if (target) { if (hit(pk, target)) events.push({ type: 'splash', car: target }); b.life = 0; }
     else if (wall) { events.push({ type: 'splash', pos: wall.point }); b.life = 0; }
     b.pos = next; b.life -= dt;
@@ -56,7 +57,7 @@ export function stepPickups(pk, cars, world, dt) {
   pk.balloons = pk.balloons.filter(b => b.life > 0);
   for (const s of pk.slicks) {
     s.life -= dt;
-    for (const c of cars) if (c !== s.owner && len(sub(c.pos, s.pos)) < 0.55 && fx(pk, c).bubble <= 0) fx(pk, c).slick = 1.2;
+    for (const c of cars) if (c !== s.owner && c !== immune && len(sub(c.pos, s.pos)) < 0.55 && fx(pk, c).bubble <= 0) fx(pk, c).slick = 1.2;
     if (s.life < 11) s.owner = null;   // after a second, the dropper can slide on it too
   }
   pk.slicks = pk.slicks.filter(s => s.life > 0);
