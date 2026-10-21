@@ -5,16 +5,19 @@
   "external_assets": [],
   "reference_game_assets": "none; no Re-Volt/RVGL model, texture or data was read",
   "district": "housing",
+  "version": 2,
   "editable_source": "assets/rc/districts/housing.blend",
   "lap_length_m": 406.8,
   "gates": 8,
   "ai_nodes": 51,
   "ai_spacing_m": 7.98,
   "houses": 8,
-  "visual_triangles": 88238,
-  "collision_triangles": 16436,
-  "collision_meshes": 157,
-  "materials": 21,
+  "visual_triangles": 135487,
+  "collision_triangles": 19508,
+  "collision_meshes": 218,
+  "materials": 24,
+  "lettering": "mesh text from Blender's bundled UI font (no textures)",
+  "cultural_references": "fictional, kid-safe; docs/research/area51-usaf-nellis-vegas-references.md section A; section B avoided (no Thunderbirds marks, real insignia, casino names or gambling imagery)",
   "vertex_ao": {
     "raw_min": 0.0,
     "raw_max": 1.0,
@@ -22,6 +25,6 @@
     "distance_m": 1.6,
     "samples": 24
   },
-  "vertex_ao_method": "Cycles AO bake to per-corner BYTE_COLOR attribute \"AO\", exported as COLOR_0; remapped to floor..1. Real bake, no painted shading.",
-  "glb_bytes": 3939940
+  "vertex_ao_method": "Cycles AO bake to per-corner BYTE_COLOR attribute \"AO\", exported as COLOR_0; remapped to floor..1. Real bake, no painted shading. Decals and the far backdrop are left at 1.0 (not occluders, not baked).",
+  "glb_bytes": 7051736
 }

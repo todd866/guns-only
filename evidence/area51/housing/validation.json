@@ -1,24 +1,25 @@
 {
   "file": "web/wwwroot/rc/assets/districts/housing.glb",
-  "checked_at": "2026-10-21T05:16:21.123Z",
+  "checked_at": "2026-10-21T05:37:09.113Z",
   "ok": true,
   "errors": [],
   "warnings": [],
-  "bytes": 3939940,
-  "materials": 21,
-  "visual_triangles": 88238,
-  "visual_primitives": 21,
-  "vis_primitives_with_color0": 21,
-  "collision_triangles": 16436,
-  "collision_meshes": 157,
+  "bytes": 7051736,
+  "materials": 24,
+  "visual_triangles": 135487,
+  "visual_primitives": 24,
+  "vis_primitives_with_color0": 24,
+  "collision_triangles": 19508,
+  "collision_meshes": 218,
   "collision_open_meshes": 0,
   "collision_surface_triangles": {
     "asphalt": 1536,
-    "carpet": 44,
-    "concrete": 6468,
-    "grass": 5376,
-    "metal": 360,
-    "wood": 2652
+    "concrete": 11016,
+    "grass": 48,
+    "gravel": 5376,
+    "metal": 660,
+    "rubber": 140,
+    "wood": 732
   },
   "gates": [
     {
@@ -81,6 +82,8 @@
   "racing_line_surface_probes": {
     "asphalt": 110
   },
+  "lateral_sweep_samples": 36130,
+  "wedge_trap_steps": 0,
   "pickups": 9,
   "specimens": [
     "SPEC_01"
@@ -107,6 +110,12 @@
       4,
       12
     ],
-    "aiMaxTurnDeg": 75
+    "aiMaxTurnDeg": 75,
+    "trapStep": [
+      0.025,
+      0.25
+    ],
+    "sweepBeyondHalfWidth": 4,
+    "sweepStep": 0.02
   }
 }
