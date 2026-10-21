@@ -2,7 +2,7 @@
 
 Updated: 2026-10-21.
 Production: Build 388, revision `ac6c4fe834a3c545824c3a4562376315664f120a`.
-Next candidate: Build 388, not deployed — hotfix: guns-only.com/rc (no trailing slash) loaded Area 51½ unstyled and inert because its relative asset URLs resolved to the site root; the page now pins <base href="/rc/">.
+Next candidate: Build 389, not deployed — hotfix: guns-only.com/rc (no trailing slash) loaded Area 51½ unstyled and inert because its relative asset URLs resolved to the site root; the page now pins <base href="/rc/">.
 Shipped 2026-10-21: Build 388 — Area 51½ gets its second track, the BX (a big-box base exchange from real Nellis BX photos), with a Liberty Loop / The BX selector.
 Shipped 2026-10-21: Build 387 — Area 51½ replaces Weekend Ride on the front door: a Re-Volt-style toy RC racer on a fictional Nellis-flavoured base (rigid-body buggy physics, kid mode by default, AI rivals, cartoon pickups, Liberty Loop housing district).
 Shipped 2026-10-16: Build 386 — hands-off F-22 RTB autopilot (Y, 8×), End after combat, and the playtest lab.
