@@ -286,11 +286,20 @@ Done: an HDRI sky (Goegap, CC0). To do:
    (≈ 5 min, vs ≈ 1 h through the full Guns Only pipeline: bin/check 13 min, CI smoke 22–29 min,
    F-22 frame gate, route smoke). The main pipeline keeps its full strictness; do NOT make the
    frame gate skip RC paths. Only the picker card stays in the main build.
-2. [ ] **Menu tidy** (≈ 2%). Guns Only picker: three plain cards (F-22, Cobra, RC), drop the
+2. [ ] **RC analytics** (≈ 2%). RC sends NOTHING today (the F-22 shell has the durable outbox in
+   render/telemetry/: telemetry_outbox.js, telemetry_batch.js, plus the admin decoder). Reuse that
+   path, don't fork it. Anonymous session id only, no personal data or fingerprinting (target
+   player is a six-year-old). Events: session start (track, mode, kid/Big Kid, device class),
+   time to first input, race start/finish (place, time, gap to winner, recoveries, ALT taken),
+   quit mid-race, Furball result (balloons left, pops, kills, duration), Again vs Free drive
+   clicks, item use, mute, frame p95. Admin view: sessions/day, races finished %, win rate by
+   mode (the "instant win" number), median session length, Again rate. Do this BEFORE item 4
+   so difficulty is tuned against data.
+3. [ ] **Menu tidy** (≈ 2%). Guns Only picker: three plain cards (F-22, Cobra, RC), drop the
    Military/Civilian tabs (Area 51½ is currently stranded alone under Civilian). RC brief:
    "Drive" not "Take the transmitter"; Drive / Race / Furball / tracks / mute in one compact row;
    joke labels (Tumbleweed, RTB, Knock it off) move to tooltips. Invoke instrument-ux first.
-3. [ ] **Difficulty: no instant wins** (≈ 1%). Owner: "it's no fun if I just instantly win."
+4. [ ] **Difficulty: no instant wins** (≈ 1%). Owner: "it's no fun if I just instantly win."
    Races: rubber band keeps it close both ways (no parking 2 gates up; rivals can win a sloppy
    lap; still never target the kid). Furball: 3 balloons each, rival fire delay 2.5 s → 1 s,
    rarer missile 3-packs; keep Chaff after each pop.
