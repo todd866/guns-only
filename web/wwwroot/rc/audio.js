@@ -13,7 +13,7 @@ export class SoundKit {
 
   build() {
     const C = window.AudioContext || window.webkitAudioContext, ctx = this.ctx = new C();
-    this.master = ctx.createGain(); this.master.gain.value = this.silent ? 0 : 0.7;
+    this.master = ctx.createGain(); this.master.gain.value = this.silent || this.muted ? 0 : 0.45;
     const comp = ctx.createDynamicsCompressor(); this.master.connect(comp).connect(ctx.destination);
     // White noise, shared by squeal, impacts and splashes.
     const len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
@@ -64,13 +64,18 @@ export class SoundKit {
   }
 
   // Per frame: speed (m/s), throttle (−1..1), slip (0..1 share of wheels sliding), paused.
+  setMuted(m) { this.muted = m; if (this.master) this.master.gain.setTargetAtTime(this.silent || m ? 0 : 0.45, this.ctx.currentTime, 0.05); }
+
   update({ speed, throttle, slip, paused, surface }) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime, live = !paused;
+    // Slow random pitch drift so the short motor loop never repeats exactly.
+    this.drift = Math.max(-0.05, Math.min(0.05, (this.drift || 0) + (Math.random() - 0.5) * 0.004));
     if (this.motorLow) {
       // Recorded motor: pitch follows speed, throttle adds load; a high-speed recording fades in above ~8 m/s.
-      const rate = 0.55 + speed / 11 + Math.abs(throttle) * 0.12, hi = this.motorHigh ? Math.min(1, Math.max(0, (speed - 6) / 5)) : 0;
-      const level = live ? 0.25 + Math.abs(throttle) * 0.35 + speed * 0.02 : 0;
+      const rate = (0.55 + speed / 11 + Math.abs(throttle) * 0.12) * (1 + this.drift), hi = this.motorHigh ? Math.min(1, Math.max(0, (speed - 6) / 5)) : 0;
+      // Quieter overall, near-silent when parked.
+      const level = live ? (speed < 0.3 && !throttle ? 0.02 : 0.08 + Math.abs(throttle) * 0.16 + speed * 0.01) : 0;
       this.motorLow.src.playbackRate.setTargetAtTime(rate, t, 0.05); this.motorLow.gain.gain.setTargetAtTime(level * (1 - hi), t, 0.06);
       if (this.motorHigh) { this.motorHigh.src.playbackRate.setTargetAtTime(rate * 0.8, t, 0.05); this.motorHigh.gain.gain.setTargetAtTime(level * hi, t, 0.06); }
       if (this.squealRec) { this.squealRec.gain.gain.setTargetAtTime(live && speed > 2.5 ? slip * 0.5 : 0, t, 0.04); this.squealGain.gain.setTargetAtTime(0, t, 0.04); }
@@ -109,6 +114,7 @@ export class SoundKit {
   fire() { this.burst({ type: 'bandpass', freq: 1200, sweep: 300, dur: 0.18, level: 0.25 }); }
   splash() { this.burst({ type: 'highpass', freq: 1500, sweep: 600, dur: 0.35, level: 0.35 }); }
   boost() { this.burst({ type: 'bandpass', freq: 400, sweep: 2400, dur: 0.6, level: 0.3 }); }
+  radio() { this.burst({ type: 'bandpass', freq: 1800, dur: 0.08, level: 0.2 }); [740, 988].forEach((f, i) => this.tone(f, 0.05 + i * 0.09, 0.08, { type: 'square', level: 0.06 })); this.burst({ type: 'bandpass', freq: 1800, dur: 0.1, level: 0.15 }); }
   beep(go = false) { this.tone(go ? 880 : 440, 0, go ? 0.45 : 0.2, { type: 'square', level: 0.08 }); }
   // Retreat: a short bugle figure (original, on the bugle's natural notes).
   bugle() { [[392, 0.35], [523, 0.35], [659, 0.5], [523, 0.3], [784, 0.9]].reduce((at, [f, d]) => (this.tone(f, at, d, { type: 'triangle', level: 0.12 }), at + d * 0.9), 0); }

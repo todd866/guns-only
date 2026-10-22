@@ -4,13 +4,15 @@
 // player; in Big Kid they just drive.
 import { createSession, stepSession, readout, recover } from './session.mjs';
 import { add, sub, scale, dot, len, rotate } from './math.mjs';
-import { createPickups, stepPickups, modifiers, use, rivalWants } from './pickups.mjs';
+import { createPickups, stepPickups, modifiers, use, rivalWants, MISSILES, boostCar } from './pickups.mjs';
+import { padHit } from './features.mjs';
+import { createFurball, stepFurball, furballInput, mayFire } from './furball.mjs';
 
 export const SKILL = { cruise: 0.78, ace: 0.95 };
 // Aggressor-squadron callsigns, one per rival paint scheme (ghost, desert, splinter, flanker, arctic).
 export const CALLSIGNS = ['GHOST', 'SANDY', 'SPLINTER', 'FLANKER', 'FROSTY'];
 
-export function createRace(course, { mode = 'kid', opponents = 3, roam = false } = {}) {
+export function createRace(course, { mode = 'kid', opponents = 3, roam = false, features = null, furball = false } = {}) {
   const grid = course.grid ?? gridBehind(course.start, opponents + 1);
   // The player starts at the back, as in Re-Volt: the chase camera sees the car, and there
   // are rivals to overtake from the first second.
@@ -22,8 +24,11 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false }
   }));
   // Retreat: once a race the bugle sounds and every rival stops for the flag. The player can
   // stand to attention too, or keep driving (nobody tells the kid off).
-  if (roam) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
-  return { course, mode, roam, player, rivals, line, alts: altRoutes(course, line), pickups: createPickups(course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: 18, length: 5 } };
+  // Furball sessions drive like free drive (no gates, no lap) inside the race's own rules.
+  if (roam || furball) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
+  const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
+  if (furball) race.furball = createFurball(race);
+  return race;
 }
 
 // Racing line: AI nodes if authored, else the lap gates.
@@ -115,12 +120,18 @@ function withEffects(race, car, input) {
 }
 
 export function stepRace(race, playerInput, dt = 1 / 120) {
-  const pk = race.pickups, cars = [race.player.car, ...race.rivals.map(r => r.session.car)];
+  const pk = race.pickups, fb = race.furball;
+  if (fb?.over) return;
+  // Shot-down Furball cars leave the fight: no physics, no bumping, no targeting.
+  const cars = [race.player.car, ...race.rivals.map(r => r.session.car)].filter(c => !fb?.out.has(c));
   if (race.player.running) race.clock += dt;
   race.t += dt;
   if (playerInput.fire) use(pk, race.player.car);
+  // Race order for the Pitbull (blue shell): leader first. Free drive has no order.
+  pk.order = race.roam || fb ? null : [race.player, ...race.rivals.map(r => r.session)].sort((a, b) => placeOf(race, a) - placeOf(race, b)).map(s => s.car);
   stepSession(race.player, withEffects(race, race.player.car, playerInput), dt);
   for (const rival of race.rivals) {
+    if (fb?.out.has(rival.session.car)) continue;
     // After any recovery the rival is back at a gate: drop a half-driven skill route and resume the
     // main line from the node nearest where it now stands (otherwise it steers at its old target).
     if (rival.session.recoveries !== (rival.lastRec ?? 0)) {
@@ -130,16 +141,23 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
       const [x, , z] = rival.session.car.pos;
       rival.node = race.line.reduce((b, p, i) => Math.hypot(p[0] - x, p[1] - z) < Math.hypot(race.line[b][0] - x, race.line[b][1] - z) ? i : b, 0);
     }
-    // Kid mode: rivals never aim balloons or oil at the player, only at each other.
-    if (rivalWants(pk, rival.session.car, race.mode === 'kid' ? cars.slice(1) : cars)) use(pk, rival.session.car);
-    stepSession(rival.session, withEffects(race, rival.session.car, driveInput(race, rival)), dt);
+    // Kid mode: in a race rivals never aim balloons or oil at the player, only at each other.
+    // Furball is the exception: being hunted is the game (see furball.mjs for the kid's cushions).
+    const targets = race.mode === 'kid' && !fb ? cars.slice(1) : cars;
+    if ((!fb || mayFire(race, rival)) && rivalWants(pk, rival.session.car, targets)) use(pk, rival.session.car);
+    const input = fb ? furballInput(race, rival, () => driveInput(race, rival)) : driveInput(race, rival);
+    stepSession(rival.session, withEffects(race, rival.session.car, input), dt);
     // A rival on its roof gets the same R a kid would press.
     if (rotate(rival.session.car.q, [0, 1, 0])[1] < 0.2 && rival.session.car.speed < 0.5) { rival.stuck = (rival.stuck || 0) + dt; if (rival.stuck > 1.5) { rival.stuck = 0; recover(rival.session); } }
   }
   for (const s of [race.player, ...race.rivals.map(r => r.session)])
     if (s.finished && !race.finishOrder.includes(s)) race.finishOrder.push(s);
+  // Boost pads: a short Afterburner for whoever crosses one (rivals too).
+  if (race.features) for (const c of cars) if (padHit(race.features, c)) boostCar(pk, c, 0.9);
   bump(cars);
-  race.events.push(...stepPickups(pk, cars, race.course.world, dt, race.mode === 'kid' ? race.player.car : null));
+  const events = stepPickups(pk, cars, race.course.world, dt, fb ? fb.out : race.mode === 'kid' ? race.player.car : null);
+  if (fb) events.push(...stepFurball(race, events, dt));
+  race.events.push(...events);
 }
 
 // Car-to-car: body spheres against body spheres, equal-mass impulses with a little bounce.

@@ -109,6 +109,8 @@ export function createEffects(scene) {
         }
       });
     },
+    puff(p) { emit(p, [0, 0, 0], '#e8e4dc', 1, 0.12); },
+    boom(p) { emit([p[0], p[1] + 0.1, p[2]], [0, 0, 0], '#ffb347', 30, 1.4); },
     splash(p) { emit([p[0], p[1] + 0.1, p[2]], [0, 0, 0], '#7fd4ff', 40, 1.6); },
     update(dt) {
       for (let i = 0; i < MAX; i++) {
@@ -131,8 +133,12 @@ export function createRacingLine(scene, line, world, { width = 0.5, step = 0.5, 
   const N = samples.length;
   // Drape on the world, and keep arc length.
   const s = new Float32Array(N); let L = 0;
+  // Drape along the drivable surface: cast from just above the previous point, so the line never
+  // jumps onto a tree canopy, roof edge, sign or table top that overhangs the road.
+  let lastY = null;
   samples.forEach((p, i) => {
-    const hit = world.raycast([p.x, 30, p.z], [0, -1, 0], 60); p.y = (hit ? hit.point[1] : 0) + 0.025;
+    const from = lastY === null ? 30 : lastY + 0.6, hit = world.raycast([p.x, from, p.z], [0, -1, 0], lastY === null ? 60 : 3);
+    lastY = hit ? hit.point[1] : (lastY ?? 0); p.y = lastY + 0.025;
     if (i) L += samples[i - 1].distanceTo(p); s[i] = L;
   });
   if (closed) L += samples[N - 1].distanceTo(samples[0]); else L += 1e4;   // open lines never wrap
@@ -168,7 +174,7 @@ export function createRacingLine(scene, line, world, { width = 0.5, step = 0.5, 
     fragmentShader: `uniform float carS; uniform float carV; uniform float loopL; uniform float time; varying float vU; varying float vArc; varying float vVt;
       void main(){
         float ahead = mod(vArc - carS + loopL, loopL);
-        float a = smoothstep(0.3, 2.5, ahead) * (1.0 - smoothstep(22.0, 32.0, ahead));
+        float a = smoothstep(0.1, 0.9, ahead) * (1.0 - smoothstep(24.0, 34.0, ahead));
         if (a < 0.01) discard;
         float d = vVt - carV;                     // >0: room to speed up
         vec3 green = vec3(0.22, 0.85, 0.35), yellow = vec3(1.0, 0.82, 0.2), red = vec3(1.0, 0.22, 0.18);
@@ -176,7 +182,7 @@ export function createRacingLine(scene, line, world, { width = 0.5, step = 0.5, 
         float chev = fract((vArc - abs(vU - 0.5) * 0.6) / 0.7 - time * 1.4);
         float stripe = smoothstep(0.0, 0.08, chev) * (1.0 - smoothstep(0.42, 0.5, chev));
         float edge = smoothstep(0.0, 0.12, vU) * smoothstep(1.0, 0.88, vU);
-        gl_FragColor = vec4(mix(c * 0.7, c * 1.15, stripe), a * edge * (0.6 + 0.35 * stripe));
+        gl_FragColor = vec4(mix(c * 0.85, c * 1.3, stripe), a * edge * (0.78 + 0.22 * stripe));
       }`,
   });
   const mesh = new T.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 2; scene.add(mesh);
