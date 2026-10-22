@@ -1,0 +1,28 @@
+#!/bin/sh
+# Ship Area 51½ on its own: RC tests -> package -> headless boot smoke of the package -> deploy to
+# the guns-only-rc Vercel project -> smoke the live site. About 5 minutes. guns-only.com/rc/ is a
+# rewrite to this project (web/wwwroot/vercel.json), so the main site picks it up with no deploy.
+# The main pipeline (bin/check, CI, the F-22 frame gate) never sees RC changes and keeps its full
+# strictness for the flight game.
+#   bin/deploy-rc            production
+#   bin/deploy-rc --preview  a preview URL only
+set -eu
+repo=$(cd "$(dirname "$0")/.." && pwd); cd "$repo"
+dist="$repo/.rc-dist"; target=--prod; [ "${1:-}" = "--preview" ] && target=""
+echo "deploy-rc: unit tests"
+(cd web/wwwroot/rc && node --test) >/dev/null
+node --test tools/rc/package-rc.test.mjs >/dev/null
+echo "deploy-rc: package"
+node tools/rc/package-rc.mjs --out "$dist"
+if [ ! -d web/smoke/node_modules/playwright ]; then (cd web/smoke && npm ci --ignore-scripts --no-audit --no-fund --silent && ./node_modules/.bin/playwright install chromium >/dev/null); fi
+echo "deploy-rc: headless smoke of the package"
+HEAVY_SLOT_LABEL=guns-only-rc-smoke heavy-slot -- node tools/rc/smoke-dist.mjs "$dist"
+echo "deploy-rc: deploy"
+vercel link --yes --project guns-only-rc --scope ian-todds-projects --cwd "$dist" >/dev/null 2>&1
+url=$(vercel deploy $target --yes --scope ian-todds-projects --cwd "$dist" 2>&1 | grep -oE 'https://[a-z0-9.-]+\.vercel\.app' | tail -1)
+[ -n "$url" ] || { echo "deploy-rc: vercel deploy failed" >&2; exit 1; }
+echo "deploy-rc: deployed $url"
+live=${url}; [ -n "$target" ] && live=https://guns-only-rc.vercel.app
+echo "deploy-rc: smoke the live site ($live)"
+HEAVY_SLOT_LABEL=guns-only-rc-smoke heavy-slot -- node tools/rc/smoke-dist.mjs "$dist" "$live"
+[ -n "$target" ] && curl -fsS -o /dev/null -w "deploy-rc: guns-only.com/rc/ %{http_code}\n" https://guns-only.com/rc/ || true

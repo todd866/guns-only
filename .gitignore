@@ -97,3 +97,6 @@ tmp/
 # not a default.
 analysis/owner-pilot-frames.jsonl
 analysis/owner-pilot-rows.jsonl
+
+# Area 51½ package for its own Vercel project (bin/deploy-rc)
+.rc-dist/
