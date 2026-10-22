@@ -50,7 +50,7 @@ test('kid mode: rival balloons and oil never catch the player', () => {
   assert.equal(modifiers(pk, kid).gripScale, 1);
 });
 
-import { MISSILES } from './physics/pickups.mjs';
+import { MISSILES, beamDir } from './physics/pickups.mjs';
 const run = (pk, cars, world, n, immune = null) => { const ev = []; for (let i = 0; i < n; i++) ev.push(...stepPickups(pk, cars, world, 1 / 120, immune)); return ev; };
 
 test('Fox Two homes onto the car ahead even when it is off to the side', () => {
@@ -66,11 +66,14 @@ test('Pitbull hunts the race leader, not the nearest car', () => {
   assert.ok(ev.some(e => e.car === leader), 'leader hit'); assert.ok(!ev.some(e => e.car === near), 'near car spared');
 });
 
-test('Fox One flies dumb once the shooter loses the target from its nose cone', () => {
-  const w = flat(), a = createCar(undefined, [0, 0.13, 0], 0), b = createCar(undefined, [0, 0.13, -6], 0), pk = createPickups({});
-  pk.held.set(a, 'foxone'); use(pk, a); a.q = [0, Math.sin(Math.PI / 2), 0, Math.cos(Math.PI / 2)];   // shooter turns away
-  b.pos = [6, 0.13, -6];   // target sidesteps
-  assert.ok(!run(pk, [a, b], w, 240).some(e => e.car === b));
+test('Fox One rides the beam: steering sweeps it onto a car off to the side', () => {
+  // b sits on the beam once it swings right (~31°), further out than where the missile rejoins it.
+  const w = flat(), a = createCar(undefined, [0, 0.13, 0], 0), b = createCar(undefined, [0, 0.13, -40], 0), pk = createPickups({});
+  a.steer = 0.4; const d = beamDir(a); a.steer = 0; b.pos = [d[0] * 20, 0.13, d[2] * 20];   // on the swung beam, 20 m out
+  pk.held.set(a, 'foxone'); use(pk, a);
+  assert.ok(!run(pk, [a, b], w, 60).some(e => e.car === b), 'beam straight ahead: no hit yet');
+  a.steer = 0.4;   // steer right: the beam swings right, the missile follows it
+  assert.ok(run(pk, [a, b], w, 240).some(e => e.car === b));
 });
 
 test('Zuni bounces off a wall and keeps flying', () => {

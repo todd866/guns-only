@@ -6,10 +6,10 @@ export const ITEMS = ['zoom', 'balloon', 'oil', 'bubble', 'foxtwo', 'pitbull', '
 // Foam-tipped toy missiles, named by brevity code. A hit spins the car (like a balloon), never wrecks it.
 //   foxtwo  heat-seeker: locks the car ahead in its cone and homes (red shell)
 //   pitbull active: the blue shell. Hunts the race leader on its own (nearest car in free drive)
-//   foxone  semi-active: guides only while the target stays in the shooter's nose cone
+//   foxone  beam-rider: rides the shooter's radar beam, which the shooter sweeps by steering
 //   zuni    unguided rocket that bounces off walls (green shell)
 export const MISSILES = new Set(['foxtwo', 'pitbull', 'foxone', 'zuni']);
-const SPEC = { foxtwo: { v: 13, turn: 3.5, life: 4 }, pitbull: { v: 12.5, turn: 4, life: 12 }, foxone: { v: 15, turn: 4.5, life: 4 }, zuni: { v: 14, turn: 0, life: 5 } };
+const SPEC = { foxtwo: { v: 13, turn: 3.5, life: 4 }, pitbull: { v: 12.5, turn: 4, life: 12 }, foxone: { v: 15, turn: 6, life: 4 }, zuni: { v: 14, turn: 0, life: 5 } };
 const RESPAWN = 4, GRAB = 0.6;
 
 export function createPickups(course, seed = 1) {
@@ -92,11 +92,11 @@ function stepMissiles(pk, cars, world, dt, immune, events, trailerHit) {
     // Pick or keep a target.
     if (m.kind === 'pitbull' && (m.retarget -= dt) <= 0) { m.retarget = 0.5; m.target = (pk.order ?? []).find(c => ok(m, c)) ?? cars.filter(c => ok(m, c)).sort((a, b) => len(sub(a.pos, m.pos)) - len(sub(b.pos, m.pos)))[0] ?? null; }
     if (m.kind === 'foxtwo' && !m.target) m.target = cars.filter(c => ok(m, c) && cone(m.pos, m.dir, c, Math.cos(0.8)) && len(sub(c.pos, m.pos)) < 25).sort((a, b) => len(sub(a.pos, m.pos)) - len(sub(b.pos, m.pos)))[0] ?? null;
-    if (m.kind === 'foxone' && !m.target) m.target = cars.filter(c => ok(m, c) && cone(m.owner.pos, ownerFwd, c, Math.cos(0.45))).sort((a, b) => len(sub(a.pos, m.pos)) - len(sub(b.pos, m.pos)))[0] ?? null;
-    // Semi-active: only guided while the shooter keeps the target in its nose cone.
-    const guided = m.target && (m.kind !== 'foxone' || cone(m.owner.pos, ownerFwd, m.target, Math.cos(0.5)));
-    if (guided && sp.turn) {
-      const want = sub(m.target.pos, m.pos); want[1] = 0; const wl = len(want);
+    // Beam-rider: aim at a point on the shooter's beam a little ahead of the missile.
+    const beamAim = m.kind === 'foxone' ? (() => { const d = beamDir(m.owner), r = Math.max(1, dot(sub(m.pos, m.owner.pos), d)) + 2; return { pos: add(m.owner.pos, scale(d, r)) }; })() : null;
+    const aim = beamAim ?? m.target;
+    if (aim && sp.turn) {
+      const want = sub(aim.pos, m.pos); want[1] = 0; const wl = len(want);
       if (wl > 1e-3) {
         const cur = Math.atan2(m.dir[0], m.dir[2]), tgt = Math.atan2(want[0] / wl, want[2] / wl);
         const err = Math.atan2(Math.sin(tgt - cur), Math.cos(tgt - cur)), step = Math.max(-sp.turn * dt, Math.min(sp.turn * dt, err)), h = cur + step;
@@ -118,6 +118,13 @@ function stepMissiles(pk, cars, world, dt, immune, events, trailerHit) {
     m.life -= dt;
   }
   pk.missiles = pk.missiles.filter(m => m.life > 0);
+}
+
+// The Fox One radar beam: the car's heading swung by its steering (1.4× the wheel angle, so a
+// kid can sweep it wide).
+export function beamDir(car) {
+  const th = 2 * Math.atan2(car.q[1], car.q[3]) - (car.steer || 0) * 1.4;
+  return [-Math.sin(th), 0, -Math.cos(th)];
 }
 
 // Where the munitions trailer rides: half a metre behind the car.
