@@ -2,7 +2,7 @@
 
 Updated: 2026-10-21.
 Production: Build 390, revision `cd2efad06322a4dd8a35cb3d0c6c14ffa18a05e7`.
-Next candidate: Build 390, not deployed — Area 51½ HD look: a real desert HDRI sky (CC0 Poly Haven) for light, reflections and backdrop, rebalanced lighting, bloom, SMAA and a speed-reactive camera FOV, on by default (?gfx=classic opts out). Key-to-steer latency measured unchanged.
+Next candidate: Build 391, not deployed — Area 51½ HD look: a real desert HDRI sky (CC0 Poly Haven) for light, reflections and backdrop, rebalanced lighting, bloom, SMAA and a speed-reactive camera FOV, on by default (?gfx=classic opts out). Key-to-steer latency measured unchanged.
 Shipped 2026-10-22: Build 390 — Area 51½: free drive by default with a RACE ring (Forza Horizon style), a Forza-style driving line, Re-Volt skill shortcuts on every track (harder, faster, fall off onto the slow road), a third track (Little Nellie Elementary: slippery gym, cafeteria tables, the playground slide), challenge coins, aggressor callsigns, real CC0/CC-BY RC recordings, 3-2-1-GO, inflatable arches, car-following shadows, dust and skid marks.
 Shipped 2026-10-22: Build 389 — hotfix: guns-only.com/rc without a trailing slash now loads Area 51½ (the page pins <base href="/rc/">).
 Shipped 2026-10-21: Build 388 — Area 51½ gets its second track, the BX (a big-box base exchange from real Nellis BX photos), with a Liberty Loop / The BX selector.
