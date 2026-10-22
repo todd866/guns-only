@@ -10,6 +10,7 @@ import {courseFromGlb} from './physics/district.mjs';
 import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
 import {LIGHTING,isIndoor,applyLighting,followSun,clearcoat,studioEnvironment,createEffects,createRacingLine,setupPolish} from './visuals.js';
 import { SoundKit } from './audio.js';
+import {JET_KINDS,fitJetShell} from './jets.js';
 const audio=new SoundKit();
 const liveSolids=[...collisionSolids],hangarFallback=[],housingFallback=[],aircraftFallback=[];
 // ?track=<district> drives an exported Blender district.
@@ -108,7 +109,7 @@ if(new URLSearchParams(location.search).get('assets')!=='prototype'){
   const [buggy,hangar]=await Promise.all([loadBuggyAsset('./assets/buggy.glb'),track?null:loadHangarAsset('./assets/hangar-slice.glb')]);
   const base=artReview&&!track?await Promise.all([loadStaticAsset('./assets/aircraft.glb','Aircraft_Root'),loadStaticAsset('./assets/quarters.glb','Quarters_Root')]):null;
   // Commit the complete visual/collision set together; a failed load retains the prototype.
-  scene.remove(car);car=buggy.car;wheels=buggy.wheels;if(track)clearcoat(car);scene.add(car);
+  scene.remove(car);car=fitJetShell(buggy.car,'viper','#f28c28');wheels=buggy.wheels;if(track)clearcoat(car);scene.add(car);
   if(hangar){scene.add(hangar.hangar);
   const floor=hangar.hangar.getObjectByName('Floor');floor.material=material('#9ca59b').clone();floor.material.roughness=.68;
   for(const z of [-14,-2]){const lamp=new T.SpotLight(0xffd29a,110,22,1.1,.75,1.4);lamp.position.set(35,6,z);lamp.target.position.set(38,0,z+2);scene.add(lamp,lamp.target);}
@@ -159,11 +160,12 @@ function resize(){renderer.setSize(innerWidth,innerHeight,false);polish?.resize(
 // restLength−compression below its attach point.
 function poseCar(group,wheelSet,c){group.position.set(...c.pos);group.quaternion.set(...c.q);group.scale.setScalar(VISUAL_SCALE);
  wheelSet.forEach((w,i)=>{const ws=c.wheels[i];w.pivot.rotation.y=w.front?-c.steer:0;w.wheel.rotation.x=ws.spin;w.pivot.position.y=-(BUGGY.restLength-ws.compression)/VISUAL_SCALE;});}
+// Rivals are clones of the current buggy; on the Blender asset each wears its own jet shell (F-15, A-10, F-22, Su-27, F-16).
 // Rivals are tinted clones of whichever buggy is current (prototype, then the Blender asset).
 // Rivals wear aggressor-squadron colours (Nellis nod): ghost blue, desert tan, splinter grey, flanker blue, arctic white.
 const RIVAL_PAINT=['#5d7fa3','#c9a46c','#8c969c','#3f5f8a','#dfe6ea'];let rivalVis=[],rivalSource=null;
 function syncRivals(){if(rivalSource===car&&rivalVis.length===race.rivals.length)return;rivalVis.forEach(v=>scene.remove(v.group));rivalSource=car;
- rivalVis=race.rivals.map((_,i)=>{const group=car.clone(true);group.traverse(o=>{if(o.isMesh&&o.material?.color){const hsl={};o.material.color.getHSL(hsl);if(hsl.s>.35&&hsl.l>.3){o.material=o.material.clone();o.material.color.set(RIVAL_PAINT[i%5]);}}});scene.add(group);
+ rivalVis=race.rivals.map((_,i)=>{const group=car.clone(true);if(group.getObjectByName('JetShell')){fitJetShell(group,JET_KINDS[(i+1)%5],RIVAL_PAINT[i%5]);clearcoat(group);}else group.traverse(o=>{if(o.isMesh&&o.material?.color){const hsl={};o.material.color.getHSL(hsl);if(hsl.s>.35&&hsl.l>.3){o.material=o.material.clone();o.material.color.set(RIVAL_PAINT[i%5]);}}});scene.add(group);
   const named=['FL','FR','RL','RR'].map(n=>({pivot:group.getObjectByName('Steer_'+n),wheel:group.getObjectByName('Wheel_'+n),front:n[0]==='F'}));
   return {group,wheels:named.every(w=>w.pivot&&w.wheel)?named:[]};});}
 // Pickup presentation: gift crates, balloons, oil puddles, bubble shields.
