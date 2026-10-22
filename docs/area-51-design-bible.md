@@ -280,7 +280,7 @@ Done: an HDRI sky (Goegap, CC0). To do:
 - [ ] Relabel Free Drive as "this track" until the hub exists (≈ 0.5%)
 - [ ] Splash / Fox Two / Tally callouts (≈ 1%)
 
-- [ ] **Furball mode** (≈ 3%)
+- [x] **Furball mode** v1 on the current track (menu button, `?mode=furball`); next: a proper arena (Red Flag ramp, WIC PlayPlace)
 - [ ] Rework the fake-acronym jokes (owner: TDY/PCS/FOD versions need work)
 - [x] Escape menu, mute, calmer motor; Liberty Loop boost pads and kicker jumps (built)
 

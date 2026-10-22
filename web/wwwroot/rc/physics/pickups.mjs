@@ -46,15 +46,18 @@ function hit(pk, car) {
   return true;
 }
 
-// `immune`: kid mode's player — rival balloons pass by and slicks do not grab.
+// `immune`: kid mode's player (one car) or Furball's downed cars (a Set) — balloons pass by,
+// missiles ignore them and slicks do not grab.
+const immuneTest = immune => immune instanceof Set ? c => immune.has(c) : c => c === immune;
 export function stepPickups(pk, cars, world, dt, immune = null) {
+  const isImmune = immuneTest(immune);
   for (const e of pk.effects.values()) for (const k in e) e[k] = Math.max(0, e[k] - dt);
   for (const spot of pk.spots) {
     spot.ready = Math.max(0, spot.ready - dt);
     if (spot.ready > 0) continue;
     const car = cars.find(c => !pk.held.has(c) && len(sub(c.pos, spot.pos)) < GRAB);
     if (car) {
-      const item = ITEMS[Math.floor(pk.rng() * ITEMS.length)]; pk.held.set(car, item); spot.ready = RESPAWN;
+      const item = ITEMS[Math.floor(pk.rng() * ITEMS.length)]; pk.held.set(car, item); spot.ready = pk.respawn ?? RESPAWN;
       // Missiles sometimes come as a 3-pack; firing the last of a pack calls "Winchester".
       if (MISSILES.has(item) && pk.rng() < 0.35) pk.ammo.set(car, 3); else pk.ammo.delete(car);
     }
@@ -68,24 +71,24 @@ export function stepPickups(pk, cars, world, dt, immune = null) {
     b.vel[1] -= 9.81 * dt; const next = add(b.pos, scale(b.vel, dt)), d = sub(next, b.pos), dl = len(d);
     const wall = dl > 0 && world.raycast(b.pos, scale(d, 1 / dl), dl);
     if (trailerHit(b.owner, next)) { b.life = 0; continue; }
-    const target = cars.find(c => c !== b.owner && c !== immune && len(sub(c.pos, next)) < 0.35);
-    if (target) { if (hit(pk, target)) events.push({ type: 'splash', car: target }); b.life = 0; }
+    const target = cars.find(c => c !== b.owner && !isImmune(c) && len(sub(c.pos, next)) < 0.35);
+    if (target) { if (hit(pk, target)) events.push({ type: 'splash', car: target, by: b.owner }); b.life = 0; }
     else if (wall) { events.push({ type: 'splash', pos: wall.point }); b.life = 0; }
     b.pos = next; b.life -= dt;
   }
   pk.balloons = pk.balloons.filter(b => b.life > 0);
-  stepMissiles(pk, cars, world, dt, immune, events, trailerHit);
+  stepMissiles(pk, cars, world, dt, isImmune, events, trailerHit);
   for (const s of pk.slicks) {
     s.life -= dt;
-    for (const c of cars) if (c !== s.owner && c !== immune && len(sub(c.pos, s.pos)) < 0.55 && fx(pk, c).bubble <= 0) fx(pk, c).slick = 1.2;
+    for (const c of cars) if (c !== s.owner && !isImmune(c) && len(sub(c.pos, s.pos)) < 0.55 && fx(pk, c).bubble <= 0) fx(pk, c).slick = 1.2;
     if (s.life < 11) s.owner = null;   // after a second, the dropper can slide on it too
   }
   pk.slicks = pk.slicks.filter(s => s.life > 0);
   return events;
 }
 
-function stepMissiles(pk, cars, world, dt, immune, events, trailerHit) {
-  const ok = (m, c) => c !== m.owner && c !== immune;
+function stepMissiles(pk, cars, world, dt, isImmune, events, trailerHit) {
+  const ok = (m, c) => c !== m.owner && !isImmune(c);
   const cone = (from, dir, c, cos) => { const d = sub(c.pos, from), l = len(d); return l > 0.3 && dot(d, dir) / l > cos; };
   for (const m of pk.missiles) {
     const sp = SPEC[m.kind], ownerFwd = rotate(m.owner.q, [0, 0, -1]);
@@ -114,7 +117,7 @@ function stepMissiles(pk, cars, world, dt, immune, events, trailerHit) {
     // Hits: a dangled missile behind its owner blocks the shot; otherwise spin the car it reaches.
     if (trailerHit(m.owner, m.pos)) { m.life = 0; continue; }
     const victim = cars.find(c => ok(m, c) && len(sub(c.pos, m.pos)) < 0.4);
-    if (victim) { if (hit(pk, victim)) events.push({ type: 'boom', car: victim }); else events.push({ type: 'boom', pos: m.pos }); m.life = 0; continue; }
+    if (victim) { if (hit(pk, victim)) events.push({ type: 'boom', car: victim, by: m.owner }); else events.push({ type: 'boom', pos: m.pos }); m.life = 0; continue; }
     m.life -= dt;
   }
   pk.missiles = pk.missiles.filter(m => m.life > 0);
@@ -126,6 +129,9 @@ export function beamDir(car) {
   const th = 2 * Math.atan2(car.q[1], car.q[3]) - (car.steer || 0) * 1.4;
   return [-Math.sin(th), 0, -Math.cos(th)];
 }
+
+// Chaff for `seconds`: the next hit pops the shield instead (Furball's grace after losing a balloon).
+export function shield(pk, car, seconds) { const e = fx(pk, car); e.bubble = Math.max(e.bubble, seconds); }
 
 // Give a car a short Afterburner (boost pads).
 export function boostCar(pk, car, seconds) { const e = fx(pk, car); e.zoom = Math.max(e.zoom, seconds); }
