@@ -6,7 +6,9 @@ const path=require('node:path');const ROOT=path.resolve(__dirname,'../../web/www
 (async()=>{const srv=await require('./serve-static.cjs')(ROOT,PORT);let browser;
 try{await new Promise(r=>setTimeout(r,800));browser=await chromium.launch({headless:true,channel:'chromium',executablePath:process.env.CHROMIUM_PATH});
 const page=await browser.newPage({viewport:{width:1280,height:800}});const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
-const q=process.env.Q||'';await page.goto(`http://127.0.0.1:${PORT}/rc/${q}${q?'&':'?'}mode=race`);await page.waitForFunction(()=>['blender','failed'].includes(window.__gunsOnlyRC?.snapshot().assets),null,{timeout:30000});
+const q=process.env.Q||'';// Classic renderer for the bot: physics are identical, and the HD composer's GPU load delays CDP
+// round-trips enough to make this polling driver overshoot (players' key-to-steer is unaffected).
+await page.goto(`http://127.0.0.1:${PORT}/rc/${q}${q?'&':'?'}mode=race${q.includes('gfx=')?'':'&gfx=classic'}`);await page.waitForFunction(()=>['blender','failed'].includes(window.__gunsOnlyRC?.snapshot().assets),null,{timeout:30000});
 await page.locator('#start').click();const held=new Set();// Follow the racing line (AI nodes on districts, gates on the prototype) with a 3 m lookahead.
 const pts=await page.evaluate(()=>window.__gunsOnlyRC.line());let node=0;
 let st,shots=new Set(),t0=Date.now(),frames=[];

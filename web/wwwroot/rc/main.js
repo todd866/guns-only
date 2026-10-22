@@ -42,8 +42,9 @@ const pmrem=new T.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(stu
 if(track){applyLighting({renderer,hemi,sun,contactSun},isIndoor(track)?LIGHTING.indoor:LIGHTING.outdoor);scene.environment=studioEnvironment(renderer);scene.environmentIntensity=.6;scene.add(sun.target);}
 const fx=createEffects(scene);
 // Polished look (HDRI light, bloom, SMAA) on district tracks.
-// Opt-in while its input-latency cost is measured (?gfx=hd, ?gfx=ao adds screen-space AO).
-let polish=null;if(track&&['hd','ao'].includes(new URLSearchParams(location.search).get('gfx')))setupPolish({renderer,scene,camera,indoor:isIndoor(track)}).then(p=>{polish=p;polish.resize(innerWidth,innerHeight);
+// Default on district tracks (key-to-steer latency measured equal to classic, 7-13 ms); ?gfx=classic
+// keeps the old renderer, ?gfx=ao adds screen-space AO.
+let polish=null;if(track&&new URLSearchParams(location.search).get('gfx')!=='classic')setupPolish({renderer,scene,camera,indoor:isIndoor(track)}).then(p=>{polish=p;polish.resize(innerWidth,innerHeight);
  // The HDRI now carries the ambient light: drop the old hemisphere fill and rebalance exposure.
  hemi.intensity*=.35;sun.intensity*=.85;renderer.toneMappingExposure=.82;}).catch(e=>console.warn('polish off',e));
 const mats=new Map();function material(c,glow=false){const key=c+glow;if(!mats.has(key))mats.set(key,new T.MeshStandardMaterial({color:c,roughness:.8,...(glow?{emissive:c,emissiveIntensity:.8}:{})}));return mats.get(key);}
