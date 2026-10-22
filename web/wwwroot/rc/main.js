@@ -132,7 +132,7 @@ const rivalCount=Math.max(0,Math.min(5,Number(new URLSearchParams(location.searc
 const startRoam=new URLSearchParams(location.search).get('mode')!=='race';
 let race=createRace(course,{mode,opponents:rivalCount,roam:startRoam}),s=race.player,paused=true,keys=new Set(),acc=0,last=performance.now(),best=0;try{best=Number(localStorage.getItem('guns-only.rc.best'))||0;}catch{}
 const format=t=>`${Math.floor(t/60)}:${(t%60).toFixed(2).padStart(5,'0')}`;
-function pause(value){paused=value;if(!value)audio.start();keys.clear();$('pause').textContent=paused?'Resume · Esc':'Pause · Esc';}
+function pause(value){paused=value;if(!value)audio.start();keys.clear();$('pause').textContent=paused?'Resume · Esc':'Knock it off · Esc';}
 let lastThrottle=0;
 $('start').onclick=()=>{audio.start();$('brief').hidden=true;pause(false);if(!race.roam)startCountdown();canvas.focus();};$('pause').onclick=()=>pause(!paused);$('reset').onclick=()=>recover(s);
 function setMode(m){mode=race.mode=s.mode=s.assist.mode=m;s.autoUnstick=m==='kid';$('mode').textContent=m==='kid'?'Kid · B':'Big Kid · B';try{localStorage.setItem('guns-only.rc.mode',m);}catch{}}
@@ -165,7 +165,8 @@ function drawPickups(now){const pk=race.pickups;
  pk.balloons.forEach((b,i)=>fxMesh('b'+i,()=>new T.Mesh(new T.SphereGeometry(.07,12,8),balloonMat)).position.set(...b.pos));
  pk.slicks.forEach((o,i)=>{const m=fxMesh('o'+i,()=>{const d=new T.Mesh(new T.CircleGeometry(.5,20),oilMat);d.rotation.x=-Math.PI/2;return d;});m.position.set(o.pos[0],o.pos[1]-.12,o.pos[2]);});
  [race.player.car,...race.rivals.map(r=>r.session.car)].forEach((c,i)=>{if(modifiers(pk,c).shielded)fxMesh('s'+i,()=>new T.Mesh(new T.SphereGeometry(.34,20,14),bubbleMat)).position.set(...c.pos);});
- const held=pk.held.get(s.car);$('item').textContent=held?`${ICON[held]} · F`:'';$('item').hidden=!held;}
+ // Brevity codes: an empty pickup slot reads WINCHESTER once you have fired something.
+ const held=pk.held.get(s.car);if(held)drawPickups.used=true;$('item').textContent=held?`${ICON[held]} · F`:'Winchester';$('item').hidden=!held&&!drawPickups.used;}
 // Kid mode driving line (Forza-style): green go, yellow hold, red brake. B (Big Kid) hides it.
 const drivingLine=createRacingLine(scene,race.line,course.world);
 // Skill shortcuts get their own (narrower) line, so you can see the hard way through.
