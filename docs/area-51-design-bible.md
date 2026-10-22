@@ -121,6 +121,22 @@ races (BX, School) stay as separate scenes entered through their doors.
 | 15 | Splash Down | waterpark | circuit | ≈ 400 m | slides, splash pads, lazy river |
 | 13 | Dreamland Night | Area 51½ | circuit (night) | ≈ 500 m | unlocked last |
 
+## 3b. Furball (battle mode, Mario Kart style)
+
+Owner, 2026-10-22. "Furball" is real slang for a chaotic multi-ship dogfight.
+- **Arena:** an open zone, not a lap: the Red Flag ramp, the WIC PlayPlace skatepark, the BX car
+  park (for now: free-drive areas of the existing tracks). Crates everywhere, 3 s respawn.
+- **Lives:** each car carries 3 kill-mark balloons; any weapon hit pops one. At zero you are shot
+  down: spectate, or come back as a ghost that can only drop Hydraulic Leak.
+- **Win:** last car flying, or most pops in 3 minutes (timed variant).
+- **Kid mode:** rivals DO target the kid here (being hunted is the mode), so to balance it the kid
+  gets 5 balloons to their 3, rivals have a longer fire cooldown, and each pop gives 2 s of Chaff
+  invulnerability. The race rule (nothing targets the kid) is unchanged.
+- **AI:** no item → nearest crate; armed → chase the nearest car and fire on rivalWants; flee
+  briefly after being popped.
+- **Callouts:** FURBALL! (start), SPLASH ONE (you pop someone), LAST MAN STANDING (two left).
+- **Cost:** about 2–3% of a week; reuses weapons, pickups, free drive and auto-unstick.
+
 ## 4. Weapons and pickups
 
 | Pickup | Brevity code | Behaviour | Status |
@@ -256,6 +272,8 @@ Done: an HDRI sky (Goegap, CC0). To do:
 - [ ] Relabel Free Drive as "this track" until the hub exists (≈ 0.5%)
 - [ ] Splash / Fox Two / Tally callouts (≈ 1%)
 
+- [ ] **Furball mode** (≈ 3%)
+- [ ] Rework the fake-acronym jokes (owner: TDY/PCS/FOD versions need work)
 - [x] Escape menu, mute, calmer motor; Liberty Loop boost pads and kicker jumps (built)
 
 **After the reset (27 Oct)**
