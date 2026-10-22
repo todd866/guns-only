@@ -52,11 +52,8 @@ test("one catalog names every route and exposes only accepted production experie
 
   assert.deepEqual(productionExperiences().map(({ id }) => id), [
     "first-merge",
-    "rapier-intercept",
     "cobra-lab",
     "area-51",
-    "top-gun",
-    "okanagan-fireboss",
   ]);
   const sequences = EXPERIENCE_CATALOG.map((entry) => entry.sequence);
   assert.equal(new Set(sequences).size, sequences.length,

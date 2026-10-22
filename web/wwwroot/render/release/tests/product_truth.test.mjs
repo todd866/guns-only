@@ -173,11 +173,8 @@ test("the evergreen status matrix covers the executable experience catalog", asy
   }
   assert.deepEqual(productionExperiences().map(({ id }) => id), [
     "first-merge",
-    "rapier-intercept",
     "cobra-lab",
     "area-51",
-    "top-gun",
-    "okanagan-fireboss",
   ]);
   assert.equal(EXPERIENCE_CATALOG.some(({ releaseState }) =>
     releaseState === EXPERIENCE_RELEASE_STATE.QUARANTINED), true);
