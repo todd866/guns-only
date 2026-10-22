@@ -26,8 +26,8 @@ const NEVER_CACHE = [
 // cached FULL bundle answers a Range request perfectly well. A successfully admitted terrain page
 // costs one extra background fetch rather than requiring a range-aware cache layer.
 const TERRAIN_BUNDLE = /\.terrain(\?|$)/;
-// Area 51½ district models are several MB; on a slow link the 8 s body deadline would abort them.
-const LARGE_ASSET = /\.glb$/;
+// Area 51½ district models and the HDRI sky are several MB; on a slow link the 8 s body deadline would abort them.
+const LARGE_ASSET = /\.(glb|hdr)$/;
 const MAX_RUNTIME_PRIME_URLS = 768;
 // A failed whole-page prime must not restart for every small Range request. Five minutes is long
 // enough to prevent a streaming sortie from repeatedly downloading the same multi-megabyte page,
