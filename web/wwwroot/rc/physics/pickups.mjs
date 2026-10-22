@@ -59,7 +59,7 @@ export function stepPickups(pk, cars, world, dt, immune = null) {
     if (car) {
       const item = ITEMS[Math.floor(pk.rng() * ITEMS.length)]; pk.held.set(car, item); spot.ready = pk.respawn ?? RESPAWN;
       // Missiles sometimes come as a 3-pack; firing the last of a pack calls "Winchester".
-      if (MISSILES.has(item) && pk.rng() < 0.35) pk.ammo.set(car, 3); else pk.ammo.delete(car);
+      if (MISSILES.has(item) && pk.rng() < 0.2) pk.ammo.set(car, 3); else pk.ammo.delete(car);
     }
   }
   const events = pk.announce.splice(0);

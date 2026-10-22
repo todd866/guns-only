@@ -1,13 +1,14 @@
 // Furball: the Mario Kart battle mode, in fighter-pilot slang for a many-ship dogfight.
 // Every car carries kill-mark balloons; any weapon hit pops one, and a car with none left is
 // shot down. Last car flying wins, or the most balloons when the clock runs out.
-// Kid mode: rivals DO hunt the kid here (being hunted is the game), so the kid carries more
-// balloons, rivals wait before firing a fresh pickup, and every pop gives a moment of Chaff.
+// Kid mode: rivals DO hunt the kid here (being hunted is the game); rivals hold a fresh pickup
+// for a beat before firing, and every pop gives a moment of Chaff.
 import { readout } from './session.mjs';
 import { sub, len } from './math.mjs';
 import { shield } from './pickups.mjs';
 
-export const FURBALL = { seconds: 180, balloons: { kid: [5, 3], bigKid: [3, 3] }, kidFireDelay: 2.5, chaff: 2, respawn: 2.5 };
+// Kid mode used to give the kid 5 balloons and rivals a 2.5 s hold: the owner won instantly.
+export const FURBALL = { seconds: 180, balloons: { kid: [3, 3], bigKid: [3, 3] }, kidFireDelay: 1, chaff: 2, respawn: 2.5 };
 
 export function createFurball(race) {
   const [mine, theirs] = FURBALL.balloons[race.mode] ?? FURBALL.balloons.bigKid;

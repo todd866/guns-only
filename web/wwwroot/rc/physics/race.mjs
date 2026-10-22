@@ -102,15 +102,25 @@ export function driveInput(race, rival) {
   }
   vmax *= 1 - Math.min(0.6, Math.abs(err));
   if (race.roam) vmax *= 0.75;   // free drive: rivals cruise round as traffic
-  else if (race.mode === 'kid') {
-    // Rubber band: ease off once ahead of the player and all but wait two gates up the road;
-    // push a little when behind. Nobody disappears over the horizon on a six-year-old.
-    const gap = progress(s) - progress(race.player);
-    vmax *= gap > 2 ? 0 : gap > 0 ? Math.max(0.1, 1 - gap * 0.45) : Math.min(1.15, 1 - gap * 0.08);
-  }
+  else if (s !== race.player) vmax *= packFactor(race, rival);
   const steer = Math.max(-1, Math.min(1, err * 2.2));
   if (vmax < 0.5 || retreatActive(race)) return { throttle: 0, brake: true, steer };
   return { throttle: r.forwardSpeed < vmax ? 1 : r.forwardSpeed > vmax + 1.5 ? -0.6 : 0.2, steer };
+}
+
+// Pack racing (owner, 2026-10-22: "you need to have people driving around you ... in any mode").
+// Each rival holds a slot near the player (just ahead, alongside, just behind) in lap progress:
+// ahead of its slot it eases off, behind it pushes, so the race happens around you, never over
+// the horizon and never parked. Kid mode: over the last third of the lap, rivals level with or
+// ahead of the kid ease off further, so a kid who keeps driving wins most of the time ("it's no
+// fun if I just instantly win": the pack is still there until the end). Big Kid gives nothing.
+export const PACK = { slots: [0.35, 0, -0.35], ease: 0.35, push: 0.25, floor: 0.45, ceiling: 1.3, kidLate: 0.66, kidGive: 0.7, boostBehind: 1, boostEvery: 2.5 };
+export function packFactor(race, rival) {
+  const n = race.course.checkpoints.length, me = progress(race.player), gap = progress(rival.session) - me;
+  const d = gap - PACK.slots[rival.colour % PACK.slots.length];
+  let k = d > 0 ? Math.max(PACK.floor, 1 - d * PACK.ease) : Math.min(PACK.ceiling, 1 - d * PACK.push);
+  if (race.mode === 'kid' && me / n > PACK.kidLate && gap > -0.25) k = Math.min(k, PACK.kidGive);
+  return k;
 }
 
 // Effects (zoom, oil, a balloon spin) ride on the step input; a spinning car's controls are dead.
@@ -147,11 +157,25 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
     if ((!fb || mayFire(race, rival)) && rivalWants(pk, rival.session.car, targets)) use(pk, rival.session.car);
     const input = fb ? furballInput(race, rival, () => driveInput(race, rival)) : driveInput(race, rival);
     stepSession(rival.session, withEffects(race, rival.session.car, input), dt);
+    // A rival that clips a steerpoint (airborne over it, or wide) is credited once it is clearly on
+    // its way to the next one; otherwise it races on beside you scored as gates behind and never
+    // finishes. Rivals only: the player's gates stay strict.
+    { const rs = rival.session, cps = race.course.checkpoints, g = rs.gate;
+      if (!rs.roam && !rs.finished && g + 1 < cps.length) {
+        const a = cps[g], b = cps[g + 1], seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (Math.hypot(b[0] - rs.car.pos[0], b[1] - rs.car.pos[2]) < seg * 0.5) rs.gate++;
+      } }
     // A rival on its roof gets the same R a kid would press.
     if (rotate(rival.session.car.q, [0, 1, 0])[1] < 0.2 && rival.session.car.speed < 0.5) { rival.stuck = (rival.stuck || 0) + dt; if (rival.stuck > 1.5) { rival.stuck = 0; recover(rival.session); } }
   }
   for (const s of [race.player, ...race.rivals.map(r => r.session)])
     if (s.finished && !race.finishOrder.includes(s)) race.finishOrder.push(s);
+  // Pack catch-up: a rival more than a gate behind the player lights a short Afterburner every
+  // few seconds (visible flames, Mario Kart style), so a fast kid still has company.
+  if (!race.roam && !fb) for (const rival of race.rivals) {
+    rival.boostIn = (rival.boostIn ?? 0) - dt;
+    if (rival.boostIn <= 0 && !rival.session.finished && progress(rival.session) - progress(race.player) < -PACK.boostBehind) { boostCar(pk, rival.session.car, 0.9); rival.boostIn = PACK.boostEvery; }
+  }
   // Boost pads: a short Afterburner for whoever crosses one (rivals too).
   if (race.features) for (const c of cars) if (padHit(race.features, c)) boostCar(pk, c, 0.9);
   bump(cars);
