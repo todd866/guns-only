@@ -4,13 +4,14 @@
 // player; in Big Kid they just drive.
 import { createSession, stepSession, readout, recover } from './session.mjs';
 import { add, sub, scale, dot, len, rotate } from './math.mjs';
-import { createPickups, stepPickups, modifiers, use, rivalWants, MISSILES } from './pickups.mjs';
+import { createPickups, stepPickups, modifiers, use, rivalWants, MISSILES, boostCar } from './pickups.mjs';
+import { padHit } from './features.mjs';
 
 export const SKILL = { cruise: 0.78, ace: 0.95 };
 // Aggressor-squadron callsigns, one per rival paint scheme (ghost, desert, splinter, flanker, arctic).
 export const CALLSIGNS = ['GHOST', 'SANDY', 'SPLINTER', 'FLANKER', 'FROSTY'];
 
-export function createRace(course, { mode = 'kid', opponents = 3, roam = false } = {}) {
+export function createRace(course, { mode = 'kid', opponents = 3, roam = false, features = null } = {}) {
   const grid = course.grid ?? gridBehind(course.start, opponents + 1);
   // The player starts at the back, as in Re-Volt: the chase camera sees the car, and there
   // are rivals to overtake from the first second.
@@ -23,7 +24,7 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false }
   // Retreat: once a race the bugle sounds and every rival stops for the flag. The player can
   // stand to attention too, or keep driving (nobody tells the kid off).
   if (roam) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
-  return { course, mode, roam, player, rivals, line, alts: altRoutes(course, line), pickups: createPickups(course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: 18, length: 5 } };
+  return { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: 18, length: 5 } };
 }
 
 // Racing line: AI nodes if authored, else the lap gates.
@@ -140,6 +141,8 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   }
   for (const s of [race.player, ...race.rivals.map(r => r.session)])
     if (s.finished && !race.finishOrder.includes(s)) race.finishOrder.push(s);
+  // Boost pads: a short Afterburner for whoever crosses one (rivals too).
+  if (race.features) for (const c of cars) if (padHit(race.features, c)) boostCar(pk, c, 0.9);
   bump(cars);
   race.events.push(...stepPickups(pk, cars, race.course.world, dt, race.mode === 'kid' ? race.player.car : null));
 }

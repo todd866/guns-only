@@ -127,6 +127,9 @@ export function beamDir(car) {
   return [-Math.sin(th), 0, -Math.cos(th)];
 }
 
+// Give a car a short Afterburner (boost pads).
+export function boostCar(pk, car, seconds) { const e = fx(pk, car); e.zoom = Math.max(e.zoom, seconds); }
+
 // Where the munitions trailer rides: half a metre behind the car.
 export const dangleSpot = car => add(car.pos, scale(rotate(car.q, [0, 0, -1]), -0.5));
 
