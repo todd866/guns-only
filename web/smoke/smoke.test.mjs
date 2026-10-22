@@ -492,7 +492,9 @@ test("iPhone selecting Top Gun and returning from Settings cannot scroll Ready s
     const page = await context.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}?menu=1&audioQa=silent`, {
+    // Top Gun left the picker on 2026-10-22 (menu is F-22, Cobra and RC); its deep link still
+    // selects it on the Ready card, which is the layout this test guards.
+    await page.goto(`${site.url}?menu=1&program=top-gun&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(30000),
     });
@@ -513,7 +515,6 @@ test("iPhone selecting Top Gun and returning from Settings cannot scroll Ready s
       // minimum patience for tick/frame-driven waits.
       { timeout: scaled(20000) },
     );
-    await page.locator('[data-program-node="top-gun"]').click();
     await page.waitForFunction(() => {
       const topGun = document.querySelector('[data-program-node="top-gun"]');
       const start = document.querySelector("#ready-start");

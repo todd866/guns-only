@@ -2988,6 +2988,13 @@ const initialProgramSelection = resolveInitialProgramSelection({
   defaultProgramNode,
 });
 const initialProgramNode = initialProgramSelection.selectedProgramNode;
+// The picker lists only some production modes (owner, 2026-10-22: F-22, Cobra and RC). A deep link
+// to an unlisted production mode (?program=top-gun) shows that one option, so the selection sits
+// visibly in the rail instead of as an invisible pressed button. Previews stay hidden.
+if (initialProgramNode && experienceLaunchable(initialProgramNode.id)) {
+  readyProgramButtons.find((button) => button.dataset.programNode === initialProgramNode.id)
+    ?.closest(".sortie-option")?.removeAttribute("hidden");
+}
 // A recognised preview/quarantined deep link remains represented in the Ready UI instead of
 // silently dismissing its release blocker. It is never the selected mission authority: the shell
 // keeps the recommended production mission selected/staged behind the disabled Ready action.
