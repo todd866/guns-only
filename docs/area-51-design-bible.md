@@ -280,9 +280,26 @@ Done: an HDRI sky (Goegap, CC0). To do:
 
 ## 7. To-do (prioritised; ≈ token cost as a share of a week's Claude budget)
 
-**Now (this week, about 15% left)**
-- [x] HD look (HDRI, bloom, SMAA): shipping as Build 391
-- [ ] Ship Build 392: missiles, trailer, Winchester, beam-rider, brevity labels, Saucer Springs, line fix (≈ 3%)
+**Next (27 Oct Claude reset or the next Codex reset; in this order)**
+1. [ ] **Split RC into its own deploy** (≈ 3–4%). Own Vercel project; guns-only.com/rc/ rewrites to it
+   so links stay. RC gate = its node tests + headless boot of each track and Furball + deploy
+   (≈ 5 min, vs ≈ 1 h through the full Guns Only pipeline: bin/check 13 min, CI smoke 22–29 min,
+   F-22 frame gate, route smoke). The main pipeline keeps its full strictness; do NOT make the
+   frame gate skip RC paths. Only the picker card stays in the main build.
+2. [ ] **Menu tidy** (≈ 2%). Guns Only picker: three plain cards (F-22, Cobra, RC), drop the
+   Military/Civilian tabs (Area 51½ is currently stranded alone under Civilian). RC brief:
+   "Drive" not "Take the transmitter"; Drive / Race / Furball / tracks / mute in one compact row;
+   joke labels (Tumbleweed, RTB, Knock it off) move to tooltips. Invoke instrument-ux first.
+3. [ ] **Difficulty: no instant wins** (≈ 1%). Owner: "it's no fun if I just instantly win."
+   Races: rubber band keeps it close both ways (no parking 2 gates up; rivals can win a sloppy
+   lap; still never target the kid). Furball: 3 balloons each, rival fire delay 2.5 s → 1 s,
+   rarer missile 3-packs; keep Chaff after each pop.
+
+**Done 2026-10-22**
+- [x] Build 394 live: HD look, jet shells, Furball (weather balloons, nose art), missiles, trailer,
+  Winchester, beam-rider, boost pads/kickers, Escape menu, mute; picker hides Rapier/Top Gun/Fire Boss
+  (deep links kept). 391 never cleared the frame gate on a busy Mac; 392 rolled back on the Top Gun
+  deep link.
 - [ ] Relabel Free Drive as "this track" until the hub exists (≈ 0.5%)
 - [ ] Splash / Fox Two / Tally callouts (≈ 1%)
 
