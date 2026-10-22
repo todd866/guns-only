@@ -103,10 +103,11 @@ export function driveInput(race, rival) {
   vmax *= 1 - Math.min(0.6, Math.abs(err));
   if (race.roam) vmax *= 0.75;   // free drive: rivals cruise round as traffic
   else if (race.mode === 'kid') {
-    // Rubber band: ease off once ahead of the player and all but wait two gates up the road;
-    // push a little when behind. Nobody disappears over the horizon on a six-year-old.
+    // Rubber band that keeps it close without rigging it (owner, 2026-10-22: "it's no fun if I
+    // just instantly win"): ahead, ease off but keep racing, so a sloppy lap can still lose;
+    // behind, push. Nobody parks up the road and nobody disappears over the horizon.
     const gap = progress(s) - progress(race.player);
-    vmax *= gap > 2 ? 0 : gap > 0 ? Math.max(0.1, 1 - gap * 0.45) : Math.min(1.15, 1 - gap * 0.08);
+    vmax *= gap > 2 ? 0.55 : gap > 0 ? Math.max(0.7, 1 - gap * 0.15) : Math.min(1.2, 1 - gap * 0.12);
   }
   const steer = Math.max(-1, Math.min(1, err * 2.2));
   if (vmax < 0.5 || retreatActive(race)) return { throttle: 0, brake: true, steer };

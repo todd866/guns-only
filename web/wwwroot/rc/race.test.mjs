@@ -12,15 +12,18 @@ test('AI rivals lap the base route on the physics car', () => {
   assert.ok(Math.min(...times) > 15 && Math.max(...times) < 70, `times ${times.map(t => t.toFixed(1))}`);
 });
 
-test('kid mode: rivals wait for a slow player instead of vanishing', () => {
-  const race = createRace(course, { mode: 'kid', opponents: 3 });
-  // A dawdling six-year-old: crawls the route at walking pace via the same controller as a rival.
-  let maxLead = 0;
-  for (let i = 0; i < 120 * 40; i++) {
-    stepRace(race, i % 240 < 120 ? { throttle: 0.35 } : {});
-    maxLead = Math.max(maxLead, ...race.rivals.map(r => progress(r.session) - progress(race.player)));
-  }
-  assert.ok(maxLead < 3.5, `rivals ran ${maxLead.toFixed(2)} gates ahead`);
+test('kid mode: rivals ease off ahead but still race to the flag (no instant wins)', () => {
+  // A dawdling player crawls the route; in kid mode rivals slow down when well ahead instead of
+  // parking up the road, so the dawdler still loses, just not by a whole lap of daylight.
+  const finish = mode => {
+    const race = createRace(course, { mode, opponents: 3 });
+    for (let i = 0; i < 120 * 120 && !race.rivals.some(r => r.session.finished); i++) stepRace(race, i % 240 < 120 ? { throttle: 0.35 } : {});
+    const done = race.rivals.filter(r => r.session.finished);
+    assert.ok(done.length > 0, `${mode}: no rival finished; rivals parked`);
+    return Math.min(...done.map(r => r.session.time));
+  };
+  const kid = finish('kid'), big = finish('bigKid');
+  assert.ok(kid > big * 1.15, `kid-mode leader ${kid.toFixed(1)} s should trail Big Kid ${big.toFixed(1)} s`);
 });
 
 test('cars bump apart and do not overlap', () => {

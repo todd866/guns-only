@@ -24,7 +24,7 @@ test('a hit pops a balloon and gives Chaff; the last balloon shoots the car down
   assert.ok(end.some(e => e.type === 'furball-over'));
 });
 
-test('kid Furball: the kid carries more balloons and rivals may target the kid', () => {
+test('kid Furball: even balloons (no instant wins) and rivals may target the kid', () => {
   const race = createRace(course, { mode: 'kid', opponents: 3, furball: true });
   assert.equal(race.furball.lives.get(race.player.car), FURBALL.balloons.kid[0]);
   assert.equal(race.furball.lives.get(race.rivals[0].session.car), FURBALL.balloons.kid[1]);
