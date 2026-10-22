@@ -1,6 +1,6 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
 import { baseCourse } from './sim.mjs';
-import { createRace, stepRace, progress, bump, placeOf } from './physics/race.mjs';
+import { createRace, stepRace, progress, bump, placeOf, driveInput } from './physics/race.mjs';
 import { createCar } from './physics/car.mjs';
 
 const course = baseCourse();
@@ -12,18 +12,31 @@ test('AI rivals lap the base route on the physics car', () => {
   assert.ok(Math.min(...times) > 15 && Math.max(...times) < 70, `times ${times.map(t => t.toFixed(1))}`);
 });
 
-test('kid mode: rivals ease off ahead but still race to the flag (no instant wins)', () => {
-  // A dawdling player crawls the route; in kid mode rivals slow down when well ahead instead of
-  // parking up the road, so the dawdler still loses, just not by a whole lap of daylight.
-  const finish = mode => {
-    const race = createRace(course, { mode, opponents: 3 });
-    for (let i = 0; i < 120 * 120 && !race.rivals.some(r => r.session.finished); i++) stepRace(race, i % 240 < 120 ? { throttle: 0.35 } : {});
-    const done = race.rivals.filter(r => r.session.finished);
-    assert.ok(done.length > 0, `${mode}: no rival finished; rivals parked`);
-    return Math.min(...done.map(r => r.session.time));
-  };
-  const kid = finish('kid'), big = finish('bigKid');
-  assert.ok(kid > big * 1.15, `kid-mode leader ${kid.toFixed(1)} s should trail Big Kid ${big.toFixed(1)} s`);
+// A scripted player: the rivals' own controller driving the player's car at a given skill.
+function runRace(mode, skill) {
+  const race = createRace(course, { mode, opponents: 3 }), bot = { session: race.player, skill, node: 0, colour: 0 };
+  let gaps = 0, samples = 0;
+  for (let i = 0; i < 120 * 150 && !race.player.finished; i++) {
+    stepRace(race, driveInput(race, bot));
+    if (i % 60 === 0) { for (const r of race.rivals) gaps += Math.abs(progress(r.session) - progress(race.player)); samples += race.rivals.length; }
+  }
+  return { place: placeOf(race, race.player), finished: race.player.finished, meanGap: gaps / samples };
+}
+
+test('every mode races as a pack: rivals stay around the player all lap', () => {
+  for (const mode of ['kid', 'bigKid']) for (const skill of [0.7, 0.9]) {
+    const r = runRace(mode, skill);
+    assert.ok(r.finished, `${mode}/${skill}: player bot did not finish`);
+    assert.ok(r.meanGap < 1.2, `${mode}/${skill}: rivals averaged ${r.meanGap.toFixed(2)} gates away`);
+  }
+});
+
+test('kid mode: a kid who keeps driving wins most of the time; Big Kid gives nothing', () => {
+  const skills = [0.6, 0.7, 0.8, 0.9];
+  const wins = mode => skills.filter(k => runRace(mode, k).place === 1).length;
+  const kid = wins('kid'), big = wins('bigKid');
+  assert.ok(kid >= 3, `kid mode won ${kid}/4`);
+  assert.ok(big < kid, `Big Kid won ${big}/4, kid ${kid}/4`);
 });
 
 test('cars bump apart and do not overlap', () => {
