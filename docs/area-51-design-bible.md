@@ -121,6 +121,14 @@ races (BX, School) stay as separate scenes entered through their doors.
 | 15 | Splash Down | waterpark | circuit | ≈ 400 m | slides, splash pads, lazy river |
 | 13 | Dreamland Night | Area 51½ | circuit (night) | ≈ 500 m | unlocked last |
 
+## 3a. Cars are toy jets
+
+Owner, 2026-10-22: the cars are real RC buggies (chassis, shocks, knobbly tyres, the antenna)
+wearing snap-on toy jet shells that resemble real jets. Shipped first pass (`rc/jets.js`):
+player F-16 Viper; rivals F-15 Eagle, A-10 Warthog, F-22 Raptor, Su-27 Flanker. Next: Blender
+shells per type, a garage to pick your shell, tribe liveries (Viper Punks, Mudhen Mafia, Prop Gang).
+Meme pages to mine: also **Mandatory Fun Day** (owner, 2026-10-22).
+
 ## 3b. Furball (battle mode, Mario Kart style)
 
 Owner, 2026-10-22. "Furball" is real slang for a chaotic multi-ship dogfight.
