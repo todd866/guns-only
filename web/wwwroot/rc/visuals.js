@@ -191,3 +191,32 @@ export function createRacingLine(scene, line, world, { width = 0.5, step = 0.5, 
     },
   };
 }
+
+// "Proper game" lighting pass: a real HDRI sky for image-based light and reflections (CC0, Poly
+// Haven "Goegap", assets/env), ground-truth ambient occlusion, a touch of bloom, SMAA. Outdoor
+// tracks also show the HDRI as the sky. ?gfx=classic turns all of it off for comparison.
+import { RGBELoader } from '../vendor/three/addons/loaders/RGBELoader.js';
+import { EffectComposer } from '../vendor/three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from '../vendor/three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from '../vendor/three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from '../vendor/three/addons/postprocessing/SMAAPass.js';
+
+export async function setupPolish({ renderer, scene, camera, indoor }) {
+  const hdr = await new RGBELoader().loadAsync('./assets/env/goegap_1k.hdr');
+  hdr.mapping = T.EquirectangularReflectionMapping;
+  const pmrem = new T.PMREMGenerator(renderer), env = pmrem.fromEquirectangular(hdr).texture; pmrem.dispose();
+  scene.environment = env; scene.environmentIntensity = indoor ? 0.55 : 0.9;
+  if (!indoor) { scene.background = hdr; scene.backgroundIntensity = 1.0; scene.backgroundBlurriness = 0.02; }
+  const w = innerWidth, h = innerHeight, composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  // Real-time GTAO measured too expensive (page main thread blocked 150 ms–1.3 s per frame on the
+  // M5); districts already carry baked AO in COLOR_0, so screen-space AO is opt-in (?gfx=ao).
+  const ao = new URLSearchParams(location.search).get('gfx') === 'ao' ? new GTAOPass(scene, camera, w / 2, h / 2) : null;
+  if (ao) { ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.2, samples: 8 }); composer.addPass(ao); }
+  composer.addPass(new UnrealBloomPass(new T.Vector2(w, h), 0.22, 0.45, 0.92));
+  composer.addPass(new OutputPass());
+  composer.addPass(new SMAAPass(w * renderer.getPixelRatio(), h * renderer.getPixelRatio()));
+  return { render: () => composer.render(), resize: (W, H) => { composer.setSize(W, H); ao?.setSize(W / 2, H / 2); } };
+}
