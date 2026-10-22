@@ -60,6 +60,31 @@ list. Direction history lives in `area-51-and-a-half.md`; engine and pipeline no
 | **Waterpark** ✎ | by the base pool | Lazy river, splash pads, slides you can drive down, shallow water that slows and sprays | **Splash Down** (slides as jumps, water as slow zones) |
 | **Area 51½ (secret)** ✎ | behind an inner fence toward the weapons storage area | Bunker doors, lab, friendly aliens in tubes, a saucer under a tarp | Unlocks after every specimen is found; **night race** |
 
+## 2a. Meme-page humour (from the owner's follows, 2026-10-22)
+
+Sources: the bios and captions of 12 USAF meme pages (airforce_intel_memes, mudhen_memes,
+blind_nordo_memes, remotelypilotedmemes, memelord_usaf, tankertoad87, hercmemes, wso_union_memes,
+viper_punk_memes, guardreserve_mafia, fighter_pilots_of_amc, plus amc_memery).
+
+- **House style: a fake meaning for a real acronym.** "AMC = Alcoholics Moving Cargo",
+  "ACC = Air Checkride Command". Kid-safe versions for our UI: TDY = "Temporary Duty Yeehaw",
+  PCS = "Pretty Cool Speedsters", FOD = "Found Our Doughnuts".
+- **"Toad" names:** Tanker Toad, Load Toad. Use it for things like "Ramp Toads" (the rival crew).
+- **TDY is a staple** ("Ready for the next TDY ✈️"), which backs the TDY Racing frontrunner.
+- **Type tribes:** Mudhen (F-15E), Viper (F-16), Herc ("Prop Gang"), Tankers, WSOs, Guard/Reserve.
+  These become rival team names and liveries: Prop Gang, Viper Punks, Mudhen Mafia, Tanker Toads.
+- **Office life** for parents: "a meeting that could've been an email", the "non-mandatory
+  mandatory Friday pizza party", "Big Blue", vibes-based shot doc, Thirsty Thursday.
+  - In-game: the **Non-Mandatory Mandatory Fun Run** (a race), and a pause-menu tip "This pause
+    could have been an email".
+- **WIC (Weapons School):** the meme calls it "a McDonald's PlayPlace from hell", which makes a
+  perfect name for the skatepark: **The WIC PlayPlace**.
+- **Brevity and comms:** "Two's Blind", "Nordo", "lost link" (drones), "Hotel Tango".
+  - Callouts: "TWO'S BLIND" when you lose sight of the leader; "LOST LINK" when an Afterburner
+    runs out.
+- Avoid: the drinking and crude jokes (Jeremiah Weed, "ur moms"), politics and named people.
+  The game stays kid-safe; parents get the in-jokes.
+
 ## 2b. Inspiration (how to borrow without copying)
 
 - **Classic N64 Mario Kart:** borrow track *archetypes*, never copy layouts. Examples: a figure-8
