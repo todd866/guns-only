@@ -2,7 +2,7 @@ import * as T from '../vendor/three.module.js';
 import {buildings,solids,aircraft,obstacles,collisionSolids,ramps,checkpoints,baseCourse} from './sim.mjs';
 import {recover,readout} from './physics/session.mjs';
 import {createRace,stepRace,placeOf,retreatActive} from './physics/race.mjs';
-import {modifiers} from './physics/pickups.mjs';
+import {modifiers,MISSILES,dangleSpot} from './physics/pickups.mjs';
 import {VISUAL_SCALE,BUGGY} from './physics/car.mjs';
 import {addBox} from './physics/world.mjs';
 import {courseFromGlb} from './physics/district.mjs';
@@ -155,24 +155,39 @@ function syncRivals(){if(rivalSource===car&&rivalVis.length===race.rivals.length
   const named=['FL','FR','RL','RR'].map(n=>({pivot:group.getObjectByName('Steer_'+n),wheel:group.getObjectByName('Wheel_'+n),front:n[0]==='F'}));
   return {group,wheels:named.every(w=>w.pivot&&w.wheel)?named:[]};});}
 // Pickup presentation: gift crates, balloons, oil puddles, bubble shields.
-let fireQueued=false;const ICON={zoom:'🔥 Afterburner',balloon:'💧 Water balloon',oil:'🛢 Hydraulic leak',bubble:'✨ Chaff'};
+let fireQueued=false;const ICON={zoom:'🔥 Afterburner',balloon:'💧 Water balloon',oil:'🛢 Hydraulic leak',bubble:'✨ Chaff',foxtwo:'🎯 Fox Two',pitbull:'🐶 Pitbull',foxone:'📡 Fox One',zuni:'🚀 Zuni'};
 const crates=race.pickups.spots.map(sp=>{const g=new T.Group();g.position.set(...sp.pos);box(0,0,0,.22,.22,.22,'#ff5aa5',g);box(0,0,0,.235,.05,.235,'#ffe066',g);box(0,0,0,.05,.235,.235,'#ffe066',g);scene.add(g);return g;});
 const fxPool=new Map();function fxMesh(key,make){if(!fxPool.has(key)){const m=make();scene.add(m);fxPool.set(key,m);}const m=fxPool.get(key);m.visible=true;return m;}
+function trailerMesh(){const g=new T.Group(),y=new T.MeshStandardMaterial({color:'#f2c230',roughness:.6}),blk=new T.MeshStandardMaterial({color:'#1d2225',roughness:.8});
+ const bed=new T.Mesh(new T.BoxGeometry(.2,.035,.3),y);bed.position.y=.06;g.add(bed);const bar=new T.Mesh(new T.BoxGeometry(.02,.02,.22),y);bar.position.set(0,.06,-.24);g.add(bar);
+ for(const x of [-.12,.12]){const w=new T.Mesh(new T.CylinderGeometry(.045,.045,.03,12),blk);w.rotation.z=Math.PI/2;w.position.set(x,.045,0);g.add(w);}
+ g.userData.rockets=[-.06,0,.06].map(x=>{const r=missileMesh();r.scale.setScalar(.85);r.position.set(x,.1,0);g.add(r);return r;});g.traverse(o=>{if(o.isMesh)o.castShadow=true;});return g;}
+function missileMesh(){const g=new T.Group(),body=new T.Mesh(new T.CylinderGeometry(.035,.035,.26,10),new T.MeshStandardMaterial({color:'#f4f4f0',roughness:.5}));body.rotation.x=Math.PI/2;g.add(body);
+ const nose=new T.Mesh(new T.ConeGeometry(.035,.08,10),new T.MeshStandardMaterial({color:'#e8352e',roughness:.4}));nose.rotation.x=Math.PI/2;nose.position.z=.17;g.add(nose);
+ for(const r of [0,Math.PI/2]){const fin=new T.Mesh(new T.BoxGeometry(.12,.005,.05),new T.MeshStandardMaterial({color:'#e8352e'}));fin.rotation.z=r;fin.position.z=-.11;g.add(fin);}g.traverse(o=>{o.castShadow=true;});return g;}
 const balloonMat=new T.MeshStandardMaterial({color:'#4fc3ff',roughness:.2}),oilMat=new T.MeshStandardMaterial({color:'#1b1b22',roughness:.05,metalness:.6}),bubbleMat=new T.MeshPhysicalMaterial({color:'#bfefff',transparent:true,opacity:.28,roughness:0,depthWrite:false});
 function drawPickups(now){const pk=race.pickups;
  crates.forEach((g,i)=>{const sp=pk.spots[i];g.visible=sp.ready<=0;g.rotation.y=now*.002+i;g.position.y=sp.pos[1]+Math.sin(now*.003+i)*.04;});
  for(const m of fxPool.values())m.visible=false;
+ // Foam toy missiles: white body, red nose, a puff of smoke behind; the dangled one hangs off the bumper.
+ const drawMissile=(key,pos,dir)=>{const m=fxMesh(key,missileMesh);m.position.set(...pos);m.rotation.set(0,Math.atan2(dir[0],dir[2]),0);};
+ pk.missiles.forEach((m,i)=>{drawMissile('m'+i,m.pos,m.dir);if(!paused)fx.puff(m.pos);});
+ // Munitions trailer ("jammer"): a yellow cart behind any car carrying missiles, one rocket per round.
+ [...(pk.dangle??[])].forEach((c,i)=>{const yaw=2*Math.atan2(c.q[1],c.q[3]),t=fxMesh('t'+i,trailerMesh),sp=dangleSpot(c);t.position.set(sp[0],sp[1]-.08,sp[2]);t.rotation.set(0,yaw,0);
+  const n=pk.ammo.get(c)??1;t.userData.rockets.forEach((r,k)=>r.visible=k<n);});
  pk.balloons.forEach((b,i)=>fxMesh('b'+i,()=>new T.Mesh(new T.SphereGeometry(.07,12,8),balloonMat)).position.set(...b.pos));
  pk.slicks.forEach((o,i)=>{const m=fxMesh('o'+i,()=>{const d=new T.Mesh(new T.CircleGeometry(.5,20),oilMat);d.rotation.x=-Math.PI/2;return d;});m.position.set(o.pos[0],o.pos[1]-.12,o.pos[2]);});
  [race.player.car,...race.rivals.map(r=>r.session.car)].forEach((c,i)=>{if(modifiers(pk,c).shielded)fxMesh('s'+i,()=>new T.Mesh(new T.SphereGeometry(.34,20,14),bubbleMat)).position.set(...c.pos);});
  // Brevity codes: an empty pickup slot reads WINCHESTER once you have fired something.
- const held=pk.held.get(s.car);if(held)drawPickups.used=true;$('item').textContent=held?`${ICON[held]} · F`:'Winchester';$('item').hidden=!held&&!drawPickups.used;}
+ const held=pk.held.get(s.car);if(held)drawPickups.used=true;const ammo=pk.ammo.get(s.car);$('item').textContent=held?`${ICON[held]}${ammo>1?' ×'+ammo:''} · F`:'Winchester';$('item').hidden=!held&&!drawPickups.used;}
 // Kid mode driving line (Forza-style): green go, yellow hold, red brake. B (Big Kid) hides it.
 const drivingLine=createRacingLine(scene,race.line,course.world);
 // Skill shortcuts get their own (narrower) line, so you can see the hard way through.
 const altLines=(course.alts??[]).map(a=>createRacingLine(scene,a.nodes,course.world,{closed:false,width:.34}));
 function drawLine(now){const show=mode==='kid'&&!s.finished&&!race.roam;drivingLine.mesh.visible=show;if(show)drivingLine.update(s.car.pos,s.car.speed,now/1000);for(const l of altLines){l.mesh.visible=show;if(show)l.update(s.car.pos,s.car.speed,now/1000);}}
 const place=()=>placeOf(race,s);
+// Radio-style callouts (brevity codes) flash in the banner slot for a moment.
+let calloutTimer=0;function callout(text){const b=$('banner');b.textContent='📻 '+text;b.hidden=false;b.dataset.callout='1';clearTimeout(calloutTimer);calloutTimer=setTimeout(()=>{delete b.dataset.callout;b.textContent='🎺 RETREAT · everyone stops for the flag';},1600);}
 // The RACE ring sits on the start line during free drive; driving into it lines everyone up.
 const ringPos=course.gates?.[0]?.pos??[cps[0][0],0,cps[0][1]],ringFwd=course.gates?.[0]?.forward??[0,0,-1];
 const raceRing=new T.Group();raceRing.position.set(ringPos[0],ringPos[1],ringPos[2]);raceRing.rotation.y=Math.atan2(-ringFwd[0],-ringFwd[2]);
@@ -226,7 +241,7 @@ const frameMs=[];function frame(now){const dt=Math.min((now-last)/1000,.1);frame
  const r=readout(s),c=s.car,p=BUGGY;
  contactSun.position.set(r.x-4,r.y+(artReview&&Math.abs(r.x-38)<9&&Math.abs(r.z+8)<11?4:8),r.z-5);contactSun.target.position.set(r.x,r.y,r.z);
  audio.update({speed:r.speed,throttle:lastThrottle,slip:c.wheels.filter(w=>w.slip).length/4,surface:c.wheels.find(w=>w.surface)?.surface,paused:paused||countdown>0});if(track)followSun(sun,car.position);
- if(!paused){for(const cc of [c,...race.rivals.map(rv=>rv.session.car)])fx.carFeedback(cc,dt);for(const e of race.events.splice(0))if(e.type==='splash'){fx.splash(e.car?.pos??e.pos);audio.splash();}}fx.update(dt);
+ if(!paused){for(const cc of [c,...race.rivals.map(rv=>rv.session.car)])fx.carFeedback(cc,dt);for(const e of race.events.splice(0))if(e.type==='splash'){fx.splash(e.car?.pos??e.pos);audio.splash();}else if(e.type==='boom'){fx.boom(e.car?.pos??e.pos);audio.impact(5);}else if(e.type==='winchester'&&e.car===s.car){callout('WINCHESTER');audio.radio();}}fx.update(dt);
  poseCar(car,wheels,c);syncRivals();race.rivals.forEach((rv,i)=>poseCar(rivalVis[i].group,rivalVis[i].wheels,rv.session.car));
  // Low chase camera behind the heading; pulled in front of any wall between it and the car.
  const back=1.05+r.speed*.03,eye=[r.x,r.y+.12,r.z];desired.set(r.x-Math.sin(r.yaw)*back,r.y+.42,r.z+Math.cos(r.yaw)*back);
@@ -234,8 +249,8 @@ const frameMs=[];function frame(now){const dt=Math.min((now-last)/1000,.1);frame
  if(hit){const k=Math.max(.15,hit.dist-.12)/dist;desired.set(eye[0]+ray[0]*k,eye[1]+ray[1]*k,eye[2]+ray[2]*k);}
  camera.fov+=((63+Math.min(14,r.speed*1.1))-camera.fov)*Math.min(1,dt*3);camera.updateProjectionMatrix();camera.position.lerp(desired,1-Math.exp(-dt*7));target.set(r.x+Math.sin(r.yaw)*.8,r.y+.15,r.z-Math.cos(r.yaw)*.8);camera.lookAt(target);
  gates.forEach((g,i)=>{const next=i===(s.gate===cps.length-1?0:s.gate);g.userData.arch.material=next?archLit:archMat;g.userData.label.visible=next;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
- $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);drawPickups(now);drawLine(now);drawRoam(now);drawCoins(now);drawTags();$('gate').textContent=race.roam?'FREE DRIVE · drive into the RACE ring':`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${Math.min(s.gate+1,cps.length)}/${cps.length} · ${/^GATE_/.test(cps[s.gate][2])?(s.gate===cps.length-1?'Finish':`Steerpoint ${s.gate+1}`):cps[s.gate][2]}`;$('banner').hidden=!retreatActive(race);$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();polish?polish.render():renderer.render(scene,camera);
+ $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(s.time);drawPickups(now);drawLine(now);drawRoam(now);drawCoins(now);drawTags();$('gate').textContent=race.roam?'FREE DRIVE · drive into the RACE ring':`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${Math.min(s.gate+1,cps.length)}/${cps.length} · ${/^GATE_/.test(cps[s.gate][2])?(s.gate===cps.length-1?'Finish':`Steerpoint ${s.gate+1}`):cps[s.gate][2]}`;if(!$('banner').dataset.callout)$('banner').hidden=!retreatActive(race);$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();polish?polish.render():renderer.render(scene,camera);
  if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>${race.rivals.length?['Sierra Hotel! You won!','Second place. Good hustle, Airman!','Third place. On the podium!','Fourth place. Next sortie!','Fifth place. Next sortie!','Sixth place. Next sortie!'][place()-1]:'Lap complete!'}</h1><p>${race.rivals.length?standings()+'<br>':''}${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/${course.secrets.length}${course.coins?.length?` · Coins ${banked.size}/${course.coins.length}`:''}</p><button id="again">Run again</button> <button id="explore">Free drive</button>`;pause(true);$("again").onclick=()=>{s=(race=createRace(course,{mode,opponents:rivalCount})).player;reported=false;Object.assign(sfx,{gate:0,coins:0,held:false,air:0,retreat:false,finished:false});startCountdown();result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;goRoam();pause(false);};}
  requestAnimationFrame(frame);}
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
-window.__gunsOnlyRC={frames:()=>{const a=[...frameMs].sort((x,y)=>x-y);return {p50:a[a.length>>1],p95:a[Math.floor(a.length*.95)],max:a.at(-1)};},audio:()=>Object.keys(audio.samples||{}),line:()=>race.line.map(p=>[p[0],p[1]]),snapshot:()=>({...readout(s),time:s.time,gate:s.gate,running:s.running,finished:s.finished,hits:s.hits,found:s.found,seen:[...s.seen],travel:s.travel,recoveries:s.recoveries,mode,paused,assets:assetState,item:race.pickups.held.get(s.car)??null,place:place()}),renderer:()=>renderer.info.render,checkpoints:()=>cps.map(c=>[c[0],c[1]])};requestAnimationFrame(frame);
+window.__gunsOnlyRC={give:(item,n)=>{race.pickups.held.set(s.car,item);if(n)race.pickups.ammo.set(s.car,n);},frames:()=>{const a=[...frameMs].sort((x,y)=>x-y);return {p50:a[a.length>>1],p95:a[Math.floor(a.length*.95)],max:a.at(-1)};},audio:()=>Object.keys(audio.samples||{}),line:()=>race.line.map(p=>[p[0],p[1]]),snapshot:()=>({...readout(s),time:s.time,gate:s.gate,running:s.running,finished:s.finished,hits:s.hits,found:s.found,seen:[...s.seen],travel:s.travel,recoveries:s.recoveries,mode,paused,assets:assetState,item:race.pickups.held.get(s.car)??null,place:place()}),renderer:()=>renderer.info.render,checkpoints:()=>cps.map(c=>[c[0],c[1]])};requestAnimationFrame(frame);

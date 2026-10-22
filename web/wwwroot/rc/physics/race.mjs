@@ -4,7 +4,7 @@
 // player; in Big Kid they just drive.
 import { createSession, stepSession, readout, recover } from './session.mjs';
 import { add, sub, scale, dot, len, rotate } from './math.mjs';
-import { createPickups, stepPickups, modifiers, use, rivalWants } from './pickups.mjs';
+import { createPickups, stepPickups, modifiers, use, rivalWants, MISSILES } from './pickups.mjs';
 
 export const SKILL = { cruise: 0.78, ace: 0.95 };
 // Aggressor-squadron callsigns, one per rival paint scheme (ghost, desert, splinter, flanker, arctic).
@@ -119,6 +119,8 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   if (race.player.running) race.clock += dt;
   race.t += dt;
   if (playerInput.fire) use(pk, race.player.car);
+  // Race order for the Pitbull (blue shell): leader first. Free drive has no order.
+  pk.order = race.roam ? null : [race.player, ...race.rivals.map(r => r.session)].sort((a, b) => placeOf(race, a) - placeOf(race, b)).map(s => s.car);
   stepSession(race.player, withEffects(race, race.player.car, playerInput), dt);
   for (const rival of race.rivals) {
     // After any recovery the rival is back at a gate: drop a half-driven skill route and resume the

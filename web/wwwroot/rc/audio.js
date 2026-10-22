@@ -109,6 +109,7 @@ export class SoundKit {
   fire() { this.burst({ type: 'bandpass', freq: 1200, sweep: 300, dur: 0.18, level: 0.25 }); }
   splash() { this.burst({ type: 'highpass', freq: 1500, sweep: 600, dur: 0.35, level: 0.35 }); }
   boost() { this.burst({ type: 'bandpass', freq: 400, sweep: 2400, dur: 0.6, level: 0.3 }); }
+  radio() { this.burst({ type: 'bandpass', freq: 1800, dur: 0.08, level: 0.2 }); [740, 988].forEach((f, i) => this.tone(f, 0.05 + i * 0.09, 0.08, { type: 'square', level: 0.06 })); this.burst({ type: 'bandpass', freq: 1800, dur: 0.1, level: 0.15 }); }
   beep(go = false) { this.tone(go ? 880 : 440, 0, go ? 0.45 : 0.2, { type: 'square', level: 0.08 }); }
   // Retreat: a short bugle figure (original, on the bugle's natural notes).
   bugle() { [[392, 0.35], [523, 0.35], [659, 0.5], [523, 0.3], [784, 0.9]].reduce((at, [f, d]) => (this.tone(f, at, d, { type: 'triangle', level: 0.12 }), at + d * 0.9), 0); }
