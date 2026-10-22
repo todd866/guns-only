@@ -13,7 +13,7 @@ export function createFurball(race) {
   const [mine, theirs] = FURBALL.balloons[race.mode] ?? FURBALL.balloons.bigKid;
   const lives = new Map([[race.player.car, mine], ...race.rivals.map(r => [r.session.car, theirs])]);
   race.pickups.respawn = FURBALL.respawn;
-  return { lives, pops: new Map(), out: new Set(), over: false, winner: null, left: FURBALL.seconds };
+  return { lives, pops: new Map(), kills: new Map(), out: new Set(), over: false, winner: null, left: FURBALL.seconds };
 }
 
 const sessions = race => [race.player, ...race.rivals.map(r => r.session)];
@@ -30,7 +30,8 @@ export function stepFurball(race, events, dt) {
     if (e.by) fb.pops.set(e.by, (fb.pops.get(e.by) ?? 0) + 1);
     if (n > 0) { shield(race.pickups, e.car, FURBALL.chaff); continue; }
     fb.out.add(e.car); race.pickups.held.delete(e.car); race.pickups.ammo.delete(e.car);
-    extra.push({ type: 'downed', car: e.car, by: e.by, left: flying(race).length });
+    if (e.by) fb.kills.set(e.by, (fb.kills.get(e.by) ?? 0) + 1);
+    extra.push({ type: 'downed', car: e.car, by: e.by, kills: e.by ? fb.kills.get(e.by) : 0, left: flying(race).length });
   }
   const alive = flying(race);
   if (alive.length <= 1 || fb.out.has(race.player.car) || fb.left <= 0) {

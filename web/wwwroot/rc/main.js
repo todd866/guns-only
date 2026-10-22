@@ -10,7 +10,7 @@ import {courseFromGlb} from './physics/district.mjs';
 import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
 import {LIGHTING,isIndoor,applyLighting,followSun,clearcoat,studioEnvironment,createEffects,createRacingLine,setupPolish} from './visuals.js';
 import { SoundKit } from './audio.js';
-import {JET_KINDS,fitJetShell} from './jets.js';
+import {JET_KINDS,fitJetShell,paintNoseArt,artTier,NOSE_ART} from './jets.js';
 const audio=new SoundKit();
 const liveSolids=[...collisionSolids],hangarFallback=[],housingFallback=[],aircraftFallback=[];
 // ?track=<district> drives an exported Blender district.
@@ -109,7 +109,7 @@ if(new URLSearchParams(location.search).get('assets')!=='prototype'){
   const [buggy,hangar]=await Promise.all([loadBuggyAsset('./assets/buggy.glb'),track?null:loadHangarAsset('./assets/hangar-slice.glb')]);
   const base=artReview&&!track?await Promise.all([loadStaticAsset('./assets/aircraft.glb','Aircraft_Root'),loadStaticAsset('./assets/quarters.glb','Quarters_Root')]):null;
   // Commit the complete visual/collision set together; a failed load retains the prototype.
-  scene.remove(car);car=fitJetShell(buggy.car,'viper','#f28c28');wheels=buggy.wheels;if(track)clearcoat(car);scene.add(car);
+  scene.remove(car);car=fitJetShell(buggy.car,'viper','#f28c28');paintNoseArt(car.getObjectByName('JetShell'),{tier:artTier(aceKills)});wheels=buggy.wheels;if(track)clearcoat(car);scene.add(car);
   if(hangar){scene.add(hangar.hangar);
   const floor=hangar.hangar.getObjectByName('Floor');floor.material=material('#9ca59b').clone();floor.material.roughness=.68;
   for(const z of [-14,-2]){const lamp=new T.SpotLight(0xffd29a,110,22,1.1,.75,1.4);lamp.position.set(35,6,z);lamp.target.position.set(38,0,z+2);scene.add(lamp,lamp.target);}
@@ -127,6 +127,8 @@ const gates=cps.slice(0,-1).map(([x,z,,half=2.5],i)=>{const g=new T.Group(),m=co
  const r=half+.15,arch=new T.Mesh(new T.TorusGeometry(r,.14,12,32,Math.PI),archMat);arch.scale.y=Math.min(1,1.6/r);arch.castShadow=true;g.add(arch);
  for(const dx of [-r,r]){const foot=new T.Mesh(new T.CylinderGeometry(.2,.24,.18,16),stripeMat);foot.position.set(dx,.09,0);g.add(foot);}
  g.userData.arch=arch;g.userData.label=sign(String(i+1).padStart(2,'0'),x,y+r*arch.scale.y+.35,z,1.1);return g;});
+// Lifetime Furball kills: they unlock nose art that is painted on the player's jet automatically.
+let aceKills=0;try{aceKills=Number(localStorage.getItem('guns-only.rc.kills'))||0;}catch{}
 let mode='kid';try{if(localStorage.getItem('guns-only.rc.mode')==='bigKid')mode='bigKid';}catch{}
 // ?rivals=0 for a solo time trial.
 const rivalCount=Math.max(0,Math.min(5,Number(new URLSearchParams(location.search).get('rivals')??3)));
@@ -165,7 +167,7 @@ function poseCar(group,wheelSet,c){group.position.set(...c.pos);group.quaternion
 // Rivals wear aggressor-squadron colours (Nellis nod): ghost blue, desert tan, splinter grey, flanker blue, arctic white.
 const RIVAL_PAINT=['#5d7fa3','#c9a46c','#8c969c','#3f5f8a','#dfe6ea'];let rivalVis=[],rivalSource=null;
 function syncRivals(){if(rivalSource===car&&rivalVis.length===race.rivals.length)return;rivalVis.forEach(v=>scene.remove(v.group));rivalSource=car;
- rivalVis=race.rivals.map((_,i)=>{const group=car.clone(true);if(group.getObjectByName('JetShell')){fitJetShell(group,JET_KINDS[(i+1)%5],RIVAL_PAINT[i%5]);clearcoat(group);}else group.traverse(o=>{if(o.isMesh&&o.material?.color){const hsl={};o.material.color.getHSL(hsl);if(hsl.s>.35&&hsl.l>.3){o.material=o.material.clone();o.material.color.set(RIVAL_PAINT[i%5]);}}});scene.add(group);
+ rivalVis=race.rivals.map((_,i)=>{const group=car.clone(true);if(group.getObjectByName('JetShell')){fitJetShell(group,JET_KINDS[(i+1)%5],RIVAL_PAINT[i%5]);clearcoat(group);paintNoseArt(group.getObjectByName('JetShell'),{});}else group.traverse(o=>{if(o.isMesh&&o.material?.color){const hsl={};o.material.color.getHSL(hsl);if(hsl.s>.35&&hsl.l>.3){o.material=o.material.clone();o.material.color.set(RIVAL_PAINT[i%5]);}}});scene.add(group);
   const named=['FL','FR','RL','RR'].map(n=>({pivot:group.getObjectByName('Steer_'+n),wheel:group.getObjectByName('Wheel_'+n),front:n[0]==='F'}));
   return {group,wheels:named.every(w=>w.pivot&&w.wheel)?named:[]};});}
 // Pickup presentation: gift crates, balloons, oil puddles, bubble shields.
@@ -222,18 +224,36 @@ scene.add(raceRing);const ringSign=sign('RACE ▸',ringPos[0],ringPos[1]+2.55,ri
 let roamArmedAt=30;
 function goRoam(){roamArmedAt=s.travel+30;race.roam=true;for(const x of [race.player,...race.rivals.map(r=>r.session)])x.roam=true;}
 // Furball: battle mode on this track. Balloons ride above every car; the kid gets extra ones.
-function goFurball(){race=createRace(course,{mode,opponents:Math.max(3,rivalCount),features:trackFeatures,furball:true});s=race.player;reported=false;Object.assign(sfx,{gate:0,coins:0,held:false,air:0,retreat:false,finished:false});startCountdown();callout('FURBALL!');}
+function goFurball(){race=createRace(course,{mode,opponents:Math.max(3,rivalCount),features:trackFeatures,furball:true});s=race.player;paintKillMarks();reported=false;Object.assign(sfx,{gate:0,coins:0,held:false,air:0,retreat:false,finished:false});startCountdown();callout('FURBALL!');}
 function furballOver(w){if(reported)return;reported=true;const fb=race.furball,result=$('result'),name=x=>x===s?'You':race.rivals.find(r=>r.session===x)?.callsign??'Nobody',down=fb.out.has(s.car);
  result.hidden=false;result.innerHTML=`<h1>${w===s?'Splash all bandits! Last jet flying!':down?`Shot down! ${name(w)} wins.`:`Knock it off! ${name(w)} wins.`}</h1><p>Pops ${fb.pops.get(s.car)??0} · Balloons left ${down?0:fb.lives.get(s.car)}</p><button id="again">Again</button> <button id="explore">Free drive</button>`;
  pause(true);$('again').onclick=()=>{result.hidden=true;goFurball();pause(false);};$('explore').onclick=()=>{result.hidden=true;race=createRace(course,{mode,opponents:rivalCount,roam:true,features:trackFeatures});s=race.player;goRoam();pause(false);};}
-const LIFE_COLOURS=['#ff4f6d','#ffd23f','#4fd1ff','#7cff6b','#c58bff'],lifeVis=new Map();
-function drawLives(now){const fb=race.furball,cs=[s.car,...race.rivals.map(r=>r.session.car)];
- for(const [c,g] of lifeVis)if(!fb||!cs.includes(c)){scene.remove(g);lifeVis.delete(c);}
+// Kill marks for this round go on every jet; lifetime unlocks only on the player's.
+function paintKillMarks(){const k=c=>race.furball?.kills.get(c)??0;paintNoseArt(car.getObjectByName('JetShell'),{tier:artTier(aceKills),marks:k(s.car)});race.rivals.forEach((rv,i)=>{if(rivalVis[i])paintNoseArt(rivalVis[i].group.getObjectByName('JetShell'),{marks:k(rv.session.car)});});}
+// Lives are weather balloons on long tethers, up over the rooftops, so you can see where
+// everyone is across the base. A popped one breaks free and sails off into the sky.
+const balloonVis=new Map(),floaters=[],tetherMat=new T.LineBasicMaterial({color:'#3a3f44',transparent:true,opacity:.6});
+function weatherBalloon(colour){const m=new T.Mesh(new T.SphereGeometry(.3,18,12),new T.MeshStandardMaterial({color:new T.Color(colour).lerp(new T.Color('#ffffff'),.55),roughness:.45}));m.scale.y=1.12;
+ const box=new T.Mesh(new T.BoxGeometry(.07,.09,.07),new T.MeshStandardMaterial({color:'#e8e2d0'}));box.position.y=-.55;m.add(box);return m;}
+function drawLives(now,dt){const fb=race.furball,cs=[s.car,...race.rivals.map(r=>r.session.car)];
+ for(const [c,v] of balloonVis)if(!fb||!cs.includes(c)){scene.remove(v.group);balloonVis.delete(c);}
  race.rivals.forEach((rv,i)=>{if(rivalVis[i])rivalVis[i].group.visible=!fb?.out.has(rv.session.car);});
+ for(const f of floaters){f.vel[1]+=dt*.6;f.mesh.position.x+=f.vel[0]*dt;f.mesh.position.y+=f.vel[1]*dt;f.mesh.position.z+=f.vel[2]*dt;f.life-=dt;f.mesh.scale.multiplyScalar(1+dt*.08);if(f.life<=0)scene.remove(f.mesh);}
+ for(let k=floaters.length-1;k>=0;k--)if(floaters[k].life<=0)floaters.splice(k,1);
  if(!fb)return;
- for(const c of cs){let g=lifeVis.get(c);if(!g){g=new T.Group();for(let j=0;j<5;j++){const b=new T.Mesh(new T.SphereGeometry(.045,12,8),new T.MeshStandardMaterial({color:LIFE_COLOURS[j],roughness:.35}));b.scale.y=1.2;g.add(b);}scene.add(g);lifeVis.set(c,g);}
-  const n=fb.out.has(c)?0:fb.lives.get(c);g.children.forEach((b,j)=>{b.visible=j<n;b.position.set((j-(n-1)/2)*.075,Math.sin(now*.003+j)*.015,0);});// The player's own bunch rides lower and smaller, under the chase camera's line of sight.
-  const mine=c===s.car;g.scale.setScalar(mine?.7:1);g.position.set(c.pos[0],c.pos[1]+(mine?.27:.45),c.pos[2]);g.quaternion.copy(camera.quaternion);}}
+ cs.forEach((c,ci)=>{let v=balloonVis.get(c);
+  if(!v){const group=new T.Group(),colour=ci?RIVAL_PAINT[(ci-1)%5]:'#f28c28',balls=[],lines=[];
+   for(let j=0;j<5;j++){const b=weatherBalloon(colour);group.add(b);balls.push(b);const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute([0,0,0,0,0,0],3));const l=new T.Line(g,tetherMat);l.frustumCulled=false;group.add(l);lines.push(l);}
+   scene.add(group);balloonVis.set(c,v={group,balls,lines,n:fb.lives.get(c)});}
+  const n=fb.out.has(c)?0:fb.lives.get(c);v.group.position.set(c.pos[0],c.pos[1],c.pos[2]);
+  // Your own bunch flies straight over the chase camera, out of sight; the HUD counts it, and a
+  // popped one still sails up past the screen.
+  v.group.visible=c!==s.car;
+  v.balls.forEach((b,j)=>{const a=j*1.26+now*.0004,h=3+j*.38;b.position.set(Math.cos(a)*.45+Math.sin(now*.0011+j)*.12,h,Math.sin(a)*.45);b.visible=j<n;
+   const p=v.lines[j].geometry.attributes.position;p.setXYZ(0,0,.25,0);p.setXYZ(1,b.position.x,h-.62,b.position.z);p.needsUpdate=true;v.lines[j].visible=j<n;});
+  // Popped: the top balloon(s) cut loose and drift up and away.
+  for(let j=n;j<v.n;j++){const m=weatherBalloon(ci?RIVAL_PAINT[(ci-1)%5]:'#f28c28');m.position.copy(v.balls[j].position).add(v.group.position);scene.add(m);floaters.push({mesh:m,vel:[(Math.random()-.5)*.8,1.4,(Math.random()-.5)*.8],life:6});}
+  v.n=n;});}
 function startRace(){race=createRace(course,{mode,opponents:rivalCount,features:trackFeatures});s=race.player;reported=false;Object.assign(sfx,{gate:0,coins:0,held:false,air:0,retreat:false,finished:false});startCountdown();}
 function drawRoam(now){const roam=race.roam;raceRing.visible=roam;ringSign.visible=roam;ringSign.quaternion.copy(camera.quaternion);raceRing.children[0].rotation.z=now*.0015;
  gates.forEach(g=>{g.visible=!roam&&!race.furball;});
@@ -280,7 +300,7 @@ const frameMs=[];function frame(now){const dt=Math.min((now-last)/1000,.1);frame
  const r=readout(s),c=s.car,p=BUGGY;
  contactSun.position.set(r.x-4,r.y+(artReview&&Math.abs(r.x-38)<9&&Math.abs(r.z+8)<11?4:8),r.z-5);contactSun.target.position.set(r.x,r.y,r.z);
  audio.update({speed:r.speed,throttle:lastThrottle,slip:c.wheels.filter(w=>w.slip).length/4,surface:c.wheels.find(w=>w.surface)?.surface,paused:paused||countdown>0});if(track)followSun(sun,car.position);
- if(!paused){for(const cc of [c,...race.rivals.map(rv=>rv.session.car)])fx.carFeedback(cc,dt);for(const e of race.events.splice(0))if(e.type==='splash'){fx.splash(e.car?.pos??e.pos);audio.splash();}else if(e.type==='boom'){fx.boom(e.car?.pos??e.pos);audio.impact(5);}else if(e.type==='winchester'&&e.car===s.car){callout('WINCHESTER');audio.radio();}else if(e.type==='downed'){fx.boom(e.car.pos);const msg=e.by===s.car?'SPLASH ONE':e.left===2&&!race.furball.out.has(s.car)?'LAST MAN STANDING':null;if(msg){callout(msg);audio.radio();}}else if(e.type==='furball-over')furballOver(e.winner);}fx.update(dt);
+ if(!paused){for(const cc of [c,...race.rivals.map(rv=>rv.session.car)])fx.carFeedback(cc,dt);for(const e of race.events.splice(0))if(e.type==='splash'){fx.splash(e.car?.pos??e.pos);audio.splash();}else if(e.type==='boom'){fx.boom(e.car?.pos??e.pos);audio.impact(5);}else if(e.type==='winchester'&&e.car===s.car){callout('WINCHESTER');audio.radio();}else if(e.type==='downed'){fx.boom(e.car.pos);let msg=e.by===s.car?'SPLASH ONE':e.left===2&&!race.furball.out.has(s.car)?'LAST MAN STANDING':null;if(e.by===s.car){const was=artTier(aceKills);aceKills++;try{localStorage.setItem('guns-only.rc.kills',aceKills);}catch{}if(artTier(aceKills)>was)msg+=` · NOSE ART: ${NOSE_ART[was].name}`;}paintKillMarks();if(msg){callout(msg);audio.radio();}}else if(e.type==='furball-over')furballOver(e.winner);}fx.update(dt);
  poseCar(car,wheels,c);syncRivals();race.rivals.forEach((rv,i)=>poseCar(rivalVis[i].group,rivalVis[i].wheels,rv.session.car));
  // Low chase camera behind the heading; pulled in front of any wall between it and the car.
  const back=1.05+r.speed*.03,eye=[r.x,r.y+.12,r.z];desired.set(r.x-Math.sin(r.yaw)*back,r.y+.42,r.z+Math.cos(r.yaw)*back);
@@ -288,7 +308,7 @@ const frameMs=[];function frame(now){const dt=Math.min((now-last)/1000,.1);frame
  if(hit){const k=Math.max(.15,hit.dist-.12)/dist;desired.set(eye[0]+ray[0]*k,eye[1]+ray[1]*k,eye[2]+ray[2]*k);}
  camera.fov+=((63+Math.min(14,r.speed*1.1))-camera.fov)*Math.min(1,dt*3);camera.updateProjectionMatrix();camera.position.lerp(desired,1-Math.exp(-dt*7));target.set(r.x+Math.sin(r.yaw)*.8,r.y+.15,r.z-Math.cos(r.yaw)*.8);camera.lookAt(target);
  gates.forEach((g,i)=>{const next=i===(s.gate===cps.length-1?0:s.gate);g.userData.arch.material=next?archLit:archMat;g.userData.label.visible=next&&!race.furball;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
- $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(race.furball?race.furball.left:s.time);drawLives(now);drawPickups(now);drawLine(now);drawRoam(now);drawCoins(now);drawTags();$('gate').textContent=race.furball?`FURBALL · 🎈${race.furball.out.has(s.car)?0:race.furball.lives.get(s.car)} · ${race.rivals.filter(r=>!race.furball.out.has(r.session.car)).length} bandits`:race.roam?'FREE DRIVE · drive into the RACE ring':`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${Math.min(s.gate+1,cps.length)}/${cps.length} · ${/^GATE_/.test(cps[s.gate][2])?(s.gate===cps.length-1?'Finish':`Steerpoint ${s.gate+1}`):cps[s.gate][2]}`;if(!$('banner').dataset.callout)$('banner').hidden=!retreatActive(race);$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();polish?polish.render():renderer.render(scene,camera);
+ $('speed').textContent=Math.round(r.speed*3.6);$('clock').textContent=format(race.furball?race.furball.left:s.time);drawLives(now,dt);drawPickups(now);drawLine(now);drawRoam(now);drawCoins(now);drawTags();$('gate').textContent=race.furball?`FURBALL · 🎈${race.furball.out.has(s.car)?0:race.furball.lives.get(s.car)} · ${race.rivals.filter(r=>!race.furball.out.has(r.session.car)).length} bandits`:race.roam?'FREE DRIVE · drive into the RACE ring':`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${Math.min(s.gate+1,cps.length)}/${cps.length} · ${/^GATE_/.test(cps[s.gate][2])?(s.gate===cps.length-1?'Finish':`Steerpoint ${s.gate+1}`):cps[s.gate][2]}`;if(!$('banner').dataset.callout)$('banner').hidden=!retreatActive(race);$('secret').textContent=`◇ ${s.found}/${course.secrets.length}`;drawMap();polish?polish.render():renderer.render(scene,camera);
  if(s.finished&&!reported){reported=true;if(!best||s.time<best){best=s.time;try{localStorage.setItem('guns-only.rc.best',best);}catch{}}const result=$('result');result.hidden=false;result.innerHTML=`<h1>${race.rivals.length?['Sierra Hotel! You won!','Second place. Good hustle, Airman!','Third place. On the podium!','Fourth place. Next sortie!','Fifth place. Next sortie!','Sixth place. Next sortie!'][place()-1]:'Lap complete!'}</h1><p>${race.rivals.length?standings()+'<br>':''}${format(s.time)} · Best ${format(best)} · Specimens ${s.found}/${course.secrets.length}${course.coins?.length?` · Coins ${banked.size}/${course.coins.length}`:''}</p><button id="again">Run again</button> <button id="explore">Free drive</button>`;pause(true);$("again").onclick=()=>{s=(race=createRace(course,{mode,opponents:rivalCount,features:trackFeatures})).player;reported=false;Object.assign(sfx,{gate:0,coins:0,held:false,air:0,retreat:false,finished:false});startCountdown();result.hidden=true;pause(false);};$('explore').onclick=()=>{result.hidden=true;goRoam();pause(false);};}
  requestAnimationFrame(frame);}
 // Read-only diagnostics for QA. Simulation tests use the same public step function.

@@ -16,6 +16,7 @@ test('a hit pops a balloon and gives Chaff; the last balloon shoots the car down
   const ev = stepFurball(race, [{ type: 'boom', car: a, by: me }, { type: 'boom', car: a, by: me }], 0.01);
   assert.ok(race.furball.out.has(a));
   assert.deepEqual(ev.map(e => e.type), ['downed']);
+  assert.equal(race.furball.kills.get(me), 1); assert.equal(ev[0].kills, 1);
   assert.equal(flying(race).length, 2);
   // Down the other rival: the player is the last jet flying.
   const end = stepFurball(race, [1, 2, 3].map(() => ({ type: 'splash', car: b, by: me })), 0.01);

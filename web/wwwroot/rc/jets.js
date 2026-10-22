@@ -83,7 +83,7 @@ const BUILD = {
 };
 
 export function makeJetShell(kind, color) {
-  const g = new T.Group(); g.name = 'JetShell'; const p = paintMat(color);
+  const g = new T.Group(); g.name = 'JetShell'; g.userData.kind = kind; const p = paintMat(color);
   (BUILD[kind] || BUILD.viper)(p, g);
   const plateMesh = new T.Mesh(new T.BoxGeometry(.4, .03, .82), dark()); plateMesh.position.set(0, .03, -.04); g.add(plateMesh);
   const aerial = new T.Mesh(new T.CylinderGeometry(.004, .004, .42, 6), dark()); aerial.position.set(.13, .38, .14); g.add(aerial);
@@ -96,4 +96,40 @@ export function fitJetShell(car, kind, color) {
   car.getObjectByName('JetShell')?.removeFromParent();
   for (const n of BUGGY_SHELL) { const o = car.getObjectByName(n); if (o) o.visible = false; }
   car.add(makeJetShell(kind, color)); return car;
+}
+
+// Nose art. Each type's main fuselage tube as [nose radius, tail radius, nose z, tail z, y]; the art
+// is a transparent sleeve over the whole tube, painted on a canvas that wraps the fuselage.
+// Canvas x runs round the fuselage (0 = spine, 0.25 = right side, 0.5 = belly, 0.75 = left side);
+// canvas top is the nose. The chase camera sees the spine, sides and tail, so the kill marks and
+// stripes live there; the shark mouth is for whoever you meet head-on.
+const NOSE = { viper: [.065, .085, -.42, .4, .2], eagle: [.06, .095, -.4, .4, .2], hog: [.075, .07, -.38, .38, .2], raptor: [.05, .095, -.4, .4, .2], flanker: [.05, .07, -.44, .2, .21] };
+// Unlocked by lifetime Furball kills and painted on automatically (owner, 2026-10-22).
+export const NOSE_ART = [{ kills: 1, name: 'SHARK MOUTH' }, { kills: 3, name: 'LIGHTNING BOLT' }, { kills: 6, name: 'CHECKERBOARD' }, { kills: 10, name: 'GOLD STARS' }];
+export const artTier = kills => NOSE_ART.filter(a => kills >= a.kills).length;
+
+function drawNose(tier, marks) {
+  const W = 512, H = 512, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d');
+  if (tier >= 3) for (let i = 0; i < 32; i++) for (let r = 0; r < 3; r++) { c.fillStyle = (i + r) % 2 ? '#111' : '#f4f4f4'; c.fillRect(i * W / 32, H - 48 + r * 16, W / 32, 16); }
+  if (tier >= 1) { // Flying Tigers shark mouth, cheek to cheek under the nose, with an eye above each end.
+    const x0 = W * .14, x1 = W * .86;
+    c.fillStyle = '#b3122a'; c.beginPath(); c.moveTo(x0, 24); c.quadraticCurveTo(W / 2, 230, x1, 24); c.quadraticCurveTo(W / 2, 110, x0, 24); c.fill();
+    c.fillStyle = '#fff'; for (let k = 0; k < 15; k++) { const t = (k + .5) / 15, x = x0 + (x1 - x0) * t, y = 24 + Math.sin(t * Math.PI) * 84; c.beginPath(); c.moveTo(x - 8, y - 2); c.lineTo(x + 8, y - 2); c.lineTo(x, y + 16); c.fill(); }
+    for (const u of [.17, .83]) { c.fillStyle = '#fff'; c.beginPath(); c.ellipse(W * u, 30, 20, 15, 0, 0, Math.PI * 2); c.fill(); c.fillStyle = '#111'; c.beginPath(); c.arc(W * u + (u < .5 ? 6 : -6), 33, 9, 0, Math.PI * 2); c.fill(); }
+  }
+  if (tier >= 2) { c.fillStyle = '#ffd400'; for (const u of [.25, .75]) { const x = W * u; c.beginPath(); c.moveTo(x - 10, 150); c.lineTo(x + 14, 150); c.lineTo(x + 2, 260); c.lineTo(x + 26, 260); c.lineTo(x - 18, 440); c.lineTo(x - 4, 300); c.lineTo(x - 26, 300); c.closePath(); c.fill(); } }
+  const star = (x, y, r, fill) => { c.fillStyle = fill; c.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? r * .45 : r; c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } c.fill(); };
+  for (let m = 0; m < Math.min(marks, 8); m++) for (const x of [W * .05, W * .95]) star(x, 200 + m * 30, 14, tier >= 4 ? '#ffc61a' : '#e8352e');
+  const tex = new T.CanvasTexture(cv); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = 4; return tex;
+}
+
+// Repaint a shell's nose art: `tier` from lifetime kills, `marks` = kills this round.
+export function paintNoseArt(shell, { tier = 0, marks = 0 } = {}) {
+  if (!shell) return; const key = tier + ':' + marks; if (shell.userData.art === key) return; shell.userData.art = key;
+  const old = shell.getObjectByName('NoseArt'); if (old) { old.material.map.dispose(); old.material.dispose(); old.geometry.dispose(); old.removeFromParent(); }
+  if (!tier && !marks) return;
+  const [r0, r1, z0, z1, y] = NOSE[shell.userData.kind] ?? NOSE.viper, len = z1 - z0;
+  const g = new T.CylinderGeometry(r0 * 1.04, r1 * 1.04, len, 24, 1, true); g.rotateX(-Math.PI / 2);
+  const m = new T.Mesh(g, new T.MeshStandardMaterial({ map: drawNose(tier, marks), transparent: true, roughness: .35, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false }));
+  m.name = 'NoseArt'; m.userData.noAO = true; m.position.set(0, y, z0 + len / 2); shell.add(m);
 }

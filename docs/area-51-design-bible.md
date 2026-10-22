@@ -143,6 +143,12 @@ Owner, 2026-10-22. "Furball" is real slang for a chaotic multi-ship dogfight.
 - **AI:** no item → nearest crate; armed → chase the nearest car and fire on rivalWants; flee
   briefly after being popped.
 - **Callouts:** FURBALL! (start), SPLASH ONE (you pop someone), LAST MAN STANDING (two left).
+- **Weather balloons** (owner, 2026-10-22): lives are weather balloons on 3–4.5 m tethers, tinted
+  in the car's paint, so you can see where everyone is over the rooftops; a popped one sails away.
+- **Nose art** (owner, 2026-10-22): each kill paints a star on the spine (every jet, this round);
+  lifetime player kills unlock art painted on automatically: 1 shark mouth, 3 lightning bolt,
+  6 checkerboard tail, 10 gold stars (`guns-only.rc.kills`). Next: more art (pin-up-free:
+  cartoon mascots, mission tallies, squadron tails), a garage to show it off front-on.
 - **Cost:** about 2–3% of a week; reuses weapons, pickups, free drive and auto-unstick.
 
 ## 4. Weapons and pickups
