@@ -56,7 +56,21 @@ list. Direction history lives in `area-51-and-a-half.md`; engine and pipeline no
 | **Bowling alley** ✎ | rec centre | Lanes as drag strips, pins to knock over | **Strike!** mini-game; lane drag |
 | **Baseball diamond** ★ | one of the 11 pitches | Dirt infield, dugouts, bleachers | **Round the Bases** sprint |
 | **Dirtbike track** ✎ | open desert inside the fence (SE) | Whoops, berms, tabletops, mud | **Whoops** race (Re-Volt style jumps) |
+| **Boneyard** ✎ | open desert inside the fence | Rows of retired jets (B-52s, F-4s, C-130s) under covers. **Kicker ramps launch you across their wings: a skill shortcut**, and falling off lands you on the desert road | **Wing Walker** (wing-hop ALT route) |
+| **Waterpark** ✎ | by the base pool | Lazy river, splash pads, slides you can drive down, shallow water that slows and sprays | **Splash Down** (slides as jumps, water as slow zones) |
 | **Area 51½ (secret)** ✎ | behind an inner fence toward the weapons storage area | Bunker doors, lab, friendly aliens in tubes, a saucer under a tarp | Unlocks after every specimen is found; **night race** |
+
+## 2b. Inspiration (how to borrow without copying)
+
+- **Classic N64 Mario Kart:** borrow track *archetypes*, never copy layouts. Examples: a figure-8
+  with an overpass, a beach with tide-pool shortcuts, a big-wheel/funfair circuit, a night
+  "rainbow" course. Rebuild each as a Saucer Springs place (a figure-8 through the hangar row; the
+  waterpark as the beach). Copying Nintendo layouts or names is out: they are protected, and
+  Nintendo enforces.
+- **Original Half-Life:** the *vibe* of the secret lab: a test chamber, a tram ride, hazard-stripe
+  science, something escaping a containment field, with "Area 51½" as a cheerful kid-safe take.
+  No Valve names, creatures or logos, and nothing scary or violent; the aliens are friendly.
+- **Pixar *Planes*:** the look of the real hardware (see Art rule).
 
 ## 3. Race catalogue (carved from the open world)
 
@@ -78,6 +92,8 @@ races (BX, School) stay as separate scenes entered through their doors.
 | 10 | Round the Bases | baseball | sprint | 110 m | slide into home |
 | 11 | Paper Route | housing | checkpoint run | ≈ 1.2 km | mailbox gates |
 | 12 | Grand Tour | whole base | point-to-point | ≈ 6 km | the FH5 showcase race |
+| 14 | Wing Walker | boneyard | circuit | ≈ 600 m | kicker jumps across parked wings |
+| 15 | Splash Down | waterpark | circuit | ≈ 400 m | slides, splash pads, lazy river |
 | 13 | Dreamland Night | Area 51½ | circuit (night) | ≈ 500 m | unlocked last |
 
 ## 4. Weapons and pickups
@@ -214,6 +230,8 @@ Done: an HDRI sky (Goegap, CC0). To do:
 - [ ] Ship Build 392: missiles, trailer, Winchester, beam-rider, brevity labels, Saucer Springs, line fix (≈ 3%)
 - [ ] Relabel Free Drive as "this track" until the hub exists (≈ 0.5%)
 - [ ] Splash / Fox Two / Tally callouts (≈ 1%)
+
+- [x] Escape menu, mute, calmer motor; Liberty Loop boost pads and kicker jumps (built)
 
 **After the reset (27 Oct)**
 1. [ ] **Hero buggy remodel** to the concept (≈ 8%)
