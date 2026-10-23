@@ -7,22 +7,39 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(path.join(ROOT, 'web/smoke/node_modules/playwright'));
 const serve = require('./serve-static.cjs');
 const [dist, live] = process.argv.slice(2);
-const srv = live ? null : await serve(path.resolve(dist), 8931);
-const base = live ?? 'http://127.0.0.1:8931';
+const srv = live ? null : await serve(path.resolve(dist), 0);
+const base = live ?? `http://127.0.0.1:${srv.address().port}`;
 let browser, failed = 0;
 const say = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failed++; };
 try {
   browser = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const ready = p => p.waitForFunction(() => window.__gunsOnlyRC?.snapshot().assets === 'blender' && !document.querySelector('#start').disabled, null, { timeout: 90000 });
+  // The hub is the shipped default: prove it boots as a connected world before
+  // exercising the individual race and furball entry points.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 800 } }), errors = [];
+    p.on('pageerror', e => errors.push(e.message));
+    p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+    try {
+      await p.goto(`${base}/rc/?audioQa=silent&gfx=classic&telemetry=off`); await ready(p);
+      const boot = await p.evaluate(() => window.__gunsOnlyRC.snapshot());
+      say(errors.length === 0 && boot.track === 'hub' && boot.world?.ready === true, `Default hub: ${boot.world?.event ?? 'unavailable'}${errors.length ? ' errors: ' + errors.join(' | ') : ''}`);
+      await p.locator('#start').click(); await p.keyboard.down('KeyW'); await p.waitForTimeout(1800); await p.keyboard.up('KeyW');
+      const moving = await p.evaluate(() => window.__gunsOnlyRC.snapshot());
+      say(Number.isFinite(moving.speed) && moving.speed > 0.1 && moving.travel > 0.1, `Default hub moving: ${Number(moving.travel).toFixed(2)}m at ${Number(moving.speed).toFixed(2)}m/s`);
+    } catch (e) { say(false, `Default hub: ${e.message.split('\n')[0]}`); } finally { await p.close(); }
+  }
   for (const [label, query, button] of [['Liberty Loop', 'track=housing', '#start'], ['The BX', 'track=bx', '#start'], ['The School', 'track=school', '#start'], ['Race', 'track=housing', '#menu-race'], ['Furball', 'track=housing', '#menu-furball']]) {
     const p = await browser.newPage({ viewport: { width: 1280, height: 800 } }), errors = [];
     p.on('pageerror', e => errors.push(e.message));
+    p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     try {
       await p.goto(`${base}/rc/?${query}&audioQa=silent&gfx=classic&telemetry=off`); await ready(p);
       await p.locator(button).click(); await p.keyboard.down('KeyW'); await p.waitForTimeout(2500); await p.keyboard.up('KeyW');
-      const speedSeen = await p.evaluate(() => window.__gunsOnlyRC.snapshot().speed ?? null);
+      const moving = await p.evaluate(() => window.__gunsOnlyRC.snapshot());
       const gate = await p.locator('#gate').innerText();
-      say(errors.length === 0 && gate.length > 0, `${label}: ${gate}${errors.length ? ' errors: ' + errors.join(' | ') : ''}${speedSeen == null ? '' : ''}`);
+      const moved = button === '#start' ? Number.isFinite(moving.speed) && moving.speed > 0.1 && moving.travel > 0.01 : true;
+      say(errors.length === 0 && gate.length > 0 && moved, `${label}: ${gate} (${Number(moving.travel).toFixed(2)}m, ${Number(moving.speed).toFixed(2)}m/s)${errors.length ? ' errors: ' + errors.join(' | ') : ''}`);
     } catch (e) { say(false, `${label}: ${e.message.split('\n')[0]}`); } finally { await p.close(); }
   }
   for (const [w, h] of [[844, 390], [667, 375]]) {

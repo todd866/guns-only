@@ -12,11 +12,11 @@ export const SKILL = { cruise: 0.78, ace: 0.95 };
 // Aggressor-squadron callsigns, one per rival paint scheme (ghost, desert, splinter, flanker, arctic).
 export const CALLSIGNS = ['GHOST', 'SANDY', 'SPLINTER', 'FLANKER', 'FROSTY'];
 
-export function createRace(course, { mode = 'kid', opponents = 3, roam = false, features = null, furball = false } = {}) {
+export function createRace(course, { mode = 'kid', opponents = 3, roam = false, features = null, furball = false, params } = {}) {
   const grid = course.grid ?? gridBehind(course.start, opponents + 1);
   // The player starts at the back, as in Re-Volt: the chase camera sees the car, and there
   // are rivals to overtake from the first second.
-  const slots = grid.slice(0, opponents + 1), player = createSession({ ...course, start: slots.at(-1) }, { mode });
+  const slots = grid.slice(0, opponents + 1), player = createSession({ ...course, start: slots.at(-1) }, { mode, params });
   const line = racingLine(course);
   const rivals = slots.slice(0, -1).map((slot, i) => ({
     session: Object.assign(createSession({ ...course, start: slot }, { mode: 'bigKid' }), { autoUnstick: true }),
@@ -26,7 +26,7 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false, 
   // stand to attention too, or keep driving (nobody tells the kid off).
   // Furball sessions drive like free drive (no gates, no lap) inside the race's own rules.
   if (roam || furball) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
-  const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
+  const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(furball || roam ? { ...course, pickupItems: null } : course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
   if (furball) race.furball = createFurball(race);
   return race;
 }

@@ -1,0 +1,4 @@
+import * as T from '../../vendor/three.module.js';import {boundarySegmentsWithin} from './boundary.mjs';
+// OSM administrative perimeter references, not a surveyed physical/security fence.
+// Non-colliding so inferred lines cannot close roads or invent real gate positions.
+export function buildBoundaryView(scene,bounds){const points=[];for(const [a,b]of boundarySegmentsWithin(bounds)){points.push(a[0],1.4,a[1],b[0],1.4,b[1]);const n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/16));for(let i=0;i<=n;i++){const x=a[0]+(b[0]-a[0])*i/n,z=a[1]+(b[1]-a[1])*i/n;points.push(x,0,z,x,1.5,z);}}const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.Float32BufferAttribute(points,3));const material=new T.LineBasicMaterial({color:'#6a817c',transparent:true,opacity:.65}),lines=new T.LineSegments(geometry,material);lines.name='PublicBaseBoundary';scene.add(lines);return {dispose(){lines.removeFromParent();geometry.dispose();material.dispose();}};}

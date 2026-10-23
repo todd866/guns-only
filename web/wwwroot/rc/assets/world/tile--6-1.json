@@ -1,0 +1,1 @@
+{"version":1,"tileSize":256,"tile":[-6,1],"features":[{"id":"way/1334394455","properties":{"access":"permit","highway":"unclassified","name":"Swaab Street","kind":"highway","osm":"way/1334394455"},"geometry":{"type":"LineString","coordinates":[[-1473.2,708.4],[-1170.99,491.25]]},"bbox":[-1473.2,491.25,-1170.99,708.4]}]}

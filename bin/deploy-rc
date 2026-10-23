@@ -8,21 +8,51 @@
 #   bin/deploy-rc --preview  a preview URL only
 set -eu
 repo=$(cd "$(dirname "$0")/.." && pwd); cd "$repo"
+run_job() {
+  if [ -f "$HOME/.codex/power/battery_guard.py" ]; then
+    /usr/bin/python3 "$HOME/.codex/power/battery_guard.py" run -- "$@"
+  else
+    "$@"
+  fi
+}
 dist="$repo/.rc-dist"; target=--prod; [ "${1:-}" = "--preview" ] && target=""
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/guns-only-rc-deploy.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT INT TERM
+evidence="$repo/evidence/rc-open-world/deploy-$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$evidence"
 echo "deploy-rc: unit tests"
-(cd web/wwwroot/rc && node --test) >/dev/null
-node --test tools/rc/package-rc.test.mjs >/dev/null
+(cd web/wwwroot/rc && run_job node --test --test-concurrency=2) >"$evidence/unit-tests.txt" 2>&1 || { cat "$evidence/unit-tests.txt"; exit 1; }
+run_job node --test --test-concurrency=2 tools/rc/*.test.mjs tools/rc/harness/*.test.mjs >"$evidence/tool-tests.txt" 2>&1 || { cat "$evidence/tool-tests.txt"; exit 1; }
 echo "deploy-rc: package"
 node tools/rc/package-rc.mjs --out "$dist"
 if [ ! -d web/smoke/node_modules/playwright ]; then (cd web/smoke && npm ci --ignore-scripts --no-audit --no-fund --silent && ./node_modules/.bin/playwright install chromium >/dev/null); fi
 echo "deploy-rc: headless smoke of the package"
-HEAVY_SLOT_LABEL=guns-only-rc-smoke heavy-slot -- node tools/rc/smoke-dist.mjs "$dist"
+HEAVY_SLOT_LABEL=guns-only-rc-smoke run_job heavy-slot -- node tools/rc/smoke-dist.mjs "$dist"
+echo "deploy-rc: hardware release gate of the package"
+HEAVY_SLOT_LABEL=guns-only-rc-release run_job heavy-slot -- env RC_QA_ROOT="$dist" node tools/rc/check-release.cjs "$evidence/local-release"
 echo "deploy-rc: deploy"
 vercel link --yes --project guns-only-rc --scope ian-todds-projects --cwd "$dist" >/dev/null 2>&1
-url=$(vercel deploy $target --yes --scope ian-todds-projects --cwd "$dist" 2>&1 | grep -oE 'https://[a-z0-9.-]+\.vercel\.app' | tail -1)
-[ -n "$url" ] || { echo "deploy-rc: vercel deploy failed" >&2; exit 1; }
+deploy_stdout="$tmp/vercel-deploy.stdout"
+if ! run_job vercel deploy $target --yes --scope ian-todds-projects --cwd "$dist" >"$deploy_stdout"; then
+  echo "deploy-rc: vercel deploy failed" >&2
+  cat "$deploy_stdout" >&2
+  exit 1
+fi
+url=$(grep -oE 'https://[a-z0-9.-]+\.vercel\.app' "$deploy_stdout" | tail -1)
+[ -n "$url" ] || { echo "deploy-rc: vercel deploy returned no deployment URL" >&2; cat "$deploy_stdout" >&2; exit 1; }
 echo "deploy-rc: deployed $url"
 live=${url}; [ -n "$target" ] && live=https://guns-only-rc.vercel.app
+if [ -n "$target" ]; then
+  echo "deploy-rc: verify production alias bytes ($live)"
+  node tools/rc/verify-dist.mjs "$dist" "$live"
+else
+  echo "deploy-rc: verify candidate bytes ($url)"
+  node tools/rc/verify-dist.mjs "$dist" "$url"
+fi
 echo "deploy-rc: smoke the live site ($live)"
-HEAVY_SLOT_LABEL=guns-only-rc-smoke heavy-slot -- node tools/rc/smoke-dist.mjs "$dist" "$live"
-[ -n "$target" ] && curl -fsS -o /dev/null -w "deploy-rc: guns-only.com/rc/ %{http_code}\n" https://guns-only.com/rc/ || true
+HEAVY_SLOT_LABEL=guns-only-rc-smoke run_job heavy-slot -- node tools/rc/smoke-dist.mjs "$dist" "$live"
+echo "deploy-rc: hardware release gate of live site"
+HEAVY_SLOT_LABEL=guns-only-rc-release run_job heavy-slot -- node tools/rc/check-release.cjs "$evidence/live-release" "$live"
+if [ -n "$target" ]; then
+  curl -fsS -o /dev/null -w "deploy-rc: guns-only.com/rc/ %{http_code}\n" https://guns-only.com/rc/
+fi

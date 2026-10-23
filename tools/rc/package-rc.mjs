@@ -6,6 +6,8 @@ import fs from 'node:fs'; import path from 'node:path'; import { fileURLToPath }
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const WWW = path.join(ROOT, 'web/wwwroot'), RC = path.join(WWW, 'rc'), VENDOR = path.join(WWW, 'vendor');
+const SHARED = path.join(WWW, 'render/telemetry');
+const SHARED_FILES = new Set(['telemetry_batch.js', 'telemetry_outbox.js']);
 const MARKER = '.rc-dist-marker', CODE = /\.(m?js|html)$/;
 const SKIP = name => /\.test\.m?js$|\.blend1?$/.test(name) || name === 'tests' || name === '__fixtures__' || name.startsWith('.');
 
@@ -29,11 +31,15 @@ export function packageRc(out = path.join(ROOT, '.rc-dist')) {
     throw Error(`${out} is not empty and has no ${MARKER}; refusing to overwrite it`);
   fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out, { recursive: true });
   const vendor = new Set(), queue = [];
+  const shared = target => inside(target, SHARED) && SHARED_FILES.has(path.relative(SHARED, target));
+  const bundledPath = target => inside(target, VENDOR)
+    ? path.join(out, 'rc/vendor', path.relative(VENDOR, target))
+    : path.join(out, 'rc/shared/telemetry', path.relative(SHARED, target));
   const resolve = (file, spec) => {
     const target = path.resolve(path.dirname(file), spec.split(/[?#]/)[0]);
     if (!fs.existsSync(target)) throw Error(`${posix(path.relative(ROOT, file))}: import '${spec}' does not exist`);
-    if (!inside(target, RC) && !inside(target, VENDOR)) throw Error(`${posix(path.relative(ROOT, file))}: import '${spec}' leaves rc/ and vendor/`);
-    if (inside(target, VENDOR) && !vendor.has(target)) { vendor.add(target); queue.push(target); }
+    if (!inside(target, RC) && !inside(target, VENDOR) && !shared(target)) throw Error(`${posix(path.relative(ROOT, file))}: import '${spec}' leaves rc/ and approved shared dependencies`);
+    if ((inside(target, VENDOR) || shared(target)) && !vendor.has(target)) { vendor.add(target); queue.push(target); }
     return target;
   };
   let bytes = 0, files = 0;
@@ -43,8 +49,8 @@ export function packageRc(out = path.join(ROOT, '.rc-dist')) {
     let src = fs.readFileSync(file, 'utf8');
     for (const spec of new Set(relativeImports(src))) {
       const target = resolve(file, spec);
-      if (!inside(target, VENDOR)) continue;
-      let rel = posix(path.relative(path.dirname(dest), path.join(out, 'rc/vendor', path.relative(VENDOR, target))));
+      if (inside(target, RC)) continue;
+      let rel = posix(path.relative(path.dirname(dest), bundledPath(target)));
       if (!rel.startsWith('.')) rel = './' + rel;
       src = src.split(`'${spec}'`).join(`'${rel}'`).split(`"${spec}"`).join(`"${rel}"`);
     }
@@ -53,12 +59,14 @@ export function packageRc(out = path.join(ROOT, '.rc-dist')) {
   // Vendor files import each other relatively; the copied tree keeps those paths valid.
   while (queue.length) { const file = queue.pop(); for (const spec of relativeImports(fs.readFileSync(file, 'utf8'))) resolve(file, spec); }
   for (const file of vendor) {
-    const dest = path.join(out, 'rc/vendor', path.relative(VENDOR, file)); fs.mkdirSync(path.dirname(dest), { recursive: true });
+    const dest = bundledPath(file); fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.copyFileSync(file, dest); bytes += fs.statSync(dest).size;
   }
   fs.writeFileSync(path.join(out, 'vercel.json'), JSON.stringify({
     redirects: [{ source: '/', destination: '/rc/', permanent: false }],
-    headers: [{ source: '/rc/assets/(.*)', headers: [{ key: 'Cache-Control', value: 'public, max-age=3600' }] }],
+    // Asset names are stable across releases. Revalidate before reusing them with new code;
+    // conditional requests still reuse the browser's downloaded bytes when unchanged.
+    headers: [{ source: '/rc/assets/(.*)', headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' }] }],
   }, null, 2) + '\n');
   fs.writeFileSync(path.join(out, MARKER), 'written by tools/rc/package-rc.mjs\n');
   return { out, files, vendor: vendor.size, bytes };

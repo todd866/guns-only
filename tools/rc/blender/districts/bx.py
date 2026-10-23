@@ -819,7 +819,7 @@ def concourse():
             y = -42.9 + k * .5
             if y + .5 > -34.4:
                 break
-            vis('decal', 'white' if (row + k) % 2 else 'black').add(aabb(-.25 + row * .25 - .25, row * .25, y, y + .5, .003, .006))
+            vis('decal', 'white' if (row + k) % 2 else 'black').add(aabb(-.25 + row * .25, row * .25, y, y + .5, .003, .006))
     vis('signs', 'steel').add(aabb(-.05, .05, -42.5, -35, 3.2, 3.24))
     vis('signs', 'hivis').add(aabb(-.03, .03, -42.2, -35.3, 2.6, 3.15))
     for f in (0, 180):

@@ -67,6 +67,12 @@ export function recover(s) {
 // Free drive: back onto the nearest racing-line point where you are, facing along the line,
 // never all the way home to the start (that is also where the RACE ring sits).
 function recoverInPlace(s) {
+  // Connected worlds supply a local safe point; their active event line may be kilometres away.
+  if (s.course.recoveryPoint) {
+    const at = s.course.recoveryPoint(s.car.pos);
+    placeCar(s.car, [at.pos[0], (Number.isFinite(at.groundY)?at.groundY:groundBelow(s.course.world, at.pos)) + rideHeight(s.car.params) + 0.02, at.pos[2]], at.yaw ?? carYaw(s.car));
+    s.recoveries++; return;
+  }
   const pts = s.course.ai?.length ? s.course.ai.map(a => [a.pos[0], a.pos[2]]) : s.course.checkpoints.map(c => [c[0], c[1]]);
   const [x, , z] = s.car.pos, n = pts.length;
   const i = pts.reduce((b, p, k) => Math.hypot(p[0] - x, p[1] - z) < Math.hypot(pts[b][0] - x, pts[b][1] - z) ? k : b, 0);

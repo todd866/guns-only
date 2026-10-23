@@ -14,7 +14,8 @@ const RESPAWN = 4, GRAB = 0.6;
 
 export function createPickups(course, seed = 1) {
   const spots = (course.pickups ?? []).map(p => ({ pos: p.pos, ready: 0 }));
-  return { spots, held: new Map(), ammo: new Map(), announce: [], effects: new Map(), balloons: [], slicks: [], missiles: [], dangle: new Set(), rng: lcg(seed) };
+  const requested=course.pickupItems?.filter(item=>ITEMS.includes(item));
+  return { items:requested?.length?requested:ITEMS, spots, held: new Map(), ammo: new Map(), announce: [], effects: new Map(), balloons: [], slicks: [], missiles: [], dangle: new Set(), rng: lcg(seed) };
 }
 const lcg = seed => () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
 const fx = (pk, car) => { let e = pk.effects.get(car); if (!e) pk.effects.set(car, e = { zoom: 0, bubble: 0, spin: 0, slick: 0 }); return e; };
@@ -57,7 +58,7 @@ export function stepPickups(pk, cars, world, dt, immune = null) {
     if (spot.ready > 0) continue;
     const car = cars.find(c => !pk.held.has(c) && len(sub(c.pos, spot.pos)) < GRAB);
     if (car) {
-      const item = ITEMS[Math.floor(pk.rng() * ITEMS.length)]; pk.held.set(car, item); spot.ready = pk.respawn ?? RESPAWN;
+      const pool=pk.items??ITEMS, item = pool[Math.floor(pk.rng() * pool.length)]; pk.held.set(car, item); spot.ready = pk.respawn ?? RESPAWN;
       // Missiles sometimes come as a 3-pack; firing the last of a pack calls "Winchester".
       if (MISSILES.has(item) && pk.rng() < 0.2) pk.ammo.set(car, 3); else pk.ammo.delete(car);
     }

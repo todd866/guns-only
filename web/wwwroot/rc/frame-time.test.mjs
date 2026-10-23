@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {frameSeconds} from './frame-time.mjs';
+test('startup timestamps cannot extrapolate camera damping outside its segment',()=>{for(const [now,last]of [[1,9000],[9000,1],[9016,9000]]){const dt=frameSeconds(now,last),blend=1-Math.exp(-dt*7);assert.ok(blend>=0&&blend<=1);assert.ok(dt<=.1);}assert.equal(frameSeconds(1,9000),0);assert.equal(frameSeconds(9016,9000),.016);});

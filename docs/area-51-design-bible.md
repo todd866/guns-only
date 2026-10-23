@@ -4,6 +4,15 @@ Living document, started 2026-10-22. It is the single source for the world, mode
 list. Direction history lives in `area-51-and-a-half.md`; engine and pipeline notes live in
 `area-51-build-plan.md`.
 
+**23 October implementation:** the connected base, 365 streamed tiles, 16 destinations,
+14 world races plus three integrated districts, 15 specimens, Dreamland finale, garage,
+Car Golf, bowling, night cycle, aircraft catalogue and standard gamepad input are now built.
+The implementation and its deliberate geographic/art approximations are recorded in
+`rc-open-world-milestones.md`; the release state is in `rc-release-2026-10-23.md`.
+The budget estimates and unchecked planning list in section 7 are historical, not the
+current completion checklist. Hero buggy refinement, further art/feel improvements and
+the main flight-game picker remain separate follow-up work.
+
 ## 1. Pillars
 
 1. **A Re-Volt spiritual successor:** rigid-body toy physics, cartoon weapons, shortcuts that
@@ -286,15 +295,17 @@ Done: an HDRI sky (Goegap, CC0). To do:
    (≈ 5 min, vs ≈ 1 h through the full Guns Only pipeline: bin/check 13 min, CI smoke 22–29 min,
    F-22 frame gate, route smoke). The main pipeline keeps its full strictness; do NOT make the
    frame gate skip RC paths. Only the picker card stays in the main build.
-2. [ ] **RC analytics** (≈ 2%). RC sends NOTHING today (the F-22 shell has the durable outbox in
-   render/telemetry/: telemetry_outbox.js, telemetry_batch.js, plus the admin decoder). Reuse that
-   path, don't fork it. Anonymous session id only, no personal data or fingerprinting (target
-   player is a six-year-old). Events: session start (track, mode, kid/Big Kid, device class),
-   time to first input, race start/finish (place, time, gap to winner, recoveries, ALT taken),
-   quit mid-race, Furball result (balloons left, pops, kills, duration), Again vs Free drive
-   clicks, item use, mute, frame p95. Admin view: sessions/day, races finished %, win rate by
-   mode (the "instant win" number), median session length, Again rate. Do this BEFORE item 4
-   so difficulty is tuned against data.
+2. [x] **RC analytics** (≈ 2%). Implemented in `web/wwwroot/rc/telemetry.mjs` and wired from
+   `rc/main.js`. It is explicit opt-in through `guns-only.telemetry-sharing.v1`, uses an anonymous
+   per-session id, and sends no personal data, fingerprint, user agent, URL, or raw simulation
+   state. Local and preview hosts stay memory-only by default; canonical guns-only.com uses the
+   shared `/telemetry` endpoint and existing bounded batch builder plus IndexedDB outbox. Rows use
+   `k: in`, `type: rc`, and a small code vocabulary: `session_start`, `first_input`,
+   `race_start`/`race_finish`, `race_quit`, `furball_outcome`, `choice`, `item_use`, `mute`, and
+   `frame_p95`. Missing storage, rejected consent, failed transport, and absent IndexedDB fail
+   quiet. Admin aggregation remains the next slice: sessions/day, race completion, win rate by
+   mode, median session length, and Again rate.
+   The admin view and difficulty tuning remain follow-up work once aggregates are available.
 3. [ ] **Menu tidy** (≈ 2%). Guns Only picker: three plain cards (F-22, Cobra, RC), drop the
    Military/Civilian tabs (Area 51½ is currently stranded alone under Civilian). RC brief:
    "Drive" not "Take the transmitter"; Drive / Race / Furball / tracks / mute in one compact row;
