@@ -1,3 +1,8 @@
+import {ALIEN_EVENTS,ALIEN_LOCATIONS} from './alien-world.mjs';
+import {BATTLE_EVENTS} from './battle-arenas.mjs';
+import {CLASSIC_LOCATIONS,CLASSIC_EVENTS} from './classic-courses.mjs';
+import {VENUE_LOCATIONS,VENUE_EVENTS} from './expansion-venues.mjs';
+import {PORTAL_EVENT,portalHeight} from './portal-course.mjs';
 import {ROAD_EVENTS} from './road-events.mjs';
 // Authored activities in the real Nellis local metre frame. +x east, +z south.
 // Gameplay courses and landmark art are fiction; OSM supplies roads and footprints.
@@ -20,6 +25,7 @@ export const LOCATIONS = [
   {id:'waterpark',name:'Sunrise Splash',short:'Waterpark',pos:[-545,0,3388],color:'#79d9e2',icon:'🏁',kind:'race',event:'splash-down'},
   {id:'lab',name:'Area 51½',short:'Dreamland',pos:[2500,0,-1200],color:'#9fe2a8',icon:'◇',kind:'race',event:'dreamland'},
 ];
+LOCATIONS.push(...VENUE_LOCATIONS,...CLASSIC_LOCATIONS,...ALIEN_LOCATIONS,{id:'night-wave',name:'Night Wave',short:'Night Wave',pos:[11200,0,200],color:'#a99cf2',icon:'◇',kind:'race',event:'night-wave',alien:true});
 const loop = (cx,cz,w,d) => [[cx,cz],[cx+w*.4,cz],[cx+w*.5,cz-d*.18],[cx+w*.5,cz-d*.82],[cx+w*.35,cz-d],[cx-w*.35,cz-d],[cx-w*.5,cz-d*.82],[cx-w*.5,cz-d*.18],[cx-w*.4,cz],[cx,cz]];
 export const EVENTS = [
   {id:'gate-guard',name:'Gate Guard',location:'gate',kind:'circuit',points:loop(-607,-29,100,70),half:4,medals:[30,42,60]},
@@ -31,11 +37,11 @@ export const EVENTS = [
   {id:'rink-drift',name:'Rink Drift',location:'rec',kind:'circuit',night:true,surface:'gymfloor',points:loop(-940,1260,45,30),half:4,medals:[20,28,40]},
   {id:'round-bases',name:'Round the Bases',location:'diamond',kind:'sprint',surface:'dirt',clearing:true,points:[[-1327,1490],[-1307,1470],[-1327,1450],[-1347,1470],[-1327,1490]],half:4,medals:[17,24,35]},
   {id:'wing-walker',gateWidths:[5,12],name:'Wing Walker',location:'boneyard',kind:'circuit',points:loop(2350,1600,190,130),half:5,medals:[52,72,100],alts:[{name:'Wing hop',nodes:[[2354,1600,1],[2356,1592,1],[2364,1592,1],[2370,1592,1],[2380,1592,2],[2400,1592,2],[2410,1592,2],[2426,1592,2],[2426,1600,2]]}]},
-  {id:'splash-down',name:'Splash Down',location:'waterpark',kind:'circuit',points:[[-545,3388],[-481,3388],[-465,3370],[-465,3340],[-490,3340],[-530,3340],[-545,3310],[-590,3310],[-625,3340],[-625,3370],[-609,3388],[-545,3388]],half:5,medals:[48,65,90]},
-  {id:'dreamland',name:'Dreamland Night',location:'lab',kind:'circuit',night:true,points:loop(2500,-1200,160,110),half:5,medals:[44,60,85]},
+  {id:'splash-down',name:'Wavepool Beach',location:'waterpark',kind:'circuit',points:[[-545,3388],[-481,3388],[-465,3370],[-465,3340],[-490,3340],[-530,3340],[-545,3310],[-590,3310],[-625,3340],[-625,3370],[-609,3388],[-545,3388]],half:5,medals:[48,65,90]},
+  {id:'dreamland',name:'Containment Circuit',location:'lab',kind:'circuit',night:true,points:[[2330,-1200],[2380,-1200],[2380,-1240],[2350,-1240],[2350,-1280],[2290,-1280],[2290,-1240],[2320,-1240],[2320,-1220],[2280,-1220],[2280,-1200],[2330,-1200]],half:5,medals:[44,60,85]},
   {id:'whoops',name:'Whoops',location:'dirt',kind:'circuit',surface:'dirt',points:[[1800,1450],[1880,1450],[1880,1400],[1740,1400],[1740,1450],[1800,1450]],half:5,medals:[42,57,80]},
 ];
-EVENTS.push(...ROAD_EVENTS);
+EVENTS.push(...ROAD_EVENTS,...VENUE_EVENTS,...CLASSIC_EVENTS,...BATTLE_EVENTS,...ALIEN_EVENTS,PORTAL_EVENT);
 export const DISTRICT_EVENTS=['housing','bx','school'].map(id=>({id:'district-'+id,name:LOCATIONS.find(p=>p.id===id).name,location:id,district:id,kind:'circuit',medals:[100,150,210]}));
 export const RACE_EVENTS=[...EVENTS,...DISTRICT_EVENTS];
 export const PAINTS=[{name:'Viper Punks',color:'#ed9145'},{name:'Arctic',color:'#d7e5e8'},{name:'Aggressor',color:'#6a9dbf'},{name:'Mudhen Mafia',color:'#b5a17b'},{name:'Night Wave',color:'#74728d'}];
@@ -43,11 +49,11 @@ export const locationById=id=>LOCATIONS.find(p=>p.id===id);
 export const eventById=id=>RACE_EVENTS.find(p=>p.id===id);
 export function eventCourse(event,world){
   const points=event.points,first=points[0],next=points[1],yaw=Math.atan2(next[0]-first[0],-(next[1]-first[1]));
-  const ai=[];for(let i=0;i<points.length-1;i++){const a=points[i],b=points[i+1],n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/4);for(let j=0;j<n;j++)ai.push({pos:[a[0]+(b[0]-a[0])*j/n,0,a[1]+(b[1]-a[1])*j/n],halfWidth:event.half});}
+  const ai=[];for(let i=0;i<points.length-1;i++){const a=points[i],b=points[i+1],n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/4);for(let j=0;j<n;j++)ai.push({pos:[a[0]+(b[0]-a[0])*j/n,(a[2]??0)+((b[2]??0)-(a[2]??0))*j/n,a[1]+(b[1]-a[1])*j/n],halfWidth:event.half});}
   if(event.kind==='sprint')ai.push({pos:[points.at(-1)[0],0,points.at(-1)[1]],halfWidth:event.half});
-  return {world,event,pickupItems:event.id==='runway-drag'?['zoom']:undefined,checkpoints:points.map(([x,z],i)=>[x,z,i===points.length-1?'Finish':`Gate ${i+1}`,event.gateWidths?.[i]??event.half]),ai,start:{pos:[first[0],0,first[1]],yaw},secrets:[],coins:[],pickups:ai.filter((_,i)=>i%12===6).map(a=>({pos:[a.pos[0],.16,a.pos[2]]})),alts:event.alts??[]};
+  return {world,event,outOfBounds:event.alien&&event.id!=='night-wave'?pos=>pos[1]<-3:event.id==='night-wave'?pos=>{const h=portalHeight(pos[0],pos[2]);return h.height>3&&pos[1]<h.height-2;}:null,pickupItems:event.id==='runway-drag'?['zoom']:undefined,checkpoints:points.map(([x,z],i)=>{const a=points[Math.max(0,i-1)],b=i?points[i]:points[1],d=Math.hypot(b[0]-a[0],b[1]-a[1])||1;return [x,z,i===points.length-1?'Finish':`Gate ${i+1}`,event.gateWidths?.[i]??event.half,[(b[0]-a[0])/d,(b[1]-a[1])/d]];}),ai,start:{pos:[first[0],first[2]??0,first[1]],yaw},secrets:[],coins:[],pickups:ai.filter((_,i)=>i%12===6).map(a=>({pos:[a.pos[0],a.pos[1]+.16,a.pos[2]]})),alts:event.alts??[]};
 }
-const eventAreas=EVENTS.filter(e=>!e.road&&(e.kind!=='sprint'||e.clearing)).map(e=>({event:e,bounds:[Math.min(...e.points.map(p=>p[0])),Math.min(...e.points.map(p=>p[1])),Math.max(...e.points.map(p=>p[0])),Math.max(...e.points.map(p=>p[1]))]}));
+const eventAreas=EVENTS.filter(e=>!e.road&&(e.kind!=='sprint'||e.clearing)).map(e=>({event:e,bounds:e.clearingBounds??[Math.min(...e.points.map(p=>p[0])),Math.min(...e.points.map(p=>p[1])),Math.max(...e.points.map(p=>p[0])),Math.max(...e.points.map(p=>p[1]))]}));
 function eventAt(x,z,padding){return eventAreas.find(({bounds:b})=>x>=b[0]-padding&&x<=b[2]+padding&&z>=b[1]-padding&&z<=b[3]+padding)?.event;}
 export function inEventArea(x,z,padding=12){return !!eventAt(x,z,padding);}
 // Shallow splash-pad drag is authored toy handling, not a hydrodynamic model.
@@ -57,17 +63,18 @@ export function eventSurface(x,z){if(SPLASH_ZONES.some(b=>x>=b[0]&&x<=b[2]&&z>=b
 export function nearestLocation(pos){return LOCATIONS.reduce((a,b)=>distance(pos,a.pos)<distance(pos,b.pos)?a:b);}
 export const distance=(a,b)=>Math.hypot(a[0]-b[0],a[2]-b[2]);
 // Original, friendly specimens stand beside each public event ring; Dreamland is the reward.
-export const SPECIMENS=LOCATIONS.filter(p=>p.id!=='lab').map(p=>({id:p.id,name:p.short,x:p.pos[0]+4,z:p.pos[2]+2}));
+export const SPECIMENS=LOCATIONS.filter(p=>['gate','housing','bx','school','ramp','hangars','runway','wic','dirt','golf','zoo','rec','diamond','boneyard','waterpark'].includes(p.id)).map(p=>({id:p.id,name:p.short,x:p.pos[0]+4,z:p.pos[2]+2}));
 export const dreamlandUnlocked=state=>SPECIMENS.every(p=>state.specimens.includes(p.id));
-export const canEnter=(state,p)=>p?.id!=='lab'||dreamlandUnlocked(state);
+export const canEnter=(state,p)=>(p?.id!=='lab'&&!p?.alien)||dreamlandUnlocked(state);
 export function collectSpecimens(state,seen){const found=[];for(const i of seen){const p=SPECIMENS[i];if(p&&!state.specimens.includes(p.id)){state.specimens.push(p.id);found.push(p);}}return found;}
-export function expedition(state){return {found:state.specimens.length,total:SPECIMENS.length,unlocked:dreamlandUnlocked(state),complete:dreamlandUnlocked(state)&&Number.isFinite(state.wins.dreamland)&&state.wins.dreamland>0};}
+export function expedition(state){return {found:state.specimens.length,total:SPECIMENS.length,unlocked:dreamlandUnlocked(state),complete:dreamlandUnlocked(state)&&(['dreamland','night-wave'].some(id=>[state.raceWins?.[id],state.wins?.[id]].some(t=>Number.isFinite(t)&&t>0)))};}
 export function loadProgress(storage){let v;try{v=JSON.parse(storage?.getItem('guns-only.rc.world.v1'));}catch{}
  const ids=(value,valid)=>[...new Set(Array.isArray(value)?value.filter(id=>valid.some(p=>p.id===id)):[])];
+ const raceWins={};for(const e of RACE_EVENTS){const t=v?.raceWins?.[e.id];if(typeof t==='number'&&Number.isFinite(t)&&t>0)raceWins[e.id]=t;}
  const wins={};for(const e of RACE_EVENTS){const t=v?.wins?.[e.id];if(typeof t==='number'&&Number.isFinite(t)&&t>0)wins[e.id]=t;}
- return {discovered:['gate',...ids(v?.discovered,LOCATIONS).filter(id=>id!=='gate')],specimens:ids(v?.specimens,SPECIMENS),bowlingBest:Number.isInteger(v?.bowlingBest)&&v.bowlingBest>=0&&v.bowlingBest<=10?v.bowlingBest:0,golfBest:Number.isInteger(v?.golfBest)&&v.golfBest>0?v.golfBest:null,wins,body:['buggy','monster','rally','pickup','golf'].includes(v?.body)&&(v.body!=='golf'||v?.discovered?.includes('golf'))?v.body:'jet',shell:['viper','eagle','hog','raptor','flanker'].includes(v?.shell)?v.shell:'viper',paint:PAINTS.some(p=>p.color===v?.paint)?v.paint:PAINTS[0].color};}
+ return {discovered:['gate',...ids(v?.discovered,LOCATIONS).filter(id=>id!=='gate')],specimens:ids(v?.specimens,SPECIMENS),bowlingBest:Number.isInteger(v?.bowlingBest)&&v.bowlingBest>=0&&v.bowlingBest<=10?v.bowlingBest:0,golfBest:Number.isInteger(v?.golfBest)&&v.golfBest>0?v.golfBest:null,wins,raceWins,body:['buggy','monster','rally','pickup','golf'].includes(v?.body)&&(v.body!=='golf'||v?.discovered?.includes('golf'))?v.body:'jet',shell:['viper','eagle','hog','raptor','flanker'].includes(v?.shell)?v.shell:'viper',paint:PAINTS.some(p=>p.color===v?.paint)?v.paint:PAINTS[0].color};}
 export function saveProgress(storage,state){try{storage?.setItem('guns-only.rc.world.v1',JSON.stringify(state));}catch{}}
 export function discover(state,pos){const found=[];for(const p of LOCATIONS)if(distance(pos,p.pos)<45&&!state.discovered.includes(p.id)){state.discovered.push(p.id);found.push(p);}return found;}
-export function recordFinish(state,id,time){if(!eventById(id)||!Number.isFinite(time)||time<=0||(id==='dreamland'&&!dreamlandUnlocked(state)))return;state.wins[id]=Math.min(Number(state.wins[id])||Infinity,time);}
-export function medal(event,time){return time<=event.medals[0]?'Gold':time<=event.medals[1]?'Silver':time<=event.medals[2]?'Bronze':'Finished';}
+export function recordFinish(state,id,time){if(!eventById(id)||!Number.isFinite(time)||time<=0||(eventById(id).location==='lab'&&!dreamlandUnlocked(state)))return;state.raceWins??={};state.raceWins[id]=Math.min(Number(state.raceWins[id])||Infinity,time);state.wins[id]=Math.min(Number(state.wins[id])||Infinity,time);}
+export function medal(event,time){const factor=event.kind==='sprint'?1:3;return time<=event.medals[0]*factor?'Gold':time<=event.medals[1]*factor?'Silver':time<=event.medals[2]*factor?'Bronze':'Finished';}
 export function rcLink(params,search=''){const p=new URLSearchParams(search);for(const k of ['track','from','event','mode','at'])p.delete(k);for(const [k,v]of Object.entries(params))if(v!=null)p.set(k,v);return `?${p}`;}

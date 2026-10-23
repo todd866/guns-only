@@ -1,5 +1,21 @@
 # Saucer Springs AFB — complete game design, v1
 
+## Approved progression update — 23 October 2026
+
+The four cups follow the world, superseding the original MK64 cup order below:
+
+| Cup | Area | Four races |
+|---|---|---|
+| Home Base | Domestic and civilian life | Liberty Loop, BX Dash, School Run, Wavepool Beach |
+| Flightline | Operational air base | Demo Team Circuit, Supply Line, Red Flag Ramp, Boneyard Maze |
+| Dreamland | Experiments and secret labs | Cold Start, Ice Patrol, Canopy Run, Containment Circuit |
+| Beyond the Portal | Connected alien world | Lunar Paddock, Comet Quarry, Gravity Garden, Night Wave |
+
+The other base events remain explorable activities. The entire base remains driveable; cups organize races rather than replacing geography with menus. MK64 remains the reference for driving, race flow, items and controls. Course correspondences below describe inspirations, not the final cup membership.
+
+The marshal begins as a robot MP. Discovering the alien location (`lab`) permanently changes the marshal to the friendly alien. This reveal does not require every specimen. The existing fifteen-specimen gate controls entry to Dreamland events and the portal separately.
+
+
 23 October 2026. This is the **build specification**, not a claim that the game already looks or plays like the finished design. The [interactive atlas](index.html) contains the mapped places, courses and arenas. The [request ledger](../../rc-design-request-ledger.md) records the recovered owner direction. The approved [buggy and hangar reference](../../../assets/rc/concepts/buggy-hangar-v1.png) remains the finish target.
 
 ![Concept target: alien marshal, Wavepool Beach and Dreamland portal](concept-sheet-v1.png)
@@ -324,7 +340,7 @@ Lifetime pops update nose art automatically: shark mouth at 1, lightning bolt at
 
 ## Alien marshal: our Lakitu
 
-A friendly small alien rides a compact saucer: warm mint skin, large expressive dark eyes, rounded hands, a cream/orange safety vest and an open cockpit. Its face, hands and signs remain legible from behind the car. The saucer banks gently and carries a visible tractor beam for recovery. This replaces the earlier robot MP and cargo quadrotor. No spoken instruction is essential.
+A friendly small alien rides a compact saucer: warm mint skin, large expressive dark eyes, rounded hands, a cream/orange safety vest and an open cockpit. Its face, hands and signs remain legible from behind the car. The saucer banks gently and carries a visible tractor beam for recovery. The robot MP performs these jobs initially; the alien takes over only after discovery of the alien location, with that discovery saved between visits. No spoken instruction is essential.
 
 | Job | Visual action | Timing / rule |
 |---|---|---|

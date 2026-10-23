@@ -10,7 +10,7 @@ import { createFurball, stepFurball, furballInput, mayFire } from './furball.mjs
 
 export const SKILL = { cruise: 0.78, ace: 0.95 };
 // Aggressor-squadron callsigns, one per rival paint scheme (ghost, desert, splinter, flanker, arctic).
-export const CALLSIGNS = ['GHOST', 'SANDY', 'SPLINTER', 'FLANKER', 'FROSTY'];
+export const CALLSIGNS = ['GHOST', 'SANDY', 'SPLINTER', 'FLANKER', 'FROSTY', 'VIPER', 'BANDIT'];
 
 export function createRace(course, { mode = 'kid', opponents = 3, roam = false, features = null, furball = false, params } = {}) {
   const grid = course.grid ?? gridBehind(course.start, opponents + 1);
@@ -56,7 +56,7 @@ function gridBehind(start, n) {
 export function progress(s) {
   const cps = s.course.checkpoints, g = Math.min(s.gate, cps.length - 1), prev = cps[Math.max(0, g - 1)], next = cps[g];
   const seg = Math.hypot(next[0] - prev[0], next[1] - prev[1]) || 1, left = Math.hypot(next[0] - s.car.pos[0], next[1] - s.car.pos[2]);
-  return s.finished ? cps.length + 1 : g + Math.max(0, 1 - left / seg);
+  return s.finished ? s.laps * cps.length + 1 : (s.lap - 1) * cps.length + g + Math.max(0, 1 - left / seg);
 }
 
 export const retreatActive = race => race.clock >= race.retreat.at && race.clock < race.retreat.at + race.retreat.length;
@@ -119,7 +119,7 @@ export function packFactor(race, rival) {
   const n = race.course.checkpoints.length, me = progress(race.player), gap = progress(rival.session) - me;
   const d = gap - PACK.slots[rival.colour % PACK.slots.length];
   let k = d > 0 ? Math.max(PACK.floor, 1 - d * PACK.ease) : Math.min(PACK.ceiling, 1 - d * PACK.push);
-  if (race.mode === 'kid' && me / n > PACK.kidLate && gap > -0.25) k = Math.min(k, PACK.kidGive);
+  if (race.mode === 'kid' && me / (n * race.player.laps) > PACK.kidLate && gap > -0.25) k = Math.min(k, PACK.kidGive);
   return k;
 }
 

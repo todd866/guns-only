@@ -1,6 +1,7 @@
 import * as T from '../../vendor/three.module.js';
 import { addBox } from '../physics/world.mjs';
 import { WAVEPOOL_BEACH, WAVEPOOL_SURFACES } from './wavepool-course.mjs';
+import { addWorldUv, attachSurfaceDetails } from './surface-detail.js';
 
 const route = WAVEPOOL_BEACH.route;
 
@@ -27,6 +28,11 @@ export function buildWavepoolBeach(scene, world) {
   const wood = mat('wood', '#9a5c38');
   const palmGreen = mat('palmGreen', '#347c56');
   const trim = mat('trim', '#fff0b2', { emissive: '#fff0b2', emissiveIntensity: .12 });
+  // Lines do not have surface normals; never share a MeshStandardMaterial with a LineLoop.
+  // The old shared foam material produced invalid GPU lighting on the beach and blacked out
+  // the entire WebGL frame on the Apple renderer.
+  const foamLine = new T.LineBasicMaterial({ color: '#e8fcf5', transparent: true, opacity: .72 });
+  const surfaceDetails = attachSurfaceDetails({ sand, water });
 
   const meshes = [];
   const addMesh = (geometry, material, position = null, name = '') => {
@@ -51,23 +57,36 @@ export function buildWavepoolBeach(scene, world) {
       verts.push(a[0] + nx, y, a[1] + nz, b[0] + nx, y, b[1] + nz, b[0] - nx, y, b[1] - nz,
         a[0] + nx, y, a[1] + nz, b[0] - nx, y, b[1] - nz, a[0] - nx, y, a[1] - nz);
     }
-    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(verts, 3)); g.computeVertexNormals();
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(verts, 3)); addWorldUv(g); g.computeVertexNormals();
+    return addMesh(g, material, null, name);
+  };
+  const rampedRibbon = (points, width, material, name = '') => {
+    const verts = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz) || 1;
+      const nx = -dz / len * width / 2, nz = dx / len * width / 2;
+      verts.push(a[0] + nx, a[2], a[1] + nz, b[0] + nx, b[2], b[1] + nz, b[0] - nx, b[2], b[1] - nz,
+        a[0] + nx, a[2], a[1] + nz, b[0] - nx, b[2], b[1] - nz, a[0] - nx, a[2], a[1] - nz);
+      // The visible wet-sand cut and collision share their continuous ground profile.
+      const cy = .025;
+      world.addQuad([a[0] + nx, cy, a[1] + nz], [b[0] + nx, cy, b[1] + nz],
+        [b[0] - nx, cy, b[1] - nz], [a[0] - nx, cy, a[1] - nz], WAVEPOOL_SURFACES.sand);
+    }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(verts, 3)); addWorldUv(g); g.computeVertexNormals();
     return addMesh(g, material, null, name);
   };
 
   // Broad pool and a dry route collar make the intended line readable from the air and from
   // the RC camera. The old event route remains the authoritative checkpoint path.
-  addMesh(new T.BoxGeometry(104, .08, 64), water, [-545, .02, 3365], 'WavepoolWater');
-  addMesh(new T.BoxGeometry(118, .12, 78), sand, [-545, -.03, 3365], 'WavepoolSandCollar');
+  const waterSurface = new T.BoxGeometry(104, .08, 64); addWorldUv(waterSurface);
+  addMesh(waterSurface, water, [-545, .02, 3365], 'WavepoolWater');
+  const sandSurface = new T.BoxGeometry(118, .12, 78); addWorldUv(sandSurface);
+  addMesh(sandSurface, sand, [-545, -.03, 3365], 'WavepoolSandCollar');
   ribbon(route, 6.2, .1, routeMat, 'WavepoolRouteRibbon');
 
-  // Sandbar shortcut: low, visibly drivable strip through the shallow end. It is a raised
-  // collision surface, never a wall, and rejoins the main route before the following gate.
-  ribbon(WAVEPOOL_BEACH.sandbarShortcut, 3.4, .18, sand, 'WavepoolSandbarShortcut');
-  for (let i = 1; i < WAVEPOOL_BEACH.sandbarShortcut.length - 1; i++) {
-    const [x, z] = WAVEPOOL_BEACH.sandbarShortcut[i];
-    addBox(world, x, z, 3.4, 3.6, .02, .22, WAVEPOOL_SURFACES.sand);
-  }
+  // Sandbar shortcut: a continuous, shallow ramp that cuts only the first hairpin and
+  // rejoins the next checkpoint. The deck sits above the water, with no isolated step boxes.
+  rampedRibbon(WAVEPOOL_BEACH.sandbarShortcut, 2.8, sand, 'WavepoolSandbarShortcut');
 
   // Animated foam rings at the two wave wash points. The rings remain subtle when paused and
   // read as water motion in the low camera without particle spam.
@@ -77,7 +96,7 @@ export function buildWavepoolBeach(scene, world) {
     const w = addMesh(g, foam, [-595 + i * 16, .1, 3360 + (i % 2) * 8], `WaveFoam_${i}`);
     w.rotation.x = -Math.PI / 2; waves.push({ mesh: w, phase: i * .85 });
   }
-  const waterline = new T.LineLoop(new T.BufferGeometry(), foam); // reusable oval foam edge
+  const waterline = new T.LineLoop(new T.BufferGeometry(), foamLine); // reusable oval foam edge
   const edge = [];
   for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2; edge.push(-545 + 52 * Math.cos(a), .13, 3365 + 32 * Math.sin(a)); }
   waterline.geometry.setAttribute('position', new T.Float32BufferAttribute(edge, 3));
@@ -146,6 +165,8 @@ export function buildWavepoolBeach(scene, world) {
     dispose() {
       root.removeFromParent();
       root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+      foamLine.dispose();
+      surfaceDetails.dispose();
       for (const material of materials.values()) material.dispose();
     },
   };

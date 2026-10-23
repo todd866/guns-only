@@ -6,7 +6,7 @@ import {LOCATIONS} from './open-world/catalog.mjs';
 test('boundary source preserves exact OSM IDs and destinations',()=>{
   assert.deepEqual(BASE_BOUNDARY.ids,{mainRelation:16282210,mainOuter:758208019,areaIII:19616628,areaIIIOuter:1377332778});
   assert.equal(BASE_BOUNDARY.rings.main.length,246);assert.equal(BASE_BOUNDARY.rings.areaIII.length,91);assert.equal(BASE_BOUNDARY.elevationDatumM,569.1);
-  for(const p of LOCATIONS)assert.ok(insideBase(p.pos[0],p.pos[2]),`${p.id} outside source union`);
+  for(const p of LOCATIONS.filter(p=>!p.alien))assert.ok(insideBase(p.pos[0],p.pos[2]),`${p.id} outside source union`);
 });
 test('source rings are finite and clipping returns only source segments',()=>{
   for(const ring of Object.values(BASE_BOUNDARY.rings))for(const p of ring)for(const v of p)assert.ok(Number.isFinite(v));

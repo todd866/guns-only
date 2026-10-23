@@ -5,6 +5,7 @@ import { sub, cross, dot, norm, scale, add, len } from './math.mjs';
 // Surface response multipliers. grip scales tyre friction; roll is rolling drag per newton of load.
 export const SURFACES = {
   // Fictional shallow splash-pad response; safe at RC scale, no buoyancy or drowning.
+  snow: { grip: .68, roll: .08 }, ice: { grip: .38, roll: .015 },
   water: { grip: 0.65, roll: 0.18 },
   asphalt: { grip: 1.0, roll: 0.02 }, concrete: { grip: 1.0, roll: 0.02 }, wood: { grip: 0.95, roll: 0.025 },
   metal: { grip: 0.8, roll: 0.02 }, tile: { grip: 0.72, roll: 0.02 }, gymfloor: { grip: 0.55, roll: 0.015 },

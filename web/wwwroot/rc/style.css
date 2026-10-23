@@ -9,3 +9,40 @@
 
 /* Keyboard focus remains visible on dark panels and colour swatches. */
 :where(button,a,select,canvas):focus-visible{outline:3px solid #ffd17b;outline-offset:3px}
+
+/* MK64-style race readout: course status and held item get their own clear stations. */
+#instruments{position:static;display:block;background:none;border:0;padding:0;margin:0;max-width:none;pointer-events:none}
+#instruments>*{position:absolute;z-index:2;background:var(--panel);border-radius:4px;box-shadow:0 6px 18px #08171b66}
+#speed{left:22px;bottom:28px;padding:7px 12px;border-left:3px solid var(--gold);min-width:96px;text-align:left}
+#instruments>span:first-of-type{left:83px;bottom:36px;padding:0;background:none;box-shadow:none;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+#clock{right:22px;top:62px;padding:8px 12px;border-right:3px solid var(--gold)}
+#gate{left:50%;top:20px;transform:translateX(-50%);padding:8px 16px;color:#fff3d1;font-size:14px;font-weight:700;letter-spacing:.06em;text-align:center}
+#item{left:50%;top:62px;transform:translateX(-50%);padding:7px 14px;color:var(--gold);font-size:13px;min-width:92px;text-align:center}
+#instruments #secret,#instruments #coins{left:22px;bottom:12px;padding:0;background:none;box-shadow:none;color:var(--muted);font-size:10px}
+#instruments #coins{left:110px}
+body.race-mode #instruments #secret,body.race-mode #instruments #coins{display:none}
+/* Secondary garage/mode/exit choices stay in the pause brief while racing. */
+body.race-mode header nav #garage,body.race-mode header nav #mode,body.race-mode header nav #exit{display:none}
+#map{width:210px;height:154px;bottom:26px;right:20px;z-index:1}
+@media(max-width:900px){#speed{left:10px;bottom:30px}#clock{right:10px;top:58px}#gate{top:17px;font-size:12px}#item{top:56px}#map{width:150px;height:128px;right:10px;bottom:24px}}
+@media(max-width:540px){#speed{left:10px;bottom:148px;font-size:27px;min-width:82px;padding:5px 9px}#instruments>span:first-of-type{left:64px;bottom:158px;font-size:9px}#clock{right:10px;top:58px;font-size:14px;padding:6px 8px}#gate{top:14px;max-width:58vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:6px 9px;font-size:11px}#item{top:52px;padding:5px 9px;min-width:78px;font-size:11px}#map{width:128px;height:112px;right:8px;bottom:145px}#instruments #secret,#instruments #coins{bottom:130px;left:10px}.race-mode #touch{bottom:72px}}
+@media(max-width:900px){header{inset:10px 10px auto}}
+@media(max-width:540px){header{inset:7px 8px auto}}
+@media(max-width:540px){#gate{top:58px}#item{top:94px}}
+
+body.portal-flash::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:1000;background:#d5f7ff;animation:portal-arrival .65s ease-out forwards}@keyframes portal-arrival{from{opacity:1}to{opacity:0}}
+
+/* Driving presents only the race instruments; everything else lives in the menu. */
+body.driving header b,body.driving header nav button:not(#pause),#speed,#instruments>span:first-of-type{display:none}
+body.driving header{left:auto;right:16px;top:16px}
+body.driving header nav{width:auto}
+body.driving #pause{width:44px;height:44px;padding:0;font-size:20px;background:#10242a70;border:0}
+body.driving #instruments #secret,body.driving #instruments #coins{display:none}
+#osm-credit{position:static;display:block;margin-top:14px;padding:0;background:none;font-size:10px}
+#clock{top:20px;right:76px;border:0;background:transparent;box-shadow:none;text-shadow:0 1px 3px #000;font-size:18px}
+#gate{left:22px;top:20px;transform:none;background:transparent;box-shadow:none;padding:8px 0;text-shadow:0 1px 3px #000}
+#item{left:22px;top:62px;transform:none}
+#map{background:#10242a85;border:0;bottom:20px}
+@media(max-width:540px){body.driving header{top:8px;right:8px}#clock{top:14px;right:62px;font-size:15px}#gate{left:12px;top:14px;max-width:45vw;font-size:12px}#item{top:52px;left:12px}#osm-credit{font-size:10px}#map{bottom:145px}}
+
+#map{width:225px;height:200px}@media(max-width:900px){#map{width:180px;height:160px}}@media(max-width:540px){#map{width:153px;height:136px}}
