@@ -10,10 +10,17 @@ const PALETTE={sand:'#bfaa86',asphalt:'#515b61',concrete:'#aeb2aa',grass:'#8c9b6
 // Clip each draw to its tile. Long OSM roads/aprons occur in multiple source tiles, but never
 // render twice on the same pixel. Collision keeps original footprints, including at seams.
 function clip(poly,b){for(const [axis,value,sign]of [[0,b[0],1],[0,b[2],-1],[1,b[1],1],[1,b[3],-1]]){const result=[];for(let i=0;i<poly.length;i++){const a=poly[i],c=poly[(i+1)%poly.length],ia=(a[axis]-value)*sign>=0,ic=(c[axis]-value)*sign>=0;if(ia)result.push(a);if(ia!==ic){const t=(value-a[axis])/(c[axis]-a[axis]);result.push([a[0]+t*(c[0]-a[0]),a[1]+t*(c[1]-a[1])]);}}poly=result;if(poly.length<3)return [];}return poly;}
-export function createTileRenderer(scene,elevation=null){const maps=new Map(['sand','asphalt','concrete','stucco','roof'].map(k=>[k,createSurfaceMaps(k)])),mats=new Map(),groups=new Map();for(const [k,c]of Object.entries(PALETTE)){const textures=maps.get(k==='wall'?'stucco':k);mats.set(k,new T.MeshStandardMaterial({color:c,emissive:k==='light'?'#e6efc2':'#000000',emissiveIntensity:k==='light'?1:0,roughness:textures?1:k==='glass'?.25:.92,metalness:k==='glass'?.3:0,vertexColors:true,...(textures?{map:textures.map,roughnessMap:textures.roughnessMap,normalMap:textures.normalMap,normalScale:new T.Vector2(.3,.3)}:{})}));}
+export function createTileRenderer(scene,elevation=null){const maps=new Map(['sand','asphalt','concrete','stucco','roof'].map(k=>[k,createSurfaceMaps(k)])),mats=new Map(),groups=new Map();for(const [k,c]of Object.entries(PALETTE)){const textures=maps.get(k==='wall'?'stucco':k);mats.set(k,new T.MeshStandardMaterial({color:textures?'#ffffff':c,emissive:k==='light'?'#e6efc2':'#000000',emissiveIntensity:k==='light'?1:0,roughness:textures?1:k==='glass'?.25:.92,metalness:k==='glass'?.3:0,vertexColors:true,...(textures?{map:textures.map,roughnessMap:textures.roughnessMap,normalMap:textures.normalMap,normalScale:new T.Vector2(k==='asphalt'?.035:.18,k==='asphalt'?.035:.18)}:{})}));}
  function load(key,tile){const b=[tile.tile[0]*SIZE,tile.tile[1]*SIZE,(tile.tile[0]+1)*SIZE,(tile.tile[1]+1)*SIZE],buckets=new Map(),root=new T.Group();root.name=`WorldTile_${key}`;
   const bucket=k=>{if(!buckets.has(k))buckets.set(k,{v:[],c:[],uv:[]});return buckets.get(k);};
-  function tri(k,a,b,c,shade=1){let triangles=[[a,b,c]];for(const d of DISTRICT_BOUNDS){if(Math.min(a[0],b[0],c[0])>d[2]||Math.max(a[0],b[0],c[0])<d[0]||Math.min(a[2],b[2],c[2])>d[3]||Math.max(a[2],b[2],c[2])<d[1])continue;triangles=triangles.flatMap(v=>subtractBox(v,[d[0],-100,d[1],d[2],1000,d[3]]));}const t=bucket(k);for(const triangle of triangles){t.v.push(...triangle.flat());for(const p of triangle){t.c.push(shade,shade,shade);t.uv.push((p[0]+p[1]*.4)*.7,(p[2]+p[1])*.7);}}}
+ function tri(k,a,b,c,shade=1){let triangles=[[a,b,c]];for(const d of DISTRICT_BOUNDS){if(Math.min(a[0],b[0],c[0])>d[2]||Math.max(a[0],b[0],c[0])<d[0]||Math.min(a[2],b[2],c[2])>d[3]||Math.max(a[2],b[2],c[2])<d[1])continue;triangles=triangles.flatMap(v=>subtractBox(v,[d[0],-100,d[1],d[2],1000,d[3]]));}const t=bucket(k);for(const triangle of triangles){t.v.push(...triangle.flat());
+    // Horizontal surfaces use X/Z; vertical facades use their dominant wall axis/Y.
+    // The old mixed X/Y and Z/Y projection skewed window bands diagonally on walls.
+    const dx=Math.abs(triangle[1][0]-triangle[0][0])+Math.abs(triangle[2][0]-triangle[0][0]);
+    const dz=Math.abs(triangle[1][2]-triangle[0][2])+Math.abs(triangle[2][2]-triangle[0][2]);
+    const vertical=Math.abs(triangle[1][1]-triangle[0][1])+Math.abs(triangle[2][1]-triangle[0][1])>.1;
+    const scale=k==='asphalt'?1.2:.16;for(const p of triangle){t.c.push(shade,shade,shade);t.uv.push(vertical?(dx>=dz?p[0]:p[2])*.24:p[0]*scale,(vertical?p[1]:p[2])*scale);}
+  }}
   function quad(k,a,b,c,d,shade=1){tri(k,a,b,c,shade);tri(k,a,c,d,shade);}
   function poly(k,ring,y,shade=1){const pts=clip(ring,b);if(pts.length<3)return;const v=pts.map(p=>new T.Vector2(...p)),faces=T.ShapeUtils.triangulateShape(v,[]);for(const [a,c,d]of faces){const p=[pts[a],pts[c],pts[d]],cross=(p[1][0]-p[0][0])*(p[2][1]-p[0][1])-(p[1][1]-p[0][1])*(p[2][0]-p[0][0]);if(cross>0)p.reverse();tri(k,...p.map(q=>[q[0],y,q[1]]),shade);}}
   function ribbon(k,a,c,w,y){const len=Math.hypot(c[0]-a[0],c[1]-a[1]);if(len<.01)return;const x=-(c[1]-a[1])/len*w/2,z=(c[0]-a[0])/len*w/2;poly(k,[[a[0]+x,a[1]+z],[c[0]+x,c[1]+z],[c[0]-x,c[1]-z],[a[0]-x,a[1]-z]],y);}
@@ -25,6 +32,10 @@ export function createTileRenderer(scene,elevation=null){const maps=new Map(['sa
      const n=Math.max(1,Math.ceil(len/3));for(let j=0;j<n;j++){const a0=[a[0]+(c[0]-a[0])*j/n,a[1]+(c[1]-a[1])*j/n],a1=[a[0]+(c[0]-a[0])*(j+1)/n,a[1]+(c[1]-a[1])*(j+1)/n],mid=[(a0[0]+a1[0])/2,(a0[1]+a1[1])/2];if(mid[0]<b[0]||mid[0]>=b[2]||mid[1]<b[1]||mid[1]>=b[3])continue;
       const P=(t,y,off=0)=>[a0[0]+(a1[0]-a0[0])*t+(c[1]-a[1])/len*off,y,a0[1]+(a1[1]-a0[1])*t-(c[0]-a[0])/len*off];
       quad('wall',P(0,0),P(1,0),P(1,h),P(0,h),shade);quad('wall',P(0,h),P(1,h),P(1,0),P(0,0),shade);
+      // A low raised plinth gives the base buildings the chunky toy-model silhouette
+      // visible in the Nellis standards photos without changing the collision footprint.
+      quad('trim',P(0,0,.045),P(1,0,.045),P(1,.2,.045),P(0,.2,.045),shade+.04);
+      quad('trim',P(0,.2,.045),P(1,.2,.045),P(1,.2,.025),P(0,.2,.025),shade+.04);
       quad('trim',P(0,h-.2,.025),P(1,h-.2,.025),P(1,h,.025),P(0,h,.025));
       if(p.building!=='roof')for(let y=1.1;y<h-1;y+=3){quad('glass',P(.2,y,.04),P(.8,y,.04),P(.8,y+1.25,.04),P(.2,y+1.25,.04));quad('glass',P(.2,y+1.25,-.04),P(.8,y+1.25,-.04),P(.8,y,-.04),P(.2,y,-.04));}
      }

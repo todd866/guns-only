@@ -6,13 +6,13 @@ import {createSurfaceMaps} from './materials.js';
 export function buildArrivalRoad(scene){
  const root=new T.Group();root.name='GateApproach';
  const textures=createSurfaceMaps('asphalt'),materials=[];
- const asphalt=new T.MeshStandardMaterial({color:'#41464a',roughnessMap:textures.roughnessMap,normalMap:textures.normalMap,normalScale:new T.Vector2(.025,.025),roughness:.94});materials.push(asphalt);
+ const asphalt=new T.MeshStandardMaterial({color:'#ffffff',map:textures.map,roughnessMap:textures.roughnessMap,normalMap:textures.normalMap,normalScale:new T.Vector2(.025,.025),roughness:.94});materials.push(asphalt);
  const paint=new T.MeshStandardMaterial({color:'#e9d9b3',roughness:.9}),yellow=new T.MeshStandardMaterial({color:'#edbc45',roughness:.9});materials.push(paint,yellow);
  const strip=(a,b,width,y,material)=>{
   const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz),nx=-dz/len*width/2,nz=dx/len*width/2;
   const points=[[a[0]-nx,y,a[1]-nz],[a[0]+nx,y,a[1]+nz],[b[0]+nx,y,b[1]+nz],[b[0]-nx,y,b[1]-nz]];
   const g=new T.BufferGeometry(),v=[...points[0],...points[1],...points[2],...points[0],...points[2],...points[3]];
-  g.setAttribute('position',new T.Float32BufferAttribute(v,3));g.setAttribute('uv',new T.Float32BufferAttribute(v.flatMap((_,i)=>i%3===0?[v[i]*.5,v[i+2]*.5]:[]),2));g.computeVertexNormals();
+  g.setAttribute('position',new T.Float32BufferAttribute(v,3));g.setAttribute('uv',new T.Float32BufferAttribute(v.flatMap((_,i)=>i%3===0?[v[i]*1.2,v[i+2]*1.2]:[]),2));g.computeVertexNormals();
   // Road faces are horizontal; explicit upward winding also works for southbound segments.
   if(g.attributes.normal.getY(0)<0){const p=g.attributes.position,u=g.attributes.uv;for(let i=0;i<p.count;i+=3){const a=new T.Vector3().fromBufferAttribute(p,i+1),uv=new T.Vector2().fromBufferAttribute(u,i+1);p.setXYZ(i+1,p.getX(i+2),p.getY(i+2),p.getZ(i+2));u.setXY(i+1,u.getX(i+2),u.getY(i+2));p.setXYZ(i+2,...a.toArray());u.setXY(i+2,...uv.toArray());}g.computeVertexNormals();}
   const mesh=new T.Mesh(g,material);mesh.receiveShadow=true;root.add(mesh);

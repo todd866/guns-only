@@ -1,7 +1,6 @@
 // A race: the player's session plus AI opponents driving the same car physics, and car-to-car
 // bumping. Opponents follow the AI_* racing line (or the gates on courses without one) with a
-// pure-pursuit steer and a curvature speed limit. In kid mode they rubber-band to stay near the
-// player; in Big Kid they just drive.
+// pure-pursuit steer and a curvature speed limit. Both modes keep a bounded nearby pack.
 import { createSession, stepSession, readout, recover } from './session.mjs';
 import { add, sub, scale, dot, len, rotate } from './math.mjs';
 import { createPickups, stepPickups, modifiers, use, rivalWants, MISSILES, boostCar } from './pickups.mjs';
@@ -26,7 +25,7 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false, 
   // stand to attention too, or keep driving (nobody tells the kid off).
   // Furball sessions drive like free drive (no gates, no lap) inside the race's own rules.
   if (roam || furball) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
-  const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(furball || roam ? { ...course, pickupItems: null } : course), events: [], clock: 0, t: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
+  const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(furball || roam ? { ...course, pickupItems: null } : course), events: [], clock: 0, t: 0, pace: 6, drivingTime: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
   if (furball) race.furball = createFurball(race);
   return race;
 }
@@ -102,7 +101,13 @@ export function driveInput(race, rival) {
   }
   vmax *= 1 - Math.min(0.6, Math.abs(err));
   if (race.roam) vmax *= 0.75;   // free drive: rivals cruise round as traffic
-  else if (s !== race.player) vmax *= packFactor(race, rival);
+  else if (s !== race.player) {
+    vmax *= packFactor(race, rival);
+    // Learn a moving player's pace, so a novice can race without mastering the drift.
+    // Only leaders ease off; there is no free speed or teleport for trailing opponents.
+    if (race.drivingTime > 2 && raceDistance(s) - raceDistance(race.player) > 5)
+      vmax = Math.min(vmax, Math.max(2.5, race.pace) * 1.04);
+  }
   const steer = Math.max(-1, Math.min(1, err * 2.2));
   if (vmax < 0.5 || retreatActive(race)) return { throttle: 0, brake: true, steer };
   return { throttle: r.forwardSpeed < vmax ? 1 : r.forwardSpeed > vmax + 1.5 ? -0.6 : 0.2, steer };
@@ -114,13 +119,27 @@ export function driveInput(race, rival) {
 // the horizon and never parked. Kid mode: over the last third of the lap, rivals level with or
 // ahead of the kid ease off further, so a kid who keeps driving wins most of the time ("it's no
 // fun if I just instantly win": the pack is still there until the end). Big Kid gives nothing.
-export const PACK = { slots: [0.35, 0, -0.35], ease: 0.35, push: 0.25, floor: 0.45, ceiling: 1.3, kidLate: 0.66, kidGive: 0.7, boostBehind: 1, boostEvery: 2.5 };
-export function packFactor(race, rival) {
-  const n = race.course.checkpoints.length, me = progress(race.player), gap = progress(rival.session) - me;
-  const d = gap - PACK.slots[rival.colour % PACK.slots.length];
-  let k = d > 0 ? Math.max(PACK.floor, 1 - d * PACK.ease) : Math.min(PACK.ceiling, 1 - d * PACK.push);
-  if (race.mode === 'kid' && me / (n * race.player.laps) > PACK.kidLate && gap > -0.25) k = Math.min(k, PACK.kidGive);
-  return k;
+// Distances, not checkpoint counts: a gate may be 4 m or 400 m away.
+const courseLengths=new WeakMap();
+export function raceDistance(s) {
+ const cps=s.course.checkpoints;let prefix=courseLengths.get(cps);
+ if(!prefix){prefix=[0];for(let i=1;i<cps.length;i++)prefix[i]=prefix[i-1]+Math.hypot(cps[i][0]-cps[i-1][0],cps[i][1]-cps[i-1][1]);courseLengths.set(cps,prefix);}
+ const length=prefix.at(-1),before=prefix[Math.max(0,Math.min(s.gate-1,cps.length-1))];
+ if(s.finished)return s.laps*length;
+ if(!s.gate)return (s.lap-1)*length-Math.hypot(cps[0][0]-s.car.pos[0],cps[0][1]-s.car.pos[2]);
+ const i=Math.min(s.gate,cps.length-1),a=cps[i-1],b=cps[i],dx=b[0]-a[0],dz=b[1]-a[1],d=Math.hypot(dx,dz);
+ const along=d?Math.max(0,Math.min(d,((s.car.pos[0]-a[0])*dx+(s.car.pos[2]-a[1])*dz)/d)):0;
+ return (s.lap-1)*length+before+along;
+}
+export const PACK = { slots: [3,0,-3], floor:.16, ceiling:1.18, kidLate:.66, kidGive:.7 };
+export function packFactor(race,rival) {
+ const gap=raceDistance(rival.session)-raceDistance(race.player),d=gap-PACK.slots[rival.colour%PACK.slots.length];
+ // Before a player moves, traffic still completes its race. Once driving, a dropped turn
+ // opens a recoverable gap instead of letting the pack disappear a lap ahead.
+ const floor=race.drivingTime>2?PACK.floor:.45;
+ let k=d>0?Math.max(floor,1-d*.045):Math.min(PACK.ceiling,1-d*.012);
+ if(race.mode==='kid'&&raceDistance(race.player)/Math.max(1,courseLengths.get(race.course.checkpoints).at(-1)*race.player.laps)>PACK.kidLate&&gap>-2)k=Math.min(k,PACK.kidGive);
+ return k;
 }
 
 // Effects (zoom, oil, a balloon spin) ride on the step input; a spinning car's controls are dead.
@@ -136,6 +155,10 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   const cars = [race.player.car, ...race.rivals.map(r => r.session.car)].filter(c => !fb?.out.has(c));
   if (race.player.running) race.clock += dt;
   race.t += dt;
+  if (!race.roam && !fb && Math.abs(playerInput.throttle || 0)>.1 && race.player.car.forwardSpeed>1) {
+    race.drivingTime += dt;
+    race.pace += (race.player.car.forwardSpeed-race.pace)*(1-Math.exp(-dt/6));
+  }
   if (playerInput.fire) use(pk, race.player.car);
   // Race order for the Pitbull (blue shell): leader first. Free drive has no order.
   pk.order = race.roam || fb ? null : [race.player, ...race.rivals.map(r => r.session)].sort((a, b) => placeOf(race, a) - placeOf(race, b)).map(s => s.car);
@@ -170,12 +193,6 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   }
   for (const s of [race.player, ...race.rivals.map(r => r.session)])
     if (s.finished && !race.finishOrder.includes(s)) race.finishOrder.push(s);
-  // Pack catch-up: a rival more than a gate behind the player lights a short Afterburner every
-  // few seconds (visible flames, Mario Kart style), so a fast kid still has company.
-  if (!race.roam && !fb) for (const rival of race.rivals) {
-    rival.boostIn = (rival.boostIn ?? 0) - dt;
-    if (rival.boostIn <= 0 && !rival.session.finished && progress(rival.session) - progress(race.player) < -PACK.boostBehind) { boostCar(pk, rival.session.car, 0.9); rival.boostIn = PACK.boostEvery; }
-  }
   // Boost pads: a short Afterburner for whoever crosses one (rivals too).
   if (race.features) for (const c of cars) if (padHit(race.features, c)) boostCar(pk, c, 0.9);
   bump(cars);

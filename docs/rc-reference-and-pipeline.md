@@ -222,3 +222,14 @@ Local play: `bin/rc-preview`, then `http://127.0.0.1:8878/rc/?art=review`.
 Full-shell preview: `python3 -m http.server 8897 --bind 127.0.0.1 --directory /tmp/rc-oct20-shell/wwwroot`,
 then `http://127.0.0.1:8897/?art=review`; start a flight, Escape, RC base, Start.
 Exit with O, then Escape to resume. The QA browsers and servers have been closed.
+
+
+## Reference-driven feel pass — 23 October 2026
+
+Owner clarified: Re-Volt supplies the toy-car scale and scenery reference only. The fun target is Mario Kart: ordinary steering should be competitive, AI should keep races close, drift is optional. Native Re-Volt control timed out despite authorization; the process was closed and no playtest is claimed. Mario Kart was driven via real keys on Luigi Raceway, including acceleration, hop/steer and a wall collision; observed references were readable road edges, stable low camera, small lower-centre car and visible ground texture.
+
+Changes: X/Z aliases, Shift/right-shoulder optional hop-slide, gentler Big Kid yaw stabilization and air leveling, preserved Kid behavior, camera pulled back slightly for more road visibility. Pack spacing now uses metres, leaders ease toward observed player pace, trailing pace adjustment is bounded to 18%, and automatic free catch-up boosts are removed. Existing pickup boosts remain. Actual three-lap tests cover a slow driver with a three-second mistake and a trailing rival stopped for three seconds; neither requires drifting. Late-lap Kid easing also uses distance.
+
+Original procedural surface textures now distinguish asphalt, concrete, desert stucco and roof material; facade UVs follow wall axes. Fine asphalt grain and short facade plinths provide scale cues. Render inspection rejected a first version with giant gravel-like grain and double colour tint; corrected before release. This is an incremental art pass, not a claim that the full concept-art quality has been achieved.
+
+Evidence: `evidence/rc-open-world/reference-feel/` real-key drift, release, laptop/phone/landscape views and controls at enlarged text; `tools/rc/check-reference-feel.cjs` reruns those checks. Both independent refuter and scoped Cursor review were used. Their drift timing, recovery, trailing-rival and uneven-gate pacing concerns were addressed and tested. Ice Patrol exposed a yaw-assist regression, fixed by retaining original steering falloff and leaving low-grip sliding to the tyres in Big Kid. Root website cache fix from PR134 is now verified live (`/tmp/rc-root-cache-final.log`, production `guns-only-patff8czn-ian-todds-projects.vercel.app`).

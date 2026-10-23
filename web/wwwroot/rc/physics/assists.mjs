@@ -1,32 +1,45 @@
 // Kid mode. Assists are honest pilots: they shape the inputs and add bounded torques the way a
 // steady hand on the transmitter would. They never change the car's physics. Big Kid turns
-// them down to plain speed-sensitive steering, as in a real RC transmitter's dual rate.
+// them down to gentler stabilization, with the same predictable speed-sensitive steering.
 import { dot, cross, scale, sub, add } from './math.mjs';
 import { carUp, carForward } from './car.mjs';
+import { createDrift, stepDrift } from './drift.mjs';
+import { SURFACES } from './world.mjs';
 
 export const MODES = {
   kid: { steerFalloff: 0.1, yawHold: 8, airLevel: true, autoRight: true, freeRecovery: true },
-  bigKid: { steerFalloff: 0.035, yawHold: 0, airLevel: false, autoRight: false, freeRecovery: false },
+  // Big Kid still has a gentle transmitter stabiliser and air attitude help. It rewards a
+  // clean line without making precision steering or mid-air correction into homework.
+  bigKid: { steerFalloff: 0.035, yawHold: 2.4, airLevel: true, autoRight: false, freeRecovery: false },
 };
 
-export function createAssist(mode = 'kid') { return { mode, flipTime: 0, righting: 0 }; }
+export function createAssist(mode = 'kid') { return { mode, flipTime: 0, righting: 0, drift: createDrift() }; }
 
 // Turns the raw transmitter input into the input stepCar receives.
 export function assistInput(a, car, raw, dt) {
   const m = MODES[a.mode], p = car.params, out = { ...raw };
+  if(a.placement !== (car.placement ?? 0)) {
+    a.placement = car.placement ?? 0;
+    a.drift = createDrift(); a.drift.held = !!raw.drift;
+  }
   const speed = Math.abs(car.forwardSpeed);
   out.steerLimit = p.maxSteer / (1 + m.steerFalloff * speed);
   const up = carUp(car), I = 1 / car.invInertia[0];
   let torque = [0, 0, 0];
+  const drift = stepDrift(a.drift, car, raw, dt, up[1]);
 
   // Yaw hold: damp yaw rate toward what the front wheels ask for, so the rear does not swap
   // ends on a six-year-old. Wheelbase from the wheel layout.
-  if (m.yawHold && car.contacts >= 3) {
+  const wheelGrips = car.wheels.map(w => SURFACES[w.surface]?.grip ?? 1).filter(Number.isFinite);
+  const lowGrip = wheelGrips.length ? Math.min(...wheelGrips) : 1;
+  // A yaw damper that is helpful on asphalt fights the intentional slip of ice and snow.
+  // Let the tyre model own those surfaces; retain stabilization on ordinary roads.
+  if (m.yawHold && car.contacts >= 3 && (a.mode === 'kid' || lowGrip >= 0.72)) {
     const L = Math.abs(p.wheels[0].at[2] - p.wheels[2].at[2]);
     // What the front wheels ask for, capped at what tyre grip can deliver (a ≈ 1.2 g).
     const kinematic = -car.forwardSpeed * Math.tan(car.steer) / L, gripLimit = 1.2 * 9.81 / Math.max(1, Math.abs(car.forwardSpeed));
     const wanted = Math.max(-gripLimit, Math.min(gripLimit, kinematic)), actual = dot(car.ang, up);
-    torque = add(torque, scale(up, -m.yawHold * (actual - wanted) / car.invInertia[1]));
+    torque = add(torque, scale(up, -m.yawHold * (drift.active ? .35 : 1) * (actual - wanted) / car.invInertia[1]));
   }
   // Air levelling: in the air, ease the body toward wheels-down so landings land.
   if (m.airLevel && car.contacts === 0) torque = add(torque, levelTorque(car, up, I, 5));
@@ -36,6 +49,17 @@ export function assistInput(a, car, raw, dt) {
   a.flipTime = stuck ? a.flipTime + dt : 0;
   if (m.autoRight && a.flipTime > 0.8 && a.righting <= 0) { a.righting = 0.7; car.vel[1] += 2.2; a.flipTime = 0; }
   if (a.righting > 0) { a.righting -= dt; torque = add(torque, levelTorque(car, up, I, 14)); }
+
+  // Drift is opt-in. The edge-triggered hop and its short lateral slide are bounded by
+  // drift.mjs; releasing the button returns to the normal tyre model immediately.
+  if (drift.hop) car.vel[1] += drift.hop;
+  if (drift.active) {
+    out.lateralGripScale = drift.lateralGripScale;
+    if (drift.yawTarget) {
+      const actual = dot(car.ang, up);
+      torque = add(torque, scale(up, -drift.yawGain * (actual - drift.yawTarget) / car.invInertia[1]));
+    }
+  }
 
   out.torque = torque;
   return out;

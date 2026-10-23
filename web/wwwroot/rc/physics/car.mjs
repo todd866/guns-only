@@ -48,7 +48,7 @@ export function createCar(params = BUGGY, pos = [0, 0.1, 0], yaw = 0) {
     params, invInertia: inertia.map(i => 1 / i),
     pos: [...pos], q: quatAxisAngle([0, 1, 0], -yaw), vel: [0, 0, 0], ang: [0, 0, 0],
     steer: 0, wheels: params.wheels.map(() => ({ compression: 0, contact: false, spin: 0, slip: 0, surface: null })),
-    grounded: false, contacts: 0, impact: 0, speed: 0, forwardSpeed: 0,
+    grounded: false, contacts: 0, impact: 0, speed: 0, forwardSpeed: 0, placement: 0,
   };
 }
 
@@ -59,6 +59,7 @@ export function rideHeight(p = BUGGY) {
 }
 
 export function placeCar(car, pos, yaw) {
+  car.placement = (car.placement ?? 0) + 1;
   car.pos = [...pos]; car.q = quatAxisAngle([0, 1, 0], -yaw); car.vel = [0, 0, 0]; car.ang = [0, 0, 0]; car.steer = 0;
 }
 
@@ -119,7 +120,7 @@ function substep(car, input, world, dt) {
     const vp = pointVelocity(car, hit.point), vLong = dot(vp, wf), vLat = dot(vp, wl);
     const load = springF, axle = wp.front ? 0 : 1;
     const muS = p.staticFriction[axle] * surf.grip * grip, muK = p.kineticFriction[axle] * surf.grip * grip;
-    let fLat = -vLat * (m / 4) / dt * p.lateralStiffness;
+    let fLat = -vLat * (m / 4) / dt * p.lateralStiffness * (input.lateralGripScale ?? 1);
     let fLong = drive / 4 - Math.sign(vLong) * Math.min(1, Math.abs(vLong) * 5) * surf.roll * load;
     if (braking) fLong += -Math.sign(vLong) * Math.min(p.brakeForce / 4, Math.abs(vLong) * (m / 4) / dt * 0.5);
     const total = Math.hypot(fLat, fLong), limitS = muS * load;
