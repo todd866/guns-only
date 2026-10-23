@@ -51,10 +51,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
     requestAnimationFrame(frame);
    }requestAnimationFrame(frame);
   });
-  for(let waited=0;waited<300;waited+=10){await page.waitForTimeout(10000);const state=await page.evaluate(()=>({s:window.__gunsOnlyRC.snapshot(),done:window.qaDrive?.done}));console.log(JSON.stringify({seconds:waited+10,lap:state.s.lap,gate:state.s.gate,travel:Math.round(state.s.travel),recoveries:state.s.recoveries}));if(state.done)break;}
+  for(let waited=0;waited<420;waited+=10){await page.waitForTimeout(10000);const state=await page.evaluate(()=>({s:window.__gunsOnlyRC.snapshot(),done:window.qaDrive?.done}));console.log(JSON.stringify({seconds:waited+10,lap:state.s.lap,gate:state.s.gate,travel:Math.round(state.s.travel),recoveries:state.s.recoveries}));if(state.done)break;}
   assert.ok(await page.evaluate(()=>window.qaDrive?.done),'Three laps must finish through controller input');
   report.finished=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());report.samples=await page.evaluate(()=>window.qaDrive.samples);
-  assert.equal(report.finished.finished,true);assert.equal(report.finished.lapTimes.length,3);
+  assert.equal(report.finished.finished,true);assert.equal(report.finished.recoveries,0);assert.equal(report.finished.lapTimes.length,3);
   assert.ok(report.samples.some(s=>s.near>0),'Rivals must be visible during the race');
   await page.screenshot({path:out+'/finish.png'});
   assert.ok(await page.evaluate(()=>JSON.parse(localStorage.getItem('guns-only.rc.world.v1')).raceWins['district-housing']>0),'Race finish is saved');

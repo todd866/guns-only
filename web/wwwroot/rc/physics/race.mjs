@@ -15,15 +15,16 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false, 
   // Older authored districts contain four grid markers. Extend their last rows
   // instead of silently shrinking an eight-car race to four cars.
   const grid = course.grid?.length ? [...course.grid] : gridBehind(course.start, opponents + 1);
+  const columns = grid.length === 1 ? 1 : 2;
   while (grid.length < opponents + 1) {
-    const previous = grid[Math.max(0, grid.length - 2)], yaw = previous.yaw;
+    const previous = grid[Math.max(0, grid.length - columns)], yaw = previous.yaw;
     grid.push({pos: add(previous.pos, [-Math.sin(yaw) * 1.1, 0, Math.cos(yaw) * 1.1]), yaw});
   }
   // The player starts at the back, as in Re-Volt: the chase camera sees the car, and there
   // are rivals to overtake from the first second.
   const slots = grid.slice(0, opponents + 1), player = createSession({ ...course, start: roam ? course.start : slots.at(-1) }, { mode, params });
   const line = racingLine(course);
-  const rivals = slots.slice(0, -1).map((slot, i) => ({
+  const rivals = (roam ? slots.slice(1) : slots.slice(0, -1)).map((slot, i) => ({
     session: Object.assign(createSession({ ...course, start: slot }, { mode: 'bigKid' }), { autoUnstick: true }),
     skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i, callsign: CALLSIGNS[i % CALLSIGNS.length],
   }));

@@ -30,3 +30,17 @@ test('one-marker grids expand safely and roam starts at its authored arrival poi
  assert.equal(createRace(course,{opponents:7}).rivals.length,7);
  const roam=createRace(course,{opponents:7,roam:true});assert.equal(roam.player.car.pos[0],course.start.pos[0]);assert.equal(roam.player.car.pos[2],course.start.pos[2]);
 });
+
+test('patrol placement retries unavailable roads and never stacks sparse ready points',()=>{
+ const course=eventCourse(EVENTS[0],createWorld());course.grid=[course.start];
+ const race=createRace(course,{roam:true,opponents:7}),pos=race.player.car.pos;
+ assert.ok(race.rivals.every(r=>Math.hypot(r.session.car.pos[0]-pos[0],r.session.car.pos[2]-pos[2])>.5));
+ const roads=[{kind:'service',points:[[pos[0],pos[2]-100],[pos[0],pos[2]+100]]}];
+ assert.equal(updateTraffic(race,roads,{ready:()=>false},null),null);
+ const sparse={ready:p=>p[2]>pos[2]+20&&p[2]<pos[2]+29};
+ const previous=updateTraffic(race,roads,sparse,null);
+ const positions=race.rivals.map(r=>[r.session.car.pos[0],r.session.car.pos[2]]);
+ assert.equal(new Set(positions.map(p=>p.join(','))).size,7);
+ updateTraffic(race,roads,{ready:()=>true},previous);
+ assert.ok(race.rivals.every(r=>r.trafficPlaced));
+});
