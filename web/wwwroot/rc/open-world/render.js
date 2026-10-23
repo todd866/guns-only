@@ -1,6 +1,6 @@
 import {createSurfaceMaps} from './materials.js';
 import {groundTriangles} from './elevation.mjs';
-import {DISTRICT_BOUNDS} from './district-zones.mjs';
+import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import * as T from '../../vendor/three.module.js';
 import {buildingInfo,roadWidth} from './geometry.mjs';

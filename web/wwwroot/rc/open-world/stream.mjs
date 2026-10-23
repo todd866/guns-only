@@ -1,4 +1,4 @@
-import {DISTRICT_BOUNDS} from './district-zones.mjs';
+import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import {groundTriangles} from './elevation.mjs';
 import {createWorld} from '../physics/world.mjs';

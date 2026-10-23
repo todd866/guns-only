@@ -1,8 +1,25 @@
-# Area 51½ RC design request ledger
+# Saucer Springs AFB RC design request ledger
 
 This ledger is the traceable scope for the RC game. It separates owner direction from
 inherited design proposals and from the current implementation scaffold. A passing test or
 render is evidence that a scaffold works; it is not approval that the finished design is right.
+
+## Current opening direction — 24 October 2026
+
+Start in the residential neighbourhood's small skatepark. The school, homes and connecting
+paths belong to the same neighbourhood; the larger base skatepark remains a separate venue.
+Use the private reference study to preserve convincing spatial relationships, with fictional
+names, original art and deliberate adaptations. Do not publish identifying research notes,
+source coordinates, personal history or private reference files with the open-source game.
+Retain required third-party data attribution separately from personal provenance.
+
+The opening teaches through play: an easy bend, optional ramp with flat bypass, nearby cars
+and items, an accessible race, then continued exploration. No mandatory drift or jump,
+unlock chore, or explanatory menu sequence. Verify the fresh-profile input journey and
+actual toy-eye screenshots. Automated completion does not prove human usability or art quality.
+
+The authored skatepark and reference layout are in progress. The complete neighbourhood
+redesign has not been deployed or visually accepted.
 
 ## Product contract
 
@@ -161,3 +178,7 @@ The “map the base and game parts to MK64 parts” instruction should be implem
 archetype matrix: each Saucer Springs venue gets a recognizable mechanical role (beach/wave,
 stadium, quarry, boardwalk, maze, fortress, highway, desert, night finale) while the AFB remains
 one continuous world and all geometry, names, signs and jokes remain original.
+
+### Residential season and setting (24 October 2026)
+
+Keep the neighbourhood recognisable through its routes, school, civic centre and small skatepark, transplanted into the American Southwest. Late spring/early summer: full leafy shade trees, irrigated lawns and playing fields, warm buildings and desert mountain backdrop. Assume sufficient irrigation across the residential district; keep its lawns and verges green rather than restricting greenery to small garden patches. Reference photographs taken in winter establish architecture only; do not reproduce bare winter vegetation. Personal source locations and photographs remain in the ignored private reference directory.

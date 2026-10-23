@@ -32,7 +32,8 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false, 
   // presentation remain a later play-balancing task.
   // Furball sessions drive like free drive (no gates, no lap) inside the race's own rules.
   if (roam || furball) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
-  const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(furball || roam ? { ...course, pickupItems: null } : course), events: [], clock: 0, t: 0, pace: 6, drivingTime: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
+  const pickupCourse = furball || roam ? { ...course, pickupItems: null } : course;
+  const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(pickupCourse, 1, { perCar: opponents > 0 && !roam }), events: [], clock: 0, t: 0, pace: 6, drivingTime: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
   if (furball) race.furball = createFurball(race);
   return race;
 }

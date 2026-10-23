@@ -1,4 +1,4 @@
-// Area 51½ car: a 6-DOF rigid body on four raycast spring-damper wheels with static/kinetic
+// Saucer Springs RC car: a 6-DOF rigid body on four raycast spring-damper wheels with static/kinetic
 // friction tyres, plus hull spheres that collide with the triangle world. Original model; SI
 // units; car-local axes are +X right, +Y up, −Z forward. Re-Volt informed the *form* of the
 // model (see docs/area-51-build-plan.md); none of its code or data is used.
@@ -38,7 +38,8 @@ export const BUGGY = {
 };
 
 const G = 9.81, SUBSTEPS = 4;
-// The Blender buggy is authored at 1:5.6 of this toy (0.75 m body, 0.15 m wheels); draw it at this scale.
+// Authoring coordinates use a 0.75 m body and 0.15 m wheel radius; this factor
+// matches the rendered car to the physics dimensions above.
 export const VISUAL_SCALE = 0.56;
 
 export function createCar(params = BUGGY, pos = [0, 0.1, 0], yaw = 0) {

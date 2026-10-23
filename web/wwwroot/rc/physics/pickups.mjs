@@ -10,12 +10,16 @@ export const ITEMS = ['zoom', 'balloon', 'oil', 'bubble', 'foxtwo', 'pitbull', '
 //   zuni    unguided rocket that bounces off walls (green shell)
 export const MISSILES = new Set(['foxtwo', 'pitbull', 'foxone', 'zuni']);
 const SPEC = { foxtwo: { v: 13, turn: 3.5, life: 4 }, pitbull: { v: 12.5, turn: 4, life: 12 }, foxone: { v: 15, turn: 6, life: 4 }, zuni: { v: 14, turn: 0, life: 5 } };
+// The player's visual cooldown remains four seconds. Each driver tracks its own
+// claim cooldown so a rival can use the same visible box without hiding it from
+// the player.
 const RESPAWN = 4, GRAB = 0.6;
 
-export function createPickups(course, seed = 1) {
-  const spots = (course.pickups ?? []).map(p => ({ pos: p.pos, ready: 0 }));
+export function createPickups(course, seed = 1, options = {}) {
+  const perCar = !!options.perCar || !!course.personalPickups;
+  const spots = (course.pickups ?? []).map(p => ({ pos: p.pos, ready: 0, cooldowns: perCar ? new Map() : null }));
   const requested=course.pickupItems?.filter(item=>ITEMS.includes(item));
-  return { items:requested?.length?requested:ITEMS, spots, held: new Map(), ammo: new Map(), announce: [], effects: new Map(), balloons: [], slicks: [], missiles: [], dangle: new Set(), rng: lcg(seed) };
+  return { items:requested?.length?requested:ITEMS, spots, perCar, held: new Map(), ammo: new Map(), announce: [], effects: new Map(), balloons: [], slicks: [], missiles: [], dangle: new Set(), rng: lcg(seed) };
 }
 const lcg = seed => () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
 const fx = (pk, car) => { let e = pk.effects.get(car); if (!e) pk.effects.set(car, e = { zoom: 0, bubble: 0, spin: 0, slick: 0 }); return e; };
@@ -55,10 +59,16 @@ export function stepPickups(pk, cars, world, dt, immune = null) {
   for (const e of pk.effects.values()) for (const k in e) e[k] = Math.max(0, e[k] - dt);
   for (const spot of pk.spots) {
     spot.ready = Math.max(0, spot.ready - dt);
-    if (spot.ready > 0) continue;
-    const car = cars.find(c => !pk.held.has(c) && len(sub(c.pos, spot.pos)) < GRAB);
+    if (!pk.perCar && spot.ready > 0) continue;
+    if (pk.perCar) for (const [car, left] of spot.cooldowns) {
+      const remaining = left - dt;
+      if (remaining > 0) spot.cooldowns.set(car, remaining); else spot.cooldowns.delete(car);
+    }
+    const car = cars.find(c => !pk.held.has(c) && (!pk.perCar || !spot.cooldowns.has(c)) && len(sub(c.pos, spot.pos)) < GRAB);
     if (car) {
-      const pool=pk.items??ITEMS, item = pool[Math.floor(pk.rng() * pool.length)]; pk.held.set(car, item); spot.ready = pk.respawn ?? RESPAWN;
+      const pool=pk.items??ITEMS, item = pool[Math.floor(pk.rng() * pool.length)]; pk.held.set(car, item);
+      if (pk.perCar) { spot.cooldowns.set(car, pk.respawn ?? RESPAWN); if (car === cars[0]) spot.ready = pk.respawn ?? RESPAWN; }
+      else spot.ready = pk.respawn ?? RESPAWN;
       // Missiles sometimes come as a 3-pack; firing the last of a pack calls "Winchester".
       if (MISSILES.has(item) && pk.rng() < 0.2) pk.ammo.set(car, 3); else pk.ammo.delete(car);
     }

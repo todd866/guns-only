@@ -1,3 +1,4 @@
+import {orientArrival} from './arrival-frame.mjs';
 import * as T from '../../vendor/three.module.js';
 import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
 
@@ -218,7 +219,7 @@ export function buildArrivalArt(scene) {
   }
   source.traverse((object) => object.geometry?.dispose());
   materials.forEach((m) => m.dispose());
-  scene.add(root);
+  orientArrival(root);scene.add(root);
   return {
     root,
     dispose() { root.removeFromParent(); for (const mesh of meshes) { mesh.geometry.dispose(); mesh.material.dispose(); } },

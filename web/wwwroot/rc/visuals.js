@@ -1,4 +1,4 @@
-// Area 51½ presentation polish: lighting presets per track, a sun shadow that follows the car,
+// Saucer Springs presentation: lighting presets per track, a sun shadow that follows the car,
 // clear-coat toy paint, and Re-Volt-style feedback (tyre dust, skid marks, balloon splashes).
 // Presentation only; nothing here touches the physics.
 import * as T from '../vendor/three.module.js';
@@ -24,7 +24,7 @@ export function applyLighting({ renderer, hemi, sun, contactSun }, preset) {
 
 // Keep the sun's shadow box centred on the car, snapped to whole texels so shadows don't shimmer.
 export function followSun(sun, at) {
-  const texel = 40 / sun.shadow.mapSize.x, snap = v => Math.round(v / texel) * texel;
+  const texel = (sun.shadow.camera.right-sun.shadow.camera.left) / sun.shadow.mapSize.x, snap = v => Math.round(v / texel) * texel;
   const cx = snap(at.x), cz = snap(at.z), d = sun.userData.dir;
   sun.target.position.set(cx, at.y, cz);
   sun.position.set(cx + d.x * 60, at.y + d.y * 60, cz + d.z * 60);
@@ -221,7 +221,7 @@ export async function setupPolish({ renderer, scene, camera, indoor }) {
   // M5); districts already carry baked AO in COLOR_0, so screen-space AO is opt-in (?gfx=ao).
   const ao = new URLSearchParams(location.search).get('gfx') === 'ao' ? new GTAOPass(scene, camera, w / 2, h / 2) : null;
   if (ao) { ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.2, samples: 8 }); composer.addPass(ao); }
-  composer.addPass(new UnrealBloomPass(new T.Vector2(w, h), 0.22, 0.45, 0.92));
+  composer.addPass(new UnrealBloomPass(new T.Vector2(w, h), indoor ? .22 : .10, .35, indoor ? .92 : 1.6));
   composer.addPass(new OutputPass());
   composer.addPass(new SMAAPass(w * renderer.getPixelRatio(), h * renderer.getPixelRatio()));
   return { render: () => composer.render(), resize: (W, H) => { composer.setSize(W, H); ao?.setSize(W / 2, H / 2); } };

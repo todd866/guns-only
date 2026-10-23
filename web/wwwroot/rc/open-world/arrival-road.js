@@ -17,7 +17,7 @@ export function buildArrivalRoad(scene){
   if(g.attributes.normal.getY(0)<0){const p=g.attributes.position,u=g.attributes.uv;for(let i=0;i<p.count;i+=3){const a=new T.Vector3().fromBufferAttribute(p,i+1),uv=new T.Vector2().fromBufferAttribute(u,i+1);p.setXYZ(i+1,p.getX(i+2),p.getY(i+2),p.getZ(i+2));u.setXY(i+1,u.getX(i+2),u.getY(i+2));p.setXYZ(i+2,...a.toArray());u.setXY(i+2,...uv.toArray());}g.computeVertexNormals();}
   const mesh=new T.Mesh(g,material);mesh.receiveShadow=true;root.add(mesh);
  };
- const segments=[[[-607,-7],[-607,-62]],[[-607,-62],[-573,-53.5]]];
+ const segments=[[[-641.1,-3.9],[-572.9,-53.5]],[[-572.9,-53.5],[-561.6,-39.8]]];
  for(const [a,b] of segments){strip(a,b,10,.03,asphalt);const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz),nx=-dz/len,nz=dx/len;for(const side of [-1,1])strip([a[0]+nx*4.6*side,a[1]+nz*4.6*side],[b[0]+nx*4.6*side,b[1]+nz*4.6*side],.12,.035,paint);for(let d=1;d<len-3;d+=6)strip([a[0]+dx*d/len,a[1]+dz*d/len],[a[0]+dx*(d+2.8)/len,a[1]+dz*(d+2.8)/len],.12,.037,yellow);}
  scene.add(root);return {dispose(){root.removeFromParent();root.traverse(o=>o.geometry?.dispose());materials.forEach(m=>m.dispose());textures.dispose();}};
 }

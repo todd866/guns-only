@@ -73,7 +73,7 @@ for(const [x,y,z,w,h,d,c] of [[0,6,0,10,.1,10,0xffe9cc],[-5,2,0,.1,4,8,0x536b70]
 const pmrem=new T.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(studio,.05).texture;scene.environmentIntensity=.45;pmrem.dispose();studio.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
 // Districts get the polished presentation: per-track lighting, a car-following sun shadow, and a
 // brighter studio environment for clear-coat reflections.
-if(track){applyLighting({renderer,hemi,sun,contactSun},isIndoor(track)?LIGHTING.indoor:LIGHTING.outdoor);scene.environment=studioEnvironment(renderer);scene.environmentIntensity=.6;scene.add(sun.target);}
+if(track){applyLighting({renderer,hemi,sun,contactSun},isIndoor(track)?LIGHTING.indoor:LIGHTING.outdoor);if(openWorld){Object.assign(sun.shadow.camera,{left:-38,right:38,top:38,bottom:-38});sun.shadow.camera.updateProjectionMatrix();sun.userData.dir.set(-.65,1,-.45).normalize();}scene.environment=studioEnvironment(renderer);scene.environmentIntensity=.6;scene.add(sun.target);}
 const fx=createEffects(scene);
 const marshal=createAlienMarshal(scene,{scale:.32});let marshalSession=null,marshalRecovery=0,marshalUntil=0,marshalLap=1,marshalLapUntil=0;
 // Polished look (HDRI light, bloom, SMAA) on district tracks.

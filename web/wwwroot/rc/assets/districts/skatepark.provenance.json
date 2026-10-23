@@ -1,0 +1,39 @@
+{
+  "generator": "tools/rc/blender/skatepark.py",
+  "license": "MIT original procedural geometry",
+  "external_assets": [],
+  "frame": "park-centred local metres; north=-Z",
+  "footprint": [
+    [
+      -18.803,
+      -20.0
+    ],
+    [
+      19.0,
+      15.053
+    ]
+  ],
+  "roam_start": [
+    6,
+    0.15,
+    8.7
+  ],
+  "roam_yaw": -0.14889,
+  "rolled_apron": {
+    "rise_m": 0.14,
+    "run_m": 0.5,
+    "profile": "smoothstep"
+  },
+  "lap_length_m": 47.6733972292086,
+  "vertex_ao": {
+    "raw_min": 0.0,
+    "raw_max": 1.0,
+    "floor": 0.48,
+    "distance_m": 1.4,
+    "samples": 20
+  },
+  "visual_triangles": 12849,
+  "collision_triangles": 3788,
+  "collision_meshes": 15,
+  "materials": 12
+}

@@ -46,6 +46,13 @@ function drawStatic(ctx, state, map, palette, bounds) {
     ctx.fillStyle = colour;
     for (const ring of rings) { path(ctx, ring, map, true); ctx.fill(); }
   }
+  const residential=state.world?.overview?.residential??state.overview?.residential;
+  for(const [items,colour]of [[residential?.greens,palette.land],[residential?.buildings,palette.building]])for(const feature of items??[]){
+    if(!visible(feature.points,...bounds))continue;
+    ctx.fillStyle=colour;path(ctx,feature.points,map,true);ctx.fill();
+    for(const hole of feature.holes??[]){ctx.fillStyle=palette.land;path(ctx,hole,map,true);ctx.fill();}
+  }
+  if(residential?.park?.points&&visible(residential.park.points,...bounds)){ctx.fillStyle='#a5b8af';path(ctx,residential.park.points,map,true);ctx.fill();}
   const roads = state.world?.overview?.roads ?? state.world?.roads ?? state.overview?.roads ?? [];
   ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = palette.road; ctx.lineWidth = 1.2;
   for (const road of roads) { const pts = (road.points ?? road.geometry?.coordinates?.map(point))?.map(point).filter(Boolean); if (!pts?.length || !visible(pts, ...bounds)) continue; path(ctx, pts, map); ctx.stroke(); }

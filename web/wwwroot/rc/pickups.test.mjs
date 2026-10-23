@@ -2,7 +2,7 @@ import test from 'node:test'; import assert from 'node:assert/strict';
 import { baseCourse } from './sim.mjs';
 import { createRace, stepRace } from './physics/race.mjs';
 import { createPickups, stepPickups, use, modifiers } from './physics/pickups.mjs';
-import { createCar } from './physics/car.mjs';
+import { createCar, stepCar } from './physics/car.mjs';
 import { createWorld, addBox } from './physics/world.mjs';
 
 const flat = () => { const w = createWorld(); w.addQuad([-50, 0, -50], [-50, 0, 50], [50, 0, 50], [50, 0, -50], 'asphalt'); return w; };
@@ -12,6 +12,29 @@ test('driving through a crate gives an item; the crate respawns', () => {
   stepPickups(pk, [car], flat(), 1 / 120);
   assert.ok(pk.held.get(car)); assert.ok(pk.spots[0].ready > 0);
   stepPickups(pk, [car], flat(), 5); assert.equal(pk.spots[0].ready, 0);
+});
+
+test('a visible crate allows a rival claim while retaining the player cooldown', () => {
+  const world = flat(), pk = createPickups({ pickups: [{ pos: [0, 0.15, 0] }] }, 1, { perCar: true });
+  const player = createCar(undefined, [0, 0.13, 0], 0), rival = createCar(undefined, [0, 0.13, 0], 0);
+  stepPickups(pk, [player, rival], world, 1 / 120);
+  assert.ok(pk.held.has(player));
+  pk.held.delete(player);
+  stepPickups(pk, [player, rival], world, 1 / 120);
+  assert.ok(pk.held.has(rival), 'rival claims the still-visible box');
+  assert.ok(pk.spots[0].ready > 0, 'player-facing box remains on its own cooldown');
+});
+
+test('a moving seven-car pack can collect a respawning crate over one pass', () => {
+  const world = flat(), pk = createPickups({ pickups: [{ pos: [0, 0.15, 0] }] }, 1, { perCar: true });
+  const cars = Array.from({ length: 7 }, (_, i) => createCar(undefined, [0, 0.13, 2 + i * 4], 0));
+  const collected = new Set();
+  for (let tick = 0; tick < 720; tick++) {
+    for (const car of cars) stepCar(car, { throttle: 1 }, world, 1 / 120);
+    stepPickups(pk, cars, world, 1 / 120);
+    cars.forEach((car, i) => { if (pk.held.has(car)) collected.add(i); });
+  }
+  assert.ok(collected.size >= 6, `moving pack collected ${collected.size}/7 cars`);
 });
 
 test('a water balloon spins the car it hits, and a bubble eats the hit', () => {

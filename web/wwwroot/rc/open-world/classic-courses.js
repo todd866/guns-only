@@ -48,6 +48,11 @@ export function createClassicCourses(scene, world) {
       cyl(g,x,.35,z,.18,.20,index===1?'#d0b77a':'#a6b6b8').rotation.z=Math.PI/2;
     }
 
+    // The complete vehicle moves as one object; merge its fixed details by material.
+    // Bevels and wheel arches should add shape, not dozens of draw calls per van.
+    g.updateMatrixWorld(true);const batches=new Map();
+    for(const mesh of [...g.children]){let geo=mesh.geometry.clone().applyMatrix4(mesh.matrix);if(geo.index){const flat=geo.toNonIndexed();geo.dispose();geo=flat;}if(!batches.has(mesh.material))batches.set(mesh.material,[]);batches.get(mesh.material).push(geo);mesh.geometry.dispose();mesh.removeFromParent();}
+    for(const [material,geometries]of batches){g.add(new T.Mesh(mergeGeometries(geometries,false),material));geometries.forEach(geo=>geo.dispose());}
   };
   for(let i=0;i<3;i++){const g=new T.Group();g.name=`BaseTraffic_van_${i}`;serviceVehicle(g,['#d8a64e','#7899a4','#a85e54'][i],i);g.position.set(-570+i*25,0,-53);g.traverse(o=>{if(o.isMesh)o.castShadow=o.receiveShadow=true;});vans.add(g);}
 

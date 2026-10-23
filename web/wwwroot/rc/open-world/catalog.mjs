@@ -1,3 +1,4 @@
+import {RESIDENTIAL_START} from './residential-frame.mjs';
 import {ALIEN_EVENTS,ALIEN_LOCATIONS} from './alien-world.mjs';
 import {BATTLE_EVENTS} from './battle-arenas.mjs';
 import {CLASSIC_LOCATIONS,CLASSIC_EVENTS} from './classic-courses.mjs';
@@ -6,16 +7,17 @@ import {PORTAL_EVENT,portalHeight} from './portal-course.mjs';
 import {ROAD_EVENTS} from './road-events.mjs';
 // Authored activities in the real Nellis local metre frame. +x east, +z south.
 // Gameplay courses and landmark art are fiction; OSM supplies roads and footprints.
-export const BOUNDS = [-2600, -2300, 3250, 4050];
+export const BOUNDS = [-3800, -2300, 3250, 4050];
 export const LOCATIONS = [
   {id:'gate',name:'Main Gate',short:'Main Gate',pos:[-607,0,-29],color:'#f8c35d',icon:'⌂',kind:'race',event:'gate-guard'},
+  {id:'skatepark',name:'Neighbourhood Skatepark',short:'Skatepark',pos:RESIDENTIAL_START.pos,color:'#59cec4',icon:'↗',kind:'interior',track:'skatepark'},
   {id:'housing',name:'Base Housing',short:'Housing',pos:[-1285,0,-1132],color:'#75cc9e',icon:'🏁',kind:'interior',track:'housing'},
   {id:'bx',name:'The BX',short:'BX',pos:[-546,0,791],color:'#f899bc',icon:'🏁',kind:'interior',track:'bx'},
   {id:'school',name:'Saucer Springs Elementary',short:'School',pos:[-1228,0,718],color:'#f7cb67',icon:'🏁',kind:'interior',track:'school'},
   {id:'ramp',name:'Red Flag Ramp',short:'Red Flag',pos:[618,0,71],color:'#fb8e56',icon:'🏁',kind:'race',event:'ramp-rat'},
   {id:'hangars',name:'Hangar Row',short:'Hangars',pos:[380,0,400],color:'#7ed7de',icon:'🏁',kind:'race',event:'hangar-hop'},
   {id:'runway',name:'Runway 03',short:'Runway',pos:[24,0,1842],color:'#c5d7ee',icon:'🏁',kind:'race',event:'runway-drag'},
-  {id:'wic',name:'WIC PlayPlace',short:'Skatepark',pos:[-1130,0,1230],color:'#b6a0f9',icon:'↗',kind:'race',event:'playplace'},
+  {id:'wic',name:'WIC PlayPlace',short:'Big Skatepark',pos:[-1130,0,1230],color:'#b6a0f9',icon:'↗',kind:'race',event:'playplace'},
   {id:'dirt',name:'Desert Whoops',short:'Whoops',pos:[1800,0,1450],color:'#e2a16d',icon:'🏁',kind:'race',event:'whoops'},
   {id:'golf',name:'Sunrise Vista',short:'Golf',pos:[-330,0,2776],color:'#a8d485',icon:'◇',kind:'activity',game:'golf',event:'fairway-rally'},
   {id:'zoo',name:'Petting Zoo',short:'Petting Zoo',pos:[-1361,0,2074],color:'#78d2d0',icon:'◇',kind:'discovery'},
@@ -42,7 +44,7 @@ export const EVENTS = [
   {id:'whoops',name:'Whoops',location:'dirt',kind:'circuit',surface:'dirt',points:[[1800,1450],[1880,1450],[1880,1400],[1740,1400],[1740,1450],[1800,1450]],half:5,medals:[42,57,80]},
 ];
 EVENTS.push(...ROAD_EVENTS,...VENUE_EVENTS,...CLASSIC_EVENTS,...BATTLE_EVENTS,...ALIEN_EVENTS,PORTAL_EVENT);
-export const DISTRICT_EVENTS=['housing','bx','school'].map(id=>({id:'district-'+id,name:LOCATIONS.find(p=>p.id===id).name,location:id,district:id,kind:'circuit',medals:[100,150,210]}));
+export const DISTRICT_EVENTS=['skatepark','housing','bx','school'].map(id=>({id:'district-'+id,name:id==='skatepark'?'Neighbourhood Run':LOCATIONS.find(p=>p.id===id).name,location:id,district:id,kind:'circuit',medals:[100,150,210]}));
 export const RACE_EVENTS=[...EVENTS,...DISTRICT_EVENTS];
 export const PAINTS=[{name:'Viper Punks',color:'#ed9145'},{name:'Arctic',color:'#d7e5e8'},{name:'Aggressor',color:'#6a9dbf'},{name:'Mudhen Mafia',color:'#b5a17b'},{name:'Night Wave',color:'#74728d'}];
 export const locationById=id=>LOCATIONS.find(p=>p.id===id);
