@@ -54,7 +54,8 @@ C.PALETTE.update({
 LOOP = C.RoundedLoop(70, 42, 16)
 ROAD, KERB, PARK, WALK = 3.5, 3.85, 5.0, 6.5
 Z_KERB, Z_LAWN, Z_WALK, Z_TURF, Z_DRIVE = .10, .10, .11, .115, .115
-GATE_D = [0, 40, 80, 120, 160, 196, 212, 378]
+# Final checkpoint is beyond the wall-route rejoin, so both routes count.
+GATE_D = [0, 40, 80, 120, 160, 196, 212, 398]
 
 
 def L(part, gx, fy, s):
@@ -590,7 +591,7 @@ def plywood_ramp(cx, y_lo, y_hi, y_back, h=.4, top=1.8, flank=.8):
     col('wood', 'plywood_ramp', (v, faces), {'note': '40 cm tabletop kicker on the shortcut; no vertical faces'})
 
 
-WALL_H, WALL_W = .7, .8              # garden wall: 70 cm above the yard, 80 cm wide cap
+WALL_H, WALL_W = .7, 2.4              # garden wall: 70 cm above the yard, 2.4 m wide rideable cap
 WALL_PTS = [(20, 25.0), (20, 21.5), (20, 13.5), (20, 11), (22.6, 11), (26.0, 11), (26.8, 11), (27.9, 11), (33.4, 11), (36.6, 11.0)]
 
 

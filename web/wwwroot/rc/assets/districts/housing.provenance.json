@@ -26,5 +26,5 @@
     "samples": 24
   },
   "vertex_ao_method": "Cycles AO bake to per-corner BYTE_COLOR attribute \"AO\", exported as COLOR_0; remapped to floor..1. Real bake, no painted shading. Decals and the far backdrop are left at 1.0 (not occluders, not baked).",
-  "glb_bytes": 7607980
+  "glb_bytes": 7614116
 }
