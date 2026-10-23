@@ -2,10 +2,11 @@
 // clear-coat toy paint, and Re-Volt-style feedback (tyre dust, skid marks, balloon splashes).
 // Presentation only; nothing here touches the physics.
 import * as T from '../vendor/three.module.js';
+import {environmentRadiance} from './environment-light.js';
 
 // Outdoor: hard desert sun. Indoor: bright, even, warm ceiling light with soft overhead shadow.
 export const LIGHTING = {
-  outdoor: { hemi: [0xd8ecf5, 0x8a7a5e, 1.35], sun: [0xffe1b0, 3.4], sunDir: [-0.45, 1, -0.35], exposure: 1.1 },
+  outdoor: { hemi: [0xd8ecf5, 0x8a7a5e, 1.35], sun: [0xfff1db, 3.4], sunDir: [-0.45, 1, -0.35], exposure: 1.1 },
   indoor: { hemi: [0xfff3df, 0x8c7a62, 2.1], sun: [0xfff1dc, 1.6], sunDir: [-0.15, 1, -0.1], exposure: 1.15 },
 };
 export const isIndoor = track => track === 'bx' || track === 'school';
@@ -209,12 +210,15 @@ import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBlo
 import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from '../vendor/three/addons/postprocessing/SMAAPass.js';
 
-export async function setupPolish({ renderer, scene, camera, indoor }) {
-  const hdr = await new RGBELoader().loadAsync('./assets/env/goegap_1k.hdr');
+export async function setupPolish({ renderer, scene, camera, indoor, world = false }) {
+  const hdr = await new RGBELoader().setDataType(T.FloatType).loadAsync('./assets/env/goegap_1k.hdr');
   hdr.mapping = T.EquirectangularReflectionMapping;
-  const pmrem = new T.PMREMGenerator(renderer), env = pmrem.fromEquirectangular(hdr).texture; pmrem.dispose();
-  scene.environment = env; scene.environmentIntensity = indoor ? 0.55 : 0.9;
-  if (!indoor) { scene.background = hdr; scene.backgroundIntensity = 1.0; scene.backgroundBlurriness = 0.02; }
+  // Three r160 ignores Scene.environmentIntensity. Scale the source radiance
+  // before convolution, so streamed meshes also receive the intended fill.
+  const radiance=environmentRadiance(hdr,world?.06:indoor?.55:.9);
+  const pmrem = new T.PMREMGenerator(renderer), env = pmrem.fromEquirectangular(radiance).texture; pmrem.dispose();radiance.dispose();
+  scene.environment = env;
+  if (!indoor && !world) { scene.background = hdr; scene.backgroundIntensity = 1.0; scene.backgroundBlurriness = 0.02; } else hdr.dispose();
   const w = innerWidth, h = innerHeight, composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   // Real-time GTAO measured too expensive (page main thread blocked 150 ms–1.3 s per frame on the

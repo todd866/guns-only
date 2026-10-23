@@ -33,7 +33,11 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false, 
   // Furball sessions drive like free drive (no gates, no lap) inside the race's own rules.
   if (roam || furball) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
   const pickupCourse = furball || roam ? { ...course, pickupItems: null } : course;
-  const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(pickupCourse, 1, { perCar: opponents > 0 && !roam }), events: [], clock: 0, t: 0, pace: 6, drivingTime: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
+  // The player gets a personal claim cooldown so a tightly packed box cannot
+  // starve them. Kid rivals do too; Big Kid rivals share a slower crate cadence
+  // to keep weapon pressure readable and preserve overtaking counterplay.
+  const personalPickups = opponents > 0 && !roam;
+  const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(pickupCourse, 1, { perCar: personalPickups, rivalPersonal: mode === 'kid', rivalRespawn: mode === 'kid' ? 4 : 8, hitGrace: mode === 'bigKid' ? 1.1 : 0 }), events: [], clock: 0, t: 0, pace: 6, drivingTime: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
   if (furball) race.furball = createFurball(race);
   return race;
 }

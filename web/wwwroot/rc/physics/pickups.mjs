@@ -17,12 +17,13 @@ const RESPAWN = 4, GRAB = 0.6;
 
 export function createPickups(course, seed = 1, options = {}) {
   const perCar = !!options.perCar || !!course.personalPickups;
-  const spots = (course.pickups ?? []).map(p => ({ pos: p.pos, ready: 0, cooldowns: perCar ? new Map() : null }));
+  const rivalPersonal = options.rivalPersonal !== false;
+  const spots = (course.pickups ?? []).map(p => ({ pos: p.pos, ready: 0, rivalReady: 0, cooldowns: perCar ? new Map() : null }));
   const requested=course.pickupItems?.filter(item=>ITEMS.includes(item));
-  return { items:requested?.length?requested:ITEMS, spots, perCar, held: new Map(), ammo: new Map(), announce: [], effects: new Map(), balloons: [], slicks: [], missiles: [], dangle: new Set(), rng: lcg(seed) };
+  return { items:requested?.length?requested:ITEMS, spots, perCar, rivalPersonal, rivalRespawn: options.rivalRespawn ?? null, hitGrace: options.hitGrace ?? 1.1, held: new Map(), ammo: new Map(), announce: [], effects: new Map(), balloons: [], slicks: [], missiles: [], dangle: new Set(), rng: lcg(seed) };
 }
 const lcg = seed => () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
-const fx = (pk, car) => { let e = pk.effects.get(car); if (!e) pk.effects.set(car, e = { zoom: 0, bubble: 0, spin: 0, slick: 0 }); return e; };
+const fx = (pk, car) => { let e = pk.effects.get(car); if (!e) pk.effects.set(car, e = { zoom: 0, bubble: 0, spin: 0, slick: 0, hitGrace: 0 }); return e; };
 
 // Input modifiers this car's effects impose; merged into its step input.
 export function modifiers(pk, car) {
@@ -46,7 +47,9 @@ export function use(pk, car) {
 
 function hit(pk, car) {
   const e = fx(pk, car);
+  if (e.hitGrace > 0) return false;
   if (e.bubble > 0) { e.bubble = 0; return false; }   // the bubble pops instead
+  e.hitGrace = pk.hitGrace;
   e.spin = 0.9; car.vel = scale(car.vel, 0.45); car.ang = add(car.ang, [0, 9, 0]); car.vel[1] += 1.2;
   return true;
 }
@@ -59,15 +62,18 @@ export function stepPickups(pk, cars, world, dt, immune = null) {
   for (const e of pk.effects.values()) for (const k in e) e[k] = Math.max(0, e[k] - dt);
   for (const spot of pk.spots) {
     spot.ready = Math.max(0, spot.ready - dt);
+    spot.rivalReady = Math.max(0, spot.rivalReady - dt);
     if (!pk.perCar && spot.ready > 0) continue;
     if (pk.perCar) for (const [car, left] of spot.cooldowns) {
       const remaining = left - dt;
       if (remaining > 0) spot.cooldowns.set(car, remaining); else spot.cooldowns.delete(car);
     }
-    const car = cars.find(c => !pk.held.has(c) && (!pk.perCar || !spot.cooldowns.has(c)) && len(sub(c.pos, spot.pos)) < GRAB);
+    const car = cars.find((c, i) => !pk.held.has(c) && (!pk.perCar || !spot.cooldowns.has(c))
+      && (!pk.perCar || i === 0 || pk.rivalPersonal || spot.rivalReady <= 0)
+      && len(sub(c.pos, spot.pos)) < GRAB);
     if (car) {
       const pool=pk.items??ITEMS, item = pool[Math.floor(pk.rng() * pool.length)]; pk.held.set(car, item);
-      if (pk.perCar) { spot.cooldowns.set(car, pk.respawn ?? RESPAWN); if (car === cars[0]) spot.ready = pk.respawn ?? RESPAWN; }
+      if (pk.perCar) { const cooldown = car === cars[0] ? (pk.respawn ?? RESPAWN) : (pk.rivalRespawn ?? pk.respawn ?? RESPAWN); spot.cooldowns.set(car, cooldown); if (car === cars[0]) spot.ready = pk.respawn ?? RESPAWN; else if (!pk.rivalPersonal) spot.rivalReady = cooldown; }
       else spot.ready = pk.respawn ?? RESPAWN;
       // Missiles sometimes come as a 3-pack; firing the last of a pack calls "Winchester".
       if (MISSILES.has(item) && pk.rng() < 0.2) pk.ammo.set(car, 3); else pk.ammo.delete(car);

@@ -1,4 +1,5 @@
 import * as T from '../../vendor/three.module.js';
+import {residentialGrass} from './residential-ground.js';
 import {createSurfaceMaps} from './materials.js';
 import {createRolledKerb} from './residential-kerbs.mjs';
 
@@ -27,12 +28,12 @@ export function buildResidentialArt(scene, world, data = {}) {
   };
   const mat = (key) => {
     if (!materials.has(key)) {
-      const texture = ['asphalt','concrete','stucco','roof'].includes(key) ? createSurfaceMaps(key) : key==='brick'?brickMaps():null;
+      const texture = ['asphalt','concrete','stucco','roof'].includes(key) ? createSurfaceMaps(key) : key==='brick'?brickMaps():key==='grass'?residentialGrass():null;
       materials.set(key, new T.MeshStandardMaterial({
         color: texture ? '#ffffff' : colours[key] || key,
         roughness: key === 'glass' ? .3 : .88,
         metalness: key === 'rail' ? .55 : 0,
-        ...(texture ? { map: texture.map, ...(texture.roughnessMap?{roughnessMap:texture.roughnessMap}:{}), ...(texture.normalMap?{normalMap:texture.normalMap}:{}), normalScale: new T.Vector2(.035, .035) } : {}),
+        ...(texture ? { map: texture.map, ...(texture.bumpMap?{bumpMap:texture.bumpMap,bumpScale:.008}:{}), ...(texture.roughnessMap?{roughnessMap:texture.roughnessMap}:{}), ...(texture.normalMap?{normalMap:texture.normalMap}:{}), normalScale: new T.Vector2(.035, .035) } : {}),
       }));
     }
     return materials.get(key);
@@ -134,7 +135,7 @@ export function buildResidentialArt(scene, world, data = {}) {
     const mesh = new T.Mesh(geometry, mat(key)); mesh.name = `Residential_${bucketKey}`; mesh.castShadow = key === 'stucco' || key === 'brick' || key === 'roof'; mesh.receiveShadow = true; root.add(mesh);
   }
   root.updateMatrixWorld(true); scene.add(root);
-  return { root, dispose() { root.removeFromParent(); root.traverse((o) => o.geometry?.dispose()); for (const m of materials.values()) { m.map?.dispose(); m.roughnessMap?.dispose(); m.normalMap?.dispose(); m.dispose(); } } };
+  return { root, dispose() { root.removeFromParent(); root.traverse((o) => o.geometry?.dispose()); for (const m of materials.values()) { m.map?.dispose(); m.bumpMap?.dispose(); m.roughnessMap?.dispose(); m.normalMap?.dispose(); m.dispose(); } } };
 }
 
 export function prepareResidential(world,data){

@@ -73,15 +73,15 @@ for(const [x,y,z,w,h,d,c] of [[0,6,0,10,.1,10,0xffe9cc],[-5,2,0,.1,4,8,0x536b70]
 const pmrem=new T.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(studio,.05).texture;scene.environmentIntensity=.45;pmrem.dispose();studio.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
 // Districts get the polished presentation: per-track lighting, a car-following sun shadow, and a
 // brighter studio environment for clear-coat reflections.
-if(track){applyLighting({renderer,hemi,sun,contactSun},isIndoor(track)?LIGHTING.indoor:LIGHTING.outdoor);if(openWorld){Object.assign(sun.shadow.camera,{left:-38,right:38,top:38,bottom:-38});sun.shadow.camera.updateProjectionMatrix();sun.userData.dir.set(-.65,1,-.45).normalize();}scene.environment=studioEnvironment(renderer);scene.environmentIntensity=.6;scene.add(sun.target);}
+if(track){applyLighting({renderer,hemi,sun,contactSun},isIndoor(track)?LIGHTING.indoor:LIGHTING.outdoor);if(openWorld){Object.assign(sun.shadow.camera,{left:-38,right:38,top:38,bottom:-38});sun.shadow.camera.updateProjectionMatrix();sun.userData.dir.set(-.65,1,.45).normalize();}scene.environment=studioEnvironment(renderer);scene.environmentIntensity=.6;scene.add(sun.target);}
 const fx=createEffects(scene);
 const marshal=createAlienMarshal(scene,{scale:.32});let marshalSession=null,marshalRecovery=0,marshalUntil=0,marshalLap=1,marshalLapUntil=0;
 // Polished look (HDRI light, bloom, SMAA) on district tracks.
 // Default on district tracks (key-to-steer latency measured equal to classic, 7-13 ms); ?gfx=classic
 // keeps the old renderer, ?gfx=ao adds screen-space AO.
-let polish=null;if(track&&new URLSearchParams(location.search).get('gfx')!=='classic')setupPolish({renderer,scene,camera,indoor:isIndoor(track)}).then(p=>{polish=p;polish.resize(innerWidth,innerHeight);
+let polish=null;if(track&&new URLSearchParams(location.search).get('gfx')!=='classic')setupPolish({renderer,scene,camera,indoor:isIndoor(track),world:!!openWorld}).then(p=>{polish=p;polish.resize(innerWidth,innerHeight);
  // The HDRI now carries the ambient light: drop the old hemisphere fill and rebalance exposure.
- hemi.intensity*=.35;sun.intensity*=.85;renderer.toneMappingExposure=.82;}).catch(e=>console.warn('polish off',e));
+ if(!openWorld){hemi.intensity*=.35;sun.intensity*=.85;renderer.toneMappingExposure=.82;}}).catch(e=>console.warn('polish off',e));
 const mats=new Map();function material(c,glow=false){const key=c+glow;if(!mats.has(key))mats.set(key,new T.MeshStandardMaterial({color:c,roughness:.8,...(glow?{emissive:c,emissiveIntensity:.8}:{})}));return mats.get(key);}
 function box(x,y,z,w,h,d,color,parent=scene){const m=new T.Mesh(new T.BoxGeometry(w,h,d),material(color));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
 function sphere(x,y,z,r,color,parent=scene,sx=1,sy=1,sz=1){const m=new T.Mesh(new T.SphereGeometry(r,14,10),material(color));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;parent.add(m);return m;}

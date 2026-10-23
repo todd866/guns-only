@@ -37,6 +37,41 @@ test('a moving seven-car pack can collect a respawning crate over one pass', () 
   assert.ok(collected.size >= 6, `moving pack collected ${collected.size}/7 cars`);
 });
 
+test('race pickup cadence is player-personal while Big Kid rivals share the slower crate', () => {
+  const world = flat(), pk = createPickups({ pickups: [{ pos: [0, 0.15, 0] }] }, 1, { perCar: true, rivalPersonal: false, rivalRespawn: 8 });
+  const player = createCar(undefined, [0, 0.13, 0], 0), rival = createCar(undefined, [0, 0.13, 0], 0), rivalTwo = createCar(undefined, [0, 0.13, 0], 0);
+  stepPickups(pk, [player, rival, rivalTwo], world, 1 / 120); // player claims first
+  pk.held.delete(player); stepPickups(pk, [player, rival, rivalTwo], world, 1 / 120); // rival claims too
+  assert.ok(pk.held.has(rival));
+  pk.held.delete(rival); stepPickups(pk, [player, rival, rivalTwo], world, 1 / 120);
+  assert.ok(!pk.held.has(rivalTwo), 'second rival is blocked by the shared cadence');
+  for (let i = 0; i < 4 * 120; i++) stepPickups(pk, [player, rival, rivalTwo], world, 1 / 120);
+  assert.ok(pk.held.has(player), 'player can reclaim after four seconds');
+  pk.held.delete(player);
+  assert.ok(!pk.held.has(rivalTwo), 'second rival remains blocked at four seconds');
+  rival.pos = [10, 0.13, 0];
+  for (let i = 0; i < 4 * 120; i++) stepPickups(pk, [player, rival, rivalTwo], world, 1 / 120);
+  assert.ok(pk.held.has(rivalTwo), 'second rival can reclaim after eight seconds');
+});
+
+test('hit grace prevents stacked hits but permits a later hit', () => {
+  const world = flat(), a = createCar(undefined, [0, 0.13, 0], 0), b = createCar(undefined, [0, 0.13, -3.5], 0), pk = createPickups({});
+  pk.held.set(a, 'balloon'); use(pk, a);
+  assert.ok(stepPickups(pk, [a, b], world, 1 / 120).every(e => e.car !== b));
+  let first = false; for (let i = 0; i < 240 && !first; i++) first = stepPickups(pk, [a, b], world, 1 / 120).some(e => e.car === b);
+  assert.ok(first, 'first hit lands');
+  b.vel = [0, 0, 0];
+  pk.balloons.push({ pos: [...b.pos], vel: [0, 0, 0], owner: a, life: 1 });
+  let chained = false; for (let i = 0; i < 2; i++) chained ||= stepPickups(pk, [a, b], world, 1 / 120).some(e => e.car === b);
+  assert.equal(chained, false, 'second hit is rejected during grace');
+  pk.balloons = [];
+  for (let i = 0; i < 150; i++) stepPickups(pk, [a, b], world, 1 / 120);
+  b.pos = [0, 0.13, -3.5]; b.vel = [0, 0, 0];
+  pk.held.set(a, 'balloon'); use(pk, a);
+  let later = false; for (let i = 0; i < 180 && !later; i++) later = stepPickups(pk, [a, b], world, 1 / 120).some(e => e.car === b);
+  assert.ok(later, 'a later hit lands after grace expires');
+});
+
 test('a water balloon spins the car it hits, and a bubble eats the hit', () => {
   const world = flat();
   for (const shield of [false, true]) {

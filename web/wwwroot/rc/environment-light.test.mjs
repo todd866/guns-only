@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as T from '../vendor/three.module.js';
+import {environmentRadiance} from './environment-light.js';
+import {finishSkateparkSurface} from './open-world/skatepark-materials.js';
+test('HDR fill is reduced without changing the visible sky or alpha',()=>{
+ const pixels=new Float32Array([20,10,5,1,2,4,8,1]);
+ const sky=new T.DataTexture(pixels,2,1,T.RGBAFormat,T.FloatType);sky.mapping=T.EquirectangularReflectionMapping;
+ const fill=environmentRadiance(sky,.25);
+ assert.deepEqual([...fill.image.data],[5,2.5,1.25,1,.5,1,2,1]);
+ assert.deepEqual([...sky.image.data],[20,10,5,1,2,4,8,1]);
+ assert.notEqual(fill.source,sky.source);assert.equal(fill.mapping,sky.mapping);fill.dispose();sky.dispose();
+});
+test('skatepark concrete gets metre-scale detail without moving its riding surface',()=>{
+ const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.Float32BufferAttribute([0,0,0,0,0,3,3,0,0],3));geometry.computeVertexNormals();
+ const material=new T.MeshStandardMaterial();material.name='floor';const original=[...geometry.attributes.position.array];
+ finishSkateparkSurface(geometry,material);
+ assert.deepEqual([...geometry.attributes.position.array],original);
+ assert.deepEqual([...geometry.attributes.uv.array],[0,0,0,1,1,0]);
+ assert.ok(material.map.isDataTexture);assert.equal(material.map.wrapS,T.RepeatWrapping);assert.ok(material.bumpMap);assert.ok(material.bumpScale<.01);
+ const map=material.map;finishSkateparkSurface(geometry,material);assert.equal(material.map,map,'batched floor shares one surface texture');
+ material.map.dispose();material.bumpMap.dispose();material.dispose();geometry.dispose();
+});
