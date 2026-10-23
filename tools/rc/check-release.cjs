@@ -18,7 +18,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
    await route.fulfill({status:200,contentType:type,body:fs.readFileSync(file)});
   });
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
-  page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
+  page.on('console',m=>{if(m.type()==='error')errors.push(`${m.text()} (${m.location().url})`);});
   const ready=()=>page.waitForFunction(()=>window.__gunsOnlyRC?.snapshot().assets==='blender'&&!document.querySelector('#start').disabled,null,{timeout:90000});
   const visit=async query=>{await page.goto(`${base}/rc/?${query}&audioQa=silent&telemetry=off`);await ready();};
   await visit('');
