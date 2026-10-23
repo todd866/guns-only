@@ -32,6 +32,13 @@ test('course factory exposes drivable collision surfaces and bounded moving haza
   }
   courses.update(0);
   assert.equal(courses.stepHazards([-607, 0, -21], 1 / 60, 0)[0]?.type, 'traffic-bump');
+  const van = courses.root.getObjectByName('BaseTraffic_van_0');
+  assert.ok(van, 'moving service van remains addressable after static batching');
+  const before = van.getWorldPosition(new T.Vector3()).clone();
+  courses.update(10); courses.root.updateMatrixWorld(true);
+  const after = van.getWorldPosition(new T.Vector3());
+  assert.ok(before.distanceTo(after) > 1, 'nested moving van must not be frozen into static batch');
+  courses.update(0);
   assert.equal(courses.stepHazards([1990, 0, 1385], 1 / 60, 0)[0]?.type, 'rolling-rock');
   assert.deepEqual(courses.stepHazards([-500, 0, 3400], 1 / 60, 0), [], 'ground-level beach cars are not rescued as boardwalk falls');
   courses.dispose();

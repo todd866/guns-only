@@ -22,7 +22,21 @@ export function createClassicCourses(scene, world) {
   const traffic = new T.Group();traffic.name='Course_base-traffic';root.add(traffic);
   for(const [x,z] of [[-470,40],[-350,180],[-430,430],[-546,720],[-720,660],[-850,450]]){cyl(traffic,x,.18,z,.22,.36,'#d5b46a');cyl(traffic,x,.42,z,.08,.5,'#52727a');}
   for(const [x,z] of [[-390,80],[-790,520],[-650,680]]){box(traffic,x,.16,z,4,.32,1.2,'#e9e1be');box(traffic,x,.38,z,3,.14,.12,'#c7b679');}
-  const vans=dyn('BaseTraffic_moving'); vans.userData.role='deterministic traffic; yields before trapping'; for(let i=0;i<3;i++){const g=new T.Group();box(g,0,.5,0,2.2,.8,4,['#d8a64e','#7899a4','#a85e54'][i]);cyl(g,-.9,.2,-1.1,.25,.2,'#263438');cyl(g,.9,.2,-1.1,.25,.2,'#263438');g.position.set(-607+i*25,0,-29);vans.add(g);}
+  const vans=dyn('BaseTraffic_moving'); vans.userData.role='deterministic traffic; yields before trapping';
+  const serviceVehicle=(g,color,index)=>{
+    // Compact utility vans: cab, glazed windscreen, grille, bumpers and four wheels.
+    box(g,0,.48,.15,2.2,.68,3.7,color); box(g,0,.92,-.48,2.0,.42,1.35,color);
+    box(g,0,1.04,-1.18,1.48,.22,.05,'#273d45');
+    for(const x of [-1.01,1.01]){box(g,x,1.01,-.47,.035,.25,.9,'#273d45');box(g,x,.72,-.2,.04,.04,.15,'#566469');}
+    for(const x of [-.76,.76])box(g,x,.63,-1.72,.3,.16,.08,'#f2e9c5');
+    box(g,0,.47,-1.74,1.55,.22,.08,'#354349');
+    box(g,0,.62,1.78,1.7,.14,.12,'#354349');
+    for(const x of [-.94,.94]) for(const z of [-1.25,1.25]) {
+      const wheel=cyl(g,x,.25,z,.25,.2,'#263438'); wheel.rotation.z=Math.PI/2;
+      cyl(g,x,.25,z,.11,.22,index===1?'#d0b77a':'#8a9aa0').rotation.z=Math.PI/2;
+    }
+  };
+  for(let i=0;i<3;i++){const g=new T.Group();g.name=`BaseTraffic_van_${i}`;serviceVehicle(g,['#d8a64e','#7899a4','#a85e54'][i],i);g.position.set(-607+i*25,0,-29);g.traverse(o=>{if(o.isMesh)o.castShadow=o.receiveShadow=true;});vans.add(g);}
 
   // Quarry Run: terraces, ridge walls and a visible rolling foam boulder hazard.
   const quarry=new T.Group();quarry.name='Course_quarry-run';root.add(quarry);
@@ -45,7 +59,9 @@ export function createClassicCourses(scene, world) {
   for (const event of CLASSIC_EVENTS.filter(e => e.id === 'quarry-run' || e.id === 'demo-team-circuit')) for (let i = 1; i < event.points.length; i++) surface(event.points[i - 1], event.points[i], event.half * 2, event.surface);
 
   // Static batch by material; dynamic hazards remain independent.
-  root.updateMatrixWorld(true);const groups=new Map(),staticMeshes=[];root.traverse(o=>{if(o.isMesh&&!o.userData.dynamic&&!o.parent?.userData.dynamic)staticMeshes.push(o);});
+  root.updateMatrixWorld(true);const groups=new Map(),staticMeshes=[];
+  const hasDynamicAncestor=(object)=>{for(let p=object.parent;p;p=p.parent)if(p.userData?.dynamic)return true;return false;};
+  root.traverse(o=>{if(o.isMesh&&!o.userData.dynamic&&!hasDynamicAncestor(o))staticMeshes.push(o);});
   for(const o of staticMeshes){let g=o.geometry.clone().applyMatrix4(o.matrixWorld);if(g.index){const f=g.toNonIndexed();g.dispose();g=f;}const k=o.material.color.getHexString();if(groups.has(k))groups.get(k).push(g);else groups.set(k,[g]);o.removeFromParent();o.geometry.dispose();}
   for(const [k,gs] of groups){const g=mergeGeometries(gs,false);gs.forEach(x=>x.dispose());const m=new T.Mesh(g,mat('#'+k));m.name='ClassicStatic_'+k;m.castShadow=m.receiveShadow=true;root.add(m);}
 
