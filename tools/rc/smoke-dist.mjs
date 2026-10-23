@@ -14,6 +14,12 @@ const say = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (
 try {
   browser = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const ready = p => p.waitForFunction(() => window.__gunsOnlyRC?.snapshot().assets === 'blender' && !document.querySelector('#start').disabled, null, { timeout: 90000 });
+  const drive = async (p, minimumTravel) => {
+    await p.keyboard.down('KeyW');
+    try {
+      await p.waitForFunction(min => { const s=window.__gunsOnlyRC.snapshot();return Number.isFinite(s.speed)&&s.speed>.1&&s.travel>min; }, minimumTravel, {timeout:15000});
+    } finally { await p.keyboard.up('KeyW'); }
+  };
   // The hub is the shipped default: prove it boots as a connected world before
   // exercising the individual race and furball entry points.
   {
@@ -24,7 +30,7 @@ try {
       await p.goto(`${base}/rc/?audioQa=silent&gfx=classic&telemetry=off`); await ready(p);
       const boot = await p.evaluate(() => window.__gunsOnlyRC.snapshot());
       say(errors.length === 0 && boot.track === 'hub' && boot.world?.ready === true, `Default hub: ${boot.world?.event ?? 'unavailable'}${errors.length ? ' errors: ' + errors.join(' | ') : ''}`);
-      await p.locator('#start').click(); await p.keyboard.down('KeyW'); await p.waitForTimeout(1800); await p.keyboard.up('KeyW');
+      await p.locator('#start').click(); await drive(p, .1);
       const moving = await p.evaluate(() => window.__gunsOnlyRC.snapshot());
       say(Number.isFinite(moving.speed) && moving.speed > 0.1 && moving.travel > 0.1, `Default hub moving: ${Number(moving.travel).toFixed(2)}m at ${Number(moving.speed).toFixed(2)}m/s`);
     } catch (e) { say(false, `Default hub: ${e.message.split('\n')[0]}`); } finally { await p.close(); }
@@ -35,7 +41,9 @@ try {
     p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     try {
       await p.goto(`${base}/rc/?${query}&audioQa=silent&gfx=classic&telemetry=off`); await ready(p);
-      await p.locator(button).click(); await p.keyboard.down('KeyW'); await p.waitForTimeout(2500); await p.keyboard.up('KeyW');
+      await p.locator(button).click();
+      if(button==='#start')await drive(p,.01);
+      else await p.waitForTimeout(2500);
       const moving = await p.evaluate(() => window.__gunsOnlyRC.snapshot());
       const gate = await p.locator('#gate').innerText();
       const moved = button === '#start' ? Number.isFinite(moving.speed) && moving.speed > 0.1 && moving.travel > 0.01 : true;

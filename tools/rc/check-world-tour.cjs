@@ -62,10 +62,13 @@ const save=()=>fs.writeFileSync(path.join(out,'tour.json'),JSON.stringify(report
       const error=Math.atan2(Math.sin(want-s.yaw),Math.cos(want-s.yaw));
       const steer=clamp(error*1.7*(l.reverse?-1:1),-1,1);
       p.axes[0]=Math.sign(steer)*(.12+Math.abs(steer)*.88);
-      const vmax=Math.min(l.speed,Math.max(1,l.speed*(1-Math.min(.85,Math.abs(error)))),Math.sqrt(Math.max(0,remaining-.35)*4));
+      const vmax=Math.min(l.speed,Math.max(1,l.speed*(1-Math.min(.85,Math.abs(error)))),Math.max(0,remaining-.5)*1.2);
       const v=s.forwardSpeed*(l.reverse?-1:1);
-      p.buttons[l.reverse?6:7].value=v<vmax?1:0;
-      p.buttons[1].value=v>vmax+.3?1:0;
+      // Proportional trigger input: alternating full throttle and handbrake
+      // pitched the buggy over at the BX threshold in the first harness run.
+      const throttle=clamp(.05+(vmax-v)*.25,-.5,.7);
+      p.buttons[throttle<0?(l.reverse?7:6):(l.reverse?6:7)].value=Math.abs(throttle);
+      p.buttons[1].value=0;
      }
     }
     requestAnimationFrame(frame);
