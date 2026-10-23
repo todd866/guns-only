@@ -93,8 +93,11 @@ const save=()=>fs.writeFileSync(path.join(out,'tour.json'),JSON.stringify(report
    for(;;){
     await page.waitForTimeout(10000);
     const current=await page.evaluate(()=>({state:window.__gunsOnlyRC.snapshot(),leg:window.__tour.leg}));
-    console.log(JSON.stringify({leg:leg.id,seconds:Math.round((Date.now()-started)/1000),node:current.leg.node,total:points.length,x:current.state.x,z:current.state.z,travel:current.state.travel,speed:current.state.speed}));
+    report.current={leg:leg.id,seconds:Math.round((Date.now()-started)/1000),node:current.leg.node,total:points.length,state:current.state};save();
+    console.log(JSON.stringify({leg:leg.id,seconds:report.current.seconds,node:current.leg.node,total:points.length,x:current.state.x,y:current.state.y,z:current.state.z,travel:current.state.travel,speed:current.state.speed}));
     assert.equal(current.state.recoveries,0,'Journey must not recover or fast travel');
+    assert.ok(current.state.speed<20,'Unstable car velocity');
+    assert.ok(current.state.y>-.1&&current.state.y<2,'Car stays on the base floor');
     if(current.leg.done){report.legs.push({id:leg.id,seconds:(Date.now()-started)/1000,state:current.state,route:vertices});save();break;}
     stuck=current.state.travel-previous<1?stuck+1:0;previous=current.state.travel;
     assert.ok(stuck<4,`${leg.id}: no progress for 40 seconds`);

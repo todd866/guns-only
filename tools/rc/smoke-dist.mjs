@@ -12,7 +12,12 @@ const base = live ?? `http://127.0.0.1:${srv.address().port}`;
 let browser, failed = 0;
 const say = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failed++; };
 try {
-  browser = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  // Use full Chromium on the host GPU, matching the production acceptance
+  // harness. Software rendering remains an explicit diagnostic option.
+  const software=process.env.RC_QA_SOFTWARE==='1';
+  browser = await chromium.launch(software
+    ? {headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']}
+    : {headless:true,channel:'chromium'});
   const ready = p => p.waitForFunction(() => window.__gunsOnlyRC?.snapshot().assets === 'blender' && !document.querySelector('#start').disabled, null, { timeout: 90000 });
   const drive = async (p, minimumTravel) => {
     await p.keyboard.down('KeyW');
@@ -28,6 +33,9 @@ try {
     p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     try {
       await p.goto(`${base}/rc/?audioQa=silent&gfx=classic&telemetry=off`); await ready(p);
+      const gpu=await p.evaluate(()=>{const gl=document.querySelector('#view').getContext('webgl2'),e=gl.getExtension('WEBGL_debug_renderer_info');return gl.getParameter(e?e.UNMASKED_RENDERER_WEBGL:gl.RENDERER);});
+      console.log(`smoke-dist: ${software?'software diagnostic':'hardware'} · ${gpu}`);
+      if(!software)say(!/swiftshader|llvmpipe/i.test(gpu),'Hardware renderer');
       const boot = await p.evaluate(() => window.__gunsOnlyRC.snapshot());
       say(errors.length === 0 && boot.track === 'hub' && boot.world?.ready === true, `Default hub: ${boot.world?.event ?? 'unavailable'}${errors.length ? ' errors: ' + errors.join(' | ') : ''}`);
       await p.locator('#start').click(); await drive(p, .1);
