@@ -32,9 +32,17 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   await page.locator('#map-close').click();await page.locator('#resume').click();await page.waitForTimeout(500);
   await page.screenshot({path:path.join(out,'open-world-drive.png')});
   await visit('');await page.locator('#pause').click();await page.locator('#choose-course').click();
-  assert.equal(await page.locator('.rc-race-menu [data-event="district-housing"]').isDisabled(),true,'Fresh housing card is locked');
-  await page.locator('.rc-race-menu [data-close]').click();
-  await page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('guns-only.rc.world.v1')||'{}');p.discovered=[...new Set(['gate','housing','bx','school',...(p.discovered||[])])];localStorage.setItem('guns-only.rc.world.v1',JSON.stringify(p));});
+  assert.equal(await page.locator('.rc-race-menu [data-event="district-housing"]').isDisabled(),false,'Fresh housing card is immediately playable');
+  assert.equal(await page.locator('.rc-race-menu [data-event="district-bx"]').isDisabled(),false,'Fresh BX card is immediately playable');
+  assert.equal(await page.locator('.rc-race-menu [data-event="district-school"]').isDisabled(),false,'Fresh school card is immediately playable');
+  await page.locator('.rc-race-menu [data-event="district-housing"]').click();await ready();
+  if(await page.locator('#start').isVisible())await page.locator('#start').click();
+  await page.locator('#view').focus();
+  await page.keyboard.down('KeyW');await page.waitForTimeout(4000);await page.keyboard.up('KeyW');
+  const firstRace=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());
+  assert.ok(firstRace.running||firstRace.travel>0,'Fresh user can enter an ordinary race from the menu');
+  assert.equal(firstRace.world.event,'district-housing');
+  results.push({name:'fresh-user-first-race',started:firstRace.running||firstRace.travel>0,event:firstRace.world.event});
   await visit('');
   for(const id of ['housing','bx','school']){
    await page.locator('#pause').click();await page.locator('#choose-course').click();await page.locator(`.rc-race-menu [data-event="district-${id}"]`).click();await ready();

@@ -24,19 +24,32 @@ export function createClassicCourses(scene, world) {
   for(const [x,z] of [[-390,80],[-790,520],[-650,680]]){box(traffic,x,.16,z,4,.32,1.2,'#e9e1be');box(traffic,x,.38,z,3,.14,.12,'#c7b679');}
   const vans=dyn('BaseTraffic_moving'); vans.userData.role='deterministic traffic; yields before trapping';
   const serviceVehicle=(g,color,index)=>{
-    // Compact utility vans: cab, glazed windscreen, grille, bumpers and four wheels.
-    box(g,0,.48,.15,2.2,.68,3.7,color); box(g,0,.92,-.48,2.0,.42,1.35,color);
-    box(g,0,1.04,-1.18,1.48,.22,.05,'#273d45');
-    for(const x of [-1.01,1.01]){box(g,x,1.01,-.47,.035,.25,.9,'#273d45');box(g,x,.72,-.2,.04,.04,.15,'#566469');}
-    for(const x of [-.76,.76])box(g,x,.63,-1.72,.3,.16,.08,'#f2e9c5');
-    box(g,0,.47,-1.74,1.55,.22,.08,'#354349');
-    box(g,0,.62,1.78,1.7,.14,.12,'#354349');
-    for(const x of [-.94,.94]) for(const z of [-1.25,1.25]) {
-      const wheel=cyl(g,x,.25,z,.25,.2,'#263438'); wheel.rotation.z=Math.PI/2;
-      cyl(g,x,.25,z,.11,.22,index===1?'#d0b77a':'#8a9aa0').rotation.z=Math.PI/2;
+    // Bevelled service pickup: a sloping glazed cab, open cargo bed and tyre arches.
+    const rounded=(x,y,z,w,h,d,c,r=.08)=>{
+      const shape=new T.Shape(),hw=w/2-r,hh=h/2-r;
+      shape.moveTo(-hw,-hh);shape.lineTo(hw,-hh);shape.lineTo(hw,hh);shape.lineTo(-hw,hh);shape.closePath();
+      const geo=new T.ExtrudeGeometry(shape,{depth:d-2*r,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:r,bevelThickness:r,curveSegments:2});geo.translate(0,0,-d/2+r);
+      const m=new T.Mesh(geo,mat(c,.48));m.position.set(x,y,z);g.add(m);return m;
+    };
+    rounded(0,.48,.12,1.85,.46,3.7,color);
+    rounded(0,.72,-1.15,1.8,.3,1.05,color);
+    rounded(0,1.05,-.35,1.72,.75,1.5,color);
+    const glass=box(g,0,1.13,-1.11,1.48,.43,.035,'#284c60');glass.rotation.x=-.19;
+    for(const x of [-.865,.865]){box(g,x,1.13,-.37,.025,.44,1.13,'#284c60');box(g,x,.89,-.20,.04,.04,.17,'#dce3d8');rounded(x*1.15,1.03,-.82,.22,.15,.28,color,.035);}
+    // Lower dark bed floor is visible between the side rails, rather than a solid cuboid.
+    box(g,0,.72,1.08,1.5,.08,1.5,'#47565a');
+    for(const x of [-.83,.83])rounded(x,.86,1.10,.18,.36,1.6,color,.04);
+    rounded(0,.86,1.86,1.82,.35,.16,color,.04);
+    for(const x of [-.65,.65]){rounded(x,.66,-1.77,.34,.19,.08,'#fff2c3',.025);box(g,x,.74,1.96,.17,.22,.03,'#c7543e');}
+    box(g,0,.55,-1.78,.82,.2,.08,'#293f47');
+    for(const z of [-1.85,1.99])rounded(0,.36,z,1.9,.14,.16,'#9ba9ac',.035);
+    for(const x of [-.94,.94])for(const z of [-1.2,1.25]){
+      const tyre=new T.Mesh(new T.TorusGeometry(.255,.10,8,16),mat('#263438'));tyre.rotation.y=Math.PI/2;tyre.position.set(x,.35,z);g.add(tyre);
+      cyl(g,x,.35,z,.18,.20,index===1?'#d0b77a':'#a6b6b8').rotation.z=Math.PI/2;
     }
+
   };
-  for(let i=0;i<3;i++){const g=new T.Group();g.name=`BaseTraffic_van_${i}`;serviceVehicle(g,['#d8a64e','#7899a4','#a85e54'][i],i);g.position.set(-607+i*25,0,-29);g.traverse(o=>{if(o.isMesh)o.castShadow=o.receiveShadow=true;});vans.add(g);}
+  for(let i=0;i<3;i++){const g=new T.Group();g.name=`BaseTraffic_van_${i}`;serviceVehicle(g,['#d8a64e','#7899a4','#a85e54'][i],i);g.position.set(-570+i*25,0,-53);g.traverse(o=>{if(o.isMesh)o.castShadow=o.receiveShadow=true;});vans.add(g);}
 
   // Quarry Run: terraces, ridge walls and a visible rolling foam boulder hazard.
   const quarry=new T.Group();quarry.name='Course_quarry-run';root.add(quarry);
@@ -65,7 +78,7 @@ export function createClassicCourses(scene, world) {
   for(const o of staticMeshes){let g=o.geometry.clone().applyMatrix4(o.matrixWorld);if(g.index){const f=g.toNonIndexed();g.dispose();g=f;}const k=o.material.color.getHexString();if(groups.has(k))groups.get(k).push(g);else groups.set(k,[g]);o.removeFromParent();o.geometry.dispose();}
   for(const [k,gs] of groups){const g=mergeGeometries(gs,false);gs.forEach(x=>x.dispose());const m=new T.Mesh(g,mat('#'+k));m.name='ClassicStatic_'+k;m.castShadow=m.receiveShadow=true;root.add(m);}
 
-  const update=(time=0)=>{const t=Number(time)||0;vans.position.set(0,0,0);vans.children.forEach((v,i)=>{v.position.x=-607+i*25+Math.sin(t*.08+i)*9;v.position.z=-29+Math.cos(t*.08+i)*8;v.rotation.y=Math.sin(t*.08+i)*.2;});rocks.children.forEach((r,i)=>{r.position.x=1990+i*70+Math.sin(t*.45+i)*18;r.position.z=1375+i*55+Math.cos(t*.45+i)*10;r.rotation.x=t*.7;r.rotation.z=t*.5;});};
+  const update=(time=0)=>{const t=Number(time)||0;vans.position.set(0,0,0);vans.children.forEach((v,i)=>{v.position.x=-570+i*25+Math.sin(t*.08+i)*9;v.position.z=-53+Math.cos(t*.08+i)*8;v.rotation.y=Math.sin(t*.08+i)*.2;});rocks.children.forEach((r,i)=>{r.position.x=1990+i*70+Math.sin(t*.45+i)*18;r.position.z=1375+i*55+Math.cos(t*.45+i)*10;r.rotation.x=t*.7;r.rotation.z=t*.5;});};
   const stepHazards=(car,dt=1/60,time=0)=>{const pos=car?.pos||car;if(!Array.isArray(pos)||pos.length<3)return[];const t=Number(time)||0,out=[];for(const v of vans.children){const x=vans.position.x+v.position.x,z=vans.position.z+v.position.z;if(Math.hypot(pos[0]-x,pos[2]-z)<4)out.push({type:'traffic-bump',venue:'hq',speedScale:.78,push:[pos[0]-x,0,pos[2]-z],dt});}for(const r of rocks.children){const x=rocks.position.x+r.position.x,z=rocks.position.z+r.position.z;if(Math.hypot(pos[0]-x,pos[2]-z)<4)out.push({type:'rolling-rock',venue:'quarry',speedScale:.65,push:[pos[0]-x,0,pos[2]-z],dt});}return out;};
   const dispose=()=>{root.removeFromParent();root.traverse(o=>{o.geometry?.dispose();if(o.material)o.material.dispose();});mats.clear();};
   return {root,locations:CLASSIC_LOCATIONS,events:CLASSIC_EVENTS,update,stepHazards,dispose};

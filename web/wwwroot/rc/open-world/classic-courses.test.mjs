@@ -31,7 +31,8 @@ test('course factory exposes drivable collision surfaces and bounded moving haza
     assert.ok(session.car.pos[1] > -.5, `${event.id} driver fell through authored course`);
   }
   courses.update(0);
-  assert.equal(courses.stepHazards([-607, 0, -21], 1 / 60, 0)[0]?.type, 'traffic-bump');
+  assert.deepEqual(courses.stepHazards([-607, 0, -23], 1 / 60, 0), [], 'arrival lane is clear of service traffic');
+  assert.equal(courses.stepHazards([-570, 0, -45], 1 / 60, 0)[0]?.type, 'traffic-bump');
   const van = courses.root.getObjectByName('BaseTraffic_van_0');
   assert.ok(van, 'moving service van remains addressable after static batching');
   const before = van.getWorldPosition(new T.Vector3()).clone();

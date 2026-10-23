@@ -10,9 +10,13 @@ export function createWorldSky({scene,sun,hemi,contactSun,renderer}){
  float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
  float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
  void main(){vec3 d=normalize(direction);float h=max(d.y,0.);vec3 col=mix(horizon,zenith,pow(h,.2));
- vec2 p=d.xz/max(.12,d.y)*2.8;float n=noise(p)*.7+noise(p*2.1)*.3;
- float clouds=smoothstep(.64,.8,n)*smoothstep(.06,.23,h)*(1.-smoothstep(.72,.95,h));
- col=mix(col,vec3(.95,.96,.91),clouds*.9);col=mix(dark,col,daylight);
+ // Direction-space clouds keep their rounded silhouette near the horizon;
+ // planar projection stretched the old noise into long white shards.
+ vec2 p=vec2(atan(d.z,d.x)*3.,d.y*8.);
+ float n=noise(p)*.58+noise(p*2.03+4.7)*.28+noise(p*4.1+9.2)*.14;
+ float clouds=smoothstep(.60,.74,n)*smoothstep(.04,.15,h)*(1.-smoothstep(.65,.95,h));
+ vec3 cloud=mix(vec3(.68,.78,.87),vec3(1.,.98,.91),smoothstep(.58,.78,n));
+ col=mix(col,cloud,clouds*.92);col=mix(dark,col,daylight);
  gl_FragColor=vec4(col,1.);
  #include <tonemapping_fragment>
  #include <colorspace_fragment>
