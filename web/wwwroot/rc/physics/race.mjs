@@ -21,8 +21,8 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false, 
     session: Object.assign(createSession({ ...course, start: slot }, { mode: 'bigKid' }), { autoUnstick: true }),
     skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i, callsign: CALLSIGNS[i % CALLSIGNS.length],
   }));
-  // Retreat: once a race the bugle sounds and every rival stops for the flag. The player can
-  // stand to attention too, or keep driving (nobody tells the kid off).
+  // In-race ceremony applies to every driver. Timing is provisional; rarity and
+  // presentation remain a later play-balancing task.
   // Furball sessions drive like free drive (no gates, no lap) inside the race's own rules.
   if (roam || furball) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
   const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(furball || roam ? { ...course, pickupItems: null } : course), events: [], clock: 0, t: 0, pace: 6, drivingTime: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
@@ -116,9 +116,8 @@ export function driveInput(race, rival) {
 // Pack racing (owner, 2026-10-22: "you need to have people driving around you ... in any mode").
 // Each rival holds a slot near the player (just ahead, alongside, just behind) in lap progress:
 // ahead of its slot it eases off, behind it pushes, so the race happens around you, never over
-// the horizon and never parked. Kid mode: over the last third of the lap, rivals level with or
-// ahead of the kid ease off further, so a kid who keeps driving wins most of the time ("it's no
-// fun if I just instantly win": the pack is still there until the end). Big Kid gives nothing.
+// the horizon and never parked. Both modes contest the finish; Kid changes handling,
+// not whether the opponents deliberately surrender.
 // Distances, not checkpoint counts: a gate may be 4 m or 400 m away.
 const courseLengths=new WeakMap();
 export function raceDistance(s) {
@@ -131,14 +130,17 @@ export function raceDistance(s) {
  const along=d?Math.max(0,Math.min(d,((s.car.pos[0]-a[0])*dx+(s.car.pos[2]-a[1])*dz)/d)):0;
  return (s.lap-1)*length+before+along;
 }
-export const PACK = { slots: [3,0,-3], floor:.16, ceiling:1.18, kidLate:.66, kidGive:.7 };
+// Keep the pack contestable in physical space as well as lap progress. A trailing rival may
+// spend a few seconds above its normal pace to rejoin; a leader still gets room to pull away.
+export const PACK = { slots: [3,0,-3], floor:.16, ceiling:1.18, ease:.06, push:.04 };
 export function packFactor(race,rival) {
  const gap=raceDistance(rival.session)-raceDistance(race.player),d=gap-PACK.slots[rival.colour%PACK.slots.length];
  // Before a player moves, traffic still completes its race. Once driving, a dropped turn
  // opens a recoverable gap instead of letting the pack disappear a lap ahead.
  const floor=race.drivingTime>2?PACK.floor:.45;
- let k=d>0?Math.max(floor,1-d*.045):Math.min(PACK.ceiling,1-d*.012);
- if(race.mode==='kid'&&raceDistance(race.player)/Math.max(1,courseLengths.get(race.course.checkpoints).at(-1)*race.player.laps)>PACK.kidLate&&gap>-2)k=Math.min(k,PACK.kidGive);
+ const ceiling = PACK.ceiling;
+ const push = race.mode === 'kid' ? 0.02 : PACK.push;
+ let k=d>0?Math.max(floor,1-d*PACK.ease):Math.min(ceiling,1-d*push);
  return k;
 }
 
@@ -162,7 +164,7 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   if (playerInput.fire) use(pk, race.player.car);
   // Race order for the Pitbull (blue shell): leader first. Free drive has no order.
   pk.order = race.roam || fb ? null : [race.player, ...race.rivals.map(r => r.session)].sort((a, b) => placeOf(race, a) - placeOf(race, b)).map(s => s.car);
-  stepSession(race.player, withEffects(race, race.player.car, playerInput), dt);
+  stepSession(race.player, withEffects(race, race.player.car, retreatActive(race)?{throttle:0,brake:true,steer:0}:playerInput), dt);
   for (const rival of race.rivals) {
     if (fb?.out.has(rival.session.car)) continue;
     // After any recovery the rival is back at a gate: drop a half-driven skill route and resume the

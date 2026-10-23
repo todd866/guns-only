@@ -30,9 +30,9 @@ export function buildArrivalArt(scene) {
   }
 
   // A low, open security canopy gives the threshold a real-base silhouette without
-  // turning the arrival lane into an arch or a collision gate.  The broad roof and
-  // two slim posts read at driving height, while the warm underside keeps it legible
-  // against the desert sky.  Everything here is decorative and merged below.
+  // turning the arrival lane into an arch or a collision gate.  Its stepped fascia,
+  // warm underside and repeated soffit ribs borrow the layered entrance proportions
+  // in the Nellis facility-standard photos while staying chunky at toy-car scale.
   for (const x of [-618.5, -595.5]) {
     box(x, 2.15, -35.5, .34, 4.3, .34, '#536468');
     box(x, 3.45, -35.5, .42, .12, .46, '#d8b45f');
@@ -40,15 +40,21 @@ export function buildArrivalArt(scene) {
   }
   box(-607, 4.28, -35.5, 24.2, .34, 4.8, '#59696a');
   box(-607, 4.05, -35.5, 23.1, .12, 4.2, '#c9b58f');
+  box(-607, 4.54, -35.5, 23.5, .18, .25, '#536468');
+  box(-607, 4.68, -35.5, 22.4, .10, 4.05, '#d0b77f');
   for (const z of [-37.25, -35.5, -33.75]) box(-607, 4.48, z, 22.8, .12, .18, '#78817a');
+  for (let x = -617.5; x <= -596.5; x += 3.5) box(x, 4.61, -35.5, .12, .06, 3.55, '#c9b58f');
 
   // A modest stone monument sits on the left shoulder, echoing Nellis's low roadside
   // welcome signs and leaving the central driving corridor visually and physically open.
-  box(-635.5, 1.05, -28.8, 5.8, 2.1, .9, '#b8a486');
-  box(-635.5, 2.22, -28.8, 6.25, .18, 1.04, '#d0b77f');
-  box(-635.5, 1.13, -28.31, 4.35, .88, .045, '#3e5658');
-  box(-635.5, .22, -28.8, 6.8, .2, 1.3, '#817464');
-  for (const x of [-638.25, -632.75]) box(x, .68, -29.34, .16, .55, .12, '#dfbd70');
+  box(-635.5, 1.18, -28.8, 6.2, 2.35, 1.1, '#897761');
+  box(-635.5, 1.12, -28.18, 5.25, 1.65, .08, '#c5a76c');
+  box(-635.5, 2.52, -28.8, 6.65, .20, 1.22, '#d0b77f');
+  box(-635.5, .22, -28.8, 7.2, .22, 1.45, '#817464');
+  // A small geometric roundel gives the sign a Nellis-style focal mark without text.
+  add(new T.CylinderGeometry(.48, .48, .06, 16), '#3e5658', -635.5, 1.62, -28.10, Math.PI / 2, 0, 0);
+  add(new T.CylinderGeometry(.24, .24, .075, 12), '#dfbd70', -635.5, 1.62, -28.05, Math.PI / 2, 0, 0);
+  for (const x of [-638.4, -632.6]) box(x, .74, -29.38, .18, .68, .14, '#dfbd70');
 
   // Two planted islands sit outside the driving envelope, with deliberately readable curbs.
   for (const [x, z, w, d] of [[-643, -43, 13, 19], [-551, -42, 12, 17], [-644, -76, 15, 10]]) {
@@ -57,22 +63,36 @@ export function buildArrivalArt(scene) {
     for (const dx of [-w * .32, 0, w * .32]) for (const dz of [-d * .28, d * .28]) rock(x + dx, .55, z + dz, .32);
   }
 
-  // Guardhouse trim/detail complements the authored booth at (-582,-69), without replacing it.
-  box(-582, 2.25, -69, 6.2, .22, 4.8, '#c5a76c');
-  box(-582, 2.42, -69, 5.5, .12, 4.1, '#6e7b78');
-  box(-584.25, 1.45, -66.92, 1.5, 1.0, .05, '#2e4a53');
-  box(-579.15, 1.45, -66.92, 1.5, 1.0, .05, '#2e4a53');
-  box(-582, .9, -71.04, 1.0, 1.8, .05, '#6c6258');
+  // Match the existing 5 × 4 m, 3.4 m-high booth rather than adding a roof
+  // halfway through its walls. Deep frames read clearly from a toy-car viewpoint.
+  box(-582, 3.38, -69, 5.3, .18, 4.3, '#c5a76c');
+  box(-582, 3.68, -69, 5.6, .10, 4.6, '#78817a');
+  for(const x of [-583.55,-582,-580.45])box(x,2,-66.90,.10,1.48,.10,'#d3ae62');
+  for(const y of [1.30,2.70])box(-582,y,-66.90,3.20,.10,.16,'#d3ae62');
+  box(-582,1.22,-66.83,3.35,.10,.36,'#897761');
+  box(-582,1.1,-71.04,1.1,2.2,.06,'#536468');
+  box(-582,1.65,-71.08,.82,.8,.04,'#2e4a53');
+  for(const x of [-582.62,-581.38])box(x,1.15,-71.10,.10,2.30,.12,'#d3ae62');
+  box(-582,2.33,-71.10,1.34,.12,.12,'#d3ae62');
+  box(-581.62,1.05,-71.14,.08,.18,.08,'#dfbd70');
   for (const x of [-585.8, -578.2]) { cyl(x, .65, -72.2, .16, 1.3, '#d3ae62', 8); box(x, 1.3, -72.2, .28, .08, .28, '#efe0ad'); }
-  for (const x of [-587.2, -576.8]) box(x, .55, -66.5, .16, 1.1, .16, '#526367');
 
   const palm = (x, z, scale = 1) => {
     cyl(x, 2.3 * scale, z, .28 * scale, 4.6 * scale, '#805c3d', 9).rotation.z = -.08;
     cyl(x + .1 * scale, 4.7 * scale, z, .38 * scale, .35 * scale, '#5e744c', 9);
-    for (let i = 0; i < 7; i++) {
-      const a = i * Math.PI * 2 / 7 + .12;
-      const leaf = add(new T.ConeGeometry(.14 * scale, 2.0 * scale, 5), '#4f724d', x + Math.cos(a) * .78 * scale, 5.0 * scale, z + Math.sin(a) * .78 * scale, 0, -a, Math.PI / 2);
-      leaf.scale.y = .72; // individual blades give the crown a clear silhouette
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI * 2 / 8 + .12;
+      const dir = new T.Vector3(Math.cos(a) * .92, .30 + .10 * Math.sin(a * 2), Math.sin(a) * .92).normalize();
+      const mid = new T.Vector3(x, 4.88 * scale, z).addScaledVector(dir, .66 * scale);
+      const leaf = add(new T.SphereGeometry(.5, 8, 4), '#4f724d', mid.x, mid.y, mid.z);
+      leaf.scale.set(.20 * scale, .14 * scale, 1.08 * scale);
+      leaf.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), dir);
+      // A second, shorter segment bends each frond down toward its tip instead of
+      // producing the old starburst of triangular spikes.
+      const tipDir = dir.clone(); tipDir.y -= .18; tipDir.normalize();
+      const tip = add(new T.SphereGeometry(.5, 8, 4), '#4f724d', mid.x + dir.x * .58 * scale, mid.y + dir.y * .58 * scale, mid.z + dir.z * .58 * scale);
+      tip.scale.set(.15 * scale, .10 * scale, .72 * scale);
+      tip.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), tipDir);
     }
   };
   palm(-646, -42, 1.05); palm(-552, -42, .88); palm(-647, -76, .8);

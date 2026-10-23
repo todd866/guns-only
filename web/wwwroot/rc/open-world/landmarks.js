@@ -31,7 +31,7 @@ export function buildLandmarks(scene,world,progress=loadProgress(),roads=[],bake
  // Short authored forecourt connection between otherwise disconnected OSM road components.
  for(const {points:[a,b]}of WORLD_LINKS){const dx=b[0]-a[0],dz=b[1]-a[1],length=Math.hypot(dx,dz),road=box((a[0]+b[0])/2,.018,(a[1]+b[1])/2,6,.012,length,'#687574');road.rotation.y=Math.atan2(dx,dz);const nx=-dz/length*3,nz=dx/length*3;world.addQuad([a[0]-nx,0,a[1]-nz],[a[0]+nx,0,a[1]+nz],[b[0]+nx,0,b[1]+nz],[b[0]-nx,0,b[1]-nz],'asphalt');}
  // Main-gate welcome, gate guard and small service booth: human-scale cues at toy-eye level.
- label('SAUCER SPRINGS AFB',-635.5,1.13,-28.27,4.1);
+ label('SAUCER SPRINGS AFB',-635.5,.85,-28.02,4.5);
  box(-582,1.7,-69,5,3.4,4,'#c5b9a1',true);box(-582,3.5,-69,5.8,.25,4.8,'#526f76');box(-582,2,-66.96,3,1.3,.05,'#446776');
  for(const [i,type]of ['F-105','F-4','F-100','F-111','F-117'].entries()){jet(-670+i*32,-140,type,'#c4d0d5',0);label(type,-670+i*32,1.8,-125,5);}
  // Ramp Rat: aircraft line the inside of a broad slalom loop, leaving its roadway clear.

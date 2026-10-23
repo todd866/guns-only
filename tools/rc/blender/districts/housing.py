@@ -1,4 +1,4 @@
-"""Area 51½ district 1: Base Housing ("Liberty Loop", Little Nellie AFB).
+"""Saucer Springs AFB district 1: Base Housing.
 
 Run (shared machine: wrap in heavy-slot, two threads):
   HEAVY_SLOT_LABEL=area51 heavy-slot -- /Applications/Blender.app/Contents/MacOS/Blender --background \
@@ -642,7 +642,7 @@ def water_tower(cx, cy):
     vis('tower', 'pad_blue').add(torus((cx, cy, 18.6), 5.22, .1, 32, 4))
     toward = math.degrees(math.atan2(-cy, -cx))
     for th in (toward, toward + 180):
-        for body, size, dz in (('LITTLE NELLIE AFB', 1.05, 22.4), ('AIM HIGH · DRIVE LOW', .62, 20.5)):
+        for body, size, dz in (('SAUCER SPRINGS AFB', 1.05, 22.4), ('AIM HIGH · DRIVE LOW', .62, 20.5)):
             v, f, _ = text2d(body, size, bold=.03)
             vis('decal', 'pad_blue').add(place_on_cylinder(v, f, (cx, cy), 5.23, dz, th), kind='flag')
 
@@ -828,7 +828,7 @@ def welcome_sign(cx, cy, facing):
             vis('signs', 'paint').add(ico((cx + r[0] * k + n[0] * .07, cy + r[1] * k + n[1] * .07, z), .055, 1), smooth=True)
     vis('signs', 'door_red').add(ico((cx + n[0] * .05, cy + n[1] * .05, 4.35), .3, 1, (1, .3, 1)))
     for text, size, mat, z in (('WELCOME TO', .2, 'pad_blue', 3.62), ('FABULOUS', .42, 'door_red', 3.12),
-                               ('AREA 51½', .34, 'pad_blue', 2.6), ('DRIVE SLOW · COME BACK SOON', .1, 'rubber', 2.18)):
+                               ('SAUCER SPRINGS AFB', .34, 'pad_blue', 2.6), ('DRIVE SLOW · COME BACK SOON', .1, 'rubber', 2.18)):
         words(mat, text, size, (cx, cy, z), facing, max_w=3.3, out=.07)
 
 
@@ -836,7 +836,7 @@ def monument(cx, cy):
     vis('monument', 'rock').add(box(cx, cy, 0, 5.4, .9, .45))
     vis('monument', 'stucco_adobe').add(box(cx, cy, .45, 5.0, .6, 1.25))
     vis('monument', 'roof_tile').add(box(cx, cy, 1.7, 5.3, .8, .14))
-    for text, size, z in (('LITTLE NELLIE AFB', .36, 1.4), ('HOME OF THE FIGHTER PILOT', .17, 1.03),
+    for text, size, z in (('SAUCER SPRINGS AFB', .36, 1.4), ('HOME OF THE FIGHTER PILOT', .17, 1.03),
                           ('(AND THE FIGHTER TOY)', .14, .78)):
         words('trim', text, size, (cx, cy + .3, z), 90, max_w=4.7, out=.006)
     col('concrete', 'monument', box(cx, cy, -.1, 5.4, .9, 1.94))
@@ -874,9 +874,9 @@ def dressing():
     sign('quiet_hours', -74.45, -2, 270, 1.1, .6, 1.6, [('QUIET HOURS', .13, 'trim', .13), ('2200 - 0600', .15, 'trim', -.12)],
          board='pad_blue', border='trim')
     for k, (txt, mat) in enumerate((('BX  ↑', 'sign_green'), ('COMMISSARY  ↑', 'sign_green'),
-                                    ('FLIGHTLINE  →', 'sign_green'), ('AREA 51½: NO', 'door_red'))):
+                                    ('FLIGHTLINE  →', 'sign_green'), ('RESTRICTED AREA', 'door_red'))):
         sign(f'bx_post_{k}', -74.45, 15, 270, 1.5, .26, 2.75 - k * .31, [(txt, .14, 'trim', 0)], board=mat, collide=k == 0)
-    sign('alien_xing', 74.45, 12, 90, .85, .85, 1.6, [('ALIEN', .15, 'rubber', .12), ('XING', .17, 'rubber', -.12)],
+    sign('mp_patrol', 74.45, 12, 90, .85, .85, 1.6, [('MP PATROL', .13, 'rubber', .12), ('CROSSING', .12, 'rubber', -.12)],
          board='paint', border='rubber')
     sign('dry_heat', 46, 51.5, 270, 1.4, .8, 1.0, [("IT'S A DRY HEAT!", .13, 'door_red', -.22)], board='trim',
          border='door_red', posts=2)
@@ -894,7 +894,7 @@ def dressing():
     vis('gate', 'metal').add(aabb(gx - .05, gx + .05, -3, 3, 0, 2.2))
     for k in range(13):
         vis('gate', 'metal').add(aabb(gx - .08, gx - .05, -3 + k * .5 - .02, -3 + k * .5 + .02, 0, 2.2))
-    sign('do_not_enter', gx - .2, 0, 180, 1.8, .9, .9, [('AREA 51½', .18, 'trim', .25), ('DO NOT ENTER', .16, 'trim', 0),
+    sign('do_not_enter', gx - .2, 0, 180, 1.8, .9, .9, [('RESTRICTED AREA', .16, 'trim', .25), ('DO NOT ENTER', .16, 'trim', 0),
                                                         ('(PLEASE)', .12, 'trim', -.25)], board='door_red', collide=False)
     water_tower(86, 44)
     gate_guard_jet(32, -66, heading=115)
@@ -1020,7 +1020,7 @@ def build():
         boulder(x - 1.4, y - .6, .6, f'yard_boulder_{i}')
     gates, ai_step, ai_count = race_markers()
     C.ROOT['district'] = 'housing'
-    C.ROOT['base'] = 'Little Nellie AFB (fictional)'
+    C.ROOT['base'] = 'Saucer Springs AFB (fictional)'
     C.ROOT['lap_length_m'] = round(LOOP.length, 2)
     C.ROOT['race_direction'] = 'clockwise from above'
     C.ROOT['streets'] = 'S: Red Flag Dr, W: Weapons School Way, N: Aggressor Ave, E: Thunder Way'

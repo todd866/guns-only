@@ -14,7 +14,7 @@ function base(kind,x,y){
  let variation=(n-.5)*.10+(d-.5)*.055+(h-.5)*.05;
  if(kind==='asphalt'){
    variation=(n-.5)*.018+(d-.5)*.012;
-   const aggregate=d>.91?.09:0;
+   const aggregate=d>.96?.022:0;
    variation+=(aggregate);
    // Sparse hairline seams are darker than the road; keep them distinct from paint.
    if(Math.abs(Math.sin(TAU*(u+.025*Math.sin(TAU*v*3))))<.018)return [.11,.12,.13];

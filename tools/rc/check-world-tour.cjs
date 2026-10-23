@@ -32,7 +32,7 @@ const save=()=>fs.writeFileSync(path.join(out,'tour.json'),JSON.stringify(report
   await page.waitForFunction(()=>window.__gunsOnlyRC?.snapshot().assets==='blender'&&!document.querySelector('#start').disabled,null,{timeout:90000});
   report.gpu=await page.evaluate(()=>{const gl=document.querySelector('#view').getContext('webgl2'),e=gl.getExtension('WEBGL_debug_renderer_info');return gl.getParameter(e?e.UNMASKED_RENDERER_WEBGL:gl.RENDERER);});
   assert.ok(!/swiftshader|llvmpipe/i.test(report.gpu),'Hardware renderer required');
-  await page.locator('#start').click();
+  if(await page.locator('#start').isVisible())await page.locator('#start').click();
   if(await page.evaluate(()=>window.__gunsOnlyRC.snapshot().mode==='kid'))await page.keyboard.press('KeyB');
   report.start=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());
   assert.equal(report.start.track,'hub');assert.equal(report.start.audioSilent,true);
@@ -78,16 +78,16 @@ const save=()=>fs.writeFileSync(path.join(out,'tour.json'),JSON.stringify(report
    {id:'road-to-bx',destination:'The BX',end:[-546,797],road:true,speed:10},
    {id:'inside-bx',end:[-546,779.2],speed:3},
    {id:'leave-bx',end:[-546,797],reverse:true,speed:3},
-   {id:'road-to-school',destination:'Little Nellie Elementary',end:[-1228,724],road:true,speed:10},
+   {id:'road-to-school',destination:'Saucer Springs Elementary',end:[-1228,724],road:true,speed:10},
    {id:'inside-school',end:[-1228,657],speed:3},
    {id:'leave-school',end:[-1228,724],reverse:true,speed:3},
-   {id:'road-to-housing',destination:'Liberty Loop',end:[-1285,-1126],road:true,speed:12},
+   {id:'road-to-housing',destination:'Base Housing',end:[-1285,-1126],road:true,speed:12},
    {id:'inside-housing',end:[-1285,-1144],speed:3},
    {id:'leave-housing',end:[-1285,-1126],reverse:true,speed:3},
   ];
   for(const leg of legs){
    const s=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());
-   if(leg.destination){await page.locator('#atlas').click();await page.getByTitle(`Set route to ${leg.destination}`,{exact:true}).click();await page.locator('#map-close').click();}
+   if(leg.destination){await page.locator('#atlas').click();await page.getByTitle(`Set route to ${leg.destination}`,{exact:true}).click();assert.equal(await page.locator('#world-panel').isVisible(),false,'Choosing a destination returns to driving');}
    const vertices=leg.road?roadRoute(graph,[s.x,s.z],leg.end):[[s.x,s.z],leg.end];
    assert.ok(vertices.length>1,`${leg.id}: route must connect`);
    const points=[];for(let i=1;i<vertices.length;i++){const a=vertices[i-1],b=vertices[i],n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/2);for(let j=0;j<n;j++)points.push([a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n]);}points.push(leg.end);

@@ -11,7 +11,7 @@ export const LOCATIONS = [
   {id:'gate',name:'Main Gate',short:'Main Gate',pos:[-607,0,-29],color:'#f8c35d',icon:'⌂',kind:'race',event:'gate-guard'},
   {id:'housing',name:'Base Housing',short:'Housing',pos:[-1285,0,-1132],color:'#75cc9e',icon:'🏁',kind:'interior',track:'housing'},
   {id:'bx',name:'The BX',short:'BX',pos:[-546,0,791],color:'#f899bc',icon:'🏁',kind:'interior',track:'bx'},
-  {id:'school',name:'Little Nellie Elementary',short:'School',pos:[-1228,0,718],color:'#f7cb67',icon:'🏁',kind:'interior',track:'school'},
+  {id:'school',name:'Saucer Springs Elementary',short:'School',pos:[-1228,0,718],color:'#f7cb67',icon:'🏁',kind:'interior',track:'school'},
   {id:'ramp',name:'Red Flag Ramp',short:'Red Flag',pos:[618,0,71],color:'#fb8e56',icon:'🏁',kind:'race',event:'ramp-rat'},
   {id:'hangars',name:'Hangar Row',short:'Hangars',pos:[380,0,400],color:'#7ed7de',icon:'🏁',kind:'race',event:'hangar-hop'},
   {id:'runway',name:'Runway 03',short:'Runway',pos:[24,0,1842],color:'#c5d7ee',icon:'🏁',kind:'race',event:'runway-drag'},

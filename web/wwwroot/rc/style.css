@@ -62,3 +62,14 @@ body:not(.driving) header,body:not(.driving) #instruments,body:not(.driving) #ma
 #options #osm-credit{margin-top:12px}
 @media(max-height:500px){#brief{padding:16px;width:540px}#brief h1{font-size:20px;margin-bottom:12px}#brief .modes{grid-template-columns:repeat(3,1fr)}#brief .modes button{font-size:16px;padding:10px}#options{margin-top:8px}}
 body.driving:not(.race-mode) #gate{display:none}
+
+/* Exploration has two visible destinations; driving remains the first screen. */
+body.driving:not(.race-mode) header nav #atlas,body.driving:not(.race-mode) header nav #garage{display:block;min-height:44px;font-size:14px;padding:8px 12px;background:#10242ac9}
+#map{cursor:pointer}
+@media(max-width:540px){body.driving:not(.race-mode) header nav #atlas,body.driving:not(.race-mode) header nav #garage{font-size:13px;padding:8px 10px}}
+@media(max-width:540px) and (min-height:501px){
+ .atlas-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(160px,1fr) minmax(100px,.65fr)}
+ #destinations{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px;align-content:start}
+ .destination-name{font-size:12px}.destination{min-width:0}.destination-name{min-width:0}
+}
+.overlay{max-height:calc(100dvh - 24px);overflow:auto}

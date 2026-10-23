@@ -37,7 +37,19 @@ export function createTileRenderer(scene,elevation=null){const maps=new Map(['sa
       quad('trim',P(0,0,.045),P(1,0,.045),P(1,.2,.045),P(0,.2,.045),shade+.04);
       quad('trim',P(0,.2,.045),P(1,.2,.045),P(1,.2,.025),P(0,.2,.025),shade+.04);
       quad('trim',P(0,h-.2,.025),P(1,h-.2,.025),P(1,h,.025),P(0,h,.025));
-      if(p.building!=='roof')for(let y=1.1;y<h-1;y+=3){quad('glass',P(.2,y,.04),P(.8,y,.04),P(.8,y+1.25,.04),P(.2,y+1.25,.04));quad('glass',P(.2,y+1.25,-.04),P(.8,y+1.25,-.04),P(.8,y,-.04),P(.2,y,-.04));}
+      // Nellis facility references: recessed blue glazing, pale projecting frames,
+      // deep lintels and roof coping. Keep every detail inside the existing facade
+      // envelope apart from a shallow sill, with no props in the driving corridor.
+      quad('trim',P(0,h,.12),P(1,h,.12),P(1,h,-.12),P(0,h,-.12));
+      if(p.building!=='roof')for(let y=1.1;y<h-1;y+=3){
+       for(const side of [-1,1]){
+        const face=(kind,t0,t1,y0,y1,off)=>side>0?quad(kind,P(t0,y0,off),P(t1,y0,off),P(t1,y1,off),P(t0,y1,off)):quad(kind,P(t0,y1,off),P(t1,y1,off),P(t1,y0,off),P(t0,y0,off));
+        face('glass',.2,.8,y,y+1.25,.045*side);
+        for(const [t0,t1,y0,y1]of [[.17,.2,y-.08,y+1.33],[.8,.83,y-.08,y+1.33],[.2,.8,y-.08,y],[.2,.8,y+1.25,y+1.33],[.49,.51,y,y+1.25]])face('trim',t0,t1,y0,y1,.085*side);
+        quad('trim',P(.16,y-.08,.18*side),P(.84,y-.08,.18*side),P(.84,y-.08,0),P(.16,y-.08,0));
+        face('trim',.16,.84,y+1.33,y+1.43,.18*side);
+       }
+      }
      }
     }continue;
    }

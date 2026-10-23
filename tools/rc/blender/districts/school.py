@@ -1,4 +1,4 @@
-"""Area 51½ district 3: the School ("LITTLE NELLIE ELEMENTARY · HOME OF THE ROCKETS", fictional).
+"""Saucer Springs AFB district 3: Saucer Springs Elementary (fictional).
 
 Run (shared machine: wrap in heavy-slot, two threads):
   HEAVY_SLOT_LABEL=area51 heavy-slot -- /Applications/Blender.app/Contents/MacOS/Blender --background \
@@ -15,7 +15,7 @@ no real brands). "Month of the Military Child" (April, purple) is a real, generi
 Layout (Blender metres, +Z up, X east, Y north; real scale; toy car 0.42 m long):
   lobby + front office  x   4 .. 26, y  0 .. 14     start/finish, trophy case
   north hallway         x 9.8 .. 14.2, y 14 .. 70.2  lockers, kid art, PCS GOODBYE card wall
-  science room          x 14.2 .. 26, y 36 .. 48     drive-through pocket, ALIEN BIOLOGY 101 (specimen)
+  science room          x 14.2 .. 26, y 36 .. 48     drive-through pocket, DESERT PLANTS exhibit (specimen)
   library               x -10 .. 9.8, y 30 .. 65.8   shortcut: diagonal under a hanging model F-16
   west hallway          x -10 .. 9.8, y 65.8 .. 70.2
   gym                   x -50 .. -10, y 40 .. 74     gymfloor (slippery), parachute, folded bleachers
@@ -525,7 +525,7 @@ def hallways():
     # Science doors: a SCIENCE LAB sign between them, frames on the openings.
     vis('signs', 'green').add(aabb(14.15, 14.2, 41.1, 42.9, 1.9, 2.4))
     words('white', 'SCIENCE LAB', .14, (14.15, 42.0, 2.2), 180, max_w=1.7, out=.004)
-    words('yellow', 'ALIEN BIOLOGY 101 →', .07, (14.15, 42.0, 2.0), 180, max_w=1.7, out=.004)
+    words('yellow', 'DESERT PLANTS →', .07, (14.15, 42.0, 2.0), 180, max_w=1.7, out=.004)
     for a, b in SCI_DOORS + (LIB_DOOR_E,):
         xw = 14.2 if (a, b) in SCI_DOORS else 9.8
         f = 180 if xw > 12 else 0
@@ -630,7 +630,7 @@ def lobby():
     words('white', 'SAFETY PATROL', .08, (hx, hy - .01, 1.9), 270, max_w=.85, out=.003)
     words('navy', 'BE SEEN · BE SAFE', .06, (hx, hy - .03, .9), 270, max_w=.9, out=.003)
     # School name over the hallway entrance (inside) and a "WELCOME" mat-side sign.
-    words('navy', 'LITTLE NELLIE ELEMENTARY', .2, (12, 14.0, 3.25), 270, max_w=4.2, out=.004)
+    words('navy', 'SAUCER SPRINGS ELEMENTARY', .2, (12, 14.0, 3.25), 270, max_w=4.2, out=.004)
 
 
 def rocket_shape(group, cx, cy, z, s, up=False, facing=270, mat=('red', 'white', 'yellow')):
@@ -651,10 +651,10 @@ def rocket_shape(group, cx, cy, z, s, up=False, facing=270, mat=('red', 'white',
         disc_up(group, 'glass' if mat[0] != 'glass' else 'white', cx, cy + .2 * s, .09 * s, z + .0005, 12)
 
 
-# ---------------------------------------------------------------- science room (specimen)
+# ---------------------------------------------------------------- science room (desert plants)
 
 def science():
-    # Lab benches on the south and north walls, sinks, the ALIEN BIOLOGY 101 display on the east.
+    # Lab benches on the south and north walls, sinks, and a desert-plants display on the east.
     for i, (y0, y1) in enumerate(((36.0, 36.9), (47.1, 48.0))):
         vis('lab', 'white').add(aabb(17.0, 25.7, y0, y1, 0, .82))
         vis('lab', 'black').add(aabb(16.95, 25.75, y0 - .02 if i == 0 else y0 - .03, y1 + .02, .82, .88))
@@ -679,31 +679,24 @@ def science():
     for k in range(9):
         for j in range(4):
             panel('lab', ['red', 'yellow', 'green', 'blue', 'teal', 'orange'][(k + j) % 6], (18.2 + k * .32, 36.0), 90, .26, .17, 1.32 + j * .2, out=.006)
-    # The display: a table with the specimen jar, a poster, "DO NOT TAP THE GLASS".
+    # The display: a table with a simple desert-botany exhibit and poster.
     cx, cy = 25.15, 42.0
     vis('lab', 'black').add(aabb(24.6, 25.7, 40.4, 43.6, 0, .75))
-    col('wood', 'alien_display', aabb(24.6, 25.7, 40.4, 43.6, -.3, .75))
-    # An open display cage (the game has no transparent materials): base ring, three rods, lid.
-    vis('alien', 'glass').add(cylinder((cx, cy, .75), .3, .04, 16, smooth=False))
-    for k in range(3):
-        a = 2 * math.pi * k / 3 + .5
-        vis('alien', 'steel').add(cylinder((cx + .28 * math.cos(a), cy + .28 * math.sin(a), .79), .012, .66, 5))
-    vis('alien', 'steel').add(cylinder((cx, cy, 1.45), .32, .06, 16))
-    vis('alien', 'green').add(ico((cx, cy, 1.18), .15, 2, (1, 1, 1.15)), smooth=True)
-    vis('alien', 'green').add(frustum((cx, cy, .8), .11, .08, .3, 10))
-    for s in (-1, 1):
-        vis('alien', 'black').add(ico((cx - .12, cy + s * .06, 1.21), .045, 1, (.6, 1, 1.3)), smooth=True)
-        vis('alien', 'green').add(cylinder((cx, cy + s * .1, 1.32), .01, .12, 4))
-        vis('alien', 'yellow').add(ico((cx, cy + s * .1, 1.45), .025, 1), smooth=True)
-    panel('alien', 'navy', (26.0, 42.0), 180, 3.0, 1.2, 1.55, out=.004)
-    words('yellow', 'ALIEN BIOLOGY 101', .22, (26.0, 42.0, 2.42), 180, max_w=2.8, out=.01)
-    words('white', 'LIFE CYCLE OF A FRIENDLY ALIEN', .08, (26.0, 42.0, 2.15), 180, max_w=2.8, out=.01)
+    col('wood', 'desert_plants_display', aabb(24.6, 25.7, 40.4, 43.6, -.3, .75))
+    # A low pot and three broad leaves read as a friendly desert plant at toy scale.
+    vis('lab', 'orange').add(cylinder((cx, cy, .88), .20, .24, 10, smooth=False))
+    vis('lab', 'green').add(cylinder((cx, cy, 1.12), .045, .48, 8))
+    for dx, dy, scale in ((-.18, .02, .13), (.18, .04, .13), (0, .16, .15)):
+        vis('lab', 'green').add(ico((cx + dx, cy + dy, 1.38 + abs(dx) * .15), scale, 1, (.36, .12, .9)), smooth=True)
+    panel('lab', 'navy', (26.0, 42.0), 180, 3.0, 1.2, 1.55, out=.004)
+    words('yellow', 'DESERT PLANTS', .22, (26.0, 42.0, 2.42), 180, max_w=2.8, out=.01)
+    words('white', 'LIFE IN THE MOJAVE', .08, (26.0, 42.0, 2.15), 180, max_w=2.8, out=.01)
     for k in range(4):
         y = 40.9 + k * .75
-        vis('alien', 'green').add(ico((25.99, y, 1.8), .06 + k * .03, 1, (.3, 1, 1)), smooth=True)
+        vis('lab', 'green').add(ico((25.99, y, 1.8), .06 + k * .03, 1, (.3, 1, 1)), smooth=True)
         if k < 3:
             words('white', '→', .1, (26.0, y + .37, 1.8), 180, out=.01)
-    words('red', 'DO NOT TAP THE GLASS', .07, (24.6, 42.0, .45), 180, max_w=2.5, out=.004)
+    words('red', 'DO NOT PICK THE PLANTS', .07, (24.6, 42.0, .45), 180, max_w=2.5, out=.004)
     words('navy', 'MS. RIVERA · SCIENCE', .09, (26.0, 38.0, 2.4), 180, max_w=2, out=.004)
 
 
@@ -1146,7 +1139,7 @@ def playground():
     words('navy', 'PLAYGROUND RULES: TAKE TURNS · NO TOY CARS ON THE SLIDE', .08, (-21.0, -.3, 1.6), 270, max_w=4.0, out=.006)
     words('red', '(EXCEPT TODAY)', .08, (-21.0, -.3, 1.45), 270, max_w=4.0, out=.006)
     # Facade dressing seen from the playground: the school name and the mascot.
-    words('navy', 'LITTLE NELLIE ELEMENTARY', .5, (-26, -.3, 3.5), 270, max_w=16, out=.01)
+    words('navy', 'SAUCER SPRINGS ELEMENTARY', .5, (-26, -.3, 3.5), 270, max_w=16, out=.01)
     rocket_shape('decal', -40.5, -.3, 3.0, 1.4, facing=270)
 
 
@@ -1171,7 +1164,7 @@ def front_walk():
     vis('sign', 'stucco').add(aabb(sx - .4, sx + .4, sy - 2.2, sy + 2.2, 0, 1.6))
     vis('sign', 'navy').add(aabb(sx + .4, sx + .44, sy - 2.0, sy + 2.0, .3, 1.5))
     col('concrete', 'monument_sign', aabb(sx - .4, sx + .44, sy - 2.2, sy + 2.2, -.3, 1.6))
-    words('white', 'LITTLE NELLIE', .3, (sx + .44, sy, 1.22), 0, max_w=3.8, out=.005)
+    words('white', 'SAUCER SPRINGS', .3, (sx + .44, sy, 1.22), 0, max_w=3.8, out=.005)
     words('white', 'ELEMENTARY', .3, (sx + .44, sy, .9), 0, max_w=3.8, out=.005)
     words('yellow', 'HOME OF THE ROCKETS', .16, (sx + .44, sy, .55), 0, max_w=3.8, out=.005)
     rocket_shape('decal', sx + .44, sy - 1.6, 1.0, .5, facing=0)
@@ -1182,7 +1175,7 @@ def front_walk():
         vis('canopy', 'steel').add(box(x, -4.8, 0, .18, .18, 3.0))
         col('metal', f'canopy_post_{int(x > 12)}', box(x, -4.8, -.3, .25, .25, 3.3))
     words('navy', 'WELCOME, ROCKETS!', .26, (12, -5.2, 3.15), 270, max_w=6.4, out=.005)
-    words('navy', 'LITTLE NELLIE ELEMENTARY', .36, (15, -.3, 3.7), 270, max_w=10.5, out=.012)
+    words('navy', 'SAUCER SPRINGS ELEMENTARY', .36, (15, -.3, 3.7), 270, max_w=10.5, out=.012)
     words('red', 'EST. 51½ · AIM HIGH, DRIVE LOW', .12, (15, -.3, 3.38), 270, max_w=10, out=.012)
     # School bus parked along the east side, nose west.
     school_bus(22.5, -8.75)
@@ -1410,7 +1403,7 @@ def race_markers():
     picks = [(x, y, ground_z(x, y) + .3) for x, y in picks] + [(4.6, 40.8, .3)]
     for k, at in enumerate(picks, start=1):
         marker(f'PICKUP_{k:02d}', at, extras={'route': 'shortcut' if k > 9 else 'main'}, display='SPHERE')
-    marker('SPEC_01', (23.0, 42.0, .3), extras={'hint': 'science room: the ALIEN BIOLOGY 101 display (drive in one door, out the other)'},
+    marker('SPEC_01', (23.0, 42.0, .3), extras={'hint': 'science room: the DESERT PLANTS display (drive in one door, out the other)'},
            display='CUBE')
     # Skill shortcuts (ALT_<name>_NNN): the library diagonal and the planter run.
     ai_xy = [ROUTE.at(phase + k * step)[0] for k in range(count)]
@@ -1427,7 +1420,7 @@ def race_markers():
     marker('CAM_library_shortcut', (5.5, 37.0, .5), (bx - ax, by - ay), extras={'note': 'diagonal under the hanging model F-16'})
     marker('CAM_table_tunnel', (-26, 37.5, .45), (0, -1), extras={'note': 'low chase hint under the cafeteria tables'})
     marker('CAM_racing_slide', (-26, -8.5, .6), (0, -1), extras={'note': 'up the racing slide, over the deck'})
-    marker('CAM_science_room', (16, 38.7, .5), (1, 0), extras={'note': 'science pocket, ALIEN BIOLOGY 101'})
+    marker('CAM_science_room', (16, 38.7, .5), (1, 0), extras={'note': 'science pocket, DESERT PLANTS'})
     return gates, step, count, widths, len(sc)
 
 
@@ -1499,8 +1492,8 @@ def build():
     gates, ai_step, ai_count, widths, sc_n = race_markers()
     tight = clearance_report(widths)
     C.ROOT['district'] = 'school'
-    C.ROOT['base'] = 'Little Nellie AFB (fictional)'
-    C.ROOT['school'] = 'LITTLE NELLIE ELEMENTARY, HOME OF THE ROCKETS (fictional)'
+    C.ROOT['base'] = 'Saucer Springs AFB (fictional)'
+    C.ROOT['school'] = 'SAUCER SPRINGS ELEMENTARY, HOME OF THE ROCKETS (fictional)'
     C.ROOT['lap_length_m'] = round(ROUTE.length, 2)
     C.ROOT['race_direction'] = 'lobby north, halls, gym, cafeteria south, playground, front walk; see school.py docstring'
     C.ROOT['shortcut'] = 'north hallway -> library diagonal (model F-16) -> west hallway'
@@ -1511,7 +1504,7 @@ INDOOR_SHOTS = [
     ('lobby-start', (12, 4.2, .3), (12, 30, .9), 22),
     ('hallway-lockers', (12, 17, .25), (12, 50, 1.0), 22),
     ('pcs-card-wall', (11.0, 50.5, .5), (14.2, 56, 1.5), 22),
-    ('science-alien', (16.5, 39.0, .4), (26, 42.5, 1.2), 22),
+    ('science-plants', (16.5, 39.0, .4), (26, 42.5, 1.2), 22),
     ('library-shortcut', (8.6, 33.9, .35), (-4.3, 62, 1.5), 20),
     ('gym-parachute', (-11.5, 68.0, .35), (-42, 64, .8), 20),
     ('gym-wide', (-12, 42.5, 3.2), (-40, 66, .6), 18),
