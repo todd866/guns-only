@@ -14,11 +14,23 @@ Fresh evidence:
 - `viewport-resume/report.json`: all 12 reusable viewport-helper checks passed (menu/map/garage at 1280×720, 390×844, 667×375 and 640×360). The last is a reflow check equivalent in CSS size to 200% zoom on the laptop, not a physical assistive-technology session.
 - `resume-tests.txt`: 198 passing top-level RC/tool tests. The release gate additionally discovers the nested world tests and runs the new release-tool tests; its final logs are authoritative for the complete suite.
 
-Current release state: **prepared; production deployment not attempted yet in this continuation**. The earlier checkpoint below is historical and records why the previous session stopped.
+The owner clarified the core requirement: all levels belong to one large, driveable Saucer Springs AFB. The continuous journey acceptance uncovered genuine floor-to-terrain seams missed by fast entrance checks: a 30 cm gap at BX, a 6 cm gap at School, and a 10 cm raised edge at Housing. Shared visible/collision threshold quads now bridge those transitions. The new real-world ground and slow analog driving tests fail before the repair and pass after it, including reversing out of all three entrances.
+
+Level menu shortcuts now enter `hub` district events in Free Drive, keeping each level inside the connected base. Query flags, including silent QA, survive those links. The release browser check clicks all three shortcuts and checks the connected world and current selection.
+
+The default smoke gate now runs full headless Chromium on the host GPU and records its renderer. `RC_QA_SOFTWARE=1` retains explicit software diagnostics. Movement checks wait for observed car travel rather than a fixed wall-clock delay. Actual GPU acceptance remains mandatory; no browser flow or test was dropped.
+
+Current release state: **`902b6ecb` verified live** at https://guns-only.com/rc/ and https://guns-only-rc.vercel.app. Production deployment `dpl_DTnHyEAsci564jx1twNyU1HcGFZN` is Ready and aliased; immutable URL: https://guns-only-1z83nxgv4-ian-todds-projects.vercel.app. The pipeline exited 0: 136 game tests + 85 tool tests, all 491 packaged public files matching production SHA-256, packaged/live hardware smoke and release checks, and canonical route HTTP 200. Both live browser checks used Apple M5 hardware, silent audio, and had no browser errors. Final logs: `evidence/rc-open-world/deploy-20261023T010105Z/` and `release-902b6ecb.txt`.
+
+The independent continuous driving journey passed all nine legs: Main Gate → BX entry/exit → School entry/exit → Housing entry/exit, **8,059.84 m actual XZ displacement**, 27 streamed cells, one document, zero recoveries/teleports/errors. Largest frame-to-frame displacement 1.088 m; 54,734 frames, median 16.7 ms / p95 17.5 ms. Evidence: `verified-world-tour/tour.json` and viewport screenshots. This uses the isolated `45467ae2` world/physics/art package; the final `902b6ecb` change only updates menu links, which the separate final live gate clicked and verified. The journey proves these routes, not every venue or human driving feel.
+
+The 23 October master design adds the full MK64 correspondence, future venues, alien marshal and portal course. Those design additions are **not represented as implemented or deployed**.
+
+Release history: The initial `358cbed1` package reached production (`dpl_4uZDZEPNGbhZ2BHJqtV68jsmyfoM`), but its live gate correctly failed on a missing root favicon. Subsequent failed/aborted runs remain in the evidence directory. The final candidate also corrects that icon request. The earlier checkpoint below is historical and records why the previous session stopped.
 
 ---
 
-The owner explicitly requested deployment of the current RC version. **Not deployed:** this session could not reach the production deployment step.
+Historical earlier-session checkpoint: the owner requested deployment, but that earlier environment could not reach the production step. It is retained here as provenance; the verified release above supersedes this status.
 
 ## Candidate
 

@@ -1,0 +1,3167 @@
+{
+  "checks": [
+    {
+      "name": "laptop-courses",
+      "passed": true,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "document": {
+        "width": 1280,
+        "height": 720,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 14,
+            "y": 63.64,
+            "width": 713,
+            "height": 642.36,
+            "right": 727,
+            "bottom": 706
+          },
+          "visibleRect": {
+            "x": 14,
+            "y": 63.64,
+            "width": 713,
+            "height": 642.36,
+            "right": 727,
+            "bottom": 706
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 739,
+            "y": 63.64,
+            "width": 527,
+            "height": 642.36,
+            "right": 1266,
+            "bottom": 706
+          },
+          "visibleRect": {
+            "x": 739,
+            "y": 63.64,
+            "width": 527,
+            "height": 642.36,
+            "right": 1266,
+            "bottom": 706
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 655.41,
+            "y": 14.06,
+            "width": 145,
+            "height": 37.5,
+            "right": 800.41,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 655.41,
+            "y": 14.06,
+            "width": 145,
+            "height": 37.5,
+            "right": 800.41,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 808.41,
+            "y": 14.06,
+            "width": 370,
+            "height": 37.5,
+            "right": 1178.41,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 808.41,
+            "y": 14.06,
+            "width": 370,
+            "height": 37.5,
+            "right": 1178.41,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1186.41,
+            "y": 14.06,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 1221.77,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 1186.41,
+            "y": 14.06,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 1221.77,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1229.77,
+            "y": 14.06,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 1266,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 1229.77,
+            "y": 14.06,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 1266,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1174.28,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1207.64,
+            "bottom": 114.64
+          },
+          "visibleRect": {
+            "x": 1174.28,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1207.64,
+            "bottom": 114.64
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1211.64,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1245,
+            "bottom": 114.64
+          },
+          "visibleRect": {
+            "x": 1211.64,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1245,
+            "bottom": 114.64
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "laptop-battle",
+      "passed": true,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "document": {
+        "width": 1280,
+        "height": 720,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 14,
+            "y": 63.64,
+            "width": 713,
+            "height": 642.36,
+            "right": 727,
+            "bottom": 706
+          },
+          "visibleRect": {
+            "x": 14,
+            "y": 63.64,
+            "width": 713,
+            "height": 642.36,
+            "right": 727,
+            "bottom": 706
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 739,
+            "y": 63.64,
+            "width": 527,
+            "height": 642.36,
+            "right": 1266,
+            "bottom": 706
+          },
+          "visibleRect": {
+            "x": 739,
+            "y": 63.64,
+            "width": 527,
+            "height": 642.36,
+            "right": 1266,
+            "bottom": 706
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 655.41,
+            "y": 14.06,
+            "width": 145,
+            "height": 37.5,
+            "right": 800.41,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 655.41,
+            "y": 14.06,
+            "width": 145,
+            "height": 37.5,
+            "right": 800.41,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 808.41,
+            "y": 14.06,
+            "width": 370,
+            "height": 37.5,
+            "right": 1178.41,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 808.41,
+            "y": 14.06,
+            "width": 370,
+            "height": 37.5,
+            "right": 1178.41,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1186.41,
+            "y": 14.06,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 1221.77,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 1186.41,
+            "y": 14.06,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 1221.77,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1229.77,
+            "y": 14.06,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 1266,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 1229.77,
+            "y": 14.06,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 1266,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1174.28,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1207.64,
+            "bottom": 114.64
+          },
+          "visibleRect": {
+            "x": 1174.28,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1207.64,
+            "bottom": 114.64
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1211.64,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1245,
+            "bottom": 114.64
+          },
+          "visibleRect": {
+            "x": 1211.64,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1245,
+            "bottom": 114.64
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "laptop-places",
+      "passed": true,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "document": {
+        "width": 1280,
+        "height": 720,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 14,
+            "y": 63.64,
+            "width": 713,
+            "height": 642.36,
+            "right": 727,
+            "bottom": 706
+          },
+          "visibleRect": {
+            "x": 14,
+            "y": 63.64,
+            "width": 713,
+            "height": 642.36,
+            "right": 727,
+            "bottom": 706
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 739,
+            "y": 63.64,
+            "width": 527,
+            "height": 642.36,
+            "right": 1266,
+            "bottom": 706
+          },
+          "visibleRect": {
+            "x": 739,
+            "y": 63.64,
+            "width": 527,
+            "height": 642.36,
+            "right": 1266,
+            "bottom": 706
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 655.41,
+            "y": 14.06,
+            "width": 145,
+            "height": 37.5,
+            "right": 800.41,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 655.41,
+            "y": 14.06,
+            "width": 145,
+            "height": 37.5,
+            "right": 800.41,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 808.41,
+            "y": 14.06,
+            "width": 370,
+            "height": 37.5,
+            "right": 1178.41,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 808.41,
+            "y": 14.06,
+            "width": 370,
+            "height": 37.5,
+            "right": 1178.41,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1186.41,
+            "y": 14.06,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 1221.77,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 1186.41,
+            "y": 14.06,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 1221.77,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1229.77,
+            "y": 14.06,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 1266,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 1229.77,
+            "y": 14.06,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 1266,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1174.28,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1207.64,
+            "bottom": 114.64
+          },
+          "visibleRect": {
+            "x": 1174.28,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1207.64,
+            "bottom": 114.64
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1211.64,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1245,
+            "bottom": 114.64
+          },
+          "visibleRect": {
+            "x": 1211.64,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1245,
+            "bottom": 114.64
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "laptop-systems",
+      "passed": true,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "document": {
+        "width": 1280,
+        "height": 720,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 14,
+            "y": 63.64,
+            "width": 713,
+            "height": 642.36,
+            "right": 727,
+            "bottom": 706
+          },
+          "visibleRect": {
+            "x": 14,
+            "y": 63.64,
+            "width": 713,
+            "height": 642.36,
+            "right": 727,
+            "bottom": 706
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 739,
+            "y": 63.64,
+            "width": 527,
+            "height": 642.36,
+            "right": 1266,
+            "bottom": 706
+          },
+          "visibleRect": {
+            "x": 739,
+            "y": 63.64,
+            "width": 527,
+            "height": 642.36,
+            "right": 1266,
+            "bottom": 706
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 655.41,
+            "y": 14.06,
+            "width": 145,
+            "height": 37.5,
+            "right": 800.41,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 655.41,
+            "y": 14.06,
+            "width": 145,
+            "height": 37.5,
+            "right": 800.41,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 808.41,
+            "y": 14.06,
+            "width": 370,
+            "height": 37.5,
+            "right": 1178.41,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 808.41,
+            "y": 14.06,
+            "width": 370,
+            "height": 37.5,
+            "right": 1178.41,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1186.41,
+            "y": 14.06,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 1221.77,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 1186.41,
+            "y": 14.06,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 1221.77,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1229.77,
+            "y": 14.06,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 1266,
+            "bottom": 51.56
+          },
+          "visibleRect": {
+            "x": 1229.77,
+            "y": 14.06,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 1266,
+            "bottom": 51.56
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1174.28,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1207.64,
+            "bottom": 114.64
+          },
+          "visibleRect": {
+            "x": 1174.28,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1207.64,
+            "bottom": 114.64
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 1211.64,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1245,
+            "bottom": 114.64
+          },
+          "visibleRect": {
+            "x": 1211.64,
+            "y": 84.64,
+            "width": 33.36,
+            "height": 30,
+            "right": 1245,
+            "bottom": 114.64
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "phone-courses",
+      "passed": true,
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document": {
+        "width": 390,
+        "height": 844,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 140.5,
+            "width": 374,
+            "height": 287.78,
+            "right": 382,
+            "bottom": 428.28
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 140.5,
+            "width": 374,
+            "height": 287.78,
+            "right": 382,
+            "bottom": 428.28
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 436.28,
+            "width": 374,
+            "height": 399.72,
+            "right": 382,
+            "bottom": 836
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 436.28,
+            "width": 374,
+            "height": 399.72,
+            "right": 382,
+            "bottom": 836
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 51.5,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 89
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 51.5,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 89
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 95,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 132.5
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 95,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 132.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 304.41,
+            "y": 8,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 339.77,
+            "bottom": 45.5
+          },
+          "visibleRect": {
+            "x": 304.41,
+            "y": 8,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 339.77,
+            "bottom": 45.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 345.77,
+            "y": 8,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 45.5
+          },
+          "visibleRect": {
+            "x": 345.77,
+            "y": 8,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 45.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 298.28,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 331.64,
+            "bottom": 479.28
+          },
+          "visibleRect": {
+            "x": 298.28,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 331.64,
+            "bottom": 479.28
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 335.64,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 369,
+            "bottom": 479.28
+          },
+          "visibleRect": {
+            "x": 335.64,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 369,
+            "bottom": 479.28
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "phone-battle",
+      "passed": true,
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document": {
+        "width": 390,
+        "height": 844,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 140.5,
+            "width": 374,
+            "height": 287.78,
+            "right": 382,
+            "bottom": 428.28
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 140.5,
+            "width": 374,
+            "height": 287.78,
+            "right": 382,
+            "bottom": 428.28
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 436.28,
+            "width": 374,
+            "height": 399.72,
+            "right": 382,
+            "bottom": 836
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 436.28,
+            "width": 374,
+            "height": 399.72,
+            "right": 382,
+            "bottom": 836
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 51.5,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 89
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 51.5,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 89
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 95,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 132.5
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 95,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 132.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 304.41,
+            "y": 8,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 339.77,
+            "bottom": 45.5
+          },
+          "visibleRect": {
+            "x": 304.41,
+            "y": 8,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 339.77,
+            "bottom": 45.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 345.77,
+            "y": 8,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 45.5
+          },
+          "visibleRect": {
+            "x": 345.77,
+            "y": 8,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 45.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 298.28,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 331.64,
+            "bottom": 479.28
+          },
+          "visibleRect": {
+            "x": 298.28,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 331.64,
+            "bottom": 479.28
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 335.64,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 369,
+            "bottom": 479.28
+          },
+          "visibleRect": {
+            "x": 335.64,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 369,
+            "bottom": 479.28
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "phone-places",
+      "passed": true,
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document": {
+        "width": 390,
+        "height": 844,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 140.5,
+            "width": 374,
+            "height": 287.78,
+            "right": 382,
+            "bottom": 428.28
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 140.5,
+            "width": 374,
+            "height": 287.78,
+            "right": 382,
+            "bottom": 428.28
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 436.28,
+            "width": 374,
+            "height": 399.72,
+            "right": 382,
+            "bottom": 836
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 436.28,
+            "width": 374,
+            "height": 399.72,
+            "right": 382,
+            "bottom": 836
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 51.5,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 89
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 51.5,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 89
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 95,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 132.5
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 95,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 132.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 304.41,
+            "y": 8,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 339.77,
+            "bottom": 45.5
+          },
+          "visibleRect": {
+            "x": 304.41,
+            "y": 8,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 339.77,
+            "bottom": 45.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 345.77,
+            "y": 8,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 45.5
+          },
+          "visibleRect": {
+            "x": 345.77,
+            "y": 8,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 45.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 298.28,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 331.64,
+            "bottom": 479.28
+          },
+          "visibleRect": {
+            "x": 298.28,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 331.64,
+            "bottom": 479.28
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 335.64,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 369,
+            "bottom": 479.28
+          },
+          "visibleRect": {
+            "x": 335.64,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 369,
+            "bottom": 479.28
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "phone-systems",
+      "passed": true,
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document": {
+        "width": 390,
+        "height": 844,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 140.5,
+            "width": 374,
+            "height": 287.78,
+            "right": 382,
+            "bottom": 428.28
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 140.5,
+            "width": 374,
+            "height": 287.78,
+            "right": 382,
+            "bottom": 428.28
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 436.28,
+            "width": 374,
+            "height": 399.72,
+            "right": 382,
+            "bottom": 836
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 436.28,
+            "width": 374,
+            "height": 399.72,
+            "right": 382,
+            "bottom": 836
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 51.5,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 89
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 51.5,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 89
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 95,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 132.5
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 95,
+            "width": 374,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 132.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 304.41,
+            "y": 8,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 339.77,
+            "bottom": 45.5
+          },
+          "visibleRect": {
+            "x": 304.41,
+            "y": 8,
+            "width": 35.36,
+            "height": 37.5,
+            "right": 339.77,
+            "bottom": 45.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 345.77,
+            "y": 8,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 45.5
+          },
+          "visibleRect": {
+            "x": 345.77,
+            "y": 8,
+            "width": 36.23,
+            "height": 37.5,
+            "right": 382,
+            "bottom": 45.5
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 298.28,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 331.64,
+            "bottom": 479.28
+          },
+          "visibleRect": {
+            "x": 298.28,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 331.64,
+            "bottom": 479.28
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 335.64,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 369,
+            "bottom": 479.28
+          },
+          "visibleRect": {
+            "x": 335.64,
+            "y": 449.28,
+            "width": 33.36,
+            "height": 30,
+            "right": 369,
+            "bottom": 479.28
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "landscape-courses",
+      "passed": true,
+      "viewport": {
+        "width": 667,
+        "height": 375
+      },
+      "document": {
+        "width": 667,
+        "height": 375,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 46,
+            "width": 273.27,
+            "height": 321,
+            "right": 281.27,
+            "bottom": 367
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 46,
+            "width": 273.27,
+            "height": 321,
+            "right": 281.27,
+            "bottom": 367
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 289.27,
+            "y": 46,
+            "width": 369.73,
+            "height": 321,
+            "right": 659,
+            "bottom": 367
+          },
+          "visibleRect": {
+            "x": 289.27,
+            "y": 46,
+            "width": 369.73,
+            "height": 321,
+            "right": 659,
+            "bottom": 367
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 224.09,
+            "y": 8,
+            "width": 110,
+            "height": 32,
+            "right": 334.09,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 224.09,
+            "y": 8,
+            "width": 110,
+            "height": 32,
+            "right": 334.09,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 339.09,
+            "y": 8,
+            "width": 253.31,
+            "height": 32,
+            "right": 592.41,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 339.09,
+            "y": 8,
+            "width": 253.31,
+            "height": 32,
+            "right": 592.41,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 597.41,
+            "y": 8,
+            "width": 27.86,
+            "height": 32,
+            "right": 625.27,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 597.41,
+            "y": 8,
+            "width": 27.86,
+            "height": 32,
+            "right": 625.27,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 630.27,
+            "y": 8,
+            "width": 28.73,
+            "height": 32,
+            "right": 659,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 630.27,
+            "y": 8,
+            "width": 28.73,
+            "height": 32,
+            "right": 659,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 577.28,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 610.64,
+            "bottom": 87
+          },
+          "visibleRect": {
+            "x": 577.28,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 610.64,
+            "bottom": 87
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 614.64,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 648,
+            "bottom": 87
+          },
+          "visibleRect": {
+            "x": 614.64,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 648,
+            "bottom": 87
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "landscape-battle",
+      "passed": true,
+      "viewport": {
+        "width": 667,
+        "height": 375
+      },
+      "document": {
+        "width": 667,
+        "height": 375,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 46,
+            "width": 273.27,
+            "height": 321,
+            "right": 281.27,
+            "bottom": 367
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 46,
+            "width": 273.27,
+            "height": 321,
+            "right": 281.27,
+            "bottom": 367
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 289.27,
+            "y": 46,
+            "width": 369.73,
+            "height": 321,
+            "right": 659,
+            "bottom": 367
+          },
+          "visibleRect": {
+            "x": 289.27,
+            "y": 46,
+            "width": 369.73,
+            "height": 321,
+            "right": 659,
+            "bottom": 367
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 224.09,
+            "y": 8,
+            "width": 110,
+            "height": 32,
+            "right": 334.09,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 224.09,
+            "y": 8,
+            "width": 110,
+            "height": 32,
+            "right": 334.09,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 339.09,
+            "y": 8,
+            "width": 253.31,
+            "height": 32,
+            "right": 592.41,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 339.09,
+            "y": 8,
+            "width": 253.31,
+            "height": 32,
+            "right": 592.41,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 597.41,
+            "y": 8,
+            "width": 27.86,
+            "height": 32,
+            "right": 625.27,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 597.41,
+            "y": 8,
+            "width": 27.86,
+            "height": 32,
+            "right": 625.27,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 630.27,
+            "y": 8,
+            "width": 28.73,
+            "height": 32,
+            "right": 659,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 630.27,
+            "y": 8,
+            "width": 28.73,
+            "height": 32,
+            "right": 659,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 577.28,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 610.64,
+            "bottom": 87
+          },
+          "visibleRect": {
+            "x": 577.28,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 610.64,
+            "bottom": 87
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 614.64,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 648,
+            "bottom": 87
+          },
+          "visibleRect": {
+            "x": 614.64,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 648,
+            "bottom": 87
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "landscape-places",
+      "passed": true,
+      "viewport": {
+        "width": 667,
+        "height": 375
+      },
+      "document": {
+        "width": 667,
+        "height": 375,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 46,
+            "width": 273.27,
+            "height": 321,
+            "right": 281.27,
+            "bottom": 367
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 46,
+            "width": 273.27,
+            "height": 321,
+            "right": 281.27,
+            "bottom": 367
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 289.27,
+            "y": 46,
+            "width": 369.73,
+            "height": 321,
+            "right": 659,
+            "bottom": 367
+          },
+          "visibleRect": {
+            "x": 289.27,
+            "y": 46,
+            "width": 369.73,
+            "height": 321,
+            "right": 659,
+            "bottom": 367
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 224.09,
+            "y": 8,
+            "width": 110,
+            "height": 32,
+            "right": 334.09,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 224.09,
+            "y": 8,
+            "width": 110,
+            "height": 32,
+            "right": 334.09,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 339.09,
+            "y": 8,
+            "width": 253.31,
+            "height": 32,
+            "right": 592.41,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 339.09,
+            "y": 8,
+            "width": 253.31,
+            "height": 32,
+            "right": 592.41,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 597.41,
+            "y": 8,
+            "width": 27.86,
+            "height": 32,
+            "right": 625.27,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 597.41,
+            "y": 8,
+            "width": 27.86,
+            "height": 32,
+            "right": 625.27,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 630.27,
+            "y": 8,
+            "width": 28.73,
+            "height": 32,
+            "right": 659,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 630.27,
+            "y": 8,
+            "width": 28.73,
+            "height": 32,
+            "right": 659,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 577.28,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 610.64,
+            "bottom": 87
+          },
+          "visibleRect": {
+            "x": 577.28,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 610.64,
+            "bottom": 87
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 614.64,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 648,
+            "bottom": 87
+          },
+          "visibleRect": {
+            "x": 614.64,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 648,
+            "bottom": 87
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "landscape-systems",
+      "passed": true,
+      "viewport": {
+        "width": 667,
+        "height": 375
+      },
+      "document": {
+        "width": 667,
+        "height": 375,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 46,
+            "width": 273.27,
+            "height": 321,
+            "right": 281.27,
+            "bottom": 367
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 46,
+            "width": 273.27,
+            "height": 321,
+            "right": 281.27,
+            "bottom": 367
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 289.27,
+            "y": 46,
+            "width": 369.73,
+            "height": 321,
+            "right": 659,
+            "bottom": 367
+          },
+          "visibleRect": {
+            "x": 289.27,
+            "y": 46,
+            "width": 369.73,
+            "height": 321,
+            "right": 659,
+            "bottom": 367
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 224.09,
+            "y": 8,
+            "width": 110,
+            "height": 32,
+            "right": 334.09,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 224.09,
+            "y": 8,
+            "width": 110,
+            "height": 32,
+            "right": 334.09,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 339.09,
+            "y": 8,
+            "width": 253.31,
+            "height": 32,
+            "right": 592.41,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 339.09,
+            "y": 8,
+            "width": 253.31,
+            "height": 32,
+            "right": 592.41,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 597.41,
+            "y": 8,
+            "width": 27.86,
+            "height": 32,
+            "right": 625.27,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 597.41,
+            "y": 8,
+            "width": 27.86,
+            "height": 32,
+            "right": 625.27,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 630.27,
+            "y": 8,
+            "width": 28.73,
+            "height": 32,
+            "right": 659,
+            "bottom": 40
+          },
+          "visibleRect": {
+            "x": 630.27,
+            "y": 8,
+            "width": 28.73,
+            "height": 32,
+            "right": 659,
+            "bottom": 40
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 577.28,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 610.64,
+            "bottom": 87
+          },
+          "visibleRect": {
+            "x": 577.28,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 610.64,
+            "bottom": 87
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 614.64,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 648,
+            "bottom": 87
+          },
+          "visibleRect": {
+            "x": 614.64,
+            "y": 57,
+            "width": 33.36,
+            "height": 30,
+            "right": 648,
+            "bottom": 87
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    },
+    {
+      "name": "phone-200-text",
+      "passed": true,
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document": {
+        "width": 390,
+        "height": 844,
+        "scrollX": 0,
+        "scrollY": 0
+      },
+      "documentY": "forbid",
+      "tolerance": 1,
+      "measurements": [
+        {
+          "kind": "primary",
+          "label": ".map-panel",
+          "selector": ".map-panel",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 253,
+            "width": 374,
+            "height": 240.69,
+            "right": 382,
+            "bottom": 493.69
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 253,
+            "width": 374,
+            "height": 240.69,
+            "right": 382,
+            "bottom": 493.69
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "primary",
+          "label": ".detail",
+          "selector": ".detail",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 501.69,
+            "width": 374,
+            "height": 334.31,
+            "right": 382,
+            "bottom": 836
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 501.69,
+            "width": 374,
+            "height": 334.31,
+            "right": 382,
+            "bottom": 836
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#view",
+          "selector": "#view",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 89,
+            "width": 374,
+            "height": 75,
+            "right": 382,
+            "bottom": 164
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 89,
+            "width": 374,
+            "height": 75,
+            "right": 382,
+            "bottom": 164
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#item",
+          "selector": "#item",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 8,
+            "y": 170,
+            "width": 374,
+            "height": 75,
+            "right": 382,
+            "bottom": 245
+          },
+          "visibleRect": {
+            "x": 8,
+            "y": 170,
+            "width": 374,
+            "height": 75,
+            "right": 382,
+            "bottom": 245
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#theme",
+          "selector": "#theme",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 237.94,
+            "y": 8,
+            "width": 68.7,
+            "height": 75,
+            "right": 306.64,
+            "bottom": 83
+          },
+          "visibleRect": {
+            "x": 237.94,
+            "y": 8,
+            "width": 68.7,
+            "height": 75,
+            "right": 306.64,
+            "bottom": 83
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#info",
+          "selector": "#info",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 312.64,
+            "y": 8,
+            "width": 69.36,
+            "height": 75,
+            "right": 382,
+            "bottom": 83
+          },
+          "visibleRect": {
+            "x": 312.64,
+            "y": 8,
+            "width": 69.36,
+            "height": 75,
+            "right": 382,
+            "bottom": 83
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#previous",
+          "selector": "#previous",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 233.84,
+            "y": 514.69,
+            "width": 65.58,
+            "height": 51.5,
+            "right": 299.42,
+            "bottom": 566.19
+          },
+          "visibleRect": {
+            "x": 233.84,
+            "y": 514.69,
+            "width": 65.58,
+            "height": 51.5,
+            "right": 299.42,
+            "bottom": 566.19
+          },
+          "clips": [],
+          "hidden": false
+        },
+        {
+          "kind": "control",
+          "label": "#next",
+          "selector": "#next",
+          "fit": "full",
+          "minWidth": 1,
+          "minHeight": 1,
+          "index": 0,
+          "matches": 1,
+          "rect": {
+            "x": 303.42,
+            "y": 514.69,
+            "width": 65.58,
+            "height": 51.5,
+            "right": 369,
+            "bottom": 566.19
+          },
+          "visibleRect": {
+            "x": 303.42,
+            "y": 514.69,
+            "width": 65.58,
+            "height": 51.5,
+            "right": 369,
+            "bottom": 566.19
+          },
+          "clips": [],
+          "hidden": false
+        }
+      ],
+      "failures": []
+    }
+  ],
+  "errors": [],
+  "network": [],
+  "offline": true,
+  "passed": true
+}
