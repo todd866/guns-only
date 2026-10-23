@@ -160,22 +160,23 @@ export const PRODUCTION_ROUTES = Object.freeze([
     },
   }),
   Object.freeze({
-    // Area 51½ replaced Weekend Ride on the front door (2026-10-21). Ready = the district and the
-    // buggy loaded and Start is live; the brief must not be showing a download fallback note.
+    // The independently deployed RC entry opens directly into the connected base.
     id: "area-51",
     path: "/rc/",
     search: "?audioQa=silent",
     isReady: () => window.__gunsOnlyRC?.snapshot().assets === "blender"
-      && document.querySelector("#start")?.disabled === false,
+      && window.__gunsOnlyRC?.snapshot().world?.ready === true
+      && window.__gunsOnlyRC?.snapshot().paused === false,
     verify: async (page) => {
       const route = await page.evaluate(() => ({
-        brief: document.querySelector("#brief")?.textContent ?? "",
-        gates: window.__gunsOnlyRC?.checkpoints().length ?? 0,
-        line: window.__gunsOnlyRC?.line().length ?? 0,
+        briefHidden: document.querySelector("#brief")?.hidden === true,
+        state: window.__gunsOnlyRC?.snapshot(),
       }));
-      assert.equal(route.brief.includes("did not download"), false, "Area 51½ fell back to the base route");
-      assert.equal(route.gates, 9, "Liberty Loop should have 8 steerpoints plus the finish");
-      assert.ok(route.line > 20, "Liberty Loop racing line missing");
+      assert.equal(route.briefHidden, true, "Saucer Springs unexpectedly opens a menu");
+      assert.equal(route.state?.track, "hub", "Saucer Springs fell back to an isolated course");
+      assert.equal(route.state?.world?.ready, true, "Connected world is not ready");
+      assert.ok(route.state?.world?.tiles > 0, "Connected world tiles missing");
+      assert.equal(route.state?.paused, false, "Open-world entry is paused");
     },
   }),
   Object.freeze({
