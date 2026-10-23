@@ -9,7 +9,7 @@ import {ROAD_EVENTS} from './road-events.mjs';
 export const BOUNDS = [-2600, -2300, 3250, 4050];
 export const LOCATIONS = [
   {id:'gate',name:'Main Gate',short:'Main Gate',pos:[-607,0,-29],color:'#f8c35d',icon:'⌂',kind:'race',event:'gate-guard'},
-  {id:'housing',name:'Liberty Loop',short:'Housing',pos:[-1285,0,-1132],color:'#75cc9e',icon:'🏁',kind:'interior',track:'housing'},
+  {id:'housing',name:'Base Housing',short:'Housing',pos:[-1285,0,-1132],color:'#75cc9e',icon:'🏁',kind:'interior',track:'housing'},
   {id:'bx',name:'The BX',short:'BX',pos:[-546,0,791],color:'#f899bc',icon:'🏁',kind:'interior',track:'bx'},
   {id:'school',name:'Little Nellie Elementary',short:'School',pos:[-1228,0,718],color:'#f7cb67',icon:'🏁',kind:'interior',track:'school'},
   {id:'ramp',name:'Red Flag Ramp',short:'Red Flag',pos:[618,0,71],color:'#fb8e56',icon:'🏁',kind:'race',event:'ramp-rat'},
@@ -64,8 +64,15 @@ export function nearestLocation(pos){return LOCATIONS.reduce((a,b)=>distance(pos
 export const distance=(a,b)=>Math.hypot(a[0]-b[0],a[2]-b[2]);
 // Original, friendly specimens stand beside each public event ring; Dreamland is the reward.
 export const SPECIMENS=LOCATIONS.filter(p=>['gate','housing','bx','school','ramp','hangars','runway','wic','dirt','golf','zoo','rec','diamond','boneyard','waterpark'].includes(p.id)).map(p=>({id:p.id,name:p.short,x:p.pos[0]+4,z:p.pos[2]+2}));
-export const dreamlandUnlocked=state=>SPECIMENS.every(p=>state.specimens.includes(p.id));
-export const canEnter=(state,p)=>(p?.id!=='lab'&&!p?.alien)||dreamlandUnlocked(state);
+export const specimensComplete=state=>SPECIMENS.every(p=>state.specimens.includes(p.id));
+const EARLY_CUP_EVENTS=['district-housing','district-bx','district-school','splash-down','demo-team-circuit','supply-line','ramp-rat','wing-walker'];
+export const earlyCupsComplete=state=>EARLY_CUP_EVENTS.every(id=>[state?.raceWins?.[id],state?.wins?.[id]].some(t=>Number.isFinite(t)&&t>0));
+// The lab follows the ordinary base cups and specimen hunt; the portal follows its finale.
+export const dreamlandUnlocked=state=>specimensComplete(state)&&earlyCupsComplete(state);
+export const secretLabUnlocked=dreamlandUnlocked;
+export const alienWorldUnlocked=state=>secretLabUnlocked(state)&&['dreamland'].some(id=>[state?.raceWins?.[id],state?.wins?.[id]].some(t=>Number.isFinite(t)&&t>0));
+export const canEnter=(state,p)=>p?.alien?alienWorldUnlocked(state):p?.id==='lab'?secretLabUnlocked(state):true;
+export const canEnterEvent=(state,event)=>event?.alien?alienWorldUnlocked(state):canEnter(state,locationById(event?.location));
 export function collectSpecimens(state,seen){const found=[];for(const i of seen){const p=SPECIMENS[i];if(p&&!state.specimens.includes(p.id)){state.specimens.push(p.id);found.push(p);}}return found;}
 export function expedition(state){return {found:state.specimens.length,total:SPECIMENS.length,unlocked:dreamlandUnlocked(state),complete:dreamlandUnlocked(state)&&(['dreamland','night-wave'].some(id=>[state.raceWins?.[id],state.wins?.[id]].some(t=>Number.isFinite(t)&&t>0)))};}
 export function loadProgress(storage){let v;try{v=JSON.parse(storage?.getItem('guns-only.rc.world.v1'));}catch{}
@@ -74,7 +81,7 @@ export function loadProgress(storage){let v;try{v=JSON.parse(storage?.getItem('g
  const wins={};for(const e of RACE_EVENTS){const t=v?.wins?.[e.id];if(typeof t==='number'&&Number.isFinite(t)&&t>0)wins[e.id]=t;}
  return {discovered:['gate',...ids(v?.discovered,LOCATIONS).filter(id=>id!=='gate')],specimens:ids(v?.specimens,SPECIMENS),bowlingBest:Number.isInteger(v?.bowlingBest)&&v.bowlingBest>=0&&v.bowlingBest<=10?v.bowlingBest:0,golfBest:Number.isInteger(v?.golfBest)&&v.golfBest>0?v.golfBest:null,wins,raceWins,body:['buggy','monster','rally','pickup','golf'].includes(v?.body)&&(v.body!=='golf'||v?.discovered?.includes('golf'))?v.body:'jet',shell:['viper','eagle','hog','raptor','flanker'].includes(v?.shell)?v.shell:'viper',paint:PAINTS.some(p=>p.color===v?.paint)?v.paint:PAINTS[0].color};}
 export function saveProgress(storage,state){try{storage?.setItem('guns-only.rc.world.v1',JSON.stringify(state));}catch{}}
-export function discover(state,pos){const found=[];for(const p of LOCATIONS)if(distance(pos,p.pos)<45&&!state.discovered.includes(p.id)){state.discovered.push(p.id);found.push(p);}return found;}
-export function recordFinish(state,id,time){if(!eventById(id)||!Number.isFinite(time)||time<=0||(eventById(id).location==='lab'&&!dreamlandUnlocked(state)))return;state.raceWins??={};state.raceWins[id]=Math.min(Number(state.raceWins[id])||Infinity,time);state.wins[id]=Math.min(Number(state.wins[id])||Infinity,time);}
+export function discover(state,pos){const found=[];for(const p of LOCATIONS)if(canEnter(state,p)&&distance(pos,p.pos)<45&&!state.discovered.includes(p.id)){state.discovered.push(p.id);found.push(p);}return found;}
+export function recordFinish(state,id,time){const event=eventById(id);if(!event||!Number.isFinite(time)||time<=0||!canEnterEvent(state,event))return;state.raceWins??={};state.raceWins[id]=Math.min(Number(state.raceWins[id])||Infinity,time);state.wins[id]=Math.min(Number(state.wins[id])||Infinity,time);}
 export function medal(event,time){const factor=event.kind==='sprint'?1:3;return time<=event.medals[0]*factor?'Gold':time<=event.medals[1]*factor?'Silver':time<=event.medals[2]*factor?'Bronze':'Finished';}
 export function rcLink(params,search=''){const p=new URLSearchParams(search);for(const k of ['track','from','event','mode','at'])p.delete(k);for(const [k,v]of Object.entries(params))if(v!=null)p.set(k,v);return `?${p}`;}

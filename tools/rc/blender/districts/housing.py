@@ -15,7 +15,7 @@ section A only; section B respected: no Thunderbirds marks, real insignia, casin
 gambling imagery). All lettering is mesh text from Blender's bundled font.
 
 Layout (Blender metres, +Z up, X east, Y north). Street centreline: rounded rectangle, half
-extents 70 x 42 m, corner radius 24 m, a 406.8 m clockwise lap. 7 m asphalt between ROLLED
+extents 70 x 42 m, corner radius 16 m, a tighter 420.53 m clockwise lap. 7 m asphalt between ROLLED
 (mountable) kerbs: a smoothstep rising 10 cm over 35 cm, so no vertical face anywhere on the road
 edge. Every other step on drivable ground is <= 2 cm; anything taller is a real wall (>= 25 cm).
 
@@ -51,7 +51,7 @@ C.PALETTE.update({
     'sign_green': ('#2E7D4F', 0, .5), 'hi_vis': ('#DDF22E', 0, .35), 'haze': ('#C9C3DA', 0, .9),
 })
 
-LOOP = C.RoundedLoop(70, 42, 24)
+LOOP = C.RoundedLoop(70, 42, 16)
 ROAD, KERB, PARK, WALK = 3.5, 3.85, 5.0, 6.5
 Z_KERB, Z_LAWN, Z_WALK, Z_TURF, Z_DRIVE = .10, .10, .11, .115, .115
 GATE_D = [0, 40, 80, 120, 160, 196, 212, 378]
@@ -737,6 +737,38 @@ def pt_belt_arch():
         words('rubber', 'START · FINISH', .2, (p[0], p[1], 2.99), facing, max_w=4.5, out=.03)
 
 
+def liberty_loop_curb_art():
+    """MK64-style alternating kerb blocks and painted arrows make the route readable at speed.
+
+    These are thin visual overlays on the existing rolled kerbs.  They deliberately do not add
+    collision; the continuous concrete kerb and asphalt slab remain the single physical edge.
+    """
+    count = int(LOOP.length // 4)
+    for k in range(count):
+        d = 1.5 + k * 4
+        p, t, n = LOOP.at(d)
+        yaw = math.atan2(t[1], t[0])
+        material = 'door_red' if k % 2 == 0 else 'trim'
+        for side in (-1, 1):
+            x, y = p[0] + n[0] * side * 3.72, p[1] + n[1] * side * 3.72
+            vis('curb_art', material).add(box(x, y, .112, 3.25, .28, .025, yaw), kind='up')
+    # Flat, high-contrast arrows on the four neighbourhood approaches echo the MK64 HUD line.
+    for d, side in ((19, 1), (118, -1), (219, 1), (319, -1)):
+        p, t, n = LOOP.at(d)
+        x, y = p[0] + n[0] * side * 1.1, p[1] + n[1] * side * 1.1
+        vis('curb_art', 'paint').add(box(x, y, .014, 1.5, .42, .006, math.atan2(t[1], t[0])), kind='up')
+
+
+def liberty_loop_landmark():
+    """A tiny fictional housing gateway gives the loop a memorable visual anchor."""
+    x, y = -70, -42.5
+    for dx in (-2.8, 2.8):
+        vis('loop_landmark', 'trim').add(cylinder((x + dx, y, 0), .16, 3.2, 10))
+        col('metal', f'loop_landmark_post_{dx}', box(x + dx, y, 0, .32, .32, 3.2))
+    vis('loop_landmark', 'door_red').add(box(x, y, 3.0, 6.1, .18, .72))
+    words('trim', 'BASE HOUSING', .3, (x, y - .11, 3.03), 270, max_w=5.6, out=.1)
+
+
 def street_blades(d, a_name, b_name, label):
     p, t, n = LOOP.at(d)
     x, y = p[0] + n[0] * 4.45, p[1] + n[1] * 4.45
@@ -827,6 +859,8 @@ def sun_face(cx, cy, z, facing, r=.35):
 
 def dressing():
     pt_belt_arch()
+    liberty_loop_curb_art()
+    liberty_loop_landmark()
     for d, a, b, lab in ((64.85, 'RED FLAG DR', 'WEAPONS SCHOOL WAY', 'blade_sw'),
                          (138.55, 'AGGRESSOR AVE', 'WEAPONS SCHOOL WAY', 'blade_nw'),
                          (268.25, 'AGGRESSOR AVE', 'THUNDER WAY', 'blade_ne'),

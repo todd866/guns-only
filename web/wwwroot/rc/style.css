@@ -46,3 +46,19 @@ body.driving #instruments #secret,body.driving #instruments #coins{display:none}
 @media(max-width:540px){body.driving header{top:8px;right:8px}#clock{top:14px;right:62px;font-size:15px}#gate{left:12px;top:14px;max-width:45vw;font-size:12px}#item{top:52px;left:12px}#osm-credit{font-size:10px}#map{bottom:145px}}
 
 #map{width:225px;height:200px}@media(max-width:900px){#map{width:180px;height:160px}}@media(max-width:540px){#map{width:153px;height:136px}}
+
+/* One entry surface: drive, choose a course, or change the car. */
+header b,header nav button:not(#pause){display:none}
+body:not(.driving) header,body:not(.driving) #instruments,body:not(.driving) #map,body:not(.driving) #touch{display:none}
+#brief{width:440px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);overflow:auto;padding:24px;background:#102b37ed;border:0;border-radius:14px}
+#brief h1{font-size:24px;margin:0 0 20px;letter-spacing:.045em}
+#brief .modes{display:grid;grid-template-columns:1fr;gap:9px;margin:0}
+#brief .modes button{min-height:48px;font-size:19px;text-align:left;padding:10px 20px;border-radius:8px}
+
+#options{margin-top:16px}
+#options summary{cursor:pointer;min-height:44px;display:list-item;align-content:center;color:var(--muted);font-size:14px;margin-left:18px}
+#options .settings{gap:8px;padding-top:8px}
+#options .credits{max-width:none;display:inline-block;margin:12px 12px 0 0;font-size:12px}
+#options #osm-credit{margin-top:12px}
+@media(max-height:500px){#brief{padding:16px;width:540px}#brief h1{font-size:20px;margin-bottom:12px}#brief .modes{grid-template-columns:repeat(3,1fr)}#brief .modes button{font-size:16px;padding:10px}#options{margin-top:8px}}
+body.driving:not(.race-mode) #gate{display:none}

@@ -2,7 +2,7 @@ import {buildingInfo} from './geometry.mjs';
 import {WAVEPOOL_BEACH} from './wavepool-course.mjs';
 // Dense tactical map renderer. The canvas is intentionally authored in 180x160 logical
 // units so the existing HUD can move to a larger backing store without changing layout.
-import { LOCATIONS } from './catalog.mjs';
+import { LOCATIONS,canEnter } from './catalog.mjs';
 const DEFAULTS = {
   bg: '#10242a', land: '#233b3c', water: '#164d61', building: '#526267', road: '#70827d',
   course: '#f2c56d', edge: '#fff1b0', center: '#c18c4d', finish: '#f8f4df', player: '#fff', rival: '#f47c68',
@@ -55,7 +55,7 @@ function drawStatic(ctx, state, map, palette, bounds) {
     rect(-545,3365,118,78,'#b99e70');rect(-545,3365,104,64,palette.water);
     for(const [x,z] of Object.values(WAVEPOOL_BEACH.landmarks))rect(x,z,5,5,'#b6c2b0');
   }
-  const course = state.course;
+  const course = state.roam ? null : state.course;
   const pts = allCoursePoints(course);
   if (pts.length > 1) {
     const width = Math.max(1, (course?.event?.half ?? course?.half ?? 4) * 2 * (map([1, 0])[0] - map([0, 0])[0]));
@@ -72,7 +72,7 @@ function drawStatic(ctx, state, map, palette, bounds) {
   }
   const locations = state.world?.locations ?? state.locations ?? LOCATIONS;
   ctx.fillStyle = palette.location ?? '#b5e5cc';
-  for (const loc of locations) { const p = point(loc.pos); if (!p || !visible([p], ...bounds)) continue; const q = map(p); ctx.beginPath(); ctx.arc(q[0], q[1], 2, 0, Math.PI * 2); ctx.fill(); }
+  for (const loc of locations) { if(state.world?.progress&&!canEnter(state.world.progress,loc))continue; const p = point(loc.pos); if (!p || !visible([p], ...bounds)) continue; const q = map(p); ctx.beginPath(); ctx.arc(q[0], q[1], 2, 0, Math.PI * 2); ctx.fill(); }
 }
 
 export function drawDetailedMinimap(ctx, { world, course, race, player, yaw = 0, palette = {} } = {}) {
@@ -85,7 +85,7 @@ export function drawDetailedMinimap(ctx, { world, course, race, player, yaw = 0,
   const pts = allCoursePoints(course);
   const roam = !course || !pts.length || race?.roam;
   let minX, maxX, minZ, maxZ;
-  if (roam) { const radius = 100, x = Math.round((car[0] ?? 0) / 32) * 32, z = Math.round((car[2] ?? car[1] ?? 0) / 32) * 32; minX = x - radius; maxX = x + radius; minZ = z - radius; maxZ = z + radius; }
+  if (roam) { const radius = 300, x = Math.round((car[0] ?? 0) / 32) * 32, z = Math.round((car[2] ?? car[1] ?? 0) / 32) * 32; minX = x - radius; maxX = x + radius; minZ = z - radius; maxZ = z + radius; }
   else { minX = Math.min(...pts.map(p => p[0])); maxX = Math.max(...pts.map(p => p[0])); minZ = Math.min(...pts.map(p => p[1])); maxZ = Math.max(...pts.map(p => p[1])); const margin = Math.max(12, (course.event?.half ?? course.half ?? 4) * 3); minX -= margin; maxX += margin; minZ -= margin; maxZ += margin; }
   const scale = Math.min(176 / Math.max(1, maxX - minX), 156 / Math.max(1, maxZ - minZ));
   const ox = (180 - (maxX - minX) * scale) / 2, oz = (160 - (maxZ - minZ) * scale) / 2;
@@ -93,15 +93,15 @@ export function drawDetailedMinimap(ctx, { world, course, race, player, yaw = 0,
   const loaded = world?.loaded instanceof Map ? world.loaded : world?.stream?.loaded;
   const tileKey = loaded instanceof Map ? [...loaded.keys()].sort().join('|') : '';
   const centerKey = roam ? `${Math.round((car[0] ?? 0) / 32)},${Math.round((car[2] ?? car[1] ?? 0) / 32)}` : '';
-  const cacheKey = `${course?.event?.id ?? course?.id ?? 'roam'}:${tileKey}:${centerKey}:${JSON.stringify(colours)}`;
+  const cacheKey = `${roam}:${world?.progress?.discovered?.join(',')}:${course?.event?.id ?? course?.id ?? 'roam'}:${tileKey}:${centerKey}:${JSON.stringify(colours)}`;
   const cache = ctx.__detailedMinimapCache ??= { key: '', canvas: null };
   let cached = cache.key === cacheKey ? cache.canvas : null;
   if (!cached && globalThis.document?.createElement) {
     cached = document.createElement('canvas'); cached.width = 360; cached.height = 320;
     const c = cached.getContext?.('2d');
-    if (c) { c.scale?.(2, 2); drawStatic(c, { world, course, overview: world?.overview }, map, colours, [minX, maxX, minZ, maxZ]); cache.key = cacheKey; cache.canvas = cached; }
+    if (c) { c.scale?.(2, 2); drawStatic(c, { world, course, roam, overview: world?.overview }, map, colours, [minX, maxX, minZ, maxZ]); cache.key = cacheKey; cache.canvas = cached; }
   }
-  if (cached && ctx.drawImage) ctx.drawImage(cached, 0, 0, 180, 160); else drawStatic(ctx, { world, course, overview: world?.overview }, map, colours, [minX, maxX, minZ, maxZ]);
+  if (cached && ctx.drawImage) ctx.drawImage(cached, 0, 0, 180, 160); else drawStatic(ctx, { world, course, roam, overview: world?.overview }, map, colours, [minX, maxX, minZ, maxZ]);
   // Dynamic markers are deliberately drawn after the cached geometry.
   for (const rival of race?.rivals ?? []) { const p = point(rival.session?.car?.pos); if (!p) continue; const q = map(p); ctx.fillStyle = colours.rival; ctx.beginPath(); ctx.arc(q[0], q[1], 2.5, 0, Math.PI * 2); ctx.fill(); }
   const pp = map([car[0] ?? 0, car[2] ?? car[1] ?? 0]); ctx.fillStyle = colours.player; ctx.beginPath(); ctx.arc(pp[0], pp[1], 2.8, 0, Math.PI * 2); ctx.fill();

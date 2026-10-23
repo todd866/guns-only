@@ -29,3 +29,15 @@ Publication verified complete:
 
 
 Known scope limits to keep honest: authored art is functional low-poly game geometry, not the full polish of the approved concept sheet. Marshal recovery currently signals the physics recovery rather than animating a complete carry flight. Course-specific art and mechanical depth still require continued refinement against the design atlas; do not describe every design-ledger item as complete solely because courses finish.
+
+## Follow-up: open-world-first entry (23 October, afternoon)
+
+User corrections: no startup choice screen; Saucer Springs is the immediately driveable starting point. Remove Area 51½ and Liberty Loop naming, keep aliens a much later discovery, reduce HUD/menu text, improve housing course presentation.
+
+Draft now auto-starts after assets are ready. Legacy base/housing/BX/school links enter the connected world; failed world loads expose Retry rather than a tiny prototype. Pause retains optional course/garage/map shortcuts. Public collectibles are ordinary badges. Lab requires 15 badges and the eight Home Base/Flightline races; alien world additionally requires Dreamland completion. Secret map entries, marshal transformation and portal visuals respect those gates. Exploration minimap shows surrounding roads instead of the selected small race ribbon. Housing is renamed Base Housing, with tighter corners, kerb markings and regenerated ambient-occlusion shading.
+
+Root website stale-cache cause is addressed separately in PR #133 (Build 397), based on protected remote main, without moving this RC checkout. Worktree: `.worktrees/rc-cache-release`; clean main deployment clone: `/Users/iantodd/Projects/guns-only-rc-cache-release`. Root service worker must activate normally before existing controlled tabs use its bypass. Dedicated RC origin bypasses that worker.
+
+Review decisions: corrected refuter's alien-event gate bypass via event-aware admission. Public location deep links remain intentionally allowed, preserving old bookmarks and access to the ordinary base; discovery controls pause-menu shortcuts, not access to public terrain. Cursor independently approved the root cache exclusion, noting existing controlled tabs retain old-worker behavior until normal activation. Do not force the owner's browser or global worker activation.
+
+Validation in progress; not yet published. Prior 163-game-test run passed; subsequent portal visibility test and no-menu-start browser tests still require final packaged release run. Do not repackage a directory while a browser test is reading it (one attempted test was invalidated by temporary missing files during replacement).

@@ -8,7 +8,8 @@ const out = path.resolve(process.argv[2] || 'evidence/rc-open-world/portal-trip'
 const base = process.argv[3] || 'http://rc.test';
 const report = { base, packageRoot: root, errors: [], documents: 0, legs: [] };
 const save = () => { fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, 'portal-trip.json'), JSON.stringify(report, null, 2)); };
-const progress = { discovered: ['gate','housing','bx','school','ramp','hangars','runway','wic','dirt','golf','zoo','rec','diamond','boneyard','waterpark','lab'], specimens: ['gate','housing','bx','school','ramp','hangars','runway','wic','dirt','golf','zoo','rec','diamond','boneyard','waterpark'], wins: {}, raceWins: {}, body: 'buggy', shell: 'viper', paint: '#ed9145', bowlingBest: 0, golfBest: null };
+const earlyWins = Object.fromEntries(['district-housing','district-bx','district-school','splash-down','demo-team-circuit','supply-line','ramp-rat','wing-walker'].map(id => [id, 60]));
+const progress = { discovered: ['gate','housing','bx','school','ramp','hangars','runway','wic','dirt','golf','zoo','rec','diamond','boneyard','waterpark','lab'], specimens: ['gate','housing','bx','school','ramp','hangars','runway','wic','dirt','golf','zoo','rec','diamond','boneyard','waterpark'], wins: { dreamland: 120 }, raceWins: { ...earlyWins, dreamland: 120 }, body: 'buggy', shell: 'viper', paint: '#ed9145', bowlingBest: 0, golfBest: null };
 
 (async () => {
   let browser, page;
@@ -34,7 +35,8 @@ const progress = { discovered: ['gate','housing','bx','school','ramp','hangars',
     await page.waitForFunction(() => window.__gunsOnlyRC?.snapshot().assets === 'blender', null, { timeout: 90000 });
     report.gpu = await page.evaluate(() => { const gl = document.querySelector('#view').getContext('webgl2'), e = gl.getExtension('WEBGL_debug_renderer_info'); return gl.getParameter(e ? e.UNMASKED_RENDERER_WEBGL : gl.RENDERER); });
     assert.ok(!/swiftshader|llvmpipe/i.test(report.gpu), `Hardware renderer required: ${report.gpu}`);
-    await page.locator('#start').click();
+
+    await page.waitForFunction(() => window.__gunsOnlyRC?.snapshot().paused === false, null, { timeout: 10000 });
     await page.evaluate(() => {
       const p = window.__portalPad, state = window.__portalTrip = { legs: [], transitions: [], last: null, distance: 0, maxStep: 0, ordinaryMaxStep: 0, target: [2530, -1200], region: 'base' };
       function tick() {

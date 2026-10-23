@@ -50,3 +50,13 @@ test('Night Wave completes three laps on its authored elevated collision road', 
   assert.equal(race.player.recoveries, 0);
   portal.dispose();
 });
+
+test('locked progression keeps the remote alien portal visuals hidden', () => {
+  const scene = new T.Scene(), world = createWorld(); let unlocked = false;
+  const portal = createPortal(scene, world, () => unlocked);
+  portal.update(0, [10000, 0, 200]); assert.equal(portal.root.visible, false);
+  portal.update(0, [2530, 0, -1200]); assert.equal(portal.root.visible, false);
+  unlocked = true; portal.update(0, [2530, 0, -1200]); assert.equal(portal.root.visible, true);
+  portal.update(0, [10000, 0, 200]); assert.equal(portal.root.visible, true);
+  portal.dispose();
+});
