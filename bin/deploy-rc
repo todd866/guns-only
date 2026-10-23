@@ -17,7 +17,9 @@ run_job() {
 }
 dist="$repo/.rc-dist"; target=--prod; [ "${1:-}" = "--preview" ] && target=""
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/guns-only-rc-deploy.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT INT TERM
+trap 'rm -rf "$tmp"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 evidence="$repo/evidence/rc-open-world/deploy-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$evidence"
 echo "deploy-rc: unit tests"
