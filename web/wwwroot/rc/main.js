@@ -40,7 +40,11 @@ function addSolid(b){liveSolids.push(b);addBox(course.world,b.x,b.z,b.w,b.d,b.mi
 let assetState='prototype';
 const artReview=new URLSearchParams(location.search).get('art')==='review';
 const $=id=>document.getElementById(id),canvas=$('view');
-for(const a of document.querySelectorAll('#tracks a'))a.setAttribute('aria-current',String(a.dataset.track===track));
+for(const a of document.querySelectorAll('#tracks a')){
+ const id=a.dataset.track;
+ a.href=rcLink(id==='hub'?{track:'hub'}:{track:'hub',event:`district-${id}`,mode:'drive'},location.search);
+ a.setAttribute('aria-current',String(id===(openWorld?.selected.district??track)));
+}
 if(districtError){const note=document.createElement('p');note.textContent=openWorld?'':`The requested area did not download. ${track==='housing'?'Liberty Loop':'Motor pool'} is available; reload to retry.`;$('brief')?.append(note);}
 const renderer=new T.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
 const scene=new T.Scene();scene.background=new T.Color('#b2c6c5');scene.fog=new T.Fog('#b2c6c5',65,150);

@@ -5,7 +5,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const root=path.resolve(process.env.RC_QA_ROOT||'.rc-dist');
 const out=path.resolve(process.argv[2]||'evidence/rc-open-world/world-tour');
 const base=process.argv[3]||'http://rc.test';
-const report={base,errors:[],legs:[],documents:0};
+const report={base,packageRoot:root,errors:[],legs:[],documents:0};
 const save=()=>fs.writeFileSync(path.join(out,'tour.json'),JSON.stringify(report,null,2));
 (async()=>{
  fs.mkdirSync(out,{recursive:true});let browser,page;
@@ -81,6 +81,9 @@ const save=()=>fs.writeFileSync(path.join(out,'tour.json'),JSON.stringify(report
    {id:'road-to-school',destination:'Little Nellie Elementary',end:[-1228,724],road:true,speed:10},
    {id:'inside-school',end:[-1228,657],speed:3},
    {id:'leave-school',end:[-1228,724],reverse:true,speed:3},
+   {id:'road-to-housing',destination:'Liberty Loop',end:[-1285,-1126],road:true,speed:12},
+   {id:'inside-housing',end:[-1285,-1144],speed:3},
+   {id:'leave-housing',end:[-1285,-1126],reverse:true,speed:3},
   ];
   for(const leg of legs){
    const s=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());
@@ -88,6 +91,8 @@ const save=()=>fs.writeFileSync(path.join(out,'tour.json'),JSON.stringify(report
    const vertices=leg.road?roadRoute(graph,[s.x,s.z],leg.end):[[s.x,s.z],leg.end];
    assert.ok(vertices.length>1,`${leg.id}: route must connect`);
    const points=[];for(let i=1;i<vertices.length;i++){const a=vertices[i-1],b=vertices[i],n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/2);for(let j=0;j<n;j++)points.push([a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n]);}points.push(leg.end);
+   const length=vertices.reduce((sum,p,i)=>sum+(i?Math.hypot(p[0]-vertices[i-1][0],p[1]-vertices[i-1][1]):0),0);
+   const timeout=Math.max(120000,length/leg.speed*2000);
    await page.evaluate(l=>{window.__tour.leg={...l,node:1,done:false};},{...leg,points});
    const started=Date.now();let previous=s.travel,stuck=0;
    for(;;){
@@ -101,7 +106,7 @@ const save=()=>fs.writeFileSync(path.join(out,'tour.json'),JSON.stringify(report
     if(current.leg.done){report.legs.push({id:leg.id,seconds:(Date.now()-started)/1000,state:current.state,route:vertices});save();break;}
     stuck=current.state.travel-previous<1?stuck+1:0;previous=current.state.travel;
     assert.ok(stuck<4,`${leg.id}: no progress for 40 seconds`);
-    assert.ok(Date.now()-started<480000,`${leg.id}: journey timed out`);
+    assert.ok(Date.now()-started<timeout,`${leg.id}: journey timed out`);
    }
    await page.screenshot({path:path.join(out,`${leg.id}.png`)});
   }
@@ -109,7 +114,7 @@ const save=()=>fs.writeFileSync(path.join(out,'tour.json'),JSON.stringify(report
   assert.equal(report.documents,1,'Journey must keep the same document');
   assert.ok(await page.evaluate(()=>window.__tour.maxStep<2),'No discontinuous position changes');
   assert.ok(await page.evaluate(()=>window.__tour.distance>3000),'Sustained journey across the base');
-  for(const id of ['gate','bx','school'])assert.ok(report.finish.world.discovered.includes(id),`${id} was discovered through driving`);
+  for(const id of ['gate','bx','school','housing'])assert.ok(report.finish.world.discovered.includes(id),`${id} was discovered through driving`);
   assert.deepEqual(report.errors,[]);report.passed=true;
  }catch(error){report.failure=error.stack;process.exitCode=1;if(page)await page.screenshot({path:path.join(out,'failure.png')}).catch(()=>{});console.error(error);}
  finally{

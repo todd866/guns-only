@@ -30,6 +30,14 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   await page.locator('#menu-map').click();assert.equal(await page.locator('#world-panel').isVisible(),true);await page.screenshot({path:path.join(out,'map.png')});
   await page.locator('#map-close').click();await page.locator('#start').click();await page.waitForTimeout(500);
   await page.screenshot({path:path.join(out,'open-world-drive.png')});
+  await visit('');
+  for(const id of ['housing','bx','school']){
+   await page.locator(`#tracks a[data-track="${id}"]`).click();await ready();
+   const state=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());
+   assert.equal(state.track,'hub');assert.equal(state.world.event,`district-${id}`);assert.equal(state.audioSilent,true);
+   assert.equal(await page.locator(`#tracks a[data-track="${id}"]`).getAttribute('aria-current'),'true');
+  }
+  results.push({name:'connected-district-menu',passed:true});
   for(const [name,query,guide]of [['bx-free','track=bx','course'],['bx-connected','track=hub&event=district-bx&mode=drive','bx']]){
    await visit(query);await page.locator('#start').click();
    await page.waitForFunction(expected=>window.__gunsOnlyRC.snapshot().guide===expected,guide);
