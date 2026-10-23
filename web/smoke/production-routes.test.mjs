@@ -160,7 +160,7 @@ test("first-run route proves cold authority and an authority-matched gorge", asy
   })), /did not preserve the valley interlock/);
 });
 
-test("standalone routes require their Ready brief and paused or cold authority", async () => {
+test("standalone routes enforce their own entry contracts", async () => {
   const cobra = route("cobra-lab");
   const rc = route("area-51");
 
@@ -173,15 +173,18 @@ test("standalone routes require their Ready brief and paused or cold authority",
     authorityTick: -1,
     vehiclePresent: true,
   }));
-  await rc.verify(pageReturning({ brief: "Small car. Big secret.", gates: 9, line: 51 }));
+  await rc.verify(pageReturning({ briefHidden: true, state: {track: "hub", paused: false, world: {ready: true, tiles: 25}} }));
 
   await assert.rejects(() => cobra.verify(pageReturning({
     status: "HOLD THE BRIDGE · AH-1G ONLINE",
     briefVisible: false,
   })), /READY · REVIEW FLIGHT BRIEF/);
   await assert.rejects(() => rc.verify(pageReturning({
-    brief: "Liberty Loop did not download, so this race uses the motor pool route.", gates: 10, line: 10,
-  })), /fell back to the base route/);
+    briefHidden: true, state: {track: "housing", paused: false},
+  })), /fell back to an isolated course/);
+  for (const state of [{track:"hub",paused:true,world:{ready:true,tiles:25}}, {track:"hub",paused:false,world:{ready:false,tiles:25}}, {track:"hub",paused:false,world:{ready:true,tiles:0}}]) {
+    await assert.rejects(() => rc.verify(pageReturning({briefHidden:true,state})));
+  }
   await assert.rejects(() => cobra.verify(pageReturning({
     status: "READY · REVIEW FLIGHT BRIEF",
     briefVisible: true,
