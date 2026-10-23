@@ -23,7 +23,7 @@ export const LOCATIONS = [
   {id:'diamond',name:'Baseball Diamond',short:'Baseball',pos:[-1327,0,1490],color:'#e5c68d',icon:'🏁',kind:'race',event:'round-bases'},
   {id:'boneyard',name:'Desert Boneyard',short:'Boneyard',pos:[2350,0,1600],color:'#c6b99c',icon:'🏁',kind:'race',event:'wing-walker'},
   {id:'waterpark',name:'Sunrise Splash',short:'Waterpark',pos:[-545,0,3388],color:'#79d9e2',icon:'🏁',kind:'race',event:'splash-down'},
-  {id:'lab',name:'Area 51½',short:'Dreamland',pos:[2500,0,-1200],color:'#9fe2a8',icon:'◇',kind:'race',event:'dreamland'},
+  {id:'lab',name:'Dreamland',short:'Dreamland',pos:[2500,0,-1200],color:'#9fe2a8',icon:'◇',kind:'race',event:'dreamland'},
 ];
 LOCATIONS.push(...VENUE_LOCATIONS,...CLASSIC_LOCATIONS,...ALIEN_LOCATIONS,{id:'night-wave',name:'Night Wave',short:'Night Wave',pos:[11200,0,200],color:'#a99cf2',icon:'◇',kind:'race',event:'night-wave',alien:true});
 const loop = (cx,cz,w,d) => [[cx,cz],[cx+w*.4,cz],[cx+w*.5,cz-d*.18],[cx+w*.5,cz-d*.82],[cx+w*.35,cz-d],[cx-w*.35,cz-d],[cx-w*.5,cz-d*.82],[cx-w*.5,cz-d*.18],[cx-w*.4,cz],[cx,cz]];
