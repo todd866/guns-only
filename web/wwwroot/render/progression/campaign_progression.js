@@ -164,11 +164,11 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     title: "Weekend Ride",
     shortObjective: "Open helmet-view lapping on the painted 10,000 ft Rapier-strip circuit; end the ride when ready and review the session.",
     qualification: "",
-    // Owner, 2026-10-21: Area 51½ replaces the driving slot on the front door. The route and
+    // Owner, 2026-10-21: Saucer Springs AFB replaces the driving slot on the front door. The route and
     // its code stay for development behind ?preview=1.
     releaseState: EXPERIENCE_RELEASE_STATE.PREVIEW,
     visible: false,
-    blocker: "Replaced on the front door by Area 51½ (owner direction 2026-10-21)",
+    blocker: "Replaced on the front door by Saucer Springs AFB (owner direction 2026-10-21)",
   }),
   experience({
     id: "area-51",
@@ -176,8 +176,8 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     sequence: 11,
     route: "/rc/",
     aircraft: "RC buggy",
-    title: "Area 51½",
-    shortObjective: "Race toy RC buggies round a desert air base: pickups, rivals, steerpoints and a hidden alien.",
+    title: "Saucer Springs AFB",
+    shortObjective: "Explore the base in an RC car, join races and battle rivals.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,
