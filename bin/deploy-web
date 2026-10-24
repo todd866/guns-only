@@ -353,6 +353,9 @@ else
         echo "deploy-web: installing the locked browser toolchain for the frame gate"
         (cd "$repo_dir/web/smoke" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null)
     fi
+    # Publishing/staging can leave compiler and filesystem work active. Wait before launching
+    # the browser; this does not warm the game or discard any measured flight frames.
+    node "$repo_dir/tools/perf/host_headroom.mjs"
     echo "deploy-web: flying the hardware frame gate on the publish artifact (~3 min, headless)"
     frame_log="$publish_dir/frame-gate.log"
     if ! node "$repo_dir/tools/perf/flight_frame_harness.mjs" --wwwroot "$deploy_root" >"$frame_log" 2>&1; then
