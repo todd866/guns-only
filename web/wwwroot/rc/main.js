@@ -13,6 +13,7 @@ import {recover,readout} from './physics/session.mjs';
 import {createRace as createRaceBase,stepRace,placeOf,retreatActive} from './physics/race.mjs';
 import {TRACK_FEATURES,placeFeatures} from './physics/features.mjs';
 import {modifiers,MISSILES,beamDir} from './physics/pickups.mjs';
+import {heldMissilePose} from './pickup-visuals.mjs';
 import {VISUAL_SCALE,BUGGY,createCar,placeCar,rideHeight} from './physics/car.mjs';
 import {addBox} from './physics/world.mjs';
 import {courseFromGlb} from './physics/district.mjs';
@@ -241,8 +242,9 @@ function drawPickups(now){const pk=race.pickups;
  pk.missiles.forEach((m,i)=>{drawMissile('m'+i,m.pos,m.dir);if(!paused)fx.puff(m.pos);});
  // Fox One radar beam: shown while your beam-rider is in the air; steering sweeps it.
  if(pk.missiles.some(m=>m.kind==='foxone'&&m.owner===s.car)){const b=fxMesh('beam',beamMesh),d=beamDir(s.car);b.position.set(s.car.pos[0],s.car.pos[1]+.08,s.car.pos[2]);b.rotation.set(0,Math.atan2(-d[0],-d[2]),0);}
- // Held missile packs orbit the kart, like MK64 triple shells. No tow trailer.
- [...(pk.dangle??[])].forEach((c,i)=>{const n=pk.ammo.get(c)??1;for(let k=0;k<n;k++){const a=now*.002+k*Math.PI*2/n;drawMissile(`orbit${i}_${k}`,[c.pos[0]+Math.cos(a)*.42,c.pos[1]+.12,c.pos[2]+Math.sin(a)*.42],[-Math.sin(a),0,Math.cos(a)]);}});
+ // Carried missiles sit on a small rear bumper rack. The rack point matches the
+ // defensive trailer collision, so a held Pitbull never visually circles the car.
+ [...(pk.dangle??[])].forEach((c,i)=>{const n=pk.ammo.get(c)??1;for(let k=0;k<n;k++){const p=heldMissilePose(c,k,n);drawMissile(`rack${i}_${k}`,p.pos,p.dir);}});
  pk.balloons.forEach((b,i)=>fxMesh('b'+i,()=>new T.Mesh(new T.SphereGeometry(.07,12,8),balloonMat)).position.set(...b.pos));
  pk.slicks.forEach((o,i)=>{const m=fxMesh('o'+i,()=>{const d=new T.Mesh(new T.CircleGeometry(.5,20),oilMat);d.rotation.x=-Math.PI/2;return d;});m.position.set(o.pos[0],o.pos[1]-.12,o.pos[2]);});
  [race.player.car,...race.rivals.map(r=>r.session.car)].forEach((c,i)=>{if(modifiers(pk,c).shielded)fxMesh('s'+i,()=>new T.Mesh(new T.SphereGeometry(.34,20,14),bubbleMat)).position.set(...c.pos);});

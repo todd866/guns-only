@@ -4,6 +4,8 @@ import { createRace, stepRace } from './physics/race.mjs';
 import { createPickups, stepPickups, use, modifiers } from './physics/pickups.mjs';
 import { createCar, stepCar } from './physics/car.mjs';
 import { createWorld, addBox } from './physics/world.mjs';
+import { heldMissilePose } from './pickup-visuals.mjs';
+import { dangleSpot } from './physics/pickups.mjs';
 
 const flat = () => { const w = createWorld(); w.addQuad([-50, 0, -50], [-50, 0, 50], [50, 0, 50], [50, 0, -50], 'asphalt'); return w; };
 
@@ -162,4 +164,15 @@ test('a 3-pack fires three times, then calls Winchester', () => {
   use(pk, a); assert.equal(pk.held.has(a), false);
   assert.ok(stepPickups(pk, [a], w, 1 / 120).some(e => e.type === 'winchester' && e.car === a));
   pk.held.set(a, 'zuni'); use(pk, a); assert.ok(!stepPickups(pk, [a], w, 1 / 120).some(e => e.type === 'winchester'), 'single missile: no callout');
+});
+
+test('carried missile presentation stays fixed on the rear rack', () => {
+  const car = createCar(undefined, [3, 0.13, -2], Math.PI / 2);
+  const one = heldMissilePose(car, 0, 1), left = heldMissilePose(car, 0, 3), right = heldMissilePose(car, 2, 3);
+  // A rack follows the car, without any time/orbit parameter or lateral drift.
+  assert.ok(Math.abs(one.dir[0] - 1) < 1e-9 && Math.abs(one.dir[1]) < 1e-9 && Math.abs(one.dir[2]) < 1e-9, 'rack missile follows the car heading');
+  const anchor = dangleSpot(car);
+  assert.ok(Math.abs(one.pos[0] - anchor[0]) < 1e-9 && Math.abs(one.pos[2] - anchor[2]) < 1e-9, 'rear rack remains centred for a single missile');
+  assert.ok(Math.abs(left.pos[0] - right.pos[0]) < 1e-9, 'pack spread is across the bumper');
+  assert.ok(Math.abs(left.pos[2] - right.pos[2]) > 0.1, 'pack missiles separate across the car width');
 });
