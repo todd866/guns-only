@@ -1,4 +1,4 @@
-# Area 51½ RC audio sources
+# Saucer Springs AFB audio sources
 
 All files: mono source, 44.1 kHz. `.mp3` is 128 kbps CBR mono. `.ogg` is Ogg Vorbis 96 kbps encoded as dual-mono stereo (the ffmpeg build here has only the native Vorbis encoder, which is stereo-only; gain +2.6 dB to match the mp3 level). Sources were the freesound.org HQ MP3 previews (`cdn.freesound.org/previews/.../*-hq.mp3`). Loops are cut at a rising zero crossing with an equal-power crossfade of the tail into the head, so they loop seamlessly. One-shots are DC-removed, silence-trimmed, with short fades. Raw downloads and the build script live in `~/.local/state/area51-audio/` (`raw/`, `tools/build.py`).
 

@@ -1,4 +1,4 @@
-"""Shared authoring kit for Area 51½ districts (Blender 5.2, background mode).
+"""Shared authoring kit for Saucer Springs AFB districts (Blender 5.2, background mode).
 
 Every district script builds native, editable objects, bakes ambient occlusion into a
 vertex colour attribute, saves an editable .blend, then joins visual meshes by material

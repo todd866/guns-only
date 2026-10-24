@@ -1,0 +1,3 @@
+// Same diagonal and interpolation for the rendered floor and wheel collision.
+export function elevationAt(data,x,z){if(!data)return 0;const {step,origin,width,height,values}=data,u=(x-origin[0])/step,v=(z-origin[1])/step,i=Math.floor(u),j=Math.floor(v);if(i<0||j<0||i>=width-1||j>=height-1)return 0;const a=u-i,b=v-j,k=j*width+i,h=values[k],east=values[k+1],south=values[k+width],se=values[k+width+1];return a+b<=1?h+(east-h)*a+(south-h)*b:se+(south-se)*(1-a)+(east-se)*(1-b);}
+export function groundTriangles(data,bounds,step=16){const out=[];for(let z=bounds[1];z<bounds[3];z+=step)for(let x=bounds[0];x<bounds[2];x+=step){const P=(a,b)=>[a,elevationAt(data,a,b),b],a=P(x,z),b=P(x+step,z),c=P(x,z+step),d=P(x+step,z+step);out.push([a,c,b],[b,c,d]);}return out;}

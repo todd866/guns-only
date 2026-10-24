@@ -50,13 +50,13 @@ test("the browser and installed-app descriptions match the six production experi
   assert.match(catalogue, /data-program-node="top-gun"/);
   assert.match(catalogue, /data-program-node="okanagan-fireboss"/);
   assert.match(catalogue, /art\/jet-cobra-generated-v4\.webp/);
-  assert.match(catalogue, /art\/area51-rc\.webp/);
+  assert.match(catalogue, /art\/saucer-springs\.webp/);
   assert.match(catalogue, /art\/jet-f14\.webp/);
   assert.match(catalogue, /art\/aircraft-fireboss\.webp/);
   assert.match(manifest.description, /F-22 guns-only dogfighting/);
   assert.match(manifest.description, /Rapier high-altitude balloon intercept/);
   assert.match(manifest.description, /AH-1G Cobra Canyon/);
-  assert.match(manifest.description, /Area 51½ RC racing/);
+  assert.match(manifest.description, /Saucer Springs AFB RC exploration and racing/);
   assert.match(manifest.description, /Top Gun ACM/);
   assert.match(manifest.description, /Okanagan Fire Boss/);
   assert.doesNotMatch(catalogue, /Seven flight experiences/);

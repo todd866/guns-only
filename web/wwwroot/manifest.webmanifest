@@ -1,7 +1,7 @@
 {
   "name": "Guns Only",
   "short_name": "Guns Only",
-  "description": "Six deterministic experiences: F-22 guns-only dogfighting, the Rapier high-altitude balloon intercept, AH-1G Cobra Canyon, Area 51½ RC racing, Top Gun ACM, and Okanagan Fire Boss.",
+  "description": "Six deterministic experiences: F-22 guns-only dogfighting, the Rapier high-altitude balloon intercept, AH-1G Cobra Canyon, Saucer Springs AFB RC exploration and racing, Top Gun ACM, and Okanagan Fire Boss.",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

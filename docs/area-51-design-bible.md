@@ -1,8 +1,16 @@
-# Area 51½: design bible
+# Area 51½: design history and implementation reference
 
-Living document, started 2026-10-22. It is the single source for the world, models, races and to-do
-list. Direction history lives in `area-51-and-a-half.md`; engine and pipeline notes live in
+Started 2026-10-22. The current build specification is [Saucer Springs master design](design/saucer-springs/master-design.md), with its [interactive MK64 correspondence map](design/saucer-springs/index.html). That 23 October design supersedes conflicting plans here: 16 mapped courses, four battle arenas, a drive-through alien portal for Rainbow Road, and a friendly alien marshal on a saucer replacing the robot MP. This file preserves the earlier design and implementation history. Direction history lives in `area-51-and-a-half.md`; engine and pipeline notes live in
 `area-51-build-plan.md`.
+
+**23 October implementation:** the connected base, 365 streamed tiles, 16 destinations,
+14 world races plus three integrated districts, 15 specimens, Dreamland finale, garage,
+Car Golf, bowling, night cycle, aircraft catalogue and standard gamepad input are now built.
+The implementation and its deliberate geographic/art approximations are recorded in
+`rc-open-world-milestones.md`; the release state is in `rc-release-2026-10-23.md`.
+The budget estimates and unchecked planning list in section 7 are historical, not the
+current completion checklist. Hero buggy refinement, further art/feel improvements and
+the main flight-game picker remain separate follow-up work.
 
 ## 1. Pillars
 
@@ -10,7 +18,7 @@ list. Direction history lives in `area-51-and-a-half.md`; engine and pipeline no
    reward skill.
 2. **Forza Horizon 5 for a six-year-old:** one big open world, with races carved out of it. Free
    roam, discovery, collecting.
-3. **Nellis during Red Flag:** the real layout at real scale. Every air force's jets are on the
+3. **Nellis during Red Flag:** source-informed geography at the existing large scale. Every air force's jets are on the
    ramps and aliens fly in the night wave. The lore is background, never spelled out; it's there to
    nerd out on.
 4. **Kid mode first:** nothing targets the kid, nothing traps the kid. Big Kid mode is opt-in.
@@ -68,7 +76,7 @@ viper_punk_memes, guardreserve_mafia, fighter_pilots_of_amc, plus amc_memery).
 
 - **House style: a fake meaning for a real acronym.** "AMC = Alcoholics Moving Cargo",
   "ACC = Air Checkride Command". Kid-safe versions for our UI: TDY = "Temporary Duty Yeehaw",
-  PCS = "Pretty Cool Speedsters", FOD = "Found Our Doughnuts".
+  PCS = "Pretty Cool Speedsters", FOD = "Found Our Doughnuts". **These draft examples were rejected for rework; they are not approved copy.**
 - **"Toad" names:** Tanker Toad, Load Toad. Use it for things like "Ramp Toads" (the rival crew).
 - **TDY is a staple** ("Ready for the next TDY ✈️"), which backs the TDY Racing frontrunner.
 - **Type tribes:** Mudhen (F-15E), Viper (F-16), Herc ("Prop Gang"), Tankers, WSOs, Guard/Reserve.
@@ -101,7 +109,7 @@ viper_punk_memes, guardreserve_mafia, fighter_pilots_of_amc, plus amc_memery).
 
 Each race is a route on the open-world map: gates, an AI racing line, ALT skill shortcuts, pickups
 and coins. All of them use the `GATE_ / AI_ / ALT_<name>_ / PICKUP_ / COIN_` contract. Interior
-races (BX, School) stay as separate scenes entered through their doors.
+races (BX, School, HQ and other venues) occupy the connected world and are physically entered through their doors. The old separate-scene plan is superseded; Dreamland’s explicit alien portal is the fantasy connection to Rainbow Road.
 
 | # | Race | Zone | Type | Length | Signature |
 |---|---|---|---|---|---|
@@ -138,7 +146,7 @@ Owner, 2026-10-22. "Furball" is real slang for a chaotic multi-ship dogfight.
   down: spectate, or come back as a ghost that can only drop Hydraulic Leak.
 - **Win:** last car flying, or most pops in 3 minutes (timed variant).
 - **Kid mode:** rivals DO target the kid here (being hunted is the mode), so to balance it the kid
-  gets 5 balloons to their 3, rivals have a longer fire cooldown, and each pop gives 2 s of Chaff
+  gets the same 3 balloons, rivals have a minimum one-second fire interval, and each pop gives 2 s of Chaff
   invulnerability. The race rule (nothing targets the kid) is unchanged.
 - **AI:** no item → nearest crate; armed → chase the nearest car and fire on rivalWants; flee
   briefly after being popped.
@@ -164,12 +172,12 @@ Owner, 2026-10-22. "Furball" is real slang for a chaotic multi-ship dogfight.
 | Beam-rider | Fox One | Steer the radar beam; the missile chases it | built |
 | Unguided rocket | Zuni | Bounces off walls (green shell) | built |
 | Missile 3-packs | Winchester | Calls WINCHESTER when empty | built |
-| Munitions trailer | Jammer | Carried missiles ride behind you; a hit loses the load | built |
+| Munitions trailer | Jammer | Owner rejected it after playtesting; remove from the target design | legacy code |
 | To design | Flare | Drops behind you; decoys Fox Two | todo |
 | To design | Buddy Lase | Paints the leader for everyone | todo |
 | To design | JDAM | Lobbed to a marked spot | todo |
 
-Kid mode: no weapon or rival item ever targets the player.
+Kid **race** mode retains no-target assistance initially. Furball opponents do target the player; the current master design defines the separate balance rules.
 
 ## 5. Brevity codes in the UI
 
@@ -278,7 +286,7 @@ Done: an HDRI sky (Goegap, CC0). To do:
 - decals (oil stains, cracks, tyre marks, paint wear)
 - a Blender light bake per landmark
 
-## 7. To-do (prioritised; ≈ token cost as a share of a week's Claude budget)
+## 7. Historical 22 October to-do (superseded by the master design build sequence)
 
 **Next (27 Oct Claude reset or the next Codex reset; in this order)**
 1. [ ] **Split RC into its own deploy** (≈ 3–4%). Own Vercel project; guns-only.com/rc/ rewrites to it
@@ -286,15 +294,17 @@ Done: an HDRI sky (Goegap, CC0). To do:
    (≈ 5 min, vs ≈ 1 h through the full Guns Only pipeline: bin/check 13 min, CI smoke 22–29 min,
    F-22 frame gate, route smoke). The main pipeline keeps its full strictness; do NOT make the
    frame gate skip RC paths. Only the picker card stays in the main build.
-2. [ ] **RC analytics** (≈ 2%). RC sends NOTHING today (the F-22 shell has the durable outbox in
-   render/telemetry/: telemetry_outbox.js, telemetry_batch.js, plus the admin decoder). Reuse that
-   path, don't fork it. Anonymous session id only, no personal data or fingerprinting (target
-   player is a six-year-old). Events: session start (track, mode, kid/Big Kid, device class),
-   time to first input, race start/finish (place, time, gap to winner, recoveries, ALT taken),
-   quit mid-race, Furball result (balloons left, pops, kills, duration), Again vs Free drive
-   clicks, item use, mute, frame p95. Admin view: sessions/day, races finished %, win rate by
-   mode (the "instant win" number), median session length, Again rate. Do this BEFORE item 4
-   so difficulty is tuned against data.
+2. [x] **RC analytics** (≈ 2%). Implemented in `web/wwwroot/rc/telemetry.mjs` and wired from
+   `rc/main.js`. It is explicit opt-in through `guns-only.telemetry-sharing.v1`, uses an anonymous
+   per-session id, and sends no personal data, fingerprint, user agent, URL, or raw simulation
+   state. Local and preview hosts stay memory-only by default; canonical guns-only.com uses the
+   shared `/telemetry` endpoint and existing bounded batch builder plus IndexedDB outbox. Rows use
+   `k: in`, `type: rc`, and a small code vocabulary: `session_start`, `first_input`,
+   `race_start`/`race_finish`, `race_quit`, `furball_outcome`, `choice`, `item_use`, `mute`, and
+   `frame_p95`. Missing storage, rejected consent, failed transport, and absent IndexedDB fail
+   quiet. Admin aggregation remains the next slice: sessions/day, race completion, win rate by
+   mode, median session length, and Again rate.
+   The admin view and difficulty tuning remain follow-up work once aggregates are available.
 3. [ ] **Menu tidy** (≈ 2%). Guns Only picker: three plain cards (F-22, Cobra, RC), drop the
    Military/Civilian tabs (Area 51½ is currently stranded alone under Civilian). RC brief:
    "Drive" not "Take the transmitter"; Drive / Race / Furball / tracks / mute in one compact row;

@@ -1,0 +1,3 @@
+import * as T from '../../vendor/three.module.js';
+import { generateSurface } from './materials.mjs';
+export function createSurfaceMaps(kind){const p=generateSurface(kind),make=(data,colorSpace)=>{const t=new T.DataTexture(data,p.size,p.size,T.RGBAFormat,T.UnsignedByteType);t.wrapS=t.wrapT=T.RepeatWrapping;t.minFilter=T.LinearMipmapLinearFilter;t.magFilter=T.LinearFilter;t.generateMipmaps=true;t.anisotropy=4;if(colorSpace)t.colorSpace=colorSpace;t.needsUpdate=true;return t;};const map=make(p.albedo,T.SRGBColorSpace),roughnessMap=make(p.roughness),normalMap=make(p.normal);return {map,roughnessMap,normalMap,dispose(){map.dispose();roughnessMap.dispose();normalMap.dispose();}};}

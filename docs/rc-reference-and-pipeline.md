@@ -1,6 +1,6 @@
 # RC reference, asset pipeline and acceptance
 
-## Current evidence boundary
+## Original art acceptance boundary — 2026-10-18
 
 The prototype is not visually accepted and does not establish Re-Volt gameplay parity. The previous procedural art extension was stopped and preserved, unimported, at `tools/rc/experiments/procedural-art-draft.js`. The target remains a connected military base, but the next acceptance slice is one strong buggy in one polished hangar.
 
@@ -8,7 +8,13 @@ Blender 5.2.0 LTS is installed at `/Applications/Blender.app/Contents/MacOS/Blen
 
 The concept's useful commitments are sculpted amber shell, ivory accents, exposed copper coil-overs, graphite chassis, knobby tires, readable rear wing and human-scale maintenance scenery. Capture real engine results beside this reference and reject boxy silhouette, floating wheels, flat lighting, bare corridor walls or decorative clutter that obscures driving.
 
-## Direct playable reference status — checked 2026-10-18
+## Current reference library — 2026-10-23
+
+The local, non-public gallery is `reference/rc/index.html` (open directly). It contains 96 local images: 48 Nellis/base references and 48 Mario Kart 64/Re-Volt manual pages, course references and direct-play captures. Full images open from thumbnails; filters work offline. Source manifests record known provenance and mark unresolved originals explicitly. `reference/rc/mk64/course-mapping.json` maps all 16 MK64 tracks to Saucer Springs locations. The library is locally ignored and excluded from game packaging.
+
+RVGL is installed at `~/Applications/RVGL.app` with data under `~/Library/Application Support/RVGL` (20 levels, 36 car folders found). User supplied `~/Downloads/Mario Kart 64.zip`; the private EmulatorJS setup is at `~/Games/RC References`. A real single-player Luigi Raceway race, HUD, acceleration and steering were verified in silent headless Chromium with external requests blocked. Reload verified arrow-key steering and X acceleration defaults. The local player is http://127.0.0.1:19764/; its launcher and Stop command are in that private directory. All 16 course starts are captured at 1280×720 and visually checked; these are starting views, not complete course surveys. A reusable native course-menu state is saved privately. The gallery is also served at http://127.0.0.1:19764/library/. All 96 image URLs load and the gallery fits laptop and phone widths. Keyboard controls: arrows steer, X accelerates/confirms, Z brakes, Shift hops/drifts, Space uses items, Enter starts/pauses. Physical controllers and RVGL gameplay have not been verified. No ROM belongs in the repository or public deployment.
+
+## Historical discovery — checked 2026-10-18 (superseded above)
 
 Bounded discovery (depth 2–3) checked `/Applications`, `~/Applications`, `~/Games`, `~/Downloads`, `~/Library/Application Support/Steam/steamapps`, `~/Library/Application Support/RVGL`, common GOG support and `/Volumes`. Steam's configured library file lists only the local library and does not contain Re-Volt app 287310. No Re-Volt/RVGL executable or original game data was found. This does not prove Ian does not own it elsewhere.
 
@@ -216,3 +222,14 @@ Local play: `bin/rc-preview`, then `http://127.0.0.1:8878/rc/?art=review`.
 Full-shell preview: `python3 -m http.server 8897 --bind 127.0.0.1 --directory /tmp/rc-oct20-shell/wwwroot`,
 then `http://127.0.0.1:8897/?art=review`; start a flight, Escape, RC base, Start.
 Exit with O, then Escape to resume. The QA browsers and servers have been closed.
+
+
+## Reference-driven feel pass — 23 October 2026
+
+Owner clarified: Re-Volt supplies the toy-car scale and scenery reference only. The fun target is Mario Kart: ordinary steering should be competitive, AI should keep races close, drift is optional. Native Re-Volt control timed out despite authorization; the process was closed and no playtest is claimed. Mario Kart was driven via real keys on Luigi Raceway, including acceleration, hop/steer and a wall collision; observed references were readable road edges, stable low camera, small lower-centre car and visible ground texture.
+
+Changes: X/Z aliases, Shift/right-shoulder optional hop-slide, gentler Big Kid yaw stabilization and air leveling, preserved Kid behavior, camera pulled back slightly for more road visibility. Pack spacing now uses metres, leaders ease toward observed player pace, trailing pace adjustment is bounded to 18%, and automatic free catch-up boosts are removed. Existing pickup boosts remain. Actual three-lap tests cover a slow driver with a three-second mistake and a trailing rival stopped for three seconds; neither requires drifting. Late-lap Kid easing also uses distance.
+
+Original procedural surface textures now distinguish asphalt, concrete, desert stucco and roof material; facade UVs follow wall axes. Fine asphalt grain and short facade plinths provide scale cues. Render inspection rejected a first version with giant gravel-like grain and double colour tint; corrected before release. This is an incremental art pass, not a claim that the full concept-art quality has been achieved.
+
+Evidence: `evidence/rc-open-world/reference-feel/` real-key drift, release, laptop/phone/landscape views and controls at enlarged text; `tools/rc/check-reference-feel.cjs` reruns those checks. Both independent refuter and scoped Cursor review were used. Their drift timing, recovery, trailing-rival and uneven-gate pacing concerns were addressed and tested. Ice Patrol exposed a yaw-assist regression, fixed by retaining original steering falloff and leaving low-grip sliding to the tyres in Big Kid. Root website cache fix from PR134 is now verified live (`/tmp/rc-root-cache-final.log`, production `guns-only-patff8czn-ian-todds-projects.vercel.app`).

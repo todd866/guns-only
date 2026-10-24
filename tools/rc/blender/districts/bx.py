@@ -1,4 +1,4 @@
-"""Area 51½ district 2: the BX ("LITTLE NELLIE BX", Little Nellie AFB, fictional).
+"""Saucer Springs AFB district 2: the Base Exchange (fictional).
 
 Run (shared machine: wrap in heavy-slot, two threads):
   HEAVY_SLOT_LABEL=area51 heavy-slot -- /Applications/Blender.app/Contents/MacOS/Blender --background \
@@ -806,7 +806,7 @@ def concourse():
         col('metal', f'pedestal_{i}', aabb(x - .13, x + .13, -34.96, -34.34, -.3, 1.65))
     # Lobby signage: the store name over the entrance, the quiet-hours note between the doors.
     vis('signs', 'white').add(aabb(-33.5, -22.5, -34.42, -34.3, 3.1, 4.0))
-    words('navy', 'LITTLE NELLIE BX', .5, (-28, -34.42, 3.66), 270, max_w=10, out=.005)
+    words('navy', 'BASE EXCHANGE', .5, (-28, -34.42, 3.66), 270, max_w=10, out=.005)
     words('red', 'AIM HIGH · SHOP LOW', .17, (-28, -34.42, 3.25), 270, max_w=10, out=.005)
     vis('signs', 'white').add(aabb(-7.4, -6.6, -34.32, -34.3, 1.05, 1.62))
     for text, size, z in (('QUIET PLEASE', .1, 1.48), ('RETREAT AT 1700', .085, 1.33), ('(STOP, FACE THE FLAG,', .055, 1.2),
@@ -819,7 +819,7 @@ def concourse():
             y = -42.9 + k * .5
             if y + .5 > -34.4:
                 break
-            vis('decal', 'white' if (row + k) % 2 else 'black').add(aabb(-.25 + row * .25 - .25, row * .25, y, y + .5, .003, .006))
+            vis('decal', 'white' if (row + k) % 2 else 'black').add(aabb(-.25 + row * .25, row * .25, y, y + .5, .003, .006))
     vis('signs', 'steel').add(aabb(-.05, .05, -42.5, -35, 3.2, 3.24))
     vis('signs', 'hivis').add(aabb(-.03, .03, -42.2, -35.3, 2.6, 3.15))
     for f in (0, 180):
@@ -858,7 +858,7 @@ def mural():
         vis('mural', 'steel').add((verts, [tuple(range(len(verts)))]), kind='flag')
     words('white', 'WELCOME HOME,', .32, (x, yc + .2, 3.12), f, max_w=4.6, out=.014)
     words('header', 'TOY HEROES', .5, (x, yc + .2, 2.68), f, max_w=4.6, out=.014)
-    words('white', 'LITTLE NELLIE BX · EST. 51½', .14, (x, yc, .62), f, max_w=6, out=.014)
+    words('white', 'BASE EXCHANGE · SAUCER SPRINGS AFB', .14, (x, yc, .62), f, max_w=6, out=.014)
 
 
 def stockroom():
@@ -923,18 +923,12 @@ def stockroom():
         wx = px0 - 1.4 + y * sc * math.cos(ang)
         verts.append((wx, yc - x * sc, ph * (wx - (px0 - 2.8)) / 2.8 + .006))
     vis('decal', 'black').add((verts, [tuple(reversed(face)) for face in f]), kind='up')
-    # The specimen: a friendly alien in a jar, on the deck's north edge.
+    # Stockroom prop only: the alien reveal belongs to the late-game portal district.
+    # Keep the crate and its collision here, but do not show the specimen early.
     sx, sy = 1.0, 30.8
-    vis('alien', 'glass').add(cylinder((sx, sy, ph), .28, .62, 16))
-    vis('alien', 'steel').add(cylinder((sx, sy, ph + .62), .3, .06, 16))
-    vis('alien', 'green').add(ico((sx, sy, ph + .42), .13, 2, (1, 1, 1.15)), smooth=True)
-    vis('alien', 'green').add(frustum((sx, sy, ph + .05), .1, .07, .26, 10))
-    for s in (-1, 1):
-        vis('alien', 'black').add(ico((sx + s * .055, sy - .1, ph + .45), .04, 1, (1, .6, 1.3)), smooth=True)
-    col('metal', 'specimen_jar', box(sx, sy, ph, .62, .62, .7))
     vis('alien', 'cardboard').add(aabb(-1.6, -.4, 31.0, 31.45, ph, ph + .6))
-    words('red', 'AREA 51½', .13, (-1.0, 31.0, ph + .42), 270, max_w=1.1, out=.002)
-    words('black', 'DO NOT OPEN (PLEASE)', .06, (-1.0, 31.0, ph + .25), 270, max_w=1.1, out=.002)
+    words('red', 'STOCK SAMPLE', .13, (-1.0, 31.0, ph + .42), 270, max_w=1.1, out=.002)
+    words('black', 'HANDLE WITH CARE', .06, (-1.0, 31.0, ph + .25), 270, max_w=1.1, out=.002)
     col('wood', 'specimen_crate', aabb(-1.6, -.4, 31.0, 31.45, ph, ph + .6))
     # Pallet jack and a lone box pile: the stockroom chicane.
     jx, jy = -13.5, 26.4                   # parked against the south stacks, not in the lane
@@ -1134,8 +1128,8 @@ def build():
     gates, ai_step, ai_count, widths = race_markers()
     tight = clearance_report(widths)
     C.ROOT['district'] = 'bx'
-    C.ROOT['base'] = 'Little Nellie AFB (fictional)'
-    C.ROOT['store'] = 'LITTLE NELLIE BX (fictional base exchange)'
+    C.ROOT['base'] = 'Saucer Springs AFB (fictional)'
+    C.ROOT['store'] = 'Base Exchange (fictional)'
     C.ROOT['lap_length_m'] = round(ROUTE.length, 2)
     C.ROOT['race_direction'] = 'lobby west, store anticlockwise then clockwise; see bx.py docstring'
     C.ROOT['shortcut'] = 'toy aisle -> swinging doors -> stockroom (box ramp, pallet deck, specimen) -> food court'

@@ -4,6 +4,9 @@ import { sub, cross, dot, norm, scale, add, len } from './math.mjs';
 
 // Surface response multipliers. grip scales tyre friction; roll is rolling drag per newton of load.
 export const SURFACES = {
+  // Fictional shallow splash-pad response; safe at RC scale, no buoyancy or drowning.
+  snow: { grip: .68, roll: .08 }, ice: { grip: .38, roll: .015 },
+  water: { grip: 0.65, roll: 0.18 },
   asphalt: { grip: 1.0, roll: 0.02 }, concrete: { grip: 1.0, roll: 0.02 }, wood: { grip: 0.95, roll: 0.025 },
   metal: { grip: 0.8, roll: 0.02 }, tile: { grip: 0.72, roll: 0.02 }, gymfloor: { grip: 0.55, roll: 0.015 },
   gravel: { grip: 0.78, roll: 0.07 }, carpet: { grip: 0.9, roll: 0.07 }, rubber: { grip: 1.0, roll: 0.03, bounce: 2.2 }, grass: { grip: 0.72, roll: 0.09 }, dirt: { grip: 0.8, roll: 0.06 },
@@ -17,12 +20,14 @@ export function createWorld(cell = 4) {
     for (let ix = Math.floor(minX / cell); ix <= Math.floor(maxX / cell); ix++)
       for (let iz = Math.floor(minZ / cell); iz <= Math.floor(maxZ / cell); iz++) fn(key(ix, iz));
   }
+  // Vertices are immutable after insertion: both the grid and bounds cache depend on them.
   function addTri(a, b, c, surface = 'concrete') {
     const e1 = sub(b, a), e2 = sub(c, a), n = norm(cross(e1, e2));
     if (len(n) === 0) return;
-    const t = { a, b, c, e1, e2, n, surface, seen: 0 };
+    const minX=Math.min(a[0],b[0],c[0]),minZ=Math.min(a[2],b[2],c[2]),maxX=Math.max(a[0],b[0],c[0]),maxZ=Math.max(a[2],b[2],c[2]);
+    const t = { a, b, c, e1, e2, n, surface, minX, minZ, maxX, maxZ, seen: 0 };
     tris.push(t);
-    cellsOf(Math.min(a[0], b[0], c[0]), Math.min(a[2], b[2], c[2]), Math.max(a[0], b[0], c[0]), Math.max(a[2], b[2], c[2]), k => {
+    cellsOf(minX,minZ,maxX,maxZ,k => {
       let list = grid.get(k); if (!list) grid.set(k, list = []); list.push(t);
     });
   }
@@ -32,7 +37,14 @@ export function createWorld(cell = 4) {
     stamp++;
     cellsOf(minX, minZ, maxX, maxZ, k => {
       const list = grid.get(k); if (!list) return;
-      for (const t of list) if (t.seen !== stamp) { t.seen = stamp; fn(t); }
+      for (const t of list) if (t.seen !== stamp) {
+        t.seen = stamp;
+        // A 16 m world cell can contain thousands of small authored faces.
+        // Reject disjoint XZ bounds before allocating narrow-phase vectors.
+        // Keep candidate order and inclusive edges; the exact solver is unchanged.
+        if(t.maxX+1e-9<minX||t.minX-1e-9>maxX||t.maxZ+1e-9<minZ||t.minZ-1e-9>maxZ)continue;
+        fn(t);
+      }
     });
   }
   // Nearest hit along origin + dir*t, t in [0,maxDist]. Only faces whose outward side faces the ray hit.

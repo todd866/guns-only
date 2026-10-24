@@ -1,4 +1,4 @@
-"""Area 51½ district 1: Base Housing ("Liberty Loop", Little Nellie AFB).
+"""Saucer Springs AFB district 1: Base Housing.
 
 Run (shared machine: wrap in heavy-slot, two threads):
   HEAVY_SLOT_LABEL=area51 heavy-slot -- /Applications/Blender.app/Contents/MacOS/Blender --background \
@@ -15,7 +15,7 @@ section A only; section B respected: no Thunderbirds marks, real insignia, casin
 gambling imagery). All lettering is mesh text from Blender's bundled font.
 
 Layout (Blender metres, +Z up, X east, Y north). Street centreline: rounded rectangle, half
-extents 70 x 42 m, corner radius 24 m, a 406.8 m clockwise lap. 7 m asphalt between ROLLED
+extents 70 x 42 m, corner radius 16 m, a tighter 420.53 m clockwise lap. 7 m asphalt between ROLLED
 (mountable) kerbs: a smoothstep rising 10 cm over 35 cm, so no vertical face anywhere on the road
 edge. Every other step on drivable ground is <= 2 cm; anything taller is a real wall (>= 25 cm).
 
@@ -51,10 +51,11 @@ C.PALETTE.update({
     'sign_green': ('#2E7D4F', 0, .5), 'hi_vis': ('#DDF22E', 0, .35), 'haze': ('#C9C3DA', 0, .9),
 })
 
-LOOP = C.RoundedLoop(70, 42, 24)
+LOOP = C.RoundedLoop(70, 42, 16)
 ROAD, KERB, PARK, WALK = 3.5, 3.85, 5.0, 6.5
 Z_KERB, Z_LAWN, Z_WALK, Z_TURF, Z_DRIVE = .10, .10, .11, .115, .115
-GATE_D = [0, 40, 80, 120, 160, 196, 212, 378]
+# Final checkpoint is beyond the wall-route rejoin, so both routes count.
+GATE_D = [0, 40, 80, 120, 160, 196, 212, 398]
 
 
 def L(part, gx, fy, s):
@@ -590,7 +591,7 @@ def plywood_ramp(cx, y_lo, y_hi, y_back, h=.4, top=1.8, flank=.8):
     col('wood', 'plywood_ramp', (v, faces), {'note': '40 cm tabletop kicker on the shortcut; no vertical faces'})
 
 
-WALL_H, WALL_W = .7, .8              # garden wall: 70 cm above the yard, 80 cm wide cap
+WALL_H, WALL_W = .7, 2.4              # garden wall: 70 cm above the yard, 2.4 m wide rideable cap
 WALL_PTS = [(20, 25.0), (20, 21.5), (20, 13.5), (20, 11), (22.6, 11), (26.0, 11), (26.8, 11), (27.9, 11), (33.4, 11), (36.6, 11.0)]
 
 
@@ -641,7 +642,7 @@ def water_tower(cx, cy):
     vis('tower', 'pad_blue').add(torus((cx, cy, 18.6), 5.22, .1, 32, 4))
     toward = math.degrees(math.atan2(-cy, -cx))
     for th in (toward, toward + 180):
-        for body, size, dz in (('LITTLE NELLIE AFB', 1.05, 22.4), ('AIM HIGH · DRIVE LOW', .62, 20.5)):
+        for body, size, dz in (('SAUCER SPRINGS AFB', 1.05, 22.4), ('AIM HIGH · DRIVE LOW', .62, 20.5)):
             v, f, _ = text2d(body, size, bold=.03)
             vis('decal', 'pad_blue').add(place_on_cylinder(v, f, (cx, cy), 5.23, dz, th), kind='flag')
 
@@ -737,6 +738,38 @@ def pt_belt_arch():
         words('rubber', 'START · FINISH', .2, (p[0], p[1], 2.99), facing, max_w=4.5, out=.03)
 
 
+def liberty_loop_curb_art():
+    """MK64-style alternating kerb blocks and painted arrows make the route readable at speed.
+
+    These are thin visual overlays on the existing rolled kerbs.  They deliberately do not add
+    collision; the continuous concrete kerb and asphalt slab remain the single physical edge.
+    """
+    count = int(LOOP.length // 4)
+    for k in range(count):
+        d = 1.5 + k * 4
+        p, t, n = LOOP.at(d)
+        yaw = math.atan2(t[1], t[0])
+        material = 'door_red' if k % 2 == 0 else 'trim'
+        for side in (-1, 1):
+            x, y = p[0] + n[0] * side * 3.72, p[1] + n[1] * side * 3.72
+            vis('curb_art', material).add(box(x, y, .112, 3.25, .28, .025, yaw), kind='up')
+    # Flat, high-contrast arrows on the four neighbourhood approaches echo the MK64 HUD line.
+    for d, side in ((19, 1), (118, -1), (219, 1), (319, -1)):
+        p, t, n = LOOP.at(d)
+        x, y = p[0] + n[0] * side * 1.1, p[1] + n[1] * side * 1.1
+        vis('curb_art', 'paint').add(box(x, y, .014, 1.5, .42, .006, math.atan2(t[1], t[0])), kind='up')
+
+
+def liberty_loop_landmark():
+    """A tiny fictional housing gateway gives the loop a memorable visual anchor."""
+    x, y = -70, -42.5
+    for dx in (-2.8, 2.8):
+        vis('loop_landmark', 'trim').add(cylinder((x + dx, y, 0), .16, 3.2, 10))
+        col('metal', f'loop_landmark_post_{dx}', box(x + dx, y, 0, .32, .32, 3.2))
+    vis('loop_landmark', 'door_red').add(box(x, y, 3.0, 6.1, .18, .72))
+    words('trim', 'BASE HOUSING', .3, (x, y - .11, 3.03), 270, max_w=5.6, out=.1)
+
+
 def street_blades(d, a_name, b_name, label):
     p, t, n = LOOP.at(d)
     x, y = p[0] + n[0] * 4.45, p[1] + n[1] * 4.45
@@ -795,7 +828,7 @@ def welcome_sign(cx, cy, facing):
             vis('signs', 'paint').add(ico((cx + r[0] * k + n[0] * .07, cy + r[1] * k + n[1] * .07, z), .055, 1), smooth=True)
     vis('signs', 'door_red').add(ico((cx + n[0] * .05, cy + n[1] * .05, 4.35), .3, 1, (1, .3, 1)))
     for text, size, mat, z in (('WELCOME TO', .2, 'pad_blue', 3.62), ('FABULOUS', .42, 'door_red', 3.12),
-                               ('AREA 51½', .34, 'pad_blue', 2.6), ('DRIVE SLOW · COME BACK SOON', .1, 'rubber', 2.18)):
+                               ('SAUCER SPRINGS AFB', .34, 'pad_blue', 2.6), ('DRIVE SLOW · COME BACK SOON', .1, 'rubber', 2.18)):
         words(mat, text, size, (cx, cy, z), facing, max_w=3.3, out=.07)
 
 
@@ -803,7 +836,7 @@ def monument(cx, cy):
     vis('monument', 'rock').add(box(cx, cy, 0, 5.4, .9, .45))
     vis('monument', 'stucco_adobe').add(box(cx, cy, .45, 5.0, .6, 1.25))
     vis('monument', 'roof_tile').add(box(cx, cy, 1.7, 5.3, .8, .14))
-    for text, size, z in (('LITTLE NELLIE AFB', .36, 1.4), ('HOME OF THE FIGHTER PILOT', .17, 1.03),
+    for text, size, z in (('SAUCER SPRINGS AFB', .36, 1.4), ('HOME OF THE FIGHTER PILOT', .17, 1.03),
                           ('(AND THE FIGHTER TOY)', .14, .78)):
         words('trim', text, size, (cx, cy + .3, z), 90, max_w=4.7, out=.006)
     col('concrete', 'monument', box(cx, cy, -.1, 5.4, .9, 1.94))
@@ -827,6 +860,8 @@ def sun_face(cx, cy, z, facing, r=.35):
 
 def dressing():
     pt_belt_arch()
+    liberty_loop_curb_art()
+    liberty_loop_landmark()
     for d, a, b, lab in ((64.85, 'RED FLAG DR', 'WEAPONS SCHOOL WAY', 'blade_sw'),
                          (138.55, 'AGGRESSOR AVE', 'WEAPONS SCHOOL WAY', 'blade_nw'),
                          (268.25, 'AGGRESSOR AVE', 'THUNDER WAY', 'blade_ne'),
@@ -839,9 +874,9 @@ def dressing():
     sign('quiet_hours', -74.45, -2, 270, 1.1, .6, 1.6, [('QUIET HOURS', .13, 'trim', .13), ('2200 - 0600', .15, 'trim', -.12)],
          board='pad_blue', border='trim')
     for k, (txt, mat) in enumerate((('BX  ↑', 'sign_green'), ('COMMISSARY  ↑', 'sign_green'),
-                                    ('FLIGHTLINE  →', 'sign_green'), ('AREA 51½: NO', 'door_red'))):
+                                    ('FLIGHTLINE  →', 'sign_green'), ('RESTRICTED AREA', 'door_red'))):
         sign(f'bx_post_{k}', -74.45, 15, 270, 1.5, .26, 2.75 - k * .31, [(txt, .14, 'trim', 0)], board=mat, collide=k == 0)
-    sign('alien_xing', 74.45, 12, 90, .85, .85, 1.6, [('ALIEN', .15, 'rubber', .12), ('XING', .17, 'rubber', -.12)],
+    sign('mp_patrol', 74.45, 12, 90, .85, .85, 1.6, [('MP PATROL', .13, 'rubber', .12), ('CROSSING', .12, 'rubber', -.12)],
          board='paint', border='rubber')
     sign('dry_heat', 46, 51.5, 270, 1.4, .8, 1.0, [("IT'S A DRY HEAT!", .13, 'door_red', -.22)], board='trim',
          border='door_red', posts=2)
@@ -859,7 +894,7 @@ def dressing():
     vis('gate', 'metal').add(aabb(gx - .05, gx + .05, -3, 3, 0, 2.2))
     for k in range(13):
         vis('gate', 'metal').add(aabb(gx - .08, gx - .05, -3 + k * .5 - .02, -3 + k * .5 + .02, 0, 2.2))
-    sign('do_not_enter', gx - .2, 0, 180, 1.8, .9, .9, [('AREA 51½', .18, 'trim', .25), ('DO NOT ENTER', .16, 'trim', 0),
+    sign('do_not_enter', gx - .2, 0, 180, 1.8, .9, .9, [('RESTRICTED AREA', .16, 'trim', .25), ('DO NOT ENTER', .16, 'trim', 0),
                                                         ('(PLEASE)', .12, 'trim', -.25)], board='door_red', collide=False)
     water_tower(86, 44)
     gate_guard_jet(32, -66, heading=115)
@@ -985,7 +1020,7 @@ def build():
         boulder(x - 1.4, y - .6, .6, f'yard_boulder_{i}')
     gates, ai_step, ai_count = race_markers()
     C.ROOT['district'] = 'housing'
-    C.ROOT['base'] = 'Little Nellie AFB (fictional)'
+    C.ROOT['base'] = 'Saucer Springs AFB (fictional)'
     C.ROOT['lap_length_m'] = round(LOOP.length, 2)
     C.ROOT['race_direction'] = 'clockwise from above'
     C.ROOT['streets'] = 'S: Red Flag Dr, W: Weapons School Way, N: Aggressor Ave, E: Thunder Way'

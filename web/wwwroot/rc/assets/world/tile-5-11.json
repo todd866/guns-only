@@ -1,0 +1,1 @@
+{"version":1,"tileSize":256,"tile":[5,11],"features":[{"id":"way/1436777328","properties":{"highway":"residential","name":"Shatz Street","surface":"asphalt","kind":"highway","osm":"way/1436777328"},"geometry":{"type":"LineString","coordinates":[[1292.24,2992.13],[1303.28,2842.71],[1306.36,2801.06]]},"bbox":[1292.24,2801.06,1306.36,2992.13]}]}

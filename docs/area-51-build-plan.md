@@ -1,6 +1,8 @@
 # Area 51½ — build plan (2026-10-21)
 
-Direction: `area-51-and-a-half.md`. This doc covers how we build it to Re-Volt standards.
+Current product/level specification: [Saucer Springs master design](design/saucer-springs/master-design.md). The separate-scene and 30-second hub proposals below are historical and superseded by the connected large-world/portal design.
+
+Direction history: `area-51-and-a-half.md`. This doc covers how we build it to Re-Volt standards.
 
 ## What "Re-Volt standard" means, concretely
 

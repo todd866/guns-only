@@ -3964,10 +3964,10 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   }),
   "area-51": Object.freeze({
     kicker: "Off duty · base housing",
-    title: "Area 51½",
-    sortie: "RC buggy · Liberty Loop · three rivals · pickups",
+    title: "Saucer Springs AFB",
+    sortie: "Explore · race · battle",
     configuration: "1:10 toy buggy · rigid-body four-wheel physics · kid mode on (B toggles Big Kid)",
-    brief: "Race toy RC buggies round the base. Grab gift crates for Afterburner, Water Balloons, Hydraulic Leaks and Chaff, hit every steerpoint, and find the alien someone hid in the housing area. Stand to attention at Retreat, or don't.",
+    brief: "Start at the neighbourhood skatepark, explore the base, and join nearby races.",
     controls: "W/S throttle/brake · A/D steer · Space brake · F fire pickup · R recover · B kid/Big Kid · Esc pause · O exit",
   }),
   "weekend-ride": Object.freeze({
@@ -5495,10 +5495,12 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
           ? keyboardControls
           : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`;
     }
-    readyStartLabel.textContent = `Fly ${brief.title}`;
+    const exploreBase = selectedProgramNodeId === "area-51";
+    readyStartLabel.textContent = exploreBase ? "Explore" : `Fly ${brief.title}`;
     readyHint.textContent = background
-      ? "Return to the game to fly"
-      : mobileControls ? "Tap Fly to launch" : "Press Enter to fly";
+      ? "Return to the game"
+      : exploreBase ? (mobileControls ? "Tap Explore" : "Press Enter to explore")
+        : mobileControls ? "Tap Fly to launch" : "Press Enter to fly";
   } else {
     // A pause screen has one job: get you back in the aeroplane. Everything that once sat here --
     // a kicker, a sentence about the deterministic clock, a two-cell sortie/status table, a

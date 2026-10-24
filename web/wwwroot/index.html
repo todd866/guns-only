@@ -3049,7 +3049,7 @@
     }
 
     #ready-screen .sortie-choice[data-aircraft="rc"] {
-      background-image: image-set(url("./art/area51-rc.webp") type("image/webp"));
+      background-image: image-set(url("./art/saucer-springs.webp") type("image/webp"));
     }
     #ready-screen .sortie-choice[data-aircraft="bike"] {
       background-image: image-set(url("./art/bike-yzf-r1.webp") type("image/webp"));
@@ -3785,7 +3785,7 @@
     #ready-screen[data-hero="rapier"] { --front-hero: url("./art/jet-rapier-hermeus-v1.webp"); }
     #ready-screen[data-hero="cobra"] { --front-hero: url("./art/jet-cobra-generated-v4.webp"); }
     #ready-screen[data-hero="bike"] { --front-hero: url("./art/bike-yzf-r1.webp"); }
-    #ready-screen[data-hero="rc"] { --front-hero: url("./art/area51-rc.webp"); }
+    #ready-screen[data-hero="rc"] { --front-hero: url("./art/saucer-springs.webp"); }
     #ready-screen[data-hero="f14"] { --front-hero: url("./art/jet-f14.webp"); }
     #ready-screen[data-hero="fireboss"] { --front-hero: url("./art/aircraft-fireboss.webp"); }
     #ready-screen[data-hero="mig-28"] { --front-hero: url("./art/jet-mig-28.webp"); }
@@ -4936,11 +4936,11 @@
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
-              <!-- Area 51½ replaced Weekend Ride here (2026-10-21); /weekend-ride/ still exists. -->
-              <button type="button" class="sortie-choice" data-aircraft="rc" data-program-node="area-51" aria-pressed="false" title="Race toy RC cars round the base. Kid mode on by default.">
-                <span class="sortie-number">AREA 51½ <b data-program-status="area-51"></b></span>
-                <strong>RC Racer</strong>
-                <small class="sortie-contract">Race · pickups · find the alien</small>
+              <!-- The stable area-51 program ID preserves saved selections; the game is Saucer Springs AFB. -->
+              <button type="button" class="sortie-choice" data-aircraft="rc" data-program-node="area-51" aria-pressed="false" title="Explore Saucer Springs AFB in an RC car.">
+                <span class="sortie-number"><b data-program-status="area-51"></b></span>
+                <strong>Saucer Springs AFB</strong>
+                <small class="sortie-contract">Explore · race · battle</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="civilian" data-selected="false" data-program-state="available" hidden>

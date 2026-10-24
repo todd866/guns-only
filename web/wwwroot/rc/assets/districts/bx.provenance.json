@@ -11,9 +11,9 @@
   "gates": 10,
   "ai_nodes": 51,
   "ai_spacing_m": 6.22,
-  "visual_triangles": 111362,
-  "collision_triangles": 2856,
-  "collision_meshes": 216,
+  "visual_triangles": 111380,
+  "collision_triangles": 2844,
+  "collision_meshes": 215,
   "materials": 24,
   "lettering": "mesh text from Blender's bundled UI font (no textures)",
   "reference_photos": "look matched to 12 CC BY 2.0 USAF photos of the Nellis AFB Exchange (2015 remodel), kept privately; no photo pixels, logos or tenant marks are in the asset (docs/research/area51-nellis-photo-reference.md)",
@@ -27,5 +27,5 @@
     "samples": 24
   },
   "vertex_ao_method": "Cycles AO bake to per-corner BYTE_COLOR attribute \"AO\", exported as COLOR_0; remapped to floor..1. Real bake, no painted shading. Decals, the ceiling and troffers are left at 1.0 (not baked).",
-  "glb_bytes": 7144272
+  "glb_bytes": 7150928
 }

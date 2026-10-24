@@ -1,11 +1,12 @@
-// Area 51½ presentation polish: lighting presets per track, a sun shadow that follows the car,
+// Saucer Springs presentation: lighting presets per track, a sun shadow that follows the car,
 // clear-coat toy paint, and Re-Volt-style feedback (tyre dust, skid marks, balloon splashes).
 // Presentation only; nothing here touches the physics.
 import * as T from '../vendor/three.module.js';
+import {environmentRadiance} from './environment-light.js';
 
 // Outdoor: hard desert sun. Indoor: bright, even, warm ceiling light with soft overhead shadow.
 export const LIGHTING = {
-  outdoor: { hemi: [0xd8ecf5, 0x8a7a5e, 1.35], sun: [0xffe1b0, 3.4], sunDir: [-0.45, 1, -0.35], exposure: 1.1 },
+  outdoor: { hemi: [0xd8ecf5, 0x8a7a5e, 1.35], sun: [0xfff1db, 3.4], sunDir: [-0.45, 1, -0.35], exposure: 1.1 },
   indoor: { hemi: [0xfff3df, 0x8c7a62, 2.1], sun: [0xfff1dc, 1.6], sunDir: [-0.15, 1, -0.1], exposure: 1.15 },
 };
 export const isIndoor = track => track === 'bx' || track === 'school';
@@ -24,7 +25,7 @@ export function applyLighting({ renderer, hemi, sun, contactSun }, preset) {
 
 // Keep the sun's shadow box centred on the car, snapped to whole texels so shadows don't shimmer.
 export function followSun(sun, at) {
-  const texel = 40 / sun.shadow.mapSize.x, snap = v => Math.round(v / texel) * texel;
+  const texel = (sun.shadow.camera.right-sun.shadow.camera.left) / sun.shadow.mapSize.x, snap = v => Math.round(v / texel) * texel;
   const cx = snap(at.x), cz = snap(at.z), d = sun.userData.dir;
   sun.target.position.set(cx, at.y, cz);
   sun.position.set(cx + d.x * 60, at.y + d.y * 60, cz + d.z * 60);
@@ -209,19 +210,22 @@ import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBlo
 import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from '../vendor/three/addons/postprocessing/SMAAPass.js';
 
-export async function setupPolish({ renderer, scene, camera, indoor }) {
-  const hdr = await new RGBELoader().loadAsync('./assets/env/goegap_1k.hdr');
+export async function setupPolish({ renderer, scene, camera, indoor, world = false }) {
+  const hdr = await new RGBELoader().setDataType(T.FloatType).loadAsync('./assets/env/goegap_1k.hdr');
   hdr.mapping = T.EquirectangularReflectionMapping;
-  const pmrem = new T.PMREMGenerator(renderer), env = pmrem.fromEquirectangular(hdr).texture; pmrem.dispose();
-  scene.environment = env; scene.environmentIntensity = indoor ? 0.55 : 0.9;
-  if (!indoor) { scene.background = hdr; scene.backgroundIntensity = 1.0; scene.backgroundBlurriness = 0.02; }
+  // Three r160 ignores Scene.environmentIntensity. Scale the source radiance
+  // before convolution, so streamed meshes also receive the intended fill.
+  const radiance=environmentRadiance(hdr,world?.06:indoor?.55:.9);
+  const pmrem = new T.PMREMGenerator(renderer), env = pmrem.fromEquirectangular(radiance).texture; pmrem.dispose();radiance.dispose();
+  scene.environment = env;
+  if (!indoor && !world) { scene.background = hdr; scene.backgroundIntensity = 1.0; scene.backgroundBlurriness = 0.02; } else hdr.dispose();
   const w = innerWidth, h = innerHeight, composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   // Real-time GTAO measured too expensive (page main thread blocked 150 ms–1.3 s per frame on the
   // M5); districts already carry baked AO in COLOR_0, so screen-space AO is opt-in (?gfx=ao).
   const ao = new URLSearchParams(location.search).get('gfx') === 'ao' ? new GTAOPass(scene, camera, w / 2, h / 2) : null;
   if (ao) { ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.2, samples: 8 }); composer.addPass(ao); }
-  composer.addPass(new UnrealBloomPass(new T.Vector2(w, h), 0.22, 0.45, 0.92));
+  composer.addPass(new UnrealBloomPass(new T.Vector2(w, h), indoor ? .22 : .10, .35, indoor ? .92 : 1.6));
   composer.addPass(new OutputPass());
   composer.addPass(new SMAAPass(w * renderer.getPixelRatio(), h * renderer.getPixelRatio()));
   return { render: () => composer.render(), resize: (W, H) => { composer.setSize(W, H); ao?.setSize(W / 2, H / 2); } };

@@ -157,7 +157,7 @@ These images are no longer in the tree; the filenames were reused by v3.
   identify public-data / fictional silhouettes only; neither source is an engineering drawing,
 film still, Paramount mark, or official livery.
 
-### Area 51½ picker — CURRENT
+### Area 51½ picker — retired
 
 - Created: 2026-10-21 as an in-engine frame, not an image-generation output: the shipped Area 51½
   page rendered headless (`tools/rc/card-art.cjs`, 900×1600, HUD hidden) on the Liberty Loop
@@ -244,3 +244,15 @@ table further down stays the single place a filename is bound to a hash.
 | `aircraft-fireboss.webp` | 1200×1200 | 208924 | `9737e2ceb208145c86e142d3e12975549565d4acc672a7000380c26e9beef149` | Okanagan Fire Boss picker poster; project-generated with OpenAI ImageGen on 2026-08-15, then corrected to the modern five-blade turboprop configuration |
 | `menu-hangar-small.webp` | 900×600 | 8518 | `a17a868a3905c6fc9d8217ae156c7123228baaf1009dce7ef781e9e613ebde45` | Narrow/loading fallback |
 | `menu-hangar.webp` | 1600×1067 | 18382 | `2b0bd29b275e6993c0ad9f355dfc5c048b1e05abaf2cd60323784f881ff9f070` | Wide/loading background |
+
+### Saucer Springs AFB picker — CURRENT
+
+- Captured 2026-10-24 from the playable neighbourhood skatepark with `tools/rc/card-art.cjs`; HUD hidden, headless Chromium, silent audio.
+- Epistemic label: `fiction`. This is an actual in-engine frame of the fictional base.
+- Source: `tools/assets/generators/menu-posters/sources/saucer-springs.png`, SHA-256 `975688ae2bce2023a1f85835798d9930a72c9b44456b1f87062bd087da7963b2`.
+- Encode with `node tools/assets/generators/menu-posters/render.mjs saucer-springs` (cwebp, quality85).
+- Project-authored scene; component asset provenance remains in the RC asset records.
+
+| File | Dimensions | Bytes | SHA-256 | Use |
+| --- | --- | --- | --- | --- |
+| `saucer-springs.webp` | 900×1120 | 74198 | `63e1c96984f3166748a88c1e393562d0c29b83a765e2debdc1f96196088cac08` | Saucer Springs AFB launcher; current gameplay |

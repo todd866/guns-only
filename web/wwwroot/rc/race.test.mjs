@@ -17,7 +17,7 @@ function runRace(mode, skill) {
   const race = createRace(course, { mode, opponents: 3 }), bot = { session: race.player, skill, node: 0, colour: 0 };
   let gaps = 0, samples = 0;
   for (let i = 0; i < 120 * 150 && !race.player.finished; i++) {
-    stepRace(race, driveInput(race, bot));
+    stepRace(race, {...driveInput(race, bot),fire:race.pickups.held.has(race.player.car)});
     if (i % 60 === 0) { for (const r of race.rivals) gaps += Math.abs(progress(r.session) - progress(race.player)); samples += race.rivals.length; }
   }
   return { place: placeOf(race, race.player), finished: race.player.finished, meanGap: gaps / samples };
@@ -31,12 +31,12 @@ test('every mode races as a pack: rivals stay around the player all lap', () => 
   }
 });
 
-test('kid mode: a kid who keeps driving wins most of the time; Big Kid gives nothing', () => {
+test('both modes allow wins and losses without a guaranteed Kid victory', () => {
   const skills = [0.6, 0.7, 0.8, 0.9];
   const wins = mode => skills.filter(k => runRace(mode, k).place === 1).length;
   const kid = wins('kid'), big = wins('bigKid');
-  assert.ok(kid >= 3, `kid mode won ${kid}/4`);
-  assert.ok(big < kid, `Big Kid won ${big}/4, kid ${kid}/4`);
+  assert.ok(kid > 0 && kid < skills.length, `kid mode won ${kid}/4`);
+  assert.ok(big > 0 && big < skills.length, `Big Kid won ${big}/4`);
 });
 
 test('cars bump apart and do not overlap', () => {
@@ -61,3 +61,5 @@ test('a rival recovered mid-shortcut drops the shortcut and resumes the main lin
   assert.equal(rv.alt, null);
   assert.ok(rv.node >= 0 && rv.node < race.line.length);
 });
+
+test('ceremony brakes the player as well as the rivals',()=>{const race=createRace(course);race.player.running=true;race.player.car.vel=[0,0,-5];race.clock=18;for(let i=0;i<240;i++)stepRace(race,{throttle:1});assert.ok(Math.hypot(...race.player.car.vel)<.2);});

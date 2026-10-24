@@ -17,7 +17,11 @@ test('the packaged RC site is self-contained under /rc/', () => {
       assert.ok(fs.existsSync(target), `${path.relative(out, f)} imports missing ${spec}`);
       assert.ok(target.startsWith(path.join(out, 'rc') + path.sep), `${path.relative(out, f)} reaches outside /rc/: ${spec}`);
     }
-  assert.ok(JSON.parse(fs.readFileSync(path.join(out, 'vercel.json'), 'utf8')).redirects.length);
+  for (const name of ['telemetry_batch.js','telemetry_outbox.js']) assert.equal(fs.readFileSync(path.join(out,'rc/shared/telemetry',name),'utf8'), fs.readFileSync(new URL('../../web/wwwroot/render/telemetry/'+name,import.meta.url),'utf8'), 'shared transport must be copied verbatim');
+  const config = JSON.parse(fs.readFileSync(path.join(out, 'vercel.json'), 'utf8'));
+  assert.ok(config.redirects.length);
+  assert.equal(config.headers.find(h => h.source === '/rc/assets/(.*)').headers.find(h => h.key === 'Cache-Control').value,
+    'public, max-age=0, must-revalidate', 'unversioned world data and art must revalidate across releases');
   packageRc(out);   // re-running over its own output is allowed
   const foreign = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-foreign-')); fs.writeFileSync(path.join(foreign, 'keep.txt'), 'x');
   assert.throws(() => packageRc(foreign), /refusing/);
