@@ -13,3 +13,11 @@ coordinate frame. Street lengths and building footprints retain metre scale;
 heights, materials, vegetation shapes and gameplay details are approximations.
 It is distributed as part of this ODbL derived database. Its generic game names
 do not identify the source neighbourhood.
+
+## Relative terrain
+
+`residential-terrain.json` contains information licensed under the
+[Open Government Licence – Ontario](https://www.ontario.ca/page/open-government-licence-ontario).
+It is an adapted, smoothed relative-height grid derived from Ontario public
+elevation data. Local grading pads and perimeter blending are fictional gameplay
+adaptations; these heights are not survey measurements of the fictional base.

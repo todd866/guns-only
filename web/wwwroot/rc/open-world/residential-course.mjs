@@ -11,12 +11,23 @@ export const RESIDENTIAL_RACE_POINTS=[
  [-3085.416,-773.366],[-3083.547,-777.897],[-3080.08,-782.166],
  [-3072.983,-785.362],[-3061.153,-788.014],[-3040,-800.504],
 ];
-export function residentialRace(event,world,makeCourse){
+export function residentialRace(event,world,makeCourse,terrain=null){
  const course=makeCourse({...event,points:RESIDENTIAL_RACE_POINTS,half:2.4},world);
+ const groundAt=(x,z)=>{const estimate=terrain?.heightAt?.(x,z)??0;return world.raycast([x,estimate+2,z],[0,-1,0],4)?.point[1]??estimate;};
+ for(const node of course.ai)node.pos[1]=groundAt(node.pos[0],node.pos[2]);
+ course.start.pos[1]=groundAt(course.start.pos[0],course.start.pos[2]);
+ for(const pickup of course.pickups??[])pickup.pos[1]=groundAt(pickup.pos[0],pickup.pos[2])+.16;
  const {pos,yaw}=course.start;
- course.grid=Array.from({length:8},(_,i)=>{const row=Math.floor(i/2)*1.1,side=i%2?.45:-.45;return {pos:[pos[0]-Math.sin(yaw)*row+Math.cos(yaw)*side,pos[1],pos[2]+Math.cos(yaw)*row+Math.sin(yaw)*side],yaw};});
+ course.grid=Array.from({length:8},(_,i)=>{const row=Math.floor(i/2)*1.1,side=i%2?.45:-.45,x=pos[0]-Math.sin(yaw)*row+Math.cos(yaw)*side,z=pos[2]+Math.cos(yaw)*row+Math.sin(yaw)*side;return {pos:[x,groundAt(x,z),z],yaw};});
  // Closely spaced bends steer the AI, but don't create a wall of checkpoint arches.
  const keep=new Set([0,4,7,10,13,18,23]);
  course.checkpoints=course.checkpoints.filter((_,i)=>keep.has(i));
+ // The renderer uses authored gate markers when available. Keep these aligned
+ // with the filtered checkpoints and ground their feet on the loaded road mesh.
+ course.gates=course.checkpoints.slice(0,-1).map(([x,z,,half,forward])=>({
+  pos:[x,groundAt(x,z),z],
+  forward:[forward?.[0]??0,0,forward?.[1]??-1],
+  halfWidth:half,
+ }));
  return course;
 }

@@ -5,10 +5,13 @@ import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUti
 // courtyard and collision shell at 3.4m; these overlays supply the upper wings
 // and the distinctive human-scale entrance details. No remote assets are used.
 export const isResidentialSchool = b => b?.kind === 'school' && b.holes?.length === 1;
-export function buildResidentialSchool(scene, data = {}) {
+export function buildResidentialSchool(scene, data = {}, options = {}) {
   const building = data.buildings?.find(isResidentialSchool);
   const root = new T.Group(); root.name = 'ResidentialSchoolDetails';
   if (!building) { scene.add(root); return {root, dispose(){root.removeFromParent();}}; }
+  const heightAt = options.terrain?.heightAt ?? (() => 0);
+  const buildingCentre = building.points.reduce((s,p)=>[s[0]+p[0]/building.points.length,s[1]+p[1]/building.points.length],[0,0]);
+  root.position.y = heightAt(buildingCentre[0], buildingCentre[1]);
   const buckets = new Map(), materials = new Map();
   const clean = ring => ring.length>3&&ring[0][0]===ring.at(-1)[0]&&ring[0][1]===ring.at(-1)[1]?ring.slice(0,-1):ring;
   const ring = clean(building.points);

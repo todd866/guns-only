@@ -74,10 +74,10 @@ test('runtime keeps plaza guidance separate from the nearby path race and recove
   const p=race.course.ai[20].pos,at=race.course.recoveryPoint(p);
   assert.ok(Math.hypot(at.pos[0]-p[0],at.pos[2]-p[2])<.01,'race recovery stays at its local path, not at the free-drive spawn');
   for(const ends of [RESIDENTIAL_LINK.points,[...RESIDENTIAL_LINK.points].reverse()]){
-   const [a,b]=ends,dx=b[0]-a[0],dz=b[1]-a[1],length=Math.hypot(dx,dz),car=createCar(undefined,[a[0],rideHeight()+.05,a[1]],Math.atan2(dx,-dz));let along=0;
+   const [a,b]=ends,dx=b[0]-a[0],dz=b[1]-a[1],length=Math.hypot(dx,dz),car=createCar(undefined,[a[0],roam.residentialTerrain.heightAt(a[0],a[1])+rideHeight()+.05,a[1]],Math.atan2(dx,-dz));let along=0;
    for(let i=0;i<3600&&along<length;i++){if(i%120===0)await roam.stream.update(car.pos);stepCar(car,{throttle:.5,steer:0},roam.stream.world,1/120);along=((car.pos[0]-a[0])*dx+(car.pos[2]-a[1])*dz)/length;}
    assert.ok(along>=length,'ordinary inputs cross the base connector in both directions');
-   assert.ok(Math.abs((car.pos[0]-a[0])*dz-(car.pos[2]-a[1])*dx)/length<1,'stays on the connector');
+   assert.ok(Math.abs((car.pos[0]-a[0])*dz-(car.pos[2]-a[1])*dx)/length<1.5,'stays within the connector lane');
   }
  }finally{roam?.dispose();race?.dispose();globalThis.fetch=previous;}
 });

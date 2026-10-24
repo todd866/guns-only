@@ -19,6 +19,12 @@
     8.7
   ],
   "roam_yaw": -0.14889,
+  "hip": {
+    "height_m": 0.66,
+    "run_m": 1.9,
+    "angle_degrees": 90,
+    "toe_fraction": 0.18
+  },
   "rolled_apron": {
     "rise_m": 0.14,
     "run_m": 0.5,
@@ -32,8 +38,8 @@
     "distance_m": 1.4,
     "samples": 20
   },
-  "visual_triangles": 12849,
-  "collision_triangles": 3788,
-  "collision_meshes": 15,
+  "visual_triangles": 16033,
+  "collision_triangles": 6172,
+  "collision_meshes": 18,
   "materials": 12
 }

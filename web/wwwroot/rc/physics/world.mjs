@@ -10,6 +10,9 @@ export const SURFACES = {
   asphalt: { grip: 1.0, roll: 0.02 }, concrete: { grip: 1.0, roll: 0.02 }, wood: { grip: 0.95, roll: 0.025 },
   metal: { grip: 0.8, roll: 0.02 }, tile: { grip: 0.72, roll: 0.02 }, gymfloor: { grip: 0.55, roll: 0.015 },
   gravel: { grip: 0.78, roll: 0.07 }, carpet: { grip: 0.9, roll: 0.07 }, rubber: { grip: 1.0, roll: 0.03, bounce: 2.2 }, grass: { grip: 0.72, roll: 0.09 }, dirt: { grip: 0.8, roll: 0.06 },
+  // Rolled residential kerbs retain road grip but use a gentler suspension response
+  // so the 0.10 m rise is traversable at toy-car speed without a launch.
+  kerb: { grip: 1.0, roll: 0.02, damper: 0.55, bumpDamper: 0.45 },
 };
 
 export function createWorld(cell = 4) {

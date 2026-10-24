@@ -3,10 +3,11 @@ import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUti
 
 // Small, instanced residential dressing. The input is anonymous local metres
 // (`trees: [{kind:'tree', point:[x,z]}]`); no source identity reaches runtime.
-export function prepareResidentialDetails(world, data = {}) {
+export function prepareResidentialDetails(world, data = {}, options = {}) {
   const trees = (data.trees || []).filter((t) => Array.isArray(t.point) && t.point.length === 2 && t.point.every(Number.isFinite));
   let root = null, disposed = false;
   const meshes = [];
+  const heightAt = options.terrain?.heightAt ?? (() => 0);
 
   const treeGeometry = () => {
     const trunkParts = [];
@@ -88,7 +89,7 @@ export function prepareResidentialDetails(world, data = {}) {
       const height = 6 + ((i * 29) % 41) / 10;
       const yaw = ((i * 47) % 360) * Math.PI / 180;
       return {
-        position: new T.Vector3(x, 0, z),
+        position: new T.Vector3(x, heightAt(x, z), z),
         rotation: new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), yaw),
         scale: new T.Vector3(width, height / crownHeight, depth),
       };
