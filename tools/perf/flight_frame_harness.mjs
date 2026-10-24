@@ -19,7 +19,6 @@ import {
 const requireFromSmoke = createRequire(
   new URL("../../web/smoke/package.json", import.meta.url),
 );
-const { chromium } = requireFromSmoke("playwright");
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIRECTORY, "../..");
@@ -204,6 +203,7 @@ async function queryRenderer(page, canvasSelector = null) {
 async function launchCandidate({ name, args, requireHardware }) {
   let browser;
   try {
+    const { chromium } = requireFromSmoke("playwright");
     browser = await chromium.launch(perfBrowserLaunchOptions({
       hardware: requireHardware,
       args,
