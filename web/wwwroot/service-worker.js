@@ -14,6 +14,8 @@ const CACHE = `guns-only-${RELEASE_BUILD}`;
 // Never cached: telemetry and the multiplayer room are live services, and a cached reply would be
 // a lie. They must fail honestly when the network is gone.
 const NEVER_CACHE = [
+  // RC has an independent release graph; the flight-game cache cannot version it.
+  /^\/rc(?:\/|$)/,
   /^\/telemetry(?:\/|$)/,
   /^\/report(?:\/|$)/,
   /^\/telemetry-admin(?:\/|$)/,
