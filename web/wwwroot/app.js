@@ -2034,7 +2034,20 @@ const frameGovernor = {
   },
 
   reset(view = null) {
-    // A new sortie re-earns its quality: one bad moment should not permanently downgrade a session.
+    const terrainKey = view?.terrainPresentationKey;
+    const requestedKey = view?.terrainPresentationRequestedKey;
+    const qualityKey = `${selectedBeat}:${terrainKey ?? ""}`;
+    if (terrainKey && (!requestedKey || requestedKey === terrainKey)
+      && this.qualityView === view && this.qualityKey === qualityKey) {
+      // Respawning in the same scene must not resize render targets or rebuild scenery.
+      // Discard menu/loading samples; normal clean-window recovery still restores quality.
+      frameGovernorPolicy.idle(performance.now());
+      latestFrameContractPass = null;
+      return;
+    }
+    this.qualityView = view;
+    this.qualityKey = qualityKey;
+    // A different scene starts from its authored quality policy.
     frameGovernorPolicy.reset(performance.now());
     this.terrainLevel = 0;
     this.viewLevel = 0;
@@ -6312,8 +6325,8 @@ function beginFlight() {
   combatCompleteSeenAt = null;
   pilotLogbook.begin({ activity: practiceExercise(selectedPracticeExercise)?.title || missionBrief().title,
     exercise: selectedPracticeExercise || "", startSimSeconds: attemptStartSimSeconds });
-  // Ready/warmup frames are deliberately excluded from the performance sample, and every sortie
-  // starts from its mission-authored terrain radius and restored shadow/scenery policy.
+  // Discard Ready/warmup samples. Same-scene respawns retain learned quality; a new scene
+  // starts from its mission-authored terrain radius and shadow/scenery policy.
   frameGovernor.reset(activeView);
   resetAdaptiveAiBudget({ recordInitial: true });
   beginMissionCloudEntry(activeView, latestState);
@@ -7675,7 +7688,7 @@ class PresentationAssetManager {
   }
 
   showCompatibility(slot) {
-    const identity = slot.dynamic ? "shared-presentation" : slot.entityId || "unprojected";
+    const identity = "shared-presentation";
     const key = `compatibility:${slot.presentationId}:${identity}`;
     if (slot.activeKey === key && slot.object) return;
     const factory = this.compatibilityFactory(slot);
@@ -7689,7 +7702,12 @@ class PresentationAssetManager {
   }
 
   setPresentation(slot, presentationId, entityId) {
-    if (slot.presentationId === presentationId && slot.entityId === entityId) return;
+    if (slot.presentationId === presentationId) {
+      // A target promotion changes authority identity, not the aircraft geometry. Preserve the
+      // slot's already-built model, shaders and pending load until its presentation changes.
+      slot.entityId = entityId;
+      return;
+    }
     slot.presentationId = presentationId;
     slot.entityId = entityId;
     slot.epoch += 1;
@@ -7915,7 +7933,7 @@ class PresentationAssetManager {
       }
     }
     const assetIdentity = lod?.uri ?? descriptor.fallback ?? descriptor.id;
-    const instanceIdentity = slot.entityId || "unprojected";
+    const instanceIdentity = slot.name; // One retained visual per stable presentation slot.
     const key = slot.remoteAssetPolicy
       ? slot.remoteAssetPolicy.registryInstanceKey(descriptorScope, assetIdentity)
       : `registry:${this.activePack.id}:${this.activePack.profile.id}:${slot.presentationId}:${instanceIdentity}:${assetIdentity}`;
@@ -8710,8 +8728,14 @@ class FlightView {
   applyTerrainFlightPolicy() {
     if (!this.terrainPresentation
         || !Number.isFinite(this.terrainNominalStreamingRadiusM)) return false;
-    return this.terrainPresentation.setStreamingRadiusM?.(
-      this.terrainNominalStreamingRadiusM) ?? false;
+    const retainedLevel = frameGovernor.qualityView === this
+      && frameGovernor.qualityKey === `${selectedBeat}:${this.terrainPresentationKey}`
+      ? frameGovernor.terrainLevel : 0;
+    const radiusM = retainedLevel > 0
+      ? Math.min(this.terrainNominalStreamingRadiusM,
+        FRAME_GOVERNOR_RADII_M[Math.min(retainedLevel, FRAME_GOVERNOR_RADII_M.length) - 1])
+      : this.terrainNominalStreamingRadiusM;
+    return this.terrainPresentation.setStreamingRadiusM?.(radiusM) ?? false;
   }
 
   ensureTerrainPresentation(state = null) {
