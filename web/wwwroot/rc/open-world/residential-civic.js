@@ -3,9 +3,10 @@ import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUti
 
 // Distinctive civic facade dressing for the first mapped public footprint. It
 // deliberately carries no source names, logos, addresses, or coordinates.
-export function prepareResidentialCivic(world, data = {}) {
+export function prepareResidentialCivic(world, data = {}, options = {}) {
   const source = (data.buildings || []).find((b) => b.kind === 'civic' && b.points?.length >= 3);
   let root = null; const meshes = []; const materials = new Map();
+  const heightAt = options.terrain?.heightAt ?? (() => 0);
   const colours = {wall: '#c5bfa9', red: '#bd4f48', roof: '#3a4446', glass: '#5a6d70', concrete: '#aaa99d', blue: '#315b79', trim: '#d6cfb4'};
   const material = (key) => { if (!materials.has(key)) materials.set(key, new T.MeshStandardMaterial({color: colours[key], roughness: key === 'glass' ? .35 : .86, metalness: key === 'roof' ? .12 : 0})); return materials.get(key); };
   const addBox = (list, key, w, h, d, x, y, z, rot = 0) => { const g = new T.BoxGeometry(w, h, d); g.applyMatrix4(new T.Matrix4().makeRotationY(rot)); g.applyMatrix4(new T.Matrix4().makeTranslation(x, y, z)); list(key).push(g); };
@@ -15,6 +16,8 @@ export function prepareResidentialCivic(world, data = {}) {
     if (!scene?.add) throw new TypeError('prepareResidentialCivic.attach requires a scene');
     if (root || !source) { if (!root) { root = new T.Group(); scene.add(root); } return root; }
     root = new T.Group(); root.name = 'ResidentialCivicDetails';
+    const sourceCentre = source.points.reduce((s,p)=>[s[0]+p[0]/source.points.length,s[1]+p[1]/source.points.length],[0,0]);
+    root.position.y = heightAt(sourceCentre[0], sourceCentre[1]);
     const buckets = new Map(); const list = (key) => { if (!buckets.has(key)) buckets.set(key, []); return buckets.get(key); };
     const pts = source.points; const minX = Math.min(...pts.map((p) => p[0])), maxX = Math.max(...pts.map((p) => p[0]));
     const minZ = Math.min(...pts.map((p) => p[1])), maxZ = Math.max(...pts.map((p) => p[1]));

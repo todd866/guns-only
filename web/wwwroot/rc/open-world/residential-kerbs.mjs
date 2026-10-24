@@ -1,7 +1,7 @@
 // Traversable residential kerbs for the metre-scale RC world.
 //
 // A kerb is modelled as a shallow rolled profile, rather than a vertical wall:
-// 0.40 m slope -> 0.10 m rise -> 1.45 m sidewalk -> 0.40 m roll back to grass.
+// 0.65 m smoothstep slope -> 0.10 m rise -> 1.45 m sidewalk -> 0.65 m roll back to grass.
 // The returned quads can be used by the renderer; when a physics world is passed,
 // the same profile is installed there so visuals and driving surfaces agree.
 
@@ -10,9 +10,9 @@ const EPS = 1e-9;
 export const RESIDENTIAL_KERB = Object.freeze({
   roadWidth: 9,
   rise: 0.10,
-  slope: 0.40,
+  slope: 0.65,
   sidewalk: 1.45,
-  surface: 'concrete',
+  surface: 'kerb',
 });
 
 const length2 = (x, z) => Math.hypot(x, z);
@@ -39,12 +39,24 @@ export function rolledKerbProfile(options = {}) {
     || !(k.rise > 0) || !(k.slope > 0) || !(k.sidewalk > 0) || !(k.roadWidth > 0)) {
     throw new RangeError('kerb dimensions must be positive');
   }
-  return [
-    { offset: k.roadWidth / 2, y: 0 },
-    { offset: k.roadWidth / 2 + k.slope, y: k.rise },
-    { offset: k.roadWidth / 2 + k.slope + k.sidewalk, y: k.rise },
-    { offset: k.roadWidth / 2 + 2 * k.slope + k.sidewalk, y: 0 },
-  ];
+  const stations = [{ offset: k.roadWidth / 2, y: 0 }];
+  // Blend a mostly linear grade with a small smoothstep easing term. This rounds the
+  // station changes without making the middle steeper than the 0.10 / 0.65 grade can
+  // comfortably follow at RC speed; the blend intentionally retains a small endpoint
+  // slope so the four collision segments do not form a launch lip.
+  const smoothstep = t => 0.8 * t + 0.2 * t * t * (3 - 2 * t);
+  // Four tessellated segments on each roll keep the collision mesh smooth at RC
+  // scale while preserving a level sidewalk between the two transitions.
+  for (let i = 1; i <= 4; i++) {
+    const t = i / 4;
+    stations.push({ offset: k.roadWidth / 2 + k.slope * t, y: k.rise * smoothstep(t) });
+  }
+  stations.push({ offset: k.roadWidth / 2 + k.slope + k.sidewalk, y: k.rise });
+  for (let i = 1; i <= 4; i++) {
+    const t = i / 4;
+    stations.push({ offset: k.roadWidth / 2 + k.slope + k.sidewalk + k.slope * t, y: k.rise * (1 - smoothstep(t)) });
+  }
+  return stations;
 }
 
 function quadUp(world, quad, surface) {

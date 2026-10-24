@@ -106,14 +106,15 @@ function substep(car, input, world, dt) {
     contacts++;
     const compression = reach - hit.dist, vAttach = pointVelocity(car, attach);
     const rate = -dot(vAttach, up);
-    const bump = compression > p.bumpAt, bounce = (SURFACES[hit.surface] || SURFACES.concrete).bounce ?? 1;
+    const surf = SURFACES[hit.surface] || SURFACES.concrete;
+    const bump = compression > p.bumpAt, bounce = surf.bounce ?? 1;
     // A bouncy surface (trampoline) is a stiffer, nearly undamped spring under the wheel.
-    const springF = Math.max(0, p.spring * bounce * compression + (bump ? p.bumpSpring * (compression - p.bumpAt) + p.bumpDamper * Math.max(0, rate) / bounce : 0) + p.damper * rate / (bounce * bounce));
+    const springF = Math.max(0, p.spring * bounce * compression + (bump ? p.bumpSpring * (compression - p.bumpAt) + (surf.bumpDamper ?? 1) * p.bumpDamper * Math.max(0, rate) / bounce : 0) + (surf.damper ?? 1) * p.damper * rate / (bounce * bounce));
     ws.contact = true; ws.compression = compression; ws.surface = hit.surface; ws.contactPoint = hit.point;
     addForce(scale(up, springF), attach);
 
     // Tyre: forces in the contact plane, applied part-way up toward the CoM (roll centre).
-    const n = hit.normal, surf = SURFACES[hit.surface] || SURFACES.concrete;
+    const n = hit.normal;
     const steerQ = wp.front ? quatAxisAngle(up, -car.steer) : null;
     let wf = steerQ ? rotate(steerQ, fwd) : fwd;
     wf = norm(sub(wf, scale(n, dot(wf, n))));

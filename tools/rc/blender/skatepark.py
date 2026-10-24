@@ -61,13 +61,39 @@ rail(west,(-.4,-5.35,1.01),(-.4,5.35,1.01))
 # Central funbox/hubba: flat top, approach bank, opposite bank and a raised long ledge.
 centre=(-3.691,.983)
 lphys('central_deck','concrete',centre,0,0,.14,5.5,2.4,.66)
+def bank_height(t):
+ # Rounded toe joins flat concrete; the straight upper bank carries momentum
+ # through the lip rather than easing the car flat before takeoff.
+ u=1-t;toe=.18
+ return .14+.66*(u*u/(2*toe) if u<toe else u-toe/2)/(1-toe/2)
 for side in [-1,1]:
  vs=[]
- for i in range(17):
-  t=i/16;y=side*(1.2+1.9*t);h=.14+.66*(.5+.5*math.cos(t*math.pi))
+ for i in range(25):
+  t=i/24;y=side*(1.2+1.9*t);h=bank_height(t)
   vs.extend([xf((-2.75,y,h),centre),xf((2.75,y,h),centre)])
- fs=[(2*i,2*i+2,2*i+3,2*i+1) for i in range(16)]
+ fs=[(2*i,2*i+2,2*i+3,2*i+1) for i in range(24)]
  phys(f'central_bank_{side}','concrete',(vs,fs),True)
+# The western end joins the two long banks around a convex 90-degree hip.
+# All three faces meet at the same deck height; the diagonal ridges are rideable
+# takeoff edges, with a broad adjoining face to land on. No wall across the runout.
+vs=[]
+for i in range(25):
+ t=i/24;h=bank_height(t)
+ vs.extend([xf((-2.75-1.9*t,-1.2,h),centre),xf((-2.75-1.9*t,1.2,h),centre)])
+phys('central_west_bank','concrete',(vs,[(2*i,2*i+2,2*i+3,2*i+1) for i in range(24)]),True)
+for side in [-1,1]:
+ vs=[]
+ for j in range(25):
+  for i in range(25):
+   u=i/24;v=j/24
+   vs.append(xf((-2.75-1.9*u,side*(1.2+1.9*v),bank_height(max(u,v))),centre))
+ fs=[]
+ for j in range(24):
+  for i in range(24):
+   a=j*25+i
+   # Split along the convex diagonal, so the two bank planes retain a true hip.
+   fs.extend([(a,a+1,a+26),(a,a+26,a+25)])
+ phys(f'central_hip_{side}','concrete',(vs,fs),True)
 lphys('central_hubba','concrete',centre,2.48,0,.14,.52,5.9,.98)
 lbox('steel',centre,2.48,0,1.12,.55,6,.045)
 # Long descending tubular rail beside the central bank, matching its layout.
@@ -205,7 +231,7 @@ bpy.context.preferences.filepaths.save_version=0
 blend=R/'assets/rc/heroes/skatepark.blend';blend.parent.mkdir(parents=True,exist_ok=True)
 bpy.ops.wm.save_as_mainfile(filepath=str(blend),compress=True)
 stats=c.counts();c.join_visuals_by_material();out=R/'web/wwwroot/rc/assets/districts/skatepark.glb';c.export_glb(out)
-info={'generator':'tools/rc/blender/skatepark.py','license':'MIT original procedural geometry','external_assets':[],'frame':'park-centred local metres; north=-Z','footprint':[[-18.803,-20.0],[19.0,15.053]],'roam_start':[6,.15,8.7],'roam_yaw':-.14889,'rolled_apron':{'rise_m':.14,'run_m':.5,'profile':'smoothstep'},'lap_length_m':route.length,'vertex_ao':ao,**stats}
+info={'generator':'tools/rc/blender/skatepark.py','license':'MIT original procedural geometry','external_assets':[],'frame':'park-centred local metres; north=-Z','footprint':[[-18.803,-20.0],[19.0,15.053]],'roam_start':[6,.15,8.7],'roam_yaw':-.14889,'hip':{'height_m':.66,'run_m':1.9,'angle_degrees':90,'toe_fraction':.18},'rolled_apron':{'rise_m':.14,'run_m':.5,'profile':'smoothstep'},'lap_length_m':route.length,'vertex_ao':ao,**stats}
 out.with_suffix('.provenance.json').write_text(json.dumps(info,indent=2)+'\n')
 print('SKATEPARK',json.dumps(info))
 c.render_glb(out,R/'evidence/rc-open-world/skatepark',[('overview',(38,-49,42),(0,1,0),42),('toy-eye',(6,-12.7,1.8),(1,1,.6),24),('bowl',(1,3,6),(8,13,.5),32)])

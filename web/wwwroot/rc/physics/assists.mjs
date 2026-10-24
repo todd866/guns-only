@@ -1,7 +1,7 @@
 // Kid mode. Assists are honest pilots: they shape the inputs and add bounded torques the way a
 // steady hand on the transmitter would. They never change the car's physics. Big Kid turns
 // them down to gentler stabilization, with the same predictable speed-sensitive steering.
-import { dot, cross, scale, sub, add } from './math.mjs';
+import { dot, cross, scale, sub, add, rotate } from './math.mjs';
 import { carUp, carForward } from './car.mjs';
 import { createDrift, stepDrift } from './drift.mjs';
 import { SURFACES } from './world.mjs';
@@ -13,7 +13,7 @@ export const MODES = {
   bigKid: { steerFalloff: 0.035, yawHold: 2.4, airLevel: true, autoRight: false, freeRecovery: false },
 };
 
-export function createAssist(mode = 'kid') { return { mode, flipTime: 0, righting: 0, drift: createDrift() }; }
+export function createAssist(mode = 'kid') { return { mode, flipTime: 0, righting: 0, airTime: 0, drift: createDrift() }; }
 
 // Turns the raw transmitter input into the input stepCar receives.
 export function assistInput(a, car, raw, dt) {
@@ -41,8 +41,33 @@ export function assistInput(a, car, raw, dt) {
     const wanted = Math.max(-gripLimit, Math.min(gripLimit, kinematic)), actual = dot(car.ang, up);
     torque = add(torque, scale(up, -m.yawHold * (drift.active ? .35 : 1) * (actual - wanted) / car.invInertia[1]));
   }
-  // Air levelling: in the air, ease the body toward wheels-down so landings land.
-  if (m.airLevel && car.contacts === 0) torque = add(torque, levelTorque(car, up, I, 5));
+  // Air levelling: in the air, ease the body toward wheels-down so landings land. A
+  // steer (or an explicit airControl input) gives a small, bounded hip-transfer control:
+  // steer rolls around the car's forward axis, while airControl may pitch around its
+  // right axis. Held accelerator alone keeps the normal upright assist. This is
+  // torque only (no velocity or position injection), so a transfer can shape a landing
+  // without becoming a hidden boost or a mandatory trick system.
+  if (m.airLevel && car.contacts === 0) {
+    // Road seams and kerb tops can briefly report zero contacts. Keep normal
+    // levelling immediate, but wait for a sustained airborne state before
+    // optional hip steering can influence the attitude.
+    a.airTime += dt;
+    const transfer = a.airTime >= 0.1 && (Math.abs(raw.steer || 0) > 0.05 || raw.airControl);
+    torque = add(torque, levelTorque(car, up, I, transfer ? 2.2 : 5));
+    if (transfer) {
+      const fwd = carForward(car), right = rotate(car.q, [1, 0, 0]);
+      const iz = 1 / car.invInertia[2];
+      const steer = Math.max(-1, Math.min(1, raw.steer || 0));
+      const throttle = raw.airControl ? Math.max(-1, Math.min(1, raw.throttle || 0)) : 0;
+      // Peak angular acceleration is deliberately modest for the 0.5–1.0 s airtime
+      // of the RC kickers. It is enough to bank through a hip, never enough to spin
+      // the car into a new heading by itself.
+      torque = add(torque, scale(fwd, steer * iz * 2.4));
+      torque = add(torque, scale(right, throttle * I * 1.8));
+    }
+  } else {
+    a.airTime = 0;
+  }
 
   // Auto-right: upside-down or on its side and stopped for 0.8 s → hop and roll upright.
   const stuck = up[1] < 0.3 && car.speed < 1.5;
