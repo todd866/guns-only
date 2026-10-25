@@ -3,7 +3,31 @@ import * as T from '../../vendor/three.module.js';
 // Original, metre-scaled cast concrete. The glTF has baked occlusion but no UVs;
 // project each triangle onto its dominant plane rather than stretching a tile
 // across the entire park. A tile spans 3 m, so aggregate stays RC-sized.
-export function finishSkateparkSurface(geometry, material) {
+export function finishSkateparkSurface(geometry, material, paintTexture = null) {
+  if(material.name==='paint'){
+    if(!paintTexture)throw new Error('Skatepark paint texture was not prepared');
+    const p=geometry.attributes.position,uv=[],c=Math.cos(.274),s=Math.sin(.274);
+    for(let i=0;i<p.count;i+=3){
+      const x=p.getX(i),z=p.getZ(i),strip=z<-6?0:x<-10?1:z>5?2:3;
+      const local=[];
+      for(let j=i;j<i+3;j++){
+        const X=p.getX(j),Y=-p.getZ(j);
+        const origin=strip===0?[8.555,12.953]:strip===1?[-15.522,-3.638]:strip===2?[-.364,-8.537]:[-3.691,.983];
+        const a=(X-origin[0])*c+(Y-origin[1])*s,b=-(X-origin[0])*s+(Y-origin[1])*c;
+        local.push([a,b,p.getY(j)]);
+      }
+      const span=k=>Math.max(...local.map(v=>v[k]))-Math.min(...local.map(v=>v[k]));
+      const top=span(2)<1e-5,along=span(0)>span(1)?0:1;
+      for(const [a,b,y] of local){
+        const u=strip===0?Math.atan2(b,a)*.7:top?a/4+.5:([a,b][along])/(strip===2?8.5:strip===1?10.7:6)+.5;
+        const height=[1.12,.85,.36,.98][strip],depth=strip===3?5.9:strip===2?1.25:10.7;
+        const v=Math.min(1,Math.max(0,top?b/depth+.5:(y-.14)/height));
+        uv.push(u,(strip+.035+v*.93)/4);
+      }
+    }
+    geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+    material.map=paintTexture;material.color.set('#ffffff');material.roughness=.88;material.needsUpdate=true;return;
+  }
   if (!['floor','concrete','edge','path'].includes(material.name)) return;
   const position=geometry.attributes.position, normal=geometry.attributes.normal, uv=[];
   for(let i=0;i<position.count;i+=3){

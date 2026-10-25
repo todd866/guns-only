@@ -1,0 +1,8 @@
+{
+  "asset": "park-paint-atlas.png",
+  "authoring": "OpenAI built-in image generation, 25 October 2026",
+  "purpose": "Original four-band abstract paint on concrete for the neighbourhood skate plaza",
+  "inputs": "Text prompt only; no source photographs or proprietary game assets",
+  "prompt": "Flat albedo atlas of four horizontal bands of original abstract skatepark spray paint on worn grey concrete; teal/coral, ochre/navy, teal/terracotta, lilac/ochre. Scuffed gestural forms and exposed concrete. No text, names, logos, characters or alien symbols.",
+  "license": "Original generated asset, distributed under the repository MIT License"
+}

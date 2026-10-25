@@ -164,7 +164,7 @@ export function prepareResidentialPark(world, data = {}, options = {}) {
       localCylinder('metal', courtPoint(...hoopLocal), .075, 3.05, 8);
       // Backboard and rim sit at RC-readable human scale; both are solid so
       // an errant car cannot pass through the post assembly.
-      localBox('trim', courtPoint(x, hoopZ + end * .44), [1.15, .9, .08], courtYaw(0), 2.18, true);
+      localBox('trim', courtPoint(x, hoopZ + end * .44), [1.55, .9, .08], courtYaw(0), 2.9, true);
       localTorus('trim', courtPoint(x, hoopZ + end * .03), .23, .035, 3.05);
     }
   };

@@ -11,7 +11,7 @@ import common as c
 R=Path(__file__).resolve().parents[3];random.seed(71)
 bpy.ops.wm.read_factory_settings(use_empty=True)
 c.ROOT=c.marker('Neighbourhood_Skate_Plaza',(0,0,0));c.ROOT.parent=None
-c.PALETTE.update({k:(v,.65 if k=='steel' else 0,.38 if k=='steel' else .85) for k,v in {'path':'#9B9D95','floor':'#BFC1B5','concrete':'#BFC1B5','edge':'#D6D4C4','joint':'#929B94','teal':'#3EA49B','coral':'#DE876E','gold':'#E1B856','blue':'#467D99','ink':'#384C56','cream':'#EEE5C9','steel':'#738990','wood':'#A67B50'}.items()})
+c.PALETTE.update({k:(v,.65 if k=='steel' else 0,.38 if k=='steel' else .85) for k,v in {'path':'#9B9D95','floor':'#BFC1B5','concrete':'#BFC1B5','edge':'#D6D4C4','joint':'#929B94','teal':'#3EA49B','coral':'#DE876E','gold':'#E1B856','blue':'#467D99','ink':'#384C56','cream':'#EEE5C9','steel':'#738990','wood':'#A67B50','paint':'#FFFFFF'}.items()})
 def add(m,g,up=False):c.vis('plaza',m).add(g,kind='up' if up else 'closed')
 def box(m,x,y,z,w,d,h):add(m,c.box(x,y,z,w,d,h))
 def phys(name,m,g,up=False):add(m,g,up);c.col('concrete',name,c.Geo().add(g,kind='up' if up else 'closed'))
@@ -56,7 +56,7 @@ for i in range(25):
  t=i/24;x=1.6-2*t;h=.14+.85*(1-math.cos(t*math.pi/2))
  vs.extend([xf((x,-5.35,h),west),xf((x,5.35,h),west)])
 fs=[(2*i,2*i+2,2*i+3,2*i+1) for i in range(24)]
-phys('west_transition','concrete',(vs,fs),True)
+phys('west_transition','paint',(vs,fs),True)
 rail(west,(-.4,-5.35,1.01),(-.4,5.35,1.01))
 # Central funbox/hubba: flat top, approach bank, opposite bank and a raised long ledge.
 centre=(-3.691,.983)
@@ -94,14 +94,14 @@ for side in [-1,1]:
    # Split along the convex diagonal, so the two bank planes retain a true hip.
    fs.extend([(a,a+1,a+26),(a,a+26,a+25)])
  phys(f'central_hip_{side}','concrete',(vs,fs),True)
-lphys('central_hubba','concrete',centre,2.48,0,.14,.52,5.9,.98)
+lphys('central_hubba','paint',centre,2.48,0,.14,.52,5.9,.98)
 lbox('steel',centre,2.48,0,1.12,.55,6,.045)
 # Long descending tubular rail beside the central bank, matching its layout.
 rail(centre,(-1.6,-2.75,.61),(-1.6,2.75,1.22))
 for y,z in [(-2.4,.65),(0,.92),(2.4,1.18)]:rail(centre,(-1.6,y,.3),(-1.6,y,z),.033)
 # Southern manual ledge with a short rail, aligned to the concrete pad.
 south=(-.364,-8.537)
-lphys('southern_manual_pad','concrete',south,0,0,.14,8.5,1.25,.36)
+lphys('southern_manual_pad','paint',south,0,0,.14,8.5,1.25,.36)
 lbox('steel',south,0,-.61,.50,8.5,.055,.035)
 rail(south,(-1.2,0,.98),(1.2,0,.98))
 for x in [-1.0,1.0]:rail(south,(x,0,.5),(x,0,.98),.033)
@@ -120,18 +120,7 @@ def bowl_wall(axis,sign,start,end,outer):
  for j in range(steps):
   for k in range(16):
    v=j*17+k;fs.append((v,v+1,v+18,v+17))
- phys(f'bowl_{axis}_{sign}','concrete',(vs,fs),True)
- # Original flowing paint ribbons follow the transition geometry precisely.
- for band,mat in [(0,'teal'),(1,'coral'),(2,'gold')]:
-  vv=[]
-  for k in range(65):
-   along=start+(end-start)*k/64
-   mid=.38+.13*band+.07*math.sin(k*.20+band)
-   for t in [mid-.027,mid+.027]:
-    d=1.35*t;h=.15+1.12*(1-math.sqrt(max(0,1-t*t)))
-    x,y=(sign*(outer-1.35+d),along) if axis=='x' else (along,sign*(outer-1.35+d))
-    vv.append(xf((x,y,h),bowl))
-  add(mat,(vv,[(2*k,2*k+2,2*k+3,2*k+1) for k in range(64)]),True)
+ phys(f'bowl_{axis}_{sign}','paint',(vs,fs),True)
  if axis=='x':p,q=(sign*outer,start,1.29),(sign*outer,end,1.29)
  else:p,q=(start,sign*outer,1.29),(end,sign*outer,1.29)
  rail(bowl,p,q,.045)
@@ -152,18 +141,19 @@ for sy in [-1,1]:
  for j in range(16):
   for i in range(16):
    v=j*17+i;fs.append((v,v+1,v+18,v+17))
- phys(f'bowl_corner_{sy}','concrete',(vs,fs),True)
+ phys(f'bowl_corner_{sy}','paint',(vs,fs),True)
  for i in range(16):
   aa=math.pi/2*i/16;bb=math.pi/2*(i+1)/16
   rail(bowl,(2.55+1.35*math.cos(aa),sy*(1.75+1.35*math.sin(aa)),1.29),(2.55+1.35*math.cos(bb),sy*(1.75+1.35*math.sin(bb)),1.29),.045)
-# Original abstract paint/graffiti marks: layered bands and shapes, no copied lettering.
-for i in range(23):
- y=-2.7+i*.24;h=.2+random.random()*.6
- lbox(['teal','coral','blue','gold'][i%4],centre,2.755,y,.17,.008,.16,h)
-for i in range(16):
- x=-3.9+i*.5;lbox(['teal','cream','coral','gold'][i%4],south,x,-.632,.2,.31,.006,.22)
-for i in range(20):
- y=-5+i*.51;lbox(['teal','coral','cream'][i%3],west,-1.51,y,.2,.009,.33,.65)
+# Three small ground-painted chevrons invite the diagonal bank transfer. They
+# occupy the flat approach; the player is free to pass either side.
+heading=(-math.cos(1),-math.sin(1));ridge=(-3.05,1.5)
+for back in [3.0,2.4,1.8]:
+ x=ridge[0]-heading[0]*back;y=ridge[1]-heading[1]*back
+ right=(-heading[1],heading[0]);pts=[]
+ for along,side in [(.18,0),(-.10,-.14),(-.04,0),(-.10,.14)]:
+  pts.append(xf((x+heading[0]*along+right[0]*side,y+heading[1]*along+right[1]*side,.146),centre))
+ add('teal',(pts,[(0,1,2),(0,2,3)]),True)
 # Continuous paved bench shoulder connected flush to the main concrete.
 phys('bench_shoulder','path',slab([(12.206,19.238),(15.0,20.0),(19.0,7.7),(15.903,8.239)],-.12,.14))
 # Traversable .14m pad edge: a half-metre smooth rolled apron around the union
@@ -216,13 +206,13 @@ for o in objs:
  if o.data.materials[0].name=='floor':o.name='VIS_decal_floor'
 # Subdivide broad concrete surfaces for coherent vertex AO and small mineral colour variation.
 for o in objs:
- if o.data.materials[0].name in ['concrete','floor']:
+ if o.data.materials[0].name in ['concrete','floor','paint']:
   bm=bmesh.new();bm.from_mesh(o.data);bmesh.ops.triangulate(bm,faces=list(bm.faces))
   edges=[e for e in bm.edges if e.calc_length()>2]
   bmesh.ops.subdivide_edges(bm,edges=edges,cuts=5,use_grid_fill=True);bm.to_mesh(o.data);bm.free()
 ao=c.bake_ao(objs,distance=1.4,samples=20,floor=.48)
 for o in objs:
- if o.data.materials and o.data.materials[0].name in ['concrete','floor']:
+ if o.data.materials and o.data.materials[0].name in ['concrete','floor','paint']:
   attr=o.data.color_attributes['AO']
   for loop in o.data.loops:
    v=o.data.vertices[loop.vertex_index].co;grain=.96+.04*(math.sin(v.x*17.13+v.y*41.71)*43758.5453%1)
@@ -231,7 +221,7 @@ bpy.context.preferences.filepaths.save_version=0
 blend=R/'assets/rc/heroes/skatepark.blend';blend.parent.mkdir(parents=True,exist_ok=True)
 bpy.ops.wm.save_as_mainfile(filepath=str(blend),compress=True)
 stats=c.counts();c.join_visuals_by_material();out=R/'web/wwwroot/rc/assets/districts/skatepark.glb';c.export_glb(out)
-info={'generator':'tools/rc/blender/skatepark.py','license':'MIT original procedural geometry','external_assets':[],'frame':'park-centred local metres; north=-Z','footprint':[[-18.803,-20.0],[19.0,15.053]],'roam_start':[6,.15,8.7],'roam_yaw':-.14889,'hip':{'height_m':.66,'run_m':1.9,'angle_degrees':90,'toe_fraction':.18},'rolled_apron':{'rise_m':.14,'run_m':.5,'profile':'smoothstep'},'lap_length_m':route.length,'vertex_ao':ao,**stats}
+info={'generator':'tools/rc/blender/skatepark.py','license':'MIT original procedural geometry','external_assets':['../materials/park-paint-atlas.png (original generated paint; runtime texture)'],'frame':'park-centred local metres; north=-Z','footprint':[[-18.803,-20.0],[19.0,15.053]],'roam_start':[6,.15,8.7],'roam_yaw':-.14889,'hip':{'height_m':.66,'run_m':1.9,'angle_degrees':90,'toe_fraction':.18},'rolled_apron':{'rise_m':.14,'run_m':.5,'profile':'smoothstep'},'lap_length_m':route.length,'vertex_ao':ao,**stats}
 out.with_suffix('.provenance.json').write_text(json.dumps(info,indent=2)+'\n')
 print('SKATEPARK',json.dumps(info))
-c.render_glb(out,R/'evidence/rc-open-world/skatepark',[('overview',(38,-49,42),(0,1,0),42),('toy-eye',(6,-12.7,1.8),(1,1,.6),24),('bowl',(1,3,6),(8,13,.5),32)])
+if '--render' in sys.argv:c.render_glb(out,R/'evidence/rc-open-world/skatepark',[('overview',(38,-49,42),(0,1,0),42),('toy-eye',(6,-12.7,1.8),(1,1,.6),24),('bowl',(1,3,6),(8,13,.5),32)])
