@@ -1,9 +1,9 @@
-// Kid mode. Assists are honest pilots: they shape the inputs and add bounded torques the way a
-// steady hand on the transmitter would. They never change the car's physics. Big Kid turns
-// them down to gentler stabilization, with the same predictable speed-sensitive steering.
+// Play-first transmitter assists: predictable steering, optional drift, wheels-down
+// landings and an authored quarter-pipe return. Big Kid reduces steering stabilization.
 import { dot, cross, scale, sub, add, rotate } from './math.mjs';
 import { carUp, carForward } from './car.mjs';
 import { createDrift, stepDrift } from './drift.mjs';
+import { stepQuarterReturn } from './quarter-return.mjs';
 import { SURFACES } from './world.mjs';
 
 export const MODES = {
@@ -16,17 +16,18 @@ export const MODES = {
 export function createAssist(mode = 'kid') { return { mode, flipTime: 0, righting: 0, airTime: 0, drift: createDrift() }; }
 
 // Turns the raw transmitter input into the input stepCar receives.
-export function assistInput(a, car, raw, dt) {
+export function assistInput(a, car, raw, dt, world) {
   const m = MODES[a.mode], p = car.params, out = { ...raw };
   if(a.placement !== (car.placement ?? 0)) {
     a.placement = car.placement ?? 0;
-    a.drift = createDrift(); a.drift.held = !!raw.drift;
+    a.drift = createDrift(); a.drift.held = !!raw.drift; a.quarter = {};
   }
   const speed = Math.abs(car.forwardSpeed);
   out.steerLimit = p.maxSteer / (1 + m.steerFalloff * speed);
   const up = carUp(car), I = 1 / car.invInertia[0];
   let torque = [0, 0, 0];
   const drift = stepDrift(a.drift, car, raw, dt, up[1]);
+  const quarter = stepQuarterReturn(a.quarter ??= {}, car, raw, dt, world);
 
   // Yaw hold: damp yaw rate toward what the front wheels ask for, so the rear does not swap
   // ends on a six-year-old. Wheelbase from the wheel layout.
@@ -47,7 +48,9 @@ export function assistInput(a, car, raw, dt) {
   // right axis. Held accelerator alone keeps the normal upright assist. This is
   // torque only (no velocity or position injection), so a transfer can shape a landing
   // without becoming a hidden boost or a mandatory trick system.
-  if (m.airLevel && car.contacts === 0) {
+  if (quarter) {
+    torque = add(torque, quarter); a.airTime = 0;
+  } else if (m.airLevel && car.contacts === 0) {
     // Road seams and kerb tops can briefly report zero contacts. Keep normal
     // levelling immediate, but wait for a sustained airborne state before
     // optional hip steering can influence the attitude.

@@ -1,3 +1,5 @@
+import {fetchAssetBuffer} from './asset-buffer.mjs';
+import {bindRCTouchControls} from './touch-controls.mjs';
 import {DRIVE_KEYS,drivingInput} from './driving-input.mjs';
 import {drawDetailedMinimap} from './open-world/minimap.js';
 import {createCup,loadCup,saveCup,recordCupRace,nextCupEvent,cupStandings} from './grand-prix.mjs';
@@ -49,7 +51,7 @@ try{openWorld=await loadOpenWorld(location.search);}catch(error){
  brief.append(title,retry);console.error('Saucer Springs could not load',error);
  throw error;
 }
-async function loadDistrict(name){const res=await fetch(`./assets/districts/${name}.glb`);if(!res.ok)throw Error(`district ${name}: HTTP ${res.status}`);const buffer=await res.arrayBuffer();return {course:courseFromGlb(buffer),gltf:await new GLTFLoader().parseAsync(buffer,'./assets/districts/')};}
+async function loadDistrict(name){const buffer=await fetchAssetBuffer(`./assets/districts/${name}.glb`);return {course:courseFromGlb(buffer),gltf:await new GLTFLoader().parseAsync(buffer,'./assets/districts/')};}
 if(track&&track!=='hub'){for(let attempt=0;attempt<2&&!district;attempt++){try{district=await loadDistrict(track);}catch(error){districtError=error;console.error('Saucer Springs district load failed',error);}}if(!district)track=null;}
 const course=openWorld?.course??district?.course??baseCourse(),cps=course.checkpoints;
 // Asset collision proxies join the triangle world the car drives on.
@@ -180,9 +182,10 @@ const format=t=>`${Math.floor(t/60)}:${(t%60).toFixed(2).padStart(5,'0')}`;
 let started=false;
 for(const event of ['pointerdown','keydown'])window.addEventListener(event,()=>audio.start(),{once:true});
 // Escape opens the menu (once racing has started): resume, change track, race or free drive, kid, mute.
-function pause(value){paused=value;if(!value)audio.start();keys.clear();fireQueued=false;$('pause').textContent=paused?'▶':'⏸';
+function pause(value){paused=value;document.body.classList.toggle('paused',value);if(!value)audio.start();keys.clear();touchControls?.reset();fireQueued=false;$('pause').textContent=paused?'▶':'⏸';
  if(started&&!$('result').hidden)return;if(started){$('brief').hidden=!paused;if(!paused)$('options').open=false;$('brief-title').textContent=paused?'PAUSED':'SAUCER SPRINGS AFB';$('resume').hidden=!paused;$('start').hidden=race.roam;$('start').textContent='Return to base';if(paused)$('resume').focus();else canvas.focus();}}
 let lastThrottle=0;
+let touchControls=null,touchState={steer:0,throttle:0,brake:false};
 // Drive = free drive on this track. On the very first press it starts whatever the URL chose (?mode=race|furball).
 $('start').onclick=()=>{telemetry.firstInput('button');audio.start();$('brief').hidden=true;$('result').hidden=true;const first=!started;started=true;if(first){pause(false);if(!race.roam)startCountdown();$('start').textContent='▶ Drive';}else{freeDrive();pause(false);}canvas.focus();};
 $('resume').onclick=()=>{pause(false);canvas.focus();};
@@ -207,8 +210,9 @@ window.addEventListener('keydown',e=>{
  if(DRIVE_KEYS.includes(e.code)){if(paused)return;e.preventDefault();telemetry.firstInput('keyboard');keys.add(e.code);}
  if(e.repeat)return;if(e.code==='KeyR'&&!paused)recover(s);if((e.code==='KeyF'||(e.code==='Enter'&&e.target===canvas))&&!paused)fireQueued=true;if(e.code==='KeyB')setMode(mode==='kid'?'bigKid':'kid');if(e.code==='KeyM')setMuted(!muted);if(e.code==='KeyO')exit();
 });window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>pause(true));document.addEventListener('visibilitychange',()=>{if(document.hidden){pause(true);telemetry.flush({force:true});}});
-$('touch-fire')?.addEventListener('pointerdown',e=>{e.preventDefault();telemetry.firstInput('touch');fireQueued=true;});
-for(const button of document.querySelectorAll('[data-key]')){button.onpointerdown=e=>{e.preventDefault();telemetry.firstInput('touch');button.setPointerCapture(e.pointerId);keys.add(button.dataset.key);};for(const event of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(event,()=>keys.delete(button.dataset.key));}
+touchControls=bindRCTouchControls({enabled:()=>started&&!paused&&!document.body.classList.contains('modal-open'),onChange:value=>{touchState=value;},onFire:()=>{telemetry.firstInput('touch');fireQueued=true;}});
+$('touch').addEventListener('pointerdown',()=>{if(started&&!paused)telemetry.firstInput('touch');},{capture:true});
+window.addEventListener('pagehide',()=>touchControls.destroy());
 window.addEventListener('storage',e=>{if(e.key==='guns-only.telemetry-sharing.v1')telemetry.flush({force:true});});
 window.addEventListener('pagehide',()=>{telemetry.raceQuit('pagehide');telemetry.endSession();telemetry.flush({force:true});});
 function resize(){renderer.setSize(innerWidth,innerHeight,false);polish?.resize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}window.addEventListener('resize',resize);resize();camera.position.set(course.start.pos[0],course.start.pos[1]+2,course.start.pos[2]+8);
@@ -367,7 +371,7 @@ window.addEventListener('pagehide',()=>{openWorld?.dispose();worldSky?.dispose()
 const worldSky=openWorld?createWorldSky({scene,sun,hemi,contactSun,renderer}):null;let worldElapsed=0;
 const pollGamepad=createGamepadInput();const frameMs=[];function frame(now){const pad=pollGamepad(navigator.getGamepads?.());if(pad.start){if(!started)$('start').click();else if(!ui.panel())pause(!paused);}if(!paused&&!ui.panel()&&pad.fire)fireQueued=true;if(!started&&!$('start').disabled){started=true;paused=false;$('brief').hidden=true;$('pause').textContent='⏸';if(!race.roam)startCountdown();}const dt=frameSeconds(now,last);telemetry.observeFrame(Math.max(0,now-last),!paused&&countdown<=0&&!document.hidden);frameMs.push(Math.max(0,now-last));if(frameMs.length>600)frameMs.shift();last=now;
  if(!paused&&!ui.panel()&&countdown>0){countdown-=dt;const n=Math.ceil(countdown);if(n<lastBeep){lastBeep=n;n>0?audio.beep():audio.beep(true);}$('countdown').hidden=countdown<=-.6;$('countdown').textContent=countdown>0?String(n):'GO!';if(countdown<=0&&countdown>-.6){}acc=0;}
- if(!paused&&!ui.panel()&&countdown<=0&&(!openWorld||openWorld.stream.ready(s.car.pos))){$('countdown').hidden=countdown<=-.6;if(countdown>-.6)countdown-=dt;acc+=dt;while(acc>=1/120){const drive=drivingInput(keys,pad),throttleIn=drive.throttle;if(fireQueued&&race.pickups.held.get(s.car)){const it=race.pickups.held.get(s.car);telemetry.itemUse(it);it==='zoom'?audio.boost():audio.fire();}stepRace(race,{...drive,fire:fireQueued},1/120);if(openWorld)for(const session of [s,...race.rivals.map(r=>r.session)])openWorld.step(session.car,1/120);if(openWorld&&race.roam){const activity=openWorld.stepActivity(1/120,s.car);if(activity?.tee)placeCar(s.car,[activity.tee.pos[0],rideHeight(s.car.params)+.02,activity.tee.pos[2]],activity.tee.yaw);if(activity?.sunk){audio.coin();callout('IN THE CUP');}if(activity?.finished){audio.finish();callout(activity.score!=null?`${activity.strike?'STRIKE!':'BOWLING'} · ${activity.score}/10`:`CAR GOLF · ${activity.total} HITS · BEST ${openWorld.progress.golfBest}`);}}fireQueued=false;acc-=1/120;lastThrottle=throttleIn||pad.throttle;soundEvents(readout(s),s.car);}}
+ if(!paused&&!ui.panel()&&countdown<=0&&(!openWorld||openWorld.stream.ready(s.car.pos))){$('countdown').hidden=countdown<=-.6;if(countdown>-.6)countdown-=dt;acc+=dt;while(acc>=1/120){const drive=drivingInput(keys,{...pad,steer:touchState.steer||pad.steer,throttle:touchState.throttle||pad.throttle,brake:touchState.brake||pad.brake}),throttleIn=drive.throttle;if(fireQueued&&race.pickups.held.get(s.car)){const it=race.pickups.held.get(s.car);telemetry.itemUse(it);it==='zoom'?audio.boost():audio.fire();}stepRace(race,{...drive,fire:fireQueued},1/120);if(openWorld)for(const session of [s,...race.rivals.map(r=>r.session)])openWorld.step(session.car,1/120);if(openWorld&&race.roam){const activity=openWorld.stepActivity(1/120,s.car);if(activity?.tee)placeCar(s.car,[activity.tee.pos[0],rideHeight(s.car.params)+.02,activity.tee.pos[2]],activity.tee.yaw);if(activity?.sunk){audio.coin();callout('IN THE CUP');}if(activity?.finished){audio.finish();callout(activity.score!=null?`${activity.strike?'STRIKE!':'BOWLING'} · ${activity.score}/10`:`CAR GOLF · ${activity.total} HITS · BEST ${openWorld.progress.golfBest}`);}}fireQueued=false;acc-=1/120;lastThrottle=throttleIn||pad.throttle;soundEvents(readout(s),s.car);}}
  document.body.classList.toggle('race-mode',!race.roam&&started&&!paused);document.body.classList.toggle('driving',started&&!paused);
  const r=readout(s),c=s.car,p=BUGGY;
  if(marshalSession!==s){marshalSession=s;marshalRecovery=s.recoveries;marshalLap=s.lap;marshalUntil=marshalLapUntil=0;}

@@ -102,7 +102,7 @@ function substep(car, input, world, dt) {
   car.wheels.forEach((ws, i) => {
     const wp = p.wheels[i], attach = add(car.pos, rotate(car.q, wp.at)), reach = p.restLength + p.wheelRadius;
     const hit = world.raycast(attach, scale(up, -1), reach);
-    if (!hit) { ws.contact = false; ws.compression = 0; ws.surface = null; ws.slip = 0; ws.contactPoint = null; return; }
+    if (!hit) { ws.contact = false; ws.compression = 0; ws.surface = null; ws.slip = 0; ws.contactPoint = null; ws.contactNormal = null; return; }
     contacts++;
     const compression = reach - hit.dist, vAttach = pointVelocity(car, attach);
     const rate = -dot(vAttach, up);
@@ -110,7 +110,7 @@ function substep(car, input, world, dt) {
     const bump = compression > p.bumpAt, bounce = surf.bounce ?? 1;
     // A bouncy surface (trampoline) is a stiffer, nearly undamped spring under the wheel.
     const springF = Math.max(0, p.spring * bounce * compression + (bump ? p.bumpSpring * (compression - p.bumpAt) + (surf.bumpDamper ?? 1) * p.bumpDamper * Math.max(0, rate) / bounce : 0) + (surf.damper ?? 1) * p.damper * rate / (bounce * bounce));
-    ws.contact = true; ws.compression = compression; ws.surface = hit.surface; ws.contactPoint = hit.point;
+    ws.contact = true; ws.compression = compression; ws.surface = hit.surface; ws.contactPoint = hit.point; ws.contactNormal = hit.normal;
     addForce(scale(up, springF), attach);
 
     // Tyre: forces in the contact plane, applied part-way up toward the CoM (roll centre).
@@ -172,7 +172,8 @@ function solveHull(car, world) {
     const vn = dot(pointVelocity(car, ct.point), ct.normal);
     ct.bias = vn < -0.5 ? -p.restitution * vn : 0; ct.jn = 0; ct.jt = [0, 0, 0];
     car.impact = Math.max(car.impact, -vn);
-    if (Math.abs(ct.normal[1]) < 0.5) car.wallImpact = Math.max(car.wallImpact, -vn);
+    // Riding an upward-facing quarter transition is intentional, even near vertical.
+    if (Math.abs(ct.normal[1]) < 0.5 && !(ct.surface === 'quarter' && ct.normal[1] > .05)) car.wallImpact = Math.max(car.wallImpact, -vn);
   }
   for (let it = 0; it < 6; it++) for (const ct of contacts) {
     const vRel = pointVelocity(car, ct.point), vn = dot(vRel, ct.normal);
