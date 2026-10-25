@@ -2,28 +2,78 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { courseFromGlb, parseGlb, walkNodes } from './physics/district.mjs';
-import { createSession, stepSession, readout } from './physics/session.mjs';
+import { createSession, stepSession } from './physics/session.mjs';
 import { carUp, placeCar, rideHeight } from './physics/car.mjs';
 
-import {PARK_HIP_LINE,bankLocal} from './open-world/park-lines.mjs';
+import {PARK_HIP_LINE,bankLocal,bankPoint} from './open-world/park-lines.mjs';
 import {loadOpenWorld} from './open-world/runtime.js';
 import {RESIDENTIAL_PARK,parkPoint} from './open-world/residential-frame.mjs';
 
 const bytes = fs.readFileSync(new URL('./assets/districts/skatepark.glb', import.meta.url));
 const course = courseFromGlb(bytes);
 
-test('skatepark GLB includes the two convex hip faces beside the central banks', () => {
+test('skatepark GLB includes the east bowl-to-quarter hip and separate modules', () => {
   const names = [];
   walkNodes(parseGlb(bytes), n => { if (n.name) names.push(n.name); });
-  assert.ok(names.includes('COL_concrete_central_hip_1'));
-  assert.ok(names.includes('COL_concrete_central_hip_-1'));
-  // The glTF frame places the west hip around x=-7, z=-3; its face is rideable,
-  // not a vertical wall, and rises toward the central deck.
-  const low = course.world.raycast([-7, 3, -3.5], [0, -1, 0], 4);
-  const face = course.world.raycast([-7, 3, -3], [0, -1, 0], 4);
-  assert.ok(low && face, 'hip has continuous collision coverage');
-  assert.ok(face.normal[1] > 0.75 && face.normal[1] < .99, `hip normal ${face.normal}`);
+  assert.ok(names.includes('COL_concrete_bowl_quarter_hip'));
+  assert.ok(names.includes('COL_concrete_west_quarter'));
+  assert.ok(names.includes('COL_concrete_central_high_table'));
+  // The east hip is a sloping convex junction, not a vertical wall. Its
+  // lower toe and upper ridge both have collision coverage in the exported GLB.
+  const lowOrigin = bankPoint(6.35, 6.85); lowOrigin[1] = 3;
+  const faceOrigin = bankPoint(7.1, 7.6); faceOrigin[1] = 3;
+  const low = course.world.raycast(lowOrigin, [0, -1, 0], 4);
+  const face = course.world.raycast(faceOrigin, [0, -1, 0], 4);
+  assert.ok(low && face, 'east hip has continuous collision coverage');
+  assert.ok(face.normal[1] > 0.55 && face.normal[1] < .99, `hip normal ${face.normal}`);
   assert.ok(face.point[1] > low.point[1] + .02, 'hip rises from its toe');
+});
+
+test('park modules share the floor without sealing the bowl hollow', () => {
+  const ground = (u,v,height=3) => { const p=bankPoint(u,v); p[1]=height; return course.world.raycast(p,[0,-1,0],4); };
+  // These are the ordinary driving lanes between the photographed west,
+  // central and east modules. They must remain continuous ground, not hidden
+  // collision walls or gaps at the authored seams.
+  for (const [u,v] of [[-11.8,0],[-8.4,6.2],[3.4,4.2],[5.8,9.9]]) {
+    const hit=ground(u,v);
+    assert.ok(hit && hit.normal[1]>.85,`flat bypass at ${u},${v}`);
+  }
+  for(const u of [9,10.8,12.6])for(const v of [9,10,11.5]){
+    const hollow=ground(u,v);
+    assert.ok(hollow&&Math.abs(hollow.point[1]-.14)<.015,`bowl hollow remains low at ${u},${v}`);
+  }
+  const deck=ground(16,10.2);
+  assert.ok(deck,'adjoining upper deck has collision');
+  assert.ok(deck.point[1]>.8,`upper deck rises above hollow (${deck.point[1]})`);
+  for(const u of [6.4,7,7.6,8]){
+    const a=ground(u,6.7-.001),b=ground(u,6.7+.001);
+    assert.ok(a&&b&&Math.abs(a.point[1]-b.point[1])<.015,'quarter/hip join has no ledge or hole');
+  }
+  for(const v of [6.9,7.5,8.1,8.5]){
+    const a=ground(8.2-.001,v),b=ground(8.2+.001,v);
+    assert.ok(a&&b&&Math.abs(a.point[1]-b.point[1])<.015,'hip/bowl join has no ledge or hole');
+  }
+  for(const v of [7.2,8.2,12.3,13.3]){
+    const a=ground(13.4-.001,v),b=ground(13.4+.001,v);
+    assert.ok(a&&b&&Math.abs(a.point[1]-b.point[1])<.015,'rounded bowl corner joins the wall');
+  }
+});
+
+test('starter route stays on the low bypass lanes', () => {
+  // Read the exported route used by the game, including every segment between
+  // its samples. The car envelope is checked on both sides of the centreline.
+  for(let i=0;i<course.ai.length;i++){
+    const a=course.ai[i].pos,b=course.ai[(i+1)%course.ai.length].pos;
+    const dx=b[0]-a[0],dz=b[2]-a[2],length=Math.hypot(dx,dz);
+    for(let d=0;d<=length;d+=.2)for(const side of [-.3,0,.3]){
+      const p=[a[0]+dx*d/length-dz/length*side,2,a[2]+dz*d/length+dx/length*side];
+      const hit=course.world.raycast(p,[0,-1,0],3);
+      assert.ok(hit&&hit.normal[1]>.8,`exported route has supported ground at ${p}`);
+      assert.ok(hit.point[1]<.35,`exported route avoids a forced ramp: ${hit.point[1]}`);
+      const wall=course.world.raycast([p[0],hit.point[1]+.12,p[2]],[dx/length,0,dz/length],.2);
+      assert.ok(!wall||wall.normal[1]>.8,'ordinary route does not cross a collision skirt');
+    }
+  }
 });
 
 test('the optional hip line also has a clear landing in the complete open world',async()=>{
@@ -35,15 +85,19 @@ test('the optional hip line also has a clear landing in the complete open world'
     placeCar(session.car,parkPoint([PARK_HIP_LINE.entry[0],.14+rideHeight(),PARK_HIP_LINE.entry[2]]),PARK_HIP_LINE.yaw-RESIDENTIAL_PARK.yaw);
     const {anchor,yaw}=RESIDENTIAL_PARK,c=Math.cos(yaw),s=Math.sin(yaw);
     const local=p=>[(p[0]-anchor[0])*c-(p[2]-anchor[2])*s,p[1],(p[0]-anchor[0])*s+(p[2]-anchor[2])*c];
-    let flight=0,longest=0,landing=false;
+    let flight=0,longest=0,landing=false,landingUp=0,landingSpeed=0;
     for(let frame=0;frame<360;frame++){
       stepSession(session,{throttle:.65,steer:0},1/120);
-      if(!session.car.grounded)flight++;else{longest=Math.max(longest,flight);if(flight>24)landing=true;flight=0;}
+      if(!session.car.grounded)flight++;else{longest=Math.max(longest,flight);if(flight>24){landing=true;landingUp=carUp(session.car)[1];landingSpeed=session.car.speed;break;}flight=0;}
     }
     const position=bankLocal(local(session.car.pos));
     assert.ok(longest>24&&landing,'ordinary throttle crosses the hip in the complete world');
-    assert.ok(position[1]<-2,'the adjoining bank has a clear runout');
-    assert.ok(carUp(session.car)[1]>.9&&session.car.speed>2);
+    assert.ok(position[0]>8.2&&position[1]>8.2,'the adjoining bowl/quarter has a clear runout');
+    assert.ok(landingUp>.9&&landingSpeed>2,'complete world hip lands upright with momentum');
+    for(let frame=0;frame<60;frame++){
+      stepSession(session,{throttle:0,steer:0,brake:true},1/120);
+      assert.ok(carUp(session.car)[1]>.9,'complete-world landing remains upright under braking');
+    }
     assert.equal(session.recoveries,0);assert.equal(session.hits,0);
   }finally{world?.dispose();globalThis.fetch=oldFetch;}
 });
@@ -57,25 +111,40 @@ for(const throttle of [.45,.65,1])test(`ordinary throttle ${throttle} transfers 
     stepSession(session,{throttle,steer:0},1/120);
     const car=session.car,p=car.pos,local=bankLocal(p);
     if(previous&&!car.grounded&&!transfer){
-      const onHip=local[0]<-2.75&&local[0]>-4.65&&local[1]>1.2&&local[1]<3.1;
+      const onHip=local[0]>6.2&&local[0]<8.25&&local[1]>6.65&&local[1]<8.75;
       if(onHip)flight={frame,from:[...p],local,speed:car.speed};
     }
     if(flight&&!car.grounded){
       const ground=course.world.raycast([p[0],p[1]+.1,p[2]],[0,-1,0],4);
       if(ground)peakClearance=Math.max(peakClearance,p[1]-ground.point[1]-rideHeight());
     }
-    if(flight&&car.grounded&&car.contacts>=2){transfer={...flight,to:[...p],landing:local,air:(frame-flight.frame)/120,speedAfter:car.speed};flight=null;}
+    if(flight&&car.grounded&&car.contacts>=2){transfer={...flight,to:[...p],landing:local,air:(frame-flight.frame)/120,speedAfter:car.speed,upright:carUp(car)[1]};flight=null;break;}
     previous=car.grounded;
   }
   assert.ok(transfer,'the full exported collider produces a transfer');
   const distance=Math.hypot(transfer.to[0]-transfer.from[0],transfer.to[2]-transfer.from[2]);
-  assert.ok(distance>1.1&&distance<4,'a transfer spans several car lengths, not a seam bounce');
+  t.diagnostic(JSON.stringify({throttle,distance,from:transfer.from,to:transfer.to,air:transfer.air,landing:transfer.landing}));
+  assert.ok(distance>1.1&&distance<6,'a transfer spans several car lengths, not a seam bounce');
   assert.ok(transfer.air>.2&&transfer.air<.8,'continuous airborne interval is a visible, controlled hop');
   assert.ok(peakClearance>.16,'the car clears the bank');
-  assert.ok(transfer.local[1]>1.2&&transfer.landing[1]<1.2,'crosses from the diagonal hip onto its western side');
-  if(throttle<1)assert.ok(transfer.landing[0]>-4.65&&transfer.landing[0]<-2.75,'moderate throttle lands on the adjoining west bank');
-  assert.ok(transfer.speedAfter>transfer.speed*.8,'landing preserves momentum');
-  assert.ok(carUp(session.car)[1]>.9&&session.car.speed>2,'upright and driving along the runout');
+  assert.ok(transfer.local[0]>6.2&&transfer.local[1]>6.65,'launches from the east hip');
+  if(throttle<1)assert.ok(transfer.landing[0]>8.2&&transfer.landing[1]>8.2,'moderate throttle lands beyond the east hip');
+  assert.ok(transfer.speedAfter>transfer.speed*.8&&transfer.speedAfter>2,'landing preserves momentum');
+  assert.ok(transfer.upright>.9,`stable landing up=${transfer.upright}`);
+  const hitsAtLanding=session.hits,recoveriesAtLanding=session.recoveries;
+  let stableFrames=0,longestStable=0;
+  for(let frame=0;frame<120;frame++){
+    stepSession(session,{throttle:0,steer:0,brake:true},1/120);
+    const up=carUp(session.car),p=session.car.pos;
+    const support=course.world.raycast([p[0],p[1]+.3,p[2]],[0,-1,0],2);
+    const aligned=support?up.reduce((sum,x,i)=>sum+x*support.normal[i],0):up[1];
+    assert.ok(up[1]>.75&&aligned>.85,'landing follows the bowl surface while braking');
+    stableFrames=session.car.grounded&&session.car.contacts>=2?stableFrames+1:0;
+    longestStable=Math.max(longestStable,stableFrames);
+  }
+  assert.ok(longestStable>=60,`landing settles into a continuous half-second of support (${longestStable}/60 frames)`);
+  assert.equal(session.hits,hitsAtLanding,'braked runout has no hull impact');
+  assert.equal(session.recoveries,recoveriesAtLanding,'braked runout needs no recovery');
   assert.equal(session.recoveries,0);assert.equal(session.hits,0,'clear runout without hull strikes');
-  t.diagnostic(JSON.stringify({throttle,distance,air:transfer.air,peakClearance}));
+  t.diagnostic(JSON.stringify({throttle,distance,air:transfer.air,peakClearance,upright:transfer.upright}));
 });
