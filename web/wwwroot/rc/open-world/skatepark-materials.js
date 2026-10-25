@@ -1,11 +1,13 @@
 import * as T from '../../vendor/three.module.js';
 
-// Original, metre-scaled cast concrete. The glTF has baked occlusion but no UVs;
-// project each triangle onto its dominant plane rather than stretching a tile
-// across the entire park. A tile spans 3 m, so aggregate stays RC-sized.
+// Keep the painted features’ authored UVs. Unpainted cast concrete uses a
+// three-metre tile projected onto each face, keeping its aggregate RC-sized.
 export function finishSkateparkSurface(geometry, material, paintTexture = null) {
   if(material.name==='paint'){
     if(!paintTexture)throw new Error('Skatepark paint texture was not prepared');
+    if(geometry.attributes.uv){
+      material.map=paintTexture;material.color.set('#ffffff');material.roughness=.88;material.needsUpdate=true;return;
+    }
     const p=geometry.attributes.position,uv=[],c=Math.cos(.274),s=Math.sin(.274);
     for(let i=0;i<p.count;i+=3){
       const x=p.getX(i),z=p.getZ(i),strip=z<-6?0:x<-10?1:z>5?2:3;

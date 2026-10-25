@@ -26,7 +26,7 @@ export async function prepareDistricts(world){
  const roots=[];
  return {courses:new Map(entries.map(e=>[e.id,e.course])),async attach(scene){
   paintTexture=await new T.TextureLoader().loadAsync(new URL('../assets/materials/park-paint-atlas.png',import.meta.url).href);
-  paintTexture.colorSpace=T.SRGBColorSpace;paintTexture.wrapS=T.RepeatWrapping;paintTexture.anisotropy=8;
+  paintTexture.colorSpace=T.SRGBColorSpace;paintTexture.flipY=false;paintTexture.wrapS=T.RepeatWrapping;paintTexture.anisotropy=8;
   for(const {id,zone,clip,placement,buffer}of entries){const gltf=await new GLTFLoader().parseAsync(buffer,'./assets/districts/'),root=new T.Group();root.name=`District_${id}`;root.position.set(...placement.anchor);root.rotation.y=placement.yaw??0;gltf.scene.updateMatrixWorld(true);
    gltf.scene.traverse(o=>{if(!o.isMesh||!o.name.startsWith('VIS_'))return;const source=o.geometry.clone().applyMatrix4(o.matrixWorld),g=source.index?source.toNonIndexed():source,attributes=['position','normal','uv','color'].filter(name=>g.attributes[name]).map(name=>[name,g.attributes[name]]),data=Object.fromEntries(attributes.map(([name])=>[name,[]]));
     for(let i=0;i<g.attributes.position.count;i+=3){const vertices=[0,1,2].map(k=>attributes.flatMap(([,a])=>Array.from({length:a.itemSize},(_,j)=>a[['getX','getY','getZ','getW'][j]](i+k))));for(const tri of clip(vertices))for(const v of tri){let at=0;for(const [name,a]of attributes){data[name].push(...v.slice(at,at+a.itemSize));at+=a.itemSize;}}}

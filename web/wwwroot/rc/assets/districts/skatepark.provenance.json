@@ -22,17 +22,31 @@
   ],
   "roam_yaw": -0.14889,
   "hip": {
-    "height_m": 0.66,
-    "run_m": 1.9,
+    "height_m": 1.4,
+    "run_m": 2.0,
     "angle_degrees": 90,
-    "toe_fraction": 0.18
+    "kind": "bowl-to-quarter convex junction",
+    "dimensions": "inferred, not surveyed"
   },
+  "modules": [
+    "western bank-quarter-bank and steps",
+    "asymmetric two-height central table and divider",
+    "offset manual pads and separate flat rail",
+    "connected east quarter, hip and open bowl"
+  ],
+  "geometry_confidence": {
+    "plan": "approximate image digitization",
+    "elevations_and_radii": "inferred, not surveyed",
+    "apron_and_race_line": "authored for forgiving RC play"
+  },
+  "paint_uv": "feature-authored before batching",
   "rolled_apron": {
     "rise_m": 0.14,
-    "run_m": 0.5,
-    "profile": "smoothstep"
+    "run_m": 0.9,
+    "profile": "smoothstep",
+    "purpose": "forgiving gameplay edge outside digitized slab"
   },
-  "lap_length_m": 47.6733972292086,
+  "lap_length_m": 45.5163160569498,
   "vertex_ao": {
     "raw_min": 0.0,
     "raw_max": 1.0,
@@ -40,8 +54,8 @@
     "distance_m": 1.4,
     "samples": 20
   },
-  "visual_triangles": 14179,
-  "collision_triangles": 6172,
-  "collision_meshes": 18,
-  "materials": 9
+  "visual_triangles": 26047,
+  "collision_triangles": 16122,
+  "collision_meshes": 30,
+  "materials": 6
 }
