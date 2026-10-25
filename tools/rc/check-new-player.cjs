@@ -14,6 +14,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   await page.goto(base+'/rc/?audioQa=silent&telemetry=off');
   const ready=()=>page.waitForFunction(()=>window.__gunsOnlyRC?.snapshot().assets==='blender'&&!window.__gunsOnlyRC.snapshot().paused,null,{timeout:90000});
   await ready();report.arrival=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());
+  report.gpu=await page.evaluate(()=>{const gl=document.querySelector('#view').getContext('webgl2'),e=gl.getExtension('WEBGL_debug_renderer_info');return gl.getParameter(e?e.UNMASKED_RENDERER_WEBGL:gl.RENDERER);});
+  assert.ok(!/swiftshader|llvmpipe/i.test(report.gpu),'Fresh-player performance acceptance requires hardware rendering');
   assert.equal(report.arrival.audioSilent,true);assert.equal(report.arrival.world.event,'district-skatepark');assert.ok(report.arrival.x<-2900&&report.arrival.z<-700,'Fresh player starts in the residential skatepark');assert.ok(!report.arrival.world.discovered.includes('bx'));
   await page.screenshot({path:out+'/arrival.png'});
   // A newcomer can leave the small pad with ordinary controls, then recover locally.
@@ -33,9 +35,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   // reads position and course geometry only; it cannot move or finish the car.
   await page.evaluate(()=>{
    const line=window.__gunsOnlyRC.line(),first=window.__gunsOnlyRC.snapshot();let node=line.reduce((b,p,i)=>Math.hypot(p[0]-first.x,p[1]-first.z)<Math.hypot(line[b][0]-first.x,line[b][1]-first.z)?i:b,0);
-   window.qaDrive={samples:[],done:false,fireInputs:0};let sampleAt=0,fireHeld=false;
+   window.qaDrive={samples:[],frames:[],done:false,fireInputs:0};let sampleAt=0,fireHeld=false,lastNow=0;
    function frame(now){const s=window.__gunsOnlyRC.snapshot(),pad=window.qaPad,at=i=>line[(i+line.length)%line.length];pad.buttons[6].value=pad.buttons[7].value=0;pad.axes[0]=0;
     if(s.finished){window.qaDrive.done=true;return;}
+    if(lastNow&&s.running&&!s.paused&&s.time>5)window.qaDrive.frames.push(now-lastNow);lastNow=now;
     if(!s.paused){
      for(let k=0;k<line.length;k++){const p=at(node),dx=p[0]-s.x,dz=p[1]-s.z,d=Math.hypot(dx,dz),ahead=dx*Math.sin(s.yaw)-dz*Math.cos(s.yaw);if(d<1.5||(ahead<0&&d<4))node++;else break;}
      let i=node,target=at(i),look=1.6+s.speed*.3;while(Math.hypot(target[0]-s.x,target[1]-s.z)<look&&i<node+line.length)target=at(++i);
@@ -50,6 +53,9 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   });
   for(let waited=0;waited<420;waited+=10){await page.waitForTimeout(10000);const state=await page.evaluate(()=>({s:window.__gunsOnlyRC.snapshot(),done:window.qaDrive?.done}));console.log(JSON.stringify({seconds:waited+10,lap:state.s.lap,gate:state.s.gate,travel:Math.round(state.s.travel),recoveries:state.s.recoveries}));if(state.done)break;if(state.s.recoveries>0)throw Error('Starter race required automatic recovery');}
   assert.ok(await page.evaluate(()=>window.qaDrive?.done),'Three laps must finish through controller input');
+  report.performance=await page.evaluate(()=>{const f=window.qaDrive.frames.slice().sort((a,b)=>a-b);return {count:f.length,p50:f[Math.floor(f.length*.5)],p95:f[Math.floor(f.length*.95)],max:f.at(-1)};});
+  assert.ok(report.performance.count>1000,'Measure sustained driving, not just the loading screen');
+  assert.ok(report.performance.p95<33.34,`Starter race frame pacing exceeded 33ms: ${JSON.stringify(report.performance)}`);
   report.finished=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());report.samples=await page.evaluate(()=>window.qaDrive.samples);report.fireInputs=await page.evaluate(()=>window.qaDrive.fireInputs);assert.ok(report.fireInputs>0,'The journey collects and uses ordinary race items');
   assert.equal(report.finished.finished,true);assert.equal(report.finished.recoveries,0);assert.equal(report.finished.lapTimes.length,3);
   assert.ok(report.samples.some(s=>s.near>0),'Rivals must be visible during the race');

@@ -1,7 +1,8 @@
 import * as T from '../../vendor/three.module.js';
 import {residentialGrass} from './residential-ground.js';
 import {createSurfaceMaps} from './materials.js';
-import {createRolledKerb} from './residential-kerbs.mjs';
+import {buildResidentialStreetSurfaces} from './residential-streets.mjs';
+import {roofProfile,splitRoofTriangle} from './residential-roofs.mjs';
 
 // Authored residential dressing. The data contract is intentionally local and
 // anonymous: roads/areas are fictional IDs with x/z metres only. This module
@@ -19,6 +20,8 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     asphalt: '#59636a', sidewalk: '#b6b5a8', grass: '#668847', sand: '#baa783',
     concrete: '#b8b5a8', stucco: '#d1b08b', brick: '#a56c59',
     roof: '#795c54', trim: '#ead4a6', glass: '#3d6870',
+    stucco1: '#d8c9ac', stucco2: '#c7b795', brick1: '#b97b66', brick2: '#b39879',
+    roof1: '#64716e', roof2: '#937965', roof3: '#565f68', door1: '#50736c', door2: '#a05b45',
     schoolDoor: '#365a9a', skate: '#a9aaa3', rail: '#c8c2ad', court: '#d7965f', tree: '#5f874f',
   };
   const brickMaps=()=>{
@@ -32,9 +35,17 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
   };
   const mat = (key) => {
     if (!materials.has(key)) {
-      const texture = ['asphalt','concrete','stucco','roof'].includes(key) ? createSurfaceMaps(key) : key==='brick'?brickMaps():key==='grass'?residentialGrass():null;
+      const family=key.replace(/\d+$/,'');
+      const texture = ['asphalt','concrete','stucco','roof'].includes(family) ? createSurfaceMaps(family) : family==='brick'?brickMaps():key==='grass'?residentialGrass():null;
+      // A neutral material tile carries grain; the house palette carries paint.
+      // Multiplying a warm coloured tile by another colour made every house brown.
+      if (/\d$/.test(key) && texture?.map?.image?.data) {
+        const pixels=texture.map.image.data, base={stucco:.72,brick:.48,roof:.37}[family];
+        for(let i=0;i<pixels.length;i+=4){const grey=Math.max(0,Math.min(255,230+(pixels[i]-base*255)));pixels[i]=pixels[i+1]=pixels[i+2]=grey;}
+        texture.map.needsUpdate=true;
+      }
       materials.set(key, new T.MeshStandardMaterial({
-        color: texture ? '#ffffff' : colours[key] || key,
+        color: /\d$/.test(key) ? colours[key] : texture ? '#ffffff' : colours[key] || key,
         roughness: key === 'glass' ? .3 : .88,
         // Ground layers are centimetres apart across a kilometre-scale view.
         // Bias paved overlays in depth, without lifting their wheel surfaces.
@@ -47,14 +58,14 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
   };
   const push = (key, a, b, c, conform = true) => {
     if (!a || !b || !c) return;
-    const chunked = /^(stucco|brick|roof|glass|trim|schoolDoor)$/.test(key);
+    const chunked = /^(stucco|brick|roof|glass|trim|schoolDoor|door)[0-9]*$/.test(key);
     const cx = (a[0] + b[0] + c[0]) / 3, cz = (a[2] + b[2] + c[2]) / 3;
     const bucketKey = chunked ? `${key}:${Math.floor(cx / 128)}:${Math.floor(cz / 128)}` : key;
     if (!buckets.has(bucketKey)) buckets.set(bucketKey, { positions: [], uv: [] });
     const bucket = buckets.get(bucketKey);
     const ab=b.map((v,i)=>v-a[i]),ac=c.map((v,i)=>v-a[i]),nx=ab[1]*ac[2]-ab[2]*ac[1],nz=ab[0]*ac[1]-ab[1]*ac[0],vertical=Math.abs(nx)+Math.abs(nz)>Math.abs(ab[2]*ac[0]-ab[0]*ac[2]);
     const triangles = conform && currentBaseY == null && terrain?.conformTriangle ? terrain.conformTriangle(a, b, c) : [[a, b, c]];
-    for (const triangle of triangles) for(const p of triangle){const q=conform && currentBaseY == null && terrain?.conformTriangle ? p : project(p);bucket.positions.push(...q);if(vertical){const u=Math.abs(nx)>Math.abs(nz)?p[2]:p[0];bucket.uv.push(u/(key==='brick'?1.76:2),p[1]/(key==='brick'?.6:2));}else bucket.uv.push(p[0]*.5,p[2]*.5);}
+    for (const triangle of triangles) for(const p of triangle){const q=conform && currentBaseY == null && terrain?.conformTriangle ? p : project(p);bucket.positions.push(...q);if(vertical){const u=Math.abs(nx)>Math.abs(nz)?p[2]:p[0];bucket.uv.push(u/(key.startsWith('brick')?1.76:2),p[1]/(key.startsWith('brick')?.6:2));}else bucket.uv.push(p[0]*.5,p[2]*.5);}
   };
   const quad = (key, a, b, c, d) => { push(key, a, b, c); push(key, a, c, d); };
   const upTri=(key,a,b,c)=>{if((b[2]-a[2])*(c[0]-a[0])-(b[0]-a[0])*(c[2]-a[2])<0)[b,c]=[c,b];push(key,a,b,c);};
@@ -79,19 +90,10 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     if (collision) collideQuad(A, D, C, B, key === 'asphalt' ? 'asphalt' : 'concrete');
   };
   const ribbonPath=(key,a,b,width,y,collision=true,offset=0)=>{const n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/4));for(let i=0;i<n;i++){const t=i/n,u=(i+1)/n;ribbon(key,[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t],[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u],width,y,collision,offset);}};
-  const widthFor = (kind) => /foot|path|walk|cycle/i.test(kind || '') ? 2.2 : /primary|secondary|tertiary/i.test(kind || '') ? 8 : /service/i.test(kind || '') ? 5 : 5.8;
-
-  // Preserve every mapped road segment and give each a narrow sidewalk ribbon.
-  for (const road of data.roads || []) {
-    const pts = road.points || [];
-    for (let i = 1; i < pts.length; i++) {
-      const path = /foot|path|walk|cycle/i.test(road.kind);
-      ribbonPath(path ? 'sidewalk' : 'asphalt', pts[i - 1], pts[i], widthFor(road.kind), path ? .018 : .025);
-      if (!path && Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1])>.05) {
-        const a=pts[i-1],b=pts[i],n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/4));
-        for(let part=0;part<n;part++){const t=part/n,u=(part+1)/n,ka=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t],kb=[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u],kerb=createRolledKerb(ka,kb,{roadWidth:widthFor(road.kind)});for(const q of kerb.quads)quad('sidewalk',...q);for(const q of kerb.quads)collideQuad(...q,'kerb');}
-      }
-    }
+  for(const surface of buildResidentialStreetSurfaces(data.roads||[]).surfaces){
+    const key=surface.material==='path'?'sidewalk':surface.material;
+    quad(key,...surface.quad);
+    if(surface.collision)collideQuad(...surface.quad,surface.collision==='path'?'concrete':surface.collision);
   }
   if(terrain?.triangles){for(const tri of terrain.triangles())push('grass',...tri.map(p=>[p[0],0,p[2]]),false);}
   else if(data.bounds){const [a,b,c,d]=data.bounds;surface('grass',[[a,b],[c,b],[c,d],[a,d]],0);collideQuad([a,0,b],[a,0,d],[c,0,d],[c,0,b],'grass');}
@@ -106,7 +108,8 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     currentBaseY=heightAt(centre[0],centre[1]);
     const foundationLo=Math.min(...outer.map(p=>heightAt(p[0],p[1])));
     const faces=T.ShapeUtils.triangulateShape(outer.map(p=>new T.Vector2(...p)),holes.map(r=>r.map(p=>new T.Vector2(...p))));
-    const wallKey=house?(index%3===0?'stucco':'brick'):kind==='school'?'brick':'stucco';
+    const wallKey=house?(index%3===0?'stucco'+(index%2+1):'brick'+(index%2+1)):kind==='school'?'brick':'stucco';
+    const roofKey=house?'roof'+(index%3+1):'roof',profile=house?roofProfile(outer,h,index):null;
     let front=null;
     for(const [ringIndex,ring]of rings.entries()){
       const area=ring.reduce((s,p,i)=>{const q=ring[(i+1)%ring.length];return s+p[0]*q[1]-q[0]*p[1];},0),sign=(area>0?1:-1)*(ringIndex? -1:1);
@@ -125,21 +128,32 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
           face('trim',u-.025/len,u+.025/len,y,y+1.2,.08);
         }
         if(!heroSchool)face('trim',0,1,h-.13,h+.06,.08);
+        if(house){
+          const cuts=[0,1],da=profile.across(a)-profile.ridge,db=profile.across(b)-profile.ridge;if(da*db<0)cuts.splice(1,0,da/(da-db));
+          for(let j=1;j<cuts.length;j++){const u=cuts[j-1],v=cuts[j],A=p(u,h,.005),B=p(v,h,.005),C=p(v,profile.height([a[0]+dx*v,a[1]+dz*v]),.005),D=p(u,profile.height([a[0]+dx*u,a[1]+dz*u]),.005);quad(wallKey,...(sign>0?[D,C,B,A]:[A,B,C,D]));}
+        }
         if(!ringIndex&&len>3){const mid=[(a[0]+b[0])/2,(a[1]+b[1])/2],road=nearestRoad(mid);if(road&&(!front||road.d<front.road.d))front={face,p,len,mid,road};}
       }
     }
     if(front&&!heroSchool&&!heroCivic){
       const {face,p,len,mid,road}=front,door=house?.95:2.3;
       face('trim',.5-(door+.18)/len/2,.5+(door+.18)/len/2,.015,2.28,.085);
-      face(kind==='school'?'schoolDoor':'glass',.5-door/len/2,.5+door/len/2,.025,2.18,.10);
+      face(kind==='school'?'schoolDoor':house?'door'+(index%2+1):'glass',.5-door/len/2,.5+door/len/2,.025,2.18,.10);
       face('trim',.5-.025/len,.5+.025/len,.04,2.16,.12);
-      if(road.d<35){const savedBase=currentBaseY;currentBaseY=null;ribbonPath('concrete',mid,road.q,house?1.1:3,.025,true);currentBaseY=savedBase;}
+      if(road.d<35){const savedBase=currentBaseY;currentBaseY=null;
+        // The path ends at the near street edge rather than covering the lane.
+        const distance=Math.max(0,road.d-3.1),t=distance/(road.d||1),end=mid.map((v,i)=>v+(road.q[i]-v)*t);
+        ribbonPath('concrete',mid,end,house?1.15:3,.038,true);currentBaseY=savedBase;}
+      if(house){
+        const awning=[p(.5-1.4/len,2.4,.10),p(.5+1.4/len,2.4,.10),p(.5+1.4/len,2.32,1.05),p(.5-1.4/len,2.32,1.05)];quad(roofKey,...awning);quad(roofKey,...awning.slice().reverse());
+        face('trim',.5-.025/len,.5+.025/len,1.02,1.16,.15);
+      }
       if(house&&len>7){const u=.18,w=2.4/len;face('trim',u-w/2,u+w/2,.025,2.1,.08);for(let j=1;j<5;j++)face('roof',u-w/2,u+w/2,j*.4,j*.4+.025,.09);}
     }
-    const edgeDistance=p=>Math.min(...rings.flatMap(r=>r.map((a,i)=>{const b=r[(i+1)%r.length],dx=b[0]-a[0],dz=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dz)/(dx*dx+dz*dz||1)));return Math.hypot(p[0]-a[0]-dx*t,p[1]-a[1]-dz*t);})));
-    const roofPoint=p=>[p[0],h+(house?Math.min(1.5,edgeDistance(p)*.65):.08),p[1]];
-    const roofTri=(a,b,c,n)=>{if(!n){upTri('roof',roofPoint(a),roofPoint(b),roofPoint(c));return;}const mid=(p,q)=>p.map((v,i)=>(v+q[i])/2),ab=mid(a,b),bc=mid(b,c),ca=mid(c,a);roofTri(a,ab,ca,n-1);roofTri(ab,b,bc,n-1);roofTri(ca,bc,c,n-1);roofTri(ab,bc,ca,n-1);};
-    for(const f of faces)roofTri(...f.map(i=>points[i]),house?2:0);
+    for(const f of faces){
+      const tri=f.map(i=>points[i]);
+      for(const roofTri of house?splitRoofTriangle(tri,profile):[tri])upTri(roofKey,...roofTri.map(p=>[p[0],house?profile.height(p):h+.08,p[1]]));
+    }
     currentBaseY=null;
   }
 
@@ -149,7 +163,7 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     if (!values.positions.length) continue;
     const key = bucketKey.split(':', 1)[0];
     const geometry = new T.BufferGeometry(); geometry.setAttribute('position', new T.Float32BufferAttribute(values.positions, 3)); geometry.setAttribute('uv', new T.Float32BufferAttribute(values.uv, 2)); geometry.computeVertexNormals(); geometry.computeBoundingSphere();
-    const mesh = new T.Mesh(geometry, mat(key)); mesh.name = `Residential_${bucketKey}`; mesh.castShadow = key === 'stucco' || key === 'brick' || key === 'roof'; mesh.receiveShadow = true; root.add(mesh);
+    const mesh = new T.Mesh(geometry, mat(key)); mesh.name = `Residential_${bucketKey}`; mesh.castShadow = /^(stucco|brick|roof)/.test(key); mesh.receiveShadow = true; root.add(mesh);
   }
   root.updateMatrixWorld(true); scene.add(root);
   return { root, dispose() { root.removeFromParent(); root.traverse((o) => o.geometry?.dispose()); for (const m of materials.values()) { m.map?.dispose(); m.bumpMap?.dispose(); m.roughnessMap?.dispose(); m.normalMap?.dispose(); m.dispose(); } } };

@@ -1,7 +1,9 @@
 {
   "generator": "tools/rc/blender/skatepark.py",
   "license": "MIT original procedural geometry",
-  "external_assets": [],
+  "external_assets": [
+    "../materials/park-paint-atlas.png (original generated paint; runtime texture)"
+  ],
   "frame": "park-centred local metres; north=-Z",
   "footprint": [
     [
@@ -38,8 +40,8 @@
     "distance_m": 1.4,
     "samples": 20
   },
-  "visual_triangles": 16033,
+  "visual_triangles": 14179,
   "collision_triangles": 6172,
   "collision_meshes": 18,
-  "materials": 12
+  "materials": 9
 }
