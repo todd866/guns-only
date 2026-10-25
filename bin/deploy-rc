@@ -32,6 +32,8 @@ echo "deploy-rc: headless smoke of the package"
 HEAVY_SLOT_LABEL=guns-only-rc-smoke run_job heavy-slot -- node tools/rc/smoke-dist.mjs "$dist"
 echo "deploy-rc: hardware release gate of the package"
 HEAVY_SLOT_LABEL=guns-only-rc-release run_job heavy-slot -- env RC_QA_ROOT="$dist" node tools/rc/check-release.cjs "$evidence/local-release"
+echo "deploy-rc: phone control journey in the package"
+HEAVY_SLOT_LABEL=guns-only-rc-mobile run_job heavy-slot -- env RC_QA_ROOT="$dist" node tools/rc/check-mobile.cjs "$evidence/local-mobile"
 echo "deploy-rc: fresh-player journey in the package"
 HEAVY_SLOT_LABEL=guns-only-rc-new-player run_job heavy-slot -- env RC_QA_ROOT="$dist" node tools/rc/check-new-player.cjs "$evidence/local-new-player"
 echo "deploy-rc: deploy"
@@ -57,6 +59,8 @@ echo "deploy-rc: smoke the live site ($live)"
 HEAVY_SLOT_LABEL=guns-only-rc-smoke run_job heavy-slot -- node tools/rc/smoke-dist.mjs "$dist" "$live"
 echo "deploy-rc: hardware release gate of live site"
 HEAVY_SLOT_LABEL=guns-only-rc-release run_job heavy-slot -- node tools/rc/check-release.cjs "$evidence/live-release" "$live"
+echo "deploy-rc: phone control journey on the live site"
+HEAVY_SLOT_LABEL=guns-only-rc-mobile run_job heavy-slot -- node tools/rc/check-mobile.cjs "$evidence/live-mobile" "$live"
 if [ -n "$target" ]; then
   curl -fsS -o /dev/null -w "deploy-rc: guns-only.com/rc/ %{http_code}\n" https://guns-only.com/rc/
 fi

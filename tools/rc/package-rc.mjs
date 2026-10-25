@@ -1,7 +1,8 @@
-// Package web/wwwroot/rc/ as a self-contained static site for the Area 51½ Vercel project.
+// Package web/wwwroot/rc/ as a self-contained static site for the Saucer Springs Vercel project.
 // guns-only.com rewrites /rc/* to that project, so the page must never reach outside /rc/ for
 // code: the three.js files RC imports are copied to rc/vendor/ and RC's imports re-pointed.
 //   node tools/rc/package-rc.mjs [--out DIR]   (default .rc-dist at the repo root)
+import {compressModels} from './compress-models.mjs';
 import fs from 'node:fs'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -9,7 +10,7 @@ const WWW = path.join(ROOT, 'web/wwwroot'), RC = path.join(WWW, 'rc'), VENDOR = 
 const SHARED = path.join(WWW, 'render/telemetry');
 const SHARED_FILES = new Set(['telemetry_batch.js', 'telemetry_outbox.js']);
 const MARKER = '.rc-dist-marker', CODE = /\.(m?js|html)$/;
-const SKIP = name => /\.test\.m?js$|\.blend1?$/.test(name) || name === 'tests' || name === '__fixtures__' || name.startsWith('.');
+const SKIP = name => /\.test\.m?js$|\.blend1?$/.test(name) || name === 'tests' || name === '__fixtures__' || name.startsWith('.') || name.endsWith('.glb.gz');
 
 // Real relative imports only: comments are blanked first (vendor files carry example code in them).
 const stripComments = src => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' ')).replace(/(^|[^:'"\\])\/\/[^\n]*/g, '$1');
@@ -56,6 +57,8 @@ export function packageRc(out = path.join(ROOT, '.rc-dist')) {
     }
     fs.writeFileSync(dest, src); bytes += Buffer.byteLength(src); files++;
   }
+  // Regenerate transport assets from this exact release's originals.
+  const compressed=compressModels(path.join(out,'rc/assets'));files+=compressed.length;bytes+=compressed.reduce((n,r)=>n+r.bytes,0);
   // Vendor files import each other relatively; the copied tree keeps those paths valid.
   while (queue.length) { const file = queue.pop(); for (const spec of relativeImports(fs.readFileSync(file, 'utf8'))) resolve(file, spec); }
   for (const file of vendor) {

@@ -5,6 +5,8 @@ import { sub, cross, dot, norm, scale, add, len } from './math.mjs';
 // Surface response multipliers. grip scales tyre friction; roll is rolling drag per newton of load.
 export const SURFACES = {
   // Fictional shallow splash-pad response; safe at RC scale, no buoyancy or drowning.
+  // Authored quarter pipes use the normal concrete tyre response plus a play assist.
+  quarter: { grip: 1.0, roll: .02 },
   snow: { grip: .68, roll: .08 }, ice: { grip: .38, roll: .015 },
   water: { grip: 0.65, roll: 0.18 },
   asphalt: { grip: 1.0, roll: 0.02 }, concrete: { grip: 1.0, roll: 0.02 }, wood: { grip: 0.95, roll: 0.025 },

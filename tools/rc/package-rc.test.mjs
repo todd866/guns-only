@@ -1,3 +1,4 @@
+import {gunzipSync} from 'node:zlib';
 import test from 'node:test'; import assert from 'node:assert/strict';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 import { packageRc, relativeImports } from './package-rc.mjs';
@@ -9,6 +10,7 @@ test('the packaged RC site is self-contained under /rc/', () => {
   packageRc(out);
   const all = files(out);
   assert.ok(!all.some(f => /\.test\.m?js$/.test(f)), 'test files shipped');
+  for(const model of all.filter(f=>f.endsWith('.glb')))assert.deepEqual(gunzipSync(fs.readFileSync(model+'.gz')),fs.readFileSync(model),'packaged compressed model matches its original');
   const main = fs.readFileSync(path.join(out, 'rc/main.js'), 'utf8');
   assert.match(main, /'\.\/vendor\/three\.module\.js'/); assert.doesNotMatch(main, /\.\.\/vendor\//);
   for (const f of all.filter(f => /\.(m?js|html)$/.test(f)))

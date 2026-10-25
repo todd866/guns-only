@@ -8,15 +8,21 @@ import {placeDistrictCourse} from './district-placement.mjs';
 import {clipDistrictTriangle} from './district-entrances.mjs';
 import {DISTRICT_ZONES,districtOffset} from './district-zones.mjs';
 import {districtApron} from './district-aprons.mjs';
+import {fetchAssetBuffer} from '../asset-buffer.mjs';
 
 // Districts and the residential skatepark are prepared before driving. Standalone GLBs remain untouched.
 export async function prepareDistricts(world){
  let paintTexture=null;
+ const ids=[...Object.keys(DISTRICT_ZONES),'skatepark'];
+ // Fetch and decode the small, bounded district set together. Collision insertion remains
+ // deterministic because results are consumed in catalog order after all promises settle.
+ const decoded=await Promise.all(ids.map(async id=>{
+  const buffer=await fetchAssetBuffer(`./assets/districts/${id}.glb`);return {id,buffer,native:courseFromGlb(buffer)};
+ }));
  const entries=[];
- for(const id of [...Object.keys(DISTRICT_ZONES),'skatepark']){
+ for(const {id,buffer,native} of decoded){
   const zone=id==='skatepark'?null:id,clip=vertices=>zone?clipDistrictTriangle(zone,vertices):[vertices],placement=zone?{anchor:districtOffset(zone)}:RESIDENTIAL_PARK;
-  const response=await fetch(`./assets/districts/${id}.glb`);if(!response.ok)throw Error(`District ${id} unavailable (${response.status})`);
-  const buffer=await response.arrayBuffer(),native=courseFromGlb(buffer),cut=createWorld();
+  const cut=createWorld();
   for(const t of native.world.tris)for(const [a,b,c]of clip([t.a,t.b,t.c]))cut.addTri(a,b,c,t.surface);
   const course=placeDistrictCourse({...native,world:cut},placement);
   for(const t of course.world.tris)world.addTri(t.a,t.b,t.c,t.surface);
@@ -25,7 +31,7 @@ export async function prepareDistricts(world){
  }
  const roots=[];
  return {courses:new Map(entries.map(e=>[e.id,e.course])),async attach(scene){
-  paintTexture=await new T.TextureLoader().loadAsync(new URL('../assets/materials/park-paint-atlas.png',import.meta.url).href);
+  paintTexture=await new T.TextureLoader().loadAsync(new URL('../assets/materials/park-paint-atlas.webp',import.meta.url).href);
   paintTexture.colorSpace=T.SRGBColorSpace;paintTexture.flipY=false;paintTexture.wrapS=T.RepeatWrapping;paintTexture.anisotropy=8;
   for(const {id,zone,clip,placement,buffer}of entries){const gltf=await new GLTFLoader().parseAsync(buffer,'./assets/districts/'),root=new T.Group();root.name=`District_${id}`;root.position.set(...placement.anchor);root.rotation.y=placement.yaw??0;gltf.scene.updateMatrixWorld(true);
    gltf.scene.traverse(o=>{if(!o.isMesh||!o.name.startsWith('VIS_'))return;const source=o.geometry.clone().applyMatrix4(o.matrixWorld),g=source.index?source.toNonIndexed():source,attributes=['position','normal','uv','color'].filter(name=>g.attributes[name]).map(name=>[name,g.attributes[name]]),data=Object.fromEntries(attributes.map(([name])=>[name,[]]));

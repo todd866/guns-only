@@ -104,7 +104,7 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
     root.add(trunkMesh); meshes.push(trunkMesh);
     // Three crown meshes share one atlas/material. Each tree occupies exactly
     // one instance; absent variants never submit degenerate zero-scale geometry.
-    const leaf=await new T.TextureLoader().loadAsync(new URL('../assets/foliage/deciduous-cluster.png',import.meta.url).href);if(disposed){leaf.dispose();return null;}leaf.colorSpace=T.SRGBColorSpace;leaf.anisotropy=4;
+    const leaf=await new T.TextureLoader().loadAsync(new URL('../assets/foliage/deciduous-cluster.webp',import.meta.url).href);if(disposed){leaf.dispose();return null;}leaf.colorSpace=T.SRGBColorSpace;leaf.anisotropy=4;
     crownMaterial=new T.MeshStandardMaterial({color:0xffffff,roughness:.9,map:leaf,alphaTest:.45,side:T.DoubleSide});
     geometry.canopies.forEach((canopy, variant) => {
       const indices=trees.map((_,i)=>i).filter(i=>i%geometry.canopies.length===variant);
