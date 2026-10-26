@@ -1,3 +1,4 @@
+import {roofProfile,roadLamps,litWindow} from './world-finish.mjs';
 import {buildingFrontage,exteriorRing,frontageWindowMask} from './building-frontages.mjs';
 import {roadVerges} from './road-verges.mjs';
 import {roadsideDetail} from './roadside-detail.mjs';
@@ -9,11 +10,12 @@ import * as T from '../../vendor/three.module.js';
 import {buildingInfo,roadWidth} from './geometry.mjs';
 import {runwayFurniture} from './runways.mjs';
 import {SIZE} from './stream.mjs';
-const PALETTE={sand:'#bfaa86',asphalt:'#515b61',concrete:'#aeb2aa',grass:'#8c9b65',wall:'#c8b99c',roof:'#9a8770',glass:'#4d6d78',paint:'#eee4c4',stripe:'#e5b751',trim:'#e2d3b5',light:'#e6efc2',scrub:'#7e8561',gravel:'#a58e70',reflector:'#e3c48a'};
+const PALETTE={sand:'#bfaa86',asphalt:'#515b61',concrete:'#aeb2aa',grass:'#8c9b65',wall:'#c8b99c',roof:'#9a8770',glass:'#4d6d78',paint:'#eee4c4',stripe:'#e5b751',trim:'#e2d3b5',light:'#e6efc2',scrub:'#7e8561',gravel:'#a58e70',reflector:'#e3c48a',windowLight:'#4d6d78'};
 // Clip each draw to its tile. Long OSM roads/aprons occur in multiple source tiles, but never
 // render twice on the same pixel. Collision keeps original footprints, including at seams.
 function clip(poly,b){for(const [axis,value,sign]of [[0,b[0],1],[0,b[2],-1],[1,b[1],1],[1,b[3],-1]]){const result=[];for(let i=0;i<poly.length;i++){const a=poly[i],c=poly[(i+1)%poly.length],ia=(a[axis]-value)*sign>=0,ic=(c[axis]-value)*sign>=0;if(ia)result.push(a);if(ia!==ic){const t=(value-a[axis])/(c[axis]-a[axis]);result.push([a[0]+t*(c[0]-a[0]),a[1]+t*(c[1]-a[1])]);}}poly=result;if(poly.length<3)return [];}return poly;}
-export function createTileRenderer(scene,elevation=null,residentialTerrain=null){const maps=new Map(['gravel','sand','asphalt','concrete','stucco','roof'].map(k=>[k,createSurfaceMaps(k)])),mats=new Map(),groups=new Map();const residentialBounds=residentialTerrain?.bounds??null;for(const [k,c]of Object.entries(PALETTE)){const textures=maps.get(k==='wall'?'stucco':k);mats.set(k,new T.MeshStandardMaterial({color:textures?'#ffffff':c,emissive:k==='light'?'#e6efc2':k==='reflector'?'#e3ba70':'#000000',emissiveIntensity:k==='light'?1:k==='reflector'?.4:0,roughness:textures?1:k==='glass'?.25:.92,metalness:k==='glass'?.3:0,vertexColors:true,...(textures?{map:textures.map,roughnessMap:textures.roughnessMap,normalMap:textures.normalMap,normalScale:new T.Vector2(k==='asphalt'?.035:.18,k==='asphalt'?.035:.18)}:{})}));}
+export function createTileRenderer(scene,elevation=null,residentialTerrain=null){const maps=new Map(['gravel','sand','asphalt','concrete','stucco','roof'].map(k=>[k,createSurfaceMaps(k)])),mats=new Map(),groups=new Map(),tileLights=new Map();const residentialBounds=residentialTerrain?.bounds??null;for(const [k,c]of Object.entries(PALETTE)){const textures=maps.get(k==='wall'?'stucco':k);mats.set(k,new T.MeshStandardMaterial({color:textures?'#ffffff':c,emissive:k==='windowLight'?'#edc792':k==='light'?'#e6efc2':k==='reflector'?'#e3ba70':'#000000',emissiveIntensity:k==='light'?1:k==='reflector'?.4:0,roughness:textures?1:['glass','windowLight'].includes(k)?.25:.92,metalness:['glass','windowLight'].includes(k)?.3:0,vertexColors:true,...(textures?{map:textures.map,roughnessMap:textures.roughnessMap,normalMap:textures.normalMap,normalScale:new T.Vector2(k==='asphalt'?.035:.18,k==='asphalt'?.035:.18)}:{})}));}
+ const poolMaterial=new T.ShaderMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,uniforms:{night:{value:0}},vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying vec2 vUv;uniform float night;void main(){float r=length((vUv-.5)*2.);float a=pow(max(0.,1.-r),2.)*.55*night;gl_FragColor=vec4(1.,.77,.43,a);}'});
  const inResidential=(x,z)=>!!residentialBounds&&x>=residentialBounds[0]&&x<=residentialBounds[2]&&z>=residentialBounds[1]&&z<=residentialBounds[3];
  function load(key,tile){const b=[tile.tile[0]*SIZE,tile.tile[1]*SIZE,(tile.tile[0]+1)*SIZE,(tile.tile[1]+1)*SIZE],buckets=new Map(),root=new T.Group();root.name=`WorldTile_${key}`;
   const bucket=k=>{if(!buckets.has(k))buckets.set(k,{v:[],c:[],uv:[]});return buckets.get(k);};
@@ -51,13 +53,14 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null)
        // Ring orientation is normalized above: positive offset is outdoors.
        // Front faces must point toward that offset, not back into the wall.
        const face=(kind,t0,t1,y0,y1,off)=>outside(kind,P(t0,y0,off),P(t1,y0,off),P(t1,y1,off),P(t0,y1,off));
-       face('glass',.2,.8,y,y+1.25,.045);
+       face(litWindow(f.id,j,Math.round((y-1.1)/3))?'windowLight':'glass',.2,.8,y,y+1.25,.045);
        for(const [t0,t1,y0,y1]of [[.17,.2,y-.08,y+1.33],[.8,.83,y-.08,y+1.33],[.2,.8,y-.08,y],[.2,.8,y+1.25,y+1.33],[.49,.51,y,y+1.25]])face('trim',t0,t1,y0,y1,.085);
        outside('trim',P(.16,y-.08,.18),P(.84,y-.08,.18),P(.84,y-.08,0),P(.16,y-.08,0));
        face('trim',.16,.84,y+1.33,y+1.43,.18);
       }
      }
     }
+    for(const face of roofProfile(f,b))tri(face.kind,...face.points,face.shade);
     for(const part of buildingFrontage(f,tile.features,b))for(const face of part.faces)quad(part.kind,...face,part.shade);
     continue;
    }
@@ -82,6 +85,12 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null)
    quad(kind,[x0,y0,z1],[x0,y1,z1],[x0,y1,z0],[x0,y0,z0],shade);quad(kind,[x1,y0,z0],[x1,y1,z0],[x1,y1,z1],[x1,y0,z1],shade);
    quad(kind,[x0,y1,z0],[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],shade);
   };
+  const lamps=roadLamps(tile,b,residentialBounds);tileLights.set(key,lamps.map(({x,z})=>({pos:new T.Vector3(x,elevationAt(elevation,x,z)+4.25,z)})));
+  const poolVertices=[],poolUvs=[];
+  for(const {x,z} of lamps){const y=elevationAt(elevation,x,z);box('glass',x,y,z,.10,4.2,.10,.7);box('trim',x,y+4.18,z,.72,.12,.38,.85);box('light',x,y+4.16,z,.60,.035,.29);
+   const r=19;for(const [u,v] of [[0,0],[0,1],[1,1],[0,0],[1,1],[1,0]]){const px=x+(u-.5)*r*2,pz=z+(v-.5)*r*2;poolVertices.push(px,elevationAt(elevation,px,pz)+.055,pz);poolUvs.push(u,v);}
+  }
+  if(poolVertices.length){const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(poolVertices,3));g.setAttribute('uv',new T.Float32BufferAttribute(poolUvs,2));const mesh=new T.Mesh(g,poolMaterial);mesh.name='RoadLightPools';root.add(mesh);}
   for(const {x,z} of verges.markers){const y=elevationAt(elevation,x,z);box('trim',x,y,z,.12,.72,.12,.75);box('reflector',x,y+.52,z,.145,.14,.145);}
   for(const {x,z} of verges.services){const y=elevationAt(elevation,x,z);poly('concrete',[[x-1.4,z-1],[x+1.4,z-1],[x+1.4,z+1],[x-1.4,z+1]],y+.025,.82,true);box('glass',x,y+.03,z,1.15,1.35,.65,.8);box('trim',x,y+1.38,z,1.25,.08,.75,.75);for(let h=.35;h<1.2;h+=.15)box('trim',x,y+h,z+.34,.8,.025,.025,.6);box('reflector',x-.4,y+1.12,z+.345,.1,.1,.03);}
   // Low, non-colliding scrub and stones sit beyond the drivable shoulder.
@@ -97,6 +106,6 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null)
   }
   for(const [k,v]of buckets){if(!v.v.length)continue;const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(v.v,3));g.setAttribute('color',new T.Float32BufferAttribute(v.c,3));g.setAttribute('uv',new T.Float32BufferAttribute(v.uv,2));g.computeVertexNormals();g.computeBoundingSphere();const m=new T.Mesh(g,mats.get(k));m.castShadow=['wall','roof'].includes(k);m.receiveShadow=true;root.add(m);}groups.set(key,root);scene.add(root);
  }
- function drop(key){const root=groups.get(key);if(!root)return;root.removeFromParent();root.traverse(o=>o.geometry?.dispose());groups.delete(key);}
- return {load,drop,dispose(){for(const k of groups.keys())drop(k);for(const m of mats.values())m.dispose();for(const m of maps.values())m.dispose();}};
+ function drop(key){const root=groups.get(key);if(!root)return;root.removeFromParent();root.traverse(o=>o.geometry?.dispose());groups.delete(key);tileLights.delete(key);}
+ return {load,drop,fixtures:()=>[...tileLights.values()].flat(),update(day){mats.get('windowLight').emissiveIntensity=(1-day)*.65;poolMaterial.uniforms.night.value=1-day;},dispose(){for(const k of groups.keys())drop(k);for(const m of mats.values())m.dispose();for(const m of maps.values())m.dispose();poolMaterial.dispose();}};
 }

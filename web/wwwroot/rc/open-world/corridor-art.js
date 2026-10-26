@@ -3,7 +3,7 @@ import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUti
 import {districtOffset} from './district-zones.mjs';
 import {orientArrival} from './arrival-frame.mjs';
 
-// Three authored elevations, not a random facade kit. All new low geometry
+// Authored corridor and hangar elevations, not a random facade kit. All new low geometry
 // follows existing walls/fences; every public doorway retains its six-metre cut.
 // No collision or road data is changed. Roof services remain above car clearance.
 export function buildCorridorArt(scene){
@@ -77,6 +77,25 @@ export function buildCorridorArt(scene){
   for(const z of[13,27,39]){box(2.08,1.15,z,.12,.45,.25,'#586d6a','metal');lamp(2.18,1.4,z,.18,.32);}
   finish();
  }
+ // HANGAR ROW: retain the original open barrel bays and their full driving
+ // clearances. Different end frames and high service bands identify each bay.
+ {const {box,lamp,finish}=region('HangarDetails');
+  for(const [x,accent] of [[353,'#4d8993'],[407,'#b48c47']]){
+   for(const side of [-1,1]){
+    for(const z of [343,350,357,364,369])box(x+side*12.42,4.2,z,.12,7.1,.20,accent,'metal');
+    box(x+side*12.45,5.8,356,.10,1.1,20,'#365963','glass');
+    box(x+side*12.5,6.42,356,.18,.12,20.3,'#d1c6a5');
+    box(x+side*12,8.0,356,1.05,.24,28.5,accent,'metal');
+    box(x+side*11.8,6.9,370.25,.65,2.2,.25,accent,'metal');
+   }
+   box(x,8.15,370.15,24,.24,.35,accent,'metal');
+   // Service ridge sits on the existing barrel crown, above all play space.
+   box(x,20.55,356,2.1,.5,14,'#526d72','glass');
+   box(x,20.87,356,2.45,.14,14.5,'#aeb8ac','metal');
+   for(const dx of [-7,0,7])lamp(x+dx,7.88,369.8,2.4,.35);
+  }
+  finish();
+ }
  scene.add(root);root.updateMatrixWorld(true);
  const bounds=regions.map(region=>({region,box:new T.Box3().setFromObject(region)}));
  const fixtures=lamps.map(l=>({pos:l.region.localToWorld(l.local.clone())}));
@@ -89,8 +108,8 @@ export function buildCorridorArt(scene){
  // Exactly two real, unshadowed lights affect the nearby car and facades. Fixed
  // light count avoids shader recompilation as the driver crosses venue boundaries.
  const lights=[0,1].map(()=>{const l=new T.PointLight('#ffe3a8',0,22,2);scene.add(l);return l;});
- return {root,fixtures,lights,pools,update(day,pos){const night=Math.max(0,Math.min(1,1-day));warm.emissiveIntensity=night*1.3;poolMaterial.uniforms.night.value=night;
-  const near=fixtures.map(f=>({f,d:Math.hypot(f.pos.x-pos[0],f.pos.z-pos[2])})).sort((a,b)=>a.d-b.d);
+ return {root,fixtures,lights,pools,update(day,pos,roadFixtures=[]){const night=Math.max(0,Math.min(1,1-day));warm.emissiveIntensity=night*1.3;poolMaterial.uniforms.night.value=night;
+  const near=[...fixtures,...roadFixtures].map(f=>({f,d:Math.hypot(f.pos.x-pos[0],f.pos.z-pos[2])})).sort((a,b)=>a.d-b.d);
   for(let i=0;i<lights.length;i++){const f=near[i];lights[i].intensity=f&&f.d<30?night*42:0;if(f)lights[i].position.copy(f.f.pos);}
   driver.set(...pos);for(const {region,box} of bounds)region.visible=box.distanceToPoint(driver)<550;
   pools.visible=night>.01;
