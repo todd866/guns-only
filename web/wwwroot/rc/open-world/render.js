@@ -1,3 +1,4 @@
+import {roadVerges} from './road-verges.mjs';
 import {roadsideDetail} from './roadside-detail.mjs';
 import {createSurfaceMaps} from './materials.js';
 import {groundTriangles,elevationAt} from './elevation.mjs';
@@ -7,11 +8,11 @@ import * as T from '../../vendor/three.module.js';
 import {buildingInfo,roadWidth} from './geometry.mjs';
 import {runwayFurniture} from './runways.mjs';
 import {SIZE} from './stream.mjs';
-const PALETTE={sand:'#bfaa86',asphalt:'#515b61',concrete:'#aeb2aa',grass:'#8c9b65',wall:'#c8b99c',roof:'#9a8770',glass:'#4d6d78',paint:'#eee4c4',stripe:'#e5b751',trim:'#e2d3b5',light:'#e6efc2',scrub:'#7e8561',gravel:'#a58e70'};
+const PALETTE={sand:'#bfaa86',asphalt:'#515b61',concrete:'#aeb2aa',grass:'#8c9b65',wall:'#c8b99c',roof:'#9a8770',glass:'#4d6d78',paint:'#eee4c4',stripe:'#e5b751',trim:'#e2d3b5',light:'#e6efc2',scrub:'#7e8561',gravel:'#a58e70',reflector:'#e3c48a'};
 // Clip each draw to its tile. Long OSM roads/aprons occur in multiple source tiles, but never
 // render twice on the same pixel. Collision keeps original footprints, including at seams.
 function clip(poly,b){for(const [axis,value,sign]of [[0,b[0],1],[0,b[2],-1],[1,b[1],1],[1,b[3],-1]]){const result=[];for(let i=0;i<poly.length;i++){const a=poly[i],c=poly[(i+1)%poly.length],ia=(a[axis]-value)*sign>=0,ic=(c[axis]-value)*sign>=0;if(ia)result.push(a);if(ia!==ic){const t=(value-a[axis])/(c[axis]-a[axis]);result.push([a[0]+t*(c[0]-a[0]),a[1]+t*(c[1]-a[1])]);}}poly=result;if(poly.length<3)return [];}return poly;}
-export function createTileRenderer(scene,elevation=null,residentialTerrain=null){const maps=new Map(['sand','asphalt','concrete','stucco','roof'].map(k=>[k,createSurfaceMaps(k)])),mats=new Map(),groups=new Map();const residentialBounds=residentialTerrain?.bounds??null;for(const [k,c]of Object.entries(PALETTE)){const textures=maps.get(k==='wall'?'stucco':k);mats.set(k,new T.MeshStandardMaterial({color:textures?'#ffffff':c,emissive:k==='light'?'#e6efc2':'#000000',emissiveIntensity:k==='light'?1:0,roughness:textures?1:k==='glass'?.25:.92,metalness:k==='glass'?.3:0,vertexColors:true,...(textures?{map:textures.map,roughnessMap:textures.roughnessMap,normalMap:textures.normalMap,normalScale:new T.Vector2(k==='asphalt'?.035:.18,k==='asphalt'?.035:.18)}:{})}));}
+export function createTileRenderer(scene,elevation=null,residentialTerrain=null){const maps=new Map(['gravel','sand','asphalt','concrete','stucco','roof'].map(k=>[k,createSurfaceMaps(k)])),mats=new Map(),groups=new Map();const residentialBounds=residentialTerrain?.bounds??null;for(const [k,c]of Object.entries(PALETTE)){const textures=maps.get(k==='wall'?'stucco':k);mats.set(k,new T.MeshStandardMaterial({color:textures?'#ffffff':c,emissive:k==='light'?'#e6efc2':k==='reflector'?'#e3ba70':'#000000',emissiveIntensity:k==='light'?1:k==='reflector'?.4:0,roughness:textures?1:k==='glass'?.25:.92,metalness:k==='glass'?.3:0,vertexColors:true,...(textures?{map:textures.map,roughnessMap:textures.roughnessMap,normalMap:textures.normalMap,normalScale:new T.Vector2(k==='asphalt'?.035:.18,k==='asphalt'?.035:.18)}:{})}));}
  const inResidential=(x,z)=>!!residentialBounds&&x>=residentialBounds[0]&&x<=residentialBounds[2]&&z>=residentialBounds[1]&&z<=residentialBounds[3];
  function load(key,tile){const b=[tile.tile[0]*SIZE,tile.tile[1]*SIZE,(tile.tile[0]+1)*SIZE,(tile.tile[1]+1)*SIZE],buckets=new Map(),root=new T.Group();root.name=`WorldTile_${key}`;
   const bucket=k=>{if(!buckets.has(k))buckets.set(k,{v:[],c:[],uv:[]});return buckets.get(k);};
@@ -66,6 +67,18 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null)
      if(p.aeroway==='runway'||w>=9){const len=Math.hypot(c[0]-a[0],c[1]-a[1]),step=p.aeroway?25:7;for(let d=0;d<len;d+=step){const t=d/len,u=Math.min((d+step*.42)/len,1);ribbon('paint',[a[0]+(c[0]-a[0])*t,a[1]+(c[1]-a[1])*t],[a[0]+(c[0]-a[0])*u,a[1]+(c[1]-a[1])*u],p.aeroway?.8:.1,y+.008);}}
     }if(p.aeroway==='runway'){const details=runwayFurniture(f,w);for(const shape of details.paint)poly('paint',shape,y+.012);for(const [x,z]of details.lights)poly('light',[[x-.18,z-.18],[x+.18,z-.18],[x+.18,z+.18],[x-.18,z+.18]],.12);}}
   }
+  // Batched road grading and sparse furniture. All standing details are beyond
+  // the drivable shoulder; no collision or racing-line geometry is changed.
+  const verges=roadVerges(tile,b,residentialBounds);
+  for(const strip of verges.strips){poly('gravel',strip.ring,.014,.98,true);if(strip.major)ribbon('paint',strip.edge[0],strip.edge[1],.12,.031);}
+  const box=(kind,x,y,z,w,h,d,shade=1)=>{
+   const x0=x-w/2,x1=x+w/2,z0=z-d/2,z1=z+d/2,y0=y,y1=y+h;
+   quad(kind,[x0,y0,z0],[x0,y1,z0],[x1,y1,z0],[x1,y0,z0],shade);quad(kind,[x1,y0,z1],[x1,y1,z1],[x0,y1,z1],[x0,y0,z1],shade);
+   quad(kind,[x0,y0,z1],[x0,y1,z1],[x0,y1,z0],[x0,y0,z0],shade);quad(kind,[x1,y0,z0],[x1,y1,z0],[x1,y1,z1],[x1,y0,z1],shade);
+   quad(kind,[x0,y1,z0],[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],shade);
+  };
+  for(const {x,z} of verges.markers){const y=elevationAt(elevation,x,z);box('trim',x,y,z,.12,.72,.12,.75);box('reflector',x,y+.52,z,.145,.14,.145);}
+  for(const {x,z} of verges.services){const y=elevationAt(elevation,x,z);poly('concrete',[[x-1.4,z-1],[x+1.4,z-1],[x+1.4,z+1],[x-1.4,z+1]],y+.025,.82,true);box('glass',x,y+.03,z,1.15,1.35,.65,.8);box('trim',x,y+1.38,z,1.25,.08,.75,.75);for(let h=.35;h<1.2;h+=.15)box('trim',x,y+h,z+.34,.8,.025,.025,.6);box('reflector',x-.4,y+1.12,z+.345,.1,.1,.03);}
   // Low, non-colliding scrub and stones sit beyond the drivable shoulder.
   // At most 48 clusters per streamed tile; two shared batches, no per-prop objects.
   for(const {x,z,size:s} of roadsideDetail(tile,b,residentialBounds)){

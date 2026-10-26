@@ -1,17 +1,18 @@
 export const MATERIAL_SIZE = 128;
-export const SURFACE_NAMES = Object.freeze(['sand','asphalt','concrete','stucco','roof']);
+export const SURFACE_NAMES = Object.freeze(['gravel','sand','asphalt','concrete','stucco','roof']);
 const TAU=Math.PI*2, clamp=x=>Math.max(0,Math.min(1,x));
 const periodic=n=>n%(MATERIAL_SIZE-1);
 // Wrapped integer grain avoids the diagonal sine-wave bands that looked like painted roads.
 const noise=(x,y,s=0)=>{let n=Math.imul(periodic(x)+1,374761393)^Math.imul(periodic(y)+1,668265263)^Math.imul(s+1,1274126177);n=Math.imul(n^(n>>>13),1274126177);return ((n^(n>>>16))>>>0)/4294967295;};
 const detail=(x,y,s=0)=>noise(x,y,s+31);
-function heightAt(kind,x,y){const u=periodic(x)/(MATERIAL_SIZE-1),v=periodic(y)/(MATERIAL_SIZE-1);switch(kind){case'sand':return .5+.045*noise(x,y)+.018*detail(x,y);case'asphalt':return .5+.06*noise(x,y)+.025*Math.sin(TAU*u*31)*Math.sin(TAU*v*29);case'concrete':return .5+.018*noise(x,y)-.025*(x<1||y<1?1:0);case'stucco':return .5+.07*noise(x,y)+.018*Math.sin(TAU*u*47)*Math.sin(TAU*v*43);case'roof':return .5+.13*Math.sin(TAU*u*8)+.02*noise(x,y);default:throw new RangeError(`unknown surface: ${kind}`);}}
+function heightAt(kind,x,y){const u=periodic(x)/(MATERIAL_SIZE-1),v=periodic(y)/(MATERIAL_SIZE-1);switch(kind){case'gravel':return .5+.09*noise(x,y,12)+.06*noise(Math.floor(x/3)*3,Math.floor(y/3)*3,14);case'sand':return .5+.045*noise(x,y)+.018*detail(x,y);case'asphalt':return .5+.06*noise(x,y)+.025*Math.sin(TAU*u*31)*Math.sin(TAU*v*29);case'concrete':return .5+.018*noise(x,y)-.025*(x<1||y<1?1:0);case'stucco':return .5+.07*noise(x,y)+.018*Math.sin(TAU*u*47)*Math.sin(TAU*v*43);case'roof':return .5+.13*Math.sin(TAU*u*8)+.02*noise(x,y);default:throw new RangeError(`unknown surface: ${kind}`);}}
 function base(kind,x,y){
  const h=heightAt(kind,x,y),n=noise(x,y,9),d=detail(x,y,kind.length),u=periodic(x)/127,v=periodic(y)/127;
  // Deliberately saturated, toy-scale colours: each base material must remain legible
  // at a distance, while the small variation keeps large tiles from reading as flat fills.
- const palette={sand:[.64,.49,.31],asphalt:[.16,.18,.19],concrete:[.56,.58,.56],stucco:[.72,.63,.49],roof:[.37,.22,.16]}[kind];
+ const palette={gravel:[.48,.43,.34],sand:[.64,.49,.31],asphalt:[.16,.18,.19],concrete:[.56,.58,.56],stucco:[.72,.63,.49],roof:[.37,.22,.16]}[kind];
  let variation=(n-.5)*.10+(d-.5)*.055+(h-.5)*.05;
+ if(kind==='gravel')variation=(n-.5)*.08+(d-.5)*.06+(noise(Math.floor(x/3)*3,Math.floor(y/3)*3,14)-.5)*.1;
  if(kind==='asphalt'){
    variation=(n-.5)*.018+(d-.5)*.012;
    const aggregate=d>.96?.022:0;
