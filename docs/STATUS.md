@@ -1,8 +1,8 @@
 # Current product status
 
-Updated: 2026-10-25.
+Updated: 2026-10-26.
 Production: Build 402, revision `55285d61445ae81b8ed99d2531a508332c87e860` (main flight site).
-Next candidate: Build 405 — not deployed to the main flight site. The initial Saucer Springs AFB neighbourhood pass shipped independently on 2026-10-25. The skatepark topology, shared collision and painted-surface corrections have shipped on the RC route. The current RC candidate adds flight-style phone controls, assisted quarter-pipe returns and smaller startup downloads.
+Next candidate: Build 406 — not deployed to the main flight site. The initial Saucer Springs AFB neighbourhood pass shipped independently on 2026-10-25. The skatepark topology, shared collision and painted-surface corrections have shipped on the RC route. The phone controls, assisted quarter returns and compressed startup assets are verified live on the independent RC route. The current RC candidate adds world-wide surface detail and bounded roadside dressing.
 Shipped 2026-10-22: Build 394 — Area 51½: HD look, toy jet shells, Furball (weather-balloon lives, nose art), toy missiles with 3-packs and Winchester, munitions trailer, Escape menu and mute; the picker hides Rapier Intercept, Top Gun and Fire Boss (deep links kept).
 Shipped 2026-10-22: Build 390 — Area 51½: free drive by default with a RACE ring (Forza Horizon style), a Forza-style driving line, Re-Volt skill shortcuts on every track (harder, faster, fall off onto the slow road), a third track (Little Nellie Elementary: slippery gym, cafeteria tables, the playground slide), challenge coins, aggressor callsigns, real CC0/CC-BY RC recordings, 3-2-1-GO, inflatable arches, car-following shadows, dust and skid marks.
 Shipped 2026-10-22: Build 389 — hotfix: guns-only.com/rc without a trailing slash now loads Area 51½ (the page pins <base href="/rc/">).
