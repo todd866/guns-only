@@ -65,7 +65,11 @@ export async function loadOpenWorld(search){const q=new URLSearchParams(search),
   update(time,pos,camera,onDiscover){landmarks?.update(time,pos,camera);activities?.update(time,pos);golfVisual?.update(golf?.kind==='golf'?golf:null);bowlingVisual?.update(golf);const key=pos.map((v,i)=>i===1?0:Math.floor(v/64)).join(',');if(key!==lastTile||stream.errors.size){lastTile=key;stream.update(pos);}for(const p of discover(progress,pos)){saveProgress(storage,progress);onDiscover?.(p);}if(target&&time-lastRoute>4){lastRoute=time;route=routeFor(pos,target);}},
   navigate(id,pos){const next=locationById(id);target=next&&canEnter(progress,next)?next:null;if(target)route=routeFor(pos,target);},
   near:pos=>{const p=nearestLocation(pos);return distance(pos,p.pos)<9?p:null;},
-  async travel(id){const p=locationById(id);if(!p||!canEnter(progress,p)||!progress.discovered.includes(id))return null;if(!await stream.prepare(p.pos))return null;await stream.update(p.pos);if(!stream.ready(p.pos))return null;golf=null;return p;},
+  async travel(id){const p=locationById(id);if(!p||!canEnter(progress,p))return null;
+   const start=p.id==='skatepark'?RESIDENTIAL_START:p.id==='gate'?ARRIVAL_START:p.track&&districts.courses.has(p.track)?districts.courses.get(p.track).start:p.event?eventCourse(eventById(p.event),stream.world).start:{pos:[p.pos[0],p.pos[1],p.pos[2]+6],yaw:0};
+   const pos=[...start.pos];if(!await stream.prepare(pos))return null;await stream.update(pos);if(!stream.ready(pos))return null;
+   const datum=inResidential(pos)?residentialTerrain.heightAt(pos[0],pos[2]):elevationAt(elevation,pos[0],pos[2]),height=Math.max(pos[1],datum),hit=stream.world.raycast([pos[0],height+1,pos[2]],[0,-1,0],3);if(!hit)return null;
+   pos[1]=hit.point[1];golf=null;target=null;route=[];lastTile='';return {...p,arrival:{pos,yaw:start.yaw}};},
   collect(seen){const before=expedition(progress),found=collectSpecimens(progress,seen);if(found.length)saveProgress(storage,progress);return {found,unlocked:!before.unlocked&&expedition(progress).unlocked};},
   save(){saveProgress(storage,progress);},finish(time){recordFinish(progress,selected.id,time);saveProgress(storage,progress);},
   eventURL(p,kind='race'){if(!canEnter(progress,p))return rcLink({track:'hub',at:p.id},search);return rcLink({track:'hub',event:p.event??(p.track?'district-'+p.track:'ramp-rat'),mode:kind},search);},
