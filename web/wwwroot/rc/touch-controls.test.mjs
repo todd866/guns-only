@@ -23,17 +23,17 @@ function fixture(run){
  const root=new Element();root.querySelector=s=>elements[s.replace('#touch-','')];
  globalThis.window=new Element();globalThis.document=new Element();let state,fire=0,enabled=true;
  const controls=bindRCTouchControls({root,onChange:s=>state=s,onFire:()=>fire++,enabled:()=>enabled});
- try{run({elements,controls,get state(){return state},get fire(){return fire},disable(){enabled=false}});}
+ try{run({root,elements,controls,get state(){return state},get fire(){return fire},disable(){enabled=false}});}
  finally{controls.destroy();for(const [key,value]of Object.entries(originals)){if(value===undefined)delete globalThis[key];else globalThis[key]=value;}}
 }
-test('two thumbs steer and set persistent power; brake and fire remain independent',()=>fixture(f=>{
+test('two thumbs steer and modulate spring-return power; brake and fire remain independent',()=>fixture(f=>{
  const e=f.elements;e.stick.dispatch('pointerdown',{pointerId:1,clientX:100,clientY:50});e['throttle-lever'].dispatch('pointerdown',{pointerId:2,clientY:0});
  assert.deepEqual(f.state,{steer:1,throttle:1,brake:false});
  e.stick.dispatch('pointerdown',{pointerId:3,clientX:0,clientY:50});assert.equal(f.state.steer,1,'second pointer cannot steal stick');
- e['throttle-lever'].dispatch('pointerup',{pointerId:2});e['throttle-lever'].dispatch('lostpointercapture',{pointerId:2});assert.equal(f.state.throttle,1,'normal lift keeps power');
+ e['throttle-lever'].dispatch('pointerup',{pointerId:2});e['throttle-lever'].dispatch('lostpointercapture',{pointerId:2});assert.equal(f.state.throttle,0,'normal lift releases power');
  e.brake.dispatch('pointerdown',{pointerId:2});assert.equal(f.state.brake,true);e.brake.dispatch('pointerup',{pointerId:2});assert.equal(f.state.brake,false);
  e.fire.dispatch('pointerdown',{pointerId:2});e.fire.dispatch('pointerup',{pointerId:2});assert.equal(f.fire,1);
- e.stick.dispatch('pointerup',{pointerId:1});assert.equal(f.state.steer,0);assert.equal(f.state.throttle,1);
+ e.stick.dispatch('pointerup',{pointerId:1});assert.equal(f.state.steer,0);assert.equal(f.state.throttle,0);
 }));
 test('cancel and lost capture release power; menu reset releases captures and every input',()=>fixture(f=>{
  const e=f.elements;
@@ -48,4 +48,21 @@ test('backgrounding, disabled moves and destroy cannot leave a runaway car',()=>
  setPower();document.hidden=true;document.dispatch('visibilitychange');assert.equal(f.state.throttle,0);
  setPower();f.disable();e['throttle-lever'].dispatch('pointermove',{pointerId:2,clientY:0});assert.equal(f.state.throttle,0);
  f.controls.destroy();for(const el of [...Object.values(e),window,document])for(const callbacks of el.events.values())assert.equal(callbacks.size,0);
+}));
+
+test('horizontal steering ignores vertical drift; throttle modulates and reverses',()=>fixture(f=>{
+ const e=f.elements;e.stick.dispatch('pointerdown',{pointerId:1,clientX:75,clientY:50});const steer=f.state.steer;
+ e.stick.dispatch('pointermove',{pointerId:1,clientX:75,clientY:-1000});assert.equal(f.state.steer,steer);
+ e['throttle-lever'].dispatch('pointerdown',{pointerId:2,clientY:25});assert.ok(f.state.throttle>0&&f.state.throttle<.5);
+ e['throttle-lever'].dispatch('pointermove',{pointerId:2,clientY:75});assert.ok(f.state.throttle<0&&f.state.throttle>-.5);
+ e['throttle-lever'].dispatch('pointermove',{pointerId:2,clientY:50});assert.equal(f.state.throttle,0);
+ window.dispatch('resize');assert.deepEqual(f.state,{steer:0,throttle:0,brake:false});
+ e['throttle-lever'].dispatch('pointerdown',{pointerId:2,clientY:0});window.dispatch('orientationchange');assert.equal(f.state.throttle,0);
+}));
+
+test('selection and context-menu prevention is scoped to the touch controls',()=>fixture(f=>{
+ for(const type of ['touchstart','touchmove','selectstart','contextmenu','dragstart']){
+  let prevented=false;f.root.dispatch(type,{target:f.elements.stick,preventDefault(){prevented=true;}});assert.equal(prevented,true,type);
+  prevented=false;f.root.dispatch(type,{target:{closest:()=>null},preventDefault(){prevented=true;}});assert.equal(prevented,false,`${type} leaves normal text alone`);
+ }
 }));
