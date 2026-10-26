@@ -1,3 +1,4 @@
+import {buildingFrontage,exteriorRing,frontageWindowMask} from './building-frontages.mjs';
 import {roadVerges} from './road-verges.mjs';
 import {roadsideDetail} from './roadside-detail.mjs';
 import {createSurfaceMaps} from './materials.js';
@@ -29,32 +30,36 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null)
   function ribbon(k,a,c,w,y){const len=Math.hypot(c[0]-a[0],c[1]-a[1]);if(len<.01)return;const x=-(c[1]-a[1])/len*w/2,z=(c[0]-a[0])/len*w/2;poly(k,[[a[0]+x,a[1]+z],[c[0]+x,c[1]+z],[c[0]-x,c[1]-z],[a[0]-x,a[1]-z]],y,1,true);}
   if(elevation){for(const points of groundTriangles(elevation,b))tri('sand',...points.map(p=>[p[0],p[1]-.025,p[2]]),1,true);}else poly('sand',[[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]],-.025,1,true);
   for(const f of tile.features){const p=f.properties,g=f.geometry;
-   if(p.building&&g.type==='Polygon'){const info=buildingInfo(f);if(!info)continue;const {ring,h,area}=info,shade=.88+(Number(f.id.replace(/\D/g,''))%11)*.014;poly('roof',ring,h,shade);
+   if(p.building&&g.type==='Polygon'){const info=buildingInfo(f);if(!info)continue;const {h,area}=info,ring=exteriorRing(info.ring),shade=.88+(Number(f.id.replace(/\D/g,''))%11)*.014;poly('roof',ring,h,shade);const maskWindow=frontageWindowMask(f,tile.features);
     for(let i=1;i<ring.length;i++){const a=ring[i-1],c=ring[i],len=Math.hypot(c[0]-a[0],c[1]-a[1]);if(!len)continue;
      // Subdivision makes clipping facades independent of polygon orientation.
      const n=Math.max(1,Math.ceil(len/3));for(let j=0;j<n;j++){const a0=[a[0]+(c[0]-a[0])*j/n,a[1]+(c[1]-a[1])*j/n],a1=[a[0]+(c[0]-a[0])*(j+1)/n,a[1]+(c[1]-a[1])*(j+1)/n],mid=[(a0[0]+a1[0])/2,(a0[1]+a1[1])/2];if(mid[0]<b[0]||mid[0]>=b[2]||mid[1]<b[1]||mid[1]>=b[3])continue;
+      const outside=(k,a,b,c,d,shade=1)=>quad(k,d,c,b,a,shade);
       const P=(t,y,off=0)=>[a0[0]+(a1[0]-a0[0])*t+(c[1]-a[1])/len*off,y,a0[1]+(a1[1]-a0[1])*t-(c[0]-a[0])/len*off];
       quad('wall',P(0,0),P(1,0),P(1,h),P(0,h),shade);quad('wall',P(0,h),P(1,h),P(1,0),P(0,0),shade);
       // A low raised plinth gives the base buildings the chunky toy-model silhouette
       // visible in the Nellis standards photos without changing the collision footprint.
-      quad('trim',P(0,0,.045),P(1,0,.045),P(1,.2,.045),P(0,.2,.045),shade+.04);
-      quad('trim',P(0,.2,.045),P(1,.2,.045),P(1,.2,.025),P(0,.2,.025),shade+.04);
-      quad('trim',P(0,h-.2,.025),P(1,h-.2,.025),P(1,h,.025),P(0,h,.025));
+      outside('trim',P(0,0,.045),P(1,0,.045),P(1,.2,.045),P(0,.2,.045),shade+.04);
+      outside('trim',P(0,.2,.045),P(1,.2,.045),P(1,.2,.025),P(0,.2,.025),shade+.04);
+      outside('trim',P(0,h-.2,.025),P(1,h-.2,.025),P(1,h,.025),P(0,h,.025));
       // Nellis facility references: recessed blue glazing, pale projecting frames,
       // deep lintels and roof coping. Keep every detail inside the existing facade
       // envelope apart from a shallow sill, with no props in the driving corridor.
-      quad('trim',P(0,h,.12),P(1,h,.12),P(1,h,-.12),P(0,h,-.12));
+      outside('trim',P(0,h,.12),P(1,h,.12),P(1,h,-.12),P(0,h,-.12));
       if(p.building!=='roof')for(let y=1.1;y<h-1;y+=3){
-       for(const side of [-1,1]){
-        const face=(kind,t0,t1,y0,y1,off)=>side>0?quad(kind,P(t0,y0,off),P(t1,y0,off),P(t1,y1,off),P(t0,y1,off)):quad(kind,P(t0,y1,off),P(t1,y1,off),P(t1,y0,off),P(t0,y0,off));
-        face('glass',.2,.8,y,y+1.25,.045*side);
-        for(const [t0,t1,y0,y1]of [[.17,.2,y-.08,y+1.33],[.8,.83,y-.08,y+1.33],[.2,.8,y-.08,y],[.2,.8,y+1.25,y+1.33],[.49,.51,y,y+1.25]])face('trim',t0,t1,y0,y1,.085*side);
-        quad('trim',P(.16,y-.08,.18*side),P(.84,y-.08,.18*side),P(.84,y-.08,0),P(.16,y-.08,0));
-        face('trim',.16,.84,y+1.33,y+1.43,.18*side);
-       }
+       if(maskWindow(mid[0],mid[1],y))continue;
+       // Ring orientation is normalized above: positive offset is outdoors.
+       // Front faces must point toward that offset, not back into the wall.
+       const face=(kind,t0,t1,y0,y1,off)=>outside(kind,P(t0,y0,off),P(t1,y0,off),P(t1,y1,off),P(t0,y1,off));
+       face('glass',.2,.8,y,y+1.25,.045);
+       for(const [t0,t1,y0,y1]of [[.17,.2,y-.08,y+1.33],[.8,.83,y-.08,y+1.33],[.2,.8,y-.08,y],[.2,.8,y+1.25,y+1.33],[.49,.51,y,y+1.25]])face('trim',t0,t1,y0,y1,.085);
+       outside('trim',P(.16,y-.08,.18),P(.84,y-.08,.18),P(.84,y-.08,0),P(.16,y-.08,0));
+       face('trim',.16,.84,y+1.33,y+1.43,.18);
       }
      }
-    }continue;
+    }
+    for(const part of buildingFrontage(f,tile.features,b))for(const face of part.faces)quad(part.kind,...face,part.shade);
+    continue;
    }
    if(g.type==='Polygon'){if(p.aeroway==='apron')poly('concrete',g.coordinates[0],.004,1,true);else if(p.leisure&&p.leisure!=='swimming_pool'||p.landuse==='grass')poly('grass',g.coordinates[0],.002,1,true);else if(p.amenity==='parking')poly('asphalt',g.coordinates[0],.008,1,true);continue;}
    if(g.type==='LineString'&&(p.highway||p.aeroway==='runway'||p.aeroway==='taxiway')){const w=roadWidth(p),kind=p.aeroway?'concrete':p.highway==='track'||p.highway==='path'?'sand':'asphalt',y=p.aeroway?.012:.02;for(let i=1;i<g.coordinates.length;i++){const a=g.coordinates[i-1],c=g.coordinates[i];if(inResidential(a[0],a[1])&&inResidential(c[0],c[1]))continue;
