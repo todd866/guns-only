@@ -47,23 +47,24 @@ body.driving #instruments #secret,body.driving #instruments #coins{display:none}
 
 #map{width:225px;height:200px}@media(max-width:900px){#map{width:180px;height:160px}}@media(max-width:540px){#map{width:153px;height:136px}}
 
-/* Flight layout: left trigger and persistent throttle, right spring steering.
+/* Racing layout: spring steering left, spring throttle/brake/reverse right.
    The controls own touch gestures; menus retain ordinary scrolling. */
-button,#touch,#touch *{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+ #touch,#touch *{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #touch{position:fixed;inset:0;pointer-events:none;touch-action:none;overscroll-behavior:none;z-index:3;--touch-l:env(safe-area-inset-left,0px);--touch-r:env(safe-area-inset-right,0px);--touch-b:env(safe-area-inset-bottom,0px)}
 .race-mode #touch{bottom:0}
 #touch-left-actions{display:contents}
 #touch-stick,#touch-throttle-lever,#touch .touch-action{position:absolute;pointer-events:auto;touch-action:none;background:#10242aa8;border:1px solid #a2b8b170}
-#touch-stick{right:calc(var(--touch-r) + 12px);bottom:calc(var(--touch-b) + 8px);width:112px;height:112px;border-radius:50%;box-shadow:inset 0 0 0 12px #0b202655}
+#touch-stick{left:calc(var(--touch-l) + 12px);bottom:calc(var(--touch-b) + 8px);width:128px;height:128px;border-radius:50%;box-shadow:inset 0 0 0 12px #0b202655}
 .touch-stick-ring{position:absolute;inset:15px;border:1px solid #edbd6a88;border-radius:50%;pointer-events:none}
 .touch-stick-puck{position:absolute;left:calc(50% - 18px);top:calc(50% - 18px);width:36px;height:36px;border-radius:50%;background:#edbd6acc;border:2px solid #fff0c6;pointer-events:none}
-#touch-throttle-lever{left:calc(var(--touch-l) + 94px);bottom:calc(var(--touch-b) + 8px);width:52px;height:112px;border-radius:8px}
-.touch-lever-fill{position:absolute;left:22px;top:var(--lever-fill-top,50%);width:6px;height:var(--lever-power,0px);background:#edbd6a88;pointer-events:none}
+#touch-throttle-lever{right:calc(var(--touch-r) + 12px);bottom:calc(var(--touch-b) + 8px);width:80px;height:128px;border-radius:8px}
+.touch-lever-fill{position:absolute;left:calc(50% - 3px);top:var(--lever-fill-top,50%);width:6px;height:var(--lever-power,0px);background:#edbd6a88;pointer-events:none}
 #touch-throttle-lever::before{content:"";position:absolute;left:4px;right:4px;top:50%;border-top:1px solid #edbd6a88;pointer-events:none}
 .touch-lever-puck{position:absolute;left:4px;right:4px;top:calc(50% - 17px);height:34px;border-radius:5px;background:#877348;border:2px solid #fff0c6;pointer-events:none}
 .touch-lever-mark{position:absolute;left:0;right:0;text-align:center;font-size:11px;color:#dbe8df;pointer-events:none}.touch-lever-forward{top:3px}.touch-lever-reverse{bottom:3px}
-#touch #touch-fire{left:calc(var(--touch-l) + 10px);bottom:calc(var(--touch-b) + 10px);width:76px;height:76px;padding:0;border-radius:12px;border-color:#edbd6a99;font-size:14px}
-#touch #touch-brake{left:calc(var(--touch-l) + 154px);bottom:calc(var(--touch-b) + 8px);min-width:62px;min-height:48px;padding:8px;font-size:13px}
+#touch #touch-fire{right:calc(var(--touch-r) + 100px);bottom:calc(var(--touch-b) + 80px);width:80px;height:56px;padding:0;border-radius:12px;border-color:#edbd6a99;font-size:14px}
+#touch #touch-brake{right:calc(var(--touch-r) + 100px);bottom:calc(var(--touch-b) + 16px);width:80px;height:56px;padding:0;font-size:13px}
+#touch-stick::before{content:"◀        ▶";position:absolute;inset:0;display:grid;place-items:center;color:#dbe8df;font-size:12px;white-space:pre;pointer-events:none}
 #touch .touch-action.active{background:#edbd6acc;color:#172b31;transform:scale(.97)}
 @media(pointer:coarse){
  #touch{display:block}
@@ -74,9 +75,6 @@ button,#touch,#touch *{user-select:none;-webkit-user-select:none;-webkit-touch-c
 }
 @media(pointer:coarse) and (orientation:portrait){
  #banner{top:188px;left:50%;transform:translateX(-50%);max-width:calc(100vw - 24px)}
- #touch #touch-fire{left:calc(var(--touch-l) + 12px);bottom:calc(var(--touch-b) + 16px);width:84px;height:84px}
- #touch-throttle-lever{left:calc(var(--touch-l) + 106px)}
- #touch #touch-brake{left:calc(var(--touch-l) + 12px);bottom:calc(var(--touch-b) + 132px)}
  #interact{bottom:calc(env(safe-area-inset-bottom,0px) + 192px)}
 }
 body.modal-open #touch,body.paused #touch{display:none}
