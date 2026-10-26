@@ -21,3 +21,10 @@ test('real outer tiles keep placement and streamed geometry budgets bounded',asy
  try{for(const [x,z] of [[0,-2],[-2,2],[-4,1],[0,0],[-5,-5]]){const tile=JSON.parse(fs.readFileSync(new URL(`../assets/world/tile-${x}-${z}.json`,import.meta.url)));const v=roadVerges(tile,[x*256,z*256,(x+1)*256,(z+1)*256]);assert.ok(v.markers.length<=16&&v.services.length<=1);renderer.load(`${x},${z}`,tile);const root=scene.children.at(-1);assert.ok(root.children.length<=16);root.traverse(o=>{if(o.isMesh)for(const n of o.geometry.attributes.position.array)assert.ok(Number.isFinite(n));});renderer.drop(`${x},${z}`);assert.equal(scene.children.length,0);}}
  finally{renderer.dispose();}
 });
+
+test('every real-map prop clears every road segment, including bends in its source way',async()=>{
+ const fs=await import('node:fs'),{roadWidth,segmentDistance}=await import('./geometry.mjs');const dir=new URL('../assets/world/',import.meta.url);
+ for(const name of fs.readdirSync(dir).filter(n=>/^tile-.*json$/.test(n))){const t=JSON.parse(fs.readFileSync(new URL(name,dir))),[x,z]=t.tile,v=roadVerges(t,[x*256,z*256,(x+1)*256,(z+1)*256]);
+  for(const p of [...v.markers,...v.services])for(const f of t.features){if(f.geometry.type!=='LineString'||!(f.properties.highway||f.properties.aeroway))continue;for(let i=1;i<f.geometry.coordinates.length;i++)assert.ok(segmentDistance(p.x,p.z,f.geometry.coordinates[i-1],f.geometry.coordinates[i])>=roadWidth(f.properties)/2+2.49,`${name}: prop encroaches ${f.id}`);}
+ }
+});

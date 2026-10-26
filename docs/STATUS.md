@@ -2,7 +2,7 @@
 
 Updated: 2026-10-26.
 Production: Build 402, revision `55285d61445ae81b8ed99d2531a508332c87e860` (main flight site).
-Next candidate: Build 409 — not deployed to the main flight site. The independent RC route shipped corrected steering-left touch controls and gate/BX/school architecture in Build 408. This RC candidate adds shared gravel verges, subtle edge markings, sparse roadside reflectors and small service details to existing outer roads, preserving authored clearances and the Build 408 controls.
+Next candidate: Build 410 — not deployed to the main flight site. The independent RC route shipped corrected steering-left touch controls and gate/BX/school architecture in Build 408. This RC candidate adds shared gravel verges, subtle edge markings, sparse roadside reflectors and small service details to existing outer roads, preserving authored clearances and the Build 408 controls.
 Shipped 2026-10-22: Build 394 — Area 51½: HD look, toy jet shells, Furball (weather-balloon lives, nose art), toy missiles with 3-packs and Winchester, munitions trailer, Escape menu and mute; the picker hides Rapier Intercept, Top Gun and Fire Boss (deep links kept).
 Shipped 2026-10-22: Build 390 — Area 51½: free drive by default with a RACE ring (Forza Horizon style), a Forza-style driving line, Re-Volt skill shortcuts on every track (harder, faster, fall off onto the slow road), a third track (Little Nellie Elementary: slippery gym, cafeteria tables, the playground slide), challenge coins, aggressor callsigns, real CC0/CC-BY RC recordings, 3-2-1-GO, inflatable arches, car-following shadows, dust and skid marks.
 Shipped 2026-10-22: Build 389 — hotfix: guns-only.com/rc without a trailing slash now loads Area 51½ (the page pins <base href="/rc/">).

@@ -7,10 +7,10 @@ import {SCENERY_BOUNDS} from './district-zones.mjs';
 export function roadVerges(tile,bounds,residentialBounds=null){
  const strips=[],markers=[],services=[],seen=new Set(),excluded=[...SCENERY_BOUNDS,...(residentialBounds?[residentialBounds]:[])];
  const owned=(x,z)=>x>=bounds[0]&&x<bounds[2]&&z>=bounds[1]&&z<bounds[3];
- const safe=(x,z,source,margin)=>{
+ const safe=(x,z,source,margin,ownClearance=1.38)=>{
   if(inEventArea(x,z,24)||excluded.some(b=>x>b[0]-4&&x<b[2]+4&&z>b[1]-4&&z<b[3]+4))return false;
   for(const f of tile.features){const p=f.properties,g=f.geometry;const b=f.bbox;if(b&&(x<b[0]-roadWidth(p)-margin||x>b[2]+roadWidth(p)+margin||z<b[1]-roadWidth(p)-margin||z>b[3]+roadWidth(p)+margin))continue;
-   if(f!==source&&g.type==='LineString'&&(p.highway||p.aeroway))for(let i=1;i<g.coordinates.length;i++)if(segmentDistance(x,z,g.coordinates[i-1],g.coordinates[i])<roadWidth(p)/2+margin)return false;
+   if(g.type==='LineString'&&(p.highway||p.aeroway))for(let i=1;i<g.coordinates.length;i++)if(segmentDistance(x,z,g.coordinates[i-1],g.coordinates[i])<roadWidth(p)/2+(f===source?ownClearance:margin))return false;
    if(g.type==='Polygon'&&(p.building||p.aeroway||p.amenity==='parking')&&(inside(x,z,g.coordinates[0])||g.coordinates[0].some((a,i,r)=>i>0&&segmentDistance(x,z,r[i-1],a)<margin)))return false;
   }return true;
  };
@@ -28,10 +28,10 @@ export function roadVerges(tile,bounds,residentialBounds=null){
    }
    for(let d=Math.ceil((distance+1)/48)*48-distance;d<len;d+=48){
     for(const side of [-1,1]){const offset=w/2+3.4,x=a[0]+dx*d/len+nx*offset*side,z=a[1]+dz*d/len+nz*offset*side,key=`${x.toFixed(2)},${z.toFixed(2)}`;
-     if(!owned(x,z)||seen.has(key)||!safe(x,z,f,4))continue;seen.add(key);
+     if(!owned(x,z)||seen.has(key)||!safe(x,z,f,4,2.5))continue;seen.add(key);
      if(markers.length<16)markers.push({x,z,nx:nx*side,nz:nz*side});
      // One small roadside utility station per tile, only on a named through road.
-     if(p.name&&w>=9&&!services.length&&Math.round(distance+d)%240===0){const sx=x+nx*side*3,sz=z+nz*side*3;if(safe(sx,sz,f,6)&&owned(sx,sz))services.push({x:sx,z:sz,nx:nx*side,nz:nz*side});}
+     if(p.name&&w>=9&&!services.length&&Math.round(distance+d)%240===0){const sx=x+nx*side*3,sz=z+nz*side*3;if(safe(sx,sz,f,6,3)&&owned(sx,sz))services.push({x:sx,z:sz,nx:nx*side,nz:nz*side});}
     }
    }distance+=len;
   }
