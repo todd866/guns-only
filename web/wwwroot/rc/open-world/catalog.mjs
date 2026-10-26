@@ -74,6 +74,8 @@ export const dreamlandUnlocked=state=>specimensComplete(state)&&earlyCupsComplet
 export const secretLabUnlocked=dreamlandUnlocked;
 export const alienWorldUnlocked=state=>secretLabUnlocked(state)&&['dreamland'].some(id=>[state?.raceWins?.[id],state?.wins?.[id]].some(t=>Number.isFinite(t)&&t>0));
 export const canEnter=(state,p)=>p?.alien?alienWorldUnlocked(state):p?.id==='lab'?secretLabUnlocked(state):true;
+// Ordinary base geography is visitable even when its challenge is locked.
+export const canVisit=(state,p)=>!!p&&(!p.alien||alienWorldUnlocked(state));
 export const canEnterEvent=(state,event)=>event?.alien?alienWorldUnlocked(state):canEnter(state,locationById(event?.location));
 export function collectSpecimens(state,seen){const found=[];for(const i of seen){const p=SPECIMENS[i];if(p&&!state.specimens.includes(p.id)){state.specimens.push(p.id);found.push(p);}}return found;}
 export function expedition(state){return {found:state.specimens.length,total:SPECIMENS.length,unlocked:dreamlandUnlocked(state),complete:dreamlandUnlocked(state)&&(['dreamland','night-wave'].some(id=>[state.raceWins?.[id],state.wins?.[id]].some(t=>Number.isFinite(t)&&t>0)))};}

@@ -105,3 +105,11 @@ body.driving:not(.race-mode) header nav #atlas,body.driving:not(.race-mode) head
  .destination-name{font-size:12px}.destination{min-width:0}.destination-name{min-width:0}
 }
 .overlay{max-height:calc(100dvh - 24px);overflow:auto}
+
+/* Native long-press protection applies to every game control, including dynamic labels. */
+:where(button,[role="button"],[role="slider"],summary,#tracks a),:where(button,[role="button"],[role="slider"],summary,#tracks a) *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+:where(button,[role="button"],summary,#tracks a){touch-action:manipulation}
+:where(input,textarea,[contenteditable="true"]){-webkit-user-select:text;user-select:text}
+.travel{min-width:48px;min-height:44px;font-size:12px}
+.destination-name{min-height:44px}
+@media(max-width:540px) and (min-height:501px){.atlas-layout{grid-template-columns:1fr;grid-template-rows:130px minmax(160px,1fr);height:min(65dvh,580px)}#destinations{grid-template-columns:1fr}.destination-name{font-size:14px}}
