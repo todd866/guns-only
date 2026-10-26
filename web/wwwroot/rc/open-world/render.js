@@ -1,12 +1,13 @@
+import {roadsideDetail} from './roadside-detail.mjs';
 import {createSurfaceMaps} from './materials.js';
-import {groundTriangles} from './elevation.mjs';
+import {groundTriangles,elevationAt} from './elevation.mjs';
 import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import * as T from '../../vendor/three.module.js';
 import {buildingInfo,roadWidth} from './geometry.mjs';
 import {runwayFurniture} from './runways.mjs';
 import {SIZE} from './stream.mjs';
-const PALETTE={sand:'#bfaa86',asphalt:'#515b61',concrete:'#aeb2aa',grass:'#8c9b65',wall:'#c8b99c',roof:'#9a8770',glass:'#4d6d78',paint:'#eee4c4',stripe:'#e5b751',trim:'#e2d3b5',light:'#e6efc2'};
+const PALETTE={sand:'#bfaa86',asphalt:'#515b61',concrete:'#aeb2aa',grass:'#8c9b65',wall:'#c8b99c',roof:'#9a8770',glass:'#4d6d78',paint:'#eee4c4',stripe:'#e5b751',trim:'#e2d3b5',light:'#e6efc2',scrub:'#7e8561',gravel:'#a58e70'};
 // Clip each draw to its tile. Long OSM roads/aprons occur in multiple source tiles, but never
 // render twice on the same pixel. Collision keeps original footprints, including at seams.
 function clip(poly,b){for(const [axis,value,sign]of [[0,b[0],1],[0,b[2],-1],[1,b[1],1],[1,b[3],-1]]){const result=[];for(let i=0;i<poly.length;i++){const a=poly[i],c=poly[(i+1)%poly.length],ia=(a[axis]-value)*sign>=0,ic=(c[axis]-value)*sign>=0;if(ia)result.push(a);if(ia!==ic){const t=(value-a[axis])/(c[axis]-a[axis]);result.push([a[0]+t*(c[0]-a[0]),a[1]+t*(c[1]-a[1])]);}}poly=result;if(poly.length<3)return [];}return poly;}
@@ -55,11 +56,26 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null)
     }continue;
    }
    if(g.type==='Polygon'){if(p.aeroway==='apron')poly('concrete',g.coordinates[0],.004,1,true);else if(p.leisure&&p.leisure!=='swimming_pool'||p.landuse==='grass')poly('grass',g.coordinates[0],.002,1,true);else if(p.amenity==='parking')poly('asphalt',g.coordinates[0],.008,1,true);continue;}
-   if(g.type==='LineString'&&(p.highway||p.aeroway==='runway'||p.aeroway==='taxiway')){const w=roadWidth(p),kind=p.aeroway?'concrete':p.highway==='track'||p.highway==='path'?'sand':'asphalt',y=p.aeroway?.012:.02;for(let i=1;i<g.coordinates.length;i++){const a=g.coordinates[i-1],c=g.coordinates[i];if(inResidential(a[0],a[1])&&inResidential(c[0],c[1]))continue;ribbon(kind,a,c,w,y);
+   if(g.type==='LineString'&&(p.highway||p.aeroway==='runway'||p.aeroway==='taxiway')){const w=roadWidth(p),kind=p.aeroway?'concrete':p.highway==='track'||p.highway==='path'?'sand':'asphalt',y=p.aeroway?.012:.02;for(let i=1;i<g.coordinates.length;i++){const a=g.coordinates[i-1],c=g.coordinates[i];if(inResidential(a[0],a[1])&&inResidential(c[0],c[1]))continue;
+     // A graded shoulder joins paved roads to desert without narrowing the route.
+     // Draw in the existing sand bucket, clipped exactly like the roadway.
+     if(kind==='asphalt')ribbon('sand',a,c,w+1.4,y-.006);
+     ribbon(kind,a,c,w,y);
      if(p.aeroway==='runway'){const len=Math.hypot(c[0]-a[0],c[1]-a[1]);if(len)for(const side of [-1,1]){const off=(w/2-1)*side,dx=(c[1]-a[1])/len*off,dz=-(c[0]-a[0])/len*off;ribbon('paint',[a[0]+dx,a[1]+dz],[c[0]+dx,c[1]+dz],.3,y+.008);}}
      if(p.aeroway==='taxiway')ribbon('stripe',a,c,.18,y+.006);
      if(p.aeroway==='runway'||w>=9){const len=Math.hypot(c[0]-a[0],c[1]-a[1]),step=p.aeroway?25:7;for(let d=0;d<len;d+=step){const t=d/len,u=Math.min((d+step*.42)/len,1);ribbon('paint',[a[0]+(c[0]-a[0])*t,a[1]+(c[1]-a[1])*t],[a[0]+(c[0]-a[0])*u,a[1]+(c[1]-a[1])*u],p.aeroway?.8:.1,y+.008);}}
     }if(p.aeroway==='runway'){const details=runwayFurniture(f,w);for(const shape of details.paint)poly('paint',shape,y+.012);for(const [x,z]of details.lights)poly('light',[[x-.18,z-.18],[x+.18,z-.18],[x+.18,z+.18],[x-.18,z+.18]],.12);}}
+  }
+  // Low, non-colliding scrub and stones sit beyond the drivable shoulder.
+  // At most 48 clusters per streamed tile; two shared batches, no per-prop objects.
+  for(const {x,z,size:s} of roadsideDetail(tile,b,residentialBounds)){
+   const y=elevationAt(elevation,x,z)-.025;
+   for(let j=0;j<3;j++){const angle=j*2.094,dx=Math.cos(angle)*s,dz=Math.sin(angle)*s;
+    quad('scrub',[x-dx,y+.015,z-dz],[x+dx,y+.015,z+dz],[x+dx*.3,y+s*.8,z+dz*.3],[x-dx*.3,y+s*.8,z-dz*.3],.85+j*.08);
+    quad('scrub',[x-dx*.3,y+s*.8,z-dz*.3],[x+dx*.3,y+s*.8,z+dz*.3],[x+dx,y+.015,z+dz],[x-dx,y+.015,z-dz],.85+j*.08);
+   }
+   const cx=x+.8,cz=z+.3,r=s*.45,top=[cx,y+.12,cz];
+   for(let j=0;j<5;j++){const a=j*Math.PI*2/5,c=(j+1)*Math.PI*2/5;tri('gravel',top,[cx+Math.cos(c)*r,y+.005,cz+Math.sin(c)*r],[cx+Math.cos(a)*r,y+.005,cz+Math.sin(a)*r],.85+j*.035);}
   }
   for(const [k,v]of buckets){if(!v.v.length)continue;const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(v.v,3));g.setAttribute('color',new T.Float32BufferAttribute(v.c,3));g.setAttribute('uv',new T.Float32BufferAttribute(v.uv,2));g.computeVertexNormals();g.computeBoundingSphere();const m=new T.Mesh(g,mats.get(k));m.castShadow=['wall','roof'].includes(k);m.receiveShadow=true;root.add(m);}groups.set(key,root);scene.add(root);
  }

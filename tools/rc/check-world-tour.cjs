@@ -28,7 +28,7 @@ const save=()=>fs.writeFileSync(path.join(out,'tour.json'),JSON.stringify(report
   page=await context.newPage();page.on('pageerror',e=>report.errors.push(e.message));
   page.on('console',m=>{if(m.type()==='error')report.errors.push(`${m.text()} (${m.location().url})`);});
   page.on('request',r=>{if(r.isNavigationRequest()&&r.frame()===page.mainFrame())report.documents++;});
-  await page.goto(`${base}/rc/?audioQa=silent&telemetry=off&rivals=0`);
+  await page.goto(`${base}/rc/?at=gate&audioQa=silent&telemetry=off&rivals=0`);
   await page.waitForFunction(()=>window.__gunsOnlyRC?.snapshot().assets==='blender'&&!document.querySelector('#start').disabled,null,{timeout:90000});
   report.gpu=await page.evaluate(()=>{const gl=document.querySelector('#view').getContext('webgl2'),e=gl.getExtension('WEBGL_debug_renderer_info');return gl.getParameter(e?e.UNMASKED_RENDERER_WEBGL:gl.RENDERER);});
   assert.ok(!/swiftshader|llvmpipe/i.test(report.gpu),'Hardware renderer required');

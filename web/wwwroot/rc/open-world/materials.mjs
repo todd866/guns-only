@@ -5,7 +5,7 @@ const periodic=n=>n%(MATERIAL_SIZE-1);
 // Wrapped integer grain avoids the diagonal sine-wave bands that looked like painted roads.
 const noise=(x,y,s=0)=>{let n=Math.imul(periodic(x)+1,374761393)^Math.imul(periodic(y)+1,668265263)^Math.imul(s+1,1274126177);n=Math.imul(n^(n>>>13),1274126177);return ((n^(n>>>16))>>>0)/4294967295;};
 const detail=(x,y,s=0)=>noise(x,y,s+31);
-function heightAt(kind,x,y){const u=periodic(x)/(MATERIAL_SIZE-1),v=periodic(y)/(MATERIAL_SIZE-1);switch(kind){case'sand':return .5+.18*Math.sin(TAU*(v*7+Math.sin(TAU*u*4)*.12))+.025*noise(x,y);case'asphalt':return .5+.06*noise(x,y)+.025*Math.sin(TAU*u*31)*Math.sin(TAU*v*29);case'concrete':return .5+.025*noise(x,y)+.018*(Math.abs(Math.sin(TAU*u*4))>.96||Math.abs(Math.sin(TAU*v*4))>.96?-.7:0);case'stucco':return .5+.07*noise(x,y)+.018*Math.sin(TAU*u*47)*Math.sin(TAU*v*43);case'roof':return .5+.13*Math.sin(TAU*u*8)+.02*noise(x,y);default:throw new RangeError(`unknown surface: ${kind}`);}}
+function heightAt(kind,x,y){const u=periodic(x)/(MATERIAL_SIZE-1),v=periodic(y)/(MATERIAL_SIZE-1);switch(kind){case'sand':return .5+.045*noise(x,y)+.018*detail(x,y);case'asphalt':return .5+.06*noise(x,y)+.025*Math.sin(TAU*u*31)*Math.sin(TAU*v*29);case'concrete':return .5+.018*noise(x,y)-.025*(x<1||y<1?1:0);case'stucco':return .5+.07*noise(x,y)+.018*Math.sin(TAU*u*47)*Math.sin(TAU*v*43);case'roof':return .5+.13*Math.sin(TAU*u*8)+.02*noise(x,y);default:throw new RangeError(`unknown surface: ${kind}`);}}
 function base(kind,x,y){
  const h=heightAt(kind,x,y),n=noise(x,y,9),d=detail(x,y,kind.length),u=periodic(x)/127,v=periodic(y)/127;
  // Deliberately saturated, toy-scale colours: each base material must remain legible
@@ -19,7 +19,14 @@ function base(kind,x,y){
    // Sparse hairline seams are darker than the road; keep them distinct from paint.
    if(Math.abs(Math.sin(TAU*(u+.025*Math.sin(TAU*v*3))))<.018)return [.11,.12,.13];
  }
- if(kind==='concrete'&&(Math.abs(Math.sin(TAU*u*4))>.96||Math.abs(Math.sin(TAU*v*4))>.96))variation-=.08;
+ if(kind==='concrete'){
+   // One expansion joint per 6.25 m tile; broad, quiet mottling plus fine aggregate.
+   // Avoid repeated sine bands: they alias strongly at the RC camera's grazing angle.
+   variation=(n-.5)*.025+(d-.5)*.016+.025*Math.sin(TAU*u)*Math.sin(TAU*v);
+   if(x<1||y<1)variation-=.11;
+   else if(x<3||y<3)variation-=.018;
+ }
+ if(kind==='sand')variation=(n-.5)*.075+(d-.5)*.035+.025*Math.sin(TAU*u)*Math.sin(TAU*v);
  if(kind==='roof')variation+=(Math.sin(TAU*u*8)>.25?.035:-.035);
  return palette.map(channel=>clamp(channel+variation));
 }
