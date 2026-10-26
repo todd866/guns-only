@@ -41,7 +41,7 @@ export function buildLandmarks(scene,world,progress=loadProgress(),roads=[],bake
  for(const x of [353,407]){const z=356;for(const side of [-1,1])box(x+side*12,4,z,.7,8,28,'#929e9e',true);
   const roof=new T.Mesh(new T.CylinderGeometry(12.3,12.3,28,32,1,true,Math.PI/2,Math.PI),new T.MeshStandardMaterial({color:'#b4bcbc',roughness:.65,side:T.DoubleSide}));roof.rotation.x=Math.PI/2;roof.position.set(x,8,z);root.add(roof);
   for(let zz=z-14;zz<=z+14;zz+=7){const rib=new T.Mesh(new T.TorusGeometry(12.35,.12,6,28,Math.PI),mat('#647c82'));rib.position.set(x,8,zz);root.add(rib);}
-  label('FLIGHT TEST',x,6.5,z+14.1,13);for(const side of [-1,1])box(x+side*9,.65,z+8,2,1.3,3,'#dcad5d',true);
+  label(x===353?'FLIGHT TEST 01':'MAINTENANCE 02',x,6.5,z+14.1,13,x===353?'#9bd7df':'#f6d58c');for(const side of [-1,1])box(x+side*9,.65,z+8,2,1.3,3,'#dcad5d',true);
  }
  // WIC PlayPlace: optional tabletop ramps and a broad, rideable curved quarterpipe.
  for(const [x,z,h]of [[-1145,1205,1],[-1115,1190,1.4],[-1130,1180,.7]])ramp(x,z,4,10,h,Math.PI/2);

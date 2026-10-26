@@ -4,7 +4,7 @@ import {SCENERY_BOUNDS} from './district-zones.mjs';
 
 // Grade the existing road edges, not the driving surface. Stable source-distance
 // sampling and half-open tile ownership keep props identical across streaming seams.
-export function roadVerges(tile,bounds,residentialBounds=null){
+export function roadVerges(tile,bounds,residentialBounds=null,includeStrips=true){
  const strips=[],markers=[],services=[],seen=new Set(),excluded=[...SCENERY_BOUNDS,...(residentialBounds?[residentialBounds]:[])];
  const owned=(x,z)=>x>=bounds[0]&&x<bounds[2]&&z>=bounds[1]&&z<bounds[3];
  const safe=(x,z,source,margin,ownClearance=1.38)=>{
@@ -18,7 +18,7 @@ export function roadVerges(tile,bounds,residentialBounds=null){
   const w=roadWidth(p);let distance=0;
   for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i],dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);if(!len)continue;const nx=-dz/len,nz=dx/len;
    // Segmented strips leave junction mouths clear rather than painting across them.
-   for(let d=0;d<len;d+=6){const end=Math.min(d+6,len),mid=(d+end)/2;
+   if(includeStrips)for(let d=0;d<len;d+=6){const end=Math.min(d+6,len),mid=(d+end)/2;
     for(const side of [-1,1]){const x=a[0]+dx*mid/len+nx*(w/2+1.4)*side,z=a[1]+dz*mid/len+nz*(w/2+1.4)*side;
      if(x<bounds[0]-5||x>bounds[2]+5||z<bounds[1]-5||z>bounds[3]+5)continue;
      if(![d,mid,end].every(t=>safe(a[0]+dx*t/len+nx*(w/2+1.4)*side,a[1]+dz*t/len+nz*(w/2+1.4)*side,f,3)))continue;
