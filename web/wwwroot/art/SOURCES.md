@@ -247,12 +247,12 @@ table further down stays the single place a filename is bound to a hash.
 
 ### Saucer Springs AFB picker — CURRENT
 
-- Captured 2026-10-24 from the playable neighbourhood skatepark with `tools/rc/card-art.cjs`; HUD hidden, headless Chromium, silent audio.
+- Captured 2026-10-28 from the playable neighbourhood skatepark with `tools/rc/card-art.cjs`: a composed low toy's-eye shot of the player's jet buggy facing the repainted graffiti quarter (the harness alone patches in camera and car placement); HUD hidden, headless Chromium, silent audio.
 - Epistemic label: `fiction`. This is an actual in-engine frame of the fictional base.
-- Source: `tools/assets/generators/menu-posters/sources/saucer-springs.png`, SHA-256 `975688ae2bce2023a1f85835798d9930a72c9b44456b1f87062bd087da7963b2`.
+- Source: `tools/assets/generators/menu-posters/sources/saucer-springs.png`, SHA-256 `d9ec9abe519fe7422ff86ea56bd2166bf4365540410ed6b70fd05c510cc1c5d8`.
 - Encode with `node tools/assets/generators/menu-posters/render.mjs saucer-springs` (cwebp, quality85).
 - Project-authored scene; component asset provenance remains in the RC asset records.
 
 | File | Dimensions | Bytes | SHA-256 | Use |
 | --- | --- | --- | --- | --- |
-| `saucer-springs.webp` | 900×1120 | 74198 | `63e1c96984f3166748a88c1e393562d0c29b83a765e2debdc1f96196088cac08` | Saucer Springs AFB launcher; current gameplay |
+| `saucer-springs.webp` | 900×1120 | 68692 | `27d02deaceb0e3cb03dac52271262cdb855fc9ac45c16c620d78cd26694b030e` | Saucer Springs AFB launcher; current gameplay |

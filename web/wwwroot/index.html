@@ -4400,7 +4400,9 @@
       grid-template-columns: none;
       grid-auto-flow: column;
       grid-auto-columns: clamp(210px, 22vw, 270px);
+      /* Centre the cards over the console; an overflowing phone carousel stays start-aligned. */
       justify-content: start;
+      justify-content: safe center;
       gap: 16px;
       padding: 3px;
       margin: 0;
@@ -4515,7 +4517,9 @@
     @media (max-width: 760px), (max-height: 500px) and (orientation: landscape) {
       :root #ready-screen .console-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
       :root #ready-screen .console-actions button:not(.console-primary) { min-height: 72px; gap: 8px; padding: 8px 3px; border-left: 0; font-size: 15px; }
-      :root #ready-screen .console-actions #ready-intro-replay { grid-column: span 2; }
+      /* The picker's five actions share one row; collapsed tracks absorb a hidden intro button. */
+      :root #ready-screen[data-mode="program"] .console-actions { grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); }
+      :root #ready-screen[data-mode="program"] .console-actions button:not(.console-primary) { font-size: 13px; }
       :root #ready-screen[data-f22-result] .f22-actions .console-primary { grid-column: 1 / -1; min-height: 60px; font-size: 24px; }
     }
     @media (max-height: 500px) and (orientation: landscape) {
@@ -4938,8 +4942,8 @@
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
               <!-- The stable area-51 program ID preserves saved selections; the game is Saucer Springs AFB. -->
               <button type="button" class="sortie-choice" data-aircraft="rc" data-program-node="area-51" aria-pressed="false" title="Explore Saucer Springs AFB in an RC car.">
-                <span class="sortie-number"><b data-program-status="area-51"></b></span>
-                <strong>Saucer Springs AFB</strong>
+                <span class="sortie-number">SAUCER SPRINGS AFB <b data-program-status="area-51"></b></span>
+                <strong>Jet Buggy</strong>
                 <small class="sortie-contract">Explore · race · battle</small>
               </button>
             </div>
