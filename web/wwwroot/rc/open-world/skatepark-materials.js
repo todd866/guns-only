@@ -44,7 +44,7 @@ export function finishSkateparkSurface(geometry, material, paintTexture = null) 
   const base={floor:[173,170,163],concrete:[151,157,159],edge:[190,182,165],path:[142,149,145]}[material.name];
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const i=(y*size+x)*4,n=noise(x,y),grain=(n-.5)*14;
-    const edge=Math.min(x,y,size-1-x,size-1-y),seam=joint&&edge<1?22:joint&&edge<3?6:0;
+    const edge=Math.min(x,y,size-1-x,size-1-y),seam=joint&&edge<2?40:joint&&edge<4?10:0;
     const mottling=3*Math.sin(x*.028)*Math.sin(y*.033)+2*Math.sin((x+y)*.071);
     // Sparse dark pinholes and subtle aggregate, rather than high-contrast gravel.
     const pore=n<.025?12:0,v=grain+mottling-seam-pore;

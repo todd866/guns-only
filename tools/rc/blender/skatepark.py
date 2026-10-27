@@ -11,7 +11,7 @@ import common as c
 R=Path(__file__).resolve().parents[3];random.seed(71)
 bpy.ops.wm.read_factory_settings(use_empty=True)
 c.ROOT=c.marker('Neighbourhood_Skate_Plaza',(0,0,0));c.ROOT.parent=None
-c.PALETTE.update({k:(v,.65 if k=='steel' else 0,.38 if k=='steel' else .85) for k,v in {'path':'#9B9D95','floor':'#BFC1B5','concrete':'#BFC1B5','edge':'#D6D4C4','joint':'#929B94','teal':'#3EA49B','coral':'#DE876E','gold':'#E1B856','blue':'#467D99','ink':'#384C56','cream':'#EEE5C9','steel':'#738990','wood':'#A67B50','paint':'#FFFFFF'}.items()})
+c.PALETTE.update({k:(v,.65 if k=='steel' else 0,.38 if k=='steel' else .85) for k,v in {'path':'#9B9D95','floor':'#BFC1B5','concrete':'#BFC1B5','edge':'#D6D4C4','joint':'#929B94','teal':'#3EA49B','coral':'#DE876E','gold':'#E1B856','blue':'#467D99','ink':'#384C56','cream':'#EEE5C9','steel':'#738990','wood':'#A67B50','paint':'#FFFFFF','checkdark':'#34393D','checklight':'#E6E3D8','turf':'#4A7A30'}.items()})
 def add(m,g,up=False):c.vis('plaza',m).add(g,kind='up' if up else 'closed')
 def box(m,x,y,z,w,d,h):add(m,c.box(x,y,z,w,d,h))
 def phys(name,m,g,up=False):
@@ -39,7 +39,7 @@ def xf(p,origin):return (origin[0]+p[0]*ca-p[1]*sa,origin[1]+p[0]*sa+p[1]*ca,p[2
 def shape(g,origin):return c.transform(g,lambda p:xf(p,origin))
 def lbox(m,origin,x,y,z,w,d,h):add(m,shape(c.box(x,y,z,w,d,h),origin))
 def lphys(name,m,origin,x,y,z,w,d,h):phys(name,m,shape(c.box(x,y,z,w,d,h),origin))
-def rail(origin,p,q,r=.04):
+def rail(origin,p,q,r=.04,mat='steel'):
  p=xf(p,origin);q=xf(q,origin)
  # Low-poly round tubular railing aligned with its true segment, with closed caps.
  from mathutils import Vector
@@ -49,7 +49,7 @@ def rail(origin,p,q,r=.04):
  for point in [Vector(p),Vector(q)]:
   for i in range(12):verts.append(tuple(point+r*(u*math.cos(i*math.tau/12)+v*math.sin(i*math.tau/12))))
  faces=[tuple(reversed(range(12))),tuple(range(12,24))]+[(i,(i+1)%12,(i+1)%12+12,i+12) for i in range(12)]
- add('steel',(verts,faces))
+ add(mat,(verts,faces))
 # The four modules use one aligned metre frame. Their footprints come from
 # image digitization; heights and transition radii remain explicit estimates.
 FLOOR=.14
@@ -100,6 +100,11 @@ surface('central_south_bank','concrete',(-5.7,-.2),(-3.6,-1.63),lambda u,v:bank(
 surface('central_divider','paint',(-5.7,-.2),(-1.63,-1.1),lambda u,v:bank(min((u+5.7)/1.65,(-.2-u)/1.65,1),.54)+.46,nu=32,nv=1)
 for u0,u1 in [(-5.7,-4.05),(-4.05,-1.85),(-1.85,-.2)]:
  rail(ORIGIN,(u0,-1.365,bank(min((u0+5.7)/1.65,(-.2-u0)/1.65,1),.54)+.49),(u1,-1.365,bank(min((u1+5.7)/1.65,(-.2-u1)/1.65,1),.54)+.49),.025)
+# The reference funbox's signature: a painted checkerboard across its flat top.
+for i in range(5):
+ for j in range(5):
+  u0=-4.15+i*.5;v0=3.05+j*.56;z=FLOOR+.986
+  add('checkdark' if (i+j)%2 else 'checklight',([xf(p,ORIGIN) for p in [(u0,v0,z),(u0+.5,v0,z),(u0+.5,v0+.56,z),(u0,v0+.56,z)]],[(0,1,2,3)]),True)
 # Bent handrail follows the lower bank, leaving the higher table unobstructed.
 rail_points=[(-5.8,.7,across(-5.8,.62)+.52),(-4.2,.7,across(-4.2,.62)+.52),(-1.6,.7,across(-1.6,.62)+.52),(0,.7,across(0,.62)+.52)]
 for pp,qq in zip(rail_points,rail_points[1:]):rail(ORIGIN,pp,qq,.035)
@@ -119,6 +124,11 @@ LIP_U=8.2;LIP_V=6.7;RUN=2.0;RISE=1.4
 surface('east_quarter','paint',(LIP_U-RUN,LIP_U),(-3.4,LIP_V),lambda u,v:quarter((u-(LIP_U-RUN))/RUN),nu=40,nv=20)
 # Broad upper deck is filled only outside the bowl; no plane bridges its hollow.
 phys('east_upper_deck','path',shape(slab([(8.2,-3.4),(13.25,-3.4),(12.2,3.45),(17.3,3.65),(17.1,6.7),(8.2,6.7)],FLOOR,FLOOR+RISE),ORIGIN))
+# The reference park's quarter backs onto a grassed berm, not a paved block:
+# turf the deck top, keeping a concrete strip behind the coping. Visual only.
+for poly in [[(8.8,-3.4),(13.25,-3.4),(12.2,3.45),(8.8,3.45)],[(8.8,3.45),(12.2,3.45),(17.3,3.65),(17.1,6.1),(8.8,6.1)]]:
+ z=FLOOR+RISE+.012
+ add('turf',([xf((u,v,z),ORIGIN) for u,v in poly],[tuple(range(len(poly)))]),True)
 surface('bowl_south','paint',(8.2,13.4),(6.7,8.7),lambda u,v:quarter((8.7-v)/RUN),nu=16,nv=32)
 surface('bowl_north','paint',(7.8,13.4),(11.8,13.8),lambda u,v:quarter((v-11.8)/RUN),nu=16,nv=32)
 surface('bowl_east','paint',(13.4,15.4),(8.7,11.8),lambda u,v:quarter((u-13.4)/RUN),nu=32,nv=12)
@@ -144,11 +154,12 @@ phys('bowl_north_deck','concrete',shape(slab([(7.55,13.8)]+arc_north+[(16.7,11.8
 arc_south=[(13.4+RUN*math.cos(math.pi*.5*i/24),8.7-RUN*math.sin(math.pi*.5*i/24)) for i in range(25)]
 phys('bowl_south_corner_deck','path',shape(slab(arc_south+[(17.1,6.7),(16.7,8.7)],FLOOR,FLOOR+RISE),ORIGIN))
 aligned_box('bowl_east_deck','concrete',16.05,9.1,1.3,5.4,RISE)
-for pp,qq in [((8.2,-3.4,1.57),(8.2,6.7,1.57)),((8.2,6.7,1.57),(13.4,6.7,1.57)),((15.4,8.7,1.57),(15.4,11.8,1.57)),((13.4,13.8,1.57),(7.8,13.8,1.57))]:rail(ORIGIN,pp,qq,.032)
+# Poured concrete lips, as on the reference park's quarter and pocket bowl.
+for pp,qq in [((8.2,-3.4,1.55),(8.2,6.7,1.55)),((8.2,6.7,1.55),(13.4,6.7,1.55)),((15.4,8.7,1.55),(15.4,11.8,1.55)),((13.4,13.8,1.55),(7.8,13.8,1.55))]:rail(ORIGIN,pp,qq,.06,'edge')
 for sign,vc in [(-1,8.7),(1,11.8)]:
  for i in range(24):
   aa=math.pi*.5*i/24;bb=math.pi*.5*(i+1)/24
-  rail(ORIGIN,(13.4+RUN*math.cos(aa),vc+sign*RUN*math.sin(aa),1.57),(13.4+RUN*math.cos(bb),vc+sign*RUN*math.sin(bb),1.57),.032)
+  rail(ORIGIN,(13.4+RUN*math.cos(aa),vc+sign*RUN*math.sin(aa),1.55),(13.4+RUN*math.cos(bb),vc+sign*RUN*math.sin(bb),1.55),.06,'edge')
 # Small ground chevrons suggest the bowl hip. They are cues, not driving assists.
 for u,v in [(4.4,4.5),(4.9,5.0),(5.4,5.5)]:
  direction=(math.sqrt(.5),math.sqrt(.5));right=(-direction[1],direction[0]);pts=[]
@@ -225,7 +236,8 @@ for o in objs:
    co=o.data.vertices[o.data.loops[li].vertex_index].co
    u=co.x*ca+co.y*sa;v=-co.x*sa+co.y*ca;h=co.z-FLOOR
    if strip==0:
-    U=(v+3.4)/10.1 if 'east_quarter' in name else math.atan2(v-10.2,u-11.6)/math.tau+1
+    # Viewed from the pad the quarter's v axis runs right-to-left; reverse U so lettering reads.
+    U=(6.7-v)/10.1 if 'east_quarter' in name else math.atan2(v-10.2,u-11.6)/math.tau+1
     V=h/RISE
     if abs(normal_v)>.995:U=(u-6.2)/10
     elif abs(normal_u)>.995:U=(v+3.4)/17.2
