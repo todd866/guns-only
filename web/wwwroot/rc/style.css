@@ -114,3 +114,20 @@ body.driving:not(.race-mode) header nav #atlas,body.driving:not(.race-mode) head
 .travel{min-width:48px;min-height:44px;font-size:12px}
 .destination-name{min-height:44px}
 @media(max-width:540px) and (min-height:501px){.atlas-layout{grid-template-columns:1fr;grid-template-rows:130px minmax(160px,1fr);height:min(65dvh,580px)}#destinations{grid-template-columns:1fr}.destination-name{font-size:14px}}
+/* Result panel: place badge, podium row, labelled stats, actions. */
+#result h1{margin:0;font-size:22px;line-height:1.15}
+.result-head{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.result-place{flex:none;min-width:58px;padding:2px 8px;border:2px solid var(--gold);border-radius:8px;color:var(--gold);font:800 30px/1.2 system-ui;text-align:center;font-variant-numeric:tabular-nums}
+.result-place sup{font-size:13px;margin-left:1px}
+.result-order{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px;padding:0;list-style:none}
+.result-order li{padding:4px 9px;border:1px solid var(--line);border-radius:5px;font-size:13px;letter-spacing:.04em;white-space:nowrap}
+.result-order li b{color:var(--muted);margin-right:3px;font-variant-numeric:tabular-nums}
+.result-order li.you{border-color:var(--gold);color:var(--gold)}.result-order li.you b{color:var(--gold)}
+.result-order li.gap{border:0;padding:0}.result-order li.gap button{min-height:0;padding:3px 9px;font-size:13px;color:var(--muted)}.result-order:not(.open) li.mid{display:none}
+.result-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(66px,1fr));gap:1px;margin:0 0 14px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.result-stats div{background:#11252b;padding:7px clamp(6px,1.6vw,10px)}
+.result-stats dt{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.result-stats dd{margin:2px 0 0;font:700 clamp(14px,4.2vw,19px) system-ui;white-space:nowrap;font-variant-numeric:tabular-nums}
+.result-cup{margin:-6px 0 12px;color:var(--muted);font-size:13px}
+.result-actions{display:flex;gap:8px}.result-actions button{flex:1;min-height:42px}
+.result-actions .primary{background:var(--gold);border-color:var(--gold);color:#1b2a2e;font-weight:700}
