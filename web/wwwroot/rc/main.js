@@ -370,6 +370,8 @@ const raceMenu=createRaceMenu({progress:()=>ui.progress,search:location.search,o
 if(openWorld){$('brief-title').textContent=new URLSearchParams(location.search).has('event')&&!openWorld.locked?openWorld.selected.name:'SAUCER SPRINGS AFB';$('start').title='Explore Saucer Springs; E enters an event, Tab opens the base map';}
 $('return-world').hidden=!!openWorld;$('return-world').onclick=()=>{location.href=rcLink({track:'hub',from:new URLSearchParams(location.search).get('from')??track},location.search);};
 window.addEventListener('pagehide',()=>{openWorld?.dispose();worldSky?.dispose();});
+// pagehide tears the world and touch controls down, so a back/forward-cache restore must reload.
+window.addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
 const worldSky=openWorld?createWorldSky({scene,sun,hemi,contactSun,renderer}):null;let worldElapsed=0;
 const pollGamepad=createGamepadInput();const frameMs=[];function frame(now){const pad=pollGamepad(navigator.getGamepads?.());if(pad.start){if(!started)$('start').click();else if(!ui.panel())pause(!paused);}if(!paused&&!ui.panel()&&pad.fire)fireQueued=true;if(!started&&!$('start').disabled){started=true;paused=false;$('brief').hidden=true;$('pause').textContent='⏸';if(!race.roam)startCountdown();}const dt=frameSeconds(now,last);telemetry.observeFrame(Math.max(0,now-last),!paused&&countdown<=0&&!document.hidden);frameMs.push(Math.max(0,now-last));if(frameMs.length>600)frameMs.shift();last=now;
  if(!paused&&!ui.panel()&&countdown>0){countdown-=dt;const n=Math.ceil(countdown);if(n<lastBeep){lastBeep=n;n>0?audio.beep():audio.beep(true);}$('countdown').hidden=countdown<=-.6;$('countdown').textContent=countdown>0?String(n):'GO!';if(countdown<=0&&countdown>-.6){}acc=0;}

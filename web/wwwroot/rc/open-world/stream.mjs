@@ -41,6 +41,8 @@ export function createStream({manifest,fetchTile,onLoad=()=>{},onDrop=()=>{},cac
  }
  async function prepare(pos){if(disposed)return false;const tiles=await Promise.all(desiredTiles(pos).map(t=>fetchReady(t.join(','))));return !disposed&&tiles.every(Boolean);}
  async function update(pos){if(disposed)return;wanted=new Set(desiredTiles(pos).map(t=>t.join(',')));for(const [key,tile] of loaded)if(!wanted.has(key)){onDrop(key,tile);loaded.delete(key);}
+  // Only failures the car still needs keep the per-frame retry alive.
+  for(const key of errors.keys())if(!wanted.has(key))errors.delete(key);
   await Promise.all([...wanted].map(async key=>{if(loaded.has(key))return;const tile=await fetchReady(key);if(disposed||!tile||!wanted.has(key)||loaded.has(key))return;onLoad(key,tile);loaded.set(key,tile);}));
  }
  // Streaming must be ready before a car can enter a neighbouring cell; no ghost buildings.
