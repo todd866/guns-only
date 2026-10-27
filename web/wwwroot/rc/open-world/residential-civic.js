@@ -102,17 +102,13 @@ export function prepareResidentialCivic(world, data = {}, options = {}) {
       const ax = edge.a[0] + outwardX * .06, az = edge.a[1] + outwardZ * .06;
       const bx = edge.b[0] + outwardX * .06, bz = edge.b[1] + outwardZ * .06;
       const panel=[[ax, .12, az], [bx, .12, bz], [bx, h, bz], [ax, h, az]];if(signedArea>0)panel.reverse();quad('rearWall',...panel);
-      // These sides face the starting skatepark, so they need to read as a
-      // building: darker plinth, roof coping and a ribbon of framed windows.
+      // These sides face the starting skatepark. Like the real building they
+      // are windowless: plinth, dark fascia band and vertical panel seams.
       const tx = (edge.b[0] - edge.a[0]) / edge.len, tz = (edge.b[1] - edge.a[1]) / edge.len, angle = Math.atan2(-tz, tx);
       addBox(list, 'concrete', edge.len, .62, .08, mx + outwardX * .07, .43, mz + outwardZ * .07, angle);
       addBox(list, 'roof', edge.len + .1, .28, .3, mx + outwardX * .1, h - .06, mz + outwardZ * .1, angle);
-      const windows = edge.len >= 7 ? Math.floor((edge.len - 3) / 4.2) : 0;
-      for (let i = 0; i < windows; i++) {
-        const t = (i - (windows - 1) / 2) * 4.2, wx = mx + tx * t, wz = mz + tz * t;
-        addBox(list, 'trim', 1.86, 1.66, .06, wx + outwardX * .07, 2.25, wz + outwardZ * .07, angle);
-        addBox(list, 'glass', 1.6, 1.4, .04, wx + outwardX * .1, 2.25, wz + outwardZ * .1, angle);
-      }
+      addBox(list, 'roof', edge.len + .04, .7, .06, mx + outwardX * .04, h - .55, mz + outwardZ * .04, angle);
+      for (let t = -edge.len / 2 + 3; t < edge.len / 2 - 1; t += 3) addBox(list, 'roof', .07, h - .9, .04, mx + tx * t + outwardX * .03, .12 + (h - .9) / 2, mz + tz * t + outwardZ * .03, angle);
     }
     // Long recessed red window band below the dark roof lip.
     addBox(list, 'red', front.len * .55, 1.35, .08, frontMid[0] + nx * .08, 1.65, frontMid[1] + nz * .08, frontAngle);
