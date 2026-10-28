@@ -128,14 +128,14 @@ for(const [id,x0,x1,h] of [['arcade',-32,-25,.83],['market',25,32,.68]])feature(
 });
 // A granite path through two planted islands is wide enough for a held-throttle transfer.
 feature('twin-planters','planter',()=>{
-  for(const [z0,z1,h] of [[-23.5,-21,.6],[-18,-15.5,.4]]){
+  for(const [z0,z1,h] of [[-22,-20,.6],[-17,-14.5,.4]]){
     box(-12,-7,z0,z1,.08,h,'granite');
     for(const [x0,x1] of [[-11.7,-11.1],[-7.9,-7.3]])box(x0,x1,z0+.3,z1-.3,h,h+.2,'green');
     for(const x of [-12,-7])edge(`twin-${z0}-${x}`,'ledge',[[x,z0,h],[x,z1,h]]);
     for(const z of [z0,z1])for(const [a,b] of h===.6?[[-12,-10.8],[-8.2,-7]]:[[-12,-7]])edge(`twin-end-${z}-${a}`,'ledge',[[a,z,h],[b,z,h]]);
   }
-  wedge(-10.7,-8.3,-27,-21,.08,1);
-  wedge(-10.7,-8.3,-15.5,-13,.4,.08);
+  wedge(-10.7,-8.3,-25,-20,.08,1);
+  wedge(-10.7,-8.3,-14.5,-12,.4,.08);
 });
 feature('fountain-link','bank',()=>{
   wedge(-21,-15,6,9,.08,.78);box(-21,-15,11,12.5,.08,.4,'granite');
@@ -144,10 +144,10 @@ feature('fountain-link','bank',()=>{
   for(const z of [11,12.5])edge(`court-link-${z}`,'ledge',[[-21,z,.4],[-15,z,.4]]);
 });
 feature('civic-walk','ledge',()=>{
-  box(12,22,25,29,.08,.78,'granite');wedge(12,22,29,31,.78,.08);
-  for(const x of [12,22])edge(`civic-walk-${x}`,'ledge',[[x,25,.78],[x,29,.78]]);
+  box(12,22,25,27,.08,.78,'granite');wedge(12,22,27,30,.78,.08);
+  for(const x of [12,22])edge(`civic-walk-${x}`,'ledge',[[x,25,.78],[x,27,.78]]);
   edge('civic-walk-drop','ledge',[[12,25,.78],[22,25,.78]]);
-  edge('civic-walk-entry','edge',[[12,29,.78],[22,29,.78]]);
+  edge('civic-walk-entry','edge',[[12,27,.78],[22,27,.78]]);
 });
 // Pads, benches and planter rows chain the bigger lines at three to eight metre intervals.
 for(const [id,x0,x1,z0,z1,h] of [['entry-pad',4,10,-22,-19,.23],['sculpture-pad',5,11,-9,-6,.23],['middle-pad',-3,2,7,10,.23],['west-pad',-22,-15,21,24,.26],['east-pad',12,21,12.5,15,.23]]){
@@ -197,7 +197,7 @@ export const PLAZA_PARK = Object.freeze({
     {name:'PLANTER POP',points:250,from:[3,11,9,13.5],to:[3,11,17.5,28]},
     {name:'ARCADE THREE',points:250,from:[-33,-24,-20,-17.5],fromAbove:.7,to:[-33,-24,-16,-8],toBelow:.4},
     {name:'MARKET STEPS',points:250,from:[24,33,-20,-17.5],fromAbove:.6,to:[24,33,-16,-8],toBelow:.4},
-    {name:'PLANTER TO PLANTER',points:350,from:[-12,-7,-24,-20.5],fromAbove:.7,to:[-12,-7,-18,-13]},
+    {name:'PLANTER TO PLANTER',points:350,from:[-12,-7,-23,-19.5],fromAbove:.7,to:[-12,-7,-17,-12]},
     {name:'FOUNTAIN TO COURT',points:300,from:[-22,-14,6,9.5],to:[-22,-14,13,21]},
     {name:'CIVIC DROP',points:250,from:[12,22,24.5,27],fromAbove:.7,to:[12,22,17,23],toBelow:.4},
   ],

@@ -71,8 +71,8 @@ test('every riding feature has an upward face at its designed height',()=>{
     [0,-8,.55],[0,-12, .08+(1.2-.08)*2/3],[18,-5,1.5],[18,1,.08+(1.5-.08)*3/7],
     [-32.2,16,1.43],[25.8,16,1.18],[-29,15,1.08],[-29,20.3,.83],[-29,21,.58],[-29,21.8,.33],[29,15,.83],[29,20.3,.58],[29,21,.33],
     [-9,10,.83],[-9,13.5,1.09],[-9,20,.63],[-6,10,.48],[-6,20,.28],[7,16,.62],[7,11.5,.59],[20.5,18.5,.62],
-    [-28.5,-24,.455],[-28.5,-20,.83],[-28.5,-17.8,.6425],[28.5,-20,.68],[-9.5,-22,.08+.92*5/6],[-9.5,-17,.4],
-    [-24.8,0,.52],[-25.2,0,.26],[-18,7.5,.43],[-18,11.5,.4],[17,27,.78],[17,30,.43],[7,-20,.23],[0,8,.23]];
+    [-28.5,-24,.455],[-28.5,-20,.83],[-28.5,-17.8,.6425],[28.5,-20,.68],[-9.5,-22,.08+.92*3/5],[-9.5,-16,.4],
+    [-24.8,0,.52],[-25.2,0,.26],[-18,7.5,.43],[-18,11.5,.4],[17,27,.78],[17,28.5,.43],[7,-20,.23],[0,8,.23]];
   for(const [x,z,h] of checks)assert.ok(Math.abs(height(x,z)-h)<.025,`${x},${z}: ${height(x,z)} != ${h}`);
   for(let i=0;i<4;i++){
     const hit=world.raycast(plazaWorld([18,1.2,-7.65+i*.7]),[0,-1,0],2);
@@ -96,10 +96,13 @@ test('all grind polylines sit on real upward-facing geometry within five centime
 const lines=[
   ['FOUNTAIN GAP',-18,-27,5,'S'],['PLINTH HOP',0,-25,4,'K'],['OVER THE SUBWAY',18,-25,4.5,null],
   ['LEDGE TO LEDGE',-9,0,3.5,'A'],['THE BIG FOUR',-29,8,3,'T'],['EAST THREE',29,8,3,null],['PLANTER POP',7,0,4,'E'],
-  ['ARCADE THREE',-28.5,-27,3.5],['MARKET STEPS',28.5,-27,3.5],['PLANTER TO PLANTER',-9.5,-27.2,3],
-  ['FOUNTAIN TO COURT',-18,1,4],['CIVIC DROP',17,31,3.5,null,0,-1],
+  ['ARCADE THREE',-28.5,-27,3.5],['MARKET STEPS',28.5,-27,3.5],['PLANTER TO PLANTER',-9.5,-26,3],
+  ['FOUNTAIN TO COURT',-18,1,4],['CIVIC DROP',17,30.75,3.5,null,0,-1],
 ];
 for(const [gap,x,z,seconds,letter,dx=0,dz=1]of lines)test(`held throttle from rest: ${gap}${letter?` and ${letter}`:''}`,()=>{
+  assert.ok(Math.abs(height(x,z)-.08)<.01,'run-up starts on ordinary plaza floor');
+  const ray=[-dx*1.36,.43,-dz*1.36],dist=Math.hypot(...ray);
+  assert.equal(world.raycast(plazaWorld([x,.08+rideHeight()+.14,z]),ray.map(v=>v/dist),dist),null,'room behind the run-up for the default chase camera');
   const r=run(x,z,seconds,dx,dz);assert.ok(r.gaps.includes(gap),r.gaps.join(','));assert.deepEqual(r.grinds,[],'rails do not hijack the jump line');if(letter)assert.ok(r.sk.letters.includes(letter));clean(r);
   if(gap==='FOUNTAIN GAP'){assert.deepEqual(PLAZA_PARK.start,{at:[x,z],toward:[0,1]});assert.ok(r.peak>1.8);assert.ok(r.sk.score>=PLAZA_PARK.goals.find(g=>g.id==='high').score);}
   if(gap==='OVER THE SUBWAY'){assert.ok(r.sk.tape);assert.ok(r.sk.goals.has('subway'));assert.ok(r.landings.some(a=>a.to[1]>=-7&&a.to[1]<=-3&&a.to[2]>1.5),'lands on the subway awning');}
