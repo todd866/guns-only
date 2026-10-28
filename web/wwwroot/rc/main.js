@@ -31,6 +31,7 @@ import {loadOpenWorld} from './open-world/runtime.js';
 import {createWorldUI} from './open-world/ui.js';
 import {loadProgress,canEnter,expedition,SPECIMENS,rcLink,nearestLocation,locationById} from './open-world/catalog.mjs';
 import {setSkateRails} from './physics/grind.mjs';
+import {MARSEILLE_PARK,marseilleLocal,marseilleWorld} from './open-world/marseille.mjs';
 import {createSkate,stepSkate,INTRO_PARK} from './physics/skate.mjs';import {SKATESTREET,SKATESTREET_PARK,skatestreetLocal,skatestreetWorld} from './open-world/skatestreet.mjs';import {HANGAR,HANGAR_PARK,hangarLocal,hangarWorld} from './open-world/skate-hangar.mjs';import {SCHOOL_PARK,yardLocal,yardWorld} from './open-world/schoolyard.mjs';import {createSkateHud,goalCard} from './skate-hud.js';import {bankPoint,bankLocal} from './open-world/park-lines.mjs';import {RESIDENTIAL_PARK,parkPoint} from './open-world/residential-frame.mjs';
 let bodyKind='jet';try{bodyKind=loadProgress(localStorage).body;}catch{}
 function createRace(course,options){return createRaceBase({...course,laps:course.event?.kind==='sprint'?1:3},{...options,params:vehicleParams(bodyKind==='jet'?'buggy':bodyKind)});}
@@ -369,6 +370,8 @@ async function travelTo(id){if(!race.roam)return false;keys.clear();touchControl
 // Each park: rules, the frame that maps world positions to its [u, v, h], its area, and the
 // browser key that remembers its goals.
 const SKATE_PARKS={
+ marseille:{park:MARSEILLE_PARK,key:'guns-only.rc.skate.v1.marseille',centre:marseilleWorld([0,0,0]),radius:53,
+  frame:p=>{const l=marseilleLocal(p);return [l[0],l[2],l[1]];},world:([x,z,h])=>marseilleWorld([x,h,z])},
  skatestreet:{park:SKATESTREET_PARK,key:'guns-only.rc.skate.v1.skatestreet',centre:SKATESTREET.center,radius:54,
   frame:p=>{const l=skatestreetLocal(p);return [l[0],l[2],l[1]];},world:([x,z,h])=>skatestreetWorld([x,h,z])},
  intro:{park:INTRO_PARK,key:'guns-only.rc.skate.v1.intro',centre:RESIDENTIAL_PARK.anchor,radius:34,

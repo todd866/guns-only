@@ -8,8 +8,8 @@ const HANGAR_BOUNDS=(()=>{const c=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([x,z])=>han
 
 // Sparse planting in the graded verge, never in a roadway, apron, building,
 // authored district or event clearing. A fixed tile budget bounds streaming cost.
-export function roadsideDetail(tile,bounds,residentialBounds=null){
- const out=[],excluded=[...SCENERY_BOUNDS,SKATESTREET_BOUNDS,...(residentialBounds?[residentialBounds]:[])];
+export function roadsideDetail(tile,bounds,residentialBounds=null,extraBounds=null){
+ const out=[],excluded=[...SCENERY_BOUNDS,SKATESTREET_BOUNDS,...(residentialBounds?[residentialBounds]:[]),...(extraBounds?[extraBounds]:[])];
  const safe=(x,z)=>{
   if(x<bounds[0]||x>=bounds[2]||z<bounds[1]||z>=bounds[3]||inEventArea(x,z,24))return false;
   if(excluded.some(b=>x>b[0]-3&&x<b[2]+3&&z>b[1]-3&&z<b[3]+3))return false;
@@ -32,8 +32,8 @@ export function roadsideDetail(tile,bounds,residentialBounds=null){
 // tile's roads (plus a 3 m margin) and every polygon keeps planting out of roadways, aprons,
 // lots and buildings; a jittered 9 m grid with a fixed budget bounds the streaming cost.
 const hash=(x,z)=>{let h=Math.imul(x|0,374761393)^Math.imul(z|0,668265263);h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;};
-export function desertScatter(tile,bounds,residentialBounds=null,limit=460){
- const cell=4,n=Math.ceil((bounds[2]-bounds[0])/cell),blocked=new Uint8Array(n*n),excluded=[...SCENERY_BOUNDS,SKATESTREET_BOUNDS,HANGAR_BOUNDS,...(residentialBounds?[residentialBounds]:[])];
+export function desertScatter(tile,bounds,residentialBounds=null,limit=460,extraBounds=null){
+ const cell=4,n=Math.ceil((bounds[2]-bounds[0])/cell),blocked=new Uint8Array(n*n),excluded=[...SCENERY_BOUNDS,SKATESTREET_BOUNDS,HANGAR_BOUNDS,...(residentialBounds?[residentialBounds]:[]),...(extraBounds?[extraBounds]:[])];
  const mark=(x,z)=>{const i=Math.floor((x-bounds[0])/cell),j=Math.floor((z-bounds[1])/cell);if(i>=0&&j>=0&&i<n&&j<n)blocked[j*n+i]=1;};
  for(const f of tile.features){const p=f.properties,g=f.geometry;
   if(g.type==='LineString'&&(p.highway||p.aeroway||p.railway)){const r=roadWidth(p)/2+3;
