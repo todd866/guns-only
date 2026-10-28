@@ -1,6 +1,6 @@
 // Play-first transmitter assists: predictable steering, optional drift, wheels-down
 // landings and an authored quarter-pipe return. Big Kid reduces steering stabilization.
-import { dot, cross, scale, sub, add, rotate } from './math.mjs';
+import { dot, cross, scale, sub, add, rotate, unrotate } from './math.mjs';
 import { carUp, carForward } from './car.mjs';
 import { createDrift, stepDrift } from './drift.mjs';
 import { stepQuarterReturn } from './quarter-return.mjs';
@@ -56,7 +56,7 @@ export function assistInput(a, car, raw, dt, world) {
     // optional hip steering can influence the attitude.
     a.airTime += dt;
     const transfer = a.airTime >= 0.1 && (Math.abs(raw.steer || 0) > 0.05 || raw.airControl);
-    torque = add(torque, levelTorque(car, up, I, transfer ? 2.2 : 5));
+    torque = add(torque, levelTorque(car, up, transfer ? 2.2 : 5));
     if (transfer) {
       const fwd = carForward(car), right = rotate(car.q, [1, 0, 0]);
       const iz = 1 / car.invInertia[2];
@@ -76,7 +76,7 @@ export function assistInput(a, car, raw, dt, world) {
   const stuck = up[1] < 0.3 && car.speed < 1.5;
   a.flipTime = stuck ? a.flipTime + dt : 0;
   if (m.autoRight && a.flipTime > 0.8 && a.righting <= 0) { a.righting = 0.7; car.vel[1] += 2.2; a.flipTime = 0; }
-  if (a.righting > 0) { a.righting -= dt; torque = add(torque, levelTorque(car, up, I, 14)); }
+  if (a.righting > 0) { a.righting -= dt; torque = add(torque, levelTorque(car, up, 14)); }
 
   // Drift is opt-in. The edge-triggered hop and its short lateral slide are bounded by
   // drift.mjs; releasing the button returns to the normal tyre model immediately.
@@ -100,12 +100,13 @@ export function assistInput(a, car, raw, dt, world) {
 }
 
 // PD torque that rotates the body's up axis toward world up, leaving yaw alone.
-function levelTorque(car, up, I, omega) {
+function levelTorque(car, up, omega) {
   let err = cross(up, [0, 1, 0]);
   // Exactly inverted, the cross product vanishes: roll about the car's own forward axis.
   if (up[1] < 0 && Math.hypot(...err) < 0.3) err = add(err, scale(carForward(car), 0.3));
   const angNoYaw = sub(car.ang, scale([0, 1, 0], car.ang[1]));
-  return sub(scale(err, I * omega * omega), scale(angNoYaw, 2 * 0.8 * I * omega));
+  const acceleration = sub(scale(err, omega * omega), scale(angNoYaw, 2 * 0.8 * omega));
+  return rotate(car.q, unrotate(car.q, acceleration).map((v, i) => v / car.invInertia[i]));
 }
 
 export { carForward };

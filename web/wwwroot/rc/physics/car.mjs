@@ -8,17 +8,17 @@ import { SURFACES, TRANSITION_SURFACES } from './world.mjs';
 // 1:10 electric buggy. Values are fiction, chosen for toy-scale feel and checked by tests.
 export const BUGGY = {
   mass: 1.8,
-  size: [0.24, 0.1, 0.42],            // body box for inertia, metres
+  size: [0.18, 0.08, 0.42],            // body box for inertia, metres
   inertiaScale: 1.0,
-  // Wheel layout matches the Blender buggy (assets/rc/models/buggy.blend) drawn at VISUAL_SCALE.
+  // Provisional 1:10 envelope: 420 mm long, 280 mm outside wheels, 116 mm tyres.
   wheels: [                           // attach points relative to the centre of mass
-    { at: [-0.1625, 0, -0.14], front: true }, { at: [0.1625, 0, -0.14], front: true },
-    { at: [-0.1625, 0, 0.14], front: false }, { at: [0.1625, 0, 0.14], front: false },
+    { at: [-0.115, 0, -0.14], front: true }, { at: [0.115, 0, -0.14], front: true },
+    { at: [-0.115, 0, 0.14], front: false }, { at: [0.115, 0, 0.14], front: false },
   ],
-  wheelRadius: 0.084,
-  restLength: 0.055,                  // attach point to wheel centre at full droop
+  wheelRadius: 0.058, wheelWidth: 0.05,
+  restLength: 0.05,                  // attach point to wheel centre at full droop
   spring: 450, damper: 9,             // per wheel, N/m and N·s/m
-  bumpAt: 0.036, bumpSpring: 4000, bumpDamper: 40, // bump rubber: absorbs before the hull touches
+  bumpAt: 0.032, bumpSpring: 4000, bumpDamper: 40, // bump rubber: absorbs before the hull touches
   staticFriction: [1.6, 1.52],        // front, rear (rear a little lower: it lets go first)
   kineticFriction: [1.2, 1.12],
   lateralStiffness: 0.5,              // fraction of the per-wheel lateral slip removed per substep
@@ -29,17 +29,16 @@ export const BUGGY = {
   linearDrag: 0.012, angularDrag: 0.4,
   // Hull: body corners act as bump stops when the suspension bottoms out, plus roof and nose.
   hull: [
-    { at: [-0.1, -0.045, -0.15], r: 0.04 }, { at: [0.1, -0.045, -0.15], r: 0.04 },
-    { at: [-0.1, -0.045, 0.15], r: 0.04 }, { at: [0.1, -0.045, 0.15], r: 0.04 },
-    { at: [0, 0.03, -0.19], r: 0.04 }, { at: [0, 0.03, 0.19], r: 0.04 },
-    { at: [0, 0.07, 0], r: 0.05 }, { at: [-0.08, 0.05, 0], r: 0.04 }, { at: [0.08, 0.05, 0], r: 0.04 },
+    { at: [-0.072, -0.028, -0.15], r: 0.028 }, { at: [0.072, -0.028, -0.15], r: 0.028 },
+    { at: [-0.072, -0.028, 0.15], r: 0.028 }, { at: [0.072, -0.028, 0.15], r: 0.028 },
+    { at: [0, 0.022, -0.18], r: 0.03 }, { at: [0, 0.022, 0.18], r: 0.03 },
+    { at: [0, 0.055, 0], r: 0.04 }, { at: [-0.06, 0.035, 0], r: 0.03 }, { at: [0.06, 0.035, 0], r: 0.03 },
   ],
   restitution: 0.25, hullFriction: 0.45,
 };
 
 const G = 9.81, SUBSTEPS = 4;
-// Authoring coordinates use a 0.75 m body and 0.15 m wheel radius; this factor
-// matches the rendered car to the physics dimensions above.
+// Model units to metres; wheel and shell fitting lives in vehicle-pose.mjs.
 export const VISUAL_SCALE = 0.56;
 
 export function createCar(params = BUGGY, pos = [0, 0.1, 0], yaw = 0) {
@@ -48,7 +47,7 @@ export function createCar(params = BUGGY, pos = [0, 0.1, 0], yaw = 0) {
   return {
     params, invInertia: inertia.map(i => 1 / i),
     pos: [...pos], q: quatAxisAngle([0, 1, 0], -yaw), vel: [0, 0, 0], ang: [0, 0, 0],
-    steer: 0, wheels: params.wheels.map(() => ({ compression: 0, contact: false, spin: 0, slip: 0, surface: null })),
+    steer: 0, wheels: params.wheels.map(() => ({ compression: params.mass * G / 4 / params.spring, contact: false, spin: 0, slip: 0, surface: null })),
     grounded: false, contacts: 0, impact: 0, speed: 0, forwardSpeed: 0, placement: 0,
   };
 }

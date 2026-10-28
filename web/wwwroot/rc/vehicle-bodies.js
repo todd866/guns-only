@@ -8,7 +8,7 @@ export function makeVehicleBody(kind='buggy',color='#db6d2f'){
  const add=(geo,m,x=0,y=0,z=0,name='')=>{const o=new T.Mesh(geo,m);o.position.set(x,y,z);o.name=name;o.castShadow=o.receiveShadow=true;g.add(o);return o;};
  const box=(w,h,d,x,y,z,m=paint,name='')=>add(new T.BoxGeometry(w,h,d),m,x,y,z,name);
  const profile=(points,width,m,name)=>{const s=new T.Shape();points.forEach(([z,y],i)=>i?s.lineTo(-z,y):s.moveTo(-z,y));s.closePath();const geo=new T.ExtrudeGeometry(s,{depth:width-.02,steps:1,bevelEnabled:true,bevelSegments:2,bevelSize:.01,bevelThickness:.01});geo.rotateY(Math.PI/2);geo.translate(-width/2+.01,0,0);return add(geo,m,0,0,0,name);};
- const raised=kind==='monster'?.07:0,w=kind==='monster'?.49:.43;
+ const raised=kind==='monster'?.025:0,w=kind==='monster'?.49:.43;
  profile([[-.34,.11+raised],[-.31,.2+raised],[-.12,.23+raised],[.3,.2+raised],[.34,.11+raised]],w,paint,'sculpted-shell');
  if(kind==='golf'){
   box(.34,.045,.42,0,.2,.02,rubber,'floor');for(const x of [-.16,.16])for(const z of [-.16,.16])box(.018,.3,.018,x,.36,z,chrome,'roof-post');
@@ -24,6 +24,6 @@ export function makeVehicleBody(kind='buggy',color='#db6d2f'){
  }
  for(const side of [-1,1]){box(.065,.045,.025,side*w*.32,.17+raised,-.333,lamp,'headlight');box(.05,.025,.025,side*w*.32,.17+raised,.335,rubber,'tail-light');}
  box(w*.45,.045,.025,0,.13+raised,-.34,rubber,'grille');
- if(kind==='monster')for(const x of [-.275,.275])for(const z of [-.25,.25]){const a=add(new T.TorusGeometry(.17,.025,6,18,Math.PI),paint,x,.1,z,'wheel-arch');a.rotation.y=Math.PI/2;}
+ if(kind==='monster')for(const x of [-.275,.275])for(const z of [-.25,.25]){const a=add(new T.TorusGeometry(.125,.015,6,18,Math.PI),paint,x,-.025,z,'wheel-arch');a.rotation.y=Math.PI/2;}
  return g;
 }

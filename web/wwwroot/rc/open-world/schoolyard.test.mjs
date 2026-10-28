@@ -56,6 +56,6 @@ test('the steps, planter and every collectable have a line', () => {
   const planter = run(-12, 0, 0, 1, 1, 3);
   assert.ok(planter.gaps.includes('PLANTER GAP') && planter.sk.letters.includes('A'), planter.gaps.join(','));
   assert.ok(run(-14, -18, 0, -1, .6, 3).sk.letters.includes('K'));
-  assert.ok(run(11.3, -32, 0, 1, 1, 4).sk.tape, 'the tape is on the kicker-edge line');
+  assert.ok(run(11.4, -32, 0, 1, 1, 4).sk.tape, 'the tape is on the kicker-edge line');
   assert.ok(!run(15, -32, 0, 1, 1, 4).sk.tape, 'the middle of the kicker misses it');
 });
