@@ -58,6 +58,11 @@ test('the shipped GLB wheels match every chassis and touch the ground independen
    if(kind!=='buggy'){fitJetShell(group,'viper','#dd762c');group.getObjectByName('JetShell').removeFromParent();group.add(makeVehicleBody(kind));poseCar(group,wheels,c);}
    const body=group.getObjectByName(kind==='buggy'?'Body':'VehicleBody'),b=new T.Box3().setFromObject(body),width=p.wheels[1].at[0]*2+p.wheelWidth;
    assert.ok(b.max.x-b.min.x<width+.005,kind+' shell fits track');assert.ok(b.max.z-b.min.z<.44,kind+' shell length');
+   if(kind!=='buggy'){
+    const skirt=new T.Box3().setFromObject(body.getObjectByName('sculpted-shell'));
+    assert.ok(skirt.min.y>0&&skirt.min.y<2*p.wheelRadius,kind+' tyres reach under the shell');
+    assert.ok(b.max.y<.26,kind+' shell height');
+   }
   }
   for(const kind of JET_KINDS){
    const {car:group,wheels}=await loadBuggyAsset('./assets/buggy.glb');fitJetShell(group,kind,'#dd762c');poseCar(group,wheels,createCar(BUGGY,[0,rideHeight(),0]));

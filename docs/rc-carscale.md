@@ -11,7 +11,11 @@ belly clearance at rest. Suspension droop is 50 mm with the bump spring starting
 at 32 mm compression. Mass (1.8 kg), drive force (26 N) and top speed (14 m/s)
 are unchanged. All spring, hull and assist values remain fictional gameplay tuning.
 The monster has 140 mm tyres, 300 mm track plus 70 mm width and 60 mm droop.
-The damper is 12 N·s/m and roll centre fraction .72. Inertia distributes 85% of mass
+The damper is 12 N·s/m and roll centre fraction .72. The existing rolled-kerb
+response retains .55 damping but uses .65 bump damping instead of .45: the softer
+end stop pitched the narrow chassis into a hull strike on diagonal landings.
+Changing the chassis bump settings instead disrupted transition/tape timing, so
+the 4000 N/m bump spring and 40 N·s/m bump damper stay intact. Inertia distributes 85% of mass
 through the body box and 15% through four solid-cylinder wheels at their settled
 positions, using the parallel-axis theorem. The mass split is fictional tuning;
 the old body-only box omitted the outboard wheels and made the narrow chassis too
@@ -23,7 +27,8 @@ its sidewalls span 0.135 units. Hub geometry originally spans 0.184 and is fitte
 inside the sidewalls. Those fixed asset dimensions drive visual scaling independently
 of BUGGY. Wheel pivots follow the complete physics attachment and spring compression.
 Shell length fitting leaves chassis shock mounts on the 280 mm wheelbase. Each jet
-shell fits a 420 × 320 mm envelope, including wings; the monster arches are lowered.
+shell fits a 420 × 320 mm envelope, including wings. The other body kits are lowered
+and shortened vertically to meet the tyres; monster arches centre on the hubs.
 
 Air levelling now applies acceleration through each body's own inertia tensor:
 using pitch inertia for roll over-damped the narrower chassis. Transfer carry is

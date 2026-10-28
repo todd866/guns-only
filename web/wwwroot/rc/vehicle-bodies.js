@@ -24,6 +24,7 @@ export function makeVehicleBody(kind='buggy',color='#db6d2f'){
  }
  for(const side of [-1,1]){box(.065,.045,.025,side*w*.32,.17+raised,-.333,lamp,'headlight');box(.05,.025,.025,side*w*.32,.17+raised,.335,rubber,'tail-light');}
  box(w*.45,.045,.025,0,.13+raised,-.34,rubber,'grille');
- if(kind==='monster')for(const x of [-.275,.275])for(const z of [-.25,.25]){const a=add(new T.TorusGeometry(.125,.015,6,18,Math.PI),paint,x,-.025,z,'wheel-arch');a.rotation.y=Math.PI/2;}
+ for(const o of g.children){o.scale.y=.65;o.position.y=o.position.y*.65-.1;}
+ if(kind==='monster')for(const x of [-.275,.275])for(const z of [-.25,.25]){const a=add(new T.TorusGeometry(.135,.005,6,18,Math.PI),paint,x,-.085,z,'wheel-arch');a.rotation.y=Math.PI/2;}
  return g;
 }
