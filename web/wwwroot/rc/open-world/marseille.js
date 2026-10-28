@@ -1,14 +1,15 @@
 import * as T from '../../vendor/three.module.js';
-import { mergeGeometries, mergeVertices } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
-import { buildMarseille, addMarseilleCollision, MARSEILLE_PARK, marseilleWorld } from './marseille.mjs';
+import { mergeGeometries, toCreasedNormals } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
+import { buildMarseille, addMarseilleCollision, MARSEILLE_PARK, marseilleWorld, marseilleLocal, marseilleHeight } from './marseille.mjs';
+import { smoothBowlNormals, refineSkateTriangles } from './skate-normals.js';
 
 const COLOURS = { deck: '#d0d1c6', bowl: '#c6d5cf', floor: '#9fb8b4', wall: '#c6d5cf', bank: '#b8c9c5', top: '#d5dbcf', steps: '#d1bc9a', ledge: '#b97253', skirt: '#9ca99f', coping: '#eae4d2', stripe: '#327c83', dark: '#495e60' };
 export function createMarseille(scene, world) {
   addMarseilleCollision(world);
-  const pieces = [], colour = new T.Color(), floor = new T.Color(COLOURS.floor).convertSRGBToLinear(), rim = new T.Color(COLOURS.bowl).convertSRGBToLinear();
+  const pieces = [], colour = new T.Color(), floor = new T.Color(COLOURS.floor), rim = new T.Color(COLOURS.bowl);
   const piece = (geometry, key, ownUv = false) => {
     const g = geometry.index ? geometry.toNonIndexed() : geometry;
-    colour.set(COLOURS[key]).convertSRGBToLinear();
+    colour.set(COLOURS[key]);
     const n = g.attributes.position.count, colours = [];
     for (let i = 0; i < n; i++) {
       if (key === 'bowl') colour.lerpColors(floor, rim, Math.max(0, Math.min(1, 1 + g.attributes.position.getY(i) / 2.2)));
@@ -20,16 +21,16 @@ export function createMarseille(scene, world) {
     pieces.push(g);
   };
   const byMat = new Map();
-  for (const t of buildMarseille()) {
-    const mat = t.surface === 'bowl' || t.surface === 'hip' ? 'bowl' : t.mat;
+  for (const source of buildMarseille()) for (const t of (source.surface === 'bowl' || source.surface === 'hip' || source.mat === 'deck' ? refineSkateTriangles([source], (x,z) => { const p=marseilleLocal([x,0,z]); return marseilleHeight(p[0],p[2]); }) : [source])) {
+    const mat = t.surface === 'hip' ? 'hip' : t.surface === 'bowl' || t.mat === 'deck' && Math.min(t.a[1],t.b[1],t.c[1]) < -.001 ? 'bowl' : t.mat;
     if (!byMat.has(mat)) byMat.set(mat, []);
     byMat.get(mat).push(...t.a, ...t.b, ...t.c);
   }
   for (const [mat, positions] of byMat) {
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(positions, 3));
     if (mat === 'bowl') {
-      const smooth = mergeVertices(g); smooth.computeVertexNormals(); piece(smooth, mat); smooth.dispose(); g.dispose();
-    } else piece(g, mat);
+      smoothBowlNormals(g, marseilleWorld([0,0,0])[1], (x,z) => { const p=marseilleLocal([x,0,z]);return marseilleHeight(p[0],p[2]); }); piece(g, mat);
+    } else if (mat === 'hip') { toCreasedNormals(g, Math.PI / 4); piece(g, 'bowl'); } else piece(g, mat);
   }
   const ribbon = (a, b, width, key) => {
     const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz), nx = -dz / len * width / 2, nz = dx / len * width / 2;

@@ -1,5 +1,5 @@
 import * as T from '../../vendor/three.module.js';
-import { mergeGeometries } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { HANGAR, buildHangar, hangarWorld } from './skate-hangar.mjs';
 
 // Visuals and collision for the Skate Hangar. Riding surfaces come from the same triangles
@@ -18,7 +18,7 @@ export function createSkateHangar(scene, world, h = HANGAR) {
   const piece = (geometry, key, uv = PLAIN, matrix = null) => {
     const g = geometry.index ? geometry.toNonIndexed() : geometry;
     if (matrix) g.applyMatrix4(matrix);
-    colour.set(COLOURS[key] ?? '#ffffff').convertSRGBToLinear();
+    colour.set(COLOURS[key] ?? '#ffffff');
     const n = g.attributes.position.count;
     g.setAttribute('color', new T.Float32BufferAttribute(Array.from({ length: n * 3 }, (_, i) => [colour.r, colour.g, colour.b][i % 3]), 3));
     if (uv !== 'own') g.setAttribute('uv', new T.Float32BufferAttribute(Array.from({ length: n * 2 }, (_, i) => uv[i % 2]), 2));
@@ -35,7 +35,7 @@ export function createSkateHangar(scene, world, h = HANGAR) {
     byMat.get(t.mat).push(...t.a, ...t.b, ...t.c);
   }
   for (const [mat, positions] of byMat) {
-    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(positions, 3)); g.computeVertexNormals();
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(positions, 3)); if (mat === 'ramp') toCreasedNormals(g, Math.PI / 4); else g.computeVertexNormals();
     piece(g, mat);
   }
   const tube = (a, b, r = .05, key = 'steel') => {

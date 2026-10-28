@@ -1,6 +1,7 @@
 import * as T from '../../vendor/three.module.js';
 import { mergeGeometries } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
-import { SCHOOLYARD, buildSchoolyard, yardWorld } from './schoolyard.mjs';
+import { SCHOOLYARD, buildSchoolyard, yardWorld, yardLocal, poolDepth } from './schoolyard.mjs';
+import { smoothBowlNormals, refineSkateTriangles } from './skate-normals.js';
 
 // Schoolyard collision and visuals. Collision is added at prepare time (as the other
 // neighbourhood layers do); the visuals are one vertex-coloured mesh to keep the world's
@@ -18,7 +19,7 @@ export function prepareSchoolyard(world, terrain) {
       const pieces = [], colour = new T.Color();
       const piece = (g, key, matrix = null) => {
         g = g.index ? g.toNonIndexed() : g; if (matrix) g.applyMatrix4(matrix);
-        colour.set(COLOURS[key]).convertSRGBToLinear();
+        colour.set(COLOURS[key]);
         const n = g.attributes.position.count;
         g.setAttribute('color', new T.Float32BufferAttribute(Array.from({ length: n * 3 }, (_, i) => [colour.r, colour.g, colour.b][i % 3]), 3));
         if (!g.attributes.normal) g.computeVertexNormals();
@@ -26,8 +27,8 @@ export function prepareSchoolyard(world, terrain) {
         pieces.push(g);
       };
       const byMat = new Map();
-      for (const t of tris) { if (!byMat.has(t.mat)) byMat.set(t.mat, []); byMat.get(t.mat).push(...t.a, ...t.b, ...t.c); }
-      for (const [mat, positions] of byMat) { const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(positions, 3)); g.computeVertexNormals(); piece(g, mat); }
+      for (const source of tris) for (const t of (['pool-wall','pool-floor','deck'].includes(source.mat) ? refineSkateTriangles([source], (x,z) => { const p=yardLocal([x,0,z]);return SCHOOLYARD.datum-poolDepth(p[0],p[2]); }) : [source])) { const mat=t.mat==='deck'&&Math.min(t.a[1],t.b[1],t.c[1])<SCHOOLYARD.datum-.001?'pool-wall':t.mat;if (!byMat.has(mat)) byMat.set(mat, []); byMat.get(mat).push(...t.a, ...t.b, ...t.c); }
+      for (const [mat, positions] of byMat) { const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(positions, 3)); if (mat === 'pool-wall') smoothBowlNormals(g, SCHOOLYARD.datum, (x,z) => { const p=yardLocal([x,0,z]);return SCHOOLYARD.datum-poolDepth(p[0],p[2]); }); else g.computeVertexNormals(); piece(g, mat); }
       const at = (p, q = new T.Quaternion()) => new T.Matrix4().compose(new T.Vector3(...yardWorld(p)), q, new T.Vector3(1, 1, 1));
       const tube = (a, b, r, key = 'steel') => {
         const from = new T.Vector3(...a), to = new T.Vector3(...b);
