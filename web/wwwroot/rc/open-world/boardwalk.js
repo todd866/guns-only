@@ -5,7 +5,7 @@ import { smoothBowlNormals, refineSkateTriangles } from './skate-normals.js';
 
 const COLOURS = {
   deck: '#bcbdb6', sand: '#d7b27a', 'pit-wall': '#c8845f', 'pit-floor': '#c8845f',
-  'pit-roller': '#cf9666', bank: '#cf9666', skirt: '#8d604a', vert: '#d18b63', roof: '#287b78', hut: '#f1d2a2',
+  'pit-roller': '#c8845f', bank: '#cf9666', skirt: '#8d604a', vert: '#d18b63', roof: '#287b78', hut: '#f1d2a2',
   steps: '#c7c2b6', ledge: '#d8d4c8', planter: '#a79b83', soil: '#775643', bench: '#b27b55',
   steel: '#bcc7c3', coping: '#e7dfcc', stripe: '#ef8064', palm: '#416d46', trunk: '#896345',
   lamp: '#f8d995', sign: '#e9bf72', tower: '#e9e0c9', water: '#4e9b9b'
@@ -47,7 +47,7 @@ export function createBoardwalk(scene, world, h = BOARDWALK) {
   }
   for (const [mat, positions] of byMat) {
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(positions, 3));
-    if (mat === 'pit-wall'||mat === 'pit-roller') smoothBowlNormals(g, h.deck, boardwalkHeight);
+    if (['pit-wall','pit-roller','pit-floor'].includes(mat)) smoothBowlNormals(g, h.deck, boardwalkHeight);
     else if (mat === 'vert') smoothBowlNormals(g, 4.04, boardwalkRampHeight);
     else if (mat === 'bank') toCreasedNormals(g, Math.PI / 4);
     else g.computeVertexNormals();
