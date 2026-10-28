@@ -19,7 +19,7 @@ export function createSkatestreet(scene, world, h = SKATESTREET) {
   const piece = (geometry, key, uv = PLAIN, matrix = null) => {
     const g = geometry.index ? geometry.toNonIndexed() : geometry;
     if (matrix) g.applyMatrix4(matrix);
-    colour.set(COLOURS[key] ?? '#ffffff').convertSRGBToLinear();
+    colour.set(COLOURS[key] ?? '#ffffff');
     const n = g.attributes.position.count;
     g.setAttribute('color', new T.Float32BufferAttribute(Array.from({ length: n * 3 }, (_, i) => [colour.r, colour.g, colour.b][i % 3]), 3));
     if (uv !== 'own') g.setAttribute('uv', new T.Float32BufferAttribute(Array.from({ length: n * 2 }, (_, i) => uv[i % 2]), 2));
@@ -62,12 +62,14 @@ export function createSkatestreet(scene, world, h = SKATESTREET) {
   // High clerestory headers sit above the one-metre perimeter walls in the collision builder.
   for (const x of [-L + 6, L - 6]) box(x, 8.5, -W - .33, 6, 1.1, .18, 'frame');
   for (const z of [-W, W]) for (const x of [-8, 8]) tube([x, 9.7, z], [x, 10, z], .025, 'steel');
-  const sign = new T.PlaneGeometry(20, 2.35);
-  const suv = sign.attributes.uv; for (let i = 0; i < suv.count; i++) suv.setY(i, .2 + suv.getY(i) * .8);
-  piece(sign, 'sign', 'own', at(0, 8.6, W + .36));
-  const inner = new T.PlaneGeometry(20, 2.35);
-  const iuv = inner.attributes.uv; for (let i = 0; i < iuv.count; i++) iuv.setY(i, .2 + iuv.getY(i) * .8);
-  piece(inner, 'sign', 'own', at(0, 8.6, -W + .36));
+  for (const z of [-W, W]) {
+    box(0, 8.6, z, 20, 2.35, .16, 'teal');
+    for (const side of [-1, 1]) {
+      const sign = new T.PlaneGeometry(20, 2.35), uv = sign.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setY(i, .2 + uv.getY(i) * .8);
+      piece(sign, 'sign', 'own', at(0, 8.6, z + side * .1, new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), side < 0 ? Math.PI : 0)));
+    }
+  }
   const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 160;
   const glowCanvas = document.createElement('canvas'); glowCanvas.width = 1024; glowCanvas.height = 160;
   for (const [c, glow] of [[canvas, false], [glowCanvas, true]]) {
