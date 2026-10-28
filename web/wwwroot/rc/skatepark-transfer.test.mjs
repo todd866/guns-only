@@ -192,3 +192,13 @@ test('a high transfer over the hip lands in the bowl and keeps riding it',()=>{
     assert.equal(s.hits,0,label);assert.equal(s.recoveries,0,label);
   }
 });
+
+test('the plaza is cut into a slope: lawn meets the coping behind the bowl, quarter and deck',()=>{
+  // Owner, 2026-10-28: "the top of the bowl is basically level with the grass".
+  const ground=(u,v)=>{const p=bankPoint(u,v);p[1]=4;return course.world.raycast(p,[0,-1,0],6);};
+  for(const [u,v] of [[11,15.6],[18.2,10],[-18.4,0],[18.5,5]]){
+    const hit=ground(u,v);
+    assert.ok(hit&&Math.abs(hit.point[1]-1.54)<.12,`lawn at coping height behind the park at ${u},${v}: ${hit?.point[1]}`);
+  }
+  for(const [u,v] of [[0,-6],[3,8],[-8,-1]])assert.ok(Math.abs(ground(u,v).point[1]-.14)<.01,`plaza floor stays level at ${u},${v}`);
+});

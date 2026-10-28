@@ -1,8 +1,18 @@
 import * as T from '../../vendor/three.module.js';
+import { residentialGrass } from './residential-ground.js';
 
 // Keep the painted features’ authored UVs. Unpainted cast concrete uses a
 // three-metre tile projected onto each face, keeping its aggregate RC-sized.
+let lawn=null;
 export function finishSkateparkSurface(geometry, material, paintTexture = null) {
+  // The berm and deck-top turf wear the neighbourhood lawn, so the grade reads as one field.
+  if(material.name==='turf'){
+    const p=geometry.attributes.position,uv=[];
+    for(let i=0;i<p.count;i++)uv.push(p.getX(i)/2,p.getZ(i)/2);
+    geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+    lawn??=residentialGrass();
+    Object.assign(material,{map:lawn.map,bumpMap:lawn.bumpMap,bumpScale:.008,roughness:.88,metalness:0});material.color.set('#ffffff');material.needsUpdate=true;return;
+  }
   if(material.name==='paint'){
     if(!paintTexture)throw new Error('Skatepark paint texture was not prepared');
     if(geometry.attributes.uv){

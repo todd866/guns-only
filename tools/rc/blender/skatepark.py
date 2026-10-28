@@ -7,6 +7,7 @@ import sys,math,json,random
 from pathlib import Path
 import bpy,bmesh
 sys.path.insert(0,str(Path(__file__).parent/'districts'))
+sys.path.insert(0,str(Path(__file__).parent))
 import common as c
 R=Path(__file__).resolve().parents[3];random.seed(71)
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -166,11 +167,15 @@ for u,v in [(4.4,4.5),(4.9,5.0),(5.4,5.5)]:
  for along,side in [(.18,0),(-.10,-.14),(-.04,0),(-.10,.14)]:
   pts.append(xf((u+direction[0]*along+right[0]*side,v+direction[1]*along+right[1]*side,FLOOR+.006),ORIGIN))
  add('teal',(pts,[(0,1,2),(0,2,3)]),True)
-# Continuous paved bench shoulder connected flush to the main concrete.
-phys('bench_shoulder','path',slab([(12.206,19.238),(15.0,20.0),(19.0,7.7),(15.903,8.239)],-.12,.14))
-# Traversable .14m pad edge: a broad smooth rolled apron around the union
-# of the measured slab and bench shoulder. Inner outline remains unchanged.
-apron_loop=outline[:6]+[(15.0,20.0),(19.0,7.7)]+outline[6:]
+# The plaza is cut into a slope (reference video): the paved bench path behind the bowl
+# and the lawn around the bowl, long quarter and western deck sit at coping height.
+import park_berm
+phys('bench_shoulder','path',slab(park_berm.SHOULDER,-.12,FLOOR+RISE))
+berm=park_berm.grid()
+c.vis('plaza','turf').add(berm,smooth=True,kind='up');c.col('grass','plaza_berm',c.Geo().add(berm,kind='up'))
+# Traversable .14m pad edge: a broad smooth rolled apron around the measured slab.
+# Behind the decks the berm buries it.
+apron_loop=list(outline)
 area=sum(p[0]*q[1]-q[0]*p[1] for p,q in zip(apron_loop,apron_loop[1:]+apron_loop[:1]))
 sign=1 if area>0 else -1
 outward=[]
@@ -192,8 +197,8 @@ for j in range(bands):
 phys('rolled_perimeter_apron','floor',(vs,faces),True)
 # Three concrete seats run along the outside bowl apron, parallel to its edge.
 for v in [5.7,9.3,12.9]:
- lbox('concrete',ORIGIN,18.75,v,.46,.6,2.35,.15)
- for offset in [-.8,.8]:lbox('concrete',ORIGIN,18.75,v+offset,.14,.5,.22,.32)
+ lbox('concrete',ORIGIN,18.75,v,RISE+.46,.6,2.35,.15)
+ for offset in [-.8,.8]:lbox('concrete',ORIGIN,18.75,v+offset,RISE+.14,.5,.22,.32)
 # Starter lap follows the flat separation lanes and forgiving north apron.
 # It does not climb the eastern quarter or force a bank/hip transfer.
 route=c.Route([xf((u,v,0),ORIGIN)[:2] for u,v in [(3.5,-4.65),(4.8,0),(4.1,4.8),(1.1,6.5),(-7.4,6.5),(-10,3.5),(-10,-2.5),(-7.3,-4.65)]],[.65]*8)
@@ -268,7 +273,7 @@ bpy.context.preferences.filepaths.save_version=0
 blend=R/'assets/rc/heroes/skatepark.blend';blend.parent.mkdir(parents=True,exist_ok=True)
 bpy.ops.wm.save_as_mainfile(filepath=str(blend),compress=True)
 stats=c.counts();c.join_visuals_by_material();out=R/'web/wwwroot/rc/assets/districts/skatepark.glb';c.export_glb(out)
-info={'generator':'tools/rc/blender/skatepark.py','license':'MIT original procedural geometry','external_assets':['../materials/park-paint-atlas.png (original generated paint; runtime texture)'],'frame':'park-centred local metres; north=-Z','footprint':[[-18.803,-20.0],[19.0,15.053]],'roam_start':[6,.15,8.7],'roam_yaw':-.14889,'hip':{'height_m':RISE,'run_m':RUN,'angle_degrees':90,'kind':'bowl-to-quarter convex junction','dimensions':'inferred, not surveyed'},'modules':['western bank-quarter-bank and steps','asymmetric two-height central table and divider','offset manual pads and separate flat rail','connected east quarter, hip and open bowl'],'geometry_confidence':{'plan':'approximate image digitization','elevations_and_radii':'inferred, not surveyed','apron_and_race_line':'authored for forgiving RC play'},'paint_uv':'feature-authored before batching','rolled_apron':{'rise_m':.14,'run_m':.9,'profile':'smoothstep','purpose':'forgiving gameplay edge outside digitized slab'},'lap_length_m':route.length,'vertex_ao':ao,**stats}
+info={'generator':'tools/rc/blender/skatepark.py','license':'MIT original procedural geometry','external_assets':['../materials/park-paint-atlas.png (original generated paint; runtime texture)'],'frame':'park-centred local metres; north=-Z','footprint':[[-18.803,-20.0],[19.0,15.053]],'roam_start':[6,.15,8.7],'roam_yaw':-.14889,'hip':{'height_m':RISE,'run_m':RUN,'angle_degrees':90,'kind':'bowl-to-quarter convex junction','dimensions':'inferred, not surveyed'},'modules':['western bank-quarter-bank and steps','asymmetric two-height central table and divider','offset manual pads and separate flat rail','connected east quarter, hip and open bowl'],'geometry_confidence':{'plan':'approximate image digitization','elevations_and_radii':'inferred, not surveyed','apron_and_race_line':'authored for forgiving RC play'},'paint_uv':'feature-authored before batching','rolled_apron':{'rise_m':.14,'run_m':.9,'profile':'smoothstep','purpose':'forgiving gameplay edge outside digitized slab'},'berm':{'top_m':park_berm.TOP,'fall_m':park_berm.FALL,'purpose':'lawn meets the coping; the plaza is cut into a slope'},'lap_length_m':route.length,'vertex_ao':ao,**stats}
 out.with_suffix('.provenance.json').write_text(json.dumps(info,indent=2)+'\n')
 print('SKATEPARK',json.dumps(info))
 if '--render' in sys.argv:c.render_glb(out,R/'evidence/rc-open-world/skatepark',[('overview',(38,-49,42),(0,1,0),42),('toy-eye',(6,-12.7,1.8),(1,1,.6),24),('bowl',(1,3,6),(8,13,.5),32)])
