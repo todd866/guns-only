@@ -89,3 +89,15 @@ test('the secret tape takes a full-speed run up the west quarter, nothing less',
   assert.ok(run(2, 1), 'flat out from across the plaza');
   assert.ok(!run(-1, .7) && !run(-9, 1), 'part throttle or a short run-up falls short');
 });
+
+test('the hip forgives a kid\'s aim: most approaches near it score the transfer', () => {
+  // Aimed at the hip's crest from the plaza, 30° (up the quarter) to 60° (across its foot), up to 0.75 m off.
+  let ok = 0, n = 0;
+  for (const ang of [30, 45, 60]) for (const off of [-.75, 0, .75]) for (const throttle of [.6, 1]) {
+    const a = ang * Math.PI / 180, du = Math.cos(a), dv = Math.sin(a), u = 7.2 - dv * off - du * 1.5, v = 7.3 + du * off - dv * 1.5;
+    const { events } = ride(u, v, du, dv, () => ({ throttle, steer: 0 }), 4);
+    n++; if (of(events, 'gap').some(e => e.name === 'HIP TRANSFER')) ok++;
+    assert.ok(!of(events, 'bail').length, `${ang}° ${off} m ${throttle}: no bail`);
+  }
+  assert.ok(ok / n >= .8, `${ok}/${n} approaches transfer`);
+});

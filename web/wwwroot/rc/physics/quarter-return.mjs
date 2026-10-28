@@ -8,6 +8,27 @@ import {carForward,carUp} from './car.mjs';
 import {TRANSITION_SURFACES} from './world.mjs';
 const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
 const horizontal=v=>norm([v[0],0,v[2]]);
+// Where a ballistic hop from here first meets the world, traced with the car's centre: close
+// enough to judge which face it comes down on.
+function landing(world,pos,vel){
+ let p=pos;
+ for(let t=.04;t<2.4;t+=.04){
+  const q=[pos[0]+vel[0]*t,pos[1]+vel[1]*t-4.905*t*t,pos[2]+vel[2]*t],d=sub(q,p),len=Math.hypot(...d);
+  const hit=len>1e-6&&world.raycast(p,scale(d,1/len),len);
+  if(hit)return hit;p=q;
+ }
+ return null;
+}
+// A transfer must come down on floor, a deck or a face sloping away along its travel, never
+// into a wall ahead. Shorten it first, then turn it a little, until it does.
+function safeTransfer(world,pos,vel){
+ const good=v=>{const h=landing(world,pos,v);return h&&(h.normal[1]>.9||dot(horizontal(h.normal),horizontal(v))>.3);};
+ for(const k of [1,.85,.7,.55,.4])for(const a of [0,.26,-.26,.52,-.52]){
+  const c=Math.cos(a),s=Math.sin(a),v=[(vel[0]*c-vel[2]*s)*k,vel[1],(vel[0]*s+vel[2]*c)*k];
+  if(good(v))return v;
+ }
+ return vel;
+}
 export function stepQuarterReturn(state,car,raw,dt,world){
  const wheels=car.wheels.filter(w=>w.contact&&TRANSITION_SURFACES.has(w.surface)&&w.contactNormal);
  if(!state.arc){
@@ -32,19 +53,24 @@ export function stepQuarterReturn(state,car,raw,dt,world){
    const vert=wheels.some(w=>w.surface==='vert'),bowl=vert||wheels.some(w=>w.surface==='bowl'),hip=wheels.some(w=>w.surface==='hip');
    if(n[1]<.72&&n[1]>.01&&car.vel[1]>1){
     const kind=bowl?'return':!hip&&dot(forward,inward)<-.9?'face':'transfer';
-    state.armed={kind,vert,inward,yaw:Math.atan2(-inward[0],inward[2]),speed:Math.max(0,car.forwardSpeed),age:0};
+    state.armed={kind,vert,hip,inward,yaw:Math.atan2(-inward[0],inward[2]),speed:Math.max(0,car.forwardSpeed),age:0};
+   }else if(hip&&(!state.armed||state.armed.hip)&&car.vel[1]>.4&&car.forwardSpeed>2.5){
+    // The hip's low corner is gentle: rolled over at speed it still launches a real transfer.
+    state.armed={kind:'transfer',hip:true,inward,yaw:0,speed:car.forwardSpeed,age:0};
    }
   }
   if(state.armed){
    state.armed.age+=dt;
    // A wheel can ride the wall's end cap for a moment after the last transition contact.
-   if(state.armed.age>.25||car.vel[1]<0)state.armed=null;
+   // Over the hip's crest the last wheel leaves just as the climb tops out.
+   if(state.armed.age>.25||car.vel[1]<(state.armed.hip?-.8:0))state.armed=null;
    else if(car.contacts===0){
     const a=state.armed;
     if(a.kind==='transfer'){
      // Keep the horizontal carry, cap the rise: the hop lands on the adjoining face or
      // floor rather than sailing across the bowl into the far wall.
-     car.vel[1]=clamp(car.vel[1],1.6,3.2);
+     car.vel[1]=clamp(car.vel[1],a.hip?2.4:1.6,3.2);
+     if(world)car.vel=safeTransfer(world,car.pos,car.vel);
      state.arc={kind:'transfer',yaw:Math.atan2(car.vel[0],-car.vel[2]),time:0};
     }else{
      // Playability threshold: the slower golf chassis must reach the return arc too.

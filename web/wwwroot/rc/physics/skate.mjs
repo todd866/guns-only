@@ -16,7 +16,7 @@ export const INTRO_PARK = Object.freeze({
   // Runs start mid-plaza, facing the long quarter.
   start: { at: [2.6, -2], toward: [1, 0] },
   gaps: [
-    { name: 'HIP TRANSFER', points: 500, from: [5.8, 8.6, 2.5, 8.7], to: [7.8, 15.4, 8.2, 13.8] },
+    { name: 'HIP TRANSFER', points: 500, from: [5.8, 8.6, 2.5, 8.7], to: [6, 15.4, 8.2, 13.8] },
     { name: 'OVER THE FUNBOX', points: 300, from: [-6.8, -4.4, -1.1, 5.9], to: [-1.4, 2.6, -1.1, 5.9] },
     { name: 'OVER THE FUNBOX', points: 300, from: [-1.4, 2.6, -1.1, 5.9], to: [-6.8, -4.4, -1.1, 5.9] },
     { name: 'LEDGE HOP', points: 200, from: [-5.7, -.2, -3.6, -1.7], to: [-5.7, -.2, -1.0, 3.0] },
