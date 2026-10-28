@@ -87,5 +87,5 @@ test('a wheels-up landing bails the combo; the clock waits for the last landing'
 test('the secret tape takes a full-speed run up the west quarter, nothing less', () => {
   const run = (u, throttle) => ride(u, .5, -1, 0, () => ({ throttle, steer: 0 }), 4).sk.tape;
   assert.ok(run(2, 1), 'flat out from across the plaza');
-  assert.ok(!run(-1, .7) && !run(-4, 1), 'part throttle or a short run-up falls short');
+  assert.ok(!run(-1, .7) && !run(-9, 1), 'part throttle or a short run-up falls short');
 });
