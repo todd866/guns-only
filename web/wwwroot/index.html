@@ -2556,7 +2556,8 @@
     .settings-binding button { min-width: 44px; min-height: 26px; padding: 0 8px; background: var(--flow-panel); font: 650 13px/1 var(--flow-font-data); }
     .settings-binding button[data-capturing="true"] { border-color: var(--flow-action-bottom); color: var(--flow-action-top); }
     .settings-card :is(button, input, summary):focus-visible { outline: 2px solid var(--flow-accent); outline-offset: 1px; }
-    .settings-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
+    /* Reset/Done stay reachable while the keyboard table scrolls under them. */
+    .settings-actions { position: sticky; bottom: -10px; z-index: 1; display: flex; justify-content: space-between; gap: 8px; margin: 8px -10px -10px; padding: 8px 10px 10px; background: var(--flow-panel); border-top: 1px solid var(--flow-line); }
     @media (max-width: 620px) {
       .settings-toggle, .settings-range { grid-template-columns: 22px minmax(0, 1fr) auto; padding: 4px 8px; min-height: 44px; }
       .settings-datum { grid-column: 2 / -1; }
