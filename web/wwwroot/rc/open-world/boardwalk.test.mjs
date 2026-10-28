@@ -8,7 +8,7 @@ import {createWorld} from '../physics/world.mjs';
 import {createSession,stepSession} from '../physics/session.mjs';
 import {placeCar,rideHeight} from '../physics/car.mjs';
 import {createSkate,stepSkate} from '../physics/skate.mjs';
-import {BOARDWALK as P,BOARDWALK_PARK as PARK,buildBoardwalk,boardwalkHeight,boardwalkRampHeight,boardwalkWorld as W,boardwalkLocal as L} from './boardwalk.mjs';
+import {BOARDWALK as P,BOARDWALK_PARK as PARK,BOARDWALK_SHORE,BOARDWALK_FAR_SHORE,buildBoardwalk,boardwalkHeight,boardwalkRampHeight,boardwalkWorld as W,boardwalkLocal as L} from './boardwalk.mjs';
 const world=createWorld(4);world.addQuad(W([-100,0,-100]),W([-100,0,100]),W([100,0,100]),W([100,0,-100]),'dirt');
 for(const t of buildBoardwalk())world.addTri(W(t.a),W(t.b),W(t.c),t.surface);
 const frame=p=>{const l=L(p);return [l[0],l[2],l[1]];};
@@ -35,7 +35,7 @@ const lineCases=[
 test('Boardwalk riding surfaces face upward at their authored heights',()=>{
   const checks=[[-30,-1,.84],[30,-1,.84],[-20,0,1.64],[0,16,.04],[-5,5.4,1.32],[-5,6.2,1],[-5,7,.68],[-5,7.8,.36],[-5,8.6,.04],
     [3,9,.84],[21,2.5,2.19],[21,11.5,.74],[21,16,.39],[8,-14,3.24],[8,-7,2.44],[15,-12,4.04],[27,-12,4.04],[26.5,-3.5,2.84],[-18,3,2.09]];
-  for(const [x,z,want] of checks){const hit=ground(x,z);assert.ok(hit&&Math.abs(hit.point[1]-want)<.025,`${x},${z}: ${hit?.point[1]} want ${want}`);assert.ok(hit.normal[1]>0);}
+  for(const [x,z,want] of checks){const hit=ground(x,z);assert.ok(hit&&Math.abs(hit.point[1]-want)<.0025,`${x},${z}: ${hit?.point[1]} want ${want}`);assert.ok(hit.normal[1]>0);}
   for(const [x,z] of [[-26,-11.5],[-24,-14],[-22,-13],[-19,-15],[-14,-11.5],[-10,-8],[-4,-10],[-2,-11]]){
     assert.ok(Math.abs(ground(x,z).point[1]-boardwalkHeight(x,z))<.05,`pit ${x},${z}`);
   }
@@ -43,6 +43,14 @@ test('Boardwalk riding surfaces face upward at their authored heights',()=>{
   const start=W([PARK.start.at[0],PARK.start.height,PARK.start.at[1]]);
   assert.ok(Math.abs(world.raycast([start[0],start[1]+3,start[2]],[0,-1,0],6).point[1]-PARK.start.height)<.01);
   assert.equal(ground(0,16).surface,'dirt','sand uses the existing slower, lower-grip surface');
+  for(const [x,z,want] of [[-20,18.5,.045],[0,19.25,.045],[-20,20.25,.045],[20,20.75,.045],[0,25,.055]]){
+    const hit=ground(x,z);assert.equal(hit.surface,'dirt','shoreline stays safely drivable');assert.ok(Math.abs(hit.point[1]-want)<.002,`${x},${z}: ${hit.point[1]} want ${want}`);
+  }
+  for(let i=1;i<BOARDWALK_SHORE.length;i++){
+    const [x,z]=BOARDWALK_SHORE[i-1],[u,v]=BOARDWALK_SHORE[i],near=(z+v)/2,far=(BOARDWALK_FAR_SHORE[i-1]+BOARDWALK_FAR_SHORE[i])/2;
+    for(const at of [near+.15,(near+far)/2,far-.15])assert.ok(Math.abs(ground((x+u)/2,at).point[1]-.055)<.002,'water has a continuous upward-facing floor');
+    assert.ok(Math.abs(ground((x+u)/2,far+.25).point[1]-.0325)<.002,'far wet sand eases back to terrain');
+  }
 });
 
 test('all sixty named rails have real tops within five centimetres throughout their polylines',()=>{
@@ -74,6 +82,17 @@ test('the driven matrix covers every gap, letter and the tape',()=>{
   assert.ok(lineCases.some(c=>c.tape));
 });
 
+function verifyShore(collision=world){
+  for(const [x,z,dx,dz,seconds] of [[0,17,0,1,2.6],[0,34,0,-1,2.4],[-30,24,1,0,6.4],[30,24,-1,0,6.4]]){
+    const r=run(x,z,dx,dz,seconds,1,false,collision);clean(r);
+    assert.ok(r.path.some(([u,v])=>Math.abs(u)<24&&v>22&&v<28),'crosses the actual water');
+    if(dz>0)assert.ok(r.path.at(-1)[1]>31,'exits the far shore onto terrain');
+    if(dz<0)assert.ok(r.path.at(-1)[1]<19,'returns to the sand');
+    if(dx)assert.ok(Math.abs(r.path.at(-1)[0])>32,'exits a tapered end');
+  }
+}
+test('held throttle crosses and exits the lagoon in both directions',()=>verifyShore());
+
 test('two-minute vert and winding-pit runs stay clean, with attainable score and combo goals',t=>{
   const vert=run(21,-12,1,0,120),pit=run(-9,-10.3,0,1,120),grab=run(21,-12,1,0,120,1,true);
   for(const r of [vert,pit,grab]){clean(r);assert.ok(r.sk.over);assert.ok(r.sk.goals.has('high')&&r.sk.goals.has('pro'));}
@@ -90,6 +109,7 @@ test('the real batched park, props and streamed terrain preserve all driven line
   try{
     await stream.update(P.center);assert.ok(stream.ready(P.center));park=createBoardwalk(scene,stream.world);
     let meshes=0;park.root.traverse(o=>{if(!o.isMesh)return;meshes++;for(const attribute of Object.values(o.geometry.attributes))for(const v of attribute.array)assert.ok(Number.isFinite(v));});assert.equal(meshes,1);
+    verifyShore(stream.world);
     for(const c of lineCases){const r=run(...c.line,1,false,stream.world);clean(r);for(const g of c.gaps)assert.ok(r.gaps.includes(g),g);for(const l of c.letters??[])assert.ok(r.sk.letters.includes(l),l);if(c.tape)assert.ok(r.sk.tape);}
   }finally{park?.dispose();stream.dispose();globalThis.document=previous;}
   assert.equal(scene.children.length,0);

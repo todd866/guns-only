@@ -1,14 +1,14 @@
 import * as T from '../../vendor/three.module.js';
 import { mergeGeometries, toCreasedNormals } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
-import { BOARDWALK, buildBoardwalk, boardwalkWorld, boardwalkHeight, boardwalkRampHeight } from './boardwalk.mjs';
+import { BOARDWALK, BOARDWALK_SHORE, BOARDWALK_FAR_SHORE, buildBoardwalk, boardwalkWorld, boardwalkHeight, boardwalkRampHeight } from './boardwalk.mjs';
 import { smoothBowlNormals, refineSkateTriangles } from './skate-normals.js';
 
 const COLOURS = {
-  deck: '#bcbdb6', sand: '#d7b27a', 'pit-wall': '#c8845f', 'pit-floor': '#c8845f',
+  deck: '#bcbdb6', sand: '#d7b27a', 'wet-sand': '#c69772', water: '#4da8b2', foam: '#d4e8dc', 'pit-wall': '#c8845f', 'pit-floor': '#c8845f',
   'pit-roller': '#c8845f', bank: '#cf9666', skirt: '#8d604a', vert: '#d18b63', roof: '#287b78', hut: '#f1d2a2',
   steps: '#c7c2b6', ledge: '#d8d4c8', planter: '#a79b83', soil: '#775643', bench: '#b27b55',
   steel: '#bcc7c3', coping: '#e7dfcc', stripe: '#ef8064', palm: '#416d46', trunk: '#896345',
-  lamp: '#f8d995', sign: '#e9bf72', tower: '#e9e0c9', water: '#4e9b9b'
+  lamp: '#f8d995', sign: '#e9bf72', tower: '#e9e0c9'
 };
 const PLAIN = [.5, .15], LAMP = [.5, .05];
 
@@ -80,14 +80,28 @@ export function createBoardwalk(scene, world, h = BOARDWALK) {
       const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(points,3));piece(g,'palm');
     }
   };
-  for (const [x, z, base] of [[-30, -19, 1.22], [-12, -19, h.deck], [2, -19, 2.02], [30, -19, 1.22], [-30, 18, .04], [29, 18, .04]]) palm(x, z, base);
+  for (const [x, z, base] of [[-30, -19, 1.22], [-12, -19, h.deck], [2, -19, 2.02], [30, -19, 1.22], [-30, 18, .04], [29, 18, .04], [-18, 17.2, .04], [10, 17.5, .04], [25, 17.3, .04]]) palm(x, z, base);
+
+  // Flat foam flecks echo the Wavepool water without another transparent draw mesh.
+  const fleck=(x,z,w,d)=>{const g=new T.PlaneGeometry(w,d);g.rotateX(-Math.PI/2);piece(g,'foam',PLAIN,at(x,.067,z));};
+  for(let i=1;i<BOARDWALK_SHORE.length;i++){
+    const [x,z]=BOARDWALK_SHORE[i-1],[u,v]=BOARDWALK_SHORE[i];
+    for(const t of [.2,.5,.8])fleck(x+(u-x)*t,z+(v-z)*t+.08,.6,.045);
+    const f=(BOARDWALK_FAR_SHORE[i-1]+BOARDWALK_FAR_SHORE[i])/2;
+    if(f-(z+v)/2>3)for(const t of [.35,.7])fleck((x+u)/2,(z+v)/2+(f-(z+v)/2)*t,1.1,.05);
+  }
 
   // Lifeguard tower on the sand, kept off the drive line.
   for (const x of [-25.4, -22.6]) for (const z of [14, 16.2]) { tube([x, .04, z], [x, 2.1, z], .09, 'tower'); solidBox(x, 1.07, z, .18, 2.14, .18); }
   box(-24, 2.15, 15.1, 4.2, .18, 3.2, 'tower');
+  box(-24, 2.55, 13.55, 3.1, .5, .08, 'stripe'); solidBox(-24, 2.55, 13.55, 3.1, .5, .08);
+  box(-24,2.55,13.5,.3,.42,.02,'tower');box(-24,2.55,13.5,.95,.16,.02,'tower');
   solidBox(-24, 2.15, 15.1, 4.2, .18, 3.2);
   for (const x of [-25.4, -22.6]) for (const z of [14, 16.2]) { tube([x, 2.24, z], [x, 2.79, z], .065, 'tower'); solidBox(x, 2.515, z, .13, .55, .13); }
   box(-24, 2.85, 15.1, 4.8, .12, 3.8, 'roof');
+  // A tall flag keeps the tower readable above the beach clutter.
+  tube([-24, 2.9, 15.1], [-24, 5.1, 15.1], .035, 'steel');
+  box(-23.55, 4.72, 15.1, .85, .42, .04, 'stripe');
   // Ladder and roof supports keep the tower readable as a real structure.
   for(const x of [-24.5,-23.5])tube([x,.04,11.8],[x,2.24,13.6],.035,'steel');
   for(let i=0;i<7;i++){const t=i/6;tube([-24.5,.14+2*t,11.9+1.6*t],[-23.5,.14+2*t,11.9+1.6*t],.025,'steel');}
