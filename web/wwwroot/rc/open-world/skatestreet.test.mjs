@@ -126,7 +126,7 @@ test('the big vert air and A need only a straight 13 m run-up',()=>{
 });
 
 test('funbox, kicker-to-ledge and stairs each have a clean full-throttle line',()=>{
-  for(const [line,gap,letter] of [[[ -33,19,1,0,4],'FUNBOX FLIGHT','T'],[[-1,9,0,1,3],'KICKER TO LEDGE',null],[[12.5,11,0,1,2.6],'STAIR MAIL','E']]){
+  for(const [line,gap,letter] of [[[ -33,19,1,0,4],'FUNBOX FLIGHT','T'],[[-1,13,0,1,3],'KICKER TO LEDGE',null],[[12.5,11,0,1,2.6],'STAIR MAIL','E']]){
     const r=run(...line);clean(r);assert.ok(r.gaps.includes(gap),gap);if(letter)assert.ok(r.sk.letters.includes(letter),letter);
     if(gap==='KICKER TO LEDGE')assert.ok(r.landings.some(a=>a.to[1]>=20&&a.to[1]<=22&&a.to[2]>.7),'lands on the actual ledge');
   }

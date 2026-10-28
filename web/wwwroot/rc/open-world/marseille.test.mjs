@@ -104,7 +104,7 @@ test('the secret tape is an off-centre deep-end air, reachable at full throttle'
 });
 
 test('held throttle locks onto the round-bowl coping and banks a real grind', () => {
-  const r=run(3,-13.6,1,0,4); clean(r);
+  const r=run(4,-13.6,1,0,4); clean(r);
   assert.ok([...r.grinds].some(id=>id.startsWith('round')));
   assert.ok(r.events.some(e=>e.type==='trick'&&e.name==='50-50'));
   assert.ok(r.sk.score>400);

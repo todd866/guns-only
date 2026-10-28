@@ -9,6 +9,7 @@ import {createRaceMenu,CUP_COURSES} from './race-menu.js';
 import {createAlienMarshal} from './alien-marshal.js';
 import {createGamepadInput} from './gamepad.mjs';
 import {frameSeconds} from './frame-time.mjs';
+import {poseCar} from './vehicle-pose.mjs';
 import {makeVehicleBody} from './vehicle-bodies.js';
 import {vehicleParams} from './physics/vehicles.mjs';
 import * as T from '../vendor/three.module.js';
@@ -18,7 +19,7 @@ import {createRace as createRaceBase,stepRace,placeOf,retreatActive} from './phy
 import {TRACK_FEATURES,placeFeatures} from './physics/features.mjs';
 import {modifiers,MISSILES,beamDir} from './physics/pickups.mjs';
 import {heldMissilePose} from './pickup-visuals.mjs';
-import {VISUAL_SCALE,BUGGY,createCar,placeCar,rideHeight} from './physics/car.mjs';
+import {BUGGY,createCar,placeCar,rideHeight} from './physics/car.mjs';
 import {addBox} from './physics/world.mjs';
 import {courseFromGlb} from './physics/district.mjs';
 import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
@@ -141,8 +142,9 @@ sign('RAPIER / MOTOR POOL',0,2.6,7,5);sign('QUARTERS',-6,1.4,-18,3);sign('FLIGHT
  // District backdrops (ridge, skyline) sit 470–660 m out: draw to 900 m with a light desert haze.
  scene.background=new T.Color('#a9d4ee');scene.fog=new T.Fog('#c9dde6',openWorld?280:180,openWorld?680:950);camera.far=openWorld?40000:900;camera.updateProjectionMatrix();
 }
-let car=new T.Group();scene.add(car);const shell=box(0,.15,0,.44,.16,.75,'#e6a53c',car);box(0,.3,.04,.33,.20,.32,'#273d45',car);box(0,.22,.39,.55,.05,.15,'#253436',car);box(0,.43,.29,.016,.45,.016,'#313d3b',car);for(const x of [-.15,.15])box(x,.19,-.39,.10,.06,.025,'#fff4be',car);
-let wheels=[];for(const x of [-.29,.29])for(const z of [-.25,.25]){const pivot=new T.Group();pivot.position.set(x,-.08,z);car.add(pivot);const wheel=new T.Mesh(new T.CylinderGeometry(.15,.15,.13,16),material('#202a2a'));wheel.rotation.z=Math.PI/2;wheel.castShadow=true;pivot.add(wheel);const hub=sphere(0,0,0,.08,'#b1b6a8',pivot,.9,1,1);wheels.push({pivot,wheel,front:z<0});}
+let car=new T.Group();scene.add(car);const prototypeBody=new T.Group();prototypeBody.name='Body';car.add(prototypeBody);
+const shell=box(0,.15,0,.44,.16,.75,'#e6a53c',prototypeBody);box(0,.3,.04,.33,.20,.32,'#273d45',prototypeBody);box(0,.22,.35,.55,.05,.05,'#253436',prototypeBody);box(0,.43,.29,.016,.45,.016,'#313d3b',prototypeBody);for(const x of [-.15,.15])box(x,.19,-.36,.10,.06,.025,'#fff4be',prototypeBody);
+let wheels=[];for(const z of [-.25,.25])for(const x of [-.29,.29]){const name=(z<0?'F':'R')+(x<0?'L':'R'),pivot=new T.Group();pivot.name='Steer_'+name;car.add(pivot);const wheel=new T.Group();wheel.name='Wheel_'+name;wheel.userData.modelRadius=.15;wheel.userData.modelWidth=.13;pivot.add(wheel);const tyre=new T.Mesh(new T.CylinderGeometry(.15,.15,.13,16).rotateZ(Math.PI/2),material('#202a2a'));tyre.castShadow=true;wheel.add(tyre);sphere(0,0,0,.06,'#b1b6a8',wheel,1,1,1);wheels.push({pivot,wheel,front:z<0});}
 // Validated original assets are the normal entry; prototype remains an explicit diagnostic fallback.
 // Start stays disabled in the HTML until the page below is wired, so an early click is never lost.
 function readyModes(){for(const id of ['start','menu-race','menu-furball'])$(id).disabled=false;if(!race.roam)$('start').textContent='▶ Go';}
@@ -222,16 +224,12 @@ window.addEventListener('pagehide',()=>touchControls.destroy());
 window.addEventListener('storage',e=>{if(e.key==='guns-only.telemetry-sharing.v1')telemetry.flush({force:true});});
 window.addEventListener('pagehide',()=>{telemetry.raceQuit('pagehide');telemetry.endSession();telemetry.flush({force:true});});
 function resize(){renderer.setSize(innerWidth,innerHeight,false);polish?.resize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}window.addEventListener('resize',resize);resize();camera.position.set(course.start.pos[0],course.start.pos[1]+2,course.start.pos[2]+8);
-// Pose a drawn car from its physics body. Wheels follow the suspension: the centre sits
-// restLength−compression below its attach point.
-function poseCar(group,wheelSet,c){group.position.set(...c.pos);group.quaternion.set(...c.q);group.scale.setScalar(VISUAL_SCALE);
- wheelSet.forEach((w,i)=>{const ws=c.wheels[i];w.pivot.rotation.y=w.front?-c.steer:0;w.wheel.rotation.x=ws.spin;w.wheel.scale.setScalar(c.params.wheelRadius/BUGGY.wheelRadius);w.pivot.position.y=-(c.params.restLength-ws.compression)/VISUAL_SCALE;});}
 // Rivals are clones of the current buggy; on the Blender asset each wears its own jet shell (F-15, A-10, F-22, Su-27, F-16).
 // Rivals are tinted clones of whichever buggy is current (prototype, then the Blender asset).
 // Rivals wear aggressor-squadron colours (Nellis nod): ghost blue, desert tan, splinter grey, flanker blue, arctic white.
 const RIVAL_PAINT=['#5d7fa3','#c9a46c','#8c969c','#3f5f8a','#dfe6ea'];let rivalVis=[],rivalSource=null;
 function syncRivals(){if(rivalSource===car&&rivalVis.length===race.rivals.length)return;rivalVis.forEach(v=>{disposeJet(v.group);scene.remove(v.group);});rivalSource=car;
- rivalVis=race.rivals.map((_,i)=>{const group=car.clone(true);group.getObjectByName('VehicleBody')?.removeFromParent();if(!group.getObjectByName('JetShell'))fitJetShell(group,JET_KINDS[(i+1)%5],RIVAL_PAINT[i%5]);if(group.getObjectByName('JetShell')){fitJetShell(group,JET_KINDS[(i+1)%5],RIVAL_PAINT[i%5]);clearcoat(group);paintNoseArt(group.getObjectByName('JetShell'),{});}else group.traverse(o=>{if(o.isMesh&&o.material?.color){const hsl={};o.material.color.getHSL(hsl);if(hsl.s>.35&&hsl.l>.3){o.material=o.material.clone();o.material.color.set(RIVAL_PAINT[i%5]);}}});scene.add(group);
+ rivalVis=race.rivals.map((_,i)=>{const group=car.clone(true);group.getObjectByName('VehicleBody')?.removeFromParent();fitJetShell(group,JET_KINDS[(i+1)%5],RIVAL_PAINT[i%5]);clearcoat(group);paintNoseArt(group.getObjectByName('JetShell'),{});scene.add(group);
   const named=['FL','FR','RL','RR'].map(n=>({pivot:group.getObjectByName('Steer_'+n),wheel:group.getObjectByName('Wheel_'+n),front:n[0]==='F'}));
   return {group,wheels:named.every(w=>w.pivot&&w.wheel)?named:[]};});}
 // Pickup presentation: gift crates, balloons, oil puddles, bubble shields.
@@ -362,7 +360,7 @@ function soundEvents(r,c){if(s.gate!==sfx.gate){if(s.gate>sfx.gate)audio.gate();
  const rt=retreatActive(race);if(rt&&!sfx.retreat)audio.bugle();sfx.retreat=rt;
  if(s.finished&&!sfx.finished)audio.finish();sfx.finished=s.finished;}
 function disposeJet(group){const jet=group.getObjectByName('JetShell'),geos=new Set(),materials=new Set();jet?.traverse(o=>{if(o.geometry)geos.add(o.geometry);if(o.material)materials.add(o.material);});for(const g of geos)g.dispose();for(const m of materials){m.map?.dispose();m.dispose();}}
-function applyShell(kind,colour,body='jet'){if(assetState!=='blender')return;const old=car.getObjectByName('VehicleBody');if(old){old.removeFromParent();const mats=new Set();old.traverse(o=>{o.geometry?.dispose();if(o.material)mats.add(o.material);});for(const m of mats)m.dispose();}disposeJet(car);fitJetShell(car,kind,colour);if(body!=='jet'){disposeJet(car);car.getObjectByName('JetShell')?.removeFromParent();if(body==='buggy'){for(const n of ['Mesh_Body_shell','RakedCanopy','Mesh_Body_ivory','Mesh_Body_graphite']){const o=car.getObjectByName(n);if(o)o.visible=true;}const shell=car.getObjectByName('Mesh_Body_shell');if(shell){shell.material=shell.material.clone();shell.material.color.set(colour);}}else car.add(makeVehicleBody(body,colour));}clearcoat(car);paintNoseArt(car.getObjectByName('JetShell'),{tier:artTier(aceKills)});if(bodyKind!==body){bodyKind=body;const pos=[...s.car.pos];Object.assign(s.car,createCar(vehicleParams(body==='jet'?'buggy':body),pos,readout(s).yaw));}rivalSource=null;}
+function applyShell(kind,colour,body='jet'){if(assetState!=='blender')return;const old=car.getObjectByName('VehicleBody');if(old){old.removeFromParent();const mats=new Set();old.traverse(o=>{o.geometry?.dispose();if(o.material)mats.add(o.material);});for(const m of mats)m.dispose();}disposeJet(car);fitJetShell(car,kind,colour);if(body!=='jet'){disposeJet(car);car.getObjectByName('JetShell')?.removeFromParent();if(body==='buggy'){for(const n of ['Mesh_Body_shell','RakedCanopy','Mesh_Body_ivory','Mesh_Body_graphite']){const o=car.getObjectByName(n);if(o)o.visible=true;}const shell=car.getObjectByName('Mesh_Body_shell');if(shell){shell.material=shell.material.clone();shell.material.color.set(colour);}}else car.add(makeVehicleBody(body,colour));}clearcoat(car);paintNoseArt(car.getObjectByName('JetShell'),{tier:artTier(aceKills)});if(bodyKind!==body){bodyKind=body;const params=vehicleParams(body==='jet'?'buggy':body),pos=[...s.car.pos];pos[1]+=rideHeight(params)-rideHeight(s.car.params);Object.assign(s.car,createCar(params,pos,readout(s).yaw));}rivalSource=null;}
 
 let portalTravelling=false;
 async function travelTo(id){if(!race.roam)return false;keys.clear();touchControls?.reset();fireQueued=false;lastThrottle=0;const p=await openWorld?.travel(id);if(!p)return false;const {pos,yaw}=p.arrival;placeCar(s.car,[pos[0],pos[1]+rideHeight(s.car.params)+.02,pos[2]],yaw);acc=0;cameraCar=null;camera.position.set(pos[0]-Math.sin(yaw)*2,pos[1]+.8,pos[2]+Math.cos(yaw)*2);roamArmedAt=s.travel+30;keys.clear();touchControls?.reset();fireQueued=false;return true;}
@@ -425,14 +423,15 @@ const pollGamepad=createGamepadInput();const frameMs=[];function frame(now){cons
  poseCar(car,wheels,c);syncRivals();race.rivals.forEach((rv,i)=>poseCar(rivalVis[i].group,rivalVis[i].wheels,rv.session.car));
  // Low chase camera behind the heading; pulled in front of any wall between it and the car.
  if(cameraCar)camera.position.add(new T.Vector3(r.x-cameraCar[0],r.y-cameraCar[1],r.z-cameraCar[2]));cameraCar=[r.x,r.y,r.z];
- const back=1.28+Math.min(.22,r.speed*.014),eye=[r.x,r.y+.12,r.z];desired.set(r.x-Math.sin(r.yaw)*back,r.y+.49,r.z+Math.cos(r.yaw)*back);
+ const back=1.36+Math.min(.24,r.speed*.015),eye=[r.x,r.y+.12,r.z];desired.set(r.x-Math.sin(r.yaw)*back,r.y+.55,r.z+Math.cos(r.yaw)*back);
  const ray=[desired.x-eye[0],desired.y-eye[1],desired.z-eye[2]],dist=Math.hypot(...ray),hit=course.world.raycast(eye,ray.map(v=>v/dist),dist);
  if(hit){const k=Math.max(.15,hit.dist-.12)/dist;desired.set(eye[0]+ray[0]*k,eye[1]+ray[1]*k,eye[2]+ray[2]*k);}
  camera.fov+=((60+Math.min(5,r.speed*.3))-camera.fov)*Math.min(1,dt*3);camera.updateProjectionMatrix();camera.position.lerp(desired,1-Math.exp(-dt*7));
  // Sweep the smoothed position too: damping must not carry the camera through a wall.
  const actualRay=[camera.position.x-eye[0],camera.position.y-eye[1],camera.position.z-eye[2]],actualDistance=Math.hypot(...actualRay);if(actualDistance>.01){const obstruction=course.world.raycast(eye,actualRay.map(v=>v/actualDistance),actualDistance);if(obstruction){const k=Math.max(.08,obstruction.dist-.08)/actualDistance;camera.position.set(eye[0]+actualRay[0]*k,eye[1]+actualRay[1]*k,eye[2]+actualRay[2]*k);}}
- target.set(r.x+Math.sin(r.yaw)*1.05,r.y+.18,r.z-Math.cos(r.yaw)*1.05);camera.lookAt(target);
- if(ui.panel()==='garage'){const a=now*.00022;camera.position.set(r.x+Math.sin(a)*1.05,r.y+.48,r.z+Math.cos(a)*1.05);camera.fov=48;camera.updateProjectionMatrix();camera.lookAt(r.x,r.y+.08,r.z);}
+ const portrait=camera.aspect<.8,portraitAim=-.3-Math.max(0,740-innerHeight)*.003;
+ target.set(r.x+Math.sin(r.yaw)*1.05,r.y+(portrait?portraitAim:.18),r.z-Math.cos(r.yaw)*1.05);camera.lookAt(target);
+ if(ui.panel()==='garage'){const a=now*.00022,d=portrait?1.7:1.05;camera.position.set(r.x+Math.sin(a)*d,r.y+(portrait?.75:.48),r.z+Math.cos(a)*d);camera.fov=48;if(portrait)camera.clearViewOffset();else camera.setViewOffset(innerWidth,innerHeight,(innerWidth>900?330:315)/2,0,innerWidth,innerHeight);camera.updateProjectionMatrix();camera.lookAt(r.x,r.y+(portrait?portraitAim:.08),r.z);}else if(camera.view?.enabled)camera.clearViewOffset();
  gates.forEach((g,i)=>{const next=i===(s.gate===cps.length-1?0:s.gate);g.userData.arch.material=next?archLit:archMat;g.userData.label.visible=false;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
  $('speed').textContent=Math.round(r.speed*3.6);$('clock').hidden=race.roam&&!race.furball;$('clock').textContent=format(race.furball?race.furball.left:s.time);drawLives(now,dt);drawPickups(now);drawLine(now);drawRoam(now);drawCoins(now);$('gate').textContent=race.furball?`FURBALL · 🎈${race.furball.out.has(s.car)?0:race.furball.lives.get(s.car)} · ${race.rivals.filter(r=>!race.furball.out.has(r.session.car)).length} bandits`:race.roam?(openWorld?nearestLocation(s.car.pos).short:'FREE DRIVE'):`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${s.laps>1?`LAP ${s.lap}/${s.laps}`:`${Math.min(s.gate+1,cps.length)}/${cps.length}`}`;if(!$('banner').dataset.callout)$('banner').hidden=!retreatActive(race);$('secret').hidden=!course.secrets.length;$('secret').textContent=openWorld?`◇ ${openWorld.progress.specimens.length}/${SPECIMENS.length} badges${expedition(openWorld.progress).complete?' ★':''}`:`◇ ${s.found}/${course.secrets.length}`;drawMap();polish?polish.render():renderer.render(scene,camera);
  if(skate)skateHud.update(skate,now);

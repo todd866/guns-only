@@ -4,7 +4,7 @@
 // An oblique launch off a quarter or the hip is a transfer: a bounded hop that faces
 // along its travel and meets the face below. No position changes or repeat boosts.
 import {dot,cross,add,sub,scale,norm,rotate,unrotate} from './math.mjs';
-import {carForward,carUp} from './car.mjs';
+import {carForward,carUp,rideHeight} from './car.mjs';
 import {TRANSITION_SURFACES} from './world.mjs';
 const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
 const horizontal=v=>norm([v[0],0,v[2]]);
@@ -23,7 +23,7 @@ function landing(world,pos,vel){
 // into a wall ahead. Shorten it first, then turn it a little, until it does.
 function safeTransfer(world,pos,vel){
  const good=v=>{const h=landing(world,pos,v);return h&&(h.normal[1]>.9||dot(horizontal(h.normal),horizontal(v))>.3);};
- for(const k of [1,.85,.7,.55,.4])for(const a of [0,.26,-.26,.52,-.52]){
+ for(const k of [.9,.8,.7,.55,.4])for(const a of [0,.26,-.26,.52,-.52]){
   const c=Math.cos(a),s=Math.sin(a),v=[(vel[0]*c-vel[2]*s)*k,vel[1],(vel[0]*s+vel[2]*c)*k];
   if(good(v))return v;
  }
@@ -80,7 +80,7 @@ export function stepQuarterReturn(state,car,raw,dt,world){
      const sideways=returning?.65:-1.8;
      // A bowl keeps a short, even rhythm between its facing walls.
      // A vert wall carries the most: big, readable air above the coping.
-     const [lo,hi]=a.vert?[5.5,8]:bowl?[4.2,5.6]:returning?[5.5,8.5]:[2.2,3.4];
+     const [lo,hi]=a.vert?[5.5,8]:bowl?[4.2,5.45]:returning?[5.5,8.5]:[2.2,3.4];
      car.vel=[drift[0]+a.inward[0]*sideways,clamp(car.vel[1],lo,hi),drift[2]+a.inward[2]*sideways];
      state.arc={kind:returning?'return':'exit',returning,yaw:a.yaw,turn:raw.steer<-.15?-1:1,time:0};
     }
@@ -101,7 +101,7 @@ export function stepQuarterReturn(state,car,raw,dt,world){
   const ground=world.raycast(add(car.pos,[0,.3,0]),[0,-1,0],8);
   if(ground&&ground.normal[1]>.35){
    targetUp=ground.normal;
-   const clearance=ground.dist-.3-.13;
+   const clearance=ground.dist-.3-rideHeight(car.params);
    if(arc.returning&&clearance<.8){
     // Soften the last part of the descent and carry the saved approach energy
     // down the transition. This prevents a toy-suspension bounce from undoing
