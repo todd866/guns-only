@@ -834,6 +834,18 @@
       visibility: hidden;
     }
 
+    /* Picker live while the runtime boots: the menu below is already usable, so the cover keeps
+       only its gauge, parked in the top corner clear of the console and the cards. */
+    #boot.picker-live:not(.ready) {
+      background: none;
+      pointer-events: none;
+    }
+    #boot.picker-live:not(.ready) .boot-load {
+      top: calc(var(--safe-top) + 12px);
+      bottom: auto;
+      right: calc(var(--safe-right) + 12px);
+    }
+
     /* Variant B: one word and a stage gauge, visible throughout loading. */
     .boot-load {
       position: absolute;
