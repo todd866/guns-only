@@ -1,6 +1,7 @@
 import {roadWidth,segmentDistance,inside} from './geometry.mjs';
 import {inEventArea} from './catalog.mjs';
 import {SCENERY_BOUNDS} from './district-zones.mjs';
+import {SKATESTREET_BOUNDS} from './skatestreet.mjs';
 import {HANGAR,hangarWorld} from './skate-hangar.mjs';
 // The skate hangar's floor: no scrub grows through it. Not a terrain clip (see stream.mjs).
 const HANGAR_BOUNDS=(()=>{const c=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([x,z])=>hangarWorld([x*(HANGAR.length/2+3),0,z*(HANGAR.width/2+3)]));return [Math.min(...c.map(p=>p[0])),Math.min(...c.map(p=>p[2])),Math.max(...c.map(p=>p[0])),Math.max(...c.map(p=>p[2]))];})();
@@ -8,7 +9,7 @@ const HANGAR_BOUNDS=(()=>{const c=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([x,z])=>han
 // Sparse planting in the graded verge, never in a roadway, apron, building,
 // authored district or event clearing. A fixed tile budget bounds streaming cost.
 export function roadsideDetail(tile,bounds,residentialBounds=null){
- const out=[],excluded=[...SCENERY_BOUNDS,...(residentialBounds?[residentialBounds]:[])];
+ const out=[],excluded=[...SCENERY_BOUNDS,SKATESTREET_BOUNDS,...(residentialBounds?[residentialBounds]:[])];
  const safe=(x,z)=>{
   if(x<bounds[0]||x>=bounds[2]||z<bounds[1]||z>=bounds[3]||inEventArea(x,z,24))return false;
   if(excluded.some(b=>x>b[0]-3&&x<b[2]+3&&z>b[1]-3&&z<b[3]+3))return false;
@@ -32,7 +33,7 @@ export function roadsideDetail(tile,bounds,residentialBounds=null){
 // lots and buildings; a jittered 9 m grid with a fixed budget bounds the streaming cost.
 const hash=(x,z)=>{let h=Math.imul(x|0,374761393)^Math.imul(z|0,668265263);h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;};
 export function desertScatter(tile,bounds,residentialBounds=null,limit=460){
- const cell=4,n=Math.ceil((bounds[2]-bounds[0])/cell),blocked=new Uint8Array(n*n),excluded=[...SCENERY_BOUNDS,HANGAR_BOUNDS,...(residentialBounds?[residentialBounds]:[])];
+ const cell=4,n=Math.ceil((bounds[2]-bounds[0])/cell),blocked=new Uint8Array(n*n),excluded=[...SCENERY_BOUNDS,SKATESTREET_BOUNDS,HANGAR_BOUNDS,...(residentialBounds?[residentialBounds]:[])];
  const mark=(x,z)=>{const i=Math.floor((x-bounds[0])/cell),j=Math.floor((z-bounds[1])/cell);if(i>=0&&j>=0&&i<n&&j<n)blocked[j*n+i]=1;};
  for(const f of tile.features){const p=f.properties,g=f.geometry;
   if(g.type==='LineString'&&(p.highway||p.aeroway||p.railway)){const r=roadWidth(p)/2+3;

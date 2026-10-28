@@ -31,7 +31,7 @@ import {loadOpenWorld} from './open-world/runtime.js';
 import {createWorldUI} from './open-world/ui.js';
 import {loadProgress,canEnter,expedition,SPECIMENS,rcLink,nearestLocation,locationById} from './open-world/catalog.mjs';
 import {setSkateRails} from './physics/grind.mjs';
-import {createSkate,stepSkate,INTRO_PARK} from './physics/skate.mjs';import {HANGAR,HANGAR_PARK,hangarLocal,hangarWorld} from './open-world/skate-hangar.mjs';import {SCHOOL_PARK,yardLocal,yardWorld} from './open-world/schoolyard.mjs';import {createSkateHud,goalCard} from './skate-hud.js';import {bankPoint,bankLocal} from './open-world/park-lines.mjs';import {RESIDENTIAL_PARK,parkPoint} from './open-world/residential-frame.mjs';
+import {createSkate,stepSkate,INTRO_PARK} from './physics/skate.mjs';import {SKATESTREET,SKATESTREET_PARK,skatestreetLocal,skatestreetWorld} from './open-world/skatestreet.mjs';import {HANGAR,HANGAR_PARK,hangarLocal,hangarWorld} from './open-world/skate-hangar.mjs';import {SCHOOL_PARK,yardLocal,yardWorld} from './open-world/schoolyard.mjs';import {createSkateHud,goalCard} from './skate-hud.js';import {bankPoint,bankLocal} from './open-world/park-lines.mjs';import {RESIDENTIAL_PARK,parkPoint} from './open-world/residential-frame.mjs';
 let bodyKind='jet';try{bodyKind=loadProgress(localStorage).body;}catch{}
 function createRace(course,options){return createRaceBase({...course,laps:course.event?.kind==='sprint'?1:3},{...options,params:vehicleParams(bodyKind==='jet'?'buggy':bodyKind)});}
 const audio=new SoundKit();
@@ -369,6 +369,8 @@ async function travelTo(id){if(!race.roam)return false;keys.clear();touchControl
 // Each park: rules, the frame that maps world positions to its [u, v, h], its area, and the
 // browser key that remembers its goals.
 const SKATE_PARKS={
+ skatestreet:{park:SKATESTREET_PARK,key:'guns-only.rc.skate.v1.skatestreet',centre:SKATESTREET.center,radius:54,
+  frame:p=>{const l=skatestreetLocal(p);return [l[0],l[2],l[1]];},world:([x,z,h])=>skatestreetWorld([x,h,z])},
  intro:{park:INTRO_PARK,key:'guns-only.rc.skate.v1.intro',centre:RESIDENTIAL_PARK.anchor,radius:34,
   frame:p=>{const {anchor:a,yaw}=RESIDENTIAL_PARK,c=Math.cos(yaw),n=Math.sin(yaw),x=(p[0]-a[0])*c-(p[2]-a[2])*n,z=(p[0]-a[0])*n+(p[2]-a[2])*c;return [...bankLocal([x,p[1],z]),p[1]];},
   world:([u,v,h])=>{const b=bankPoint(u,v);return parkPoint([b[0],h,b[2]]);}},
@@ -381,7 +383,7 @@ let skate=null,skatePark=null,skateHud=null,skateGrabUntil=0;
 const skateSaved=id=>{const saved={goals:[],best:0,gaps:[]};try{Object.assign(saved,JSON.parse(localStorage.getItem(SKATE_PARKS[id].key)||'{}'));}catch{}return saved;};
 const skateParkAt=()=>{if(!openWorld||!race.roam)return null;for(const [id,p] of Object.entries(SKATE_PARKS))if(Math.hypot(s.car.pos[0]-p.centre[0],s.car.pos[2]-p.centre[2])<p.radius)return id;return null;};
 function skateCard(id,run=null){const result=$('result'),saved=skateSaved(id);result.innerHTML=goalCard({park:SKATE_PARKS[id].park,goals:saved.goals,best:saved.best,run,gapsFound:saved.gaps});result.hidden=false;pause(true);$('skate-go').onclick=()=>startSkateRun(id);$('skate-free').onclick=()=>{result.hidden=true;pause(false);canvas.focus();};$('skate-go').focus();}
-function startSkateRun(id){$('result').hidden=true;const def=SKATE_PARKS[id];skateHud?.stop();skateHud??=createSkateHud({scene,T});skatePark=id;skate=createSkate(def.park,skateSaved(id).goals);setSkateRails(s,def.park,def.world);skateHud.start(skate,def.world);const {at,toward}=def.park.start,p=def.world([...at,0]),q=def.world([at[0]+toward[0],at[1]+toward[1],0]),ground=course.world.raycast([p[0],p[1]+3,p[2]],[0,-1,0],6)?.point[1]??p[1];placeCar(s.car,[p[0],ground+rideHeight(s.car.params)+.02,p[2]],Math.atan2(q[0]-p[0],-(q[2]-p[2])));acc=0;cameraCar=null;pause(false);canvas.focus();}
+function startSkateRun(id){$('result').hidden=true;const def=SKATE_PARKS[id];skateHud?.stop();skateHud??=createSkateHud({scene,T});skatePark=id;skate=createSkate(def.park,skateSaved(id).goals);setSkateRails(s,def.park,def.world);skateHud.start(skate,def.world);const {at,toward}=def.park.start,p=def.world([...at,def.park.start.height??0]),q=def.world([at[0]+toward[0],at[1]+toward[1],0]),ground=course.world.raycast([p[0],p[1]+3,p[2]],[0,-1,0],6)?.point[1]??p[1];placeCar(s.car,[p[0],ground+rideHeight(s.car.params)+.02,p[2]],Math.atan2(q[0]-p[0],-(q[2]-p[2])));acc=0;cameraCar=null;pause(false);canvas.focus();}
 function endSkate(){setSkateRails(s,null);skate=null;skatePark=null;skateHud?.stop();}
 function skateStep(input){if(!skate)return;const def=SKATE_PARKS[skatePark];if(Math.hypot(s.car.pos[0]-def.centre[0],s.car.pos[2]-def.centre[2])>def.radius+26){endSkate();return;}if(fireQueued)skateGrabUntil=performance.now()+400;
  for(const e of stepSkate(skate,s,{...input,drift:input.drift||performance.now()<skateGrabUntil},1/120,def.frame)){skateHud.event(e);if(e.type==='gap'||e.type==='tape'||e.type==='letter')audio.coin();else if(e.type==='bail')audio.impact(4);else if(e.type==='goal')audio.gate();
