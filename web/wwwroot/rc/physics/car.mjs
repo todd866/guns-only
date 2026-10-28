@@ -10,6 +10,7 @@ export const BUGGY = {
   mass: 1.8,
   size: [0.18, 0.08, 0.42],            // body box for inertia, metres
   inertiaScale: 1.0,
+  wheelMassFraction: .15,
   // Provisional 1:10 envelope: 420 mm long, 280 mm outside wheels, 116 mm tyres.
   wheels: [                           // attach points relative to the centre of mass
     { at: [-0.115, 0, -0.14], front: true }, { at: [0.115, 0, -0.14], front: true },
@@ -17,12 +18,12 @@ export const BUGGY = {
   ],
   wheelRadius: 0.058, wheelWidth: 0.05,
   restLength: 0.05,                  // attach point to wheel centre at full droop
-  spring: 450, damper: 9,             // per wheel, N/m and N·s/m
+  spring: 450, damper: 12,             // per wheel, N/m and N·s/m
   bumpAt: 0.032, bumpSpring: 4000, bumpDamper: 40, // bump rubber: absorbs before the hull touches
   staticFriction: [1.6, 1.52],        // front, rear (rear a little lower: it lets go first)
   kineticFriction: [1.2, 1.12],
   lateralStiffness: 0.5,              // fraction of the per-wheel lateral slip removed per substep
-  rollCentre: 0.6,                    // tyre forces act this fraction of the way up to the CoM
+  rollCentre: 0.72,                    // tyre forces act this fraction of the way up to the CoM
   driveForce: 26, topSpeed: 14, reverseSpeed: 5, brakeForce: 30,
   maxSteer: 0.5, steerRate: 5,
   downforce: 0.04,                    // N per (m/s)²
@@ -43,9 +44,18 @@ export const VISUAL_SCALE = 0.56;
 
 export function createCar(params = BUGGY, pos = [0, 0.1, 0], yaw = 0) {
   const [w, h, l] = params.size, m = params.mass, k = params.inertiaScale;
-  const inertia = [m / 12 * (h * h + l * l) * k, m / 12 * (w * w + l * l) * k, m / 12 * (w * w + h * h) * k];
+  const wheelMass = m * (params.wheelMassFraction ?? 0) / params.wheels.length, bodyMass = m - wheelMass * params.wheels.length;
+  const inertia = [h * h + l * l, w * w + l * l, w * w + h * h].map(v => bodyMass * v / 12);
+  // The outboard wheels carry mass too; a narrow body box alone understates roll inertia.
+  for (const wheel of params.wheels) {
+    const [x, atY, z] = wheel.at, y = atY - params.restLength + m * G / 4 / params.spring;
+    const r2 = params.wheelRadius ** 2, radial = (3 * r2 + (params.wheelWidth ?? 0) ** 2) / 12;
+    inertia[0] += wheelMass * (y * y + z * z + r2 / 2);
+    inertia[1] += wheelMass * (x * x + z * z + radial);
+    inertia[2] += wheelMass * (x * x + y * y + radial);
+  }
   return {
-    params, invInertia: inertia.map(i => 1 / i),
+    params, invInertia: inertia.map(i => 1 / (i * k)),
     pos: [...pos], q: quatAxisAngle([0, 1, 0], -yaw), vel: [0, 0, 0], ang: [0, 0, 0],
     steer: 0, wheels: params.wheels.map(() => ({ compression: params.mass * G / 4 / params.spring, contact: false, spin: 0, slip: 0, surface: null })),
     grounded: false, contacts: 0, impact: 0, speed: 0, forwardSpeed: 0, placement: 0,

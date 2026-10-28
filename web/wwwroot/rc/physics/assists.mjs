@@ -55,7 +55,9 @@ export function assistInput(a, car, raw, dt, world) {
     // levelling immediate, but wait for a sustained airborne state before
     // optional hip steering can influence the attitude.
     a.airTime += dt;
-    const transfer = a.airTime >= 0.1 && (Math.abs(raw.steer || 0) > 0.05 || raw.airControl);
+    // Keep the landing gyro in charge after a seam kicks the chassis into a tumble.
+    const stable = up[1] > .5 && Math.hypot(car.ang[0], car.ang[2]) < 4;
+    const transfer = stable && a.airTime >= 0.1 && (Math.abs(raw.steer || 0) > 0.05 || raw.airControl);
     torque = add(torque, levelTorque(car, up, transfer ? 2.2 : 5));
     if (transfer) {
       const fwd = carForward(car), right = rotate(car.q, [1, 0, 0]);

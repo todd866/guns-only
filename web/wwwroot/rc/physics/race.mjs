@@ -26,7 +26,7 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false, 
   const line = racingLine(course);
   const rivals = (roam ? slots.slice(1) : slots.slice(0, -1)).map((slot, i) => ({
     session: Object.assign(createSession({ ...course, start: slot }, { mode: 'bigKid' }), { autoUnstick: true }),
-    skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i, callsign: CALLSIGNS[i % CALLSIGNS.length],
+    skill: [SKILL.cruise, SKILL.ace, 0.82][i % 3], node: 0, colour: i, callsign: CALLSIGNS[i % CALLSIGNS.length],
   }));
   // In-race ceremony applies to every driver. Timing is provisional; rarity and
   // presentation remain a later play-balancing task.
@@ -216,15 +216,16 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
 }
 
 // Car-to-car: body spheres against body spheres, equal-mass impulses with a little bounce.
-const BODY = [[0, 0.02, -0.14], [0, 0.02, 0], [0, 0.02, 0.14]], R = 0.12;
+const bodySpheres = car => { const r = car.params.size[0] / 2, z = car.params.size[2] / 2 - r; return { r, at: [[0, .02, -z], [0, .02, 0], [0, .02, z]] }; };
 export function bump(cars) {
   for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) {
     const a = cars[i], b = cars[j];
     if (len(sub(a.pos, b.pos)) > 0.8) continue;
-    for (const pa of BODY) for (const pb of BODY) {
+    const ba = bodySpheres(a), bb = bodySpheres(b), reach = ba.r + bb.r;
+    for (const pa of ba.at) for (const pb of bb.at) {
       const ca = add(a.pos, rotate(a.q, pa)), cb = add(b.pos, rotate(b.q, pb)), d = sub(ca, cb), dl = len(d);
-      if (dl >= 2 * R || dl < 1e-6) continue;
-      const n = scale(d, 1 / dl), depth = 2 * R - dl;
+      if (dl >= reach || dl < 1e-6) continue;
+      const n = scale(d, 1 / dl), depth = reach - dl;
       a.pos = add(a.pos, scale(n, depth / 2)); b.pos = sub(b.pos, scale(n, depth / 2));
       const vn = dot(sub(a.vel, b.vel), n);
       if (vn < 0) { const j = -(1 + 0.3) * vn / 2; a.vel = add(a.vel, scale(n, j)); b.vel = sub(b.vel, scale(n, j)); a.impact = Math.max(a.impact, -vn); b.impact = Math.max(b.impact, -vn); }

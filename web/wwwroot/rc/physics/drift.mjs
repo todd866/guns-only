@@ -8,7 +8,7 @@ export const DRIFT = Object.freeze({
   slideWindow: 0.72,
   maxAirTime: 0.32,
   cooldown: 0.4,
-  lateralGripScale: 0.58,
+  lateralGripScale: 0.5,
   yawGain: 2.4,
   yawRate: 0.14,
 });

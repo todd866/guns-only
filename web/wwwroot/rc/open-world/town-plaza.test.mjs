@@ -114,8 +114,8 @@ test('held throttle grinds both long granite tiers, transfers the gap and banks 
 });
 
 test('held throttle from the stair bank catches a handrail and exits cleanly',()=>{
-  for(const [x,id] of [[-32.2,'big-four-w'],[25.8,'east-three-w']]){
-    const r=run(x,8,4);clean(r);assert.deepEqual(r.grinds,[id]);
+  for(const [x,z,id] of [[-32.2,6,'big-four-w'],[25.8,8,'east-three-w']]){
+    const r=run(x,z,4);clean(r);assert.deepEqual(r.grinds,[id]);
     assert.ok(r.events.some(e=>e.type==='trick'&&e.name==='50-50'));assert.ok(r.sk.score>100);assert.equal(r.s.skateRide.active,null);
   }
 });

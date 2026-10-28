@@ -9,9 +9,24 @@ import {JET_KINDS,fitJetShell} from './jets.js';
 import {BUGGY,createCar,rideHeight,stepCar,carUp} from './physics/car.mjs';
 import {VEHICLE_KINDS,vehicleParams} from './physics/vehicles.mjs';
 import {createWorld} from './physics/world.mjs';
+import {bump} from './physics/race.mjs';
+import {assistInput,createAssist} from './physics/assists.mjs';
 
 const flat=createWorld();flat.addQuad([-30,0,-30],[-30,0,30],[30,0,30],[30,0,-30]);
 const close=(a,b,label)=>assert.ok(Math.abs(a-b)<.001,`${label}: ${a} versus ${b}`);
+test('a pitching chassis lands wheels-down even with steering held',()=>{
+ const c=createCar(BUGGY,[0,.75,0]),a=createAssist('bigKid');c.vel=[1.5,3.2,-6];c.ang=[10,0,0];
+ for(let f=0;f<180&&!c.contacts;f++)stepCar(c,assistInput(a,c,{throttle:1,steer:1},1/120,flat),flat);
+ assert.ok(c.contacts>0,'returns to the ground');assert.ok(carUp(c)[1]>.75,'steering does not weaken tumble recovery');
+ assert.ok(c.speed>6,'landing retains forward momentum');
+});
+test('car-to-car contacts follow each chassis width and length',()=>{
+ for(const kind of VEHICLE_KINDS)for(const axis of [0,2]){
+  const p=vehicleParams(kind),a=createCar(p,[0,rideHeight(p),0]),at=[0,rideHeight(p),0];at[axis]=p.size[axis]+.005;
+  const b=createCar(p,at);bump([a,b]);assert.deepEqual(a.pos,[0,rideHeight(p),0]);assert.deepEqual(b.pos,at);
+  b.pos[axis]-=.015;bump([a,b]);close(b.pos[axis]-a.pos[axis],p.size[axis],kind+' contact envelope');
+ }
+});
 test('1:10 envelopes retain the motor, mass and wheelbase; suspension settles above its hull',()=>{
  close(BUGGY.wheelRadius*2,.116,'buggy tyre diameter');close(BUGGY.wheels[1].at[0]*2+BUGGY.wheelWidth,.28,'buggy width');
  assert.equal(BUGGY.mass,1.8);assert.equal(BUGGY.driveForce,26);assert.equal(BUGGY.topSpeed,14);close(BUGGY.size[2],.42,'length');

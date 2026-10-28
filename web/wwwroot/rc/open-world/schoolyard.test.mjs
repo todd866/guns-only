@@ -44,7 +44,7 @@ test('a held throttle rides the pool end to end', () => {
 });
 
 test('full speed clears the bus; less lands on its roof; neither crashes', () => {
-  const fast = run(14, -32, 0, 1, 1, 4), slow = run(14, -32, 0, 1, .6, 4);
+  const fast = run(14, -31, 0, 1, 1, 4), slow = run(14, -31, 0, 1, .6, 4);
   assert.ok(fast.gaps.includes('OVER THE BUS') && fast.sk.letters.includes('S'), fast.gaps.join(','));
   assert.ok(slow.gaps.includes('ROOF LANDING') && !slow.gaps.includes('OVER THE BUS'), slow.gaps.join(','));
   for (const r of [fast, slow]) { assert.equal(r.s.hits, 0); assert.equal(r.s.recoveries, 0); }
