@@ -12,14 +12,14 @@ const PLAIN_UV = [.5, .125];
 
 // One atlas keeps signs legible without adding a draw call to the plaza.
 function makeAtlas() {
-  const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 256;
+  const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 256;
   const g = canvas.getContext('2d');
-  g.fillStyle = '#ffffff'; g.fillRect(0, 192, 1024, 64);
+  g.fillStyle = '#ffffff'; g.fillRect(0, 192, 512, 64);
   for (const [row, text] of [[0, 'TOWN PLAZA'], [1, 'CIVIC HALL'], [2, 'SUBWAY']]) {
-    const y = row * 64; g.fillStyle = '#263d40'; g.fillRect(0, y, 1024, 64);
-    g.fillStyle = '#c78b53'; g.fillRect(0, y, 1024, 5);
+    const y = row * 64; g.fillStyle = '#263d40'; g.fillRect(0, y, 512, 64);
+    g.fillStyle = '#c78b53'; g.fillRect(0, y, 512, 5);
     g.fillStyle = '#f5e8c9'; g.font = '900 42px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(text, 512, y + 34);
+    g.fillText(text, 256, y + 34);
   }
   const texture = new T.CanvasTexture(canvas); texture.colorSpace = T.SRGBColorSpace; texture.anisotropy = 4;
   return texture;

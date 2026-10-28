@@ -21,11 +21,11 @@ for (const t of buildPlaza()) stream.world.addTri(plazaWorld(t.a),plazaWorld(t.b
 const world = stream.world, frame = p => { const l = plazaLocal(p); return [l[0],l[2],l[1]]; };
 const course = { world, checkpoints: [[-600,-200,'a'],[-599,-200,'b']], secrets: [], start: { pos: plazaWorld([0,0,0]), yaw: 0 } };
 const height = (x,z) => world.raycast(plazaWorld([x,10,z]),[0,-1,0],12)?.point[1] - PLAZA.center[1];
-function run(x,z,seconds,dx=0,dz=1,throttle=1) {
+function run(x,z,seconds,dx=0,dz=1,throttle=1,grab=false) {
   const s=createSession(course,{mode:'kid'});s.roam=true;
   placeCar(s.car,plazaWorld([x,height(x,z)+rideHeight()+.01,z]),Math.atan2(dx,-dz));
   const sk=createSkate(PLAZA_PARK),events=[],grinds=new Set(),landings=[];let peak=0;
-  for(let f=0;f<seconds*120;f++){stepSession(s,{throttle,steer:0},1/120);const air=sk.air;events.push(...stepSkate(sk,s,{throttle},1/120,frame));if(s.skateRide?.active)grinds.add(s.skateRide.active.rail.id);if(air&&!sk.air&&air.time>.3)landings.push({from:air.from,to:frame(s.car.pos)});peak=Math.max(peak,frame(s.car.pos)[2]);}
+  for(let f=0;f<seconds*120;f++){const drift=grab&&f<(seconds-.75)*120;stepSession(s,{throttle,steer:0,drift},1/120);const air=sk.air;events.push(...stepSkate(sk,s,{throttle,drift},1/120,frame));if(s.skateRide?.active)grinds.add(s.skateRide.active.rail.id);if(air&&!sk.air&&air.time>.3)landings.push({from:air.from,to:frame(s.car.pos)});peak=Math.max(peak,frame(s.car.pos)[2]);}
   return {s,sk,events,peak,grinds:[...grinds],landings,gaps:events.filter(e=>e.type==='gap').map(e=>e.name)};
 }
 const clean = r => { assert.equal(r.s.hits,0,'no wall strikes');assert.equal(r.s.recoveries,0,'no automatic rescues');assert.equal(r.events.filter(e=>e.type==='bail').length,0,'no bails'); };
@@ -64,11 +64,18 @@ test('both scenery scatterers keep scrub off the plaza',()=>{
 });
 
 test('every riding feature has an upward face at its designed height',()=>{
-  const checks=[[-18,-7.5,.12],[-18,-10.3,.7],[-18,-13, .08+(1.2-.08)/3],[-18,-2,.08],
+  const checks=[[-18,-7.5,.14],[-18.6,-7.5,.12],[-18,-10.3,.7],[-18,-13, .08+(1.2-.08)/3],[-18,-2,.08],
     [0,-8,.55],[0,-12, .08+(1.2-.08)*2/3],[18,-5,1.5],[18,1,.08+(1.5-.08)*3/7],
     [-32.2,16,1.43],[25.8,16,1.18],[-29,15,1.08],[-29,20.3,.83],[-29,21,.58],[-29,21.8,.33],[29,15,.83],[29,20.3,.58],[29,21,.33],
     [-9,10,.83],[-9,13.5,1.09],[-9,20,.63],[-6,10,.48],[-6,20,.28],[7,16,.62],[7,11.5,.59],[17,22,.62]];
   for(const [x,z,h] of checks)assert.ok(Math.abs(height(x,z)-h)<.025,`${x},${z}: ${height(x,z)} != ${h}`);
+  for(let i=0;i<4;i++){
+    const hit=world.raycast(plazaWorld([18,1.2,-7.65+i*.7]),[0,-1,0],2);
+    assert.ok(Math.abs(hit.point[1]-(1.05-i*.24))<.01,'subway treads beneath the awning');
+  }
+  for(const {a,b,c,mat} of buildPlaza())if(['bank','paver','paver-dark','basin','rim'].includes(mat)){
+    assert.ok((b[2]-a[2])*(c[0]-a[0])-(b[0]-a[0])*(c[2]-a[2])>0,`${mat} riding face points upward`);
+  }
 });
 
 test('all grind polylines sit on real upward-facing geometry within five centimetres',()=>{
@@ -111,4 +118,12 @@ test('held throttle from the stair bank catches a handrail and exits cleanly',()
     const r=run(x,8,4);clean(r);assert.deepEqual(r.grinds,[id]);
     assert.ok(r.events.some(e=>e.type==='trick'&&e.name==='50-50'));assert.ok(r.sk.score>100);assert.equal(r.s.skateRide.active,null);
   }
+});
+
+
+test('linking the ledges with held grab/manual earns Sick Score in a real driven line',t=>{
+  const r=run(-10.5,0,7,0,1,1,true);clean(r);
+  for(const id of ['high','pro','sick','combo'])assert.ok(r.sk.goals.has(id),id);
+  assert.deepEqual(r.grinds,['tier-upper-a','tier-upper-b']);assert.ok(r.sk.left>110);
+  t.diagnostic(`grab/manual ledge line: ${r.sk.score} points, ${r.sk.best} tricks`);
 });

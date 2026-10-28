@@ -36,8 +36,11 @@ for(let x=-38;x<38;x+=2)for(let z=-31;z<31;z+=2)top([x,.08,z],[x+2,.08,z],[x+2,.
 const rings = [[0,.12],[1.4,.12],[2.6,.7],[3,.7],[3.8,.08]], n=64;
 for(let k=1;k<rings.length;k++)for(let i=0;i<n;i++){
   const [r0,y0]=rings[k-1],[r1,y1]=rings[k],p=(r,y,j)=>[-18+r*Math.cos(j*2*Math.PI/n),y,-7.5+r*Math.sin(j*2*Math.PI/n)];
-  top(p(r0,y0,i),p(r1,y1,i),p(r1,y1,i+1),p(r0,y0,i+1),k===3?'rim':k<3?'basin':'granite');
+  const mat=k===3?'rim':k<3?'basin':'granite';
+  if(!r0)tri(p(0,y0,i),p(r1,y1,i+1),p(r1,y1,i),mat);
+  else top(p(r0,y0,i),p(r1,y1,i),p(r1,y1,i+1),p(r0,y0,i+1),mat);
 }
+for(let i=-3;i<=3;i++)box(-18+i*.1-.025,-18+i*.1+.025,-7.85,-7.15,.12,.14,'steel');
 for(let q=0;q<4;q++)edge(`fountain-rim-${q}`,'ledge',Array.from({length:17},(_,i)=>{const a=(q*16+i)*2*Math.PI/64;return [-18+2.8*Math.cos(a),-7.5+2.8*Math.sin(a),.7];}));
 wedge(-21,-15,-14,-11,.08,1.2);
 // An off-centre open sculpture leaves the plinth's jump line clear.
