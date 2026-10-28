@@ -3,7 +3,7 @@
 // units; car-local axes are +X right, +Y up, −Z forward. Re-Volt informed the *form* of the
 // model (see docs/area-51-build-plan.md); none of its code or data is used.
 import { add, sub, scale, madd, dot, cross, len, norm, rotate, unrotate, quatIntegrate, quatIdentity, quatAxisAngle, yawOf } from './math.mjs';
-import { SURFACES } from './world.mjs';
+import { SURFACES, TRANSITION_SURFACES } from './world.mjs';
 
 // 1:10 electric buggy. Values are fiction, chosen for toy-scale feel and checked by tests.
 export const BUGGY = {
@@ -173,7 +173,7 @@ function solveHull(car, world) {
     ct.bias = vn < -0.5 ? -p.restitution * vn : 0; ct.jn = 0; ct.jt = [0, 0, 0];
     car.impact = Math.max(car.impact, -vn);
     // Riding an upward-facing quarter transition is intentional, even near vertical.
-    if (Math.abs(ct.normal[1]) < 0.5 && !(ct.surface === 'quarter' && ct.normal[1] > .05)) car.wallImpact = Math.max(car.wallImpact, -vn);
+    if (Math.abs(ct.normal[1]) < 0.5 && !(TRANSITION_SURFACES.has(ct.surface) && ct.normal[1] > .05)) car.wallImpact = Math.max(car.wallImpact, -vn);
   }
   for (let it = 0; it < 6; it++) for (const ct of contacts) {
     const vRel = pointVelocity(car, ct.point), vn = dot(vRel, ct.normal);

@@ -148,3 +148,47 @@ for(const throttle of [.45,.65,1])test(`ordinary throttle ${throttle} transfers 
   assert.equal(session.recoveries,0);assert.equal(session.hits,0,'clear runout without hull strikes');
   t.diagnostic(JSON.stringify({throttle,distance,air:transfer.air,peakClearance,upright:transfer.upright}));
 });
+
+// Owner, 2026-10-28: "fairly simple to drive back and forth on the halfpipe, especially the hip
+// transfer". Scripted kid drivers hold one throttle and never steer.
+const parkYaw=(du,dv)=>{const a=bankPoint(du,dv),o=bankPoint(0,0);return Math.atan2(a[0]-o[0],-(a[2]-o[2]));};
+function holdThrottle(u,v,du,dv,throttle,seconds){
+  const s=createSession(course,{mode:'kid'});s.roam=true;
+  const p=bankPoint(u,v);p[1]=course.world.raycast([p[0],4,p[2]],[0,-1,0],6).point[1]+rideHeight()+.01;
+  placeCar(s.car,p,parkYaw(du,dv));
+  let air=0,minUp=1;const landings=[];
+  for(let frame=0;frame<seconds*120;frame++){
+    stepSession(s,{throttle,steer:0},1/120);
+    if(!s.car.grounded){air++;continue;}
+    minUp=Math.min(minUp,carUp(s.car)[1]);
+    if(air>20)landings.push({at:bankLocal(s.car.pos),up:carUp(s.car)[1],speed:s.car.speed});
+    air=0;
+  }
+  return {s,landings,minUp,end:bankLocal(s.car.pos)};
+}
+const inBowl=([u,v])=>u>7.8&&u<15.4&&v>6.7&&v<13.8;
+
+for(const throttle of [.5,.7,1])test(`held throttle ${throttle} rides the bowl back and forth`,()=>{
+  const {s,landings}=holdThrottle(10.8,10.25,0,-1,throttle,11);
+  assert.ok(landings.length>=4,`four wall-to-wall returns in 11 s (${landings.length})`);
+  for(const l of landings){
+    assert.ok(inBowl(l.at),`returns land back in the bowl ${l.at}`);
+    assert.ok(l.up>.85&&l.speed>2.5,'each return lands wheels-down with speed to reach the far wall');
+  }
+  const walls=landings.map(l=>l.at[1]<10.25?'south':'north');
+  assert.ok(walls.every((w,i)=>!i||w!==walls[i-1]),`alternates walls: ${walls}`);
+  assert.equal(s.hits,0);assert.equal(s.recoveries,0);
+});
+
+test('a high transfer over the hip lands in the bowl and keeps riding it',()=>{
+  // Up the east quarter at an angle toward the hip corner, across speeds and lines.
+  for(const angle of [35,45,55])for(const aim of [3.5,5.5])for(const throttle of [.6,1]){
+    const a=angle*Math.PI/180,du=Math.cos(a),dv=Math.sin(a);
+    const {s,landings,minUp,end}=holdThrottle(7.4-du*4.5,aim-dv*4.5,du,dv,throttle,6);
+    const label=`${angle}° aim ${aim} throttle ${throttle}`;
+    assert.ok(landings.length&&inBowl(landings[0].at),`${label}: transfer lands in the bowl`);
+    assert.ok(minUp>0,`${label}: never rolls over (${minUp})`);
+    assert.ok(inBowl(end),`${label}: still riding the bowl at the end ${end}`);
+    assert.equal(s.hits,0,label);assert.equal(s.recoveries,0,label);
+  }
+});
