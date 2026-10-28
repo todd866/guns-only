@@ -27,6 +27,7 @@ export const LOCATIONS = [
   {id:'waterpark',name:'Sunrise Splash',short:'Waterpark',pos:[-545,0,3388],color:'#79d9e2',icon:'🏁',kind:'race',event:'splash-down'},
   {id:'lab',name:'Dreamland',short:'Dreamland',pos:[2500,0,-1200],color:'#9fe2a8',icon:'◇',kind:'race',event:'dreamland'},
   // THPS2-style skate park on the flight line: E inside opens the skate goal card.
+  {id:'schoolyard',name:'Schoolyard',short:'Schoolyard',pos:[-3373,0,-778],color:'#f2b705',icon:'🛹',kind:'activity',skate:'school'},
   {id:'skate-hangar',name:'Skate Hangar',short:'Skate Hangar',pos:[581.9,0,877.7],color:'#edbd6a',icon:'🛹',kind:'activity',skate:'hangar'},
 ];
 LOCATIONS.push(...VENUE_LOCATIONS,...CLASSIC_LOCATIONS,...ALIEN_LOCATIONS,{id:'night-wave',name:'Night Wave',short:'Night Wave',pos:[11200,0,200],color:'#a99cf2',icon:'◇',kind:'race',event:'night-wave',alien:true});

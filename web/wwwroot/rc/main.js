@@ -30,7 +30,7 @@ import {createWorldSky} from './open-world/sky.js';
 import {loadOpenWorld} from './open-world/runtime.js';
 import {createWorldUI} from './open-world/ui.js';
 import {loadProgress,canEnter,expedition,SPECIMENS,rcLink,nearestLocation,locationById} from './open-world/catalog.mjs';
-import {createSkate,stepSkate,INTRO_PARK} from './physics/skate.mjs';import {HANGAR,HANGAR_PARK,hangarLocal,hangarWorld} from './open-world/skate-hangar.mjs';import {createSkateHud,goalCard} from './skate-hud.js';import {bankPoint,bankLocal} from './open-world/park-lines.mjs';import {RESIDENTIAL_PARK,parkPoint} from './open-world/residential-frame.mjs';
+import {createSkate,stepSkate,INTRO_PARK} from './physics/skate.mjs';import {HANGAR,HANGAR_PARK,hangarLocal,hangarWorld} from './open-world/skate-hangar.mjs';import {SCHOOL_PARK,yardLocal,yardWorld} from './open-world/schoolyard.mjs';import {createSkateHud,goalCard} from './skate-hud.js';import {bankPoint,bankLocal} from './open-world/park-lines.mjs';import {RESIDENTIAL_PARK,parkPoint} from './open-world/residential-frame.mjs';
 let bodyKind='jet';try{bodyKind=loadProgress(localStorage).body;}catch{}
 function createRace(course,options){return createRaceBase({...course,laps:course.event?.kind==='sprint'?1:3},{...options,params:vehicleParams(bodyKind==='jet'?'buggy':bodyKind)});}
 const audio=new SoundKit();
@@ -371,6 +371,8 @@ const SKATE_PARKS={
  intro:{park:INTRO_PARK,key:'guns-only.rc.skate.v1.intro',centre:RESIDENTIAL_PARK.anchor,radius:34,
   frame:p=>{const {anchor:a,yaw}=RESIDENTIAL_PARK,c=Math.cos(yaw),n=Math.sin(yaw),x=(p[0]-a[0])*c-(p[2]-a[2])*n,z=(p[0]-a[0])*n+(p[2]-a[2])*c;return [...bankLocal([x,p[1],z]),p[1]];},
   world:([u,v,h])=>{const b=bankPoint(u,v);return parkPoint([b[0],h,b[2]]);}},
+ school:{park:SCHOOL_PARK,key:'guns-only.rc.skate.v1.school',centre:yardWorld([0,0,0]),radius:36,
+  frame:p=>{const l=yardLocal(p);return [l[0],l[2],l[1]];},world:([x,z,h])=>yardWorld([x,h,z])},
  hangar:{park:HANGAR_PARK,key:'guns-only.rc.skate.v1.hangar',centre:HANGAR.center,radius:36,
   frame:p=>{const l=hangarLocal(p);return [l[0],l[2],l[1]];},world:([x,z,h])=>hangarWorld([x,h,z])},
 };
