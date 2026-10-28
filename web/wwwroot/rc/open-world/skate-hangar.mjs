@@ -116,6 +116,17 @@ export function buildHangar(h = HANGAR) {
 export const HANGAR_PARK = Object.freeze({
   id: 'hangar', name: 'SKATE HANGAR',
   start: { at: [24, 0], toward: [-1, 0] },
+  rails: [
+    { id: 'vert-coping-west', kind: 'coping', pts: [[-23.6, -7, 3.67], [-23.6, 7, 3.67]] },
+    { id: 'vert-coping-east', kind: 'coping', pts: [[-11.4, -7, 3.67], [-11.4, 7, 3.67]] },
+    { id: 'drop-deck-guard-west', kind: 'rail', pts: [[-26.4, -7, 4.535], [-26.4, 7, 4.535]] },
+    { id: 'quarter-coping-south', kind: 'coping', pts: [[-6, -19.98, 2.45], [29, -19.98, 2.45]] },
+    { id: 'quarter-coping-north', kind: 'coping', pts: [[-6, 19.98, 2.45], [29, 19.98, 2.45]] },
+    { id: 'pyramid-edge-south', kind: 'edge', pts: [[10.5, -1.5, 1.2], [13.5, -1.5, 1.2]] },
+    { id: 'pyramid-edge-east', kind: 'edge', pts: [[13.5, -1.5, 1.2], [13.5, 1.5, 1.2]] },
+    { id: 'pyramid-edge-north', kind: 'edge', pts: [[13.5, 1.5, 1.2], [10.5, 1.5, 1.2]] },
+    { id: 'pyramid-edge-west', kind: 'edge', pts: [[10.5, 1.5, 1.2], [10.5, -1.5, 1.2]] },
+  ],
   gaps: [
     { name: 'DROP IN', points: 250, from: [-11.6, -1.2, -7, 7], fromAbove: 3.3, to: [-23.6, -11.4, -7, 7], toBelow: 3.3 },
     { name: 'DECK LANDING', points: 400, from: [-23.6, -11.4, -7, 7], fromBelow: 3.4, to: [-26.6, -23.4, -7, 7], toAbove: 3.4 },
