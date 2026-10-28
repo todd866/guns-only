@@ -74,3 +74,32 @@ test('passing below a rail on the flat does not snap up through it', () => {
   placeCar(r.s.car, [.25, rideHeight(), -1], 0); r.drive(.8, { throttle: 1 });
   assert.equal(r.s.skateRide.active, null); assert.ok(!r.events.some(e => e.name === '50-50'));
 });
+
+test('approach and steering name boardslides, nosegrinds and 5-0s', () => {
+  for (const [yaw, input, name] of [[Math.PI / 2, { drift: true }, 'Boardslide'], [0, { steer: -.5 }, 'Nosegrind'], [0, { steer: .5 }, '5-0']]) {
+    const r = setup(); r.launch([0, .8, -1], [0, -1, -4], yaw); r.step({ throttle: 1, ...input });
+    assert.equal(r.s.skateRide.active?.name, name); assert.ok(r.events.some(e => e.name === name));
+  }
+});
+test('hop from coping points into the lower bowl, then lands without a crash', () => {
+  const r = setup({ kind: 'coping' });
+  r.s.course.world.addQuad([-5, .5, -15], [-5, .5, 2], [0, .5, 2], [0, .5, -15], 'concrete');
+  r.launch(); r.drive(.2); assert.ok(r.s.skateRide.active);
+  r.step({ throttle: 1, drift: true }); assert.ok(r.s.car.vel[0] > 0 && r.s.car.pos[0] > 0, 'toward the lower side');
+  r.drive(1, { throttle: 1 }); assert.equal(r.s.hits, 0); assert.equal(r.s.recoveries, 0); assert.ok(!r.events.some(e => e.type === 'bail'));
+});
+
+test('a held manual yields to a solid wall instead of passing through it', () => {
+  const r = setup();
+  r.s.course.world.addQuad([5, 0, -4], [11, 0, -4], [11, 2, -4], [5, 2, -4], 'concrete');
+  placeCar(r.s.car, [8, rideHeight(), 0], 0);
+  r.drive(2, { throttle: 1, drift: true });
+  assert.ok(r.s.car.pos[2] > -4, `wall crossing ${r.s.car.pos}`); assert.equal(r.s.skateRide.manual, null);
+});
+
+test('the final combo can land into a manual after the run clock expires', () => {
+  const r = setup({ pts: [[0, 0, .5], [0, -4, .5]] }); r.launch([0, 2.4, -.2], [0, 0, -3]); r.sk.left = .1;
+  r.drive(3, t => ({ throttle: 1, drift: t > .8 }));
+  assert.ok(!r.sk.over && r.s.skateRide.manual, 'clock waits for the manual');
+  r.drive(.8, { throttle: 1 }); assert.ok(r.sk.over && r.sk.score > 1000);
+});

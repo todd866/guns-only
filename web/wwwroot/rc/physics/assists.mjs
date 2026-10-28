@@ -89,6 +89,12 @@ export function assistInput(a, car, raw, dt, world) {
     }
   }
 
+  a.skateAir = raw.skate && car.contacts === 0 ? (a.skateAir ?? 0) + dt : 0;
+  a.skateSpinning = a.skateAir > .12 && raw.drift && Math.abs(raw.steer || 0) > .25;
+  if (a.skateSpinning) {
+    // A held grab and steer spins in the air; the wheels-down assist still owns pitch/roll.
+    torque[1] = (-raw.steer * 9 - car.ang[1]) * 8 / car.invInertia[1];
+  }
   out.torque = torque;
   return out;
 }

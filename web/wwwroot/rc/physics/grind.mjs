@@ -1,9 +1,10 @@
 // Authored skate motion: the rail owns position until an exit returns it to the rigid body.
-import { add, sub, scale, dot, norm, quatAxisAngle, quatMul } from './math.mjs';
+import { add, sub, scale, dot, norm, rotate, quatAxisAngle, quatMul } from './math.mjs';
 import { carForward, carUp, rideHeight } from './car.mjs';
 import { createDrift } from './drift.mjs';
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const horizontal = v => norm([v[0], 0, v[2]]);
+const grindHeight = car => Math.max(...car.params.hull.map(s => s.r - s.at[1]));
 
 export function createBalance() { return { value: 0, time: 0 }; }
 export function stepBalance(b, steer, dt, mode = 'kid') {
@@ -89,8 +90,10 @@ function capture(s, raw) {
     const rel = sub(c.pos, seg.a), t = (rel[0] * d[0] + rel[2] * d[2]) / h2;
     if (t < 0 || t > 1) continue;
     const point = add(seg.a, scale(d, t)), distance = Math.hypot(c.pos[0] - point[0], c.pos[2] - point[2]);
-    const clearance = c.pos[1] - rideHeight(c.params) - point[1];
+    const clearance = c.pos[1] - grindHeight(c) - point[1];
     if (distance > .4 || Math.abs(clearance) > .3 || (c.contacts > 0 && clearance < -.12)) continue;
+    // Freestanding tubes catch a landing from above, never a car passing underneath downhill.
+    if (r.kind === 'rail' && clearance < -.04) continue;
     const tangent = horizontal(seg.dir), alignment = Math.abs(dot(forward, tangent)), moving = dot(travel, tangent);
     const sideways = alignment < Math.cos(Math.PI / 4) && c.contacts === 0 && raw.drift;
     if (Math.abs(moving) < Math.cos(40 * Math.PI / 180) || (alignment < Math.cos(40 * Math.PI / 180) && !sideways)) continue;
@@ -110,7 +113,7 @@ export function stepSkateRide(s, raw, dt) {
   const car = s.car, held = !!(raw.hop || raw.drift), hop = held && !state.held;
   state.held = held; if (!raw.drift) state.manualBlocked = false; state.cooldown = Math.max(0, state.cooldown - dt);
   if (state.placement !== car.placement) {
-    state.placement = car.placement; state.active = state.manual = null; state.cooldown = .15;
+    state.placement = car.placement; state.active = state.manual = null; state.cooldown = 0;
   }
   if (!state.active) capture(s, raw);
   const g = state.active;
@@ -125,7 +128,7 @@ export function stepSkateRide(s, raw, dt) {
       g.distance = clamp(g.distance, 0, g.rail.length); leave(s, 'end', false); return true;
     }
     const next = railPoint(g.rail, g.distance, g.direction);
-    car.pos = add(next.point, [0, rideHeight(car.params), 0]); car.vel = scale(next.tangent, g.speed);
+    car.pos = add(next.point, [0, grindHeight(car), 0]); car.vel = scale(next.tangent, g.speed);
     attitude(car, next.tangent, g.sideways); clearContacts(car); car.speed = car.forwardSpeed = g.speed;
     for (const w of car.wheels) w.spin += g.speed / car.params.wheelRadius * dt;
     return true;
@@ -144,7 +147,12 @@ export function stepSkateRide(s, raw, dt) {
   const forward = horizontal(carForward(car)), speed = clamp(car.speed + ((raw.throttle || 0) * 5 * (1 - car.speed / car.params.topSpeed) - .5) * dt, 0, car.params.topSpeed);
   const next = add(car.pos, scale(forward, speed * dt)), support = s.course.world.raycast(add(next, [0, .25, 0]), [0, -1, 0], .75);
   if (!support || support.normal[1] < .98 || Math.abs(support.point[1] - ground.point[1]) > .06) { state.manual = null; return false; }
-  car.pos = [next[0], support.point[1] + rideHeight(car.params) + .035, next[2]]; car.vel = scale(forward, speed);
+  const position = [next[0], support.point[1] + rideHeight(car.params) + .035, next[2]];
+  // The manual owns the wheelie, but solid walls still belong to the collision solver.
+  if (car.params.hull.some(h => s.course.world.sphereContacts(add(position, rotate(car.q, h.at)), h.r).some(c => Math.abs(c.normal[1]) < .7))) {
+    state.manual = null; state.manualBlocked = true; return false;
+  }
+  car.pos = position; car.vel = scale(forward, speed);
   attitude(car, forward, false, .22); clearContacts(car); car.speed = car.forwardSpeed = speed; car.contacts = 2; car.grounded = true;
   for (let i = 0; i < car.wheels.length; i++) { const w = car.wheels[i]; w.contact = i >= 2; w.surface = support.surface; w.contactNormal = support.normal; w.spin += speed / car.params.wheelRadius * dt; }
   s.assist.quarter = {}; return true;

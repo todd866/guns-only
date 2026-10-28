@@ -24,6 +24,12 @@ export function goalCard({ park, goals, best = 0, run = null, gapsFound = [] }) 
 
 export function createSkateHud({ scene, T }) {
   const root = $('skate'), pop = $('skate-pop');
+  const special = document.createElement('div'); special.id = 'skate-special'; special.setAttribute('role', 'meter');
+  special.setAttribute('aria-label', 'Special'); special.setAttribute('aria-valuemin', '0'); special.setAttribute('aria-valuemax', '100');
+  special.title = 'Build combos to light SPECIAL'; special.innerHTML = '<i></i><b>SPECIAL</b>'; root.querySelector('.skate-top').append(special);
+  const balance = document.createElement('div'); balance.id = 'skate-balance'; balance.hidden = true; balance.setAttribute('role', 'meter');
+  balance.setAttribute('aria-valuemin', '-100'); balance.setAttribute('aria-valuemax', '100'); balance.title = 'Steer toward the centre';
+  balance.innerHTML = '<i></i><b></b>'; $('skate-combo').prepend(balance);
   let popTimer = 0, markers = null;
   function popUp(text, kind = '') {
     pop.textContent = text; pop.className = kind; pop.hidden = false;
@@ -49,7 +55,7 @@ export function createSkateHud({ scene, T }) {
   return {
     start(sk, toWorld) { placeMarkers(sk.park, toWorld); root.hidden = false; document.body.classList.add('skating'); },
     stop() {
-      root.hidden = true; document.body.classList.remove('skating');
+      root.hidden = true; document.body.classList.remove('skating'); clearTimeout(popTimer); pop.hidden = true;
       if (markers) for (const m of markers.values()) { m.removeFromParent(); m.material.map.dispose(); m.material.dispose(); }
       markers = null;
     },
@@ -66,6 +72,15 @@ export function createSkateHud({ scene, T }) {
       $('skate-clock').textContent = clock(sk.left);
       $('skate-clock').classList.toggle('low', sk.left <= 10);
       for (const el of $('skate-letters').children) el.classList.toggle('lit', sk.letters.includes(el.textContent));
+      special.style.setProperty('--fill', sk.special ?? 0); special.classList.toggle('lit', !!sk.specialActive);
+      special.setAttribute('aria-valuenow', String(Math.round((sk.special ?? 0) * 100)));
+      balance.hidden = !sk.balance;
+      if (sk.balance) {
+        balance.style.setProperty('--needle', `${50 + Math.max(-1, Math.min(1, sk.balance.value)) * 48}%`);
+        balance.classList.toggle('danger', Math.abs(sk.balance.value) > .7);
+        balance.setAttribute('aria-label', `${sk.balance.kind === 'grind' ? 'Grind' : 'Manual'} balance`);
+        balance.setAttribute('aria-valuenow', String(Math.round(sk.balance.value * 100)));
+      }
       const combo = comboText(sk);
       $('skate-combo').hidden = !combo;
       if (combo) { $('skate-tricks').textContent = combo.tricks; $('skate-points').textContent = combo.score; }
