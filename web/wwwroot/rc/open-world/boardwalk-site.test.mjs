@@ -44,7 +44,7 @@ test('Boardwalk site is flat, inside the base, and clear of authored scenery', (
   for (let x = x0; x <= x1; x += 3) for (let z = z0; z <= z1; z += 3) assert.equal(elevationAt(terrain, x, z), 0, `flat datum at ${x},${z}`);
   for (const [x, z] of [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]) assert.ok(insideBase(x, z), `site corner inside base: ${x},${z}`);
   for (const b of [...SCENERY_BOUNDS, SKATESTREET_BOUNDS, hangarBounds]) assert.ok(!overlaps(BOARDWALK_BOUNDS, b), `overlaps authored scenery ${b}`);
-  for (const p of LOCATIONS.filter(p => !['waterpark', 'boardwalk'].includes(p.id))) assert.ok(Math.hypot(p.pos[0] + 668, p.pos[2] - 3421) > 100, `${p.id} too close`);
+  for (const p of LOCATIONS.filter(p => !['waterpark', 'venice'].includes(p.id))) assert.ok(Math.hypot(p.pos[0] + 668, p.pos[2] - 3421) > 100, `${p.id} too close`);
 });
 
 test('Boardwalk site clears every real road, building, event, and the Wavepool loop', () => {
@@ -70,4 +70,11 @@ test('Boardwalk site leaves generated scatter outside the skate floor', () => {
     const file = new URL(`tile-${tx}-${tz}.json`, root), tile = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : { tile: [tx, tz], features: [] }, bounds = [tx * 256, tz * 256, (tx + 1) * 256, (tz + 1) * 256];
     for (const p of [...roadsideDetail(tile, bounds), ...desertScatter(tile, bounds, null, 460)]) assert.ok(!inside(p.x, p.z, ring), `runtime scatter through Boardwalk at ${p.x},${p.z}`);
   }
+});
+
+
+test('Venice has a unique skate location beside the existing After Hours Boardwalk race',()=>{
+  const park=LOCATIONS.find(l=>l.skate==='venice');assert.ok(park);assert.equal(park.id,'venice');
+  assert.equal(new Set(LOCATIONS.map(l=>l.id)).size,LOCATIONS.length);
+  assert.equal(LOCATIONS.find(l=>l.id==='boardwalk').event,'after-hours-boardwalk');
 });

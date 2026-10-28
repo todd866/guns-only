@@ -5,7 +5,7 @@ import { smoothBowlNormals, refineSkateTriangles } from './skate-normals.js';
 
 const COLOURS = {
   deck: '#bcbdb6', sand: '#d7b27a', 'pit-wall': '#c8845f', 'pit-floor': '#c8845f',
-  bank: '#cf9666', skirt: '#8d604a', vert: '#d18b63', roof: '#287b78', hut: '#f1d2a2',
+  'pit-roller': '#cf9666', bank: '#cf9666', skirt: '#8d604a', vert: '#d18b63', roof: '#287b78', hut: '#f1d2a2',
   steps: '#c7c2b6', ledge: '#d8d4c8', planter: '#a79b83', soil: '#775643', bench: '#b27b55',
   steel: '#bcc7c3', coping: '#e7dfcc', stripe: '#ef8064', palm: '#416d46', trunk: '#896345',
   lamp: '#f8d995', sign: '#e9bf72', tower: '#e9e0c9', water: '#4e9b9b'
@@ -37,17 +37,17 @@ export function createBoardwalk(scene, world, h = BOARDWALK) {
   const byMat = new Map();
   for (const source of buildBoardwalk(h)) {
     if (world?.addTri) world.addTri(boardwalkWorld(source.a, h), boardwalkWorld(source.b, h), boardwalkWorld(source.c, h), source.surface);
-    const curved = source.mat === 'pit-wall' || source.mat === 'vert' || source.mat === 'pit-floor' ||
-      source.mat === 'deck' && [source.a,source.b,source.c].every(([x,y,z])=>x>=-28&&x<=1&&z>=-18&&z<=-5);
+    const pitGrid=['pit-wall','pit-floor','deck','bank'].includes(source.mat)&&[source.a,source.b,source.c].every(([x,y,z])=>x>=-28&&x<=1&&z>=-18&&z<=-5);
+    const curved=pitGrid||source.mat==='vert';
     for (const t of (curved ? refineSkateTriangles([source], source.mat === 'vert' ? boardwalkRampHeight : boardwalkHeight) : [source])) {
-      const mat = source.mat==='deck'&&curved&&Math.min(t.a[1],t.b[1],t.c[1])<h.deck-.001?'pit-wall':t.mat;
+      const mat = pitGrid&&source.mat==='bank'?'pit-roller':source.mat==='deck'&&curved&&Math.min(t.a[1],t.b[1],t.c[1])<h.deck-.001?'pit-wall':t.mat;
       if (!byMat.has(mat)) byMat.set(mat, []);
       byMat.get(mat).push(...t.a, ...t.b, ...t.c);
     }
   }
   for (const [mat, positions] of byMat) {
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(positions, 3));
-    if (mat === 'pit-wall') smoothBowlNormals(g, h.deck, boardwalkHeight);
+    if (mat === 'pit-wall'||mat === 'pit-roller') smoothBowlNormals(g, h.deck, boardwalkHeight);
     else if (mat === 'vert') smoothBowlNormals(g, 4.04, boardwalkRampHeight);
     else if (mat === 'bank') toCreasedNormals(g, Math.PI / 4);
     else g.computeVertexNormals();
