@@ -1,3 +1,4 @@
+import {NY,NY_PARK,bridgeLocal,bridgeWorld} from './open-world/under-bridge.mjs';
 import {BOARDWALK,BOARDWALK_PARK,boardwalkLocal,boardwalkWorld} from './open-world/boardwalk.mjs';
 import {protectGameControls} from './control-surfaces.mjs';
 protectGameControls();
@@ -370,6 +371,8 @@ async function travelTo(id){if(!race.roam)return false;keys.clear();touchControl
 // Each park: rules, the frame that maps world positions to its [u, v, h], its area, and the
 // browser key that remembers its goals.
 const SKATE_PARKS={
+ ny:{park:NY_PARK,key:'guns-only.rc.skate.v1.ny',centre:NY.center,radius:40,
+  frame:p=>{const l=bridgeLocal(p);return [l[0],l[2],l[1]];},world:([x,z,h])=>bridgeWorld([x,h,z])},
  venice:{park:BOARDWALK_PARK,key:'guns-only.rc.skate.v1.venice',centre:BOARDWALK.center,radius:39,
   frame:p=>{const l=boardwalkLocal(p);return [l[0],l[2],l[1]];},world:([x,z,h])=>boardwalkWorld([x,h,z])},
  philly:{park:PLAZA_PARK,key:'guns-only.rc.skate.v1.philly',centre:PLAZA.center,radius:49,
