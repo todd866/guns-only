@@ -25,12 +25,16 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   assert.equal(report.freeExit.recoveries,0,'Leaving the park does not force a rescue');
   await page.locator('#view').focus();await page.keyboard.press('KeyR');await page.waitForTimeout(300);
   report.localRecovery=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());assert.ok(Math.hypot(report.localRecovery.x-report.arrival.x,report.localRecovery.z-report.arrival.z)<1,'Recovery remains at the neighbourhood park');
-  assert.ok(await page.locator('#interact').isVisible(),'A nearby race is offered on the first screen');
-  await page.locator('#view').focus();await page.keyboard.press('KeyE');await ready();
+  assert.ok(await page.locator('#interact').isVisible(),'The first screen offers its nearby event');
+  // The starting plaza is a skate park sharing its spot with the Neighbourhood Run: E opens the
+  // goal card, which offers both a skate run and the race.
+  await page.locator('#view').focus();await page.keyboard.press('KeyE');
+  await page.locator('#skate-go').waitFor({state:'visible'});assert.ok(await page.locator('#skate-race').isVisible(),'A nearby race is offered on the first screen');
+  await page.screenshot({path:out+'/skate-card.png'});await page.locator('#skate-race').click();await ready();
   assert.equal(await page.evaluate(()=>window.__gunsOnlyRC.snapshot().world.event),'district-skatepark');
   assert.equal(new URL(page.url()).searchParams.get('mode'),'race');
   report.race=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());assert.equal(report.race.world.event,'district-skatepark');assert.equal(report.race.rivals.length,7);
-  await page.screenshot({path:out+'/grid.png'});console.log('Fresh skatepark race started through nearby keyboard prompt with seven rivals');
+  await page.screenshot({path:out+'/grid.png'});console.log('Fresh skatepark race started from the skate card Race button with seven rivals');
   // Drive the real three-lap course with ordinary gamepad inputs. The seam below
   // reads position and course geometry only; it cannot move or finish the car.
   await page.evaluate(()=>{

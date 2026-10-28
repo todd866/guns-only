@@ -7,7 +7,7 @@ const $ = id => document.getElementById(id);
 const clock = t => `${Math.floor(Math.ceil(t) / 60)}:${String(Math.ceil(t) % 60).padStart(2, '0')}`;
 const escape = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function goalCard({ park, goals, best = 0, run = null, gapsFound = [] }) {
+export function goalCard({ park, goals, best = 0, run = null, gapsFound = [], race = null }) {
   const done = new Set(goals), fresh = new Set(run?.newGoals ?? []);
   const gapNames = [...new Set(park.gaps.map(g => g.name))];
   const rows = park.goals.map(g => {
@@ -19,7 +19,7 @@ export function goalCard({ park, goals, best = 0, run = null, gapsFound = [] }) 
   return `<div class="result-head"><span class="result-place skate-badge" title="Skate park">🛹</span><h1>${escape(park.name)}</h1></div>`
     + `<ol class="skate-goals" aria-label="Goals">${rows}</ol>`
     + `<dl class="result-stats">${stats.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`
-    + `<div class="result-actions"><button id="skate-go" class="primary">${run ? '↻ Run again' : '▶ Start run'}</button><button id="skate-free">▶ Drive</button></div>`;
+    + `<div class="result-actions"><button id="skate-go" class="primary">${run ? '↻ Run again' : '▶ Start run'}</button>${race ? `<button id="skate-race" title="${escape(race)}">🏁 Race</button>` : ''}<button id="skate-free">▶ Drive</button></div>`;
 }
 
 export function createSkateHud({ scene, T }) {

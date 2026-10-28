@@ -32,7 +32,7 @@ import {createRCTelemetry} from './telemetry.mjs';import {resultPanel,bindResult
 import {createWorldSky} from './open-world/sky.js';
 import {loadOpenWorld} from './open-world/runtime.js';
 import {createWorldUI} from './open-world/ui.js';
-import {loadProgress,canEnter,expedition,SPECIMENS,rcLink,nearestLocation,locationById} from './open-world/catalog.mjs';
+import {loadProgress,canEnter,expedition,SPECIMENS,rcLink,nearestLocation,locationById,eventById} from './open-world/catalog.mjs';
 import {setSkateRails} from './physics/grind.mjs';
 import {PLAZA,PLAZA_PARK,plazaLocal,plazaWorld} from './open-world/town-plaza.mjs';
 import {MARSEILLE_PARK,marseilleLocal,marseilleWorld} from './open-world/marseille.mjs';
@@ -392,7 +392,8 @@ const SKATE_PARKS={
 let skate=null,skatePark=null,skateHud=null,skateGrabUntil=0;
 const skateSaved=id=>{const saved={goals:[],best:0,gaps:[]};try{Object.assign(saved,JSON.parse(localStorage.getItem(SKATE_PARKS[id].key)||'{}'));}catch{}return saved;};
 const skateParkAt=()=>{if(!openWorld||!race.roam)return null;for(const [id,p] of Object.entries(SKATE_PARKS))if(Math.hypot(s.car.pos[0]-p.centre[0],s.car.pos[2]-p.centre[2])<p.radius)return id;return null;};
-function skateCard(id,run=null){const result=$('result'),saved=skateSaved(id);result.innerHTML=goalCard({park:SKATE_PARKS[id].park,goals:saved.goals,best:saved.best,run,gapsFound:saved.gaps});result.hidden=false;pause(true);$('skate-go').onclick=()=>startSkateRun(id);$('skate-free').onclick=()=>{result.hidden=true;pause(false);canvas.focus();};$('skate-go').focus();}
+// A park that shares its spot with a race (the starting plaza's Neighbourhood Run) offers both.
+function skateCard(id,run=null){const result=$('result'),saved=skateSaved(id),near=openWorld?.near(s.car.pos),race=near&&!near.game&&near.kind!=='discovery'&&canEnter(openWorld.progress,near)?near:null;result.innerHTML=goalCard({park:SKATE_PARKS[id].park,goals:saved.goals,best:saved.best,run,gapsFound:saved.gaps,race:race&&(eventById(race.event??(race.track?'district-'+race.track:''))?.name??race.name)});result.hidden=false;pause(true);if(race)$('skate-race').onclick=()=>{location.href=openWorld.eventURL(race);};$('skate-go').onclick=()=>startSkateRun(id);$('skate-free').onclick=()=>{result.hidden=true;pause(false);canvas.focus();};$('skate-go').focus();}
 function startSkateRun(id){$('result').hidden=true;const def=SKATE_PARKS[id];skateHud?.stop();skateHud??=createSkateHud({scene,T});skatePark=id;skate=createSkate(def.park,skateSaved(id).goals);setSkateRails(s,def.park,def.world);skateHud.start(skate,def.world);const {at,toward}=def.park.start,p=def.world([...at,def.park.start.height??0]),q=def.world([at[0]+toward[0],at[1]+toward[1],0]),ground=course.world.raycast([p[0],p[1]+3,p[2]],[0,-1,0],6)?.point[1]??p[1];placeCar(s.car,[p[0],ground+rideHeight(s.car.params)+.02,p[2]],Math.atan2(q[0]-p[0],-(q[2]-p[2])));acc=0;cameraCar=null;pause(false);canvas.focus();}
 function endSkate(){setSkateRails(s,null);skate=null;skatePark=null;skateHud?.stop();}
 function skateStep(input){if(!skate)return;const def=SKATE_PARKS[skatePark];if(Math.hypot(s.car.pos[0]-def.centre[0],s.car.pos[2]-def.centre[2])>def.radius+26){endSkate();return;}if(fireQueued)skateGrabUntil=performance.now()+400;
