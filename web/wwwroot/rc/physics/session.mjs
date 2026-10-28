@@ -2,6 +2,7 @@
 // A course is { world, checkpoints:[[x,z,name]], secrets:[{x,z}], start:{pos,yaw} }.
 import { createCar, stepCar, placeCar, rideHeight, carYaw, BUGGY } from './car.mjs';
 import { createAssist, assistInput, MODES } from './assists.mjs';
+import { stepSkateRide } from './grind.mjs';
 import { len, sub } from './math.mjs';
 
 export function createSession(course, { mode = 'kid', params = BUGGY } = {}) {
@@ -29,7 +30,7 @@ const above = (s, maxDrop) => s.course.world.raycast(s.car.pos, [0, -1, 0], maxD
 export function stepSession(s, raw, dt = 1 / 120) {
   const before = [...s.car.pos];
   s.prevPos = before;
-  stepCar(s.car, assistInput(s.assist, s.car, raw, dt, s.course.world), s.course.world, dt);
+  if (!stepSkateRide(s, raw, dt)) stepCar(s.car, assistInput(s.assist, s.car, s.skateRide ? { ...raw, skate: true } : raw, dt, s.course.world), s.course.world, dt);
   s.travel += len(sub(s.car.pos, before));
   if (s.car.wallImpact > 1.5) s.hits++;
   // Wedged against a pole or a rival with the throttle held: after 2.5 s, hop back to the last

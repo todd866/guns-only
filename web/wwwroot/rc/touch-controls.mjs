@@ -9,7 +9,7 @@ export function leverValue(clientY,bounds){
  const value=clamp(1-2*(clientY-bounds.top)/Math.max(1,bounds.height));
  return Math.abs(value)<.08?0:Math.sign(value)*(Math.abs(value)-.08)/.92;
 }
-export function bindRCTouchControls({root=document,onChange=()=>{},onFire=()=>{},enabled=()=>true}={}){
+export function bindRCTouchControls({root=document,onChange=()=>{},onFire=()=>{},onGrab=()=>{},enabled=()=>true}={}){
  const find=id=>root.querySelector(`#touch-${id}`),elements={stick:find('stick'),lever:find('throttle-lever'),brake:find('brake'),fire:find('fire')};
  const puck=find('stick-puck'),knob=find('throttle-puck'),listeners=[],owners=new Map();
  if(Object.values(elements).some(e=>!e)||!puck||!knob)return {reset(){},destroy(){}};
@@ -26,7 +26,7 @@ export function bindRCTouchControls({root=document,onChange=()=>{},onFire=()=>{}
  function reset(){
   const held=[...owners];owners.clear();
   for(const [id,kind]of held){const el=elements[kind];try{if(el.hasPointerCapture(id))el.releasePointerCapture(id);}catch{}}
-  state={steer:0,throttle:0,brake:false};puck.style.transform='translate3d(0,0,0)';elements.stick.setAttribute('aria-valuenow',0);
+  onGrab(false);state={steer:0,throttle:0,brake:false};puck.style.transform='translate3d(0,0,0)';elements.stick.setAttribute('aria-valuenow',0);
   elements.brake.classList.remove('active');elements.fire.classList.remove('active');paintLever();emit();
  }
  function move(kind,event){
@@ -40,7 +40,7 @@ export function bindRCTouchControls({root=document,onChange=()=>{},onFire=()=>{}
  function begin(kind,event){
   if(!enabled()||event.button>0||[...owners.values()].includes(kind))return;event.preventDefault();event.stopPropagation();owners.set(event.pointerId,kind);
   try{elements[kind].setPointerCapture(event.pointerId);}catch{}
-  if(kind==='fire'){elements.fire.classList.add('active');onFire();}
+  if(kind==='fire'){elements.fire.classList.add('active');onGrab(true);onFire();}
   else if(kind==='brake'){state.brake=true;elements.brake.classList.add('active');emit();}
   else move(kind,event);
  }
@@ -50,6 +50,7 @@ export function bindRCTouchControls({root=document,onChange=()=>{},onFire=()=>{}
   // Lift, cancellation and lost capture all spring back to neutral.
   try{if(elements[kind].hasPointerCapture(event.pointerId))elements[kind].releasePointerCapture(event.pointerId);}catch{}
   if(kind==='lever'){state.throttle=0;paintLever();}
+  if(kind==='fire')onGrab(false);
   if(kind==='brake')state.brake=false;elements[kind].classList.remove('active');emit();
  }
  for(const [kind,el]of Object.entries(elements)){

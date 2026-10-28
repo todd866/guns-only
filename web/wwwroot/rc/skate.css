@@ -33,3 +33,14 @@ body.skating #instruments #gate,body.skating #instruments #clock,body.skating #m
    goal list in two columns. */
 #result{max-height:calc(100dvh - 20px);overflow:auto}
 @media(max-height:500px){#result{padding:10px 12px}#result .result-head{margin-bottom:6px}#result h1{font-size:18px}.skate-goals{grid-template-columns:1fr 1fr;margin-bottom:8px}.skate-goals li{padding:4px 8px;font-size:13px}#result .result-stats{margin-bottom:8px}#result .result-actions button{min-height:38px}}
+
+/* The gauges share the score and combo instruments; no extra instruction rows. */
+#skate-special{position:relative;align-self:center;width:94px;height:19px;border:1px solid #edbd6a99;background:#08171be6;transform:skew(-8deg);isolation:isolate}
+#skate-special i{position:absolute;inset:0;background:#edbd6a70;transform:scaleX(var(--fill,0));transform-origin:left;z-index:-1}
+#skate-special b{display:block;text-align:center;font:italic 900 12px/17px system-ui;letter-spacing:.07em;color:#fff0c7}
+#skate-special.lit{box-shadow:0 0 12px #ffca69;border-color:#fff0c7}#skate-special.lit i{background:#efb548}#skate-special.lit b{color:#16222a}
+#skate-balance{position:relative;width:180px;height:20px;margin:0 0 3px;border:2px solid #f3efdc;background:linear-gradient(90deg,#cc593e 0 16%,#c59a46 16% 34%,#4e9770 34% 66%,#c59a46 66% 84%,#cc593e 84%);box-shadow:0 1px 7px #08171b;border-radius:10px}
+#skate-balance i{position:absolute;left:50%;top:0;bottom:0;border-left:2px solid #f3efdc}
+#skate-balance b{position:absolute;left:var(--needle,50%);top:-5px;width:4px;height:26px;transform:translateX(-50%);background:#fff;box-shadow:0 0 0 1px #08171b;border-radius:2px}
+#skate-balance.danger b{background:#ffcf87}
+@media(max-width:540px){.skate-top{gap:8px}#skate-special{width:72px;height:17px}#skate-special b{font-size:10px;line-height:15px}#skate-letters{gap:1px}#skate-letters i{font-size:13px}}

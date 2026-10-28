@@ -4,6 +4,7 @@
 // Pure: the caller supplies a frame that maps world positions into the park's [u, v, h].
 import { dot, rotate } from './math.mjs';
 import { carUp } from './car.mjs';
+import { bindSkateRails, createBalance, stepBalance } from './grind.mjs';
 
 // A landing banks the combo after `revert` seconds unless the hop button reverts it (on a
 // transition) or the car rolls into a manual.
@@ -15,6 +16,19 @@ export const INTRO_PARK = Object.freeze({
   id: 'intro', name: 'SKATE PLAZA',
   // Runs start mid-plaza, facing the long quarter.
   start: { at: [2.6, -2], toward: [1, 0] },
+  rails: [
+    { id: 'west-quarter-coping', kind: 'coping', pts: [[-16, -3.8, 1.605], [-16, 6.4, 1.605]] },
+    { id: 'funbox-edge', kind: 'edge', pts: [[-4.1, 5.88, 1.12], [-1.7, 5.88, 1.12]] },
+    { id: 'divider-ledge', kind: 'ledge', pts: [[-4.05, -1.36, 1.14], [-1.85, -1.36, 1.14]] },
+    { id: 'manual-pad-west', kind: 'ledge', pts: [[-6.65, -9.25, .5], [-3.05, -9.25, .5]] },
+    { id: 'manual-pad-east', kind: 'ledge', pts: [[-.85, -7.45, .5], [2.35, -7.45, .5]] },
+    { id: 'manual-pad-rail', kind: 'rail', pts: [[-4.9, -5.65, .81], [-1.1, -5.65, .81]] },
+    { id: 'low-bank-rail', kind: 'rail', pts: [[-5.8, .7, .8015], [-4.2, .7, 1.315], [-1.6, .7, 1.315], [0, .7, .8015]] },
+    { id: 'east-quarter-coping', kind: 'coping', pts: [[8.2, -3.4, 1.61], [8.2, 6.7, 1.61]] },
+    { id: 'bowl-coping-south', kind: 'coping', pts: [[8.2, 6.7, 1.61], [13.4, 6.7, 1.61]] },
+    { id: 'bowl-coping-east', kind: 'coping', pts: [[15.4, 8.7, 1.61], [15.4, 11.8, 1.61]] },
+    { id: 'bowl-coping-north', kind: 'coping', pts: [[13.4, 13.8, 1.61], [7.8, 13.8, 1.61]] },
+  ],
   gaps: [
     { name: 'HIP TRANSFER', points: 500, from: [5.8, 8.6, 2.5, 8.7], to: [6, 15.4, 8.2, 13.8] },
     { name: 'OVER THE FUNBOX', points: 300, from: [-6.8, -4.4, -1.1, 5.9], to: [-1.4, 2.6, -1.1, 5.9] },
@@ -50,15 +64,22 @@ const commas = n => Math.round(n).toLocaleString('en-US');
 
 export function createSkate(park = INTRO_PARK, done = []) {
   return { park, left: SKATE.seconds, score: 0, over: false, letters: [], tape: false, gapsFound: new Set(),
-    goals: new Set(done), newGoals: [], best: 0, combo: null, air: null, ground: 0, manual: 0, events: [] };
+    goals: new Set(done), newGoals: [], best: 0, combo: null, air: null, ground: 0, manual: 0, special: 0, specialActive: false, events: [] };
 }
 
+function chargeSpecial(sk, points) {
+  sk.special = Math.min(1, sk.special + Math.max(0, points) / 4000);
+  if (sk.special >= 1) sk.specialActive = true;
+}
 function addTrick(sk, name, points) {
   const combo = sk.combo ??= { tricks: [], base: 0 };
   // Repeats in one combo are worth half each time, so a pendulum cannot farm forever.
   const repeats = combo.tricks.filter(t => t === name).length, value = points * Math.max(.125, .5 ** repeats);
+  const before = combo.base * combo.tricks.length;
   combo.tricks.push(name); combo.base += value;
+  chargeSpecial(sk, combo.base * combo.tricks.length - before);
   sk.events.push({ type: 'trick', name, points: Math.round(value) });
+  return points ? value / points : 1;
 }
 
 function bank(sk) {
@@ -73,7 +94,7 @@ function bank(sk) {
 
 function bail(sk) {
   sk.events.push({ type: 'bail', lost: sk.combo ? Math.round(sk.combo.base * sk.combo.tricks.length) : 0 });
-  sk.combo = null; sk.manual = 0;
+  sk.combo = null; sk.manual = 0; sk.manualTrick = false; sk.landed = null; sk.special = 0; sk.specialActive = false;
 }
 
 function goal(sk, id, met) {
@@ -93,19 +114,43 @@ function nameAir(a) {
     name = `${turns} ${grab ?? 'Spin'}`; points += { 180: 150, 360: 400, 540: 750 }[turns] ?? 1000;
   }
   tricks.push([name, points]);
+  if (a.special && !assisted && spin >= 900) tricks.push(['The 900', 9000]);
+  else if (a.special && !assisted && spin >= 540) tricks.push(['Orbital 540', 3500]);
+  else if (a.special && a.grab >= .75 && a.time >= 1 && a.rise >= 1) tricks.push(['Christ Air', 3000]);
   if (Math.abs(a.roll) >= 5.2) tricks.push(['Barrel Roll', 750]);
   if (Math.abs(a.pitch) >= 5.2) tricks.push([a.pitch > 0 ? 'Backflip' : 'Frontflip', 800]);
   return tricks;
 }
 
-// One fixed physics step. `session` is the player's physics session; `frame(pos)` returns the
-// park-local [u, v, h]. Returns this step's events (trick, land, bail, gap, letter, tape, goal, over).
+function landAir(sk, a, at, up) {
+  if (a.time < SKATE.minAir) return;
+  const l = sk.landed;
+  if (l && !l.kept && !l.linked && l.time > SKATE.revert) bank(sk);
+  if (up[1] < .55) { bail(sk); return; }
+  for (const [name, points] of nameAir(a)) addTrick(sk, name, points);
+  for (const g of sk.park.gaps) {
+    if (!inZone(a.from, g.from) || !inZone(at, g.to)) continue;
+    if (g.fromAbove != null && a.from[2] < g.fromAbove) continue;
+    if (g.fromBelow != null && a.from[2] > g.fromBelow) continue;
+    if (g.minAir != null && a.time < g.minAir) continue;
+    if (g.toAbove != null && at[2] < g.toAbove) continue;
+    if (g.toBelow != null && at[2] > g.toBelow) continue;
+    addTrick(sk, g.name, g.points); sk.gapsFound.add(g.name);
+    sk.events.push({ type: 'gap', name: g.name, points: g.points });
+    for (const def of sk.park.goals) if (def.gap === g.name) goal(sk, def.id, true);
+  }
+  if (sk.combo) sk.landed = { time: 0, transition: a.kind === 'return' || a.kind === 'transfer' };
+}
+
+// One fixed physics step. frame(pos) returns park-local [u, v, h].
 export function stepSkate(sk, session, input, dt, frame) {
   sk.events = [];
   if (sk.over) return sk.events;
-  const car = session.car, at = frame(car.pos), up = carUp(car);
+  bindSkateRails(session, sk.park, frame);
+  const car = session.car, at = frame(car.pos), up = carUp(car), grind = session.skateRide?.active;
   sk.left = Math.max(0, sk.left - dt);
-  // Collectables: letters and the tape count anywhere the car reaches them, air or ground.
+  sk.special = Math.max(0, sk.special - (sk.specialActive ? .04 : .012) * dt);
+  if (sk.special <= 0) sk.specialActive = false;
   for (const l of sk.park.letters) if (!sk.letters.includes(l.letter) && Math.hypot(at[0] - l.at[0], at[1] - l.at[1]) < SKATE.reach && Math.abs(at[2] - l.at[2]) < SKATE.reachUp) {
     sk.letters.push(l.letter); sk.events.push({ type: 'letter', letter: l.letter, count: sk.letters.length });
     goal(sk, 'skate', sk.letters.length === sk.park.letters.length);
@@ -113,65 +158,57 @@ export function stepSkate(sk, session, input, dt, frame) {
   const t = sk.park.tape;
   if (t && !sk.tape && Math.hypot(at[0] - t[0], at[1] - t[1]) < SKATE.reach && Math.abs(at[2] - t[2]) < SKATE.reachUp) { sk.tape = true; sk.events.push({ type: 'tape' }); goal(sk, 'tape', true); }
 
-  if (car.contacts === 0) {
-    // Airborne: integrate rotation about world up (spin) and the car's own axes (flip, roll).
-    const a = sk.air ??= { time: 0, from: sk.lastGround ?? at, yaw: 0, roll: 0, pitch: 0, grab: 0, grabSteer: 0, kind: null };
-    a.time += dt;
-    a.yaw += car.ang[1] * dt;
+  sk.balance = null;
+  if (grind) {
+    if (sk.air) { landAir(sk, sk.air, at, up); sk.air = null; }
+    if (sk.grindId !== grind.id) {
+      sk.grindId = grind.id; sk.grindRate = addTrick(sk, grind.name, 100);
+    }
+    const points = 180 * dt * sk.grindRate; sk.combo.base += points; chargeSpecial(sk, points * sk.combo.tricks.length);
+    if (sk.specialActive && grind.time >= 2 && !grind.special) { addTrick(sk, 'Meteor Grind', 1800); grind.special = true; }
+    sk.balance = { ...grind.balance, kind: 'grind' }; sk.manual = 0; sk.manualTrick = false;
+    sk.lastGround = at; sk.ground = 0; sk.landed = { time: 0, linked: true };
+  } else if (car.contacts === 0) {
+    const a = sk.air ??= { time: 0, from: sk.lastGround ?? at, yaw: 0, roll: 0, pitch: 0, grab: 0, grabSteer: 0, kind: null, rise: 0 };
+    a.special = sk.specialActive; a.rise = Math.max(a.rise, at[2] - a.from[2]);
+    a.time += dt; a.yaw += car.ang[1] * dt;
     a.roll += dot(car.ang, rotate(car.q, [0, 0, -1])) * dt;
     a.pitch += dot(car.ang, rotate(car.q, [1, 0, 0])) * dt;
     a.kind ??= session.assist?.quarter?.arc?.kind ?? null;
+    if (session.assist?.skateSpinning) a.kind = 'spin';
     if (input.drift) { if (!a.grab) a.grabSteer = input.steer || 0; a.grab += dt; }
-    sk.ground = 0;
-    // Bounces under the trick threshold do not restart the revert window.
+    sk.ground = 0; sk.manual = 0; sk.manualTrick = false;
     if (sk.landed) sk.landed.time += dt;
   } else if (sk.air) {
     sk.ground += dt;
     if (car.contacts >= 2 && sk.ground >= .05) {
-      const a = sk.air; sk.air = null;
-      if (a.time >= SKATE.minAir) {
-        const l = sk.landed;
-        if (l && !l.kept && l.time > SKATE.revert) bank(sk);
-        if (up[1] < .55) bail(sk);
-        else {
-          for (const [name, points] of nameAir(a)) addTrick(sk, name, points);
-          for (const g of sk.park.gaps) {
-            if (!inZone(a.from, g.from) || !inZone(at, g.to)) continue;
-            if (g.fromAbove != null && a.from[2] < g.fromAbove) continue;
-            if (g.fromBelow != null && a.from[2] > g.fromBelow) continue;
-            if (g.minAir != null && a.time < g.minAir) continue;
-            if (g.toAbove != null && at[2] < g.toAbove) continue;
-            if (g.toBelow != null && at[2] > g.toBelow) continue;
-            addTrick(sk, g.name, g.points); sk.gapsFound.add(g.name);
-            sk.events.push({ type: 'gap', name: g.name, points: g.points });
-            for (const goalDef of sk.park.goals) if (goalDef.gap === g.name) goal(sk, goalDef.id, true);
-          }
-        }
-        if (sk.combo) sk.landed = { time: 0, transition: a.kind === 'return' || a.kind === 'transfer' };
-      }
+      const a = sk.air; sk.air = null; landAir(sk, a, at, up);
     }
   } else {
     sk.lastGround = at;
-    // Manual: rear wheels down, front wheels up, held. It keeps a combo alive like THPS2.
     const front = car.wheels[0].contact || car.wheels[1].contact, rear = car.wheels[2].contact || car.wheels[3].contact;
     const flat = car.wheels.some(w => w.contact && w.contactNormal?.[1] > .95);
-    if (rear && !front && flat && car.speed > 1) sk.manual += dt;
-    else {
-      if (sk.manual >= SKATE.manualMin) addTrick(sk, 'Manual', 60 + 120 * sk.manual);
-      sk.manual = 0;
-    }
+    const manual = session.skateRide?.manual;
+    if (manual || (!session.skateRide?.manualBlocked && !sk.manualLost && rear && !front && flat && car.speed > 1)) {
+      if (!sk.manual) sk.manualBalance = createBalance();
+      sk.manual += dt;
+      const b = manual?.balance ?? sk.manualBalance;
+      const balanced = manual || stepBalance(b, input.steer, dt, session.mode);
+      if (!balanced) { sk.manual = 0; sk.manualTrick = false; sk.manualLost = true; }
+      if (balanced && sk.manual >= SKATE.manualMin) {
+        if (!sk.manualTrick) { sk.manualRate = addTrick(sk, 'Manual', 60 + 120 * SKATE.manualMin); sk.manualTrick = true; }
+        const points = 120 * dt * sk.manualRate; sk.combo.base += points; chargeSpecial(sk, points * sk.combo.tricks.length); sk.landed = { time: 0, linked: true }; sk.balance = { ...b, kind: 'manual' };
+      }
+    } else { sk.manual = 0; sk.manualTrick = false; if (front || !rear) sk.manualLost = false; }
     const l = sk.landed;
     if (sk.combo && sk.manual < SKATE.manualMin) {
       if (l) l.time += dt;
-      // Revert: the hop button held through, or pressed just after, a transition landing.
       if (l && !l.kept && l.transition && input.drift && l.time <= SKATE.revert) { l.kept = true; addTrick(sk, 'Revert', 100); }
-      // A reverted combo lives until the next takeoff; anything else banks.
       if (!l || (l.kept ? l.time > 2.5 : l.time > SKATE.revert)) { sk.landed = null; bank(sk); }
     }
   }
   if (session.recoveries !== (sk.recoveries ??= session.recoveries)) { sk.recoveries = session.recoveries; sk.air = null; bail(sk); }
-  // The clock may run out mid-air: like THPS2, the last combo still lands.
-  if (sk.left <= 0 && !sk.air && !sk.manual) {
+  if (sk.left <= 0 && !sk.air && !sk.manual && !session.skateRide?.manual && !grind) {
     bank(sk); sk.over = true; sk.events.push({ type: 'over', score: sk.score });
   }
   return sk.events;
