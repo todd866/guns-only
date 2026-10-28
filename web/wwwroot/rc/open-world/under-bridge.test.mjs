@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import * as T from '../../vendor/three.module.js';
 import {createStream} from './stream.mjs';
 import {createUnderBridge} from './under-bridge.js';
+import {segmentDistance} from './geometry.mjs';
 import {NY,brickHeight} from './under-bridge.mjs';
 import {createWorld} from '../physics/world.mjs';
 import {createSession,stepSession} from '../physics/session.mjs';
@@ -22,6 +23,10 @@ function run(x,z,dx,dz,seconds=3,throttle=1,drift=false,collision=world){
 const clean=r=>{assert.equal(r.s.hits,0,'no wall hits');assert.equal(r.s.recoveries,0,'no rescue');assert.ok(!r.events.some(e=>e.type==='bail'),'no bail');};
 const ground=(x,z,ceiling=6.8)=>world.raycast(W([x,ceiling,z]),[0,-1,0],15);
 const lineCases=[
+  {line:[-16,-8,0,1,3],gaps:['SECOND SET']},
+  {line:[-4,-9,0,1,3.6],gaps:['BRICK SPINE','BENCH ROW']},
+  {line:[-4,3,0,1,2.8],gaps:['BENCH ROW']},
+  {line:[29,-2,0,1,3],gaps:['SIDEWALK TRANSFER']},
   {line:[...PARK.start.at,...PARK.start.toward,3],gaps:['BANK TO LEDGE'],letters:['S']},
   {line:[-18,-5,0,-1,5],gaps:['BRICK AIR']},
   {line:[0,-5,0,-1,5],gaps:['BRICK AIR','BETWEEN THE PILLARS'],letters:['K']},
@@ -36,7 +41,7 @@ const lineCases=[
 ];
 
 test('Under the Bridge riding surfaces face upward at their designed heights',()=>{
-  const checks=[[-24,0,.76],[-24,7,.64],[-24,11,.34],[4,-5,.64],[4,0,1.24],[4,2.35,1],[4,3.05,.76],[4,3.75,.52],[4,4.45,.28],[4,5.15,.04],
+  const checks=[[-16,-3,.54],[-16,0,1.04],[-16,1.35,.79],[-16,2.05,.54],[-16,2.75,.29],[-4,-4,.54],[-4,-1,1.04],[-4,6.5,.69],[29,2.5,.49],[29,8,.44],[29,11.5,.24],[-18.2,9,.65],[16.6,9,.65],[-21,-6,.3],[-24,0,.76],[-24,7,.64],[-24,11,.34],[4,-5,.64],[4,0,1.24],[4,2.35,1],[4,3.05,.76],[4,3.75,.52],[4,4.45,.28],[4,5.15,.04],
     [22,.5,1.14],[22,6.3,1.8],[11,10,.64],[11,15,.64],[-11,6,.565],[-11,15,.08],[-11,18.1,.74],[-11,18.8,.39],[-11,17.4,.41],
     [24,-17,3.24],[14,-19.2,1.64],[-2,19,.64],[12,2,.64],[-6,19,.34],[8,2,.34],[-29,12,.54],[27.6,15,.955]];
   for(const [x,z,want] of checks){const hit=ground(x,z);assert.ok(hit&&Math.abs(hit.point[1]-want)<.025,`${x},${z}: ${hit?.point[1]} want ${want}`);assert.ok(hit.normal[1]>0);}
@@ -50,7 +55,7 @@ test('Under the Bridge riding surfaces face upward at their designed heights',()
 });
 
 test('every named rail sits on real geometry within five centimetres along its entire polyline',()=>{
-  assert.ok(PARK.rails.length>=50);assert.equal(new Set(PARK.rails.map(r=>r.id)).size,PARK.rails.length);
+  assert.ok(PARK.rails.length>=90);assert.equal(new Set(PARK.rails.map(r=>r.id)).size,PARK.rails.length);
   for(const r of PARK.rails){assert.ok(['rail','ledge','coping','edge'].includes(r.kind));assert.ok(r.pts.length>=2);
     for(let i=1;i<r.pts.length;i++)for(const t of [0,.01,.25,.5,.75,.99,1]){
       const a=r.pts[i-1],b=r.pts[i],p=a.map((v,k)=>v+(b[k]-v)*t),dx=b[0]-a[0],dz=b[1]-a[1],n=Math.hypot(dx,dz);assert.ok(n>.001);
@@ -66,6 +71,10 @@ function verifyLine(r,c){
   if(c.tape)assert.ok(r.sk.tape,'tape reached via access bank');
   const crosses=(axis,at,height)=>r.flight.some(p=>Math.abs(p[axis]-at)<.15&&p[2]>height);
   for(const gap of c.gaps){
+    if(gap==='SECOND SET')assert.ok(crosses(1,2.4,.9)&&r.landings.some(a=>a.from[1]<1&&a.to[1]>3.8&&a.to[2]<.3),'clears the second staircase');
+    if(gap==='BRICK SPINE')assert.ok(r.landings.some(a=>a.from[1]<0&&a.to[1]>2&&a.to[2]<.3),'leaves spine and lands before bench bank');
+    if(gap==='BENCH ROW')assert.ok(crosses(1,9.8,.8)&&crosses(1,11,.7)&&r.landings.some(a=>a.to[1]>12.5&&a.to[2]<.3),'clears both bench tops and lands on the floor');
+    if(gap==='SIDEWALK TRANSFER')assert.ok(r.landings.some(a=>a.from[1]<5&&a.to[1]>7&&a.to[1]<10&&a.to[2]>.44),'lands on the sidewalk ledge');
     if(gap==='BANK TO LEDGE')assert.ok(r.landings.some(a=>a.from[1]<3&&a.to[1]>5&&a.to[1]<9&&a.to[2]>.64),'lands on the actual granite ledge');
     if(gap==='ABUTMENT DROP')assert.ok(r.landings.some(a=>a.to[1]>-14&&a.to[1]<-9&&a.to[2]>.4),'drops onto brick, not the flat floor');
     if(gap==='CAB CLEARANCE')assert.ok(crosses(1,6.3,1.95)&&r.landings.some(a=>a.from[1]<4&&a.to[1]>8),'clears the cab roof and far bumper');
@@ -80,8 +89,8 @@ function verifyLine(r,c){
 }
 for(const c of lineCases)test(`held throttle drives ${c.gaps.join(' / ')||'the abutment tape approach'}`,()=>verifyLine(run(...c.line),c));
 
-test('the driven matrix covers all ten gaps, all five letters and the tape',()=>{
-  assert.equal(PARK.gaps.length,10);assert.equal(new Set(PARK.gaps.map(g=>g.name)).size,10);
+test('the driven matrix covers all fourteen gaps, all five letters and the tape',()=>{
+  assert.equal(PARK.gaps.length,14);assert.equal(new Set(PARK.gaps.map(g=>g.name)).size,14);
   assert.deepEqual(new Set(lineCases.flatMap(c=>c.gaps)),new Set(PARK.gaps.map(g=>g.name)));
   assert.deepEqual(new Set(lineCases.flatMap(c=>c.letters??[])),new Set(PARK.letters.map(l=>l.letter)));assert.ok(lineCases.some(c=>c.tape));
 });
@@ -104,4 +113,19 @@ test('the batched visual park and real streamed terrain preserve every driven li
     for(const c of lineCases)verifyLine(run(...c.line,1,false,stream.world),c);
   }finally{park?.dispose();stream.dispose();globalThis.document=previous;}
   assert.equal(scene.children.length,0);
+});
+
+test('road approaches reach terrain and all four frontage blocks are solid',()=>{
+  for(const side of [-1,1])for(const u of [31.1,37,43,49,54.9]){
+    const hit=ground(side*u,-16,12);assert.ok(Math.abs(hit.point[1]-(8.2-(u-31)/24*8.175))<.025);assert.ok(hit.normal[1]>.9);
+  }
+  for(const side of [-1,1])for(const z of [0,15]){
+    const wall=side<0?-33.2:32,hit=world.raycast(W([wall-side*2,1,z]),[side,0,0],3);
+    assert.ok(hit&&Math.abs(hit.point[0]-NY.center[0]-wall)<.02&&hit.normal[0]*side<-.9,'street front is a solid outward-facing wall');
+    const r=run(wall-side*3,z,side,0,1.6);assert.ok(r.s.hits>0);assert.equal(r.s.recoveries,0);assert.ok((L(r.s.car.pos)[0]-wall)*side<0,'car stays outside frontage');
+  }
+});
+
+test('the riding court is within seven metres of a grindable feature throughout',()=>{
+  for(let x=-30;x<=30;x+=2)for(let z=-7;z<=21;z+=2){const distance=Math.min(...PARK.rails.flatMap(r=>r.pts.slice(1).map((b,i)=>segmentDistance(x,z,r.pts[i],b))));assert.ok(distance<=7,`${x},${z}: ${distance} m to a feature`);}
 });
