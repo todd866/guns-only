@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { BOARDWALK_BOUNDS, BOARDWALK } from './boardwalk.mjs';
+import { BOARDWALK_BOUNDS, BOARDWALK, buildBoardwalk, boardwalkWorld } from './boardwalk.mjs';
 import { EVENTS, LOCATIONS } from './catalog.mjs';
 import { inside, roadWidth, segmentDistance } from './geometry.mjs';
 import { insideBase } from './boundary.mjs';
@@ -38,7 +38,7 @@ const hangarBounds = (() => {
 })();
 
 test('Boardwalk site is flat, inside the base, and clear of authored scenery', () => {
-  assert.deepEqual(BOARDWALK_BOUNDS, [-700, 3400, -636, 3442]);
+  assert.deepEqual(BOARDWALK_BOUNDS, [-700, 3400, -636, 3452]);
   assert.deepEqual(BOARDWALK.center, [-668, 0, 3421]);
   const terrain = read('playable-terrain.json');
   for (let x = x0; x <= x1; x += 3) for (let z = z0; z <= z1; z += 3) assert.equal(elevationAt(terrain, x, z), 0, `flat datum at ${x},${z}`);
@@ -77,4 +77,8 @@ test('Venice has a unique skate location beside the existing After Hours Boardwa
   const park=LOCATIONS.find(l=>l.skate==='venice');assert.ok(park);assert.equal(park.id,'venice');
   assert.equal(new Set(LOCATIONS.map(l=>l.id)).size,LOCATIONS.length);
   assert.equal(LOCATIONS.find(l=>l.id==='boardwalk').event,'after-hours-boardwalk');
+});
+
+test('the lagoon geometry stays inside its checked site',()=>{
+  for(const t of buildBoardwalk())for(const p of [t.a,t.b,t.c]){const [x,,z]=boardwalkWorld(p);assert.ok(x>=x0&&x<=x1&&z>=z0&&z<=z1,`outside site ${p}`);}
 });

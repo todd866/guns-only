@@ -1,7 +1,9 @@
 // Original beach park: local geometry [x,y,z], skate data [x,z,h]. The raised
 // promenade contains the pit above the existing terrain, without a hidden floor.
 export const BOARDWALK = Object.freeze({ center: [-668, 0, 3421], length: 64, width: 42, deck: 1.64 });
-export const BOARDWALK_BOUNDS = [-700, 3400, -636, 3442];
+export const BOARDWALK_BOUNDS = [-700, 3400, -636, 3452];
+export const BOARDWALK_SHORE = Object.freeze([[-32,20.5],[-24,21.4],[-16,21],[-8,22],[0,21.5],[8,22],[16,21],[24,21.4],[32,20.5]]);
+export const BOARDWALK_FAR_SHORE=Object.freeze([20.5,27.4,29,30,30.4,30,29,27.4,20.5]);
 export const boardwalkWorld = ([x,y,z]) => [BOARDWALK.center[0]+x,y,BOARDWALK.center[2]+z];
 export const boardwalkLocal = ([x,y,z]) => [x-BOARDWALK.center[0],y,z-BOARDWALK.center[2]];
 const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
@@ -71,7 +73,15 @@ export function buildBoardwalk() {
     quad([x1,.04,z0],[x1,y0,z0],[x1,y1,z1],[x1,.04,z1],'concrete','skirt');
   };
   const bankX=(x0,x1,z0,z1,y0,y1)=>quad([x0,y0,z0],[x0,y0,z1],[x1,y1,z1],[x1,y1,z0],'concrete','bank');
-  flat(-32,32,5,21,.04,'sand','dirt');
+  // The lagoon stays shallow and drivable, including its rounded outer shore.
+  flat(-32,32,5,18,.04,'sand','dirt');
+  for(let i=1;i<BOARDWALK_SHORE.length;i++){
+    const [x0,z0]=BOARDWALK_SHORE[i-1],[x1,z1]=BOARDWALK_SHORE[i];
+    quad([x0,.045,18],[x0,.045,z0],[x1,.045,z1],[x1,.045,18],'dirt','wet-sand');
+    const f0=BOARDWALK_FAR_SHORE[i-1],f1=BOARDWALK_FAR_SHORE[i];
+    quad([x0,.055,z0],[x0,.055,f0],[x1,.055,f1],[x1,.055,z1],'dirt','water');
+    quad([x0,.04,f0],[x0,.025,f0+.5],[x1,.025,f1+.5],[x1,.04,f1],'dirt','wet-sand');
+  }
   // The four-metre side banks make every entrance flush with the surrounding ground.
   for(const r of [[-28,1,-21,-18],[-28,1,-5,5],[1,28,-21,5]])flat(...r,1.64);
   bankX(-32,-28,-21,5,.04,1.64);bankX(28,32,-21,5,1.64,.04);

@@ -3,7 +3,7 @@ import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUti
 import {NY,buildUnderBridge,bridgeWorld,brickHeight} from './under-bridge.mjs';
 import {smoothBowlNormals,refineSkateTriangles} from './skate-normals.js';
 
-const COLOURS={paver:'#a6a7a1','paver-dark':'#999c99',border:'#c6c4b9',brick:'#b85b42','brick-deck':'#a9513c',wall:'#894731',skirt:'#895344',road:'#535959',soffit:'#5f6869',steel:'#8eaba9',pillar:'#b8b3a4',granite:'#bbbcb2',stripe:'#ddd5ac',barrier:'#a39a7b',abutment:'#a36b50',bank:'#b87258',access:'#ad795d','subway-bank':'#bcb5a6',steps:'#c6c2b7','cab-bank':'#b27259',cab:'#f5bc32',glass:'#324b53',taxi:'#f6de8c',tyre:'#303736','hydrant-bank':'#ad7358',hydrant:'#b64936',news:'#526e78',paper:'#dfd6b6',basin:'#829c98',rim:'#c8c5b5','basin-bank':'#8fa5a1','fountain-bank':'#b2b3a7','fountain-launch':'#b9765d',bench:'#bcb5a3',soil:'#705849','manual-bank':'#b7b8ad',lamp:'#ffe7b0',sign:'#ffffff'};
+const COLOURS={sidewalk:'#7e837f',earth:'#ae8b59',retaining:'#9e7051','front-brick':'#9e523c','front-brick-dark':'#814735',window:'#263f44',awning:'#557b72',garden:'#72874b','spine-top':'#a9513c','second-bank':'#b87258','spine-bank':'#b87258','bench-bank':'#b87258','side-bank':'#b87258','side-return':'#b7b8ad','street-bank':'#b7b8ad','ledge-return':'#b7b8ad',paver:'#a6a7a1','paver-dark':'#999c99',border:'#c6c4b9',brick:'#b85b42','brick-deck':'#a9513c',wall:'#894731',skirt:'#895344',road:'#535959',soffit:'#5f6869',steel:'#8eaba9',pillar:'#b8b3a4',granite:'#bbbcb2',stripe:'#ddd5ac',barrier:'#a39a7b',abutment:'#a36b50',bank:'#b87258',access:'#ad795d','subway-bank':'#bcb5a6',steps:'#c6c2b7','cab-bank':'#b27259',cab:'#f5bc32',glass:'#324b53',taxi:'#f6de8c',tyre:'#303736','hydrant-bank':'#ad7358',hydrant:'#b64936',news:'#526e78',paper:'#dfd6b6',basin:'#829c98',rim:'#c8c5b5','basin-bank':'#8fa5a1','fountain-bank':'#b2b3a7','fountain-launch':'#b9765d',bench:'#bcb5a3',soil:'#705849','manual-bank':'#b7b8ad',lamp:'#ffe7b0',sign:'#ffffff'};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const heights={
   brick:brickHeight,'brick-deck':brickHeight,
@@ -23,10 +23,10 @@ export function createUnderBridge(scene,world){
   const batches=new Map(),pieces=[],colour=new T.Color();
   for(const source of buildUnderBridge()){
     if(world?.addTri)world.addTri(bridgeWorld(source.a),bridgeWorld(source.b),bridgeWorld(source.c),source.surface);
-    const mat=source.mat,fn=heights[mat],brick=mat==='brick'||mat==='brick-deck';
+    const mat=source.mat,fn=heights[mat],brick=['brick','brick-deck','second-bank','spine-bank','bench-bank','side-bank'].includes(mat);
     if(!batches.has(mat))batches.set(mat,{positions:[],uv:[]});const batch=batches.get(mat);
     const minx=Math.min(source.a[0],source.b[0],source.c[0]),minz=Math.min(source.a[2],source.b[2],source.c[2]);
-    for(const t of fn?refineSkateTriangles([source],fn):[source])for(const p of [t.a,t.b,t.c]){batch.positions.push(...p);batch.uv.push(...(brick?[(p[0]-minx),.2+(p[2]-minz)*3.2]:[.75,.1]));}
+    for(const t of fn?refineSkateTriangles([source],fn):[source])for(const p of [t.a,t.b,t.c]){batch.positions.push(...p);batch.uv.push(...(brick?[(p[0]-minx),.2+(p[2]-minz)*3.2]:[.75,mat==='lamp'?.02:.1]));}
   }
   const piece=(g,mat)=>{
     colour.set(COLOURS[mat]);const n=g.attributes.position.count;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { NY, NY_BOUNDS } from './under-bridge.mjs';
+import { NY, NY_BOUNDS, NY_FOOTPRINT, buildUnderBridge, bridgeWorld } from './under-bridge.mjs';
 import { EVENTS, LOCATIONS } from './catalog.mjs';
 import { inside, roadWidth, segmentDistance } from './geometry.mjs';
 import { insideBase } from './boundary.mjs';
@@ -18,7 +18,7 @@ import { elevationAt } from './elevation.mjs';
 const root = new URL('../assets/world/', import.meta.url);
 const read = name => JSON.parse(fs.readFileSync(new URL(name, root)));
 const [x0, z0, x1, z1] = NY_BOUNDS;
-const corners = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+const corners = NY_FOOTPRINT;
 const ring = [...corners, corners[0]];
 const overlaps = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
 const cross = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
@@ -42,7 +42,7 @@ const otherParks = [SKATESTREET_BOUNDS, PLAZA_BOUNDS, BOARDWALK_BOUNDS, hangarBo
 
 test('Under the Bridge site is a flat, inside-base parcel clear of authored venues', () => {
   assert.deepEqual(NY.center, [452, 0, 1152]);
-  assert.deepEqual(NY_BOUNDS, [420, 1130, 484, 1174]);
+  assert.deepEqual(NY_BOUNDS, [396, 1125, 508, 1178]);
   const terrain = read('playable-terrain.json');
   for (let x = x0; x <= x1; x += 3) for (let z = z0; z <= z1; z += 3) assert.equal(elevationAt(terrain, x, z), 0, `flat datum at ${x},${z}`);
   for (const [x, z] of corners) assert.ok(insideBase(x, z), `site corner inside base: ${x},${z}`);
@@ -76,4 +76,8 @@ test('Under the Bridge has a unique skate location beside Skatestreet', () => {
   assert.equal(park.id, 'ny');
   assert.deepEqual(park.pos, [NY.center[0] - 24, .04, NY.center[2] - 7]);
   assert.equal(new Set(LOCATIONS.map(p => p.id)).size, LOCATIONS.length);
+});
+
+test('the expanded road approaches and frontage stay within the checked parcel',()=>{
+  for(const t of buildUnderBridge())for(const p of [t.a,t.b,t.c]){const [x,,z]=bridgeWorld(p);assert.ok(inside(x,z,ring)||ring.slice(1).some((b,i)=>segmentDistance(x,z,ring[i],b)<.001),`outside parcel ${p}`);}
 });
