@@ -158,7 +158,7 @@ if(new URLSearchParams(location.search).get('assets')!=='prototype'){
   hangar.collision.forEach(addSolid);}
   if(base){for(const node of [...housingFallback,...aircraftFallback])node.visible=false;for(const a of aircraft){const model=base[0].clone(true);model.position.set(a.x,0,a.z);scene.add(model);addSolid({x:a.x,z:a.z-2.6,w:.3,d:.45,h:.75,minY:0});}for(const b of buildings.filter(b=>b.kind==='house')){const model=base[1].clone(true);model.position.set(b.x,0,b.z);scene.add(model);}}
   if(artReview&&hangar){const {applyArtReview}=await import('./art-review.js');applyArtReview({scene,car,hangar:hangar.hangar,renderer,sun,contactSun});}
-  assetState='blender';ui.apply();
+  assetState='blender';ui.apply();openWorld?.loadBackground?.();
  }).catch(error=>{assetState='failed';console.error('RC Blender asset rejected:',error);$('brief').hidden=false;const warning=document.createElement('p');warning.textContent='Asset loading failed; prototype fallback is available.';$('brief').append(warning);}).finally(readyModes);
 }
 // Gates are inflatable toy-race arches: the next one glows, the rest stay quiet.

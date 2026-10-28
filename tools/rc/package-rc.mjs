@@ -27,6 +27,38 @@ function walk(dir, out = []) {
 const inside = (p, dir) => p === dir || p.startsWith(dir + path.sep);
 const posix = p => p.split(path.sep).join('/');
 
+// The default open-world start downloads these before the car is drivable. Without hints the
+// browser only learns of each file after the previous module or JSON has been parsed, so on a
+// 150 ms satellite link the static import chain alone cost about 4 s before any world data.
+export const START_ASSETS = [
+  ['fetch', 'assets/world/manifest.json'], ['fetch', 'assets/world/overview.json'],
+  ['fetch', 'assets/world/terrain.json'], ['fetch', 'assets/world/playable-terrain.json'],
+  ['fetch', 'assets/world/residential.json'], ['fetch', 'assets/world/residential-terrain.json'],
+  ['fetch', 'assets/districts/skatepark.glb.gz'], ['fetch', 'assets/buggy.glb.gz'],
+  ['fetch', 'assets/heroes/landmarks.glb.gz'], ['fetch', 'assets/heroes/B-52.glb.gz'],
+  ['fetch', 'assets/heroes/C-17.glb.gz'], ['fetch', 'assets/heroes/A-10.glb.gz'],
+  ['fetch', 'assets/env/goegap_1k.hdr'],
+  ['image', 'assets/materials/park-paint-atlas.webp'], ['image', 'assets/foliage/deciduous-cluster.webp'],
+];
+// Every module main.js reaches through static imports, plus the asset loader it imports at once.
+export function startModules(rcDir) {
+  const seen = new Set(), queue = [path.join(rcDir, 'main.js'), path.join(rcDir, 'assets.js')];
+  const STATIC = /\b(?:import|export)\b[^'"`;()]*?\bfrom\s*(['"])(\.{1,2}\/[^'"]+)\1|\bimport\s*(['"])(\.{1,2}\/[^'"]+)\3/g;
+  while (queue.length) {
+    const file = queue.shift(); if (seen.has(file) || !fs.existsSync(file)) continue; seen.add(file);
+    for (const m of stripComments(fs.readFileSync(file, 'utf8')).matchAll(STATIC)) queue.push(path.resolve(path.dirname(file), (m[2] ?? m[4]).split(/[?#]/)[0]));
+  }
+  return [...seen].map(f => posix(path.relative(rcDir, f))).filter(f => !f.startsWith('..')).sort();
+}
+export function injectPreloads(rcDir) {
+  const index = path.join(rcDir, 'index.html'), html = fs.readFileSync(index, 'utf8');
+  for (const [, file] of START_ASSETS) if (!fs.existsSync(path.join(rcDir, file))) throw Error(`preload ${file} is missing`);
+  const tags = [...startModules(rcDir).map(f => `<link rel="modulepreload" href="${f}">`),
+    ...START_ASSETS.map(([as, f]) => `<link rel="preload" as="${as}" href="${f}" crossorigin>`)].join('');
+  if (!html.includes('</head>')) throw Error('rc/index.html has no </head>');
+  fs.writeFileSync(index, html.replace('</head>', tags + '</head>'));
+}
+
 export function packageRc(out = path.join(ROOT, '.rc-dist')) {
   if (fs.existsSync(out) && fs.readdirSync(out).length && !fs.existsSync(path.join(out, MARKER)))
     throw Error(`${out} is not empty and has no ${MARKER}; refusing to overwrite it`);
@@ -65,6 +97,7 @@ export function packageRc(out = path.join(ROOT, '.rc-dist')) {
     const dest = bundledPath(file); fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.copyFileSync(file, dest); bytes += fs.statSync(dest).size;
   }
+  injectPreloads(path.join(out, 'rc'));
   fs.writeFileSync(path.join(out, 'vercel.json'), JSON.stringify({
     redirects: [{ source: '/', destination: '/rc/', permanent: false }],
     // Asset names are stable across releases. Revalidate before reusing them with new code;
