@@ -45,6 +45,7 @@ test('Under the Bridge riding surfaces face upward at their designed heights',()
   }
   assert.ok(Math.abs(ground(0,-16,10).point[1]-8.2)<.01,'road deck is solid from above');
   const roof=world.raycast(W([0,6,-16]),[0,1,0],3);assert.ok(roof&&Math.abs(roof.point[1]-7.7)<.01&&roof.normal[1]<0,'road soffit collides from below');
+  for(const x of [-29,-6,6,29])assert.ok(world.raycast(W([x-1,.15,-19.5]),[1,0,0],1),'rear pier foundation reaches the flat ground');
   assert.ok(Math.abs(ground(...PARK.start.at).point[1]-PARK.start.height)<.01,'run starts on the floor');
 });
 

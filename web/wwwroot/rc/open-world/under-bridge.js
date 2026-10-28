@@ -51,6 +51,8 @@ export function createUnderBridge(scene,world){
   }
   const texture=new T.CanvasTexture(canvas),emissiveMap=new T.CanvasTexture(glow);texture.colorSpace=emissiveMap.colorSpace=T.SRGBColorSpace;
   const material=new T.MeshStandardMaterial({vertexColors:true,map:texture,emissive:'#ffffff',emissiveMap,emissiveIntensity:1.1,roughness:.87,side:T.DoubleSide,shadowSide:T.BackSide});
+  // Atlas mipmaps must not turn distant brick mortar into emissive bands.
+  material.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\nif (vEmissiveMapUv.y >= .2) totalEmissiveRadiance = vec3(0.0);');};
   const mesh=new T.Mesh(mergeGeometries(pieces),material);mesh.name='Under the Bridge';mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);
   for(const g of pieces)g.dispose();
   return {root,dispose(){root.removeFromParent();mesh.geometry.dispose();material.dispose();texture.dispose();emissiveMap.dispose();}};

@@ -47,6 +47,7 @@ export function buildUnderBridge(){
     quad(...p,z<-14?'brick-deck':'brick','bowl');
   }
   for(const x of [-28,28])for(let z=-18;z<-9;z+=.125){const p=[[x,.04,z],[x,brickHeight(x,z),z],[x,brickHeight(x,z+.125),z+.125],[x,.04,z+.125]];x<0?quad(...p,'skirt'):quad(p[3],p[2],p[1],p[0],'skirt');}
+  for(let x=-28;x<28;x++)quad([x,.04,-18],[x,brickHeight(x,-18),-18],[x+1,brickHeight(x+1,-18),-18],[x+1,.04,-18],'wall');
   box(-28,28,-21.4,-21,.04,3.24,'wall');
   // The deck is a closed retired span, independent of the live road network.
   box(-31,31,-21,-11,7.7,8.2,'road','asphalt');
@@ -54,15 +55,16 @@ export function buildUnderBridge(){
   for(const z of [-20.8,-11.2])box(-31,31,z-.12,z+.12,8.2,8.85,'granite');
   for(const z of [-20,-12])box(-31,31,z-.16,z+.16,7.2,7.7,'steel','metal');
   for(const x of [-29,-6,6,29])for(const z of [-19.5,-11.5]){
-    const base=Math.abs(x)<28?brickHeight(x,z):.04;
-    box(x-.42,x+.42,z-.42,z+.42,base,7.7,'pillar');
-    box(x-.7,x+.7,z-.65,z+.65,base,base+.25,'granite');
+    const base=Math.abs(x)<28&&z>=-18?brickHeight(x,z):.04;
+    box(x-.42,x+.42,z-.42,z+.42,.04,7.7,'pillar');
+    box(x-.7,x+.7,z-.65,z+.65,.04,base+.25,'granite');
   }
   for(let x=-29;x<30;x+=6)flat(x,x+3,-16.07,-15.93,8.22,'stripe');
   for(const x of [-30,30])box(x-.2,x+.2,-20.8,-11.2,8.2,9,'barrier');
   // Accessible abutment with a broad landing on the brick bank below.
   box(20,28,-20,-15,.04,3.24,'abutment','concrete','w');
   quad([8,.04,-20],[8,.04,-18.5],[20,3.24,-18.5],[20,3.24,-20],'access');
+  for(const z of [-20,-18.5]){const p=[[8,.04,z],[20,.04,z],[20,3.24,z],[8,.04,z]];z===-20?quad(p[3],p[2],p[1],p[0],'skirt'):quad(...p,'skirt');}
   // Three separate straight lines: bank to granite, subway steps, and the cab.
   bank(-28,-20,-3,2,.04,1.24);box(-28,-20,5,9,.04,.64,'granite');bank(-28,-20,9,13,.64,.04,'ledge-return');
   bank(1,7,-8,-2,.04,1.24,'subway-bank');flat(1,7,-2,2,1.24,'steps');
