@@ -46,7 +46,8 @@ export function createMarseille(scene, world) {
   const sign = new T.PlaneGeometry(7, 1.2), uv = sign.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setY(i, .1 + uv.getY(i) * .9);
   for (const z of [-9.9,-4.1]) { const post = new T.BoxGeometry(.1,2,.1); post.translate(...marseilleWorld([-38.45,1,z])); piece(post,'dark'); }
-  sign.rotateY(Math.PI / 2); sign.translate(...marseilleWorld([-38.4, 1.4, -7])); piece(sign, 'coping', true);
+  for (const side of [-1,1]) { const panel=sign.clone();panel.rotateY(side*Math.PI/2);panel.translate(...marseilleWorld([-38.4+side*.015,1.4,-7]));piece(panel,'coping',true); }
+  sign.dispose();
   const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 256;
   const ctx = canvas.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 1024, 256);
   ctx.fillStyle = '#28595e'; ctx.fillRect(0, 0, 1024, 230); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f6e6ba'; ctx.font = 'italic 900 118px system-ui'; ctx.fillText('THE BOWLS', 512, 113);
