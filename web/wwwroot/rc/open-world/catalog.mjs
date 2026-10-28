@@ -1,3 +1,4 @@
+import {NY} from './under-bridge.mjs';
 import {plazaWorld,PLAZA_PARK} from './town-plaza.mjs';
 import {RESIDENTIAL_START} from './residential-frame.mjs';
 import {ALIEN_EVENTS,ALIEN_LOCATIONS} from './alien-world.mjs';
@@ -32,6 +33,7 @@ export const LOCATIONS = [
   {id:'town-plaza',name:'Town Plaza',short:'Town Plaza',pos:plazaWorld([PLAZA_PARK.start.at[0],0,PLAZA_PARK.start.at[1]]),color:'#77c9c0',icon:'🛹',kind:'activity',skate:'philly'},
   {id:'skatestreet',name:'Skatestreet',short:'Skatestreet',pos:[560,0,1030],color:'#59cec4',icon:'🛹',kind:'activity',skate:'skatestreet'},
   {id:'marseille',name:'The Bowls',short:'The Bowls',pos:[2164,0,2458],color:'#65b9b6',icon:'🛹',kind:'activity',skate:'marseille'},
+  {id:'ny',name:'Under the Bridge',short:'The Bridge',pos:[NY.center[0]-24,.04,NY.center[2]-7],color:'#bd7355',icon:'🛹',kind:'activity',skate:'ny'},
   {id:'venice',name:'Venice Boardwalk',short:'Venice',pos:[-694,1.64,3421],color:'#edb879',icon:'🛹',kind:'activity',skate:'venice'},
   {id:'skate-hangar',name:'Skate Hangar',short:'Skate Hangar',pos:[581.9,0,877.7],color:'#edbd6a',icon:'🛹',kind:'activity',skate:'hangar'},
 ];
