@@ -1,3 +1,4 @@
+import {plazaWorld,PLAZA_PARK} from './town-plaza.mjs';
 import {RESIDENTIAL_START} from './residential-frame.mjs';
 import {ALIEN_EVENTS,ALIEN_LOCATIONS} from './alien-world.mjs';
 import {BATTLE_EVENTS} from './battle-arenas.mjs';
@@ -28,6 +29,7 @@ export const LOCATIONS = [
   {id:'lab',name:'Dreamland',short:'Dreamland',pos:[2500,0,-1200],color:'#9fe2a8',icon:'◇',kind:'race',event:'dreamland'},
   // THPS2-style skate park on the flight line: E inside opens the skate goal card.
   {id:'schoolyard',name:'Schoolyard',short:'Schoolyard',pos:[-3373,0,-778],color:'#f2b705',icon:'🛹',kind:'activity',skate:'school'},
+  {id:'town-plaza',name:'Town Plaza',short:'Town Plaza',pos:plazaWorld([PLAZA_PARK.start.at[0],0,PLAZA_PARK.start.at[1]]),color:'#77c9c0',icon:'🛹',kind:'activity',skate:'philly'},
   {id:'skatestreet',name:'Skatestreet',short:'Skatestreet',pos:[560,0,1030],color:'#59cec4',icon:'🛹',kind:'activity',skate:'skatestreet'},
   {id:'marseille',name:'The Bowls',short:'The Bowls',pos:[2164,0,2458],color:'#65b9b6',icon:'🛹',kind:'activity',skate:'marseille'},
   {id:'skate-hangar',name:'Skate Hangar',short:'Skate Hangar',pos:[581.9,0,877.7],color:'#edbd6a',icon:'🛹',kind:'activity',skate:'hangar'},
