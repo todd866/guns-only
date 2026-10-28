@@ -138,6 +138,8 @@ export function stepSkate(sk, session, input, dt, frame) {
           for (const g of sk.park.gaps) {
             if (!inZone(a.from, g.from) || !inZone(at, g.to)) continue;
             if (g.fromAbove != null && a.from[2] < g.fromAbove) continue;
+            if (g.fromBelow != null && a.from[2] > g.fromBelow) continue;
+            if (g.minAir != null && a.time < g.minAir) continue;
             if (g.toAbove != null && at[2] < g.toAbove) continue;
             if (g.toBelow != null && at[2] > g.toBelow) continue;
             addTrick(sk, g.name, g.points); sk.gapsFound.add(g.name);

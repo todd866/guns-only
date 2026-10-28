@@ -22,7 +22,7 @@ export function goalCard({ park, goals, best = 0, run = null, gapsFound = [] }) 
     + `<div class="result-actions"><button id="skate-go" class="primary">${run ? '↻ Run again' : '▶ Start run'}</button><button id="skate-free">▶ Drive</button></div>`;
 }
 
-export function createSkateHud({ scene, T, toWorld }) {
+export function createSkateHud({ scene, T }) {
   const root = $('skate'), pop = $('skate-pop');
   let popTimer = 0, markers = null;
   function popUp(text, kind = '') {
@@ -40,14 +40,14 @@ export function createSkateHud({ scene, T, toWorld }) {
     const s = new T.Sprite(new T.SpriteMaterial({ map: texture, depthTest: true, transparent: true }));
     s.scale.set(.55, .55, 1); return s;
   }
-  function placeMarkers(park) {
+  function placeMarkers(park, toWorld) {
     if (markers) return;
     markers = new Map();
     for (const l of park.letters) { const s = sprite(l.letter, '#edbd6a'); s.position.set(...toWorld(l.at)); scene.add(s); markers.set(l.letter, s); }
     if (park.tape) { const s = sprite('📼', '#f3efdc'); s.position.set(...toWorld(park.tape)); scene.add(s); markers.set('tape', s); }
   }
   return {
-    start(sk) { placeMarkers(sk.park); root.hidden = false; document.body.classList.add('skating'); },
+    start(sk, toWorld) { placeMarkers(sk.park, toWorld); root.hidden = false; document.body.classList.add('skating'); },
     stop() {
       root.hidden = true; document.body.classList.remove('skating');
       if (markers) for (const m of markers.values()) { m.removeFromParent(); m.material.map.dispose(); m.material.dispose(); }

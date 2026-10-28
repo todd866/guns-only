@@ -11,16 +11,28 @@ const horizontal=v=>norm([v[0],0,v[2]]);
 export function stepQuarterReturn(state,car,raw,dt,world){
  const wheels=car.wheels.filter(w=>w.contact&&TRANSITION_SURFACES.has(w.surface)&&w.contactNormal);
  if(!state.arc){
+  // Kick turn: a car that stalls nose-up on a bowl or vert wall pops off it and turns to face
+  // back down, instead of sliding back fakie into a throttle that drives it up again.
+  const wall=wheels.filter(w=>w.surface==='bowl'||w.surface==='vert');
+  if(wall.length>=2&&!state.armed&&(raw.throttle??0)>.2&&!raw.brake){
+   const n=norm(wall.reduce((sum,w)=>add(sum,w.contactNormal),[0,0,0])),inward=horizontal(n);
+   if(n[1]<.85&&n[1]>.05&&dot(horizontal(carForward(car)),inward)<-.5&&car.forwardSpeed<.5&&car.vel[1]<.3){
+    car.vel=add(scale(inward,1.2),scale(n,1.4));
+    state.arc={kind:'return',returning:true,kick:true,yaw:Math.atan2(-inward[0],inward[2]),turn:raw.steer<-.15?-1:1,time:0};
+   }
+  }
+ }
+ if(!state.arc){
   if(wheels.length>=2&&car.forwardSpeed>1){
    const n=norm(wheels.reduce((sum,w)=>add(sum,w.contactNormal),[0,0,0]));
    const inward=horizontal(n),forward=horizontal(carForward(car));
    // At the steep upper transition and climbing. A quarter returns only within ~25 degrees
    // of head-on; on a bowl wall any climb counts, since a car carving up at an angle points
    // sideways by the time it is vertical.
-   const bowl=wheels.some(w=>w.surface==='bowl'),hip=wheels.some(w=>w.surface==='hip');
+   const vert=wheels.some(w=>w.surface==='vert'),bowl=vert||wheels.some(w=>w.surface==='bowl'),hip=wheels.some(w=>w.surface==='hip');
    if(n[1]<.72&&n[1]>.01&&car.vel[1]>1){
     const kind=bowl?'return':!hip&&dot(forward,inward)<-.9?'face':'transfer';
-    state.armed={kind,inward,yaw:Math.atan2(-inward[0],inward[2]),speed:Math.max(0,car.forwardSpeed),age:0};
+    state.armed={kind,vert,inward,yaw:Math.atan2(-inward[0],inward[2]),speed:Math.max(0,car.forwardSpeed),age:0};
    }
   }
   if(state.armed){
@@ -41,7 +53,8 @@ export function stepQuarterReturn(state,car,raw,dt,world){
      const carry=bowl?.5:1.2,drift=Math.hypot(...tangent)>carry?scale(norm(tangent),carry):tangent;
      const sideways=returning?.65:-1.8;
      // A bowl keeps a short, even rhythm between its facing walls.
-     const [lo,hi]=bowl?[4.2,5.6]:returning?[5.5,8.5]:[2.2,3.4];
+     // A vert wall carries the most: big, readable air above the coping.
+     const [lo,hi]=a.vert?[5.5,8]:bowl?[4.2,5.6]:returning?[5.5,8.5]:[2.2,3.4];
      car.vel=[drift[0]+a.inward[0]*sideways,clamp(car.vel[1],lo,hi),drift[2]+a.inward[2]*sideways];
      state.arc={kind:returning?'return':'exit',returning,yaw:a.yaw,turn:raw.steer<-.15?-1:1,time:0};
     }

@@ -6,7 +6,7 @@ import { sub, cross, dot, norm, scale, add, len } from './math.mjs';
 export const SURFACES = {
   // Fictional shallow splash-pad response; safe at RC scale, no buoyancy or drowning.
   // Authored quarter pipes use the normal concrete tyre response plus a play assist.
-  quarter: { grip: 1.0, roll: .02 }, bowl: { grip: 1.0, roll: .02 }, hip: { grip: 1.0, roll: .02 },
+  quarter: { grip: 1.0, roll: .02 }, bowl: { grip: 1.0, roll: .02 }, vert: { grip: 1.0, roll: .02 }, hip: { grip: 1.0, roll: .02 },
   snow: { grip: .68, roll: .08 }, ice: { grip: .38, roll: .015 },
   water: { grip: 0.65, roll: 0.18 },
   asphalt: { grip: 1.0, roll: 0.02 }, concrete: { grip: 1.0, roll: 0.02 }, wood: { grip: 0.95, roll: 0.025 },
@@ -19,7 +19,7 @@ export const SURFACES = {
 
 // Riding these is intentional even near vertical: not a wall strike (car.mjs), and
 // quarter-return.mjs gives each an arcade response.
-export const TRANSITION_SURFACES = new Set(['quarter', 'bowl', 'hip']);
+export const TRANSITION_SURFACES = new Set(['quarter', 'bowl', 'vert', 'hip']);
 
 export function createWorld(cell = 4) {
   const tris = [], grid = new Map();
