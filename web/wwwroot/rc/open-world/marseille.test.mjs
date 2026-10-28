@@ -7,7 +7,7 @@ import { createSession, stepSession } from '../physics/session.mjs';
 import { placeCar, rideHeight } from '../physics/car.mjs';
 import { createSkate, stepSkate } from '../physics/skate.mjs';
 import { MARSEILLE_TERRAIN } from './marseille-site.mjs';
-import { MARSEILLE, MARSEILLE_PARK, buildMarseille, marseilleHeight, kidneyDistance, marseilleWorld, marseilleLocal } from './marseille.mjs';
+import { MARSEILLE, MARSEILLE_PARK, addMarseilleCollision, marseilleHeight, kidneyDistance, marseilleWorld, marseilleLocal } from './marseille.mjs';
 
 const read = name => JSON.parse(fs.readFileSync(new URL(`../assets/world/${name}`, import.meta.url)));
 const stream = createStream({ manifest: read('manifest.json'), elevation: read('playable-terrain.json'), terrainSite: MARSEILLE_TERRAIN,
@@ -15,7 +15,7 @@ const stream = createStream({ manifest: read('manifest.json'), elevation: read('
 await stream.update(marseilleWorld([0, 0, 0]));
 after(() => stream.dispose());
 const world = stream.world, riding = createWorld(4);
-for (const t of buildMarseille()) { world.addTri(t.a, t.b, t.c, t.surface); riding.addTri(t.a, t.b, t.c, t.surface); }
+addMarseilleCollision(world); addMarseilleCollision(riding);
 // The driving fixture retains the level desert beyond the exact park cut.
 for (const [x0,z0,x1,z1] of [[-200,-200,-40,200],[32,-200,200,200],[-40,-200,32,-24],[-40,32,32,200]]) riding.addQuad(...[[x0,0,z0],[x0,0,z1],[x1,0,z1],[x1,0,z0]].map(marseilleWorld),'grass');
 const course = { world: riding, checkpoints: [[...MARSEILLE.center, 'a'], [MARSEILLE.center[0]+1,MARSEILLE.center[1], 'b']], secrets: [], start: { pos: marseilleWorld([0, 0, 0]), yaw: 0 } };
@@ -36,6 +36,11 @@ function run(x, z, dx, dz, seconds, throttle = 1, grab = false, collision = ridi
   return { s, sk, events, peak, minZ, maxZ, radius, grinds, gaps: events.filter(e => e.type === 'gap').map(e => e.name) };
 }
 function clean(r) { assert.equal(r.s.hits, 0, 'no wall hits'); assert.equal(r.s.recoveries, 0, 'no rescue'); assert.ok(!r.events.some(e => e.type === 'bail'), 'no bail'); }
+
+test('preparing travel and then attaching visuals installs collision only once', () => {
+  const count=riding.tris.length; addMarseilleCollision(riding);
+  assert.equal(riding.tris.length,count);
+});
 
 test('sunken bowls, hips and plaza have upward collision at their designed heights', () => {
   for (const [x, z] of [[-23,-7],[-23,-14],[-30,-7],[-13,-5],[7,-6],[7,-11],[-10,10],[0,12],[-4.5,-6],[1,-6]])

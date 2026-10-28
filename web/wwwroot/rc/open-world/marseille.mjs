@@ -81,6 +81,13 @@ export function buildMarseille() {
   return tris;
 }
 
+const installed = new WeakSet();
+export function addMarseilleCollision(world) {
+  if (!world?.addTri || installed.has(world)) return;
+  for (const t of buildMarseille()) world.addTri(t.a, t.b, t.c, t.surface);
+  installed.add(world);
+}
+
 // The coping sits on the flat outside edge, so its grind height is the deck datum.
 const kidneyCoping = [];
 for (let i = 0; i <= 100; i++) {

@@ -1,9 +1,10 @@
 import * as T from '../../vendor/three.module.js';
 import { mergeGeometries, mergeVertices } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
-import { buildMarseille, MARSEILLE_PARK, marseilleWorld } from './marseille.mjs';
+import { buildMarseille, addMarseilleCollision, MARSEILLE_PARK, marseilleWorld } from './marseille.mjs';
 
 const COLOURS = { deck: '#d0d1c6', bowl: '#c6d5cf', floor: '#9fb8b4', wall: '#c6d5cf', bank: '#b8c9c5', top: '#d5dbcf', steps: '#d1bc9a', ledge: '#b97253', skirt: '#9ca99f', coping: '#eae4d2', stripe: '#327c83', dark: '#495e60' };
 export function createMarseille(scene, world) {
+  addMarseilleCollision(world);
   const pieces = [], colour = new T.Color(), floor = new T.Color(COLOURS.floor).convertSRGBToLinear(), rim = new T.Color(COLOURS.bowl).convertSRGBToLinear();
   const piece = (geometry, key, ownUv = false) => {
     const g = geometry.index ? geometry.toNonIndexed() : geometry;
@@ -20,7 +21,6 @@ export function createMarseille(scene, world) {
   };
   const byMat = new Map();
   for (const t of buildMarseille()) {
-    world?.addTri?.(t.a, t.b, t.c, t.surface);
     const mat = t.surface === 'bowl' || t.surface === 'hip' ? 'bowl' : t.mat;
     if (!byMat.has(mat)) byMat.set(mat, []);
     byMat.get(mat).push(...t.a, ...t.b, ...t.c);

@@ -26,6 +26,7 @@ import {updateTraffic} from './traffic.mjs';
 import {createStream} from './stream.mjs';
 import {createResidentialTerrain,boundsOfPoints} from './residential-terrain.mjs';
 import {MARSEILLE_TERRAIN} from './marseille-site.mjs';
+import {addMarseilleCollision} from './marseille.mjs';
 import {YARD_PAD,POOL_HOLE} from './schoolyard.mjs';import {prepareSchoolyard} from './schoolyard.js';
 import {createTileRenderer} from './render.js';
 import {buildLandmarks} from './landmarks.js';
@@ -41,6 +42,7 @@ export async function loadOpenWorld(search){const q=new URLSearchParams(search),
  const residentialTerrain=createResidentialTerrain(residentialTerrainData,{bounds:RESIDENTIAL_BOUNDS,edgeFeather:128,pads:residentialTerrainData.pads??defaultPads,holes:[POOL_HOLE]});overview.bounds=[...BOUNDS];overview.residential=residentialData;overview.roads=residentialRoads(overview.roads,residentialData);overview.roads.push(...WORLD_LINKS);
  let storage;try{storage=localStorage;}catch{}const progress=loadProgress(storage),explicitEntry=q.has('event')||q.has('from')||q.has('at'),requested=eventById(q.get('event')),requestedPlace=requested&&locationById(requested.location),requestedBlocked=!!requested&&!canEnterEvent(progress,requested),locked=requestedBlocked&&requested?.location==='lab',defaultEvent=eventById('district-skatepark')??EVENTS[0],selected=requestedBlocked?EVENTS[0]:requested??(q.get('at')==='skatepark'||q.get('from')==='skatepark'?defaultEvent:explicitEntry?EVENTS[0]:defaultEvent),rawAt=locationById(q.get('from')??q.get('at')),safeAt=rawAt&&canVisit(progress,rawAt)?rawAt:null,at=safeAt??locationById(locked?'lab':requestedBlocked?'gate':q.has('event')?selected.location:explicitEntry?'gate':selected.location);
  const navigationRoads=residentialNavigationRoads(overview.roads);let render=null,terrain=null,activities=null,residentialSchool=null;const stream=createStream({manifest,elevation,residentialTerrain,terrainSite:MARSEILLE_TERRAIN,fetchTile:key=>get(`tile-${key.replace(',','-')}.json`),onLoad:(key,t)=>render?.load(key,t),onDrop:key=>render?.drop(key)});const schoolyard=prepareSchoolyard(stream.world,residentialTerrain),residentialPark=prepareResidentialPark(stream.world,residentialData,{terrain:residentialTerrain}),residentialYards=prepareResidentialYards(stream.world,residentialData,{terrain:residentialTerrain});const residentialCivic=prepareResidentialCivic(stream.world,residentialData,{terrain:residentialTerrain});const residentialDetails=prepareResidentialDetails(stream.world,residentialData,{terrain:residentialTerrain});const residential=prepareResidential(stream.world,{...residentialData,roads:[...residentialData.roads,RESIDENTIAL_LINK]},{terrain:residentialTerrain});
+ addMarseilleCollision(stream.world);
  // These independent startup jobs overlap network and parsing work. The stream remains the
  // readiness gate, while the district promise supplies collision before a course is exposed.
  // Node-side physics/content tests have no DOM; leave the optional hero cache for attach there.
