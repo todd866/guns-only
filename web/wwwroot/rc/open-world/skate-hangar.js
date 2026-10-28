@@ -6,7 +6,8 @@ import { HANGAR, buildHangar, hangarWorld } from './skate-hangar.mjs';
 // as collision. The whole hangar is one mesh: the world shares a draw budget, so colour is
 // per vertex and one small texture carries the door sign (top) and a lamp strip (bottom).
 const COLOURS = { floor: '#a5a8a1', ramp: '#c79c62', deck: '#9da19b', bank: '#a3a69f', skirt: '#6d5338', pyramid: '#b48d5a', 'pyramid-top': '#d0b07c', wall: '#b4bfc0', steel: '#c9d0cf', frame: '#3d4a4e', truss: '#68777c' };
-// Texture rows (v up): sign 1..0.2, plain 0.2..0.1 (white map, no glow), lamp 0.1..0 (glows).
+// Texture rows (v up): sign 1..0.2, plain 0.2..0.1 (white map, a faint glow: under the trusses
+// the shell's inner faces and ramp sides see little sun and read black), lamp 0.1..0 (glows).
 const PLAIN = [.5, .15], LAMP = [.5, .05];
 
 export function createSkateHangar(scene, world, h = HANGAR) {
@@ -81,7 +82,7 @@ export function createSkateHangar(scene, world, h = HANGAR) {
     const g = c.getContext('2d');
     g.fillStyle = '#1b2a2e'; g.fillRect(0, 0, 1024, 128);
     g.font = 'italic 900 92px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = glow ? '#5a4520' : '#edbd6a'; g.fillText('SKATE HANGAR', 512, 68);
-    g.fillStyle = glow ? '#000000' : '#ffffff'; g.fillRect(0, 128, 1024, 16);
+    g.fillStyle = glow ? '#464d4e' : '#ffffff'; g.fillRect(0, 128, 1024, 16);
     g.fillStyle = glow ? '#ffe9b8' : '#ffffff'; g.fillRect(0, 144, 1024, 16);
   }
   const texture = new T.CanvasTexture(canvas), glowTexture = new T.CanvasTexture(glowCanvas);
