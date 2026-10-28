@@ -17,7 +17,7 @@ export function createSkatestreet(scene, world, h = SKATESTREET) {
   root.position.set(...h.center);
   const pieces = [], colour = new T.Color();
   const piece = (geometry, key, uv = PLAIN, matrix = null) => {
-    let g = geometry.index ? geometry.toNonIndexed() : geometry;
+    const g = geometry.index ? geometry.toNonIndexed() : geometry;
     if (matrix) g.applyMatrix4(matrix);
     colour.set(COLOURS[key] ?? '#ffffff').convertSRGBToLinear();
     const n = g.attributes.position.count;
@@ -53,17 +53,21 @@ export function createSkatestreet(scene, world, h = SKATESTREET) {
     tube([x, 12.4, -W + .2], [x, 12.4, W - .2], .12, 'truss');
   }
   for (const z of [-W + 2, -W / 2, 0, W / 2, W - 2]) tube([-L + 2, 12.4, z], [L - 2, 12.4, z], .07, 'truss');
+  for (const x of [-L, L]) for (const z of [-W, 0, W]) tube([x, 1, z], [x, 12.4, z], .16, 'frame');
+  for (const z of [-W, W]) box(0, 10, z, h.length, .5, .4, 'frame');
+  for (const z of [-W + 3, W - 3]) box(0, 12.65, z, h.length, .16, 6, 'wall');
   // Recessed lamps and their simple emissive strips make the level readable without glare.
   for (const z of [-20, -8, 6, 20]) box(0, 11.9, z, h.length - 8, .1, .42, 'light', LAMP);
 
   // High clerestory headers sit above the one-metre perimeter walls in the collision builder.
   for (const x of [-L + 6, L - 6]) box(x, 8.5, -W - .33, 6, 1.1, .18, 'frame');
+  for (const z of [-W, W]) for (const x of [-8, 8]) tube([x, 9.7, z], [x, 10, z], .025, 'steel');
   const sign = new T.PlaneGeometry(20, 2.35);
   const suv = sign.attributes.uv; for (let i = 0; i < suv.count; i++) suv.setY(i, .2 + suv.getY(i) * .8);
   piece(sign, 'sign', 'own', at(0, 8.6, W + .36));
   const inner = new T.PlaneGeometry(20, 2.35);
   const iuv = inner.attributes.uv; for (let i = 0; i < iuv.count; i++) iuv.setY(i, .2 + iuv.getY(i) * .8);
-  piece(inner, 'sign', 'own', at(0, 8.6, -W - .36, new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), Math.PI)));
+  piece(inner, 'sign', 'own', at(0, 8.6, -W + .36));
   const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 160;
   const glowCanvas = document.createElement('canvas'); glowCanvas.width = 1024; glowCanvas.height = 160;
   for (const [c, glow] of [[canvas, false], [glowCanvas, true]]) {
