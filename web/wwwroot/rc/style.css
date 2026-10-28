@@ -131,3 +131,23 @@ body.driving:not(.race-mode) header nav #atlas,body.driving:not(.race-mode) head
 .result-cup{margin:-6px 0 12px;color:var(--muted);font-size:13px}
 .result-actions{display:flex;gap:8px}.result-actions button{flex:1;min-height:42px}
 .result-actions .primary{background:var(--gold);border-color:var(--gold);color:#1b2a2e;font-weight:700}
+/* Pause / start menu: five rows. Title; the primary action; Courses · Places · Garage on one row;
+   the settings row (always visible, no expander); one credits line. */
+#brief .modes{grid-template-columns:repeat(3,minmax(0,1fr))}
+#brief .modes #resume,#brief .modes #start{grid-column:1/-1;text-align:center}
+#brief .modes button:not(#resume):not(#start){text-align:center;font-size:15px;padding:10px 6px;white-space:nowrap}
+#brief .pause-settings{margin-top:12px}
+#brief .pause-settings .settings{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+#brief .pause-settings .settings button{min-height:40px;padding:6px 4px;font-size:13px;white-space:nowrap}
+#menu-kid[aria-pressed=true]{border-color:var(--gold);color:var(--gold)}
+#exit{color:#f2b9a2}
+.pause-credits{margin:10px 0 0;font-size:11px;line-height:1;color:var(--muted);text-align:right}
+.pause-credits .credits{font-size:11px;color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+#brief .pause-credits #osm-credit,#brief .pause-credits .credits{position:static;margin:0;padding:0;background:none;font-size:11px;max-width:none;display:inline}
+@media(max-height:500px){#brief .modes{grid-template-columns:repeat(4,minmax(0,1fr))}#brief .modes #resume,#brief .modes #start{grid-column:auto}#brief .pause-settings{margin-top:8px}}
+/* Course tabs share one row, however many series are unlocked. */
+.rc-race-tabs{grid-template-columns:none!important;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+.rc-race-tabs button:last-child{grid-column:auto!important}
+/* Controls help matches the device: touch pads on phones, keys elsewhere. */
+#keys-panel dl.touch-keys{display:none}
+@media(pointer:coarse){#keys-panel dl.touch-keys{display:grid}#keys-panel dl.key-list{display:none}}

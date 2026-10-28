@@ -28,7 +28,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   assert.equal(boot.track,'hub');assert.equal(boot.world.ready,true);assert.equal(boot.audioSilent,true);
   results.push({name:'default-open-world',gpu,state:boot});await page.screenshot({path:path.join(out,'open-world.png')});
   assert.equal(boot.paused,false);assert.equal(await page.locator('#brief').isVisible(),false);
-  await page.locator('#pause').click();await page.locator('#options summary').click();await page.locator('#menu-map').click();assert.equal(await page.locator('#world-panel').isVisible(),true);await page.screenshot({path:path.join(out,'map.png')});
+  await page.locator('#pause').click();await page.locator('#menu-map').click();assert.equal(await page.locator('#world-panel').isVisible(),true);await page.screenshot({path:path.join(out,'map.png')});
   await page.locator('#map-close').click();await page.locator('#resume').click();await page.waitForTimeout(500);
   await page.screenshot({path:path.join(out,'open-world-drive.png')});
   await visit('');await page.locator('#pause').click();await page.locator('#choose-course').click();
@@ -75,7 +75,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   results.push({name:'failed-world-download',retry:true});await failedWorld.close();
   await page.setViewportSize({width:390,height:844});await visit('');
   await page.screenshot({path:path.join(out,'phone-portrait.png')});
-  await page.locator('#pause').click();await page.locator('#options summary').click();await page.locator('#menu-map').click();await page.screenshot({path:path.join(out,'phone-portrait-map.png')});
+  await page.locator('#pause').click();await page.locator('#menu-map').click();await page.screenshot({path:path.join(out,'phone-portrait-map.png')});
   await page.setViewportSize({width:667,height:375});await visit('');
   const b=await page.locator('#pause').boundingBox();assert.ok(b&&b.y>=0&&b.y+b.height<=375);
   await page.screenshot({path:path.join(out,'phone.png')});assert.deepEqual(errors,[]);

@@ -185,7 +185,7 @@ let started=false;
 for(const event of ['pointerdown','keydown'])window.addEventListener(event,()=>audio.start(),{once:true});
 // Escape opens the menu (once racing has started): resume, change track, race or free drive, kid, mute.
 function pause(value){paused=value;document.body.classList.toggle('paused',value);if(!value)audio.start();keys.clear();touchControls?.reset();fireQueued=false;$('pause').textContent=paused?'▶':'⏸';
- if(started&&!$('result').hidden)return;if(started){$('brief').hidden=!paused;if(!paused)$('options').open=false;$('brief-title').textContent=paused?'PAUSED':'SAUCER SPRINGS AFB';$('resume').hidden=!paused;$('start').hidden=race.roam;$('start').textContent='Return to base';if(paused)$('resume').focus();else canvas.focus();}}
+ if(started&&!$('result').hidden)return;if(started){$('brief').hidden=!paused;$('brief-title').textContent=paused?'PAUSED':'SAUCER SPRINGS AFB';$('resume').hidden=!paused;$('start').hidden=race.roam;$('start').textContent='Return to base';if(paused)$('resume').focus();else canvas.focus();}}
 let lastThrottle=0;
 let touchControls=null,touchState={steer:0,throttle:0,brake:false};
 // Drive = free drive on this track. On the very first press it starts whatever the URL chose (?mode=race|furball).
