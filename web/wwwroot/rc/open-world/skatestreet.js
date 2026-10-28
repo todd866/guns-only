@@ -1,6 +1,7 @@
 import * as T from '../../vendor/three.module.js';
-import { mergeGeometries } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
-import { SKATESTREET, buildSkatestreet, skatestreetWorld } from './skatestreet.mjs';
+import { mergeGeometries, toCreasedNormals } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
+import { SKATESTREET, buildSkatestreet, skatestreetWorld, streetBowlHeight } from './skatestreet.mjs';
+import { smoothBowlNormals, refineSkateTriangles } from './skate-normals.js';
 
 // Skatestreet art is deliberately one merged mesh: the world has a shared draw budget and
 // the collision builder remains the source of truth for every rideable surface.
@@ -37,11 +38,18 @@ export function createSkatestreet(scene, world, h = SKATESTREET) {
   const byMat = new Map();
   for (const t of buildSkatestreet(h)) {
     if (world?.addTri) world.addTri(skatestreetWorld(t.a, h), skatestreetWorld(t.b, h), skatestreetWorld(t.c, h), t.surface);
-    if (!byMat.has(t.mat)) byMat.set(t.mat, []);
-    byMat.get(t.mat).push(...t.a, ...t.b, ...t.c);
+    const gridDeck = t.mat === 'deck' && [t.a,t.b,t.c].every(([x,y,z]) => x>=-35 && x<=10 && z>=-24 && z<=4 && Math.abs(y-h.deck)<.001);
+    const render = gridDeck || ['bowl-wall','bowl-floor','hip'].includes(t.mat) ? refineSkateTriangles([t], streetBowlHeight) : [t];
+    for (const r of render) {
+      const mat=gridDeck&&Math.min(r.a[1],r.b[1],r.c[1])<h.deck-.001?'bowl-wall':r.mat;
+      if (!byMat.has(mat)) byMat.set(mat, []);
+      byMat.get(mat).push(...r.a, ...r.b, ...r.c);
+    }
   }
   for (const [mat, positions] of byMat) {
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(positions, 3));
+    if (mat === 'bowl-wall') smoothBowlNormals(g, h.deck, streetBowlHeight);
+    else if (mat === 'ramp' || mat === 'hip') toCreasedNormals(g, Math.PI / 4);
     piece(g, mat);
   }
 

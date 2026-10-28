@@ -1,5 +1,5 @@
 import * as T from '../../vendor/three.module.js';
-import { mergeGeometries } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { PLAZA, buildPlaza, plazaWorld } from './town-plaza.mjs';
 
 const COLOURS = {
@@ -48,7 +48,7 @@ export function createTownPlaza(scene, world) {
     byMat.get(t.mat).push(...t.a, ...t.b, ...t.c);
   }
   for (const [mat, positions] of byMat) {
-    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(positions, 3)); g.computeVertexNormals(); piece(g, mat);
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(positions, 3)); if (mat === 'basin' || mat === 'granite') toCreasedNormals(g, Math.PI / 12); else g.computeVertexNormals(); piece(g, mat);
   }
 
   const atlas = makeAtlas();
