@@ -3,10 +3,11 @@ import { mergeGeometries } from '../../vendor/three/addons/utils/BufferGeometryU
 import { PLAZA, buildPlaza, plazaWorld } from './town-plaza.mjs';
 
 const COLOURS = {
-  paver: '#bdc2bf', 'paver-dark': '#a0aba9', granite: '#d4d7d1', rim: '#95a4a2',
+  paver: '#bdc2bf', 'paver-dark': '#859591', sidewalk: '#9ca29a', granite: '#d4d7d1', rim: '#95a4a2',
   basin: '#49aeb1', bank: '#b4bdb9', skirt: '#828f8d', steps: '#b8c1be',
   sculpture: '#a96b42', awning: '#7c8781', steel: '#56666a', bench: '#8b735b',
   civic: '#d3c5ac', glass: '#24424a', green: '#66834d', soil: '#765a3d', concrete: '#c8bca4', sign: '#ffffff',
+  brick: '#a67459', bark: '#67513b', leaf: '#73964e', lamp: '#f6e6b9', trim: '#95a4a2',
 };
 const PLAIN_UV = [.5, .125];
 
