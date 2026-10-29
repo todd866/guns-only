@@ -17,7 +17,7 @@ const EVENT_CODES = new Set([
 ]);
 const ERROR_LIMIT = 8;
 const short = (value, n = 40) => String(value ?? "unknown").slice(0, n);
-const ITEMS = new Set(["zoom", "balloon", "oil", "bubble", "foxtwo", "pitbull", "foxone", "zuni"]);
+const ITEMS = new Set(["zoom", "balloon", "oil", "bubble", "foxtwo", "pitbull", "foxone", "zuni", "laser"]);
 
 // Anonymous gameplay events are on for every player; only an explicit "disabled" from the
 // site's Settings toggle (or ?telemetry=off) stops them.

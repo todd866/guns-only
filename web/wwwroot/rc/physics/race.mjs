@@ -38,6 +38,7 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false, 
   // to keep weapon pressure readable and preserve overtaking counterplay.
   const personalPickups = opponents > 0 && !roam;
   const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(pickupCourse, 1, { perCar: personalPickups, rivalPersonal: mode === 'kid', rivalRespawn: mode === 'kid' ? 4 : 8, hitGrace: mode === 'bigKid' ? 1.1 : 0 }), events: [], clock: 0, t: 0, pace: 6, drivingTime: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
+  race.pickups.superFor = mode === 'kid' ? 'player' : 'all';
   if (furball) race.furball = createFurball(race);
   return race;
 }
@@ -119,9 +120,12 @@ export function driveInput(race, rival) {
     // Only leaders ease off; there is no free speed or teleport for trailing opponents.
     if (race.drivingTime > 2 && raceDistance(s) - raceDistance(race.player) > 5)
       vmax = Math.min(vmax, Math.max(2.5, race.pace) * 1.04);
+    if (kidFinale(race) && raceDistance(s) > raceDistance(race.player)) vmax = Math.min(vmax, Math.max(2.5, race.pace) * 0.93);
   }
   const steer = Math.max(-1, Math.min(1, err * 2.2));
   if (vmax < 0.5 || retreatActive(race)) return { throttle: 0, brake: true, steer };
+  // In the kid finale the cap must hold: 0.2 throttle within 1.5 m/s coasts straight past it.
+  if (s !== race.player && kidFinale(race)) return { throttle: r.forwardSpeed < vmax ? 1 : r.forwardSpeed > vmax + .3 ? -0.5 : 0, steer };
   return { throttle: r.forwardSpeed < vmax ? 1 : r.forwardSpeed > vmax + 1.5 ? -0.6 : 0.2, steer };
 }
 
@@ -144,6 +148,24 @@ export function raceDistance(s) {
 }
 // Keep the pack contestable in physical space as well as lap progress. A trailing rival may
 // spend a few seconds above its normal pace to rejoin; a leader still gets room to pull away.
+// Kid mode's final act (owner: "kid mode should mean you usually win after a long battle"): over the
+// last KID_HIT.finale of the race nobody can hit the player, and rivals ahead ease to just under the
+// player's pace, so a kid still in the fight catches them. Rivals behind keep racing.
+export function kidFinale(race) {
+  if (race.mode !== 'kid' || race.roam || race.furball || !race.player.running) return false;
+  const cps = race.course.checkpoints, laps = race.player.laps ?? race.course.laps ?? 1;
+  if (race.courseLength === undefined) { let length = 0; for (let i = 1; i < cps.length; i++) length += Math.hypot(cps[i][0] - cps[i - 1][0], cps[i][1] - cps[i - 1][1]); race.courseLength = length; }
+  return race.courseLength > 0 && raceDistance(race.player) > laps * race.courseLength * (1 - KID_HIT.finale);
+}
+// Kid-mode exposure: the player can be hit once the race has settled, with a breather after each hit,
+// and is never kicked while already in last place.
+export const KID_HIT = { after: 8, gap: 16, finale: .3 };
+export function kidOpen(race) {
+  if (race.mode !== 'kid' || race.roam || race.furball) return race.mode !== 'kid';
+  if (!race.player.running || race.player.finished || race.clock < KID_HIT.after || kidFinale(race)) return false;
+  if (race.clock - (race.playerHitAt ?? -Infinity) < KID_HIT.gap) return false;
+  return race.rivals.length > 0 && placeOf(race, race.player) < race.rivals.length + 1;
+}
 export const PACK = { slots: [3,0,-3], floor:.16, ceiling:1.18, ease:.06, push:.04 };
 export function packFactor(race,rival) {
  const gap=raceDistance(rival.session)-raceDistance(race.player),d=gap-PACK.slots[rival.colour%PACK.slots.length];
@@ -202,9 +224,11 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
       const [x, , z] = rival.session.car.pos;
       rival.node = race.line.reduce((b, p, i) => Math.hypot(p[0] - x, p[1] - z) < Math.hypot(race.line[b][0] - x, race.line[b][1] - z) ? i : b, 0);
     }
-    // Kid mode: in a race rivals never aim balloons or oil at the player, only at each other.
-    // Furball is the exception: being hunted is the game (see furball.mjs for the kid's cushions).
-    const targets = race.mode === 'kid' && !fb ? cars.slice(1) : cars;
+    // Kid mode: the player can be hit, Mario Kart style (owner, 2026-10-29: "you get hit a few
+    // times, find yourself at the back, then battle to the front"), but only through kidOpen():
+    // never in the opening seconds, at most once per KID_HIT.gap, and never while already last.
+    // Furball keeps its own rules (furball.mjs).
+    const targets = race.mode === 'kid' && !fb && !kidOpen(race) ? cars.slice(1) : cars;
     if ((!fb || mayFire(race, rival)) && rivalWants(pk, rival.session.car, targets)) use(pk, rival.session.car);
     const input = fb ? furballInput(race, rival, () => driveInput(race, rival)) : driveInput(race, rival);
     stepSession(rival.session, withEffects(race, rival.session.car, input), dt);
@@ -229,7 +253,8 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   // Boost pads: a short Afterburner for whoever crosses one (rivals too).
   if (race.features) for (const c of cars) if (padHit(race.features, c)) boostCar(pk, c, 0.9);
   bump(cars);
-  const events = stepPickups(pk, cars, race.course.world, dt, fb ? fb.out : race.mode === 'kid' ? race.player.car : null);
+  const events = stepPickups(pk, cars, race.course.world, dt, fb ? fb.out : race.mode === 'kid' && !kidOpen(race) ? race.player.car : null);
+  if (events.some(e => e.car === race.player.car)) race.playerHitAt = race.clock;
   if (fb) events.push(...stepFurball(race, events, dt));
   race.events.push(...events);
 }

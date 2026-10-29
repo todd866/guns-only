@@ -41,11 +41,21 @@ export function stepSession(s, raw, dt = 1 / 120) {
   if (s.course.outOfBounds?.(s.car.pos)) recover(s);
   if (s.running) s.time += dt;
   const [x, , z] = s.car.pos, low = !!above(s, 1.6);
-  const cps = s.course.checkpoints, g = cps[s.gate];
+  const cps = s.course.checkpoints;
+  // A gate clipped wide is credited when the car reaches the next one having really driven the
+  // distance (60% of the route from the last gate): otherwise a kid laps on in last place with
+  // nothing counting (2026-10-29 Neighbourhood Run). The distance rule keeps it from being a
+  // shortcut, including where a later gate sits on an earlier one (Base Traffic's U-turn).
+  if (!s.roam && !s.finished && low && s.gate > 0 && s.gate + 1 < cps.length && !throughGate(s.prevPos, s.car.pos, cps[s.gate])
+    && throughGate(s.prevPos, s.car.pos, cps[s.gate + 1])) {
+    const a = cps[s.gate - 1], b = cps[s.gate], c = cps[s.gate + 1];
+    if (s.travel - (s.gateTravel ?? 0) >= 0.6 * (Math.hypot(b[0] - a[0], b[1] - a[1]) + Math.hypot(c[0] - b[0], c[1] - b[1]))) { s.gate++; s.missedGates = (s.missedGates ?? 0) + 1; }
+  }
+  const g = cps[s.gate];
   // Free drive (roam): no gates and no clock; coins and specimens still count.
   if (!s.roam && !s.finished && low && throughGate(s.prevPos, s.car.pos, g)) {
     if (!s.running) { s.running = true; s.time = 0; }
-    s.gate++;
+    s.gate++; s.gateTravel = s.travel;
     if (s.gate === cps.length) {
       s.lapTimes.push(s.time - s.lapStartedAt);
       s.lapStartedAt = s.time;

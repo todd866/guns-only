@@ -19,7 +19,7 @@ import {buildings,solids,aircraft,obstacles,collisionSolids,ramps,checkpoints,ba
 import {recover,readout} from './physics/session.mjs';
 import {createRace as createRaceBase,stepRace,placeOf,retreatActive} from './physics/race.mjs';
 import {TRACK_FEATURES,placeFeatures} from './physics/features.mjs';
-import {modifiers,MISSILES,beamDir} from './physics/pickups.mjs';
+import {modifiers,MISSILES,beamDir,LASER} from './physics/pickups.mjs';
 import {heldMissilePose} from './pickup-visuals.mjs';
 import {BUGGY,createCar,placeCar,rideHeight} from './physics/car.mjs';
 import {addBox} from './physics/world.mjs';
@@ -238,7 +238,7 @@ function syncRivals(){if(rivalSource===car&&rivalVis.length===race.rivals.length
   const named=['FL','FR','RL','RR'].map(n=>({pivot:group.getObjectByName('Steer_'+n),wheel:group.getObjectByName('Wheel_'+n),front:n[0]==='F'}));
   return {group,wheels:named.every(w=>w.pivot&&w.wheel)?named:[]};});}
 // Pickup presentation: gift crates, balloons, oil puddles, bubble shields.
-let fireQueued=false;const ICON={zoom:'🔥 Afterburner',balloon:'💧 Water balloon',oil:'🛢 Hydraulic leak',bubble:'✨ Chaff',foxtwo:'🎯 Fox Two',pitbull:'🐶 Pitbull',foxone:'📡 Fox One',zuni:'🚀 Zuni'};
+let fireQueued=false;const ICON={zoom:'🔥 Afterburner',balloon:'💧 Water balloon',oil:'🛢 Hydraulic leak',bubble:'✨ Chaff',foxtwo:'🎯 Fox Two',pitbull:'🐶 Pitbull',foxone:'📡 Fox One',zuni:'🚀 Zuni',laser:'👽 Laser turret'};
 const crates=race.pickups.spots.map(sp=>{const g=new T.Group();g.position.set(...sp.pos);box(0,0,0,.22,.22,.22,'#ff5aa5',g);box(0,0,0,.235,.05,.235,'#ffe066',g);box(0,0,0,.05,.235,.235,'#ffe066',g);scene.add(g);return g;});
 const fxPool=new Map();function fxMesh(key,make){if(!fxPool.has(key)){const m=make();scene.add(m);fxPool.set(key,m);}const m=fxPool.get(key);m.visible=true;return m;}
 function beamMesh(){const g=new T.PlaneGeometry(.1,25);g.translate(0,12.5,0);g.rotateX(-Math.PI/2);
@@ -246,6 +246,20 @@ function beamMesh(){const g=new T.PlaneGeometry(.1,25);g.translate(0,12.5,0);g.r
 function missileMesh(){const g=new T.Group(),body=new T.Mesh(new T.CylinderGeometry(.035,.035,.26,10),new T.MeshStandardMaterial({color:'#f4f4f0',roughness:.5}));body.rotation.x=Math.PI/2;g.add(body);
  const nose=new T.Mesh(new T.ConeGeometry(.035,.08,10),new T.MeshStandardMaterial({color:'#e8352e',roughness:.4}));nose.rotation.x=Math.PI/2;nose.position.z=.17;g.add(nose);
  for(const r of [0,Math.PI/2]){const fin=new T.Mesh(new T.BoxGeometry(.12,.005,.05),new T.MeshStandardMaterial({color:'#e8352e'}));fin.rotation.z=r;fin.position.z=-.11;g.add(fin);}g.traverse(o=>{o.castShadow=true;});return g;}
+// Laser turret: a little alien gunner climbs out of the roof behind a stubby cannon.
+function alienGunner(){const g=new T.Group(),skin=new T.MeshStandardMaterial({color:'#7fe07a',roughness:.55}),dark=new T.MeshStandardMaterial({color:'#15181c',roughness:.3}),steel=new T.MeshStandardMaterial({color:'#5b6470',roughness:.4,metalness:.5});
+ const body=new T.Mesh(new T.CapsuleGeometry(.035,.05,4,10),skin);body.position.y=.06;g.add(body);
+ const head=new T.Mesh(new T.SphereGeometry(.05,16,12),skin);head.scale.set(1,1.15,1);head.position.y=.14;g.add(head);
+ // The gunner sits turned round, grinning at the pack it is passing; the cannon still points forward.
+ for(const x of [-.02,.02]){const eye=new T.Mesh(new T.SphereGeometry(.016,10,8),dark);eye.scale.set(1,1.5,.6);eye.position.set(x,.15,.042);g.add(eye);}
+ const grin=new T.Mesh(new T.TorusGeometry(.016,.003,4,10,Math.PI),dark);grin.rotation.z=Math.PI;grin.position.set(0,.122,.047);g.add(grin);
+ const stalk=new T.Mesh(new T.CylinderGeometry(.003,.003,.05,5),skin);stalk.position.set(0,.205,0);g.add(stalk);const bob=new T.Mesh(new T.SphereGeometry(.009,8,6),new T.MeshBasicMaterial({color:'#ff4fd8'}));bob.position.set(0,.232,0);g.add(bob);
+ const arm=new T.Mesh(new T.CapsuleGeometry(.008,.05,3,6),skin);arm.position.set(.045,.1,.01);arm.rotation.z=-.9;arm.name='wave';g.add(arm);
+ const mount=new T.Mesh(new T.BoxGeometry(.07,.035,.07),steel);mount.position.set(0,.03,-.06);g.add(mount);
+ const barrel=new T.Mesh(new T.CylinderGeometry(.012,.014,.14,10),steel);barrel.rotation.x=Math.PI/2;barrel.position.set(0,.045,-.13);g.add(barrel);
+ const tip=new T.Mesh(new T.SphereGeometry(.014,8,6),new T.MeshBasicMaterial({color:'#ff3b30'}));tip.position.set(0,.045,-.2);g.add(tip);
+ g.traverse(o=>{o.castShadow=true;});return g;}
+function laserBeam(){const g=new T.CylinderGeometry(.03,.03,1,8,1,true);g.translate(0,.5,0);g.rotateX(Math.PI/2);const m=new T.Mesh(g,new T.MeshBasicMaterial({color:'#ff3b30',transparent:true,opacity:.85,depthWrite:false,blending:T.AdditiveBlending}));m.userData.noAO=true;return m;}
 const balloonMat=new T.MeshStandardMaterial({color:'#4fc3ff',roughness:.2}),oilMat=new T.MeshStandardMaterial({color:'#1b1b22',roughness:.05,metalness:.6}),bubbleMat=new T.MeshPhysicalMaterial({color:'#bfefff',transparent:true,opacity:.28,roughness:0,depthWrite:false});
 function drawPickups(now){const pk=race.pickups;
  crates.forEach((g,i)=>{const sp=pk.spots[i];g.visible=sp.ready<=0;g.rotation.y=now*.002+i;g.position.y=sp.pos[1]+Math.sin(now*.003+i)*.04;});
@@ -260,9 +274,15 @@ function drawPickups(now){const pk=race.pickups;
  [...(pk.dangle??[])].forEach((c,i)=>{const n=pk.ammo.get(c)??1;for(let k=0;k<n;k++){const p=heldMissilePose(c,k,n);drawMissile(`rack${i}_${k}`,p.pos,p.dir);}});
  pk.balloons.forEach((b,i)=>fxMesh('b'+i,()=>new T.Mesh(new T.SphereGeometry(.07,12,8),balloonMat)).position.set(...b.pos));
  pk.slicks.forEach((o,i)=>{const m=fxMesh('o'+i,()=>{const d=new T.Mesh(new T.CircleGeometry(.5,20),oilMat);d.rotation.x=-Math.PI/2;return d;});m.position.set(o.pos[0],o.pos[1]-.12,o.pos[2]);});
+ [race.player.car,...race.rivals.map(r=>r.session.car)].forEach((c,i)=>{const m=modifiers(pk,c);if(!m.lasering)return;
+  // Pops up over the first 0.4 s, waves while firing, ducks back in over the last 0.3 s.
+  const g=fxMesh('alien'+i,alienGunner),t=LASER.seconds-m.laserLeft,rise=Math.min(1,t/.4,m.laserLeft/.3);g.position.set(...c.pos);g.quaternion.set(...c.q);g.translateY(.07+rise*.06-.06);g.scale.setScalar(.4+.6*rise);g.getObjectByName('wave').rotation.z=-.9+Math.sin(now*.02)*.6;});
+ (pk.zaps??[]).forEach((z,i)=>{const b=fxMesh('zap'+i,laserBeam),d=[z.to[0]-z.from[0],z.to[1]-z.from[1],z.to[2]-z.from[2]],l=Math.hypot(...d);b.position.set(...z.from);b.lookAt(z.to[0],z.to[1],z.to[2]);b.scale.set(1,1,l);
+  const f=fxMesh('flash'+i,()=>new T.Mesh(new T.SphereGeometry(.12,12,8),new T.MeshBasicMaterial({color:'#ffd0c8',transparent:true,opacity:.9,depthWrite:false,blending:T.AdditiveBlending})));f.position.set(...z.to);f.scale.setScalar(.6+z.life*4);});
+ if((pk.zaps??[]).some(z=>z.owner===s.car&&z.life>.19))audio.fire();
  [race.player.car,...race.rivals.map(r=>r.session.car)].forEach((c,i)=>{if(modifiers(pk,c).shielded)fxMesh('s'+i,()=>new T.Mesh(new T.SphereGeometry(.34,20,14),bubbleMat)).position.set(...c.pos);});
  // Brevity codes: an empty pickup slot reads WINCHESTER once you have fired something.
- const held=pk.held.get(s.car);if(held)drawPickups.used=true;const ammo=pk.ammo.get(s.car);$('item').textContent=held?`${ICON[held]}${ammo>1?' ×'+ammo:''} · F`:'Winchester';$('item').hidden=!held&&!drawPickups.used;}
+ const held=pk.held.get(s.car),laserOn=modifiers(pk,s.car);if(held)drawPickups.used=true;const ammo=pk.ammo.get(s.car);$('item').textContent=laserOn.lasering?`👽 LASER ${Math.ceil(laserOn.laserLeft)}s`:held?`${ICON[held]}${ammo>1?' ×'+ammo:''} · F`:'Winchester';$('item').hidden=!held&&!drawPickups.used&&!laserOn.lasering;}
 // The racing line shows in both difficulties, in races and in Free Drive (owner, 2026-10-29).
 // A sprint's guide stops at the finish: drawn closed it ran a bogus chord back to the start (Hangar Hop: 242 m).
 const drivingLine=createRacingLine(scene,race.line,course.world,{closed:course.event?.kind!=='sprint'});

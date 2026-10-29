@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createWorld,addBox} from './physics/world.mjs';
-import {createSession,recover,readout} from './physics/session.mjs';
+import {createSession,recover,readout,stepSession} from './physics/session.mjs';
 import {RACE_EVENTS,eventById,eventLaps,medal,RACE_TARGET_M} from './open-world/catalog.mjs';
 
 test('laps keep every authored circuit near the kid race length and sprints stay one run',()=>{
@@ -34,3 +34,19 @@ test('recovery faces along the racing line and repeats at one gate move further 
  for(let i=0;i<20;i++)recover(s);const far=readout(s);assert.ok(Math.hypot(far.x-30,far.z+12)>1,'never placed past the next gate');
  s.gate=2;recover(s);assert.equal(s.recoverStreak,0,'a new gate resets the streak');
 });
+
+test('a gate clipped wide is credited at the next gate only after driving the real distance', () => {
+ const world=createWorld();addBox(world,0,0,400,400,-1,0);
+ const course={world,laps:1,start:{pos:[0,0,0],yaw:0},checkpoints:[[0,0,'Start',2],[0,-40,'A',2],[40,-40,'B',2],[40,0,'Finish',2]],secrets:[]};
+ const s=createSession(course,{mode:'kid'});
+ const drive=(x,z)=>{s.prevPos=[...s.car.pos];s.car.pos=[x,.13,z];s.travel+=Math.hypot(x-s.prevPos[0],z-s.prevPos[2]);};
+ // Start, then go wide past A (8 m off it) and arrive at B having driven the corner.
+ s.gate=1;s.gateTravel=0;s.running=true;s.travel=0;
+ for(let z=0;z>=-40;z-=2)drive(-8,z);for(let x=-8;x<=40;x+=2)drive(x,-40);
+ s.prevPos=[38,.13,-40];stepAt(s,[40,.13,-40]);
+ assert.equal(s.gate,3,'A credited and B passed');assert.equal(s.missedGates,1);
+ // A teleport-short arrival at B (no distance driven) is not credited.
+ const t=createSession(course,{mode:'kid'});t.gate=1;t.gateTravel=0;t.travel=5;t.running=true;t.prevPos=[38,.13,-40];stepAt(t,[40,.13,-40]);
+ assert.equal(t.gate,1);
+});
+function stepAt(s,pos){s.car.pos=[...pos];s.car.vel=[0,0,0];stepSession(s,{throttle:0,steer:0},1/120);}
