@@ -165,7 +165,7 @@ export function createRCTelemetry({
   function itemUse(item) { if (ITEMS.has(item)) record("item_use", { item }); }
   // Halloween pumpkins: every smash up to 30, then every tenth, so a smashing spree stays small.
   function pumpkin(total) { const n = Math.round(finite(total, 0)); if (n > 0 && (n <= 30 || n % 10 === 0)) record("pumpkin", { total: n }); }
-  function garage({ body, shell, paint } = {}) { record("garage", { body: short(body, 16), shell: short(shell, 16), paint: short(paint, 24) }); }
+  function garage({ body, shell, paint, pattern } = {}) { record("garage", { body: short(body, 16), shell: short(shell, 16), paint: short(paint, 24), pattern: short(pattern, 16) }); }
   function playmate({ dest, result } = {}) { record("playmate", { dest: short(dest, 24), result: short(result, 12) }); }
   function mute(value) { record("mute", { muted: Boolean(value) }); }
   function observeFrame(deltaMs, activeFrame = true) {
