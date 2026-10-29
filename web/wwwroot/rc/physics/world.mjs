@@ -15,6 +15,8 @@ export const SURFACES = {
   // Rolled kerbs soften initial damping but retain enough bump damping for the
   // narrow chassis to land without a yawing hull strike.
   kerb: { grip: 1.0, roll: 0.02, damper: 0.55, bumpDamper: 0.65 },
+  // Playground: rubber softfall is grippy and a little soft, sand drags, slide plastic is slick.
+  softfall: { grip: 1.0, roll: 0.035, damper: 1.15 }, sand: { grip: 0.7, roll: 0.16 }, slide: { grip: 0.8, roll: 0.008 },
 };
 
 // Riding these is intentional even near vertical: not a wall strike (car.mjs), and
