@@ -181,7 +181,8 @@ export function packFactor(race,rival) {
 // Effects (zoom, oil, a balloon spin) ride on the step input; a spinning car's controls are dead.
 function withEffects(race, car, input) {
   const m = modifiers(race.pickups, car);
-  return m.spinning ? { boost: 1, gripScale: 0.5 } : { ...input, boost: m.boost, gripScale: m.gripScale };
+  // The free-drive afterburner (input.boost) stacks with pickups; a spin keeps flight controls.
+  return m.spinning ? { boost: 1, gripScale: 0.5, flight: input.flight } : { ...input, boost: m.boost * (input.boost ?? 1), gripScale: m.gripScale };
 }
 
 // Racing-line node of each gate, searched forward in route order so a gate that shares its spot

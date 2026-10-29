@@ -3,12 +3,13 @@
 import { createCar, stepCar, placeCar, rideHeight, carYaw, BUGGY } from './car.mjs';
 import { createAssist, assistInput, MODES } from './assists.mjs';
 import { stepSkateRide } from './grind.mjs';
+import { createFlight, stepFlight } from './flight.mjs';
 import { len, sub } from './math.mjs';
 
 export function createSession(course, { mode = 'kid', params = BUGGY } = {}) {
   const { pos, yaw } = course.start;
   const car = createCar(params, [pos[0], groundBelow(course.world, pos) + rideHeight(params), pos[2]], yaw);
-  return { course, car, assist: createAssist(mode), mode, time: 0, gate: 0, running: false, finished: false,
+  return { course, car, assist: createAssist(mode), flight: createFlight(), mode, time: 0, gate: 0, running: false, finished: false,
     lap: 1, laps: Math.max(1, Math.floor(course.laps ?? 1)), lapTimes: [], lapStartedAt: 0, hits: 0, found: 0, seen: [], coins: [], travel: 0, recoveries: 0, stuckTime: 0, autoUnstick: mode === 'kid' };
 }
 
@@ -30,7 +31,10 @@ const above = (s, maxDrop) => s.course.world.raycast(s.car.pos, [0, -1, 0], maxD
 export function stepSession(s, raw, dt = 1 / 120) {
   const before = [...s.car.pos];
   s.prevPos = before;
-  if (!stepSkateRide(s, raw, dt)) stepCar(s.car, assistInput(s.assist, s.car, s.skateRide ? { ...raw, skate: true } : raw, dt, s.course.world), s.course.world, dt);
+  // Free-drive flight takes the car off its wheels; the normal step resumes on touchdown.
+  if (!s.roam && s.flight.mode) s.flight.mode = null;
+  if (stepFlight(s.flight, s.car, raw.flight, s.course.world, dt)) { /* flying or under the chute */ }
+  else if (!stepSkateRide(s, raw, dt)) stepCar(s.car, assistInput(s.assist, s.car, s.skateRide ? { ...raw, skate: true } : raw, dt, s.course.world), s.course.world, dt);
   s.travel += len(sub(s.car.pos, before));
   if (s.car.wallImpact > 1.5) s.hits++;
   // Wedged against a pole or a rival with the throttle held: after 2.5 s, hop back to the last
@@ -76,6 +80,7 @@ export function stepSession(s, raw, dt = 1 / 120) {
 // gate-to-gate heading can point into a wall, e.g. BX aisle 5→6). Each repeat at the same gate
 // starts a few metres further on, so an auto-unstick can never loop on one trap forever.
 export function recover(s) {
+  s.flight.mode = null;
   if (s.roam) return recoverInPlace(s);
   const cps = s.course.checkpoints, last = cps[Math.max(0, s.gate - 1)], next = cps[Math.min(cps.length - 1, s.gate)];
   const streakKey = `${s.lap}:${s.gate}`;

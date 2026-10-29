@@ -112,6 +112,20 @@ export class SoundKit {
   pickup() { [660, 880, 1175].forEach((f, i) => this.tone(f, i * 0.05, 0.12, { type: 'square', level: 0.06 })); }
   coin() { this.tone(1568, 0, 0.08, { type: 'square', level: 0.07 }); this.tone(2093, 0.07, 0.25, { type: 'square', level: 0.07 }); }
   fire() { this.burst({ type: 'bandpass', freq: 1200, sweep: 300, dur: 0.18, level: 0.25 }); }
+  // A flight passing overhead: a long low rumble swelling in, and a tearing edge for fighters.
+  jet({ heavy = false, ships = 1 } = {}) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime, dur = heavy ? 7 : 4.2, peak = Math.min(.5, .2 + ships * .06);
+    for (const [type, from, to, share] of heavy ? [['lowpass', 140, 220, 1]] : [['lowpass', 260, 420, 1], ['bandpass', 1400, 2600, .45]]) {
+      const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      src.buffer = this.noiseBuf; src.loop = true; f.type = type;
+      // Doppler-ish: the pitch climbs while it approaches, then drops away after the pass.
+      f.frequency.setValueAtTime(from, t); f.frequency.linearRampToValueAtTime(to, t + dur * .4); f.frequency.exponentialRampToValueAtTime(from * .5, t + dur);
+      g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(peak * share, t + dur * .4); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      src.connect(f).connect(g).connect(this.master); src.start(t, Math.random()); src.stop(t + dur + .05);
+    }
+  }
+  splat() { this.burst({ type: 'lowpass', freq: 700, sweep: 120, dur: 0.22, level: 0.45 }); this.tone(180, 0, 0.12, { type: 'triangle', level: 0.18, glide: 60 }); }
   splash() { this.burst({ type: 'highpass', freq: 1500, sweep: 600, dur: 0.35, level: 0.35 }); }
   boost() { this.burst({ type: 'bandpass', freq: 400, sweep: 2400, dur: 0.6, level: 0.3 }); }
   radio() { this.burst({ type: 'bandpass', freq: 1800, dur: 0.08, level: 0.2 }); [740, 988].forEach((f, i) => this.tone(f, 0.05 + i * 0.09, 0.08, { type: 'square', level: 0.06 })); this.burst({ type: 'bandpass', freq: 1800, dur: 0.1, level: 0.15 }); }

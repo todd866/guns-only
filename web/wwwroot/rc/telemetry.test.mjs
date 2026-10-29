@@ -131,3 +131,14 @@ test("works-and-doing events: boot, capped URL-free errors, deduped visits, side
   assert.deepEqual(of("recover").map((r) => r.how), ["key", "unknown"]);
   assert.deepEqual([of("heartbeat")[0].doing, of("heartbeat")[0].metres, of("heartbeat")[0].recoveries], ["roam", 812, 2]);
 });
+
+test("garage changes and Halloween pumpkin smashes are recorded, sprees thinned after thirty", async () => {
+  const rows = []; const t = createRCTelemetry({ storage: { getItem: () => null }, locationObject: { hostname: "guns-only.com", search: "" }, outbox: noIdbOutbox(), fetchImpl: async (_url, options) => { rows.push(...JSON.parse(options.body).rows); return { status: 200, ok: true }; } });
+  t.garage({ body: "monster", shell: "viper", paint: "Arctic" });
+  for (let n = 1; n <= 45; n++) t.pumpkin(n);
+  await t.flush({ force: true });
+  const of = (code) => rows.filter((row) => row.code === code);
+  assert.deepEqual(of("garage").map((r) => [r.body, r.shell, r.paint]), [["monster", "viper", "Arctic"]]);
+  const totals = of("pumpkin").map((r) => r.total);
+  assert.equal(totals.length, 31); assert.deepEqual(totals.slice(-3), [29, 30, 40]);
+});

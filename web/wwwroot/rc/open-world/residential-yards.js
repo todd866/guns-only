@@ -90,6 +90,20 @@ export function computeResidentialYardPlacement({building, bounds, centre, road}
 
 const makeMaterial = (color, roughness = .9) => new T.MeshStandardMaterial({color, roughness});
 
+/** Front-step spots for seasonal props, one per dressed yard: on the walk just in front of the house. */
+export function residentialPorches(data = {}, options = {}) {
+  const heightAt = options.terrain?.heightAt ?? (() => 0);
+  const yardLimit = Number.isFinite(options.maxYards) ? Math.min(300, Math.max(1, options.maxYards)) : 280;
+  return selectResidentialYards(data.buildings || [], data.roads || [], yardLimit).map(({building, bounds, centre, road, index}) => {
+    const placement = computeResidentialYardPlacement({building, bounds, centre, road});
+    if (!placement) return null;
+    const {front, tangent, width, yardOrigin, yardDepth} = placement;
+    const at = (along, across) => [centre[0] + front[0] * (yardOrigin + along) + tangent[0] * across, centre[1] + front[1] * (yardOrigin + along) + tangent[1] * across];
+    const step = at(.35, width * .14), lawn = at(Math.min(yardDepth * .45, 1.8), -width * .3);
+    return {index, x: step[0], z: step[1], y: heightAt(step[0], step[1]), yaw: Math.atan2(front[0], front[1]), lawn: {x: lawn[0], z: lawn[1], y: heightAt(lawn[0], lawn[1])}};
+  }).filter(Boolean);
+}
+
 export function prepareResidentialYards(world, data = {}, options = {}) {
   const terrain = options.terrain;
   const heightAt = terrain?.heightAt ?? (() => 0);

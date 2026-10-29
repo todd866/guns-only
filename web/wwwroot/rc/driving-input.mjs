@@ -4,5 +4,11 @@ export function drivingInput(keys, pad = {}) {
  const held=(...codes)=>codes.some(code=>keys.has(code));
  return {throttle:Number(held('KeyW','ArrowUp','KeyX'))-Number(held('KeyS','ArrowDown')) || pad.throttle || 0,
  steer:Number(held('KeyD','ArrowRight'))-Number(held('KeyA','ArrowLeft')) || pad.steer || 0,
- brake:held('Space','KeyZ') || !!pad.brake,drift:held('ShiftLeft','ShiftRight') || !!pad.drift};
+ brake:held('KeyZ') || !!pad.brake,drift:held('ShiftLeft','ShiftRight') || !!pad.drift};
+}
+// Free-drive flight (Enter) uses the guns-only jet keys: ↑ push, ↓ pull, ←/→ roll, A/D rudder,
+// W/S power, Space afterburner. On the ground Space is the afterburner alone.
+export function flightInput(keys){
+ const held=(...codes)=>codes.some(code=>keys.has(code));
+ return {pitch:Number(held('ArrowDown'))-Number(held('ArrowUp')),roll:Number(held('ArrowRight'))-Number(held('ArrowLeft')),yaw:Number(held('KeyD'))-Number(held('KeyA')),power:Number(held('KeyW'))-Number(held('KeyS')),burner:held('Space')};
 }
