@@ -36,6 +36,9 @@ try{
  await page.waitForTimeout(500);
  const codes=rows.map(r=>r.code);
  for(const code of ['session_start','first_input','skate_start','skate_end','choice','session_end'])assert.ok(codes.includes(code),`missing ${code}: ${codes.join(',')}`);
+ assert.equal(rows.find(r=>r.code==='boot')?.assets,'blender','boot records loaded assets');
+ assert.ok(rows.some(r=>r.code==='visit'),'hub visit recorded');
+ assert.equal(rows.filter(r=>r.code==='error').length,0,'no script errors reported');
  const end=rows.find(r=>r.code==='skate_end');
  assert.equal(end.park,'intro'); assert.equal(end.reason,'time');
  assert.equal(rows.find(r=>r.code==='choice').choice,'skate_free');
@@ -56,5 +59,5 @@ try{
  await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide')));
  await page.waitForTimeout(500);
  assert.equal(rows.length,count,'Settings opt out must send nothing');
- console.log(JSON.stringify({ok:true,events:count,renderer:'SwiftShader; functional check only',checks:['default on with no stored setting','plaza skate run start/end + choice','first input','real IndexedDB','session end best-effort hook','query opt out','Settings opt out','no initial mute event']}));
+ console.log(JSON.stringify({ok:true,events:count,renderer:'SwiftShader; functional check only',checks:['default on with no stored setting','boot + first visit','plaza skate run start/end + choice','first input','real IndexedDB','session end best-effort hook','query opt out','Settings opt out','no initial mute event']}));
 }finally{await browser?.close();}

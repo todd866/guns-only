@@ -114,3 +114,20 @@ test("throwing browser storage getters cannot throw and still record", async () 
     if (oldIndexed) Object.defineProperty(globalThis, "indexedDB", oldIndexed); else delete globalThis.indexedDB;
   }
 });
+
+test("works-and-doing events: boot, capped URL-free errors, deduped visits, side games, map, resets, heartbeat", async () => {
+  const rows = []; const t = createRCTelemetry({ storage: { getItem: () => null }, locationObject: { hostname: "guns-only.com", search: "" }, outbox: noIdbOutbox(), fetchImpl: async (_url, options) => { rows.push(...JSON.parse(options.body).rows); return { status: 200, ok: true }; } });
+  t.boot({ assets: "blender", ms: 4321.7 });
+  for (let i = 0; i < 12; i++) t.error("error", `boom ${i} at https://guns-only.com/rc/main.js?x=1:10`);
+  t.visit("skatepark"); t.visit("skatepark"); t.visit("gate"); t.visit(null);
+  t.activityStart("golf"); t.activityEnd({ game: "golf", total: 9 }); t.mapOpen(); t.recover("key"); t.recover("sneaky");
+  t.heartbeat({ doing: "roam", place: "gate", metres: 812.4, recoveries: 2 });
+  await t.flush({ force: true });
+  const of = (code) => rows.filter((row) => row.code === code);
+  assert.deepEqual(of("boot").map((r) => [r.assets, r.ms]), [["blender", 4322]]);
+  assert.equal(of("error").length, 8); assert.ok(of("error").every((r) => !r.message.includes("http") && r.message.includes("<url>")));
+  assert.deepEqual(of("visit").map((r) => r.place), ["skatepark", "gate"]);
+  assert.equal(of("activity_end")[0].total, 9); assert.equal(of("map_open").length, 1);
+  assert.deepEqual(of("recover").map((r) => r.how), ["key", "unknown"]);
+  assert.deepEqual([of("heartbeat")[0].doing, of("heartbeat")[0].metres, of("heartbeat")[0].recoveries], ["roam", 812, 2]);
+});

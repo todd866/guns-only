@@ -13,7 +13,10 @@ const EVENT_CODES = new Set([
   "session_start", "first_input", "race_start", "race_finish", "race_quit",
   "furball_outcome", "choice", "item_use", "mute", "frame_p95", "session_end",
   "skate_start", "skate_end",
+  "boot", "error", "visit", "activity_start", "activity_end", "map_open", "recover", "heartbeat",
 ]);
+const ERROR_LIMIT = 8;
+const short = (value, n = 40) => String(value ?? "unknown").slice(0, n);
 const ITEMS = new Set(["zoom", "balloon", "oil", "bubble", "foxtwo", "pitbull", "foxone", "zuni"]);
 
 // Anonymous gameplay events are on for every player; only an explicit "disabled" from the
@@ -144,6 +147,21 @@ export function createRCTelemetry({
     lastResult = { park: skateRun.park };
     skateRun = null;
   }
+  // "Does it work": time to drivable, asset failures, script errors (URLs stripped, capped).
+  function boot({ assets, ms } = {}) { record("boot", { assets: short(assets, 16), ms: finite(ms) === null ? null : Math.round(finite(ms)) }); }
+  let errors = 0;
+  function error(kind, message) {
+    if (++errors > ERROR_LIMIT) return;
+    record("error", { kind: short(kind, 16), message: String(message ?? "").replace(/\b(?:https?|blob|data):\S*/g, "<url>").slice(0, 200) });
+  }
+  // "What are they doing": places reached, side games, map use, resets and a once-a-minute status.
+  let lastPlace = null;
+  function visit(place) { if (!place || place === lastPlace) return; lastPlace = place; record("visit", { place: short(place) }); }
+  function activityStart(game) { record("activity_start", { game: short(game, 16) }); }
+  function activityEnd({ game, score, total } = {}) { record("activity_end", { game: short(game, 16), score: finite(score), total: finite(total) }); }
+  function mapOpen() { record("map_open", {}); }
+  function recover(how) { record("recover", { how: ["key", "button", "auto"].includes(how) ? how : "unknown" }); }
+  function heartbeat({ doing, place, metres, recoveries } = {}) { record("heartbeat", { doing: short(doing, 16), place: place ? short(place) : null, metres: Math.round(finite(metres, 0)), recoveries: finite(recoveries, 0) }); }
   function itemUse(item) { if (ITEMS.has(item)) record("item_use", { item }); }
   function mute(value) { record("mute", { muted: Boolean(value) }); }
   function observeFrame(deltaMs, activeFrame = true) {
@@ -207,5 +225,5 @@ export function createRCTelemetry({
   const initialMode = mode === "bigKid" ? "bigKid" : "kid";
   record("session_start", { track: initialTrack, mode: initialMode, device: deviceClass(navigatorObject), day: new Date().toISOString().slice(0, 10) });
   function endSession() { if (sessionEnded) return; sessionEnded = true; skateEnd({ reason: "pagehide" }); record("session_end", { duration: Math.max(0, Math.round(now() - startedAt)) }); }
-  return Object.freeze({ session, enabled: uploadAllowed, firstInput, raceStart, raceFinish, raceQuit, furballOutcome, skateStart, skateEnd, choice, setMode, itemUse, mute, observeFrame, flush, endSession, diagnostics: () => ({ bufferedRows: rows.length, active: Boolean(active), frameSamples: frames.length, p95: p95() }) });
+  return Object.freeze({ session, enabled: uploadAllowed, firstInput, raceStart, raceFinish, raceQuit, furballOutcome, skateStart, skateEnd, boot, error, visit, activityStart, activityEnd, mapOpen, recover, heartbeat, choice, setMode, itemUse, mute, observeFrame, flush, endSession, diagnostics: () => ({ bufferedRows: rows.length, active: Boolean(active), frameSamples: frames.length, p95: p95() }) });
 }
