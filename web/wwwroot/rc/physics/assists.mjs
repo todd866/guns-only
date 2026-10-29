@@ -2,7 +2,7 @@
 // landings and an authored quarter-pipe return. Big Kid reduces steering stabilization.
 import { dot, cross, scale, sub, add, rotate, unrotate } from './math.mjs';
 import { carUp, carForward } from './car.mjs';
-import { createDrift, stepDrift } from './drift.mjs';
+import { createDrift, stepDrift, DRIFT } from './drift.mjs';
 import { stepQuarterReturn } from './quarter-return.mjs';
 import { SURFACES } from './world.mjs';
 
@@ -26,7 +26,7 @@ export function assistInput(a, car, raw, dt, world) {
   out.steerLimit = p.maxSteer / (1 + m.steerFalloff * speed);
   const up = carUp(car), I = 1 / car.invInertia[0];
   let torque = [0, 0, 0];
-  const drift = stepDrift(a.drift, car, raw, dt, up[1]);
+  const drift = stepDrift(a.drift, car, raw, dt, up[1], a.mode);
   const quarter = stepQuarterReturn(a.quarter ??= {}, car, raw, dt, world);
 
   // Yaw hold: damp yaw rate toward what the front wheels ask for, so the rear does not swap
@@ -80,11 +80,31 @@ export function assistInput(a, car, raw, dt, world) {
   if (m.autoRight && a.flipTime > 0.8 && a.righting <= 0) { a.righting = 0.7; car.vel[1] += 2.2; a.flipTime = 0; }
   if (a.righting > 0) { a.righting -= dt; torque = add(torque, levelTorque(car, up, 14)); }
 
-  // Drift is opt-in. The edge-triggered hop and its short lateral slide are bounded by
-  // drift.mjs; releasing the button returns to the normal tyre model immediately.
+  // Drift is opt-in. The edge-triggered hop and the held slide are bounded by drift.mjs;
+  // releasing the button returns to the normal tyre model and pays out any charged mini-turbo.
   if (drift.hop) car.vel[1] += drift.hop;
+  // Turn the horizontal velocity toward the heading: during a slide it carves at maxSlip; on a
+  // paid-out release most of the slip straightens so the mini-turbo shoots along the nose.
+  const keep = drift.active ? DRIFT.maxSlip : drift.fired ? null : undefined;
+  if (keep !== undefined && car.grounded) {
+    const f = carForward(car), h = Math.atan2(f[0], f[2]), v = Math.atan2(car.vel[0], car.vel[2]);
+    const slip = Math.atan2(Math.sin(h - v), Math.cos(h - v));
+    const turn = keep === null ? slip * DRIFT.straighten : Math.sign(slip) * Math.max(0, Math.abs(slip) - keep);
+    if (turn && Math.hypot(car.vel[0], car.vel[2]) > 0.5) {
+      const c = Math.cos(turn), sn = Math.sin(turn), x = car.vel[0], z = car.vel[2];
+      car.vel[0] = x * c + z * sn; car.vel[2] = -x * sn + z * c;
+    }
+  }
+  if (drift.kick) { const f = carForward(car); car.vel = add(car.vel, scale([f[0], 0, f[2]], drift.kick / Math.max(1e-6, Math.hypot(f[0], f[2])))); }
+  if (drift.turbo > 1) out.boost = (raw.boost ?? 1) * drift.turbo;
+  a.driftFired = drift.fired; a.driftTier = drift.tier; if (drift.fired) a.turbos = (a.turbos ?? 0) + 1;
   if (drift.active) {
     out.lateralGripScale = drift.lateralGripScale;
+    const flat = Math.hypot(car.vel[0], car.vel[2]);
+    if (car.grounded && (raw.throttle ?? 0) > 0 && flat > 0.5 && flat < drift.carry) {
+      const dv = Math.min(drift.carry - flat, DRIFT.carryAccel * dt) / flat;
+      car.vel[0] += car.vel[0] * dv; car.vel[2] += car.vel[2] * dv;
+    }
     if (drift.yawTarget) {
       const actual = dot(car.ang, up);
       torque = add(torque, scale(up, -drift.yawGain * (actual - drift.yawTarget) / car.invInertia[1]));

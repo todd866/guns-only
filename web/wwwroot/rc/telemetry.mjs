@@ -110,10 +110,10 @@ export function createRCTelemetry({
     active = { id: `${eventSession}-r${++raceSequence}`, kind, startedAt: now(), track: String(track ?? "unknown").slice(0, 40), mode: mode === "bigKid" ? "bigKid" : "kid" };
     record("race_start", { race_id: active.id, kind: kind === "furball" ? "furball" : "race", track: active.track, mode: active.mode });
   }
-  function raceFinish({ place, time, gap, recoveries, altTaken } = {}) {
+  function raceFinish({ place, time, gap, recoveries, altTaken, turbos } = {}) {
     if (!active) return;
     record(active.kind === "furball" ? "furball_outcome" : "race_finish", active.kind === "furball"
-      ? {} : { track: active.track, mode: active.mode, place: finite(place), time: finite(time), gap: finite(gap), recoveries: finite(recoveries, 0), alt_taken: altTaken === null || altTaken === undefined ? null : Boolean(altTaken) });
+      ? {} : { track: active.track, mode: active.mode, place: finite(place), time: finite(time), gap: finite(gap), recoveries: finite(recoveries, 0), turbos: finite(turbos, 0), alt_taken: altTaken === null || altTaken === undefined ? null : Boolean(altTaken) });
     lastResult = { race_id: active.id, track: active.track, mode: active.mode };
     active = null;
   }

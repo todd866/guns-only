@@ -15,13 +15,54 @@ function flatCar() {
   return { world, car };
 }
 
-test('drift starts only on a press edge at speed and is bounded', () => {
+test('drift starts only on a press edge at speed, holds while held and charges to three tiers', () => {
   const { car } = flatCar(), d = createDrift();
   assert.equal(stepDrift(d, car, { drift: true, steer: 1 }).active, true);
   assert.equal(stepDrift(d, car, { drift: true, steer: 1 }).hop, 0);
-  for (let i = 0; i < 120; i++) stepDrift(d, car, { drift: true, steer: 1 });
-  assert.equal(d.active, false);
+  const tiers = new Set();
+  for (let i = 0; i < 600; i++) tiers.add(stepDrift(d, car, { drift: true, steer: 1 }).tier);
+  assert.equal(d.active, true);
+  assert.deepEqual([...tiers].sort(), [0, 1, 2, 3]);
   assert.ok(d.cooldown >= 0 && d.cooldown <= DRIFT.cooldown);
+  const out = stepDrift(d, car, { drift: false, steer: 0 });
+  assert.equal(out.active, false);
+  assert.equal(out.fired, 3);
+  assert.ok(out.kick > 0 && out.turbo > 1);
+});
+
+test('a straight hop or a slide lost in the air never pays a mini-turbo', () => {
+  const { car } = flatCar();
+  let d = createDrift();
+  stepDrift(d, car, { drift: true, steer: 0 });
+  for (let i = 0; i < 300; i++) stepDrift(d, car, { drift: true, steer: 0 });
+  assert.equal(stepDrift(d, car, { drift: false }).fired, 0);
+  d = createDrift();
+  for (let i = 0; i < 200; i++) stepDrift(d, car, { drift: true, steer: 1 });
+  car.grounded = false; car.contacts = 0;
+  for (let i = 0; i < 60; i++) stepDrift(d, car, { drift: true, steer: 1 });
+  assert.equal(d.active, false);
+  car.grounded = true; car.contacts = 4;
+  assert.equal(stepDrift(d, car, { drift: false }).fired, 0);
+});
+
+test('a charged drift carries speed through the corner and the turbo beats a grip turn', () => {
+  const world = createWorld();
+  world.addQuad([-200, 0, -200], [-200, 0, 200], [200, 0, 200], [200, 0, -200], 'asphalt');
+  const course = { world, start: { pos: [0, 0, 150], yaw: 0 }, checkpoints: [[0, -190, 'finish']], secrets: [] };
+  for (const mode of ['kid', 'bigKid']) {
+    const run = drift => {
+      const s = createSession(course, { mode });
+      for (let i = 0; i < 240; i++) stepSession(s, { throttle: 1 });
+      const entry = s.car.speed;
+      for (let i = 0; i < 150; i++) stepSession(s, { throttle: 1, steer: 1, drift });
+      const exit = s.car.speed; let peak = 0;
+      for (let i = 0; i < 120; i++) { stepSession(s, { throttle: 1 }); peak = Math.max(peak, s.car.speed); }
+      return { entry, exit, peak };
+    };
+    const grip = run(false), slide = run(true);
+    assert.ok(slide.exit > slide.entry * 0.82, `${mode} slide scrubbed ${slide.entry} -> ${slide.exit}`);
+    assert.ok(slide.peak > grip.peak + 1, `${mode} turbo ${slide.peak} vs grip ${grip.peak}`);
+  }
 });
 
 test('drift never starts while stopped or airborne and release cancels it', () => {
