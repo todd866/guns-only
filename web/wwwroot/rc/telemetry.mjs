@@ -12,7 +12,7 @@ export const RC_TELEMETRY_BUFFER_LIMIT = 240;
 const EVENT_CODES = new Set([
   "session_start", "first_input", "race_start", "race_finish", "race_quit",
   "furball_outcome", "choice", "item_use", "mute", "frame_p95", "session_end",
-  "skate_start", "skate_end", "pumpkin", "garage",
+  "skate_start", "skate_end", "pumpkin", "garage", "playmate",
   "boot", "error", "visit", "activity_start", "activity_end", "map_open", "recover", "heartbeat",
 ]);
 const ERROR_LIMIT = 8;
@@ -166,6 +166,7 @@ export function createRCTelemetry({
   // Halloween pumpkins: every smash up to 30, then every tenth, so a smashing spree stays small.
   function pumpkin(total) { const n = Math.round(finite(total, 0)); if (n > 0 && (n <= 30 || n % 10 === 0)) record("pumpkin", { total: n }); }
   function garage({ body, shell, paint } = {}) { record("garage", { body: short(body, 16), shell: short(shell, 16), paint: short(paint, 24) }); }
+  function playmate({ dest, result } = {}) { record("playmate", { dest: short(dest, 24), result: short(result, 12) }); }
   function mute(value) { record("mute", { muted: Boolean(value) }); }
   function observeFrame(deltaMs, activeFrame = true) {
     const eligible = activeFrame && previousActiveFrame;
@@ -228,5 +229,5 @@ export function createRCTelemetry({
   const initialMode = mode === "bigKid" ? "bigKid" : "kid";
   record("session_start", { track: initialTrack, mode: initialMode, device: deviceClass(navigatorObject), day: new Date().toISOString().slice(0, 10) });
   function endSession() { if (sessionEnded) return; sessionEnded = true; skateEnd({ reason: "pagehide" }); record("session_end", { duration: Math.max(0, Math.round(now() - startedAt)) }); }
-  return Object.freeze({ session, enabled: uploadAllowed, firstInput, raceStart, raceFinish, raceQuit, furballOutcome, skateStart, skateEnd, boot, error, visit, activityStart, activityEnd, mapOpen, recover, heartbeat, choice, setMode, itemUse, pumpkin, garage, mute, observeFrame, flush, endSession, diagnostics: () => ({ bufferedRows: rows.length, active: Boolean(active), frameSamples: frames.length, p95: p95() }) });
+  return Object.freeze({ session, enabled: uploadAllowed, firstInput, raceStart, raceFinish, raceQuit, furballOutcome, skateStart, skateEnd, boot, error, visit, activityStart, activityEnd, mapOpen, recover, heartbeat, choice, setMode, itemUse, pumpkin, garage, playmate, mute, observeFrame, flush, endSession, diagnostics: () => ({ bufferedRows: rows.length, active: Boolean(active), frameSamples: frames.length, p95: p95() }) });
 }

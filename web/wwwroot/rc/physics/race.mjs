@@ -2,6 +2,7 @@
 // bumping. Opponents follow the AI_* racing line (or the gates on courses without one) with a
 // pure-pursuit steer and a curvature speed limit. Both modes keep a bounded nearby pack.
 import { createSession, stepSession, readout, recover } from './session.mjs';
+import { followInput } from './playmate.mjs';
 import { add, sub, scale, dot, len, rotate } from './math.mjs';
 import { createPickups, stepPickups, modifiers, use, rivalWants, MISSILES, boostCar } from './pickups.mjs';
 import { padHit } from './features.mjs';
@@ -231,7 +232,7 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
     // Furball keeps its own rules (furball.mjs).
     const targets = race.mode === 'kid' && !fb && !kidOpen(race) ? cars.slice(1) : cars;
     if ((!fb || mayFire(race, rival)) && rivalWants(pk, rival.session.car, targets)) use(pk, rival.session.car);
-    const input = fb ? furballInput(race, rival, () => driveInput(race, rival)) : driveInput(race, rival);
+    const input = rival.follow ? followInput(rival.session, rival.follow) : fb ? furballInput(race, rival, () => driveInput(race, rival)) : driveInput(race, rival);
     stepSession(rival.session, withEffects(race, rival.session.car, input), dt);
     // A rival that clips a steerpoint (airborne over it, or wide) is credited once it is clearly on
     // its way to the next one; otherwise it races on beside you scored as gates behind and never
