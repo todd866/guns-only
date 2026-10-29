@@ -12,11 +12,14 @@ export const RC_TELEMETRY_BUFFER_LIMIT = 240;
 const EVENT_CODES = new Set([
   "session_start", "first_input", "race_start", "race_finish", "race_quit",
   "furball_outcome", "choice", "item_use", "mute", "frame_p95", "session_end",
+  "skate_start", "skate_end",
 ]);
 const ITEMS = new Set(["zoom", "balloon", "oil", "bubble", "foxtwo", "pitbull", "foxone", "zuni"]);
 
+// Anonymous gameplay events are on for every player; only an explicit "disabled" from the
+// site's Settings toggle (or ?telemetry=off) stops them.
 function readConsent(storage) {
-  try { return storage?.getItem?.(RC_TELEMETRY_CONSENT_KEY) === "enabled"; } catch { return false; }
+  try { return storage?.getItem?.(RC_TELEMETRY_CONSENT_KEY) !== "disabled"; } catch { return true; }
 }
 
 function canonicalHost(locationObject) {
@@ -41,7 +44,7 @@ function finite(value, fallback = null) {
 }
 
 /**
- * Small, opt-in RC event recorder. It intentionally has no user agent, IP, URL, account,
+ * Small, default-on RC event recorder. It intentionally has no user agent, IP, URL, account,
  * fingerprint, or raw simulation state. The shared batch builder and IndexedDB outbox provide
  * bounded immutable requests and retry; this module owns only the RC event vocabulary.
  */
@@ -123,10 +126,23 @@ export function createRCTelemetry({
     active = null;
   }
   function choice(choiceName) {
-    if (choiceName === "again" || choiceName === "drive") record("choice", { ...lastResult, choice: choiceName });
+    if (choiceName === "again" || choiceName === "drive" || choiceName === "skate_again" || choiceName === "skate_free") record("choice", { ...lastResult, choice: choiceName });
   }
   function setMode(value) {
     if (active && value !== active.mode) active.mode = "mixed";
+  }
+  let skateRun = null;
+  function skateStart(park) {
+    if (skateRun) skateEnd({ reason: "replaced" });
+    skateRun = { park: String(park ?? "unknown").slice(0, 24), startedAt: now() };
+    record("skate_start", { park: skateRun.park });
+  }
+  function skateEnd({ reason = "time", score, bestCombo, gaps, goals, newGoals, letters } = {}) {
+    if (!skateRun) return;
+    record("skate_end", { park: skateRun.park, reason: String(reason).slice(0, 24), duration: Math.max(0, Math.round(now() - skateRun.startedAt)),
+      score: finite(score, 0), best_combo: finite(bestCombo, 0), gaps: finite(gaps, 0), goals: finite(goals, 0), new_goals: finite(newGoals, 0), letters: finite(letters, 0) });
+    lastResult = { park: skateRun.park };
+    skateRun = null;
   }
   function itemUse(item) { if (ITEMS.has(item)) record("item_use", { item }); }
   function mute(value) { record("mute", { muted: Boolean(value) }); }
@@ -190,6 +206,6 @@ export function createRCTelemetry({
   const initialTrack = String(track ?? query.get("track") ?? "housing").slice(0, 40);
   const initialMode = mode === "bigKid" ? "bigKid" : "kid";
   record("session_start", { track: initialTrack, mode: initialMode, device: deviceClass(navigatorObject), day: new Date().toISOString().slice(0, 10) });
-  function endSession() { if (sessionEnded) return; sessionEnded = true; record("session_end", { duration: Math.max(0, Math.round(now() - startedAt)) }); }
-  return Object.freeze({ session, enabled: uploadAllowed, firstInput, raceStart, raceFinish, raceQuit, furballOutcome, choice, setMode, itemUse, mute, observeFrame, flush, endSession, diagnostics: () => ({ bufferedRows: rows.length, active: Boolean(active), frameSamples: frames.length, p95: p95() }) });
+  function endSession() { if (sessionEnded) return; sessionEnded = true; skateEnd({ reason: "pagehide" }); record("session_end", { duration: Math.max(0, Math.round(now() - startedAt)) }); }
+  return Object.freeze({ session, enabled: uploadAllowed, firstInput, raceStart, raceFinish, raceQuit, furballOutcome, skateStart, skateEnd, choice, setMode, itemUse, mute, observeFrame, flush, endSession, diagnostics: () => ({ bufferedRows: rows.length, active: Boolean(active), frameSamples: frames.length, p95: p95() }) });
 }

@@ -11,11 +11,26 @@ function noIdbOutbox() {
   return { async put() { return null; }, async list() { return []; }, async remove() {}, async clear() {} };
 }
 
-test("consent is opt in and missing storage cannot throw or upload", async () => {
+test("records by default; missing storage cannot throw and an explicit Settings opt out sends nothing", async () => {
   const outbox = memoryOutbox(); let calls = 0;
   const t = createRCTelemetry({ storage: undefined, locationObject: { hostname: "guns-only.com", search: "" }, outbox, fetchImpl: async () => { calls++; return { status: 200 }; } });
   t.firstInput("keyboard"); await t.flush({ force: true });
-  assert.equal(t.enabled, false); assert.equal(calls, 0); assert.equal(outbox.entries.size, 0);
+  assert.equal(t.enabled, true); assert.equal(calls, 1);
+  const fresh = createRCTelemetry({ storage: { getItem: () => null }, locationObject: { hostname: "guns-only.com", search: "" }, outbox: memoryOutbox(), fetchImpl: async () => { calls++; return { status: 200 }; } });
+  fresh.firstInput("touch"); await fresh.flush({ force: true }); assert.equal(fresh.enabled, true); assert.equal(calls, 2, "a never-asked player records");
+  const optedOut = createRCTelemetry({ storage: { getItem: () => "disabled" }, locationObject: { hostname: "guns-only.com", search: "" }, outbox: memoryOutbox(), fetchImpl: async () => { calls++; return { status: 200 }; } });
+  optedOut.firstInput("touch"); await optedOut.flush({ force: true }); assert.equal(optedOut.enabled, false); assert.equal(calls, 2);
+});
+
+test("skate runs record park, score and how the run ended, and the follow-up choice", async () => {
+  const rows = []; let now = 0; const t = createRCTelemetry({ storage: { getItem: () => null }, locationObject: { hostname: "guns-only.com", search: "" }, outbox: noIdbOutbox(), now: () => now, fetchImpl: async (_url, options) => { rows.push(...JSON.parse(options.body).rows); return { status: 200, ok: true }; } });
+  t.skateStart("intro"); now = 120_000; t.skateEnd({ reason: "time", score: 12_345, bestCombo: 4, gaps: 3, goals: 2, newGoals: 1, letters: 5 }); t.choice("skate_again");
+  t.skateStart("hangar"); now = 130_000; t.skateStart("school"); t.endSession(); await t.flush({ force: true });
+  const ends = rows.filter((row) => row.code === "skate_end");
+  assert.deepEqual(ends.map((row) => [row.park, row.reason]), [["intro", "time"], ["hangar", "replaced"], ["school", "pagehide"]]);
+  assert.equal(ends[0].score, 12_345); assert.equal(ends[0].duration, 120_000); assert.equal(ends[0].best_combo, 4); assert.equal(ends[0].letters, 5);
+  assert.equal(rows.find((row) => row.code === "choice").park, "intro");
+  assert.equal(rows.filter((row) => row.code === "skate_start").length, 3);
 });
 
 test("records bounded lifecycle vocabulary without user data", async () => {
@@ -87,13 +102,13 @@ test("foreground p95 excludes the first resumed frame and null metrics are prese
   assert.equal(rows.find((row) => row.code === "race_finish").gap, null); assert.equal(rows.find((row) => row.code === "race_finish").alt_taken, null);
 });
 
-test("throwing browser storage getters fail closed", async () => {
+test("throwing browser storage getters cannot throw and still record", async () => {
   const oldStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage"); const oldIndexed = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
   try {
     Object.defineProperty(globalThis, "localStorage", { configurable: true, get() { throw new Error("blocked"); } });
     Object.defineProperty(globalThis, "indexedDB", { configurable: true, get() { throw new Error("blocked"); } });
     const t = createRCTelemetry({ locationObject: { hostname: "guns-only.com", search: "" }, fetchImpl: async () => ({ status: 200 }) });
-    t.firstInput("keyboard"); await t.flush({ force: true }); assert.equal(t.enabled, false);
+    t.firstInput("keyboard"); await t.flush({ force: true }); assert.equal(t.enabled, true);
   } finally {
     if (oldStorage) Object.defineProperty(globalThis, "localStorage", oldStorage); else delete globalThis.localStorage;
     if (oldIndexed) Object.defineProperty(globalThis, "indexedDB", oldIndexed); else delete globalThis.indexedDB;
