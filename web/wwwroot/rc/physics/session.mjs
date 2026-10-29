@@ -62,11 +62,24 @@ export function stepSession(s, raw, dt = 1 / 120) {
 }
 
 // R: back to the last gate passed, facing the next one. Free in kid mode, +3 s in Big Kid.
+// With a racing line the car lands on the line beside that gate and faces along it (a straight
+// gate-to-gate heading can point into a wall, e.g. BX aisle 5→6). Each repeat at the same gate
+// starts a few metres further on, so an auto-unstick can never loop on one trap forever.
 export function recover(s) {
   if (s.roam) return recoverInPlace(s);
   const cps = s.course.checkpoints, last = cps[Math.max(0, s.gate - 1)], next = cps[Math.min(cps.length - 1, s.gate)];
-  const yaw = s.gate === 0 ? s.course.start.yaw : Math.atan2(next[0] - last[0], -(next[1] - last[1]));
-  placeCar(s.car, [last[0], groundBelow(s.course.world, [last[0], s.course.event?.points?.[Math.max(0,s.gate-1)]?.[2] ?? 0, last[1]]) + rideHeight(s.car.params) + 0.02, last[1]], yaw);
+  const streakKey = `${s.lap}:${s.gate}`;
+  s.recoverStreak = s.recoverKey === streakKey ? (s.recoverStreak ?? 0) + 1 : 0; s.recoverKey = streakKey;
+  const line = s.gate > 0 && s.course.ai?.length > 2 ? s.course.ai : null;
+  if (line) {
+    const n = line.length, near = (x, z) => line.reduce((b, a, k) => Math.hypot(a.pos[0] - x, a.pos[2] - z) < Math.hypot(line[b].pos[0] - x, line[b].pos[2] - z) ? k : b, 0);
+    const from = near(last[0], last[1]), to = near(next[0], next[1]), span = (to - from + n) % n;
+    const i = (from + Math.min(s.recoverStreak * 3, Math.max(0, span - 1))) % n, p = line[i].pos, q = line[(i + 1) % n].pos;
+    placeCar(s.car, [p[0], groundBelow(s.course.world, [p[0], p[1] ?? 0, p[2]]) + rideHeight(s.car.params) + 0.02, p[2]], Math.atan2(q[0] - p[0], -(q[2] - p[2])));
+  } else {
+    const yaw = s.gate === 0 ? s.course.start.yaw : Math.atan2(next[0] - last[0], -(next[1] - last[1]));
+    placeCar(s.car, [last[0], groundBelow(s.course.world, [last[0], s.course.event?.points?.[Math.max(0,s.gate-1)]?.[2] ?? 0, last[1]]) + rideHeight(s.car.params) + 0.02, last[1]], yaw);
+  }
   s.recoveries++;
   if (s.running && !MODES[s.mode].freeRecovery) s.time += 3;
 }

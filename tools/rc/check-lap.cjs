@@ -9,7 +9,7 @@ const page=await browser.newPage({viewport:{width:1280,height:800}});const error
 const q=process.env.Q||'';// Classic renderer for the bot: physics are identical, and the HD composer's GPU load delays CDP
 // round-trips enough to make this polling driver overshoot (players' key-to-steer is unaffected).
 await page.goto(`http://127.0.0.1:${PORT}/rc/${q}${q?'&':'?'}mode=race${q.includes('gfx=')?'':'&gfx=classic'}`);await page.waitForFunction(()=>['blender','failed'].includes(window.__gunsOnlyRC?.snapshot().assets),null,{timeout:30000});
-await page.locator('#start').click();const held=new Set();// Follow the racing line (AI nodes on districts, gates on the prototype) with a 3 m lookahead.
+if(await page.locator('#start').isVisible())await page.locator('#start').click();const held=new Set();// Follow the racing line (AI nodes on districts, gates on the prototype) with a 3 m lookahead.
 const pts=await page.evaluate(()=>window.__gunsOnlyRC.line());let node=0;
 let st,shots=new Set(),t0=Date.now(),frames=[];
 while(Date.now()-t0<90000){st=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());

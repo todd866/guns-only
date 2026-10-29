@@ -62,7 +62,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   await visit('track=hub&event=district-bx&mode=race');
   if(await page.evaluate(()=>window.__gunsOnlyRC.snapshot().mode==='bigKid'))await page.keyboard.press('KeyB');
   await page.waitForFunction(()=>window.__gunsOnlyRC.snapshot().guide==='course');
-  await page.keyboard.press('KeyB');await page.waitForFunction(()=>window.__gunsOnlyRC.snapshot().guide===null);
+  // Big Kid keeps the racing line too (owner, 2026-10-29).
+  await page.keyboard.press('KeyB');await page.waitForFunction(()=>window.__gunsOnlyRC.snapshot().mode==='bigKid');assert.equal(await page.evaluate(()=>window.__gunsOnlyRC.snapshot().guide),'course','Big Kid races keep the racing line');
   results.push({name:'race-assist-mode',passed:true});
   await visit('track=hub&event=district-bx&mode=furball');
   await page.waitForFunction(()=>window.__gunsOnlyRC.snapshot().guide===null);results.push({name:'furball',passed:true});

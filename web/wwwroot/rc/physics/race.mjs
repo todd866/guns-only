@@ -162,6 +162,20 @@ function withEffects(race, car, input) {
   return m.spinning ? { boost: 1, gripScale: 0.5 } : { ...input, boost: m.boost, gripScale: m.gripScale };
 }
 
+// Racing-line node of each gate, searched forward in route order so a gate that shares its spot
+// with an earlier one (an out-and-back) maps to the later pass.
+function gateNodes(race) {
+  if (race.gateNodes) return race.gateNodes;
+  const line = race.line, out = [];let from = 0;
+  for (const c of race.course.checkpoints) {
+    let best = from;for (let k = from; k < line.length; k++) if (Math.hypot(line[k][0] - c[0], line[k][1] - c[1]) < Math.hypot(line[best][0] - c[0], line[best][1] - c[1])) best = k;
+    // Only look as far as the first local minimum within reach, so a later pass is not taken early.
+    for (let k = from; k < line.length; k++) { const d = Math.hypot(line[k][0] - c[0], line[k][1] - c[1]); if (d < (c[3] ?? 2.4) + 2) { best = k; while (k + 1 < line.length && Math.hypot(line[k + 1][0] - c[0], line[k + 1][1] - c[1]) <= Math.hypot(line[k][0] - c[0], line[k][1] - c[1])) best = ++k; break; } }
+    out.push(best);from = best;
+  }
+  return race.gateNodes = out;
+}
+
 export function stepRace(race, playerInput, dt = 1 / 120) {
   const pk = race.pickups, fb = race.furball;
   if (fb?.over) return;
@@ -197,10 +211,15 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
     // A rival that clips a steerpoint (airborne over it, or wide) is credited once it is clearly on
     // its way to the next one; otherwise it races on beside you scored as gates behind and never
     // finishes. Rivals only: the player's gates stay strict.
+    // The rival must also have driven past that gate's point on the racing line: on a route that
+    // doubles back (Base Traffic's out-and-back) the next gate can sit beside an earlier one, and
+    // proximity alone credited the whole 474 m U-turn leg, leaving the pack crawling under the
+    // leader brake while the player won alone.
     { const rs = rival.session, cps = race.course.checkpoints, g = rs.gate;
       if (!rs.roam && !rs.finished && g + 1 < cps.length) {
         const a = cps[g], b = cps[g + 1], seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        if (Math.hypot(b[0] - rs.car.pos[0], b[1] - rs.car.pos[2]) < seg * 0.5) rs.gate++;
+        const reached = !race.line.length || rival.alt || (rival.node % race.line.length) >= gateNodes(race)[g] - 2;
+        if (reached && Math.hypot(b[0] - rs.car.pos[0], b[1] - rs.car.pos[2]) < seg * 0.5) rs.gate++;
       } }
     // A rival on its roof gets the same R a kid would press.
     if (rotate(rival.session.car.q, [0, 1, 0])[1] < 0.2 && rival.session.car.speed < 0.5) { rival.stuck = (rival.stuck || 0) + dt; if (rival.stuck > 1.5) { rival.stuck = 0; recover(rival.session); } }

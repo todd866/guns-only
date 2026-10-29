@@ -97,5 +97,14 @@ export function loadProgress(storage){let v;try{v=JSON.parse(storage?.getItem('g
 export function saveProgress(storage,state){try{storage?.setItem('guns-only.rc.world.v1',JSON.stringify(state));}catch{}}
 export function discover(state,pos){const found=[];for(const p of LOCATIONS)if(canEnter(state,p)&&distance(pos,p.pos)<45&&!state.discovered.includes(p.id)){state.discovered.push(p.id);found.push(p);}return found;}
 export function recordFinish(state,id,time){const event=eventById(id);if(!event||!Number.isFinite(time)||time<=0||!canEnterEvent(state,event))return;state.raceWins??={};state.raceWins[id]=Math.min(Number(state.raceWins[id])||Infinity,time);state.wins[id]=Math.min(Number(state.wins[id])||Infinity,time);}
-export function medal(event,time){const factor=event.kind==='sprint'?1:3;return time<=event.medals[0]*factor?'Gold':time<=event.medals[1]*factor?'Silver':time<=event.medals[2]*factor?'Bronze':'Finished';}
+// Laps per race: a sprint is one run; a circuit gets 1-3 laps so the race is about RACE_TARGET_M
+// (~2.5 min at the measured 7.6 m/s kid pace, 2026-10-29 sweep). Three laps of a 2.3 km road
+// route was a 15-minute race for a six-year-old. Courses without authored points keep 3.
+export const RACE_TARGET_M=1150;
+export function eventLaps(event){
+ if(event?.laps)return event.laps;if(event?.kind==='sprint')return 1;const p=event?.points;if(!p?.length)return 3;
+ const metres=p.slice(1).reduce((sum,q,i)=>sum+Math.hypot(q[0]-p[i][0],q[1]-p[i][1]),0);
+ return Math.max(1,Math.min(3,Math.round(RACE_TARGET_M/Math.max(1,metres))));
+}
+export function medal(event,time){const factor=eventLaps(event);return time<=event.medals[0]*factor?'Gold':time<=event.medals[1]*factor?'Silver':time<=event.medals[2]*factor?'Bronze':'Finished';}
 export function rcLink(params,search=''){const p=new URLSearchParams(search);for(const k of ['track','from','event','mode','at'])p.delete(k);for(const [k,v]of Object.entries(params))if(v!=null)p.set(k,v);return `?${p}`;}

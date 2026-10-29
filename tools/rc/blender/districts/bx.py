@@ -611,7 +611,9 @@ def soft_goods():
     # U south side: one long run that also faces the H&B cross aisle.
     gondola('u_south', -15, 17.4, -12.4, -11.2, header='SOFT GOODS', seed=9)
     # Round racks and mannequins along the U (never inside 3 m of the line).
-    racks = [(-22.3, 12.5), (-22.3, 7.0), (-22.3, 1.8), (-16.6, -4.5), (-6, -4.6), (6, -4.6), (16.5, -3.6), (16.6, 6.6)]
+    # rack_3 sat at (-16.6, -4.5), 1.9 m inside the north-to-east aisle corner: the whole pack wedged on it
+    # every lap and kid auto-unstick looped there (2026-10-29 race sweep). (-13, -4.5) keeps 3.6 m to the line.
+    racks = [(-22.3, 12.5), (-22.3, 7.0), (-22.3, 1.8), (-13, -4.5), (-6, -4.6), (6, -4.6), (16.5, -3.6), (16.6, 6.6)]
     for i, (x, y) in enumerate(racks):
         round_rack(x, y, f'round_rack_{i}', ['red', 'blue', 'green', 'magenta', 'header', 'navy', 'white', 'orange'][i])
     for i, (x, y, f, m) in enumerate(((-0.5, -3.8, 270, 'red'), (.3, -3.8, 270, 'navy'), (11.6, 13.3, 180, 'magenta'))):
