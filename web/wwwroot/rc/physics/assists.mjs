@@ -6,6 +6,9 @@ import { createDrift, stepDrift, DRIFT } from './drift.mjs';
 import { stepQuarterReturn } from './quarter-return.mjs';
 import { SURFACES } from './world.mjs';
 
+// Wheelie and stoppie balance: nose angle held (radians), the spring rate, and wheelie power.
+export const BALANCE = Object.freeze({ angle: .5, omega: 7, lift: 6, hop: .3, wheelieThrottle: .85, wheelieBoost: 1.9, plant: 14, sink: .4, roll: 14, carry: 5 });
+
 export const MODES = {
   kid: { steerFalloff: 0.1, yawHold: 8, airLevel: true, autoRight: true, freeRecovery: true },
   // Big Kid still has a gentle transmitter stabiliser and air attitude help. It rewards a
@@ -50,7 +53,7 @@ export function assistInput(a, car, raw, dt, world) {
   // without becoming a hidden boost or a mandatory trick system.
   if (quarter) {
     torque = add(torque, quarter); a.airTime = 0;
-  } else if (m.airLevel && car.contacts === 0) {
+  } else if (m.airLevel && car.contacts === 0 && !(raw.wheelie || raw.stoppie)) {
     // Road seams and kerb tops can briefly report zero contacts. Keep normal
     // levelling immediate, but wait for a sustained airborne state before
     // optional hip steering can influence the attitude.
@@ -110,6 +113,47 @@ export function assistInput(a, car, raw, dt, world) {
       torque = add(torque, scale(up, -drift.yawGain * (actual - drift.yawTarget) / car.invInertia[1]));
     }
   }
+
+  // Wheelie (↑ + S) and stoppie (↓ + W), owner 2026-10-30: a balance assist holds the nose up on
+  // the rear wheels under power, or up on the front wheels under brake. Only on the wheels, and
+  // it lets go the moment the keys do (the levelling gyro is not needed: gravity brings it down).
+  const fwdNow = carForward(car), rightNow = rotate(car.q, [1, 0, 0]);
+  const trick = raw.wheelie ? 1 : raw.stoppie ? -1 : 0;
+  a.balance = 0;
+  // The balance rides through the short hops a single axle makes on its springs.
+  a.trickAir = trick && car.contacts === 0 ? (a.trickAir ?? 0) + dt : 0;
+  if (trick && (car.contacts >= 1 || a.trickAir < BALANCE.hop) && up[1] > .4 && (trick < 0 ? car.forwardSpeed > 1.2 : true)) {
+    const pitch = Math.asin(Math.max(-1, Math.min(1, fwdNow[1]))), rate = dot(car.ang, rightNow);
+    const target = trick * BALANCE.angle, k = BALANCE.omega;
+    // Gravity on the far axle is what a real wheelie fights: feed that moment forward, then a PD
+    // spring holds the angle. (A pure spring on this 1.8 kg car is a fraction of the moment.)
+    const arm = Math.abs(p.wheels[0].at[2] - p.wheels[2].at[2]) / 2, hold = trick * p.mass * 9.81 * arm * Math.cos(pitch);
+    // Pivoting on one axle, the body swings with its inertia plus the mass at the arm.
+    const pivot = I + p.mass * arm * arm, stiff = pivot * k * k + p.mass * 9.81 * arm * BALANCE.lift;
+    torque = add(torque, scale(rightNow, hold + stiff * (target - pitch) - 2 * .9 * Math.sqrt(stiff * pivot) * rate));
+    // With only the rear tyres down the car has half its traction; make it up so a wheelie cruises.
+    if (trick > 0) { out.throttle = Math.max(out.throttle ?? 0, BALANCE.wheelieThrottle); out.brake = false; out.boost = (out.boost ?? 1) * BALANCE.wheelieBoost; }
+    else { out.throttle = 0; out.brake = false; }  // coast: a brake would end the stoppie in a metre
+    // On one axle the car is a two-wheeled balancer: hold the wings level so bumpy grass cannot
+    // tip it onto its side. (Positive torque about the nose lowers the right side.)
+    const iz = 1 / car.invInertia[2], rollRate = dot(car.ang, fwdNow);
+    torque = add(torque, scale(fwdNow, iz * (BALANCE.roll * BALANCE.roll * rightNow[1] - 2 * BALANCE.roll * rollRate)));
+    // A torque turns the body about its centre, which drives the down axle into its springs and
+    // then bounces it off. Pivot about the axle instead: the centre rises and falls with the
+    // nose (v = rate × arm × cos pitch), so the tyres stay planted through the whole trick.
+    const pivotVy = trick * rate * arm * Math.cos(pitch), sinkVy = car.contacts ? 0 : -BALANCE.sink;
+    car.vel[1] += (pivotVy + sinkVy - car.vel[1]) * Math.min(1, BALANCE.plant * dt);
+    // On one axle the tyres barely reach the ground at this angle; a wheelie carries its speed
+    // the way a held drift does (topped up along the heading, never above the speed it began at).
+    if (trick > 0) {
+      if (!a.trickEntry) a.trickEntry = Math.min(car.params.topSpeed * .8, Math.max(0, car.forwardSpeed));
+      const flat = Math.hypot(car.vel[0], car.vel[2]), want = Math.max(3, a.trickEntry);
+      if (flat < want) { const h = Math.hypot(fwdNow[0], fwdNow[2]) || 1, dv = Math.min(want - flat, BALANCE.carry * dt); car.vel[0] += fwdNow[0] / h * dv; car.vel[2] += fwdNow[2] / h * dv; }
+    }
+    a.balance = Math.abs(pitch) > BALANCE.angle * .55 ? trick : 0;
+  }
+  if (!trick) a.trickEntry = 0;
+  a.balanceTime = a.balance ? (a.balanceTime ?? 0) + dt : 0;
 
   a.skateAir = raw.skate && car.contacts === 0 ? (a.skateAir ?? 0) + dt : 0;
   a.skateSpinning = a.skateAir > .12 && raw.drift && Math.abs(raw.steer || 0) > .25;
