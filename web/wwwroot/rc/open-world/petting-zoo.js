@@ -2,6 +2,8 @@ import * as T from '../../vendor/three.module.js';
 import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
 import {addBox} from '../physics/world.mjs';
 import {ZOO,ZOO_JETS,createZooState,stepZoo} from './petting-zoo.mjs';
+import {ZOO_RAMPS} from './jet-decks.mjs';
+import {addDeck,findEdge,addRamp} from './jet-decks.js';
 
 // The petting zoo, drawn (data and facts in petting-zoo.mjs). Four jets built to their real
 // shapes and sizes, which matter at toy scale: the car sees them from under the wing.
@@ -206,6 +208,11 @@ export function createPettingZoo(scene, world) {
   for (const j of ZOO_JETS) {
     const jet = buildJet(j.type, keep); mergeStatic(jet, keep); jet.position.set(j.at[0], 0, j.at[1]); root.add(jet);
     const { spec, parts } = jet.userData; jets.set(j.type, { jet, parts, wake: 0 });
+    // Some jets have a ramp up onto the wing from behind (jet-decks.mjs): their skin is solid.
+    for (const r of ZOO_RAMPS.filter(r => r.type === j.type)) {
+      jet.updateMatrixWorld(true); addDeck(world, jet.children[0].children.filter(o => o.isMesh));
+      const e = findEdge(world, r, [j.at[1] - 16, j.at[1] + 12]); if (e) addRamp(root, world, r, e.edge, e.top, keep);
+    }
     // Wheels are solid: you can bump the jet's legs, but never get stuck under it.
     for (const [gx, gz] of jet.userData.gears) addBox(world, j.at[0] - gx, j.at[1] - gz, .5, .5, 0, 1.2);   // turned to face +z
     // The pen: brass posts round the jet, rope at .5 m (the car rolls under it), open at the nose.
