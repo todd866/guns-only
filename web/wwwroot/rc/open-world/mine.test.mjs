@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld } from '../physics/world.mjs';
 import { createRobot, stepRobot } from '../physics/robot.mjs';
-import { checkDungeon, openChest, pressPlate, tryDoor, reachable, defeatBoss } from '../physics/dungeon.mjs';
+import { checkDungeon, openChest, pressPlate, tryDoor, reachable, defeatBoss, digDoor } from '../physics/dungeon.mjs';
 import { buildMine, doorTris, MINE_DUNGEON, CHESTS, PLATES, createMineState, mineWorldTris, MINE } from './mine.mjs';
 
 test('the mine is a fair Ocarina-style dungeon: one small-key door at a time, and the boss is reachable', () => {
@@ -67,4 +67,11 @@ test('the alien cell stays shut until the excavator is freed', () => {
   assert.equal(tryDoor(d, 'C').why, 'boss');
   assert.deepEqual(defeatBoss(d), ['C']);
   assert.ok(reachable(d).has('R6'), 'cell open after the boss');
+});
+
+test('the spirit chamber is behind cracked rock that only digging opens', () => {
+  const d = checkDungeon(MINE_DUNGEON).d; defeatBoss(d);
+  assert.equal(tryDoor(d, 'D').why, 'dig');
+  assert.ok(digDoor(d, 'D')); assert.ok(!digDoor(d, 'D'), 'once');
+  assert.equal(doorTris(new Set(['A', 'P', 'B', 'C'])).filter(t => t.gate === 'mine:D').length > 0, true);
 });

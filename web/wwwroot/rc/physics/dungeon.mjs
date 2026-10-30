@@ -5,7 +5,7 @@
 
 /**
  * A dungeon: { rooms: [{ id, links: [{ to, door?: doorId }] }], doors: { id: { kind: 'small'|'big'|'plate', plate? } },
- * Doors of kind 'boss' open when defeatBoss() is called.
+ * Doors of kind 'boss' open when defeatBoss() is called; kind 'dig' is cracked rock (digDoor).
  * chests: { id: { room, holds: 'small'|'big'|item } }, plates: { id: { room } }, start, boss }.
  */
 export function createDungeon(def) {
@@ -52,7 +52,15 @@ export function tryDoor(d, id) {
   if (def.kind === 'small') { if (d.keys < 1) return { ok: false, why: 'locked' }; d.keys--; d.open.add(id); return { ok: true }; }
   if (def.kind === 'big') { if (!d.bigKey) return { ok: false, why: 'big key' }; d.open.add(id); return { ok: true }; }
   if (def.kind === 'boss') return { ok: false, why: 'boss' };
+  if (def.kind === 'dig') return { ok: false, why: 'dig' };
   return { ok: false, why: 'a switch opens this' };
+}
+
+/** Dig through a cracked-rock door (the caller checks for the claw). */
+export function digDoor(d, id) {
+  // No reachability check: like the boss, you can only be standing at it if you got there.
+  if (d.def.doors[id]?.kind !== 'dig' || d.open.has(id)) return false;
+  d.open.add(id); return true;
 }
 
 /** The boss is beaten: its doors open (the way on to the rescue). */

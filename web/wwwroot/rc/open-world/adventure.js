@@ -4,8 +4,9 @@ import {createExcavator} from './excavator.js';
 import {createGoodAlien} from './good-alien.js';
 import {createBoss,stepBoss} from '../physics/boss.mjs';
 import {createFighter,createEnemy,stepCombat,reviveFighter,roomHelp} from '../physics/combat.mjs';
-import {CHESTS,PLATES,OPENINGS,MINE_BOUNDS,MINE_ENEMIES,ROOM_ENTRANCES,MINE,BOSS_AT,mineWorld,mineLocal,roomAt,createMineState} from './mine.mjs';
-import {openChest,pressPlate,tryDoor,defeatBoss} from '../physics/dungeon.mjs';
+import {CHESTS,PLATES,OPENINGS,MINE_BOUNDS,MINE_ENEMIES,ROOM_ENTRANCES,MINE,BOSS_AT,CELLS,SPIRIT_MARK,DOORS,mineWorld,mineLocal,roomAt,createMineState} from './mine.mjs';
+import {createInventory,giveItem,hasItem,takeCell,saveInventory} from '../physics/items.mjs';
+import {openChest,pressPlate,tryDoor,defeatBoss,digDoor} from '../physics/dungeon.mjs';
 
 // The adventure layer in the open world (docs/design/adventure). For now: the Old Silver Mine, played
 // Zelda-style by touch: walk into a chest to open it, onto a plate to press it, and up to a locked
@@ -13,7 +14,11 @@ import {openChest,pressPlate,tryDoor,defeatBoss} from '../physics/dungeon.mjs';
 export function createAdventure(scene, world) {
   const mine = createMine(scene), state = createMineState(), toys = createBadToys(scene);
   const enemies = MINE_ENEMIES.map(e => Object.assign(createEnemy(e.id, mineWorld(e.at)), { room: e.room }));
-  const rooms = {}; let fighter = null, time = 0;
+  // Items and battery cells persist (Zelda's inventory); the dungeon itself resets on reload for now.
+  const SAVE = 'rc-adventure-v1', load = () => { try { return JSON.parse(localStorage.getItem(SAVE)); } catch { return null; } };
+  const inventory = createInventory(load()), save = () => { try { localStorage.setItem(SAVE, JSON.stringify(saveInventory(inventory))); } catch {} };
+  for (const id of inventory.cells) mine.takeCell(id);
+  const rooms = {}; let fighter = null, time = 0, markTouched = false;
   // The excavator wakes when you first walk into its hall, and stays freed once beaten.
   const boss = createBoss(mineWorld(BOSS_AT), MINE.yaw), digger = createExcavator(scene, mineWorld(BOSS_AT), MINE.yaw); let bossAwake = false;
   const alien = createGoodAlien(scene, mineWorld([0, 0, -23.8]));
@@ -22,7 +27,7 @@ export function createAdventure(scene, world) {
   const inside = p => p[0] >= MINE_BOUNDS[0] && p[0] <= MINE_BOUNDS[2] && p[2] >= MINE_BOUNDS[1] && p[2] <= MINE_BOUNDS[3];
   let lastBump = null;
   return {
-    state, inside, boss, fighter: () => fighter,
+    state, inside, boss, inventory, fighter: () => fighter,
     /** While the excavator fight is on: where the camera should look (the boss), else null. */
     bossFrame: p => bossAwake && !boss.freed && roomAt(mineLocal(p)) === 'R5' ? boss.origin : null,
     /** fight = { robot, input: { attack, lock }, mode } while on foot; null in the car. */
@@ -34,7 +39,7 @@ export function createAdventure(scene, world) {
       if (!inside(pos)) return [];
       const events = [];
       if (fight?.robot) {
-        fighter ??= createFighter(fight.mode); const here = roomAt(mineLocal(pos)), room = rooms[here] ??= { knockouts: 0 };
+        if (!fighter) { fighter = createFighter(fight.mode); fighter.max += inventory.extraBatteries; fighter.batteries = fighter.max; } const here = roomAt(mineLocal(pos)), room = rooms[here] ??= { knockouts: 0 };
         // Only the toys in your room (and awake) join in.
         const active = enemies.filter(e => e.room === here);
         for (const ev of stepCombat(fight.robot, fighter, active, fight.input, room, dt)) {
@@ -52,7 +57,16 @@ export function createAdventure(scene, world) {
         }
       }
       // The rescue: walk up to the jar once the excavator is freed.
-      if (boss.freed && !alien.freed && near(pos, mineWorld([0, 0, -23.8]), .6, .6)) { alien.free(); state.rescued = true; events.push({ rescued: 'alien' }); }
+      if (boss.freed && !alien.freed && near(pos, mineWorld([0, 0, -23.8]), .6, .6)) {
+        alien.free(); state.rescued = true; events.push({ rescued: 'alien' });
+        const item = giveItem(inventory, 'claw'); if (item) { save(); events.push({ item: 'claw', ...item }); }
+      }
+      for (const [id, c] of Object.entries(CELLS)) if (!inventory.cells.includes(id) && near(pos, mineWorld(c.at), .3, .4)) {
+        const got = takeCell(inventory, id); mine.takeCell(id); save();
+        if (fighter && got.battery) { fighter.max++; fighter.batteries = fighter.max; }
+        events.push({ cell: id, ...got });
+      }
+      if (!markTouched && near(pos, mineWorld([SPIRIT_MARK.at[0] + .25, 0, SPIRIT_MARK.at[2]]), .5, .6)) { markTouched = true; events.push({ spiritMark: 'mountain' }); }
       for (const [id, c] of Object.entries(CHESTS)) if (near(pos, mineWorld(c.at), .32, .35)) {
         const got = openChest(state, id); if (got) { mine.openChest(id); events.push({ chest: id, got }); }
       }
@@ -60,7 +74,13 @@ export function createAdventure(scene, world) {
         mine.pressPlate(id); events.push({ plate: id });
         for (const [door, d] of Object.entries(state.def.doors)) if (d.plate === id) { world.openGate?.(`mine:${door}`); mine.openDoor(door); events.push({ door, opened: true }); }
       }
-      for (const o of OPENINGS) if (o.door && !state.open.has(o.door) && near(pos, doorAt(o), .55, .6)) {
+      for (const o of OPENINGS) if (o.door && !state.open.has(o.door) && near(pos, doorAt(o), DOORS[o.door].kind === 'dig' ? .75 : .55, .6)) {
+        // Cracked rock: punch it with the claw to dig through; without it, a hint.
+        if (DOORS[o.door].kind === 'dig') {
+          if (hasItem(inventory, 'claw') && fight?.input?.attack && digDoor(state, o.door)) { world.openGate?.(`mine:${o.door}`); mine.openDoor(o.door); events.push({ door: o.door, opened: true, dug: true }); }
+          else if (!hasItem(inventory, 'claw') && lastBump !== o.door) events.push({ door: o.door, locked: 'dig' });
+          lastBump = o.door; continue;
+        }
         const r = tryDoor(state, o.door);
         if (r.ok) { world.openGate?.(`mine:${o.door}`); mine.openDoor(o.door); events.push({ door: o.door, opened: true }); }
         else if (lastBump !== o.door) events.push({ door: o.door, locked: r.why });

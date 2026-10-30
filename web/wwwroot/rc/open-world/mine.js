@@ -1,6 +1,6 @@
 import * as T from '../../vendor/three.module.js';
 import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
-import {MINE,ROOMS,OPENINGS,CHESTS,PLATES,buildMine,mineWorld} from './mine.mjs';
+import {MINE,ROOMS,OPENINGS,CHESTS,PLATES,CELLS,SPIRIT_MARK,DOORS,buildMine,mineWorld} from './mine.mjs';
 
 // The Old Silver Mine, drawn: red-brown rock with timber frames, cart rails across the hub, oil
 // lanterns, toy treasure chests, rusty gates with padlocks, a pressure plate, and a rocky hill with
@@ -33,7 +33,12 @@ export function createMine(scene){
  const shellMat=new T.MeshStandardMaterial({vertexColors:true,roughness:.92,side:T.DoubleSide});const shell=new T.Mesh(merged,shellMat);shell.castShadow=shell.receiveShadow=true;root.add(shell);
  // Dynamic: doors (rusty gates with a padlock), chests, the plate.
  const gateMat=new T.MeshStandardMaterial({color:'#7d5a43',roughness:.6,metalness:.5}),lockMat=new T.MeshStandardMaterial({color:'#d8b04a',roughness:.3,metalness:.8}),bigLockMat=new T.MeshStandardMaterial({color:'#c23b3b',roughness:.35,metalness:.6});
- const doors={};for(const o of OPENINGS)if(o.door){const g=new T.Group(),[s0,s1]=o.span,len=s1-s0,mid=(s0+s1)/2;for(let i=0;i<=len/.18;i++){const bar=new T.Mesh(new T.CylinderGeometry(.015,.015,MINE.ceiling,6),gateMat);bar.position.set(-len/2+i*.18,MINE.ceiling/2,0);g.add(bar);}
+ const doors={};const crackMat=new T.MeshStandardMaterial({color:'#8a5a40',roughness:.95}),seamMat=new T.MeshStandardMaterial({color:'#1c120c',roughness:1});
+ for(const o of OPENINGS)if(o.door&&DOORS[o.door].kind==='dig'){// cracked rock: a lumpy slab with dark seams, crumbles when dug
+  const g=new T.Group(),[s0,s1]=o.span,len=s1-s0,mid=(s0+s1)/2,H=MINE.ceiling;g.add(Object.assign(new T.Mesh(new T.BoxGeometry(len,H,.16),crackMat),{castShadow:true}));g.children[0].position.y=H/2;
+  for(const [x,y,a,l] of [[-.2,.5,.7,.6],[.15,.9,-.5,.7],[0,1.25,.3,.5],[.3,.35,1.1,.4]]){const seam=new T.Mesh(new T.BoxGeometry(l,.025,.18),seamMat);seam.position.set(x,y,0);seam.rotation.z=a;g.add(seam);}
+  const at=o.wall==='x'?[o.at,0,mid]:[mid,0,o.at];g.position.set(...W(at));g.rotation.y=MINE.yaw+(o.wall==='x'?Math.PI/2:0);g.userData.dig=true;root.add(g);doors[o.door]=g;}
+ for(const o of OPENINGS)if(o.door&&DOORS[o.door].kind!=='dig'){const g=new T.Group(),[s0,s1]=o.span,len=s1-s0,mid=(s0+s1)/2;for(let i=0;i<=len/.18;i++){const bar=new T.Mesh(new T.CylinderGeometry(.015,.015,MINE.ceiling,6),gateMat);bar.position.set(-len/2+i*.18,MINE.ceiling/2,0);g.add(bar);}
   for(const y of [.25,MINE.ceiling-.2]){const rail=new T.Mesh(new T.BoxGeometry(len,.05,.04),gateMat);rail.position.y=y;g.add(rail);}
   if(o.door==='A'||o.door==='B'){const lock=new T.Mesh(new T.BoxGeometry(.14,.16,.06),o.door==='B'?bigLockMat:lockMat);lock.position.y=.55;g.add(lock);}
   const at=o.wall==='x'?[o.at,0,mid]:[mid,0,o.at];g.position.set(...W(at));g.rotation.y=MINE.yaw+(o.wall==='x'?Math.PI/2:0);root.add(g);doors[o.door]=g;}
@@ -41,12 +46,20 @@ export function createMine(scene){
  const chests={};for(const [id,c] of Object.entries(CHESTS)){const g=new T.Group(),big=c.holds==='big',s=big?1.4:1;const body=new T.Mesh(new T.BoxGeometry(.22*s,.13*s,.15*s),chestMat);body.position.y=.065*s;g.add(body);const lid=new T.Group();lid.position.set(0,.13*s,.075*s);const top=new T.Mesh(new T.BoxGeometry(.22*s,.05*s,.15*s),chestMat);top.position.set(0,.025*s,-.075*s);lid.add(top);const band=new T.Mesh(new T.BoxGeometry(.04*s,.06*s,.155*s),trimMat);band.position.set(0,.02*s,-.075*s);lid.add(band);g.add(lid);
   g.position.set(...W(c.at));g.rotation.y=MINE.yaw;root.add(g);chests[id]={g,lid};}
  const plates={};for(const [id,p] of Object.entries(PLATES)){const m=new T.Mesh(new T.CylinderGeometry(.22,.24,.03,20),new T.MeshStandardMaterial({color:'#4fb3c9',emissive:'#1f8fb0',emissiveIntensity:.4}));m.position.set(...W([p.at[0],.015,p.at[2]]));root.add(m);plates[id]=m;}
+ // The spirit mark: a glowing spiral-mountain painted on the chamber wall, and a battery cell.
+ {const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');x.strokeStyle='#7ff5e4';x.lineWidth=10;x.lineCap='round';x.shadowColor='#3fe0d0';x.shadowBlur=18;
+  x.beginPath();x.moveTo(30,200);x.lineTo(128,50);x.lineTo(226,200);x.stroke();x.beginPath();for(let t=0;t<14;t+=.1){const r=4+t*4;x.lineTo(128+Math.cos(t)*r,150+Math.sin(t)*r*.8);}x.stroke();
+  const tex=new T.CanvasTexture(c);tex.colorSpace=T.SRGBColorSpace;const m=new T.Mesh(new T.PlaneGeometry(.9,.9),new T.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}));m.position.set(...W(SPIRIT_MARK.at));m.rotation.y=MINE.yaw+Math.PI/2;root.add(m);keep.push(tex,m.geometry,m.material);
+  const glow=new T.PointLight('#5ff0dc',1.2,3,1.5);glow.position.set(...W([SPIRIT_MARK.at[0]+.4,SPIRIT_MARK.at[1],SPIRIT_MARK.at[2]]));root.add(glow);}
+ const cellMat=new T.MeshStandardMaterial({color:'#7dff6a',emissive:'#3ad13a',emissiveIntensity:1.2,roughness:.3}),capMat=new T.MeshStandardMaterial({color:'#d9d9d9',metalness:.9,roughness:.25});
+ const cells={};for(const [id,c] of Object.entries(CELLS)){const g=new T.Group();const body=new T.Mesh(new T.CylinderGeometry(.035,.035,.1,14),cellMat);g.add(body);const cap=new T.Mesh(new T.CylinderGeometry(.015,.015,.02,10),capMat);cap.position.y=.06;g.add(cap);g.position.set(...W(c.at));root.add(g);cells[id]=g;}
  scene.add(root);
  return {root,
-  openDoor(id){const g=doors[id];if(g)g.userData.opening=0;},
+  takeCell(id){const g=cells[id];if(g)g.visible=false;},
+  openDoor(id){const g=doors[id];if(!g)return;if(g.userData.dig){g.visible=false;return;}g.userData.opening=0;},
   openChest(id){const c=chests[id];if(c)c.lid.userData.opening=0;},
   pressPlate(id){const m=plates[id];if(m){m.position.y-=.02;m.material.emissiveIntensity=1.6;}},
-  update(dt){for(const g of Object.values(doors))if(g.userData.opening!==undefined&&g.userData.opening<1){g.userData.opening=Math.min(1,g.userData.opening+dt*.8);g.position.y=mineWorld([0,0,0])[1]+MINE.ceiling*.95*g.userData.opening;}
+  update(dt){for(const g of Object.values(cells))if(g.visible){g.rotation.y+=dt*2;}for(const g of Object.values(doors))if(g.userData.opening!==undefined&&g.userData.opening<1){g.userData.opening=Math.min(1,g.userData.opening+dt*.8);g.position.y=mineWorld([0,0,0])[1]+MINE.ceiling*.95*g.userData.opening;}
    for(const c of Object.values(chests))if(c.lid.userData.opening!==undefined&&c.lid.userData.opening<1){c.lid.userData.opening=Math.min(1,c.lid.userData.opening+dt*2.5);c.lid.rotation.x=-1.9*c.lid.userData.opening;}},
-  dispose(){root.removeFromParent();root.traverse(o=>{o.geometry?.dispose();});[shellMat,lampMat,gateMat,lockMat,bigLockMat,chestMat,trimMat,...keep].forEach(x=>x.dispose?.());}};
+  dispose(){root.removeFromParent();root.traverse(o=>{o.geometry?.dispose();});[shellMat,lampMat,crackMat,seamMat,cellMat,capMat,gateMat,lockMat,bigLockMat,chestMat,trimMat,...keep].forEach(x=>x.dispose?.());}};
 }

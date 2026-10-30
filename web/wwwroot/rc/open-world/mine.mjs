@@ -13,7 +13,7 @@ import { createDungeon } from '../physics/dungeon.mjs';
 // Sited on flat desert east of the Boneyard (ground at -6.7 m there), its footprint cut out of the
 // terrain so the mine's own floor is the ground.
 export const MINE = Object.freeze({ anchor: [2700, -6.7, 1100], yaw: 0, ceiling: 1.6, wall: .12 });
-export const MINE_BOUNDS = Object.freeze([2700 - 9.5, 1100 - 25.5, 2700 + 9.5, 1100 + 6]);
+export const MINE_BOUNDS = Object.freeze([2700 - 9.5, 1100 - 25.5, 2700 + 9.5, 1100 + 6]);   // R7 sits inside it
 
 const R = (id, x0, x1, z0, z1, extra = {}) => ({ id, x: [x0, x1], z: [z0, z1], ...extra });
 export const ROOMS = Object.freeze([
@@ -24,6 +24,7 @@ export const ROOMS = Object.freeze([
   R('R4', -9, -4, -6, -2, { name: 'West stope' }),
   R('R5', -3, 3, -22, -14, { name: 'Excavator hall' }),
   R('R6', -1.5, 1.5, -25, -22, { name: 'Alien cell' }),
+  R('R7', -4, -1.5, -25, -22.5, { name: 'Spirit chamber' }),
 ]);
 // Openings between rooms: on a shared wall, [from, to, axis, at, span, door?]
 export const OPENINGS = Object.freeze([
@@ -33,6 +34,8 @@ export const OPENINGS = Object.freeze([
   { a: 'R1', b: 'R4', wall: 'x', at: -4, span: [-5, -3], door: 'P' },
   { a: 'R3', b: 'R5', wall: 'z', at: -14, span: [-1, 1], door: 'B' },
   { a: 'R5', b: 'R6', wall: 'z', at: -22, span: [-1.5, 1.5], door: 'C' },
+  // Cracked rock: the claw you win from the boss digs through it, Zelda's first use of a new item.
+  { a: 'R6', b: 'R7', wall: 'x', at: -1.5, span: [-24.4, -23.1], door: 'D' },
 ]);
 // Solid features: [x0, x1, z0, z1, y0, y1, surface]. The entrance beam leaves a 22 cm crawl gap.
 export const FEATURES = Object.freeze([
@@ -51,6 +54,9 @@ export const CHESTS = Object.freeze({
   BK: { room: 'R4', at: [-8, .62, -4], holds: 'big' },
 });
 export const PLATES = Object.freeze({ P1: { room: 'R3', at: [0, 0, -12] } });
+// The spirit chamber: a glowing mark of the mountain (touch it: the story begins) and a battery cell.
+export const SPIRIT_MARK = Object.freeze({ room: 'R7', at: [-3.9, .7, -23.75] });
+export const CELLS = Object.freeze({ 'mine-spirit': { room: 'R7', at: [-2.6, .08, -24.5] } });
 // Bad toys per room (local positions): the hub's pair teaches the fight, then one guard per room.
 export const MINE_ENEMIES = Object.freeze([
   { id: 'hub1', room: 'R1', at: [-2, 0, -4.5] }, { id: 'hub2', room: 'R1', at: [2.2, 0, -5.5] },
@@ -58,11 +64,11 @@ export const MINE_ENEMIES = Object.freeze([
   { id: 'west1', room: 'R4', at: [-5.2, 0, -5] }, { id: 'west2', room: 'R4', at: [-5.6, 0, -2.8] },
 ]);
 // Where a knocked-out robot comes back: each room's doorway from the way in.
-export const ROOM_ENTRANCES = Object.freeze({ R0: [0, 0, 5], R1: [0, 0, -.6], R2: [4.6, 0, -4], R3: [0, 0, -8.6], R4: [-4.6, 0, -4], R5: [0, 0, -14.6], R6: [0, 0, -22.4] });
+export const ROOM_ENTRANCES = Object.freeze({ R0: [0, 0, 5], R1: [0, 0, -.6], R2: [4.6, 0, -4], R3: [0, 0, -8.6], R4: [-4.6, 0, -4], R5: [0, 0, -14.6], R6: [0, 0, -22.4], R7: [-2, 0, -23.7] });
 export function roomAt([x, , z]) { return ROOMS.find(r => x >= r.x[0] && x <= r.x[1] && z >= r.z[0] && z <= r.z[1])?.id ?? null; }
 export const mineLocal = ([x, y, z]) => { const a = MINE.anchor, c = Math.cos(MINE.yaw), s = Math.sin(MINE.yaw), dx = x - a[0], dz = z - a[2]; return [dx * c - dz * s, y - a[1], dx * s + dz * c]; };
 
-export const DOORS = Object.freeze({ A: { kind: 'small' }, P: { kind: 'plate', plate: 'P1' }, B: { kind: 'big' }, C: { kind: 'boss' } });
+export const DOORS = Object.freeze({ A: { kind: 'small' }, P: { kind: 'plate', plate: 'P1' }, B: { kind: 'big' }, C: { kind: 'boss' }, D: { kind: 'dig' } });
 
 export const MINE_DUNGEON = Object.freeze({
   start: 'R0', boss: 'R5',
