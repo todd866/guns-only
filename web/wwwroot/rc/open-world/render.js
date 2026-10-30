@@ -4,7 +4,7 @@ import {roadVerges} from './road-verges.mjs';
 import {roadsideDetail,desertScatter} from './roadside-detail.mjs';
 import {createSurfaceMaps} from './materials.js';
 import {groundTriangles,elevationAt,terrainStep} from './elevation.mjs';
-import {inMountain,roadNear,MOUNTAIN} from './spirit-mountain.mjs';
+import {inMountain,roadNear,MOUNTAIN,LAKE} from './spirit-mountain.mjs';
 import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import * as T from '../../vendor/three.module.js';
@@ -121,7 +121,7 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null,
   // Open desert: creosote-like clumps (three crossed cards, slightly varied height and tone)
   // or a low stone, on bare sand only. Same two batches as the verge planting.
   if(elevation)for(const {x,z,size:s,stone} of desertScatter(tile,b,residentialBounds,460,sitePad)){
-   if(inMountain(x,z)&&roadNear(x,z).some(n=>n.d<MOUNTAIN.shelf+3))continue;   // never on Spirit Mountain's road
+   if(inMountain(x,z)&&(roadNear(x,z).some(n=>n.d<MOUNTAIN.shelf+3)||LAKE.contains(x,z)))continue;   // never on Spirit Mountain's road or under its lake
    const y=elevationAt(elevation,x,z,terrainSite)-.025,turn=(x*.37+z*.11)%Math.PI;
    if(stone){const r=s*.55,top=[x,y+r*.45,z];for(let j=0;j<5;j++){const a=turn+j*Math.PI*2/5,c=turn+(j+1)*Math.PI*2/5;tri('gravel',top,[x+Math.cos(c)*r,y+.005,z+Math.sin(c)*r*.8],[x+Math.cos(a)*r,y+.005,z+Math.sin(a)*r*.8],.72+j*.05);}continue;}
    for(let j=0;j<3;j++){const angle=turn+j*2.094,dx=Math.cos(angle)*s,dz=Math.sin(angle)*s,h=s*(.7+j*.12),tone=.68+j*.09;

@@ -1,5 +1,5 @@
 import * as T from '../../vendor/three.module.js';
-import {mountainHeight,MOUNTAIN_BOUNDS,ROAD,MOUNTAIN,LAKE,damTris,townTris,valleyPoint} from './spirit-mountain.mjs';
+import {mountainHeight,MOUNTAIN_BOUNDS,ROAD,MOUNTAIN,LAKE,damTris,damSpan,townTris,valleyPoint,TOWN,DAM_PARAPET} from './spirit-mountain.mjs';
 import {SIZE} from './stream.mjs';
 import {createWaterSurface} from './water-surface.js';
 import {WATER} from '../physics/water.mjs';
@@ -36,16 +36,46 @@ export function createMountainView(scene) {
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(v, 3)); g.setIndex(idx); g.computeVertexNormals(); return g; };
   const road = new T.Mesh(ribbon(MOUNTAIN.roadHalf, .03, () => true), roadMat); road.receiveShadow = true; road.name = 'MountainRoad'; root.add(road);
   const dashes = new T.Mesh(ribbon(.07, .045, i => i % 3 === 0), lineMat); dashes.name = 'MountainRoadLine'; root.add(dashes);
-  // The dam: pale concrete, its downstream face banded like Hoover's lifts; the crest is a road.
-  const damGeo = new T.BufferGeometry(), dv = [];
-  for (const [a, b, c] of damTris()) dv.push(...a, ...b, ...c);
-  damGeo.setAttribute('position', new T.Float32BufferAttribute(dv, 3)); damGeo.computeVertexNormals();
-  const damMat = new T.MeshStandardMaterial({ color: '#d8d2c2', roughness: .85 }), dam = new T.Mesh(damGeo, damMat); dam.name = 'SpiritDam'; dam.castShadow = dam.receiveShadow = true; root.add(dam);
+  // The dam: concrete in Hoover's horizontal lift bands, with water stains down the downstream
+  // face; an asphalt crest road with a dashed line between parapets. Drawn on a grid (the
+  // collision is a plain box) so the bands and stains have somewhere to live.
+  const span = damSpan(), damV = [], damC = [], col = new T.Color(), concrete = new T.Color('#e0d3b6'), stain = new T.Color('#8f8a7c');
+  const y0 = MOUNTAIN.lake.floor - 6, y1 = span.crest, half = span.thick / 2, sq = (P, cs) => { const [a, b, c, e] = P; damV.push(...a, ...b, ...c, ...a, ...c, ...e); for (let i = 0; i < 6; i++) damC.push(...cs[[0, 1, 2, 0, 2, 3][i]]); };
+  const shade = (ac, y, face) => { const band = Math.floor((y - y0) / 4.5) % 2 ? .88 : 1.06, joint = Math.abs(((ac - span.from) % 16 + 16) % 16) < 1 ? .72 : 1, streak = face > 0 ? Math.max(0, Math.sin(ac * .9) * Math.sin(ac * .37 + 1)) * (1 - (y - y0) / (y1 - y0)) * .6 : 0; col.copy(concrete).lerp(stain, streak).multiplyScalar(band * joint); return [col.r, col.g, col.b]; };
+  for (const face of [1, -1]) for (let y = y0; y < y1; y += 4.5) for (let ac = span.from; ac < span.to; ac += 1) {
+    const ya = Math.min(y1, y + 4.5), ab = Math.min(span.to, ac + 1), al = span.along + face * half;
+    const P = [valleyPoint(al, ac, y), valleyPoint(al, ab, y), valleyPoint(al, ab, ya), valleyPoint(al, ac, ya)];
+    sq(face > 0 ? P : [P[1], P[0], P[3], P[2]], [shade(ac, y, face), shade(ab, y, face), shade(ab, ya, face), shade(ac, ya, face)]);
+  }
+  const damGeo = new T.BufferGeometry(); damGeo.setAttribute('position', new T.Float32BufferAttribute(damV, 3)); damGeo.setAttribute('color', new T.Float32BufferAttribute(damC, 3)); damGeo.computeVertexNormals();
+  const damMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: .9, side: T.DoubleSide }), dam = new T.Mesh(damGeo, damMat); dam.name = 'SpiritDam'; dam.castShadow = dam.receiveShadow = true; root.add(dam);
+  // The crest road and its parapets (the parapets collide: damTris).
+  const crest = new T.Group(); crest.name = 'SpiritDamCrest'; root.add(crest);
+  const yaw = Math.atan2(...(() => { const a = valleyPoint(0, 0), b = valleyPoint(0, 1); return [b[0] - a[0], b[2] - a[2]]; })());
+  const along = (w, d, h, al, ac, y, mat) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat), p = valleyPoint(al, ac, y); m.position.set(...p); m.rotation.y = yaw; crest.add(m); return m; };
+  const crestMat = new T.MeshStandardMaterial({ color: '#41474b', roughness: .9 }), parMat = new T.MeshStandardMaterial({ color: '#d6cfbd', roughness: .85 }), mid = (span.from + span.to) / 2, len = span.to - span.from;
+  along(span.thick - 2 * DAM_PARAPET.w, len, .04, span.along, mid, y1 + .02, crestMat);
+  for (const s of [-1, 1]) along(DAM_PARAPET.w, len, DAM_PARAPET.h, span.along + s * (half - DAM_PARAPET.w / 2), mid, y1 + DAM_PARAPET.h / 2, parMat);
+  for (let ac = span.from + 4; ac < span.to - 4; ac += 6) along(.14, 2.6, .01, span.along, ac, y1 + .045, lineMat);
   // The drowned town: weathered adobe, silted and green under the water.
   const townGeo = new T.BufferGeometry(), tv = [];
   for (const [a, b, c] of townTris()) tv.push(...a, ...b, ...c);
   townGeo.setAttribute('position', new T.Float32BufferAttribute(tv, 3)); townGeo.computeVertexNormals();
   const townMat = new T.MeshStandardMaterial({ color: '#9c8f74', roughness: .95 }), town = new T.Mesh(townGeo, townMat); town.name = 'DrownedTown'; town.receiveShadow = true; root.add(town);
+  // Its details: dark empty doors and windows, a coping line round each roof, a cross on the steeple.
+  const holeMat = new T.MeshStandardMaterial({ color: '#2b2722', roughness: 1 }), trimMat = new T.MeshStandardMaterial({ color: '#7d725e', roughness: .95 });
+  const tyaw = Math.atan2(...(() => { const a = valleyPoint(0, 0), b = valleyPoint(0, 1); return [b[0] - a[0], b[2] - a[2]]; })()), floor = MOUNTAIN.lake.floor;
+  const piece = (w, h, d, al, ac, y, mat) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(...valleyPoint(al, ac, y)); m.rotation.y = tyaw; town.add(m); };
+  for (const [a0, a1, c0, c1, h] of TOWN) {
+    const steeple = h > 10, al = (a0 + a1) / 2, ac = (c0 + c1) / 2;
+    if (steeple) { piece(.3, 2.4, .3, al, ac, floor + h + 1.2, trimMat); piece(.3, .3, 1.4, al, ac, floor + h + 1.7, trimMat); continue; }
+    for (const c of [c0, c1]) {   // the faces toward and away from the main street
+      const s = c === c0 ? -1 : 1;
+      piece(1.1, 2.1, .12, al, c + s * .02, floor + 1.05, holeMat);   // door
+      for (let x = a0 + 2; x < a1 - 1.5; x += 3.2) if (Math.abs(x - al) > 1.4) piece(.9, .9, .12, x, c + s * .02, floor + Math.min(h - .9, 1.8), holeMat);
+    }
+    piece(a1 - a0 + .3, .25, .3, al, c0, floor + h, trimMat); piece(a1 - a0 + .3, .25, .3, al, c1, floor + h, trimMat);   // roof coping
+  }
   // The reservoir's surface: the lake's bounding box at its level; the canyon walls hide the rest.
   const corners = [[MOUNTAIN.lake.back, -220], [MOUNTAIN.lake.back, 220], [MOUNTAIN.lake.dam, -220], [MOUNTAIN.lake.dam, 220]].map(([a, c]) => valleyPoint(a, c));
   const xs = corners.map(p => p[0]), zs = corners.map(p => p[2]), w = Math.max(...xs) - Math.min(...xs), d = Math.max(...zs) - Math.min(...zs);
@@ -57,6 +87,6 @@ export function createMountainView(scene) {
     /** The streamed tile at key now has (or no longer has) detailed ground. */
     tileLoaded(key, on) { const m = chunks.get(key); if (m) m.visible = !on; },
     update(day) { farMat.color.setScalar(.15 + .85 * day); lake.update(WATER.time); },
-    dispose() { root.removeFromParent(); root.traverse(o => o.geometry?.dispose()); [farMat, roadMat, lineMat, damMat, townMat].forEach(m => m.dispose()); lake.dispose(); },
+    dispose() { root.removeFromParent(); root.traverse(o => o.geometry?.dispose()); [farMat, roadMat, lineMat, damMat, townMat, crestMat, parMat, holeMat, trimMat].forEach(m => m.dispose()); lake.dispose(); },
   };
 }

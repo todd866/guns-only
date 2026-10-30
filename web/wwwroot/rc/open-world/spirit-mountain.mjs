@@ -15,7 +15,7 @@ export const MOUNTAIN = Object.freeze({
   // The dam (owner, 30 Oct): across the east valley's canyon, holding a reservoir you can dive in;
   // the drowned town sits on a flattened floor under it. (In the upside-down there is no dam.)
   // Distances are along / across the east valley's axis from the mountain's centre.
-  lake: { valley: 0, dam: 650, damThick: 9, crest: 62, level: 56, floor: 8, town: [525, 632], townHalf: 58, back: 430 },
+  lake: { valley: 0, dam: 650, damThick: 9, crest: 62, level: 60, floor: 8, town: [525, 632], townHalf: 58, back: 430 },
 });
 const M = MOUNTAIN, [CX, CZ] = M.centre;
 export const MOUNTAIN_BOUNDS = Object.freeze([CX - M.radius, CZ - M.radius, CX + M.radius, CZ + M.radius]);
@@ -152,9 +152,23 @@ export function damTris() {
   quad(P(h, d.to, y0), P(h, d.to, y1), P(-h, d.to, y1), P(-h, d.to, y0));
   // Fix each face's winding to point away from the dam's centre line.
   const mid = valleyPoint(d.along, (d.from + d.to) / 2, (y0 + y1) / 2);
-  return out.map(([a, b, c]) => { const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  const wall = out.map(([a, b, c]) => { const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
     const ctr = [(a[0] + b[0] + c[0]) / 3 - mid[0], (a[1] + b[1] + c[1]) / 3 - mid[1], (a[2] + b[2] + c[2]) / 3 - mid[2]];
     return n[0] * ctr[0] + n[1] * ctr[1] + n[2] * ctr[2] >= 0 ? [a, b, c] : [a, c, b]; });
+  // Parapets along both crest edges, so a car on the crest road can't drive off the top.
+  const par = DAM_PARAPET;
+  return [...wall, ...[-1, 1].flatMap(s => frameBox([d.along + s * (h - par.w / 2) - par.w / 2, d.along + s * (h - par.w / 2) + par.w / 2, d.from, d.to], y1, y1 + par.h))];
+}
+export const DAM_PARAPET = Object.freeze({ w: .5, h: .4 });   // low: a toy car's camera sees the lake over it, and still can't drive off
+/** A box in the valley frame [along0, along1, across0, across1] from y0 to y1, faces outward. */
+function frameBox([a0, a1, c0, c1], y0, y1) {
+  const P = (al, ac, y) => valleyPoint(al, ac, y), out = [], mid = valleyPoint((a0 + a1) / 2, (c0 + c1) / 2, (y0 + y1) / 2);
+  const q = (a, b, c, e) => out.push([a, b, c], [a, c, e]);
+  q(P(a0, c0, y1), P(a0, c1, y1), P(a1, c1, y1), P(a1, c0, y1));
+  q(P(a0, c0, y0), P(a0, c0, y1), P(a1, c0, y1), P(a1, c0, y0)); q(P(a0, c1, y0), P(a0, c1, y1), P(a1, c1, y1), P(a1, c1, y0));
+  q(P(a0, c0, y0), P(a0, c0, y1), P(a0, c1, y1), P(a0, c1, y0)); q(P(a1, c0, y0), P(a1, c0, y1), P(a1, c1, y1), P(a1, c1, y0));
+  return out.map(([a, b, c]) => { const u = a.map((v, i) => b[i] - v), v = a.map((w, i) => c[i] - w), n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const ctr = [0, 1, 2].map(i => (a[i] + b[i] + c[i]) / 3 - mid[i]); return n[0] * ctr[0] + n[1] * ctr[1] + n[2] * ctr[2] >= 0 ? [a, b, c] : [a, c, b]; });
 }
 
 // The drowned town (Lake Mead really drowned St. Thomas, Nevada): a main street of ruined adobe

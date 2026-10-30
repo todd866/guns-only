@@ -1,5 +1,6 @@
 import * as T from '../../vendor/three.module.js';
 import {districtBounds} from './district-zones.mjs';
+import {bodyAt} from '../physics/water.mjs';
 
 // Toy-height ground detail. The chase camera sits 30-50 cm up, so the few metres in front of the
 // car fill half the frame; flat turf and concrete there read as a cheap game however good the
@@ -82,11 +83,12 @@ export function planCell(cx, cz, raycast, {cell = NEAR_DETAIL.cell, density = NE
   for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
     const px = x0 + (i + .5) * step, pz = z0 + (j + .5) * step, sub = j * 4 + i;
     if (INDOOR.some(b => px >= b[0] && px <= b[2] && pz >= b[1] && pz <= b[3])) continue;
-    const h = raycast([px, 40, pz], [0, -1, 0], 80);
+    const h = raycast([px, 300, pz], [0, -1, 0], 340);   // from above Spirit Mountain's summit
     if (!h) continue;
     hits++;
     const n = h.normal ?? [0, 1, 0], s = h.surface;
     if (n[1] < .82 || SKIP.has(s)) continue;
+    const wet = bodyAt(px, pz); if (wet && (wet.level ?? 0) > h.point[1]) continue;   // nothing grows under water
     const yAt = (x, z) => h.point[1] - (n[0] * (x - px) + n[2] * (z - pz)) / n[1];
     const scatter = (count, key, make) => {
       for (let k = 0; k < count; k++) {
