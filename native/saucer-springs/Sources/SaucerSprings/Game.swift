@@ -89,3 +89,33 @@ func snapshotGame(root: URL, to path: String, wait: Double, clickStart: Bool) {
   }
   withExtendedLifetime(game) { app.run() }
 }
+
+// --perf out.json [--size WxH] [--seconds N]: the app's frame-rate gate. Runs the game off-screen
+// at a real window size, drives it with tools/rc/native/drive-script.js, and reports the game's own
+// frame times (p50/p95 over its last 600 frames) and the pixels it renders.
+func perfGame(root: URL, out: String, size: NSSize, seconds: Double, drive: String) {
+  let app = NSApplication.shared; app.setActivationPolicy(.prohibited)
+  let game = GameWindow(root: root, offscreen: true)
+  game.window.setContentSize(size)
+  func poll(_ tries: Int) {
+    game.web.evaluateJavaScript("window.__gunsOnlyRC?.snapshot?.().assets === 'blender'") { r, _ in
+      if (r as? Bool) == true {
+        game.web.evaluateJavaScript("document.getElementById('start')?.click(); true") { _, _ in
+          DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            game.web.evaluateJavaScript(drive) { _, _ in
+              DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+                let js = "JSON.stringify({frames: window.__gunsOnlyRC.frames(), dpr: devicePixelRatio, css: [innerWidth, innerHeight], pixels: Math.round(innerWidth * innerHeight * Math.min(devicePixelRatio, 1.75) ** 2), load: null})"
+                game.web.evaluateJavaScript(js) { r, _ in
+                  let text = (r as? String) ?? "{}"; try? text.write(toFile: out, atomically: true, encoding: .utf8); print(text); exit(0)
+                }
+              }
+            }
+          }
+        }
+      } else if tries > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { poll(tries - 1) } }
+      else { print("game never finished loading"); exit(1) }
+    }
+  }
+  DispatchQueue.main.asyncAfter(deadline: .now() + 2) { poll(120) }
+  withExtendedLifetime(game) { app.run() }
+}

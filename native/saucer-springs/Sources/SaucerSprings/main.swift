@@ -351,6 +351,11 @@ let args = CommandLine.arguments
 if !args.contains("--metal") && !args.contains("--shot") {   // (--snapshot is a game-mode QA capture)
   let web = args.firstIndex(of: "--web").map { URL(fileURLWithPath: args[$0 + 1]) } ?? Bundle.main.resourceURL!.appendingPathComponent("web")
   guard FileManager.default.fileExists(atPath: web.appendingPathComponent("rc/index.html").path) else { print("no game build at \(web.path) (make-app.sh packages it)"); exit(2) }
+  if let i = args.firstIndex(of: "--perf") {
+    let wh = args.firstIndex(of: "--size").map { args[$0 + 1].split(separator: "x").compactMap { Double($0) } } ?? [1440, 900]
+    let script = args.firstIndex(of: "--drive-script").flatMap { try? String(contentsOfFile: args[$0 + 1], encoding: .utf8) } ?? "true"
+    perfGame(root: web, out: args[i + 1], size: NSSize(width: wh[0], height: wh[1]), seconds: args.firstIndex(of: "--seconds").flatMap { Double(args[$0 + 1]) } ?? 15, drive: script)
+  }
   if let i = args.firstIndex(of: "--snapshot") {
     snapshotGame(root: web, to: args[i + 1], wait: args.firstIndex(of: "--wait").flatMap { Double(args[$0 + 1]) } ?? 15, clickStart: args.contains("--click-start"))
   }
