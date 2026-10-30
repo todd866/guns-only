@@ -151,3 +151,4 @@ body.driving:not(.race-mode) header nav #atlas,body.driving:not(.race-mode) head
 /* Controls help matches the device: touch pads on phones, keys elsewhere. */
 #keys-panel dl.touch-keys{display:none}
 @media(pointer:coarse){#keys-panel dl.touch-keys{display:grid}#keys-panel dl.key-list{display:none}}
+#flight-hud{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}

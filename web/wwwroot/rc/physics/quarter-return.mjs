@@ -82,7 +82,7 @@ export function stepQuarterReturn(state,car,raw,dt,world){
      // A vert wall carries the most: big, readable air above the coping.
      const [lo,hi]=a.vert?[5.5,8]:bowl?[4.2,5.45]:returning?[5.5,8.5]:[2.2,3.4];
      car.vel=[drift[0]+a.inward[0]*sideways,clamp(car.vel[1],lo,hi),drift[2]+a.inward[2]*sideways];
-     state.arc={kind:returning?'return':'exit',returning,yaw:a.yaw,turn:raw.steer<-.15?-1:1,time:0};
+     state.arc={kind:returning?'return':'exit',returning,yaw:a.yaw,turn:raw.steer<-.15?-1:1,time:0,inward:a.inward,apex:car.vel[1]/9.81,vert:returning};
     }
     state.armed=null;
    }
@@ -96,12 +96,12 @@ export function stepQuarterReturn(state,car,raw,dt,world){
  if(arc.kind==='return'){const t=clamp(arc.time/.65,0,1);yaw+=Math.PI*arc.turn*t*t*(3-2*t);}
  // A transfer faces along its travel, so it meets the landing face nose-down the slope.
  else if(arc.kind==='transfer'&&Math.hypot(car.vel[0],car.vel[2])>.8)yaw=arc.yaw=Math.atan2(car.vel[0],-car.vel[2]);
- let targetUp=[0,1,0];
+ let targetUp=[0,1,0],aligning=false,clear=Infinity;
  if(world&&arc.kind!=='exit'&&car.vel[1]<0){
   const ground=world.raycast(add(car.pos,[0,.3,0]),[0,-1,0],8);
   if(ground&&ground.normal[1]>.35){
-   targetUp=ground.normal;
-   const clearance=ground.dist-.3-rideHeight(car.params);
+   targetUp=ground.normal;aligning=true;
+   const clearance=clear=ground.dist-.3-rideHeight(car.params);
    if(arc.returning&&clearance<.8){
     // Soften the last part of the descent and carry the saved approach energy
     // down the transition. This prevents a toy-suspension bounce from undoing
@@ -112,11 +112,26 @@ export function stepQuarterReturn(state,car,raw,dt,world){
    }
   }
  }
- const forward=[Math.sin(yaw),0,-Math.cos(yaw)];
+ let forward=[Math.sin(yaw),0,-Math.cos(yaw)];
+ // Vert air (owner, 2026-10-30): out of a wall the car leaves nose-up with its wheels to the ramp,
+ // turns left or right about its own up axis at the top, and comes back nose-down onto the wall,
+ // the way a skater's frontside or backside air does. Steer chooses the side; the wheels stay
+ // facing the ramp throughout, so it lands rolling.
+ // The landing alignment takes over only in the last metre above the ramp.
+ if(arc.vert&&arc.inward&&!arc.kick&&(car.vel[1]>0||!aligning||clear>1.1)){
+  const s0=clamp((arc.time-arc.apex*.45)/(arc.apex*.85),0,1),k=s0*s0*(3-2*s0),side=scale(cross([0,1,0],arc.inward),arc.turn);
+  forward=norm(add(scale([0,1,0],Math.cos(Math.PI*k)),scale(side,Math.sin(Math.PI*k))));
+  // Falling back in, the nose tips from straight down toward the ramp's slope, so it re-enters
+  // rolling down the transition rather than spearing it.
+  const fall=clamp(-car.vel[1]/7,0,1)*k;
+  forward=norm(add(forward,scale(arc.inward,fall*.4)));
+  targetUp=norm(add(arc.inward,scale([0,1,0],fall*.4)));
+ }
  const targetForward=norm(sub(forward,scale(targetUp,dot(forward,targetUp))));
  const error=scale(add(cross(carForward(car),targetForward),cross(carUp(car),targetUp)),.5);
  // Bounded attitude acceleration: visibly rotate in flight and align to the landing face.
  let acceleration=sub(scale(error,144),scale(car.ang,20));
- const size=Math.hypot(...acceleration);if(size>100)acceleration=scale(acceleration,100/size);
+ // A vert air turns half a circle in about half a second: it gets more authority than a flat return.
+ const cap=arc.vert?180:100,size=Math.hypot(...acceleration);if(size>cap)acceleration=scale(acceleration,cap/size);
  return rotate(car.q,unrotate(car.q,acceleration).map((v,i)=>v/car.invInertia[i]));
 }

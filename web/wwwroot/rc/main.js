@@ -265,6 +265,38 @@ function alienGunner(){const g=new T.Group(),skin=new T.MeshStandardMaterial({co
 function laserBeam(){const g=new T.CylinderGeometry(.03,.03,1,8,1,true);g.translate(0,.5,0);g.rotateX(Math.PI/2);const m=new T.Mesh(g,new T.MeshBasicMaterial({color:'#ff3b30',transparent:true,opacity:.85,depthWrite:false,blending:T.AdditiveBlending}));m.userData.noAO=true;return m;}
 const balloonMat=new T.MeshStandardMaterial({color:'#4fc3ff',roughness:.2}),oilMat=new T.MeshStandardMaterial({color:'#1b1b22',roughness:.05,metalness:.6}),bubbleMat=new T.MeshPhysicalMaterial({color:'#bfefff',transparent:true,opacity:.28,roughness:0,depthWrite:false});
 const SPARK=['#4fc3ff','#ffa020','#d84bff'];
+// Flight HUD (owner, 2026-10-30), in the guns-only F-22's language: a horizon and pitch ladder
+// that roll with the car, a heading tape, speed and height boxes, and power with the burner.
+// Hidden on the ground; landing hands back to driving with a callout.
+const hud=$('flight-hud'),hg=hud.getContext('2d');let hudMode=null;
+function drawFlightHud(){const mode=race.roam?s.flight.mode:null;
+ if(mode!==hudMode){if(hudMode&&!mode)callout('🛬 LANDED · back to driving');hudMode=mode;hud.hidden=!mode;}
+ if(!mode)return;
+ const dpr=Math.min(2,devicePixelRatio||1),W=innerWidth,H=innerHeight;if(hud.width!==Math.round(W*dpr)||hud.height!==Math.round(H*dpr)){hud.width=Math.round(W*dpr);hud.height=Math.round(H*dpr);}
+ const c=s.car,q=new T.Quaternion(c.q[0],c.q[1],c.q[2],c.q[3]),f=new T.Vector3(0,0,-1).applyQuaternion(q),rt=new T.Vector3(1,0,0).applyQuaternion(q),up=new T.Vector3(0,1,0).applyQuaternion(q);
+ const pitch=Math.asin(Math.max(-1,Math.min(1,f.y))),roll=Math.atan2(-rt.y,up.y),heading=(Math.atan2(f.x,-f.z)*180/Math.PI+360)%360;
+ const ground=course.world.raycast([c.pos[0],c.pos[1]+.05,c.pos[2]],[0,-1,0],400),agl=ground?ground.dist:null;
+ const G='#7dff9c',ink=(w=2)=>{hg.lineWidth=w;hg.strokeStyle=G;hg.fillStyle=G;hg.shadowColor='rgba(0,20,8,.85)';hg.shadowBlur=4;};
+ hg.setTransform(dpr,0,0,dpr,0,0);hg.clearRect(0,0,W,H);ink();hg.font='600 15px ui-monospace,Menlo,monospace';hg.textBaseline='middle';
+ const cx=W/2,cy=H*.46,pxPerDeg=Math.min(W,H)*.012;
+ // Pitch ladder and horizon, rolled about the waterline.
+ hg.save();hg.translate(cx,cy);hg.rotate(-roll);
+ for(let d=-30;d<=30;d+=10){const y=(pitch*180/Math.PI-d)*pxPerDeg;if(Math.abs(y)>H*.32)continue;const w=d===0?W*.22:W*.06;
+  hg.setLineDash(d<0?[8,6]:[]);hg.beginPath();hg.moveTo(-w,y);hg.lineTo(-w*.25,y);hg.moveTo(w*.25,y);hg.lineTo(w,y);hg.stroke();
+  if(d){hg.textAlign='right';hg.fillText(Math.abs(d),-w-6,y);hg.textAlign='left';hg.fillText(Math.abs(d),w+6,y);}}
+ hg.setLineDash([]);hg.restore();
+ // Waterline (where the nose points).
+ hg.beginPath();hg.moveTo(cx-34,cy);hg.lineTo(cx-12,cy);hg.lineTo(cx-6,cy+8);hg.moveTo(cx+34,cy);hg.lineTo(cx+12,cy);hg.lineTo(cx+6,cy+8);hg.stroke();
+ // Heading tape.
+ const ty=H*.1;hg.textAlign='center';for(let d=-30;d<=30;d+=5){const hdg=Math.round(heading/5)*5+d,x=cx+(hdg-heading)*6;if(Math.abs(x-cx)>W*.22)continue;const v=((hdg%360)+360)%360;hg.beginPath();hg.moveTo(x,ty);hg.lineTo(x,ty+(v%10?6:12));hg.stroke();if(v%10===0)hg.fillText(String(v/10).padStart(2,'0'),x,ty+24);}
+ hg.beginPath();hg.moveTo(cx,ty-4);hg.lineTo(cx-6,ty-14);hg.lineTo(cx+6,ty-14);hg.closePath();hg.fill();
+ // Speed (left) and height above ground (right) boxes.
+ const box=(x,label,value)=>{hg.strokeRect(x-44,cy-16,88,32);hg.textAlign='center';hg.font='600 20px ui-monospace,Menlo,monospace';hg.fillText(value,x,cy);hg.font='600 12px ui-monospace,Menlo,monospace';hg.fillText(label,x,cy+30);};
+ box(cx-W*.28,'KM/H',String(Math.round((mode==='fly'?s.flight.speed:Math.hypot(...c.vel))*3.6)));box(cx+W*.28,'AGL M',agl==null?'---':agl.toFixed(agl<10?1:0));
+ // Power and burner, lower left; the one key that matters, bottom centre.
+ hg.font='600 14px ui-monospace,Menlo,monospace';hg.textAlign='left';const px=cx-W*.28-44,py=cy+70;
+ if(mode==='fly'){hg.strokeRect(px,py,88,10);hg.fillRect(px,py,88*s.flight.power,10);hg.fillText(burning?'PWR  AB':'PWR',px,py+24);}else hg.fillText('🪂 CHUTE',px,py+12);
+ hg.textAlign='center';hg.fillText(mode==='fly'?'⏎ parachute':'drifting down…',cx,H*.86);}
 function drawPickups(now){const pk=race.pickups;
  crates.forEach((g,i)=>{const sp=pk.spots[i];g.visible=sp.ready<=0;g.rotation.y=now*.002+i;g.position.y=sp.pos[1]+Math.sin(now*.003+i)*.04;});
  for(const m of fxPool.values())m.visible=false;
@@ -393,7 +425,7 @@ function drawMap(){drawDetailedMinimap(map,{world:openWorld,course,race,player:s
 let reported=false;
 // 3-2-1-GO: nobody moves until GO (Re-Volt start).
 let countdown=-1,lastBeep=0;function startCountdown(){telemetry.raceStart({kind:race.furball?'furball':'race',track:telemetryTrack,mode});countdown=2.999;lastBeep=4;}
-const sfx={gate:0,coins:0,held:false,air:0,retreat:false,finished:false};let pumpkinsSmashed=0;let burning=false,trickCalled=false;const playmates=createPlaymates();
+const sfx={gate:0,coins:0,held:false,air:0,retreat:false,finished:false};let pumpkinsSmashed=0;let burning=false,trickCalled=false,camHeading=null,camEasing=false;const playmates=createPlaymates();
 function soundEvents(r,c){if(s.assist.driftFired){audio.boost();if(s.assist.driftFired>1)callout(s.assist.driftFired>2?'ULTRA TURBO!':'SUPER TURBO!');}
  if(s.gate!==sfx.gate){if(s.gate>sfx.gate)audio.gate();sfx.gate=s.gate;}
  if(s.coins.length>sfx.coins){audio.coin();sfx.coins=s.coins.length;}
@@ -477,17 +509,22 @@ const splats=openWorld.seasonStep(c.pos,c.vel,now/1000);if(splats.length){pumpki
  poseCar(car,wheels,c);syncRivals();race.rivals.forEach((rv,i)=>poseCar(rivalVis[i].group,rivalVis[i].wheels,rv.session.car));
  // Low chase camera behind the heading; pulled in front of any wall between it and the car.
  if(cameraCar)camera.position.add(new T.Vector3(r.x-cameraCar[0],r.y-cameraCar[1],r.z-cameraCar[2]));cameraCar=[r.x,r.y,r.z];
- const back=1.36+Math.min(.24,r.speed*.015),eye=[r.x,r.y+.12,r.z];desired.set(r.x-Math.sin(r.yaw)*back,r.y+.55,r.z+Math.cos(r.yaw)*back);
+ // A vert air points the nose at the sky, so its heading means nothing: hold the heading the car
+ // launched on, rise with it and look at it through the turn, then ease back once it lands.
+ const vertArc=s.assist.quarter?.arc?.vert?s.assist.quarter.arc:null,wantYaw=vertArc?vertArc.yaw+Math.PI:r.yaw;
+ if(camHeading===null||(!vertArc&&!camEasing))camHeading=wantYaw;else{const d=Math.atan2(Math.sin(wantYaw-camHeading),Math.cos(wantYaw-camHeading));camHeading+=d*Math.min(1,dt*(vertArc?10:4));camEasing=!!vertArc||Math.abs(d)>.04;}
+ const camYaw=camHeading;
+ const back=1.36+Math.min(.24,r.speed*.015),eye=[r.x,r.y+.12,r.z];desired.set(r.x-Math.sin(camYaw)*back,r.y+.55,r.z+Math.cos(camYaw)*back);
  const ray=[desired.x-eye[0],desired.y-eye[1],desired.z-eye[2]],dist=Math.hypot(...ray),hit=course.world.raycast(eye,ray.map(v=>v/dist),dist);
  if(hit){const k=Math.max(.15,hit.dist-.12)/dist;desired.set(eye[0]+ray[0]*k,eye[1]+ray[1]*k,eye[2]+ray[2]*k);}
  camera.fov+=((60+Math.min(5,r.speed*.3))-camera.fov)*Math.min(1,dt*3);camera.updateProjectionMatrix();camera.position.lerp(desired,1-Math.exp(-dt*7));
  // Sweep the smoothed position too: damping must not carry the camera through a wall.
  const actualRay=[camera.position.x-eye[0],camera.position.y-eye[1],camera.position.z-eye[2]],actualDistance=Math.hypot(...actualRay);if(actualDistance>.01){const obstruction=course.world.raycast(eye,actualRay.map(v=>v/actualDistance),actualDistance);if(obstruction){const k=Math.max(.08,obstruction.dist-.08)/actualDistance;camera.position.set(eye[0]+actualRay[0]*k,eye[1]+actualRay[1]*k,eye[2]+actualRay[2]*k);}}
  const portrait=camera.aspect<.8,portraitAim=-.3-Math.max(0,740-innerHeight)*.003;
- target.set(r.x+Math.sin(r.yaw)*1.05,r.y+(portrait?portraitAim:.18),r.z-Math.cos(r.yaw)*1.05);camera.lookAt(target);
+ if(vertArc)target.set(r.x,r.y+.1,r.z);else target.set(r.x+Math.sin(camYaw)*1.05,r.y+(portrait?portraitAim:.18),r.z-Math.cos(camYaw)*1.05);camera.lookAt(target);
  if(ui.panel()==='garage'){const a=now*.00022,d=portrait?1.7:1.05;camera.position.set(r.x+Math.sin(a)*d,r.y+(portrait?.75:.48),r.z+Math.cos(a)*d);camera.fov=48;if(portrait)camera.clearViewOffset();else camera.setViewOffset(innerWidth,innerHeight,(innerWidth>900?330:315)/2,0,innerWidth,innerHeight);camera.updateProjectionMatrix();camera.lookAt(r.x,r.y+(portrait?portraitAim:.08),r.z);}else if(camera.view?.enabled)camera.clearViewOffset();
  gates.forEach((g,i)=>{const next=i===(s.gate===cps.length-1?0:s.gate);g.userData.arch.material=next?archLit:archMat;g.userData.label.visible=false;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
- $('speed').textContent=Math.round(r.speed*3.6);$('clock').hidden=race.roam&&!race.furball;$('clock').textContent=format(race.furball?race.furball.left:s.time);drawLives(now,dt);drawPickups(now);drawLine(now);drawRoam(now);drawCoins(now);$('gate').textContent=race.furball?`FURBALL · 🎈${race.furball.out.has(s.car)?0:race.furball.lives.get(s.car)} · ${race.rivals.filter(r=>!race.furball.out.has(r.session.car)).length} bandits`:race.roam?(openWorld?nearestLocation(s.car.pos).short:'FREE DRIVE'):`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${s.laps>1?`LAP ${s.lap}/${s.laps}`:`${Math.min(s.gate+1,cps.length)}/${cps.length}`}`;if(!$('banner').dataset.callout)$('banner').hidden=!retreatActive(race);$('secret').hidden=!course.secrets.length;$('secret').textContent=openWorld?`◇ ${openWorld.progress.specimens.length}/${SPECIMENS.length} badges${expedition(openWorld.progress).complete?' ★':''}`:`◇ ${s.found}/${course.secrets.length}`;drawMap();polish?polish.render():renderer.render(scene,camera);
+ $('speed').textContent=Math.round(r.speed*3.6);$('clock').hidden=race.roam&&!race.furball;$('clock').textContent=format(race.furball?race.furball.left:s.time);drawLives(now,dt);drawPickups(now);drawFlightHud();drawLine(now);drawRoam(now);drawCoins(now);$('gate').textContent=race.furball?`FURBALL · 🎈${race.furball.out.has(s.car)?0:race.furball.lives.get(s.car)} · ${race.rivals.filter(r=>!race.furball.out.has(r.session.car)).length} bandits`:race.roam?(openWorld?nearestLocation(s.car.pos).short:'FREE DRIVE'):`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${s.laps>1?`LAP ${s.lap}/${s.laps}`:`${Math.min(s.gate+1,cps.length)}/${cps.length}`}`;if(!$('banner').dataset.callout)$('banner').hidden=!retreatActive(race);$('secret').hidden=!course.secrets.length;$('secret').textContent=openWorld?`◇ ${openWorld.progress.specimens.length}/${SPECIMENS.length} badges${expedition(openWorld.progress).complete?' ★':''}`:`◇ ${s.found}/${course.secrets.length}`;drawMap();polish?polish.render():renderer.render(scene,camera);
  if(skate)skateHud.update(skate,now);
  if(s.finished&&!reported){reported=true;openWorld?.finish(s.time,s.lapTimes);telemetry.raceFinish({place:place(),time:s.time,gap:null,recoveries:s.recoveries,altTaken:null,turbos:s.assist.turbos??0});if(!best||s.time<best){best=s.time;try{localStorage.setItem(bestKey,best);}catch{}}const result=$('result');result.hidden=false;const at=place(),ranked=race.rivals.length;result.innerHTML=resultPanel({badge:ranked?`${at}<sup>${ordinal(at).slice(String(at).length)}</sup>`:null,title:openWorld?.selected.location==='lab'&&expedition(openWorld.progress).complete?'DREAMLAND CLEARED':ranked?placeTitle(at):'Lap complete!',order:ranked?finishOrder():[],you:at,stats:[['Time',format(s.time)],['Best',format(best)],['Badges',`${openWorld?openWorld.progress.specimens.length:s.found}/${course.secrets.length}`],...(course.coins?.length?[['Coins',`${banked.size}/${course.coins.length}`]]:[])],again:'🏁 Again'});bindResultPanel(result);pause(true);$("again").onclick=()=>{telemetry.choice('again');s=(race=createRace(course,{mode,opponents:rivalCount,features:trackFeatures})).player;reported=false;Object.assign(sfx,{gate:0,coins:0,held:false,air:0,retreat:false,finished:false});startCountdown();result.hidden=true;pause(false);};$('explore').onclick=()=>{telemetry.choice('drive');result.hidden=true;goRoam();pause(false);};$('to-menu').onclick=toMenu;if(cup){const order=[s,...race.rivals.map(r=>r.session)].sort((a,b)=>placeOf(race,a)-placeOf(race,b)).map(x=>x===s?'YOU':race.rivals.find(r=>r.session===x).callsign);recordCupRace(cup,openWorld.selected.id,order);saveCup(cup,cupStorage);const scores=document.createElement('p');scores.textContent=cupStandings(cup).map(r=>`${r.rank}. ${r.id} ${r.points}`).join(' · ');scores.className='result-cup';result.querySelector('.result-actions').before(scores);const next=nextCupEvent(cup);if(next){const button=document.createElement('button');button.textContent='Next race';button.className='primary';button.onclick=()=>location.href=cupURL(next,cup.id);$('again').classList.remove('primary');result.querySelector('.result-actions').prepend(button);}else{result.querySelector('h1').textContent=CUP_COURSES[Number(cup.id)].cup+' Cup · '+cupStandings(cup).find(r=>r.id==='YOU').rank;}}}
  if(now-lastTelemetrySample>=1000){lastTelemetrySample=now;sampleTelemetry(now);}stuckHint();if(now-lastTelemetryFlush>=15_000){lastTelemetryFlush=now;telemetry.flush();}
