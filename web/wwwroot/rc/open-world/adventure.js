@@ -6,6 +6,7 @@ import {createBoss,stepBoss} from '../physics/boss.mjs';
 import {createFighter,createEnemy,stepCombat,reviveFighter,roomHelp} from '../physics/combat.mjs';
 import {CHESTS,PLATES,OPENINGS,MINE_BOUNDS,MINE_ENEMIES,ROOM_ENTRANCES,MINE,BOSS_AT,CELLS,SPIRIT_MARK,DOORS,mineWorld,mineLocal,roomAt,createMineState} from './mine.mjs';
 import {createInventory,giveItem,hasItem,takeCell,saveInventory} from '../physics/items.mjs';
+import {activeSave,createSlot} from '../physics/save-slots.mjs';
 import {openChest,pressPlate,tryDoor,defeatBoss,digDoor} from '../physics/dungeon.mjs';
 
 // The adventure layer in the open world (docs/design/adventure). For now: the Old Silver Mine, played
@@ -15,8 +16,10 @@ export function createAdventure(scene, world) {
   const mine = createMine(scene), state = createMineState(), toys = createBadToys(scene);
   const enemies = MINE_ENEMIES.map(e => Object.assign(createEnemy(e.id, mineWorld(e.at)), { room: e.room }));
   // Items and battery cells persist (Zelda's inventory); the dungeon itself resets on reload for now.
-  const SAVE = 'rc-adventure-v1', load = () => { try { return JSON.parse(localStorage.getItem(SAVE)); } catch { return null; } };
-  const inventory = createInventory(load()), save = () => { try { localStorage.setItem(SAVE, JSON.stringify(saveInventory(inventory))); } catch {} };
+  // Saved to the active save file (physics/save-slots.mjs); playing the mine before any file exists
+  // makes slot 1, so a kid who just starts playing never loses the progress.
+  const store = (() => { try { return localStorage; } catch { return null; } })(), file = store && activeSave(store);
+  const inventory = createInventory(file?.data), save = () => { if (!store) return; const f = activeSave(store) ?? (createSlot(store, 0, 'Player 1'), activeSave(store)); try { store.setItem(f.key, JSON.stringify(saveInventory(inventory))); } catch {} };
   for (const id of inventory.cells) mine.takeCell(id);
   const rooms = {}; let fighter = null, time = 0, markTouched = false;
   // The excavator wakes when you first walk into its hall, and stays freed once beaten.

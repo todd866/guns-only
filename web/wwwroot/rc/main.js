@@ -12,6 +12,8 @@ import {createRobot,stepRobot} from './physics/robot.mjs';
 import {makeRobotBody,poseRobotBody,makeBoardRider,poseBoardRider} from './robot-body.js';
 import {createAdventure} from './open-world/adventure.js';
 import {createIntro} from './open-world/intro.js';
+import {createFileSelect} from './open-world/file-select.js';
+import {readSlots,slotSave} from './physics/save-slots.mjs';
 import {mineWorld as mineWorldPos} from './open-world/mine.mjs';
 import {ITEMS} from './physics/items.mjs';
 import {vehicleParams,legendCarParams,LEGEND_CARS} from './physics/vehicles.mjs';
@@ -151,7 +153,7 @@ sign('RAPIER / MOTOR POOL',0,2.6,7,5);sign('QUARTERS',-6,1.4,-18,3);sign('FLIGHT
 }else{
  // District visuals: VIS_* meshes render; collision and markers stay invisible.
  if(openWorld)await openWorld.attach(scene);
- if(openWorld){adventure=createAdventure(scene,course.world);$('menu-legend').hidden=!adventure.inventory.legend;}
+ if(openWorld){adventure=createAdventure(scene,course.world);$('menu-legend').hidden=!(adventure.inventory.legend||(()=>{try{return readSlots(localStorage).slots.some((x,i)=>x&&slotSave(localStorage,i)?.legend);}catch{return false;}})());}
  const root=district?.gltf.scene;if(root){root.traverse(o=>{if(/^(COL_|GATE_|START_|AI_|PICKUP_|SPEC_|CAM_)/.test(o.name))o.visible=false;else if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});scene.add(root);}
  // District backdrops (ridge, skyline) sit 470–660 m out: draw to 900 m with a light desert haze.
  scene.background=new T.Color('#a9d4ee');scene.fog=new T.Fog('#c9dde6',openWorld?280:180,openWorld?680:950);camera.far=openWorld?40000:900;camera.updateProjectionMatrix();
@@ -216,7 +218,8 @@ $('start').onclick=()=>{telemetry.firstInput('button');audio.start();$('brief').
 $('resume').onclick=()=>{pause(false);canvas.focus();};
 $('menu-race').onclick=()=>{if(openWorld&&race.roam){const p=nearestLocation(s.car.pos);location.href=openWorld.eventURL(p.event||p.track?p:locationById('ramp'));return;}telemetry.firstInput('button');audio.start();started=true;$('brief').hidden=true;$('result').hidden=true;pause(false);startRace();canvas.focus();};
 // The Legend of Spirit Mountain: unlocked by the mine's reveal; starts as the robot at the mine mouth.
-$('menu-legend').onclick=()=>{const u=new URL(location.href);u.search='';u.searchParams.set('track','hub');u.searchParams.set('mode','legend');location.href=u.href;};
+const fileSelect=createFileSelect({onPlay:()=>{const u=new URL(location.href);u.search='';u.searchParams.set('track','hub');u.searchParams.set('mode','legend');location.href=u.href;}});
+$('menu-legend').onclick=()=>fileSelect.show();
 let legendStage=0;function legendStart(){if(urlMode!=='legend'||!started||!adventure||legendStage>1)return;
  if(legendStage===0){const p=legendCarParams(LEGEND_CARS[adventure.inventory.car]?adventure.inventory.car:'starter');Object.assign(s.car,createCar(p,[...mineWorldPos([0,.35,12])],0));legendStage=1;return;}
  if(openWorld.stream.ready(s.car.pos)&&!robot){transform();legendStage=2;callout('🏔️ THE LEGEND OF SPIRIT MOUNTAIN · find the way to the mountain',5000);}}
