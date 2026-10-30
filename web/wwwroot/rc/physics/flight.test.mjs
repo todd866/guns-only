@@ -119,3 +119,26 @@ test('easy flyer: holding down lands it on its wheels', () => {
   run(s, 1, {});
   assert.ok(s.car.grounded, `${s.car.pos}`);
 });
+
+test('kid mode: Auto-GCAS pulls out of a dive at the ground, and out of an inverted dive', () => {
+  for (const roll of [0, 1]) {
+    const s = roam(field());
+    toggleFlight(s.flight, s.car);
+    run(s, 2, { flight: { pitch: .6, assist: true } });     // climb away
+    if (roll) run(s, .9, { flight: { roll: 1, assist: true } });   // roll inverted-ish
+    let low = Infinity;
+    run(s, 8, t => { low = Math.min(low, s.car.pos[1]); return { flight: { pitch: -1, power: 1, assist: true } }; });   // push for the ground
+    assert.equal(s.flight.mode, 'fly', `still flying (roll ${roll})`);
+    assert.ok(low > 1, `never touched the ground: lowest ${low.toFixed(2)} (roll ${roll})`);
+  }
+});
+
+test('without the assist a dive reaches the ground, and full power is quick now', () => {
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 1, { flight: { pitch: .6 } });
+  run(s, 6, { flight: { pitch: -1 } });
+  assert.notEqual(s.flight.mode, 'fly');
+  const t = roam(field()); toggleFlight(t.flight, t.car); run(t, 1, { flight: { pitch: .3 } }); run(t, 4, { flight: { power: 1 } });
+  assert.ok(t.flight.speed > 25, `speed ${t.flight.speed}`);
+});

@@ -6,13 +6,17 @@
 import { add, sub, scale, madd, dot, len, norm, rotate, quatMul, quatAxisAngle, quatNorm, yawOf } from './math.mjs';
 
 export const FLIGHT = Object.freeze({
-  takeoff: 5, climbFor: .7, minSpeed: 7, maxSpeed: 18, burner: 26, startPower: .45, powerRate: .6,
-  accel: 2.2, diveGain: 4, pitchRate: 1.5, rollRate: 2.4, yawRate: .7, bankTurn: 1.3, levelRoll: .9,
-  chuteSink: 1.5, chuteDrag: 1.2, chuteLevel: 3, ceiling: 90, land: .32, burnerBoost: 1.8,
+  // Owner, 31 Oct: "make it faster". Speeds roughly doubled; the world streams fine at burner.
+  takeoff: 5, climbFor: .7, minSpeed: 12, maxSpeed: 32, burner: 42, startPower: .5, powerRate: .6,
+  accel: 1.6, diveGain: 6, pitchRate: 1.6, rollRate: 2.8, yawRate: .7, bankTurn: 1.1, levelRoll: .9,
+  chuteSink: 1.5, chuteDrag: 1.2, chuteLevel: 3, ceiling: 140, land: .32, burnerBoost: 1.8,
+  // Kid mode flies the real controls with an Auto-GCAS, like the real F-16's: if the path ahead
+  // meets the ground, it rolls the wings level and pulls up until it's safe, then hands back.
+  gcas: Object.freeze({ look: [.35, .8, 1.4], floor: 4, hold: .5, roll: 4 }),
   ollie: 3.2, hop: 2.4,   // Space: the skateboard's ollie and the car's hop, m/s up (main.js)
   // The easy flyer (kid mode): steer banks and turns, up climbs, down descends, speed looks after
   // itself, and it holds a safe height over the ground unless you are coming down to land.
-  easy: Object.freeze({ cruise: 12, bank: .45, bankRate: 4, turn: 2, climb: .35, pitchRate: 3, takeoffPitch: .3, floor: 3, lookAhead: .7 }),
+  easy: Object.freeze({ cruise: 24, bank: .45, bankRate: 4, turn: 2, climb: .35, pitchRate: 3, takeoffPitch: .3, floor: 3, lookAhead: .7 }),
 });
 
 export function createFlight() { return { mode: null, speed: 0, power: FLIGHT.startPower, climb: 0, flights: 0, chutes: 0 }; }
@@ -65,6 +69,7 @@ export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
     }
     car.vel = [h[0] * across, vy, h[1] * across];
   } else if (f.mode === 'fly') {
+    if (ctl.assist) ctl = gcas(f, car, ctl, world, dt);
     f.power = Math.max(0, Math.min(1, f.power + (ctl.power || 0) * FLIGHT.powerRate * dt));
     const target = ctl.burner ? FLIGHT.burner : FLIGHT.minSpeed + f.power * (FLIGHT.maxSpeed - FLIGHT.minSpeed);
     // Diving speeds the car up and climbing bleeds speed, never below the minimum.
@@ -115,5 +120,17 @@ export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
   car.speed = len(car.vel); car.forwardSpeed = dot(car.vel, rotate(car.q, [0, 0, -1]));
   car.grounded = false; car.contacts = 0;
   return true;
+}
+// Auto-GCAS: look along the flight path; if it meets the ground (plus a floor), take the stick:
+// roll toward wings level (rolling out of inverted first), then pull, full power, and let go once
+// the path is clear for `hold` seconds. f.gcas > 0 while it's flying.
+function gcas(f, car, ctl, world, dt) {
+  const G = FLIGHT.gcas, nose = rotate(car.q, [0, 0, -1]);
+  if (f.climb <= 0 && G.look.some(t => { const p = madd(car.pos, nose, f.speed * t), g = groundAt(world, p[0], car.pos[1], p[2]); return g != null && p[1] < g + G.floor; })) f.gcas = G.hold;
+  if (!(f.gcas > 0)) return ctl;
+  f.gcas -= dt;
+  const right = rotate(car.q, [1, 0, 0]), up = rotate(car.q, [0, 1, 0]);
+  const roll = up[1] < .2 ? (right[1] >= 0 ? 1 : -1) : Math.max(-1, Math.min(1, right[1] * G.roll));
+  return { ...ctl, roll, yaw: 0, pitch: up[1] > 0 && Math.abs(right[1]) < .35 ? 1 : 0, power: 1 };
 }
 const dot4 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];

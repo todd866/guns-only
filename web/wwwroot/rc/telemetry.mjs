@@ -172,7 +172,7 @@ export function createRCTelemetry({
   function garage({ body, shell, paint, pattern } = {}) { record("garage", { body: short(body, 16), shell: short(shell, 16), paint: short(paint, 24), pattern: short(pattern, 16) }); }
   // The toy's form (car / robot / board) and free-drive flight: fly, chute, land (from = previous mode).
   function form(name) { record("form", { form: short(name, 12) }); }
-  function flight({ mode, from, easy, at } = {}) { record("flight", { mode: short(mode, 8), from: short(from, 8), easy: !!easy, ...where(at) }); }
+  function flight({ mode, from, assist, at } = {}) { record("flight", { mode: short(mode, 8), from: short(from, 8), assist: !!assist, ...where(at) }); }
   function playmate({ dest, result, closed } = {}) { record("playmate", { dest: short(dest, 24), result: short(result, 12), ...(Number.isFinite(closed) ? { closed: Math.round(closed) } : {}) }); }
   function mute(value) { record("mute", { muted: Boolean(value) }); }
   function observeFrame(deltaMs, activeFrame = true) {
