@@ -25,3 +25,9 @@ test('pauses and hitches are not load', () => {
   assert.equal(a.ratio, 1.75);
   assert.ok(ADAPT.slow > ADAPT.calm);
 });
+
+test('a pacing tail at a 60 fps median keeps full resolution', () => {
+  const a = createAdaptiveResolution({ max: 1.75 });
+  for (let i = 0; i < 2000; i++) stepAdaptiveResolution(a, [16, 17, 17, 17, 18, 17, 17, 23, 17, 17][i % 10]);
+  assert.equal(a.ratio, 1.75);
+});

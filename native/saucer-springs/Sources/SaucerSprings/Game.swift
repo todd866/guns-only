@@ -52,6 +52,10 @@ final class GameWindow: NSObject, WKUIDelegate {
     if offscreen {
       // QA: a real window far off-screen, never activated, so nothing pops up or takes focus.
       window.setFrameOrigin(NSPoint(x: -30000, y: -30000)); window.orderBack(nil)
+      // WebKit stops animation in a window macOS reports as occluded, as an off-screen one can be.
+      // QA must measure the game, not the pause: switch WebKit's occlusion detection off here only.
+      let sel = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
+      if web.responds(to: sel) { web.perform(sel, with: false as NSNumber) } else { print("warning: WebKit occlusion switch unavailable; frames may pause") }
     } else {
       window.setFrameAutosaveName("SaucerSpringsGame"); window.center()
       window.makeKeyAndOrderFront(nil); window.makeFirstResponder(web)
