@@ -16,6 +16,21 @@ stop the break-in, you cross the base, climb **the mountain** where the river be
 through its old gate into the upside-down. The creatures of the mountain help a toy that carries the
 good aliens' light.
 
+## The shape of the game (owner, 30 Oct)
+
+**First half: the open world with dungeon sites.** You explore the base as the RC car and the
+skateboard, THPS2-style. Dotted around the map are **places where you transform and go in on foot**,
+like Zelda's dungeon entrances or Minish Cap's shrink portals. Inside you walk, climb and fight bad
+robots and toys, collect **power-ups** (new forms and gadgets), and **learn the backstory** piece by
+piece (what's in the hangar, what the bad aliens are doing, why the toys are waking). The first is
+the Old Silver Mine.
+
+**The turn: the mountain.** When you have enough power-ups you climb the big mountain: drive up its
+roads, or fly to the top and parachute down. At the top is the **big spirit cave**.
+
+**Second half: the upside-down.** Through the spirit cave you come out in the upside-down, the bad
+aliens' twisted mirror of the same map, for the second set of dungeons and the finale.
+
 ## How it maps onto Zelda
 
 | Zelda | Saucer Springs |
