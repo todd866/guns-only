@@ -199,6 +199,19 @@ could always see but never reach become the next "I can get up there now" moment
 Telemetry note: the owner's son skips races but plays freely, so "get there in style" puzzles
 suit him better than timed contests. Keep timers generous in kid mode.
 
+## Owner wishlist, 30 Oct (not built yet)
+
+- **Learning by accident.** "Educational content but not crammed down your throat; people should
+  passively learn stuff." Real things in the world carry their real facts (the jets on the
+  ramp, the dam, the desert plants, the stars at night), told by toys in one line when you're
+  near or in the item text. No quizzes, no stopping play. Facts must be true and checked.
+- **Puzzles of every kind unlock things:** GTA-style dancing minigames (a dancing robot is
+  hilarious), Guitar Hero-style music minigames, trick shrines, races. Lots of small ways to
+  open a door.
+- **The petting-zoo planes need to be way better.**
+- **Steal a jet.** The robot sneaks into a parked jet, takes it, and flies it like proper
+  guns-only (the real flight model, not the RC arcade flyer).
+
 ## Good guys on the base
 
 **The toys never talk to people** (owner). Humans are giants in the background: you overhear them,
