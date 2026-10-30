@@ -535,10 +535,10 @@ function toggleBoost(){if(paused||robot||!race.roam||skate)return;boostOn=!boost
 // Trick-or-treat (open-world/trick-or-treat.mjs): any trick near a lit porch earns candy. The car's
 // tricks are measured here (a jump, a mid-air spin, a long drift); the board's come from its combo
 // landings and the robot's from its jumps.
-const retreatGame=createRetreat(1+Math.floor(Math.random()*9973));
+const retreatGame=createRetreat();
 function retreatStep(dt){const ready=!!openWorld&&race.roam&&started&&!paused&&!ui?.panel()&&!s.flight.mode,speed=robot?Math.hypot(robot.vel[0],robot.vel[2]):s.car.speed;
- for(const e of stepRetreat(retreatGame,speed,ready,dt)){if(e.start){audio.bugle();callout('🎺 RETREAT! Stop for the flag!',RETREAT.grace*1000);}else if(e.stopped)callout('🫡 Hold still for the flag…',RETREAT.hold*1000+300);
-  else if(e.done){audio.finish();const pr=openWorld.progress;pr.retreats=(pr.retreats??0)+1;openWorld.save();callout('🫡 PERFECT RETREAT! Everyone stopped for the flag',3000);}else callout('😅 Oops! Everyone else stopped for the flag',2400);}}
+ for(const e of stepRetreat(retreatGame,speed,ready,dt,((worldElapsed%1200)+1200)%1200/1200)){const word=(e.start??e.stopped??e.kind)==='reveille'?'REVEILLE':'RETREAT';if(e.start){audio.bugle();callout(`🎺 ${word}! ${e.start==='reveille'?'Sunrise':'Sunset'} · stop for the flag!`,RETREAT.grace*1000);}else if(e.stopped)callout('🫡 Hold still for the flag…',RETREAT.hold*1000+300);
+  else if(e.done){audio.finish();const pr=openWorld.progress;pr.retreats=(pr.retreats??0)+1;openWorld.save();callout(`🫡 PERFECT ${word}! Everyone stopped for the flag`,3000);}else callout('😅 Oops! Everyone else stopped for the flag',2400);}}
 let totTrick=null,totAir=0,totSpin=0,totYaw=null,totDrift=0,candyRun=0,candyRecord=null,pumpkinRecord=null;
 function trickOrTreatStep(pos,dt,now){if(!openWorld?.trickOrTreat||!race.roam||s.flight.mode)return;
  if(robot){if(!robot.grounded)totAir+=dt;else{if(totAir>.3)totTrick??={name:'robot jump',size:trickSize({air:totAir})};totAir=0;}}
@@ -577,7 +577,7 @@ function enterLocation(){if(!openWorld||paused||!race.roam)return;if(skateParkAt
 function statRows(){const pr=openWorld?.progress??{},num=n=>Number(n||0).toLocaleString(),skateBest=Math.max(0,...Object.keys(SKATE_PARKS).map(id=>skateSaved(id).best||0));
  return [['🍬','Candy this time',num(candyRun)],['🍬','Candy record',num(Math.max(pr.candyBest||0,candyRun)),'Most trick-or-treat candy in one go'],['🎃','Pumpkin record',num(Math.max(pr.pumpkinBest||0,pumpkinsSmashed)),'Most pumpkins splatted in one go'],['🎃','Pumpkins this time',num(pumpkinsSmashed)],['🎃','Pumpkins ever',num(pr.pumpkins)],
   ['📍','Places found',num(pr.discovered?.length)],['🦎','Desert finds',num(pr.specimens?.length)],['🏁','Races won',num(Object.keys(pr.raceWins??{}).length)],
-  ['🛹','Best skate score',num(skateBest)],['✈️','Splash ones',num(aceKills)],['🫡','Perfect retreats',num(pr.retreats)],['🎳','Bowling best',pr.bowlingBest?`${pr.bowlingBest}/10`:'–'],['⛳','Golf best',pr.golfBest?`${pr.golfBest} hits`:'–'],
+  ['🛹','Best skate score',num(skateBest)],['✈️','Splash ones',num(aceKills)],['🫡','Perfect retreats & reveilles',num(pr.retreats)],['🎳','Bowling best',pr.bowlingBest?`${pr.bowlingBest}/10`:'–'],['⛳','Golf best',pr.golfBest?`${pr.golfBest} hits`:'–'],
   ...(adventure?[['🔋','Battery cells',num(adventure.inventory.cells.length)],['🎒','Adventure items',num(adventure.inventory.items.size??adventure.inventory.items.length)]]:[])];}
 const ui=createWorldUI({stats:statRows,world:openWorld,getState:()=>({pos:s.car.pos,yaw:readout(s).yaw,paused,roam:race.roam,started,flying:!!s.flight.mode,skate:!!skateParkAt()&&!skate,skating:!!skate}),pause,applyShell,onGarage:g=>telemetry.garage(g),travel:travelTo,interact:enterLocation,search:location.search,onOpen:which=>{if(which==='map')telemetry.mapOpen(s.car.pos);}});
 let cupStorage;try{cupStorage=sessionStorage;}catch{}let cup=loadCup(cupStorage);const cupId=new URLSearchParams(location.search).get('cup');if(!cupId||!CUP_COURSES[Number(cupId)]||cup?.id!==cupId||!cup.events.includes(openWorld?.selected.id)||(cup&&cup.events.indexOf(openWorld?.selected.id)>cup.results.length))cup=null;
