@@ -81,19 +81,16 @@ over by bad-alien machinery. 5–7 dungeons (Zelda used 7; start with 3 and grow
 
 ## Good guys on the base
 
-Not everyone has been turned. A few airmen and civilians notice something's wrong and quietly
-help: Zelda's helpful townsfolk and Sahasrahla, the old sage who points you onward.
-- **A drone-pilot technical sergeant** who spots your toy on a security feed and decides to look
-  the other way, then starts leaving doors open.
-- **A night-shift maintainer in the hangar** who has been sneaking the captured aliens snacks.
-- **A wildlife biologist on the range** who knows the desert creatures and their patterns, and
-  points you toward the mountain.
+**The toys never talk to people** (owner). Humans are giants in the background: you overhear them,
+and some of them help without knowing it. The few good ones show it in what they do: a drone-pilot
+sergeant who leaves a door propped open, a night-shift maintainer who has been feeding the captured
+aliens, a biologist whose field camera the toys can use. Some of the airmen can be Native: they're
+background people, never portrayed as mystics.
 
-Native Americans serve in the US military at the highest rate of any group, and some of these good
-guys should be Native: written as modern, competent people with ordinary names, jobs and quirks.
-The spirit-world link stays with the desert's creatures. A Native character whose role is to
-"understand the spirits" is the mystic-guide trope Native critics single out, so the people stay
-people (see the setting research). Their help is practical: open doors, intel, a ride.
+**The spirit world is real** in this game: the desert's own world of creatures, springs, wind and
+stone, which the aliens are trying to break through. You only ever meet its beings, never people.
+It is unnamed and invented, and presented as the land's own spirit world rather than as any real
+tribe's religion. No real stories, ceremonies, sacred sites or figures appear.
 
 ## A working drone-era base
 
