@@ -53,6 +53,27 @@ toys patrol the streets, drones hunt you, and every road is contested.
 | Ocarina songs (warp, puzzles) | **Signal tunes**: the alien light hums a few notes that open doors and call you home |
 | Epona | Car mode itself is your horse: the fast way across the map |
 
+## Keyboard only (owner, 30 Oct)
+
+The whole game plays on a keyboard alone: no mouse, no pad needed. Each key keeps **one meaning
+in every form**, so switching never changes what your fingers do:
+
+| Key | Car | Robot | Skateboard |
+|---|---|---|---|
+| W/S or ↑/↓ | drive | walk | push / brake |
+| A/D or ←/→ | steer | turn | carve |
+| Space | afterburner | jump | ollie |
+| Shift (hold) | drift | **lock on** (Z-targeting) | grab / spin |
+| F | fire pickup | **attack** | trick |
+| T | transform (car → robot → board) | | |
+| E | enter / talk | | |
+| R | back on track / to the room entrance | | |
+| Tab | map (the dungeon map once you find it) | | |
+| Enter | fly / parachute (car) | | |
+
+Chests, plates and keyed doors work by touch, so no extra key is needed. The camera follows on its
+own (with lock-on, it frames you and the target), so nothing ever needs the mouse.
+
 ## The toy's forms are the Zelda items
 
 Lesson from Majora's Mask: each form must move differently and have routes only it can use, and the
