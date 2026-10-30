@@ -12,5 +12,11 @@ export function flightInput(keys){
  const held=(...codes)=>codes.some(code=>keys.has(code));
  return {pitch:Number(held('ArrowDown'))-Number(held('ArrowUp')),roll:Number(held('ArrowRight'))-Number(held('ArrowLeft')),yaw:Number(held('KeyD'))-Number(held('KeyA')),power:Number(held('KeyW'))-Number(held('KeyS')),burner:held('Space')};
 }
+// The easy flyer (kid mode): the driving keys keep their meaning. Steer turns, W/↑ climbs, S/↓
+// comes down (and lands); Space boost is a toggle the caller fills in.
+export function easyFlightInput(keys){
+ const held=(...codes)=>codes.some(code=>keys.has(code));
+ return {easy:true,steer:Number(held('KeyD','ArrowRight'))-Number(held('KeyA','ArrowLeft')),climb:Number(held('KeyW','ArrowUp','KeyX'))-Number(held('KeyS','ArrowDown')),burner:false};
+}
 // Tricks on the wheels: ↑ + S wheelie, ↓ + W stoppie (the two keys would otherwise cancel).
 export function trickInput(keys){return {wheelie:keys.has('ArrowUp')&&keys.has('KeyS'),stoppie:keys.has('ArrowDown')&&keys.has('KeyW')};}

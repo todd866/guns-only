@@ -76,3 +76,46 @@ test('races never fly', () => {
   assert.equal(s.flight.mode, null);
   assert.ok(carForward(s.car));
 });
+
+// The easy flyer (kid mode, owner 2026-10-30: Enter to fly was "very janky").
+const easy = (o = {}) => ({ flight: { easy: true, ...o } });
+test('easy flyer: holding the throttle key through take-off climbs instead of diving back down', () => {
+  const s = roam(field());
+  run(s, 1, { throttle: 1 });
+  toggleFlight(s.flight, s.car);
+  run(s, 3, easy({ climb: 1 }));
+  assert.equal(s.flight.mode, 'fly');
+  assert.ok(s.car.pos[1] > 8, `climbed ${s.car.pos[1]}`);
+});
+test('easy flyer: hands off it cruises level at a safe height, and steering turns without rolling over', () => {
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 4, easy());
+  assert.equal(s.flight.mode, 'fly');
+  assert.ok(s.car.pos[1] > 2.5 && s.car.pos[1] < 6, `height ${s.car.pos[1]}`);
+  const yaw = carYaw(s.car);
+  run(s, 3, easy({ steer: 1 }));
+  const turned = Math.atan2(Math.sin(carYaw(s.car) - yaw), Math.cos(carYaw(s.car) - yaw));
+  assert.ok(Math.abs(turned) > 1.5, `turned ${turned}`);
+  assert.ok(Math.abs(s.flight.bank) <= FLIGHT.easy.bank + 1e-9, `bank ${s.flight.bank}`);
+});
+test('easy flyer: rising ground ahead lifts it over instead of crashing', () => {
+  const world = field();
+  // A 25% ramp up to a 20 m plateau, 30 m ahead.
+  world.addQuad([-20, 0, -30], [20, 0, -30], [20, 20, -110], [-20, 20, -110], 'rock');
+  world.addQuad([-20, 20, -110], [20, 20, -110], [20, 20, -300], [-20, 20, -300], 'rock');
+  const s = roam(world);
+  toggleFlight(s.flight, s.car);
+  run(s, 12, easy());
+  assert.equal(s.flight.mode, 'fly');
+  assert.ok(s.car.pos[2] < -120 && s.car.pos[1] > 21, `${s.car.pos}`);
+});
+test('easy flyer: holding down lands it on its wheels', () => {
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 3, easy({ climb: 1 }));
+  for (let i = 0; i < 20 * 120 && s.flight.mode; i++) stepSession(s, easy({ climb: -1 }), 1 / 120);
+  assert.equal(s.flight.mode, null);
+  run(s, 1, {});
+  assert.ok(s.car.grounded, `${s.car.pos}`);
+});
