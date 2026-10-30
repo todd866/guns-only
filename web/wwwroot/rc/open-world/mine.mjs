@@ -10,7 +10,10 @@
 //                             R0 entrance (collapsed timber: crawl under)
 import { createDungeon } from '../physics/dungeon.mjs';
 
-export const MINE = Object.freeze({ anchor: [2650, 0, 1250], yaw: 0, ceiling: 1.6, wall: .12 });
+// Sited on flat desert east of the Boneyard (ground at -6.7 m there), its footprint cut out of the
+// terrain so the mine's own floor is the ground.
+export const MINE = Object.freeze({ anchor: [2700, -6.7, 1100], yaw: 0, ceiling: 1.6, wall: .12 });
+export const MINE_BOUNDS = Object.freeze([2700 - 9.5, 1100 - 25.5, 2700 + 9.5, 1100 + 6]);
 
 const R = (id, x0, x1, z0, z1, extra = {}) => ({ id, x: [x0, x1], z: [z0, z1], ...extra });
 export const ROOMS = Object.freeze([
@@ -96,12 +99,17 @@ export function boxTris([x0, x1, z0, z1, y0, y1], surface) {
   return t;
 }
 
-/** Collision for each shut door, as a solid panel filling its opening (rebuilt when doors open). */
-export function doorTris(open) {
+/** Collision for each shut door, as a solid panel filling its opening; each carries its door id. */
+export function doorTris(open = new Set()) {
   const out = [];
   for (const o of OPENINGS) if (o.door && !open.has(o.door)) {
     const [s0, s1] = o.span, b = o.wall === 'x' ? [o.at - .06, o.at + .06, s0, s1, 0, MINE.ceiling] : [s0, s1, o.at - .06, o.at + .06, 0, MINE.ceiling];
-    out.push(...boxTris(b, 'metal'));
+    out.push(...boxTris(b, 'metal').map(t => ({ ...t, gate: `mine:${o.door}` })));
   }
   return out;
+}
+
+/** World-frame triangles for the whole mine, doors gated (add once; open with world.openGate). */
+export function mineWorldTris() {
+  return [...buildMine(), ...doorTris()].map(t => ({ a: mineWorld(t.a), b: mineWorld(t.b), c: mineWorld(t.c), surface: t.surface, gate: t.gate ?? null }));
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorld } from '../physics/world.mjs';
 import { createRobot, stepRobot } from '../physics/robot.mjs';
 import { checkDungeon, openChest, pressPlate, tryDoor, reachable } from '../physics/dungeon.mjs';
-import { buildMine, doorTris, MINE_DUNGEON, CHESTS, PLATES, createMineState } from './mine.mjs';
+import { buildMine, doorTris, MINE_DUNGEON, CHESTS, PLATES, createMineState, mineWorldTris, MINE } from './mine.mjs';
 
 test('the mine is a fair Ocarina-style dungeon: one small-key door at a time, and the boss is reachable', () => {
   const r = checkDungeon(MINE_DUNGEON);
@@ -51,4 +51,12 @@ test('shut doors really block the robot', () => {
   const r = createRobot([0, 0, -6], 0), w = level(new Set());
   walk(w, r, [[0, -12]], 5);
   assert.ok(r.pos[2] > -8.1, `stopped at door A ${r.pos}`);
+});
+
+test('in the world, gated door triangles block until the gate opens', () => {
+  const w = createWorld(); for (const t of mineWorldTris()) w.addTri(t.a, t.b, t.c, t.surface, t.gate);
+  const [ax, ay, az] = MINE.anchor, from = [ax, ay + .2, az - 6], dir = [0, 0, -1];
+  assert.ok(w.raycast(from, dir, 3)?.dist < 2.2, 'door A is shut');
+  w.openGate('mine:A');
+  const hit = w.raycast(from, dir, 3); assert.ok(!hit || hit.dist > 2.2, 'door A is open');
 });
