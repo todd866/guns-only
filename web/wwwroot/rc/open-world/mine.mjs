@@ -46,6 +46,17 @@ export const CHESTS = Object.freeze({
   BK: { room: 'R4', at: [-8, .62, -4], holds: 'big' },
 });
 export const PLATES = Object.freeze({ P1: { room: 'R3', at: [0, 0, -12] } });
+// Bad toys per room (local positions): the hub's pair teaches the fight, then one guard per room.
+export const MINE_ENEMIES = Object.freeze([
+  { id: 'hub1', room: 'R1', at: [-2, 0, -4.5] }, { id: 'hub2', room: 'R1', at: [2.2, 0, -5.5] },
+  { id: 'east', room: 'R2', at: [5.5, 0, -3] }, { id: 'chute', room: 'R3', at: [.8, 0, -11] },
+  { id: 'west1', room: 'R4', at: [-5.2, 0, -5] }, { id: 'west2', room: 'R4', at: [-5.6, 0, -2.8] },
+]);
+// Where a knocked-out robot comes back: each room's doorway from the way in.
+export const ROOM_ENTRANCES = Object.freeze({ R0: [0, 0, 5], R1: [0, 0, -.6], R2: [4.6, 0, -4], R3: [0, 0, -8.6], R4: [-4.6, 0, -4], R5: [0, 0, -14.6], R6: [0, 0, -22.4] });
+export function roomAt([x, , z]) { return ROOMS.find(r => x >= r.x[0] && x <= r.x[1] && z >= r.z[0] && z <= r.z[1])?.id ?? null; }
+export const mineLocal = ([x, y, z]) => { const a = MINE.anchor, c = Math.cos(MINE.yaw), s = Math.sin(MINE.yaw), dx = x - a[0], dz = z - a[2]; return [dx * c - dz * s, y - a[1], dx * s + dz * c]; };
+
 export const DOORS = Object.freeze({ A: { kind: 'small' }, P: { kind: 'plate', plate: 'P1' }, B: { kind: 'big' } });
 
 export const MINE_DUNGEON = Object.freeze({
