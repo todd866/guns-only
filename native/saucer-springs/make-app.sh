@@ -14,17 +14,17 @@ web=$(mktemp -d)/web; (cd $here/../.. && node tools/rc/package-rc.mjs --out "$we
 cp "$world" "$stage/Contents/Resources/world.rcworld"
 [ -d "${world%.rcworld}.tex" ] && cp -R "${world%.rcworld}.tex" "$stage/Contents/Resources/world.tex"
 for ext in car col; do [ -f "${world%.rcworld}.$ext" ] && cp "${world%.rcworld}.$ext" "$stage/Contents/Resources/world.$ext"; done
-iconset=$(mktemp -d)/AppIcon.iconset; mkdir -p $iconset
-cp icon/icon-1024.png $iconset/icon_512x512@2x.png   # from a real render: icon/make-icon.py icon/hero.png icon/icon-1024.png
-for s in 16 32 128 256 512; do sips -z $s $s $iconset/icon_512x512@2x.png --out $iconset/icon_${s}x${s}.png >/dev/null; sips -z $((s*2)) $((s*2)) $iconset/icon_512x512@2x.png --out $iconset/icon_${s}x${s}@2x.png >/dev/null; done
-iconutil -c icns $iconset -o "$stage/Contents/Resources/AppIcon.icns"
+# Icon: an Icon Composer icon (icon/AppIcon.icon, layers from icon/make-glyphs.py). actool compiles
+# it to Assets.car plus a fallback .icns; a plain .icns alone gets a grey frame on current macOS.
+icons=$(mktemp -d); xcrun actool "$here/icon/AppIcon.icon" --compile $icons --app-icon AppIcon --platform macosx --minimum-deployment-target 15.0 --output-partial-info-plist $icons/partial.plist >/dev/null
+cp $icons/Assets.car $icons/AppIcon.icns "$stage/Contents/Resources/"
 cat > "$stage/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleName</key><string>Saucer Springs</string><key>CFBundleDisplayName</key><string>Saucer Springs</string>
 <key>CFBundleIdentifier</key><string>com.gunsonly.saucer-springs</string><key>CFBundleExecutable</key><string>SaucerSprings</string>
-<key>CFBundleIconFile</key><string>AppIcon</string><key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleIconFile</key><string>AppIcon</string><key>CFBundleIconName</key><string>AppIcon</string><key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.1</string><key>CFBundleVersion</key><string>$(git -C $here rev-parse --short HEAD)</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string><key>NSHighResolutionCapable</key><true/>
 <key>LSApplicationCategoryType</key><string>public.app-category.racing-games</string>
