@@ -16,11 +16,16 @@ struct Uniforms {
   var fog: SIMD4<Float>
   var size: SIMD2<UInt32>
   var frame: UInt32
-  var aoRays: UInt32
+  var accumulated: UInt32
+  var jitter: SIMD2<Float>
+  var pad: SIMD2<Float> = .zero
 }
+struct Material { var tex: Int32; var alpha: Int32 }
 
 struct World {
-  let positions: MTLBuffer, normals: MTLBuffer, colours: MTLBuffer, indices: MTLBuffer
+  let positions: MTLBuffer, normals: MTLBuffer, colours: MTLBuffer, uvs: MTLBuffer, mats: MTLBuffer, indices: MTLBuffer
+  let solidIndices: MTLBuffer, cutoutIndices: MTLBuffer, solidCount: Int, cutoutCount: Int
+  let materials: [Material], textures: MTLTexture?
   let indexCount: Int, vertexCount: Int
   let spawn: SIMD3<Float>, yaw: Float, sun: SIMD3<Float>
 }
@@ -29,18 +34,43 @@ enum LoadError: Error { case bad(String) }
 
 func loadWorld(_ path: String, device: MTLDevice) throws -> World {
   let data = try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)
-  guard data.count > 8, String(decoding: data.prefix(4), as: UTF8.self) == "RCW1" else { throw LoadError.bad("not an RCW1 file") }
+  guard data.count > 8, String(decoding: data.prefix(4), as: UTF8.self) == "RCW2" else { throw LoadError.bad("not an RCW2 file (re-export with tools/rc/native/export-world.cjs)") }
   let headerBytes = Int(data.subdata(in: 4..<8).withUnsafeBytes { $0.load(as: UInt32.self) })
   let json = try JSONSerialization.jsonObject(with: data.subdata(in: 8..<(8 + headerBytes)).filter { $0 != 0 }) as! [String: Any]
-  let v = json["vertices"] as! Int, n = json["indices"] as! Int
+  let v = json["vertices"] as! Int, n = json["indices"] as! Int, texCount = json["textures"] as? Int ?? 0
   let spawn = (json["spawn"] as! [Double]).map(Float.init), sun: [Float] = [0.55, 0.42, 0.62]   // a lower mid-morning sun for longer shadows
+  let materials = (json["materials"] as? [[String: Any]] ?? []).map { Material(tex: Int32($0["tex"] as? Int ?? -1), alpha: ($0["alpha"] as? Bool ?? false) ? 1 : 0) }
   var at = 8 + headerBytes
-  func buffer(_ bytes: Int) -> MTLBuffer {
-    let b = data.withUnsafeBytes { raw in device.makeBuffer(bytes: raw.baseAddress! + at, length: bytes, options: .storageModeShared)! }
-    at += bytes; return b
+  func buffer(_ bytes: Int, advance: Int? = nil) -> MTLBuffer {
+    let b = data.withUnsafeBytes { raw in device.makeBuffer(bytes: raw.baseAddress! + at, length: max(4, bytes), options: .storageModeShared)! }
+    at += advance ?? bytes; return b
   }
-  let P = buffer(v * 12), N = buffer(v * 12), C = buffer(v * 4), I = buffer(n * 4)
-  return World(positions: P, normals: N, colours: C, indices: I, indexCount: n, vertexCount: v,
+  let P = buffer(v * 12), N = buffer(v * 12), C = buffer(v * 4), U = buffer(v * 8), M = buffer(v * 2, advance: v * 2 + (4 - (v * 2) % 4) % 4), I = buffer(n * 4)
+  // Textures: <world>.tex/NNN.png (1024², sRGB) into one mipmapped array; inside the .app, Resources/world.tex.
+  var array: MTLTexture? = nil
+  if texCount > 0 {
+    let dir = URL(fileURLWithPath: path).deletingPathExtension().appendingPathExtension("tex")
+    let d = MTLTextureDescriptor(); d.textureType = .type2DArray; d.pixelFormat = .bgra8Unorm_srgb; d.width = 1024; d.height = 1024; d.arrayLength = texCount
+    d.mipmapLevelCount = 11; d.usage = .shaderRead; d.storageMode = .private
+    let tex = device.makeTexture(descriptor: d)!, loader = MTKTextureLoader(device: device), queue = device.makeCommandQueue()!, cb = queue.makeCommandBuffer()!, blit = cb.makeBlitCommandEncoder()!
+    for i in 0..<texCount {
+      let url = dir.appendingPathComponent(String(format: "%03d.png", i))
+      // The loader hands back BGRA; the array matches it, because a blit copies raw bytes.
+      guard let t = try? loader.newTexture(URL: url, options: [.SRGB: true, .textureStorageMode: MTLStorageMode.private.rawValue, .generateMipmaps: false]), t.width == 1024, t.pixelFormat == .bgra8Unorm_srgb else { print("texture \(i) skipped"); continue }
+      blit.copy(from: t, sourceSlice: 0, sourceLevel: 0, to: tex, destinationSlice: i, destinationLevel: 0, sliceCount: 1, levelCount: 1)
+    }
+    blit.generateMipmaps(for: tex); blit.endEncoding(); cb.commit(); cb.waitUntilCompleted(); array = tex
+  }
+  // Ray tracing splits the triangles: opaque ones skip any-hit work; only leaf cards run the alpha test.
+  var solid = [UInt32](), cutout = [UInt32](); solid.reserveCapacity(n)
+  let ip = I.contents().bindMemory(to: UInt32.self, capacity: n), mp = M.contents().bindMemory(to: UInt16.self, capacity: v)
+  for t in stride(from: 0, to: n, by: 3) {
+    let mi = Int(mp[Int(ip[t])]), cut = mi < materials.count && materials[mi].alpha != 0
+    if cut { cutout += [ip[t], ip[t + 1], ip[t + 2]] } else { solid += [ip[t], ip[t + 1], ip[t + 2]] }
+  }
+  if cutout.isEmpty { cutout = [0, 0, 0] }
+  let SB = device.makeBuffer(bytes: solid, length: solid.count * 4)!, CB = device.makeBuffer(bytes: cutout, length: cutout.count * 4)!
+  return World(positions: P, normals: N, colours: C, uvs: U, mats: M, indices: I, solidIndices: SB, cutoutIndices: CB, solidCount: solid.count, cutoutCount: cutout.count, materials: materials, textures: array, indexCount: n, vertexCount: v,
                spawn: SIMD3(spawn[0], spawn[1], spawn[2]), yaw: Float(json["yaw"] as? Double ?? 0), sun: simd_normalize(SIMD3(sun[0], sun[1], sun[2])))
 }
 
@@ -56,35 +86,55 @@ func lookAt(eye: SIMD3<Float>, forward f: SIMD3<Float>) -> simd_float4x4 {
 
 final class Renderer {
   let device: MTLDevice, queue: MTLCommandQueue, world: World
-  let worldPipeline: MTLRenderPipelineState, skyPipeline: MTLRenderPipelineState, depthState: MTLDepthStencilState
+  let worldPipeline: MTLRenderPipelineState, skyPipeline: MTLRenderPipelineState, postPipeline: MTLRenderPipelineState
+  let accumulate: MTLComputePipelineState, depthState: MTLDepthStencilState, equalState: MTLDepthStencilState, depthPipeline: MTLRenderPipelineState, sampler: MTLSamplerState
+  let materials: MTLBuffer, fallbackTexture: MTLTexture
   var accel: MTLAccelerationStructure!
-  var eye: SIMD3<Float>, yaw: Float, pitch: Float = -0.08, frame: UInt32 = 0
+  var eye: SIMD3<Float>, yaw: Float, pitch: Float = -0.08, frame: UInt32 = 0, accumulated: UInt32 = 0
+  var hdr: MTLTexture?, accum: MTLTexture?, depth: MTLTexture?
   let colourFormat: MTLPixelFormat = .bgra8Unorm_srgb
 
   init(device: MTLDevice, world: World) throws {
     self.device = device; self.world = world; queue = device.makeCommandQueue()!
     eye = world.spawn + SIMD3(0, 1.2, 0); yaw = world.yaw
-    let url = Bundle.module.url(forResource: "Shaders", withExtension: "metal")!
+    // Inside the .app the shaders sit in Contents/Resources; from `swift run` they are in the SwiftPM bundle.
+    let url = Bundle.main.url(forResource: "Shaders", withExtension: "metal") ?? Bundle.module.url(forResource: "Shaders", withExtension: "metal")!
     let opts = MTLCompileOptions(); opts.languageVersion = .version3_1
     let lib = try device.makeLibrary(source: try String(contentsOf: url, encoding: .utf8), options: opts)
-    let d = MTLRenderPipelineDescriptor()
-    d.vertexFunction = lib.makeFunction(name: "worldVertex"); d.fragmentFunction = lib.makeFunction(name: "worldFragment")
-    d.colorAttachments[0].pixelFormat = colourFormat; d.depthAttachmentPixelFormat = .depth32Float
-    worldPipeline = try device.makeRenderPipelineState(descriptor: d)
-    let s = MTLRenderPipelineDescriptor()
-    s.vertexFunction = lib.makeFunction(name: "skyVertex"); s.fragmentFunction = lib.makeFunction(name: "skyFragment")
-    s.colorAttachments[0].pixelFormat = colourFormat; s.depthAttachmentPixelFormat = .depth32Float
-    skyPipeline = try device.makeRenderPipelineState(descriptor: s)
+    func pipeline(_ v: String, _ f: String, _ format: MTLPixelFormat, depth: Bool) throws -> MTLRenderPipelineState {
+      let d = MTLRenderPipelineDescriptor(); d.vertexFunction = lib.makeFunction(name: v); d.fragmentFunction = lib.makeFunction(name: f)
+      d.colorAttachments[0].pixelFormat = format; if depth { d.depthAttachmentPixelFormat = .depth32Float }
+      return try device.makeRenderPipelineState(descriptor: d)
+    }
+    worldPipeline = try pipeline("worldVertex", "worldFragment", .rgba16Float, depth: true)
+    let dp = MTLRenderPipelineDescriptor(); dp.vertexFunction = lib.makeFunction(name: "worldVertex"); dp.fragmentFunction = lib.makeFunction(name: "depthFragment")
+    dp.colorAttachments[0].pixelFormat = .rgba16Float; dp.colorAttachments[0].writeMask = []; dp.depthAttachmentPixelFormat = .depth32Float
+    depthPipeline = try device.makeRenderPipelineState(descriptor: dp)
+    skyPipeline = try pipeline("skyVertex", "skyFragment", .rgba16Float, depth: true)
+    postPipeline = try pipeline("postVertex", "postFragment", colourFormat, depth: false)
+    accumulate = try device.makeComputePipelineState(function: lib.makeFunction(name: "accumulate")!)
     let ds = MTLDepthStencilDescriptor(); ds.depthCompareFunction = .less; ds.isDepthWriteEnabled = true
     depthState = device.makeDepthStencilState(descriptor: ds)!
+    let es = MTLDepthStencilDescriptor(); es.depthCompareFunction = .equal; es.isDepthWriteEnabled = false
+    equalState = device.makeDepthStencilState(descriptor: es)!
+    let sd = MTLSamplerDescriptor(); sd.minFilter = .linear; sd.magFilter = .linear; sd.mipFilter = .linear; sd.maxAnisotropy = 16
+    sd.sAddressMode = .repeat; sd.tAddressMode = .repeat; sampler = device.makeSamplerState(descriptor: sd)!
+    var mats = world.materials.isEmpty ? [Material(tex: -1, alpha: 0)] : world.materials
+    materials = device.makeBuffer(bytes: &mats, length: MemoryLayout<Material>.stride * mats.count)!
+    let fd = MTLTextureDescriptor(); fd.textureType = .type2DArray; fd.pixelFormat = .bgra8Unorm_srgb; fd.width = 1; fd.height = 1; fd.arrayLength = 1
+    fallbackTexture = device.makeTexture(descriptor: fd)!
     try buildAccel()
   }
 
   func buildAccel() throws {
-    let g = MTLAccelerationStructureTriangleGeometryDescriptor()
-    g.vertexBuffer = world.positions; g.vertexStride = 12; g.vertexFormat = .float3
-    g.indexBuffer = world.indices; g.indexType = .uint32; g.triangleCount = world.indexCount / 3; g.opaque = true
-    let desc = MTLPrimitiveAccelerationStructureDescriptor(); desc.geometryDescriptors = [g]
+    func geometry(_ idx: MTLBuffer, _ count: Int, opaque: Bool) -> MTLAccelerationStructureTriangleGeometryDescriptor {
+      let g = MTLAccelerationStructureTriangleGeometryDescriptor()
+      g.vertexBuffer = world.positions; g.vertexStride = 12; g.vertexFormat = .float3
+      g.indexBuffer = idx; g.indexType = .uint32; g.triangleCount = count / 3; g.opaque = opaque; return g
+    }
+    // Geometry 0: opaque triangles. Geometry 1: alpha-tested leaf cards (any-hit tests the texture).
+    let desc = MTLPrimitiveAccelerationStructureDescriptor()
+    desc.geometryDescriptors = [geometry(world.solidIndices, world.solidCount, opaque: true), geometry(world.cutoutIndices, world.cutoutCount, opaque: false)]
     let sizes = device.accelerationStructureSizes(descriptor: desc)
     accel = device.makeAccelerationStructure(size: sizes.accelerationStructureSize)!
     let scratch = device.makeBuffer(length: sizes.buildScratchBufferSize, options: .storageModePrivate)!
@@ -95,51 +145,75 @@ final class Renderer {
   }
 
   var forward: SIMD3<Float> { SIMD3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch)) }
+  func resetAccumulation() { accumulated = 0 }
 
-  func encode(into cb: MTLCommandBuffer, colour: MTLTexture, depth: MTLTexture) {
-    let w = colour.width, h = colour.height
+  func targets(_ w: Int, _ h: Int) {
+    if hdr?.width == w && hdr?.height == h { return }
+    func tex(_ f: MTLPixelFormat, _ usage: MTLTextureUsage) -> MTLTexture { let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: f, width: w, height: h, mipmapped: false); d.usage = usage; d.storageMode = .private; return device.makeTexture(descriptor: d)! }
+    hdr = tex(.rgba16Float, [.renderTarget, .shaderRead]); accum = tex(.rgba32Float, [.shaderRead, .shaderWrite]); depth = tex(.depth32Float, .renderTarget); accumulated = 0
+  }
+
+  // Halton(2,3) sub-pixel offsets for anti-aliasing under accumulation.
+  func halton(_ i: UInt32, _ b: UInt32) -> Float { var f: Float = 1, r: Float = 0, i = i; while i > 0 { f /= Float(b); r += f * Float(i % b); i /= b }; return r }
+
+  func encode(into cb: MTLCommandBuffer, output: MTLTexture) {
+    let w = output.width, h = output.height; targets(w, h)
     let proj = perspective(fovy: 60 * .pi / 180, aspect: Float(w) / Float(h), near: 0.05, far: 2000)
     let vp = proj * lookAt(eye: eye, forward: forward)
-    var u = Uniforms(viewProj: vp, eye: SIMD4(eye, 0), sun: SIMD4(world.sun, 2.4), fog: SIMD4(260, 900, 0, 0),
-                     size: SIMD2(UInt32(w), UInt32(h)), frame: frame, aoRays: 4)
+    let j = SIMD2((halton(accumulated + 1, 2) - 0.5) * 2 / Float(w), (halton(accumulated + 1, 3) - 0.5) * 2 / Float(h))
+    var u = Uniforms(viewProj: vp, eye: SIMD4(eye, 0), sun: SIMD4(world.sun, 3.2), fog: SIMD4(300, 1100, 0, 0),
+                     size: SIMD2(UInt32(w), UInt32(h)), frame: frame, accumulated: accumulated, jitter: j)
     var inv = vp.inverse
     let rp = MTLRenderPassDescriptor()
-    rp.colorAttachments[0].texture = colour; rp.colorAttachments[0].loadAction = .clear; rp.colorAttachments[0].storeAction = .store
+    rp.colorAttachments[0].texture = hdr; rp.colorAttachments[0].loadAction = .clear; rp.colorAttachments[0].storeAction = .store
     rp.depthAttachment.texture = depth; rp.depthAttachment.loadAction = .clear; rp.depthAttachment.clearDepth = 1; rp.depthAttachment.storeAction = .dontCare
     let enc = cb.makeRenderCommandEncoder(descriptor: rp)!
     enc.setRenderPipelineState(skyPipeline)
     enc.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
     enc.setFragmentBytes(&inv, length: MemoryLayout<simd_float4x4>.stride, index: 1)
     enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-    enc.setRenderPipelineState(worldPipeline); enc.setDepthStencilState(depthState); enc.setCullMode(.none)
-    enc.setVertexBuffer(world.positions, offset: 0, index: 0); enc.setVertexBuffer(world.normals, offset: 0, index: 1)
-    enc.setVertexBuffer(world.colours, offset: 0, index: 2); enc.setVertexBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 3)
+    enc.setCullMode(.none)
+    for (i, b) in [world.positions, world.normals, world.colours, world.uvs, world.mats].enumerated() { enc.setVertexBuffer(b, offset: 0, index: i) }
+    enc.setVertexBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 5)
+    enc.setFragmentBuffer(materials, offset: 0, index: 7); enc.setFragmentTexture(world.textures ?? fallbackTexture, index: 0); enc.setFragmentSamplerState(sampler, index: 0)
+    enc.setRenderPipelineState(depthPipeline); enc.setDepthStencilState(depthState)
+    enc.drawIndexedPrimitives(type: .triangle, indexCount: world.indexCount, indexType: .uint32, indexBuffer: world.indices, indexBufferOffset: 0)
+    enc.setRenderPipelineState(worldPipeline); enc.setDepthStencilState(equalState)
+    enc.setVertexBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 5)
     enc.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
     enc.setFragmentAccelerationStructure(accel, bufferIndex: 1)
+    for (i, b) in [world.positions, world.solidIndices, world.colours, world.uvs, world.mats, materials, world.cutoutIndices].enumerated() { enc.setFragmentBuffer(b, offset: 0, index: i + 2) }
+    enc.setFragmentTexture(world.textures ?? fallbackTexture, index: 0); enc.setFragmentSamplerState(sampler, index: 0)
     enc.useResource(accel, usage: .read, stages: .fragment)
     enc.drawIndexedPrimitives(type: .triangle, indexCount: world.indexCount, indexType: .uint32, indexBuffer: world.indices, indexBufferOffset: 0)
-    enc.endEncoding(); frame &+= 1
+    enc.endEncoding()
+    let ce = cb.makeComputeCommandEncoder()!
+    ce.setComputePipelineState(accumulate); ce.setTexture(hdr, index: 0); ce.setTexture(accum, index: 1); ce.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
+    ce.dispatchThreads(MTLSize(width: w, height: h, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1)); ce.endEncoding()
+    let pp = MTLRenderPassDescriptor(); pp.colorAttachments[0].texture = output; pp.colorAttachments[0].loadAction = .dontCare; pp.colorAttachments[0].storeAction = .store
+    let pe = cb.makeRenderCommandEncoder(descriptor: pp)!
+    pe.setRenderPipelineState(postPipeline); pe.setFragmentTexture(accum, index: 0); pe.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3); pe.endEncoding()
+    frame &+= 1; accumulated += 1
   }
 
-  func shot(to path: String, width: Int = 1280, height: Int = 720) throws -> Double {
+  func shot(to path: String, width: Int = 1280, height: Int = 720, samples: Int = 96) throws -> Double {
     let cd = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: colourFormat, width: width, height: height, mipmapped: false)
     cd.usage = [.renderTarget, .shaderRead]; cd.storageMode = .shared
-    let dd = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .depth32Float, width: width, height: height, mipmapped: false)
-    dd.usage = .renderTarget; dd.storageMode = .private
-    let colour = device.makeTexture(descriptor: cd)!, depth = device.makeTexture(descriptor: dd)!
-    // Warm-up frame, then a timed one.
-    for _ in 0..<2 { let cb = queue.makeCommandBuffer()!; encode(into: cb, colour: colour, depth: depth); cb.commit(); cb.waitUntilCompleted() }
-    let cb = queue.makeCommandBuffer()!; encode(into: cb, colour: colour, depth: depth); cb.commit(); cb.waitUntilCompleted()
-    let gpuMs = (cb.gpuEndTime - cb.gpuStartTime) * 1000
+    let colour = device.makeTexture(descriptor: cd)!
+    var gpu: Double = 0
+    for i in 0..<samples {
+      let cb = queue.makeCommandBuffer()!; encode(into: cb, output: colour); cb.commit(); cb.waitUntilCompleted()
+      if let e = cb.error { throw e }
+      if i == 1 { gpu = (cb.gpuEndTime - cb.gpuStartTime) * 1000 }
+    }
     var bytes = [UInt8](repeating: 0, count: width * height * 4)
     colour.getBytes(&bytes, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
-    // BGRA → RGBA for the PNG writer.
-    for i in stride(from: 0, to: bytes.count, by: 4) { bytes.swapAt(i, i + 2) }
+    for i in stride(from: 0, to: bytes.count, by: 4) { bytes.swapAt(i, i + 2) }   // BGRA → RGBA
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
                                isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: width * 4, bitsPerPixel: 32)!
     memcpy(rep.bitmapData!, bytes, bytes.count)
     try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
-    return gpuMs
+    return gpu
   }
 }
 
@@ -148,7 +222,7 @@ final class View: MTKView {
   override var acceptsFirstResponder: Bool { true }
   override func keyDown(with e: NSEvent) { keys.insert(e.keyCode) }
   override func keyUp(with e: NSEvent) { keys.remove(e.keyCode) }
-  override func mouseDragged(with e: NSEvent) { renderer.yaw += Float(e.deltaX) * 0.004; renderer.pitch = max(-1.4, min(1.4, renderer.pitch - Float(e.deltaY) * 0.004)) }
+  override func mouseDragged(with e: NSEvent) { renderer.yaw += Float(e.deltaX) * 0.004; renderer.pitch = max(-1.4, min(1.4, renderer.pitch - Float(e.deltaY) * 0.004)); renderer.resetAccumulation() }
   override func draw(_ r: NSRect) {
     let now = CACurrentMediaTime(), dt = Float(min(0.05, now - last)); last = now
     let f = renderer.forward, flat = simd_normalize(SIMD3(f.x, 0, f.z)), right = SIMD3(-flat.z, 0, flat.x)
@@ -156,20 +230,21 @@ final class View: MTKView {
     var m = SIMD3<Float>(0, 0, 0)
     if keys.contains(13) { m += f }; if keys.contains(1) { m -= f }; if keys.contains(2) { m += right }; if keys.contains(0) { m -= right }
     if keys.contains(14) { m.y += 1 }; if keys.contains(12) { m.y -= 1 }
-    renderer.eye += m * speed * dt
-    guard let pass = currentRenderPassDescriptor, let drawable = currentDrawable, let depth = pass.depthAttachment.texture else { return }
+    if simd_length(m) > 0 { renderer.eye += m * speed * dt; renderer.resetAccumulation() }
+    guard let drawable = currentDrawable else { return }
     let cb = renderer.queue.makeCommandBuffer()!
-    renderer.encode(into: cb, colour: drawable.texture, depth: depth)
+    renderer.encode(into: cb, output: drawable.texture)
     cb.present(drawable); cb.commit()
   }
 }
 
 let args = CommandLine.arguments
-guard args.count >= 2 else { print("usage: SaucerSprings <world.rcworld> [--shot out.png] [--at x,y,z,yaw,pitch]"); exit(2) }
+let worldPath = args.count >= 2 && !args[1].hasPrefix("--") ? args[1] : Bundle.main.path(forResource: "world", ofType: "rcworld")
+guard let worldPath else { print("usage: SaucerSprings <world.rcworld> [--shot out.png] [--at x,y,z,yaw,pitch]"); exit(2) }
 let device = MTLCreateSystemDefaultDevice()!
 guard device.supportsRaytracing else { print("this GPU has no Metal ray tracing"); exit(1) }
 let t0 = CACurrentMediaTime()
-let world = try loadWorld(args[1], device: device)
+let world = try loadWorld(worldPath, device: device)
 let renderer = try Renderer(device: device, world: world)
 print(String(format: "%@: %d vertices, %d triangles, load+BVH %.2f s", device.name, world.vertexCount, world.indexCount / 3, CACurrentMediaTime() - t0))
 if let i = args.firstIndex(of: "--at"), i + 1 < args.count {
@@ -177,7 +252,8 @@ if let i = args.firstIndex(of: "--at"), i + 1 < args.count {
   if v.count >= 3 { renderer.eye = SIMD3(v[0], v[1], v[2]) }; if v.count >= 4 { renderer.yaw = v[3] }; if v.count >= 5 { renderer.pitch = v[4] }
 }
 if let i = args.firstIndex(of: "--shot"), i + 1 < args.count {
-  let ms = try renderer.shot(to: args[i + 1])
+  let samples = args.firstIndex(of: "--samples").flatMap { Int(args[$0 + 1]) } ?? 96
+  let ms = try renderer.shot(to: args[i + 1], samples: samples)
   print(String(format: "frame GPU %.2f ms", ms)); exit(0)
 }
 
@@ -186,7 +262,7 @@ app.setActivationPolicy(.regular)
 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
 window.title = "Saucer Springs"
 let view = View(frame: window.contentLayoutRect, device: device)
-view.colorPixelFormat = renderer.colourFormat; view.depthStencilPixelFormat = .depth32Float; view.renderer = renderer; view.preferredFramesPerSecond = 120
+view.colorPixelFormat = renderer.colourFormat; view.framebufferOnly = false; view.renderer = renderer; view.preferredFramesPerSecond = 120
 window.contentView = view; window.center(); window.makeKeyAndOrderFront(nil); window.makeFirstResponder(view)
 app.activate(ignoringOtherApps: true)
 app.run()
