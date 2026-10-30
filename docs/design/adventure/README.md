@@ -29,7 +29,10 @@ the Old Silver Mine.
 roads, or fly to the top and parachute down. At the top is the **big spirit cave**.
 
 **Second half: the upside-down.** Through the spirit cave you come out in the upside-down, the bad
-aliens' twisted mirror of the same map, for the second set of dungeons and the finale.
+aliens' twisted mirror of the same map, for the second set of dungeons and the finale. Unlike the
+first half's mostly peaceful overworld (enemies live in the dungeons), **the upside-down is full of
+enemies out in the open**, the way ALttP's Dark World is far more hostile than the Light World: bad
+toys patrol the streets, drones hunt you, and every road is contested.
 
 ## How it maps onto Zelda
 
