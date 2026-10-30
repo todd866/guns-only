@@ -91,6 +91,31 @@ from the Water Temple: **switching must be instant**, one button, never a menu.
 into the toy-sized places: under picnic tables, through skirting-board gaps, into drains and drawers.
 That's Minish Cap's idea without its shrink portals.
 
+## A hidden game: The Legend of Spirit Mountain (owner, 30 Oct)
+
+The adventure is **hidden inside the RC sandbox**. The Old Silver Mine is the prologue: finish it
+and a letterboxed cinematic reveals **The Legend of Spirit Mountain** (LoSM), which then appears on
+the menu as **its own game mode**. Built: the mine → excavator boss → rescue → claw → spirit mark →
+reveal → Legend button (`?mode=legend`, starts as the robot at the mine mouth).
+
+**Zelda's item loop** (`physics/items.mjs`): every dungeon gives one item; that item beats the
+boss and then opens new places in the world. **Some places are simply off limits until you have the
+right item or weapon**: the classic Zelda gate, never an invisible wall, always a visible obstacle
+you will recognise later (cracked rock, a gap, a dark room). The world also hides **battery cells**
+(four make one more battery, Zelda's heart pieces).
+
+| Item | From | Opens |
+| --- | --- | --- |
+| ⛏️ Excavator Claw | Old Silver Mine (built) | cracked rock; the digging area |
+| 🌀 Wind-Up Spring | dungeon 2 | high ledges |
+| 🏮 Spirit Lamp | dungeon 3 | dark rooms, hidden spirit marks |
+| 🪀 Grapple Yo-Yo | dungeon 4 | gaps between posts |
+| 🪞 Moon Mirror | Spirit Mountain | the upside-down |
+
+**Digging, Minecraft-style, only in one area.** The claw breaks marked cracked rock anywhere (a
+Zelda bombable wall). Free block-by-block digging is confined to **one dedicated place**, so it
+stays special and the rest of the world keeps its authored routes.
+
 ## Dungeons: real-ish places
 
 Ocarina's rule, kept for a 6-year-old: **one locked door at a time**, so a key is never wasted.
@@ -101,9 +126,11 @@ boss with it → take it out into the world, where it opens new routes.
 1. **The Old Silver Mine.** A Nelson/Techatticup-style abandoned mine in the hills: mine-cart rails,
    rusty trucks, timber shafts. You find the **walking robot** form. The boss is a bad toy excavator,
    beaten by climbing onto it. You free alien 1.
-2. **Saucer Springs Elementary after dark.** Stranger Things corridors, the gym, the boiler room. You
+2. **The sewers under the base** (owner, 30 Oct): storm drains and service tunnels under the
+   runways and housing; gated in the overworld by grates you need an item to open.
+3. **Saucer Springs Elementary after dark.** Stranger Things corridors, the gym, the boiler room. You
    find the **skateboard**. The boss is a taken-over kickball bot in the gym. You free alien 2.
-3. **The Lookout on the mountain's shoulder.** A ruined fire lookout and slot canyons with real
+4. **The Lookout on the mountain's shoulder.** A ruined fire lookout and slot canyons with real
    flash floods ("sky goes dark, get to high ground"). You find the **flying suit**. The boss is a
    giant possessed kite. You free alien 3. With three aliens free, the guardians open the gate at
    the summit.
