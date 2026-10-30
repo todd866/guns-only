@@ -24,7 +24,7 @@ export function createMine(scene){
  const lampMat=new T.MeshStandardMaterial({color:COL.lamp,emissive:'#ffb347',emissiveIntensity:2.2});
  for(const [x,z] of [[-1.3,4],[-3.8,-2],[3.8,-6],[-1.8,-10],[1.8,-13],[-2.8,-18],[2.8,-18],[8.7,-3],[-8.7,-3]]){const l=new T.Mesh(new T.SphereGeometry(.06,10,8),lampMat);l.position.set(...W([x,1.1,z]));root.add(l);}
  // Outside: a rocky hill over the whole footprint and a timbered mouth with a sign.
- {const [cx,cz]=[0,-9.5],g=new T.SphereGeometry(1,28,14,0,Math.PI*2,0,Math.PI/2);const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),k=1+.12*Math.sin(x*7)*Math.cos(z*5);p.setXYZ(i,x*12.5*k,y*5*k+.2,z*18*k);}g.computeVertexNormals();
+ {const [cx,cz]=[0,-9.5],g=new T.SphereGeometry(1,28,14,0,Math.PI*2,0,Math.PI/2);const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),k=1+.12*Math.sin(x*7)*Math.cos(z*5);p.setXYZ(i,x*12.5*k,y*5*k+.2,Math.min(z*18*k,15.1));}// the front is cut to a cliff at z 5.6, so the timbered mouth and sign stand clear of itg.computeVertexNormals();
   let hg=g.toNonIndexed();hg.deleteAttribute('uv');parts.push(coloured(place(hg,cx,-.15,cz),'#9a6748'));}
  box(.18,1.9,.18,-1.65,.95,6,COL.wood);box(.18,1.9,.18,1.65,.95,6,COL.wood);box(3.6,.2,.22,0,1.85,6,COL.wood);
  {const c=document.createElement('canvas');c.width=512;c.height=128;const x=c.getContext('2d');x.fillStyle='#3a2414';x.fillRect(0,0,512,128);x.font='bold 64px Georgia,serif';x.fillStyle='#f2d38c';x.textAlign='center';x.textBaseline='middle';x.fillText('OLD SILVER MINE',256,68);

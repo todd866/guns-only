@@ -10,7 +10,7 @@ export const INTRO_CARDS = Object.freeze([
   'Now bad aliens are sending a signal from the other side…',
   '…through the spirit cave, high on the mountain.',
 ]);
-export const TITLE = Object.freeze({ name: 'SPIRIT MOUNTAIN', sub: 'a toy’s legend' });
+export const TITLE = Object.freeze({ pre: 'The Legend of', name: 'SPIRIT MOUNTAIN' });
 
 export function createIntro(root = document.body) {
   const el = document.createElement('div'); el.id = 'intro'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-live', 'polite');
@@ -28,7 +28,7 @@ body.cinematic :is(#instruments,#item,#map,#banner,#pause,#mute,#atlas,#garage,#
 #intro .title small{margin-top:4vh;font:600 15px system-ui;letter-spacing:.2em;color:#f4ecd6;opacity:.8}
 #intro .next{position:absolute;right:4vw;bottom:4vh;font:600 13px system-ui;letter-spacing:.15em;opacity:.7}
 </style><div class="bar top"></div><div class="bar bot"></div><div class="card"></div>
-<div class="title"><b>${TITLE.name}</b><i>${TITLE.sub}</i><small>PRESS ENTER</small></div><div class="next">ENTER ▸</div>`;
+<div class="title"><i>${TITLE.pre}</i><b>${TITLE.name}</b><small>NEW GAME UNLOCKED · PRESS ENTER</small></div><div class="next">ENTER ▸</div>`;
   root.appendChild(el);
   const card = el.querySelector('.card'), title = el.querySelector('.title'), next = el.querySelector('.next');
   let active = false, i = -1, t = 0, from = null, over = null, onDone = null;

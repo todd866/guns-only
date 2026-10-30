@@ -12,11 +12,13 @@ export const ITEMS = Object.freeze({
 export const CELLS_PER_BATTERY = 4;
 
 export function createInventory(saved = null) {
-  const inv = { items: [], cells: [], extraBatteries: 0 };
+  // legend: the mine is beaten and The Legend of Spirit Mountain is unlocked as its own mode.
+  const inv = { items: [], cells: [], extraBatteries: 0, legend: false };
   if (saved && typeof saved === 'object') {
     inv.items = (saved.items ?? []).filter(id => ITEMS[id]);
     inv.cells = [...new Set((saved.cells ?? []).filter(id => typeof id === 'string'))];
     inv.extraBatteries = Math.floor(inv.cells.length / CELLS_PER_BATTERY);
+    inv.legend = saved.legend === true;
   }
   return inv;
 }
@@ -35,4 +37,4 @@ export function takeCell(inv, id) {
   const before = inv.extraBatteries; inv.extraBatteries = Math.floor(inv.cells.length / CELLS_PER_BATTERY);
   return { cell: inv.cells.length % CELLS_PER_BATTERY || CELLS_PER_BATTERY, of: CELLS_PER_BATTERY, battery: inv.extraBatteries > before };
 }
-export const saveInventory = inv => ({ items: [...inv.items], cells: [...inv.cells] });
+export const saveInventory = inv => ({ items: [...inv.items], cells: [...inv.cells], legend: inv.legend });

@@ -28,6 +28,8 @@ export function createAdventure(scene, world) {
   let lastBump = null;
   return {
     state, inside, boss, inventory, fighter: () => fighter,
+    /** The reveal finished: unlock The Legend of Spirit Mountain on the menu. */
+    unlockLegend() { inventory.legend = true; save(); },
     /** While the excavator fight is on: where the camera should look (the boss), else null. */
     bossFrame: p => bossAwake && !boss.freed && roomAt(mineLocal(p)) === 'R5' ? boss.origin : null,
     /** fight = { robot, input: { attack, lock }, mode } while on foot; null in the car. */
