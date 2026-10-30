@@ -44,6 +44,29 @@ export const FEATURES = Object.freeze([
 ]);
 // Wedges: a kicker in the shrine, rising toward +x: [x0, x1, z0, z1, height].
 export const KICKERS = Object.freeze([{ name: 'shrine kicker', box: [38.2, 39, -2.2, -.8, .18] }]);
+// The drained bowl in S5: a pool with a shallow end by the door and a deep end, rounded
+// transitions and coping all round. The Rat King runs round the bottom (physics/rat-king.mjs).
+export const BOWL = Object.freeze({ room: 'S5', box: [48.5, 56.5, -6.5, 1.5], wall: 1.2, shallow: .35, deep: 1, slope: [50.5, 53.5], cell: .25, coping: .04 });
+const bowlDepth = x => { const [a, b] = BOWL.slope, t = Math.max(0, Math.min(1, (x - a) / (b - a))); return BOWL.shallow + (BOWL.deep - BOWL.shallow) * t * t * (3 - 2 * t); };
+/** The bowl's floor height at (x, z), local; 0 (the deck) outside it. */
+export function bowlFloor(x, z) {
+  const [x0, x1, z0, z1] = BOWL.box;
+  if (x <= x0 || x >= x1 || z <= z0 || z >= z1) return 0;
+  const a = Math.min(x - x0, x1 - x) / BOWL.wall, b = Math.min(z - z0, z1 - z) / BOWL.wall;
+  const e = Math.min(1, (a ** -4 + b ** -4) ** -.25);   // rounded corners
+  return -bowlDepth(x) * (1 - (1 - e) ** 2);
+}
+export const inBowl = ([x, , z]) => x > BOWL.box[0] && x < BOWL.box[1] && z > BOWL.box[2] && z < BOWL.box[3];
+// Coping on each side, stopping short of the rounded corners.
+function copingRails() {
+  const [x0, x1, z0, z1] = BOWL.box, h = BOWL.coping, i = .5;
+  return [
+    { id: 'coping-north', kind: 'rail', pts: [[x0 + i, z0, h], [x1 - i, z0, h]] },
+    { id: 'coping-south', kind: 'rail', pts: [[x0 + i, z1, h], [x1 - i, z1, h]] },
+    { id: 'coping-deep', kind: 'rail', pts: [[x1, z0 + i, h], [x1, z1 - i, h]] },
+    { id: 'coping-shallow', kind: 'rail', pts: [[x0, z0 + i, h], [x0, z1 - i, h]] },
+  ];
+}
 // Grindable lines, a skate park's rails in [x, z, h] (physics/skate.mjs park frame).
 export const PIPE_Y = .34;
 export const SEWER_PARK = Object.freeze({
@@ -52,6 +75,7 @@ export const SEWER_PARK = Object.freeze({
     { id: 'pipe-north', kind: 'rail', pts: [[22.4, -4, PIPE_Y], [33.6, -4, PIPE_Y]] },
     { id: 'pipe-south', kind: 'rail', pts: [[22.4, -1, PIPE_Y], [33.6, -1, PIPE_Y]] },
     { id: 'shrine-ledge', kind: 'ledge', pts: [[39, -4.2, .2], [43, -4.2, .2]] },
+    ...copingRails(),
   ],
   gaps: [], letters: [], goals: [], tape: null,
 });
@@ -59,13 +83,14 @@ export const CHESTS = Object.freeze({
   K1: { room: 'S1', at: [12, 0, 2.2], holds: 'small' },
   BOARD: { room: 'S2', at: [18.6, 0, -1], holds: 'board' },
 });
-export const CELLS = Object.freeze({ 'sewer-bowl': { room: 'S5', at: [55, .08, -6.5] } });
+// The bowl's battery cell sits in a little cage on the deck; it opens when the Rat King is freed.
+export const CELLS = Object.freeze({ 'sewer-bowl': { room: 'S5', at: [57.2, .08, -7.3], boss: true } });
 // The way in and out: arrive at the foot of the ladder; the exit ladder in the bowl climbs back up.
 export const ARRIVE = Object.freeze({ at: [-.8, 0, -1.9], yaw: Math.PI / 2 });
 export const LADDERS = Object.freeze({ in: [-1.85, 0, -1.9], out: [57.6, 0, 2.2] });
-export const RAT_KING = Object.freeze({ at: [53, 0, -1], cage: [50.5, 56, -3.5, 1.5] });
+export const RAT_KING = Object.freeze({ at: [53.4, -1, -2.5], cage: [56.85, 57.55, -7.65, -6.95] });
 // Where a fall into the sewage washes you back to: the near ledge of each channel.
-export const WASH_BACK = Object.freeze({ S1: [8, 0, -1.9], S3: [21.4, 0, -2.5] });
+export const WASH_BACK = Object.freeze({ S1: [8, 0, -1.9], S3: [21.4, 0, -2.5], S5: [47.8, 0, -2.5] });
 // Combo needed at the trick shrine, by difficulty.
 export const SHRINE = Object.freeze({ room: 'S4', kid: 2, bigKid: 4 });
 export const SEWER_BOUNDS = Object.freeze([SEWER.anchor[0] - 2.5, SEWER.anchor[2] - 8.5, SEWER.anchor[0] + 58.5, SEWER.anchor[2] + 3.5]);
@@ -93,11 +118,12 @@ export function buildSewer() {
     const [x0, x1] = r.x, [z0, z1] = r.z, H = r.ceiling ?? SEWER.ceiling;
     // Walkway floor, cut around channels: rows of x-intervals x z-intervals not inside a channel.
     const xs = new Set([x0, x1]), zs = new Set([z0, z1]);
-    for (const c of CHANNELS.filter(c => c.room === r.id)) { xs.add(c.box[0]); xs.add(c.box[1]); zs.add(c.box[2]); zs.add(c.box[3]); }
+    const cuts = [...CHANNELS.filter(c => c.room === r.id).map(c => c.box), ...(r.id === BOWL.room ? [BOWL.box] : [])];
+    for (const c of cuts) { xs.add(c[0]); xs.add(c[1]); zs.add(c[2]); zs.add(c[3]); }
     const X = [...xs].sort((a, b) => a - b), Z = [...zs].sort((a, b) => a - b);
     for (let i = 1; i < X.length; i++) for (let j = 1; j < Z.length; j++) {
       const cx = (X[i - 1] + X[i]) / 2, cz = (Z[j - 1] + Z[j]) / 2;
-      if (!CHANNELS.some(c => c.room === r.id && inBox(cx, cz, c.box))) floor(X[i - 1], X[i], Z[j - 1], Z[j], 0, 'concrete');
+      if (!cuts.some(c => inBox(cx, cz, c))) floor(X[i - 1], X[i], Z[j - 1], Z[j], 0, 'concrete');
     }
     quad([x0, H, z0], [x1, H, z0], [x1, H, z1], [x0, H, z1], 'concrete');   // ceiling, facing down
     const gapsOn = (axis, at) => OPENINGS.filter(o => (o.a === r.id || o.b === r.id) && o.wall === axis && Math.abs(o.at - at) < 1e-6).map(o => o.span);
@@ -126,6 +152,10 @@ export function buildSewer() {
     both([x0, y, z0], [x1, y, z0], [x1, 0, z0], [x0, 0, z0], 'brick'); both([x0, y, z1], [x1, y, z1], [x1, 0, z1], [x0, 0, z1], 'brick');
     both([x0, y, z0], [x0, y, z1], [x0, 0, z1], [x0, 0, z0], 'brick'); both([x1, y, z0], [x1, y, z1], [x1, 0, z1], [x1, 0, z0], 'brick');
   }
+  // The bowl: a heightfield in cells, facing up like the floors.
+  { const [x0, x1, z0, z1] = BOWL.box, nx = Math.round((x1 - x0) / BOWL.cell), nz = Math.round((z1 - z0) / BOWL.cell);
+    const P = (i, j) => { const x = x0 + (x1 - x0) * i / nx, z = z0 + (z1 - z0) * j / nz; return [x, bowlFloor(x, z), z]; };
+    for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) quad(P(i, j), P(i, j + 1), P(i + 1, j + 1), P(i + 1, j), 'concrete'); }
   for (const f of FEATURES) out.push(...boxTris(f.box, f.surface));
   for (const k of KICKERS) { const [x0, x1, z0, z1, h] = k.box; quad([x0, 0, z0], [x0, 0, z1], [x1, h, z1], [x1, h, z0], 'concrete'); both([x1, 0, z0], [x1, 0, z1], [x1, h, z1], [x1, h, z0], 'concrete'); }
   return out;

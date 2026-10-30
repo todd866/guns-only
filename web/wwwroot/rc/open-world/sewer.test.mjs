@@ -25,3 +25,15 @@ test('walkways are solid, channels drop to the pit, and the pipes span the whole
   for (const r of SEWER_PARK.rails.filter(r => r.id.startsWith('pipe'))) { assert.ok(r.pts[0][0] < x0 && r.pts.at(-1)[0] > x1); assert.equal(r.pts[0][2], PIPE_Y); }
   assert.ok(buildSewer().length > 100);
 });
+
+test('the bowl is a pool: deck at 0, a shallow end by the door, a deep end, coping on all four sides', async () => {
+  const { BOWL, bowlFloor } = await import('./sewer.mjs');
+  const world = createWorld(4);
+  for (const t of sewerWorldTris()) world.addTri(t.a, t.b, t.c, t.surface, t.gate);
+  const y = (x, z) => world.raycast(sewerWorld([x, 1, z]), [0, -1, 0], 4).point[1] - sewerWorld([0, 0, 0])[1];
+  assert.ok(Math.abs(y(47.8, -2.5)) < 1e-6, 'deck by the door');
+  assert.ok(Math.abs(y(54.5, -2.5) + BOWL.deep) < .02, 'deep end');
+  assert.ok(y(50, -2.5) > -BOWL.shallow - .02 && y(50, -2.5) < -.1, 'shallow end');
+  assert.ok(Math.abs(y(54.5, -2.5) - bowlFloor(54.5, -2.5)) < .02);
+  assert.equal(SEWER_PARK.rails.filter(r => r.id.startsWith('coping')).length, 4);
+});

@@ -141,6 +141,8 @@ function landAir(sk, a, at, up) {
     for (const def of sk.park.goals) if (def.gap === g.name) goal(sk, def.id, true);
   }
   if (sk.combo) sk.landed = { time: 0, transition: a.kind === 'return' || a.kind === 'transfer' };
+  // Where and how it came down, for things in the world that care (the Rat King).
+  sk.events.push({ type: 'touchdown', at, air: a.time, tricks: [...(sk.combo?.tricks ?? [])] });
 }
 
 // Free skate on the board anywhere in the world: the same combos, manuals and special meter,

@@ -1,10 +1,11 @@
 import {createMine} from './mine.js';
 import {createSewer} from './sewer.js';
-import {SEWER,SEWER_BOUNDS,CHESTS as SEWER_CHESTS,CELLS as SEWER_CELLS,OPENINGS as SEWER_OPENINGS,DOORS as SEWER_DOORS,WASH_BACK,ARRIVE,LADDERS,MANHOLE,SHRINE,sewerWorld,sewerLocal,roomAt as sewerRoomAt,inChannel,createSewerState} from './sewer.mjs';
+import {SEWER,SEWER_BOUNDS,CHESTS as SEWER_CHESTS,CELLS as SEWER_CELLS,OPENINGS as SEWER_OPENINGS,DOORS as SEWER_DOORS,WASH_BACK,ARRIVE,LADDERS,MANHOLE,SHRINE,BOWL,bowlFloor,inBowl,sewerWorld,sewerLocal,roomAt as sewerRoomAt,inChannel,createSewerState} from './sewer.mjs';
 import {createBadToys} from './bad-toys.js';
 import {createExcavator} from './excavator.js';
 import {createGoodAlien} from './good-alien.js';
 import {createBoss,stepBoss} from '../physics/boss.mjs';
+import {createRatKing,stepRatKing,landOnRat} from '../physics/rat-king.mjs';
 import {createFighter,createEnemy,stepCombat,reviveFighter,roomHelp} from '../physics/combat.mjs';
 import {CHESTS,PLATES,OPENINGS,MINE_BOUNDS,MINE_ENEMIES,ROOM_ENTRANCES,MINE,BOSS_AT,CELLS,SPIRIT_MARK,DOORS,mineWorld,mineLocal,roomAt,createMineState} from './mine.mjs';
 import {ITEMS,createInventory,giveItem,hasItem,takeCell,saveInventory} from '../physics/items.mjs';
@@ -24,6 +25,8 @@ export function createAdventure(scene, world) {
   const inventory = createInventory(file?.data), save = () => { if (!store) return; const f = activeSave(store) ?? (createSlot(store, 0, 'Player 1'), activeSave(store)); try { store.setItem(f.key, JSON.stringify(saveInventory(inventory))); } catch {} };
   // The Sewers (dungeon 2): same Zelda rules; the skateboard is the item, found halfway.
   const sewer = createSewer(scene), sewerState = createSewerState(); let shrineBest = 0, lastSewerBump = null;
+  // The Rat King in the bowl: beaten with the board, by landing on him (physics/rat-king.mjs).
+  const rat = createRatKing(), ratEvents = [];
   for (const id of inventory.cells) { mine.takeCell(id); sewer.takeCell(id); }
   const inSewer = p => p[0] >= SEWER_BOUNDS[0] && p[0] <= SEWER_BOUNDS[2] && p[2] >= SEWER_BOUNDS[1] && p[2] <= SEWER_BOUNDS[3] && p[1] < SEWER.anchor[1] + 4;
   const sewerDoorAt = o => sewerWorld([o.at, 0, (o.span[0] + o.span[1]) / 2]);
@@ -35,17 +38,22 @@ export function createAdventure(scene, world) {
   const doorAt = o => mineWorld(o.wall === 'x' ? [o.at, 0, (o.span[0] + o.span[1]) / 2] : [(o.span[0] + o.span[1]) / 2, 0, o.at]);
   const inside = p => p[0] >= MINE_BOUNDS[0] && p[0] <= MINE_BOUNDS[2] && p[2] >= MINE_BOUNDS[1] && p[2] <= MINE_BOUNDS[3];
   let lastBump = null;
-  function sewerStep(pos) {
-    const events = [], local = sewerLocal(pos);
+  function sewerStep(pos, ride) {
+    const events = ratEvents.splice(0), local = sewerLocal(pos), mode = ride?.mode ?? 'kid';
     // Falling into the slime sweeps you back to the near ledge: some crossings need a grind.
     if (local[1] < SEWER.sewage + .08 && inChannel(local)) { const room = sewerRoomAt(local); events.push({ washed: sewerWorld(WASH_BACK[room] ?? ARRIVE.at) }); return events; }
+    // The bowl floods a little with every hit on the Rat King; the flooded part washes you out too.
+    if (inBowl(local) && local[1] < rat.level + .05 && bowlFloor(local[0], local[2]) < rat.level - .02) { events.push({ washed: sewerWorld(WASH_BACK.S5), bowl: true }); return events; }
+    const inS5 = sewerRoomAt(local) === BOWL.room;
+    if (inS5 || rat.state !== 'sleep') for (const ev of stepRatKing(rat, { at: local, inBowl: inS5 && inBowl(local) && local[1] < -.1, near: inS5, air: !!ride?.air }, mode, bowlFloor, ride?.dt ?? 1 / 120)) events.push(ev);
+    if (ride?.punch && inS5 && Math.hypot(local[0] - rat.at[0], local[2] - rat.at[1]) < 1.4 && !rat.freed) events.push({ ratDodge: true });
     for (const [id, c] of Object.entries(SEWER_CHESTS)) if (near(pos, sewerWorld(c.at), .34, .35)) {
       const got = openChest(sewerState, id); if (!got) continue;
       sewer.openChest(id);
       if (got === 'small') events.push({ chest: id, got });
       else { const item = giveItem(inventory, got); if (item) save(); events.push({ chest: id, item: got, ...(item ?? ITEMS[got]) }); }
     }
-    for (const [id, c] of Object.entries(SEWER_CELLS)) if (!inventory.cells.includes(id) && near(pos, sewerWorld(c.at), .3, .4)) {
+    for (const [id, c] of Object.entries(SEWER_CELLS)) if (!inventory.cells.includes(id) && (!c.boss || rat.freed) && near(pos, sewerWorld(c.at), .3, .4)) {
       const got = takeCell(inventory, id); sewer.takeCell(id); save(); if (fighter && got.battery) { fighter.max++; fighter.batteries = fighter.max; }
       events.push({ cell: id, ...got });
     }
@@ -60,7 +68,12 @@ export function createAdventure(scene, world) {
     return events;
   }
   return {
-    state, inside, boss, inventory, fighter: () => fighter, sewerState, inSewer,
+    state, inside, boss, inventory, fighter: () => fighter, sewerState, inSewer, rat,
+    /** The board touched down: in the bowl, landing on the Rat King hits him. Events come out of step(). */
+    landing(p, air, tricks, mode = 'kid') {
+      if (!inSewer(p)) return;
+      for (const ev of landOnRat(rat, sewerLocal(p), air, tricks, mode)) { ratEvents.push(ev); if (ev.ratFreed) { sewer.freeRat(); defeatBoss(sewerState); } }
+    },
     /** In a dungeon (no flying, no free-skate curb rails): the mine or the sewers. */
     underground: p => inside(p) || inSewer(p),
     /** E at the manhole climbs down; E at either ladder climbs back up. Returns { pos, yaw } or null. */
@@ -81,13 +94,13 @@ export function createAdventure(scene, world) {
     /** While the excavator fight is on: where the camera should look (the boss), else null. */
     bossFrame: p => bossAwake && !boss.freed && roomAt(mineLocal(p)) === 'R5' ? boss.origin : null,
     /** fight = { robot, input: { attack (Q), use (E: the item), lock }, mode } while on foot; null in the car. */
-    step(pos, dt, fight = null) {
+    step(pos, dt, fight = null, ride = null) {
       mine.update(dt); time += dt;
       toys.sync(enemies, time, dt, () => MINE.anchor[1]);
       digger.sync(boss, time, dt, MINE.anchor[1]);
       alien.sync(time, dt, alien.freed ? (fight?.robot?.pos ?? pos) : null);
-      sewer.update(dt);
-      if (inSewer(pos)) return sewerStep(pos);
+      sewer.update(dt, rat);
+      if (inSewer(pos)) return sewerStep(pos, ride && { ...ride, dt, punch: fight?.input?.attack });
       if (!inside(pos)) return [];
       const events = [];
       if (fight?.robot) {
