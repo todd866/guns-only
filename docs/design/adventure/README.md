@@ -145,6 +145,25 @@ Drones bring the base to life and give it its first-act threat:
 - Under the corrupted leadership the bots get **meaner**: red lights, faster patrols. In the
   upside-down, some are fused with bad-alien tech.
 
+## Difficulty a 6-year-old can win (owner, 30 Oct)
+
+The same doctrine as the races' Kid mode: not immunity, but setbacks then a win after a real battle.
+Hard but not impossible, and the game adjusts by itself so he never hits a wall:
+- **Kid / Big Kid** (B) sets the baseline: Kid gets more batteries, slower enemy attacks with clear
+  wind-ups, wider ledges to land on, and no fall damage anywhere.
+- **Quiet help when he's stuck**, measured per room, never announced:
+  - knocked out twice in a room → enemies there telegraph longer and drop extra batteries;
+  - three times → the boss's weak point glows and its attacks slow;
+  - wandering a room for 90 s without progress → the good alien's light drifts toward the next
+    thing to do (Ocarina 3D's hint stones, but free and wordless);
+  - help eases off again once he's doing well, so it never becomes a cakewalk.
+- **No game over, no lost progress.** Getting knocked out puts you back at the room's entrance
+  with keys and items kept (Zelda's dungeon respawn, friendlier).
+- **Every puzzle is solvable without reading:** the world shows what to do (a crawl gap's
+  shape, a ledge's handholds, a plate's glow, a key's colour matching its lock).
+- **Telemetry** per room (time, knockouts, hint shown, quit) shows where he really struggles, so
+  tuning comes from his play, not guesses.
+
 ## Enemies: good toys and bad toys
 
 - **Everyday bad toys** (tin soldiers, wind-up monkeys, RC tanks, jack-in-the-box door guards) **pop
