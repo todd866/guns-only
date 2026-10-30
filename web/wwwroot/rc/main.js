@@ -14,7 +14,7 @@ import {createAdventure} from './open-world/adventure.js';
 import {createIntro} from './open-world/intro.js';
 import {mineWorld as mineWorldPos} from './open-world/mine.mjs';
 import {ITEMS} from './physics/items.mjs';
-import {vehicleParams} from './physics/vehicles.mjs';
+import {vehicleParams,legendCarParams,LEGEND_CARS} from './physics/vehicles.mjs';
 import {createAdaptiveResolution,stepAdaptiveResolution} from './adaptive-resolution.mjs';
 import {createPlaymates,stepPlaymates} from './physics/playmate.mjs';
 import {drawDetailedMinimap} from './open-world/minimap.js';
@@ -218,7 +218,7 @@ $('menu-race').onclick=()=>{if(openWorld&&race.roam){const p=nearestLocation(s.c
 // The Legend of Spirit Mountain: unlocked by the mine's reveal; starts as the robot at the mine mouth.
 $('menu-legend').onclick=()=>{const u=new URL(location.href);u.search='';u.searchParams.set('track','hub');u.searchParams.set('mode','legend');location.href=u.href;};
 let legendStage=0;function legendStart(){if(urlMode!=='legend'||!started||!adventure||legendStage>1)return;
- if(legendStage===0){placeCar(s.car,[...mineWorldPos([0,.35,12])],0);legendStage=1;return;}
+ if(legendStage===0){const p=legendCarParams(LEGEND_CARS[adventure.inventory.car]?adventure.inventory.car:'starter');Object.assign(s.car,createCar(p,[...mineWorldPos([0,.35,12])],0));legendStage=1;return;}
  if(openWorld.stream.ready(s.car.pos)&&!robot){transform();legendStage=2;callout('🏔️ THE LEGEND OF SPIRIT MOUNTAIN · find the way to the mountain',5000);}}
 $('menu-furball').onclick=()=>{if(openWorld){location.href=openWorld.eventURL(locationById('ramp'),'furball');return;}telemetry.firstInput('button');audio.start();started=true;$('brief').hidden=true;$('result').hidden=true;goFurball();pause(false);canvas.focus();};$('pause').onclick=()=>pause(!paused);$('reset').onclick=()=>{telemetry.recover('button');recover(s);};
 function setMode(m){telemetry.setMode(m);bestKey=`guns-only.rc.best.v3.${track??'base'}.${openWorld?.selected.id??'lap'}.${m}`;best=0;try{best=Number(localStorage.getItem(bestKey))||0;}catch{}mode=race.mode=s.mode=s.assist.mode=m;s.autoUnstick=m==='kid';$('mode').textContent=m==='kid'?'Kid · B':'Big Kid · B';$('menu-kid').textContent=m==='kid'?'Kid':'Big Kid';$('menu-kid').setAttribute('aria-pressed',String(m==='kid'));try{localStorage.setItem('guns-only.rc.mode',m);}catch{}}
@@ -454,7 +454,7 @@ function disposeJet(group){const jet=group.getObjectByName('JetShell'),geos=new 
 // T cycles the toy's forms (docs/design/adventure): car -> walking robot -> skateboard -> car.
 // The robot is its own controller; the board rides the car physics with board tuning, so every
 // skate-park trick, grind and gap scores for it too.
-function transform(){const r=readout(s),paint=openWorld?.progress?.paint??'#f28c28',carParams=()=>vehicleParams(bodyKind==='jet'||!bodyKind?'buggy':bodyKind);
+function transform(){const r=readout(s),paint=openWorld?.progress?.paint??'#f28c28',carParams=()=>urlMode==='legend'?legendCarParams(LEGEND_CARS[adventure?.inventory.car]?adventure.inventory.car:'starter'):vehicleParams(bodyKind==='jet'||!bodyKind?'buggy':bodyKind);
  if(form==='car'){robot=createRobot([r.x,r.y-rideHeight(s.car.params)+.01,r.z],r.yaw);if(!robotBody){robotBody=makeRobotBody(paint);scene.add(robotBody);}robotBody.visible=true;car.visible=false;s.car.vel=[0,0,0];s.car.ang=[0,0,0];form='robot';callout('🤖 ROBOT · T for the board');}
  else if(form==='robot'){const p=vehicleParams('board'),pos=[robot.pos[0],robot.pos[1]+rideHeight(p)+.02,robot.pos[2]];Object.assign(s.car,createCar(p,pos,robot.yaw));robot=null;robotBody.visible=false;if(!boardRider){boardRider=makeBoardRider(paint);scene.add(boardRider);}boardRider.visible=true;form='board';callout('🛹 SKATEBOARD · T for the car');}
  else{const p=carParams(),pos=[...s.car.pos];pos[1]+=rideHeight(p)-rideHeight(s.car.params)+.02;Object.assign(s.car,createCar(p,pos,readout(s).yaw));boardRider.visible=false;car.visible=true;form='car';callout('🚗 CAR');}

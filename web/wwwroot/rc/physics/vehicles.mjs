@@ -15,3 +15,28 @@ const BOARD = { mass: 1.1, size: [.09, .04, .3], topSpeed: 12, driveForce: 22, w
   hull: [{ at: [0, -.01, -.13], r: .02 }, { at: [0, -.01, .13], r: .02 }, { at: [0, .03, 0], r: .035 }] };
 export function vehicleParams(kind = 'buggy') { if (kind === 'board') return clone(Object.assign(clone(BUGGY), BOARD)); if (!PRESETS[kind]) throw new RangeError(`unknown vehicle kind: ${kind}`); return clone(Object.assign(clone(BUGGY), PRESETS[kind])); }
 export function golfVehicleUnlocked(state) { const d = Array.isArray(state) ? state : state?.discovered; return !!d?.includes('golf'); }
+
+// The Legend of Spirit Mountain's car ladder (owner, 30 Oct): you start in a small RC car that is
+// easy to drive and not too fast; later cars are a bit bigger and a bit faster, ending in a choice
+// of a grippy road car or a loose, forgiving rally car for the mountain switchbacks.
+// scale grows the whole car (wheels, track, hull); mass and every force grow by scale^2 so the
+// accelerations, and so the handling, stay what each tier's numbers say (springs: see below).
+export const LEGEND_CARS = Object.freeze({
+  starter: { name: 'Little Buggy', scale: 1,    topSpeed: 9,  driveForce: 20, staticFriction: [1.75, 1.65], kineticFriction: [1.35, 1.28] },
+  trail:   { name: 'Trail Buggy',  scale: 1.15, topSpeed: 12, driveForce: 24 },
+  road:    { name: 'Road Racer',   scale: 1.3,  topSpeed: 17, driveForce: 30, maxSteer: .4, staticFriction: [1.95, 1.85], kineticFriction: [1.5, 1.42] },
+  rally:   { name: 'Rally Car',    scale: 1.3,  topSpeed: 16, driveForce: 29, staticFriction: [1.6, 1.45], kineticFriction: [1.32, 1.18] },
+});
+export const LEGEND_LADDER = Object.freeze(['starter', 'trail', ['road', 'rally']]);
+export function legendCarParams(tier = 'starter') {
+  const t = LEGEND_CARS[tier]; if (!t) throw new RangeError(`unknown Legend car: ${tier}`);
+  const { name, scale: k, ...tune } = t, p = clone(BUGGY), m = k * k;
+  Object.assign(p, { scale: k, size: p.size.map(v => v * k), wheelRadius: p.wheelRadius * k, wheelWidth: p.wheelWidth * k, restLength: p.restLength * k,
+    wheels: p.wheels.map(w => ({ ...w, at: w.at.map(v => v * k) })), hull: p.hull.map(h => ({ ...h, at: h.at.map(v => v * k), r: h.r * k })),
+    mass: p.mass * m, brakeForce: p.brakeForce * m,
+    // Springs grow by k so the static sag scales with the car; dampers by k^1.5 keep the damping ratio.
+    spring: p.spring * k, damper: p.damper * k ** 1.5, bumpSpring: p.bumpSpring * k, bumpDamper: p.bumpDamper * k ** 1.5 });
+  if (p.bumpAt != null) p.bumpAt *= k;
+  Object.assign(p, tune, { driveForce: tune.driveForce * m });
+  return p;
+}
