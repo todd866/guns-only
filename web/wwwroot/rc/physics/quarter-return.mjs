@@ -82,7 +82,8 @@ export function stepQuarterReturn(state,car,raw,dt,world){
      // A vert wall carries the most: big, readable air above the coping.
      const [lo,hi]=a.vert?[5.5,8]:bowl?[4.2,5.45]:returning?[5.5,8.5]:[2.2,3.4];
      car.vel=[drift[0]+a.inward[0]*sideways,clamp(car.vel[1],lo,hi),drift[2]+a.inward[2]*sideways];
-     state.arc={kind:returning?'return':'exit',returning,yaw:a.yaw,turn:raw.steer<-.15?-1:1,time:0,inward:a.inward,apex:car.vel[1]/9.81,vert:returning};
+     // The big vert air is for vert walls and straight quarters; a bowl keeps its quick flat carve-back.
+     state.arc={kind:returning?'return':'exit',returning,yaw:a.yaw,turn:raw.steer<-.15?-1:1,time:0,inward:a.inward,apex:car.vel[1]/9.81,vert:returning&&!(bowl&&!a.vert)};
     }
     state.armed=null;
    }
