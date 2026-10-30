@@ -7,7 +7,7 @@ set -e
 here=${0:A:h}; size=${1:-1440x900}; secs=${2:-15}
 # The app binary from the build folder, on the installed app's own game files: an installed (bundled)
 # app hidden off-screen is napped by macOS, which would measure the nap, not the game.
-app="$here/../../../native/saucer-springs/.build/release/SaucerSprings"; web="/Applications/Saucer Springs.app/Contents/Resources/web"
+app="$here/../../../native/saucer-springs/.build/release/SaucerSprings"; web=${RC_WEB:-"/Applications/Saucer Springs.app/Contents/Resources/web"}   # RC_WEB: gate an unreleased package
 out=$(mktemp -d)
 echo "load $(sysctl -n vm.loadavg)"
 "$app" --web "$web" --perf $out/app.json --size $size --seconds $secs --drive-script $here/drive-script.js >/dev/null
