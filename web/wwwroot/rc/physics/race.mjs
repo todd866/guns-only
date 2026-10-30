@@ -3,6 +3,7 @@
 // pure-pursuit steer and a curvature speed limit. Both modes keep a bounded nearby pack.
 import { createSession, stepSession, readout, recover } from './session.mjs';
 import { followInput } from './playmate.mjs';
+import { WATER } from './water.mjs';
 import { add, sub, scale, dot, len, rotate } from './math.mjs';
 import { createPickups, stepPickups, modifiers, use, rivalWants, MISSILES, boostCar } from './pickups.mjs';
 import { padHit } from './features.mjs';
@@ -203,6 +204,7 @@ function gateNodes(race) {
 export function stepRace(race, playerInput, dt = 1 / 120) {
   const pk = race.pickups, fb = race.furball;
   if (fb?.over) return;
+  WATER.time += dt;
   // Shot-down Furball cars leave the fight: no physics, no bumping, no targeting.
   const cars = [race.player.car, ...race.rivals.map(r => r.session.car)].filter(c => !fb?.out.has(c));
   if (race.player.running) race.clock += dt;

@@ -4,6 +4,7 @@ import { createCar, stepCar, placeCar, rideHeight, carYaw, BUGGY } from './car.m
 import { createAssist, assistInput, MODES } from './assists.mjs';
 import { stepSkateRide } from './grind.mjs';
 import { createFlight, stepFlight } from './flight.mjs';
+import { stepWater } from './water.mjs';
 import { len, sub } from './math.mjs';
 
 export function createSession(course, { mode = 'kid', params = BUGGY } = {}) {
@@ -35,6 +36,8 @@ export function stepSession(s, raw, dt = 1 / 120) {
   if (!s.roam && s.flight.mode) s.flight.mode = null;
   if (stepFlight(s.flight, s.car, raw.flight, s.course.world, dt)) { /* flying or under the chute */ }
   else if (!stepSkateRide(s, raw, dt)) stepCar(s.car, assistInput(s.assist, s.car, s.skateRide ? { ...raw, skate: true } : raw, dt, s.course.world), s.course.world, dt);
+  // Water: buoyancy everywhere it is deep enough, boat handling once the car floats.
+  if (!s.flight.mode) stepWater(s.car, raw, dt, s.mode);
   s.travel += len(sub(s.car.pos, before));
   if (s.car.wallImpact > 1.5) s.hits++;
   // Wedged against a pole or a rival with the throttle held: after 2.5 s, hop back to the last

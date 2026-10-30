@@ -74,8 +74,8 @@ export function placeCar(car, pos, yaw) {
 }
 
 const applyInvInertia = (car, v) => rotate(car.q, unrotate(car.q, v).map((x, i) => x * car.invInertia[i]));
-function pointVelocity(car, p) { return add(car.vel, cross(car.ang, sub(p, car.pos))); }
-function applyImpulse(car, j, at) {
+export function pointVelocity(car, p) { return add(car.vel, cross(car.ang, sub(p, car.pos))); }
+export function applyImpulse(car, j, at) {
   car.vel = madd(car.vel, j, 1 / car.params.mass);
   car.ang = add(car.ang, applyInvInertia(car, cross(sub(at, car.pos), j)));
 }

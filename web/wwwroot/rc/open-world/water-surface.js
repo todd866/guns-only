@@ -7,16 +7,14 @@ import * as T from '../../vendor/three.module.js';
 // - colour that deepens with the view path through the water (depth absorption);
 // - Jacobian foam: where the horizontal displacement folds (determinant small), the crest breaks.
 // Visual only: the physics keeps its flat water.
-// Scaled for the 1:10 cars: a wavepool swell a car can ride, not an ocean.
-export const SWELL = Object.freeze([
-  // direction x, z; amplitude (m); wavelength (m)
-  [.82, .57, .07, 17], [.95, -.2, .04, 9.5], [.6, .8, .022, 5.2], [-.3, .95, .011, 2.7],
-]);
-const CHOP = .85;   // Gerstner Q: how far crests pinch toward each other (0 = sine, 1 = cusp)
+// The wave set lives with the physics so the cars ride the waves that are drawn.
+import { SWELL } from '../physics/water.mjs';
+export { SWELL };
+const CHOP = .0;   // pure sine heights: the physics samples heights without horizontal shift   // Gerstner Q: how far crests pinch toward each other (0 = sine, 1 = cusp)
 
-export function createWaterSurface({ size = [100, 60], segments = [200, 120], position = [0, 0, 0], shallow = '#25c1cf', deep = '#0b6f96', swell = SWELL, floor = -Infinity } = {}) {
+export function createWaterSurface({ size = [100, 60], segments = [200, 120], position = [0, 0, 0], shallow = '#1fb2c4', deep = '#08608a', swell = SWELL, floor = -Infinity } = {}) {
   const geometry = new T.PlaneGeometry(size[0], size[1], segments[0], segments[1]); geometry.rotateX(-Math.PI / 2);
-  const material = new T.MeshPhysicalMaterial({ color: '#ffffff', roughness: .12, metalness: 0, ior: 1.33, transparent: true, opacity: .9, envMapIntensity: 9,   // the open world dims its environment to 6% for diffuse fill; water must still mirror the sky
+  const material = new T.MeshPhysicalMaterial({ color: '#ffffff', roughness: .12, metalness: 0, ior: 1.33, transparent: true, opacity: .9, envMapIntensity: 4,   // the open world dims its environment to 6% for diffuse fill; water must still mirror the sky
      specularIntensity: 1 });
   // One vec4 uniform per wave (direction x, z; steepness; wavelength), unrolled in the shader: a
   // vec4 array uniform arrived with zero wavelengths and threw NaN vertices into the sky.
@@ -29,10 +27,10 @@ export function createWaterSurface({ size = [100, 60], segments = [200, 120], po
     shader.vertexShader = `uniform float uTime; ${waveDecl} varying float vFoam; varying float vCrest;
       // One Gerstner wave (GPU Gems 1, ch. 1): displacement, analytic normal and the Jacobian.
       void gerstner(vec4 w, inout vec3 gp, inout vec3 gN, inout float jxx, inout float jzz, inout float jxz, inout float crest) {
-        vec2 d = w.xy; float a = w.z, k = 6.2831853 / w.w, c = sqrt(9.8 / k), qa = ${CHOP} * a;
+        vec2 d = w.xy; float a = w.z, k = 6.2831853 / w.w, c = sqrt(9.8 / k), qa = ${CHOP.toFixed(3)} * a;
         float f = k * (dot(d, position.xz) - c * uTime), sf = sin(f), cf = cos(f);
         gp.x += d.x * qa * cf; gp.z += d.y * qa * cf; gp.y += a * sf; crest += sf * a * k;
-        gN.x -= d.x * k * a * cf; gN.z -= d.y * k * a * cf; gN.y -= ${CHOP} * k * a * sf;
+        gN.x -= d.x * k * a * cf; gN.z -= d.y * k * a * cf; gN.y -= ${CHOP.toFixed(3)} * k * a * sf;
         jxx -= k * qa * d.x * d.x * sf; jzz -= k * qa * d.y * d.y * sf; jxz -= k * qa * d.x * d.y * sf;
       }\n` + shader.vertexShader
       .replace('#include <beginnormal_vertex>', `
