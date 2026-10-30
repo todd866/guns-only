@@ -47,3 +47,16 @@ tensor cores), and keep them isolated behind a capability check, not a dependenc
   (`tools/rc/native/check-app-frames.sh`, p95 ≤ 33 ms against Chrome in the same minute).
 - Every water and lighting change is rendered and compared side by side with the previous build
   before it ships (owner: graphics must be "actually good", not just technically present).
+
+## Status (30 Oct, first attempt)
+
+`web/wwwroot/rc/open-world/water-surface.js` has the Gerstner swell, analytic normals, depth
+colour and Jacobian foam, and it renders. It is **not wired in**, because side-by-side renders were
+no better than the flat pool. Three things block it:
+1. The car physics treats the pool as flat ground at y ≈ 0, so any visible swell above about
+   6 cm swallows the car. A swell needs a floating ride: buoyancy in the physics, or boat mode
+   (planned for the river anyway). That comes first.
+2. A baked landmark ground plane sits at y = 0.02 under the pool with a depth bias, so a water
+   surface near it z-fights or vanishes. Cut it out under water bodies.
+3. The open world dims the scene environment to 6%, so water reflects almost nothing. It needs
+   its own sky probe (or screen-space reflection), not a 9× intensity hack, which went milky.
