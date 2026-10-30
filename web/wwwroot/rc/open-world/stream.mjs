@@ -3,7 +3,7 @@ import {WATER_BODIES,basinTriangles} from '../physics/water.mjs';
 import {MINE_BOUNDS,mineWorldTris} from './mine.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import {groundTriangles,terrainStep} from './elevation.mjs';
-import {inMountain,mountainSurface} from './spirit-mountain.mjs';
+import {inMountain,mountainSurface,damTris,townTris} from './spirit-mountain.mjs';
 import {createWorld} from '../physics/world.mjs';
 import {BOUNDS,eventSurface} from './catalog.mjs';
 import {buildingInfo,addBuildingCollision,surfaceAt} from './geometry.mjs';
@@ -23,6 +23,9 @@ export function createStream({manifest,fetchTile,onLoad=()=>{},onDrop=()=>{},cac
  for(const b of WATER_BODIES)for(const [p,q,r] of basinTriangles(b))authored.addTri(p,q,r,'water');
  // The Old Silver Mine (docs/design/adventure): its own floor, walls and gated doors.
  for(const t of mineWorldTris())authored.addTri(t.a,t.b,t.c,t.surface,t.gate);
+ // Spirit Mountain's dam: a solid wall with a drivable crest.
+ for(const [a,b,c] of damTris())authored.addTri(a,b,c,'concrete');
+ for(const [a,b,c] of townTris())authored.addTri(a,b,c,'concrete');   // the drowned town under the reservoir
  const world={addTri:authored.addTri,addQuad:authored.addQuad,
   // Every collision triangle currently loaded, '__terrain' resolved to its surface (native export).
   triangles(){const out=[...authored.tris];for(const t of loaded.values())for(const tri of t.collision?.tris??[])out.push(tri.surface==='__terrain'?{...tri,surface:ground((tri.a[0]+tri.b[0]+tri.c[0])/3,(tri.a[2]+tri.b[2]+tri.c[2])/3)}:tri);return out;},

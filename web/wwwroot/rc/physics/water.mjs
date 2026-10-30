@@ -33,10 +33,16 @@ export const WATER_BODIES = [
     depth: .5, entry: 7, swell: SWELL, flow: null },
 ];
 
+// Natural water with no basin of its own: the terrain is its bed. { id, contains(x, z), level,
+// swell, flow, active }. The Spirit Mountain reservoir registers here (open-world/spirit-mountain.mjs);
+// `active: false` drains it (the upside-down has no dam).
+export const NATURAL_WATER = [];
+
 export const WATER = { time: 0 };   // advanced once per race step; the renderer reads it too
 
 export function bodyAt(x, z) {
   for (const b of WATER_BODIES) if (x >= b.rect[0] && x <= b.rect[2] && z >= b.rect[1] && z <= b.rect[3]) return b;
+  for (const b of NATURAL_WATER) if (b.active !== false && b.contains(x, z)) return b;
   return null;
 }
 

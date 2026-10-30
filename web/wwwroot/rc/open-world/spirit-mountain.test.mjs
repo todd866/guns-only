@@ -42,3 +42,23 @@ test('valleys deep enough to fly through, and nothing outside the footprint', ()
   assert.ok(naturalHeight(...side) - naturalHeight(x, z) > 40, 'the valley floor is 40 m+ below its sides');
   assert.equal(mountainHeight(MOUNTAIN.centre[0] + MOUNTAIN.radius + 5, MOUNTAIN.centre[1]), 0);
 });
+
+import { LAKE, damSpan, valleyPoint } from './spirit-mountain.mjs';
+test('the dam holds a deep reservoir over a flat drowned-town floor, clear of the road', () => {
+  const d = damSpan(), L = MOUNTAIN.lake;
+  assert.ok(d.to - d.from > 150 && d.to - d.from < 400, `dam ${(d.to - d.from).toFixed(0)} m wide`);
+  for (const s of [d.from, d.to]) { const [x, , z] = valleyPoint(L.dam, s); assert.ok(mountainHeight(x, z) >= L.crest - 1, 'the dam meets the canyon walls'); }
+  let area = 0; for (let a = L.back; a < L.dam; a += 5) for (let c = -220; c < 220; c += 5) { const [x, , z] = valleyPoint(a, c); if (LAKE.contains(x, z)) area += 25; }
+  assert.ok(area > 15000, `lake ${area} m²`);
+  for (let a = L.town[0]; a < L.town[1]; a += 10) for (let c = -40; c <= 40; c += 20) { const [x, , z] = valleyPoint(a, c); assert.ok(Math.abs(mountainHeight(x, z) - L.floor) < .5, `town floor at ${a},${c}`); }
+  for (const p of ROAD) assert.ok(!LAKE.contains(p.x, p.z), 'the road never runs into the lake');
+});
+
+import { damTris } from './spirit-mountain.mjs';
+import { createWorld } from '../physics/world.mjs';
+test('the dam is solid: a ray down hits its crest, a ray across hits its face', () => {
+  const w = createWorld(16); for (const [a, b, c] of damTris()) w.addTri(a, b, c, 'concrete');
+  const L = MOUNTAIN.lake, top = valleyPoint(L.dam, 0, L.crest + 5), side = valleyPoint(L.dam - 30, 0, L.crest - 20), dir = valleyPoint(1, 0, 0).map((v, i) => v - valleyPoint(0, 0, 0)[i]);
+  const down = w.raycast(top, [0, -1, 0], 20); assert.ok(down && Math.abs(down.point[1] - L.crest) < .01, 'crest');
+  const across = w.raycast(side, dir, 60); assert.ok(across && across.dist > 20 && across.dist < 30, `face at ${across?.dist}`);
+});

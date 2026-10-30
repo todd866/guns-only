@@ -1,6 +1,8 @@
 import * as T from '../../vendor/three.module.js';
-import {mountainHeight,MOUNTAIN_BOUNDS,ROAD,MOUNTAIN} from './spirit-mountain.mjs';
+import {mountainHeight,MOUNTAIN_BOUNDS,ROAD,MOUNTAIN,LAKE,damTris,townTris,valleyPoint} from './spirit-mountain.mjs';
 import {SIZE} from './stream.mjs';
+import {createWaterSurface} from './water-surface.js';
+import {WATER} from '../physics/water.mjs';
 
 // Spirit Mountain, drawn (physics and the near ground: spirit-mountain.mjs via the tiles).
 // - A far view: the mountain at 16 m, unfogged and hazed like the USGS horizon ranges, so it stands
@@ -34,10 +36,27 @@ export function createMountainView(scene) {
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(v, 3)); g.setIndex(idx); g.computeVertexNormals(); return g; };
   const road = new T.Mesh(ribbon(MOUNTAIN.roadHalf, .03, () => true), roadMat); road.receiveShadow = true; road.name = 'MountainRoad'; root.add(road);
   const dashes = new T.Mesh(ribbon(.07, .045, i => i % 3 === 0), lineMat); dashes.name = 'MountainRoadLine'; root.add(dashes);
+  // The dam: pale concrete, its downstream face banded like Hoover's lifts; the crest is a road.
+  const damGeo = new T.BufferGeometry(), dv = [];
+  for (const [a, b, c] of damTris()) dv.push(...a, ...b, ...c);
+  damGeo.setAttribute('position', new T.Float32BufferAttribute(dv, 3)); damGeo.computeVertexNormals();
+  const damMat = new T.MeshStandardMaterial({ color: '#d8d2c2', roughness: .85 }), dam = new T.Mesh(damGeo, damMat); dam.name = 'SpiritDam'; dam.castShadow = dam.receiveShadow = true; root.add(dam);
+  // The drowned town: weathered adobe, silted and green under the water.
+  const townGeo = new T.BufferGeometry(), tv = [];
+  for (const [a, b, c] of townTris()) tv.push(...a, ...b, ...c);
+  townGeo.setAttribute('position', new T.Float32BufferAttribute(tv, 3)); townGeo.computeVertexNormals();
+  const townMat = new T.MeshStandardMaterial({ color: '#9c8f74', roughness: .95 }), town = new T.Mesh(townGeo, townMat); town.name = 'DrownedTown'; town.receiveShadow = true; root.add(town);
+  // The reservoir's surface: the lake's bounding box at its level; the canyon walls hide the rest.
+  const corners = [[MOUNTAIN.lake.back, -220], [MOUNTAIN.lake.back, 220], [MOUNTAIN.lake.dam, -220], [MOUNTAIN.lake.dam, 220]].map(([a, c]) => valleyPoint(a, c));
+  const xs = corners.map(p => p[0]), zs = corners.map(p => p[2]), w = Math.max(...xs) - Math.min(...xs), d = Math.max(...zs) - Math.min(...zs);
+  const lake = createWaterSurface({ size: [w, d], segments: [Math.round(w / 3), Math.round(d / 3)], position: [(Math.max(...xs) + Math.min(...xs)) / 2, LAKE.level, (Math.max(...zs) + Math.min(...zs)) / 2], swell: LAKE.swell, shallow: '#2a8fa0', deep: '#0b3f5c' });
+  lake.mesh.name = 'SpiritReservoir'; root.add(lake.mesh);
   return {
+    /** The upside-down has no dam: the water drains and the drowned town stands in the open. */
+    setDam(on) { LAKE.active = on; dam.visible = on; lake.mesh.visible = on; },
     /** The streamed tile at key now has (or no longer has) detailed ground. */
     tileLoaded(key, on) { const m = chunks.get(key); if (m) m.visible = !on; },
-    update(day) { farMat.color.setScalar(.15 + .85 * day); },
-    dispose() { root.removeFromParent(); root.traverse(o => o.geometry?.dispose()); [farMat, roadMat, lineMat].forEach(m => m.dispose()); },
+    update(day) { farMat.color.setScalar(.15 + .85 * day); lake.update(WATER.time); },
+    dispose() { root.removeFromParent(); root.traverse(o => o.geometry?.dispose()); [farMat, roadMat, lineMat, damMat, townMat].forEach(m => m.dispose()); lake.dispose(); },
   };
 }

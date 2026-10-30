@@ -6,11 +6,16 @@
 //     with hairpins wide enough for a kid's car;
 //   the carve: the ground is the road's height on a shelf either side of it, blended back to the
 //     natural slope, so the road is the terrain itself (no separate collision ribbon).
+import { NATURAL_WATER } from '../physics/water.mjs';
 export const MOUNTAIN = Object.freeze({
   centre: [2300, -3250], radius: 1250, peak: 230,
   grade: .08, hairpinGrade: .05, hairpinRadius: 15, legSpan: .72,   // radians either side of due south
   roadHalf: 2.75, shelf: 6.5, falloff: 21, summit: 80, plateau: 28, step: 4,   // summit: where the road stops climbing; plateau: the flat top around its end
   valleys: [{ angle: 1.25, from: 140, depth: 75, width: 170 }, { angle: -1.95, from: 200, depth: 60, width: 150 }],
+  // The dam (owner, 30 Oct): across the east valley's canyon, holding a reservoir you can dive in;
+  // the drowned town sits on a flattened floor under it. (In the upside-down there is no dam.)
+  // Distances are along / across the east valley's axis from the mountain's centre.
+  lake: { valley: 0, dam: 650, damThick: 9, crest: 62, level: 56, floor: 8, town: [525, 632], townHalf: 58, back: 430 },
 });
 const M = MOUNTAIN, [CX, CZ] = M.centre;
 export const MOUNTAIN_BOUNDS = Object.freeze([CX - M.radius, CZ - M.radius, CX + M.radius, CZ + M.radius]);
@@ -32,8 +37,20 @@ export function naturalHeight(x, z) {
     const depth = v.depth * smooth((along - v.from) / 320) * smooth((M.radius - along) / 300);
     if (Math.abs(across) < v.width) h -= depth * (1 + Math.cos(Math.PI * across / v.width)) / 2;
   }
+  // The drowned town's floor: a flat valley bottom upstream of the dam (only ever lowers the ground).
+  const L = M.lake, f = valleyFrame(x, z);
+  if (f.along > L.town[0] - 60 && f.along < L.dam + 20 && Math.abs(f.across) < L.townHalf + 50) {
+    const w = smooth((f.along - (L.town[0] - 60)) / 60) * smooth((L.dam + 20 - f.along) / 20) * smooth((L.townHalf + 50 - Math.abs(f.across)) / 50);
+    h = Math.min(h, h * (1 - w) + L.floor * w);
+  }
   return Math.max(0, h * smooth((M.radius - r) / 60));
 }
+/** Position in the lake valley's frame: along its axis from the centre, and across it. */
+export function valleyFrame(x, z) {
+  const v = M.valleys[M.lake.valley], dx = x - CX, dz = z - CZ, ax = Math.sin(v.angle), az = Math.cos(v.angle);
+  return { along: dx * ax + dz * az, across: dx * az - dz * ax };
+}
+export const valleyPoint = (along, across, y = 0) => { const v = M.valleys[M.lake.valley], ax = Math.sin(v.angle), az = Math.cos(v.angle); return [CX + ax * along + az * across, y, CZ + az * along - ax * across]; };
 const grad = (x, z, e = 1) => [(naturalHeight(x + e, z) - naturalHeight(x - e, z)) / (2 * e), (naturalHeight(x, z + e) - naturalHeight(x, z - e)) / (2 * e)];
 
 /** The switchback road, bottom to top: [{ x, z, y, piece }] every ~4 m. piece numbers each leg. */
@@ -108,3 +125,54 @@ export function mountainSurface(x, z) {
   return Math.hypot(sx, sz) > .55 ? 'rock' : 'grass';
 }
 export const inMountain = (x, z) => x >= MOUNTAIN_BOUNDS[0] && x <= MOUNTAIN_BOUNDS[2] && z >= MOUNTAIN_BOUNDS[1] && z <= MOUNTAIN_BOUNDS[3];
+
+// The reservoir: water wherever the ground is below its level, upstream of the dam's face.
+// A lake's surface: a low, slow swell (the wave pool's would be far too busy on open water).
+export const LAKE = {
+  id: 'reservoir', level: M.lake.level, swell: [[.7, .7, .06, 23], [-.4, .9, .03, 11]], flow: null, active: true,
+  contains(x, z) { const f = valleyFrame(x, z); return f.along > M.lake.back && f.along < M.lake.dam - M.lake.damThick / 2 && Math.abs(f.across) < 220 && mountainHeight(x, z) < M.lake.level; },
+};
+NATURAL_WATER.push(LAKE);
+/** The dam wall across the canyon: from wall to wall at the crest, foot to crest. */
+export function damSpan() {
+  const L = M.lake, side = s => { let a = 0; while (a < 300 && mountainHeight(...[valleyPoint(L.dam, s * a)].map(p => [p[0], p[2]])[0]) < L.crest) a += 2; return s * (a + 6); };
+  return { from: side(-1), to: side(1), along: L.dam, thick: L.damThick, crest: L.crest };
+}
+/** The dam wall as world collision triangles: an oriented box from the canyon floor to the crest, its
+ *  top a drivable crest road. Faces point outward (the world's collision is one-sided). */
+export function damTris() {
+  const d = damSpan(), h = d.thick / 2, out = [];
+  const P = (al, ac, y) => valleyPoint(d.along + al, ac, y), y0 = M.lake.floor - 6, y1 = d.crest;
+  const quad = (a, b, c, e) => { out.push([a, b, c], [a, c, e]); };
+  // top (+y), downstream (+along), upstream (-along), the two ends
+  quad(P(-h, d.from, y1), P(-h, d.to, y1), P(h, d.to, y1), P(h, d.from, y1));
+  quad(P(h, d.from, y0), P(h, d.from, y1), P(h, d.to, y1), P(h, d.to, y0));
+  quad(P(-h, d.to, y0), P(-h, d.to, y1), P(-h, d.from, y1), P(-h, d.from, y0));
+  quad(P(-h, d.from, y0), P(-h, d.from, y1), P(h, d.from, y1), P(h, d.from, y0));
+  quad(P(h, d.to, y0), P(h, d.to, y1), P(-h, d.to, y1), P(-h, d.to, y0));
+  // Fix each face's winding to point away from the dam's centre line.
+  const mid = valleyPoint(d.along, (d.from + d.to) / 2, (y0 + y1) / 2);
+  return out.map(([a, b, c]) => { const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const ctr = [(a[0] + b[0] + c[0]) / 3 - mid[0], (a[1] + b[1] + c[1]) / 3 - mid[1], (a[2] + b[2] + c[2]) / 3 - mid[2]];
+    return n[0] * ctr[0] + n[1] * ctr[1] + n[2] * ctr[2] >= 0 ? [a, b, c] : [a, c, b]; });
+}
+
+// The drowned town (Lake Mead really drowned St. Thomas, Nevada): a main street of ruined adobe
+// houses, a general store and a church with a steeple on the reservoir floor. Boxes in the valley
+// frame [along0, along1, across0, across1, height]; walkable and climbable by the robot.
+export const TOWN = Object.freeze([
+  ...[0, 1, 2, 3].flatMap(i => [[540 + i * 20, 552 + i * 20, -22, -12, 3.2 - (i % 2) * .8], [538 + i * 20, 551 + i * 20, 12, 22, 2.6 + (i % 2) * .9]]),
+  [600, 618, -30, -14, 4.5],          // the general store
+  [602, 616, 14, 28, 5],              // the church
+  [607, 611, 19, 23, 13],             // its steeple
+]);
+function orientedBox([a0, a1, c0, c1, h], y0 = M.lake.floor - .5) {
+  const P = (al, ac, y) => valleyPoint(al, ac, y), y1 = M.lake.floor + h, out = [], mid = valleyPoint((a0 + a1) / 2, (c0 + c1) / 2, (y0 + y1) / 2);
+  const q = (a, b, c, e) => out.push([a, b, c], [a, c, e]);
+  q(P(a0, c0, y1), P(a0, c1, y1), P(a1, c1, y1), P(a1, c0, y1));
+  q(P(a0, c0, y0), P(a0, c0, y1), P(a1, c0, y1), P(a1, c0, y0)); q(P(a0, c1, y0), P(a0, c1, y1), P(a1, c1, y1), P(a1, c1, y0));
+  q(P(a0, c0, y0), P(a0, c0, y1), P(a0, c1, y1), P(a0, c1, y0)); q(P(a1, c0, y0), P(a1, c0, y1), P(a1, c1, y1), P(a1, c1, y0));
+  return out.map(([a, b, c]) => { const u = a.map((v, i) => b[i] - v), v = a.map((w, i) => c[i] - w), n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const ctr = [0, 1, 2].map(i => (a[i] + b[i] + c[i]) / 3 - mid[i]); return n[0] * ctr[0] + n[1] * ctr[1] + n[2] * ctr[2] >= 0 ? [a, b, c] : [a, c, b]; });
+}
+export const townTris = () => TOWN.flatMap(b => orientedBox(b));

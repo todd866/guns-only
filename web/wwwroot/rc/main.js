@@ -16,6 +16,7 @@ import {createFileSelect} from './open-world/file-select.js';
 import {readSlots,slotSave} from './physics/save-slots.mjs';
 import {mineWorld as mineWorldPos} from './open-world/mine.mjs';
 import {ITEMS} from './physics/items.mjs';
+import {bodyAt,waterHeight} from './physics/water.mjs';
 import {vehicleParams,legendCarParams,LEGEND_CARS} from './physics/vehicles.mjs';
 import {createAdaptiveResolution,stepAdaptiveResolution} from './adaptive-resolution.mjs';
 import {createPlaymates,stepPlaymates} from './physics/playmate.mjs';
@@ -65,6 +66,12 @@ if(legacyTrack&&legacyTrack!=='hub'){
  history.replaceState(null,'','?'+entry);
 }
 let track='hub',district=null,districtError=null,openWorld=null;let adventure=null;const intro=createIntro();
+// Diving (Spirit Mountain's reservoir): with the camera under a water surface, the haze turns
+// murky teal and short, and the sky goes with it; surfacing puts the day's own back.
+let underState=null;function underwater(){const b=bodyAt(camera.position.x,camera.position.z),under=!!b&&camera.position.y<waterHeight(b,camera.position.x,camera.position.z)-.05;
+ // The sky rewrites the fog's colour every frame (before this), so the tint is re-applied while under.
+ if(under){underState??={near:scene.fog.near,far:scene.fog.far,bg:scene.background,water:new T.Color('#1e5964')};scene.fog.color.copy(underState.water);scene.fog.near=.5;scene.fog.far=26;scene.background=underState.water;}
+ else if(underState){scene.fog.near=underState.near;scene.fog.far=underState.far;scene.background=underState.bg;underState=null;}}
 try{openWorld=await loadOpenWorld(location.search);}catch(error){
  const brief=document.getElementById('brief');
  brief.hidden=false;brief.dataset.loadFailed='true';brief.replaceChildren();
@@ -561,6 +568,7 @@ legendStart();if(adventure){const here=robot?robot.pos:s.car.pos;const attackNow
  else camera.up.lerp(new T.Vector3(0,1,0),1-Math.exp(-dt*6)).normalize();
  camera.lookAt(target);
  if(intro.active)intro.update(dt,camera);
+ underwater();
  if(ui.panel()==='garage'){const a=now*.00022,d=portrait?1.7:1.05;camera.position.set(r.x+Math.sin(a)*d,r.y+(portrait?.75:.48),r.z+Math.cos(a)*d);camera.fov=48;if(portrait)camera.clearViewOffset();else camera.setViewOffset(innerWidth,innerHeight,(innerWidth>900?330:315)/2,0,innerWidth,innerHeight);camera.updateProjectionMatrix();camera.lookAt(r.x,r.y+(portrait?portraitAim:.08),r.z);}else if(camera.view?.enabled)camera.clearViewOffset();
  gates.forEach((g,i)=>{const next=i===(s.gate===cps.length-1?0:s.gate);g.userData.arch.material=next?archLit:archMat;g.userData.label.visible=false;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
  $('speed').textContent=Math.round(r.speed*3.6);{const f=adventure?.fighter?.();const hud=$('item');if(robot&&f&&adventure.inside(robot.pos)){hud.hidden=false;hud.textContent='🔋'.repeat(Math.max(0,f.batteries))+'▫️'.repeat(Math.max(0,f.max-f.batteries))+(adventure.state.keys?`  🗝️×${adventure.state.keys}`:'')+(adventure.state.bigKey?'  🔑':'')+(adventure.inventory.items.length?'  '+adventure.inventory.items.map(id=>ITEMS[id].icon).join(''):'');hud.title=adventure.inventory.items.map(id=>`${ITEMS[id].name}: ${ITEMS[id].does}`).join('\n');}}$('clock').hidden=race.roam&&!race.furball;$('clock').textContent=format(race.furball?race.furball.left:s.time);drawLives(now,dt);drawPickups(now);drawFlightHud();drawLine(now);drawRoam(now);drawCoins(now);$('gate').textContent=race.furball?`FURBALL · 🎈${race.furball.out.has(s.car)?0:race.furball.lives.get(s.car)} · ${race.rivals.filter(r=>!race.furball.out.has(r.session.car)).length} bandits`:race.roam?(openWorld?nearestLocation(s.car.pos).short:'FREE DRIVE'):`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${s.laps>1?`LAP ${s.lap}/${s.laps}`:`${Math.min(s.gate+1,cps.length)}/${cps.length}`}`;if(!$('banner').dataset.callout)$('banner').hidden=!retreatActive(race);$('secret').hidden=!course.secrets.length;$('secret').textContent=openWorld?`◇ ${openWorld.progress.specimens.length}/${SPECIMENS.length} badges${expedition(openWorld.progress).complete?' ★':''}`:`◇ ${s.found}/${course.secrets.length}`;drawMap();(prof.renderStart=performance.now(),renderer.info.reset(),polish?polish.render():renderer.render(scene,camera),prof.calls+=renderer.info.render.calls,prof.tris+=renderer.info.render.triangles,prof.add(performance.now()-prof.renderStart,prof.renderStart-(prof.simStart??prof.renderStart)));
