@@ -84,7 +84,7 @@ from the Water Temple: **switching must be instant**, one button, never a menu.
 |---|---|---|---|
 | **RC car** (start) | You wake as one | Speed, jumps, boat mode in water, Enter-flight (later) | Roads, ramps, rivers |
 | **Walking robot** | Dungeon 1 (the mine) | Climb ledges and ladders, push and pull, crawl through gaps, flip switches, talk to toys | Ledges with handholds, crawl gaps under doors |
-| **Skateboard** | Dungeon 2 (the school or a skate site) | Grind rails across gaps, wall-ride, THPS tricks open combo doors | Rails across pits, quarter-pipes up to high doors |
+| **Skateboard** | Dungeon 2 (the Sewers under the base) | Grind rails across gaps, wall-ride, THPS tricks open combo doors | Rails across pits, quarter-pipes up to high doors |
 | **Flying suit** | Dungeon 3 (the mountain lookout) | Glide from high places, hover over hazards, ride updrafts in the valleys | Updraft vents, cliff edges with far landings |
 
 **Scale.** It's all one toy-scale world, so the forms don't change your size. The robot simply gets
@@ -157,6 +157,34 @@ over by bad-alien machinery. 5–7 dungeons (Zelda used 7; start with 3 and grow
 - **The Flooded Arroyo / Rouge River**: boats, currents, the train bridge as a boss arena.
 - **The BX Basement and the Hangar Complex**: bad-alien factory turning toys bad; the final rescue.
 - **The Final Tower**: the bad aliens' machine forcing the gate open.
+
+## Dungeon 2: the Sewers, where skating is the key (owner, 30 Oct)
+
+Owner: "how cool would it be if the zelda game actually requires this kinda stuff sometimes."
+The board is a real THPS2 skater now: flips, grabs, spins, manuals, grinds on every curb and
+park rail, combos and the special meter (physics/skate.mjs, physics/board-tricks.mjs,
+open-world/street-rails.mjs). The Sewers turn that moveset into Zelda traversal, the way the
+Hookshot turns a post into a bridge.
+
+- **Pipes are rails.** Long pipes span sewage channels; the only way across is to ollie on and
+  grind. Falling in washes you back to the last ledge, never a death.
+- **Low tunnels need a manual.** Dripping grates sit low enough that only a board on its back
+  wheels fits under; the robot is too tall.
+- **Timed gates.** A lever opens a gate for 10 s: grind, kickflip over a drain, through.
+- **Combo locks.** A trick-shrine door opens on a 5-trick combo landed in front of it (Zelda's
+  shrine trial in THPS clothes). Kid mode shows the count on the door.
+- **S-K-A-T-E letters are the small keys,** each one on a line you can only reach by grinding.
+- **Boss: the Rat King** in a drained bowl. Hit him by grinding the rim coping and dropping onto
+  him with a grab; each hit floods the bowl a little more and changes the lines.
+- **Reward:** the skateboard form itself (T only offers forms you have earned).
+
+What it opens afterwards: the dam's crest parapet as a 200 m grind; the Spirit Mountain
+switchback guardrails as a downhill grind line with a secret at the bottom; the drowned town's
+rooftop line in the upside-down. The Wind-Up Spring (dungeon 3) raises the ollie, so rails you
+could always see but never reach become the next "I can get up there now" moment.
+
+Telemetry note: the owner's son skips races but plays freely, so "get there in style" puzzles
+suit him better than timed contests. Keep timers generous in kid mode.
 
 ## Good guys on the base
 
