@@ -79,6 +79,22 @@ over by bad-alien machinery. 5–7 dungeons (Zelda used 7; start with 3 and grow
 - **The BX Basement and the Hangar Complex**: bad-alien factory turning toys bad; the final rescue.
 - **The Final Tower**: the bad aliens' machine forcing the gate open.
 
+## Good guys on the base
+
+Not everyone has been turned. A few airmen and civilians notice something's wrong and quietly
+help: Zelda's helpful townsfolk and Sahasrahla, the old sage who points you onward.
+- **A drone-pilot technical sergeant** who spots your toy on a security feed and decides to look
+  the other way, then starts leaving doors open.
+- **A night-shift maintainer in the hangar** who has been sneaking the captured aliens snacks.
+- **A wildlife biologist on the range** who knows the desert creatures and their patterns, and
+  points you toward the mountain.
+
+Native Americans serve in the US military at the highest rate of any group, and some of these good
+guys should be Native: written as modern, competent people with ordinary names, jobs and quirks.
+The spirit-world link stays with the desert's creatures. A Native character whose role is to
+"understand the spirits" is the mystic-guide trope Native critics single out, so the people stay
+people (see the setting research). Their help is practical: open doors, intel, a ride.
+
 ## A working drone-era base
 
 Nellis flies both manned jets (4th, 5th and 6th generation: F-15s and F-16s, F-22s and F-35s,
