@@ -9,6 +9,8 @@ export const SURFACES = {
   quarter: { grip: 1.0, roll: .02 }, bowl: { grip: 1.0, roll: .02 }, vert: { grip: 1.0, roll: .02 }, hip: { grip: 1.0, roll: .02 },
   snow: { grip: .68, roll: .08 }, ice: { grip: .38, roll: .015 },
   water: { grip: 0.65, roll: 0.18 },
+  // The Sewers (open-world/sewer.mjs): brick walls, and the slime in the channels you get washed out of.
+  brick: { grip: 0.95, roll: 0.03 }, sewage: { grip: 0.5, roll: 0.2 },
   asphalt: { grip: 1.0, roll: 0.02 }, concrete: { grip: 1.0, roll: 0.02 }, wood: { grip: 0.95, roll: 0.025 },
   metal: { grip: 0.8, roll: 0.02 }, tile: { grip: 0.72, roll: 0.02 }, gymfloor: { grip: 0.55, roll: 0.015 },
   gravel: { grip: 0.78, roll: 0.07 }, carpet: { grip: 0.9, roll: 0.07 }, rubber: { grip: 1.0, roll: 0.03, bounce: 2.2 }, grass: { grip: 0.72, roll: 0.09 }, dirt: { grip: 0.8, roll: 0.06 }, rock: { grip: 0.85, roll: 0.04 },   // Spirit Mountain's steep faces

@@ -1,11 +1,13 @@
 import {createMine} from './mine.js';
+import {createSewer} from './sewer.js';
+import {SEWER,SEWER_BOUNDS,CHESTS as SEWER_CHESTS,CELLS as SEWER_CELLS,OPENINGS as SEWER_OPENINGS,DOORS as SEWER_DOORS,WASH_BACK,ARRIVE,LADDERS,MANHOLE,SHRINE,sewerWorld,sewerLocal,roomAt as sewerRoomAt,inChannel,createSewerState} from './sewer.mjs';
 import {createBadToys} from './bad-toys.js';
 import {createExcavator} from './excavator.js';
 import {createGoodAlien} from './good-alien.js';
 import {createBoss,stepBoss} from '../physics/boss.mjs';
 import {createFighter,createEnemy,stepCombat,reviveFighter,roomHelp} from '../physics/combat.mjs';
 import {CHESTS,PLATES,OPENINGS,MINE_BOUNDS,MINE_ENEMIES,ROOM_ENTRANCES,MINE,BOSS_AT,CELLS,SPIRIT_MARK,DOORS,mineWorld,mineLocal,roomAt,createMineState} from './mine.mjs';
-import {createInventory,giveItem,hasItem,takeCell,saveInventory} from '../physics/items.mjs';
+import {ITEMS,createInventory,giveItem,hasItem,takeCell,saveInventory} from '../physics/items.mjs';
 import {activeSave,createSlot} from '../physics/save-slots.mjs';
 import {openChest,pressPlate,tryDoor,defeatBoss,digDoor} from '../physics/dungeon.mjs';
 
@@ -20,7 +22,11 @@ export function createAdventure(scene, world) {
   // makes slot 1, so a kid who just starts playing never loses the progress.
   const store = (() => { try { return localStorage; } catch { return null; } })(), file = store && activeSave(store);
   const inventory = createInventory(file?.data), save = () => { if (!store) return; const f = activeSave(store) ?? (createSlot(store, 0, 'Player 1'), activeSave(store)); try { store.setItem(f.key, JSON.stringify(saveInventory(inventory))); } catch {} };
-  for (const id of inventory.cells) mine.takeCell(id);
+  // The Sewers (dungeon 2): same Zelda rules; the skateboard is the item, found halfway.
+  const sewer = createSewer(scene), sewerState = createSewerState(); let shrineBest = 0, lastSewerBump = null;
+  for (const id of inventory.cells) { mine.takeCell(id); sewer.takeCell(id); }
+  const inSewer = p => p[0] >= SEWER_BOUNDS[0] && p[0] <= SEWER_BOUNDS[2] && p[2] >= SEWER_BOUNDS[1] && p[2] <= SEWER_BOUNDS[3] && p[1] < SEWER.anchor[1] + 4;
+  const sewerDoorAt = o => sewerWorld([o.at, 0, (o.span[0] + o.span[1]) / 2]);
   const rooms = {}; let fighter = null, time = 0, markTouched = false;
   // The excavator wakes when you first walk into its hall, and stays freed once beaten.
   const boss = createBoss(mineWorld(BOSS_AT), MINE.yaw), digger = createExcavator(scene, mineWorld(BOSS_AT), MINE.yaw); let bossAwake = false;
@@ -29,8 +35,47 @@ export function createAdventure(scene, world) {
   const doorAt = o => mineWorld(o.wall === 'x' ? [o.at, 0, (o.span[0] + o.span[1]) / 2] : [(o.span[0] + o.span[1]) / 2, 0, o.at]);
   const inside = p => p[0] >= MINE_BOUNDS[0] && p[0] <= MINE_BOUNDS[2] && p[2] >= MINE_BOUNDS[1] && p[2] <= MINE_BOUNDS[3];
   let lastBump = null;
+  function sewerStep(pos) {
+    const events = [], local = sewerLocal(pos);
+    // Falling into the slime sweeps you back to the near ledge: some crossings need a grind.
+    if (local[1] < SEWER.sewage + .08 && inChannel(local)) { const room = sewerRoomAt(local); events.push({ washed: sewerWorld(WASH_BACK[room] ?? ARRIVE.at) }); return events; }
+    for (const [id, c] of Object.entries(SEWER_CHESTS)) if (near(pos, sewerWorld(c.at), .34, .35)) {
+      const got = openChest(sewerState, id); if (!got) continue;
+      sewer.openChest(id);
+      if (got === 'small') events.push({ chest: id, got });
+      else { const item = giveItem(inventory, got); if (item) save(); events.push({ chest: id, item: got, ...(item ?? ITEMS[got]) }); }
+    }
+    for (const [id, c] of Object.entries(SEWER_CELLS)) if (!inventory.cells.includes(id) && near(pos, sewerWorld(c.at), .3, .4)) {
+      const got = takeCell(inventory, id); sewer.takeCell(id); save(); if (fighter && got.battery) { fighter.max++; fighter.batteries = fighter.max; }
+      events.push({ cell: id, ...got });
+    }
+    for (const o of SEWER_OPENINGS) if (o.door && !sewerState.open.has(o.door) && near(pos, sewerDoorAt(o), .7, .6)) {
+      if (SEWER_DOORS[o.door].kind === 'combo') { if (lastSewerBump !== o.door) events.push({ door: o.door, locked: 'combo' }); lastSewerBump = o.door; continue; }
+      const r = tryDoor(sewerState, o.door);
+      if (r.ok) { world.openGate?.(`sewer:${o.door}`); sewer.openDoor(o.door); events.push({ door: o.door, opened: true }); }
+      else if (lastSewerBump !== o.door) events.push({ door: o.door, locked: r.why });
+      lastSewerBump = o.door;
+    }
+    if (!SEWER_OPENINGS.some(o => o.door && near(pos, sewerDoorAt(o), .9, .6))) lastSewerBump = null;
+    return events;
+  }
   return {
-    state, inside, boss, inventory, fighter: () => fighter,
+    state, inside, boss, inventory, fighter: () => fighter, sewerState, inSewer,
+    /** In a dungeon (no flying, no free-skate curb rails): the mine or the sewers. */
+    underground: p => inside(p) || inSewer(p),
+    /** E at the manhole climbs down; E at either ladder climbs back up. Returns { pos, yaw } or null. */
+    ladder(p) {
+      if (Math.hypot(p[0] - MANHOLE.at[0], p[2] - MANHOLE.at[2]) < MANHOLE.reach && Math.abs(p[1] - MANHOLE.at[1]) < 1.5) return { pos: sewerWorld(ARRIVE.at), yaw: ARRIVE.yaw, down: true };
+      for (const l of [LADDERS.in, LADDERS.out]) if (inSewer(p) && near(p, sewerWorld(l), .9, 1)) return { pos: [MANHOLE.at[0] + 1.2, MANHOLE.at[1] + .1, MANHOLE.at[2]], yaw: Math.PI / 2, down: false };
+      return null;
+    },
+    /** A skate combo just banked with `tricks` tricks: at the trick shrine it can open the door. */
+    combo(p, tricks, mode = 'kid') {
+      if (!inSewer(p) || sewerRoomAt(sewerLocal(p)) !== SHRINE.room || sewerState.open.has('C')) return null;
+      const need = SHRINE[mode] ?? SHRINE.kid; shrineBest = Math.max(shrineBest, tricks); sewer.setShrine(need, shrineBest);
+      if (tricks < need) return { shrine: tricks, need };
+      sewerState.open.add('C'); world.openGate?.('sewer:C'); sewer.openDoor('C'); return { shrine: tricks, need, opened: true };
+    },
     /** The reveal finished: unlock The Legend of Spirit Mountain on the menu. */
     unlockLegend() { inventory.legend = true; save(); },
     /** While the excavator fight is on: where the camera should look (the boss), else null. */
@@ -41,6 +86,8 @@ export function createAdventure(scene, world) {
       toys.sync(enemies, time, dt, () => MINE.anchor[1]);
       digger.sync(boss, time, dt, MINE.anchor[1]);
       alien.sync(time, dt, alien.freed ? (fight?.robot?.pos ?? pos) : null);
+      sewer.update(dt);
+      if (inSewer(pos)) return sewerStep(pos);
       if (!inside(pos)) return [];
       const events = [];
       if (fight?.robot) {
@@ -94,6 +141,6 @@ export function createAdventure(scene, world) {
       if (!OPENINGS.some(o => o.door && near(pos, doorAt(o), .7, .6))) lastBump = null;
       return events;
     },
-    dispose() { mine.dispose(); toys.dispose(); digger.dispose(); alien.dispose(); },
+    dispose() { sewer.dispose(); mine.dispose(); toys.dispose(); digger.dispose(); alien.dispose(); },
   };
 }

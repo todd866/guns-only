@@ -4,6 +4,7 @@
 // Pure data and logic; saved by the caller (adventure.js) as JSON.
 export const ITEMS = Object.freeze({
   claw:    { name: 'Excavator Claw', icon: '⛏️', from: 'Old Silver Mine', does: 'E digs cracked rock' },
+  board:   { name: 'Skateboard',     icon: '🛹', from: 'The Sewers',      does: 'T to ride · ollie onto pipes to grind' },
   spring:  { name: 'Wind-Up Spring', icon: '🌀', from: 'dungeon 2',       does: 'Space twice: big jump' },
   lamp:    { name: 'Spirit Lamp',    icon: '🏮', from: 'dungeon 3',       does: 'lights dark rooms, shows spirit marks' },
   yoyo:    { name: 'Grapple Yo-Yo',  icon: '🪀', from: 'dungeon 4',       does: 'pulls you to posts across gaps' },
