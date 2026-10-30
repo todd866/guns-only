@@ -44,3 +44,6 @@ body.skating #instruments #gate,body.skating #instruments #clock,body.skating #m
 #skate-balance b{position:absolute;left:var(--needle,50%);top:-5px;width:4px;height:26px;transform:translateX(-50%);background:#fff;box-shadow:0 0 0 1px #08171b;border-radius:2px}
 #skate-balance.danger b{background:#ffcf87}
 @media(max-width:540px){.skate-top{gap:8px}#skate-special{width:72px;height:17px}#skate-special b{font-size:10px;line-height:15px}#skate-letters{gap:1px}#skate-letters i{font-size:13px}}
+
+/* Free skate on the board: no run clock or S-K-A-T-E letters. */
+body.free-skate #skate-clock,body.free-skate #skate-letters{display:none}

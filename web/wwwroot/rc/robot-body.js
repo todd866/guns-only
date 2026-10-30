@@ -51,23 +51,38 @@ export function makeBoardRider(paint = '#f28c28') {
   const g = new T.Group(); g.name = 'BoardRider';
   const deckMat = new T.MeshStandardMaterial({ color: '#23262a', roughness: .8 }), edge = new T.MeshStandardMaterial({ color: paint, roughness: .4 });
   const wheelMat = new T.MeshStandardMaterial({ color: '#f1e7c8', roughness: .5 }), truckMat = new T.MeshStandardMaterial({ color: '#b9c2c4', roughness: .3, metalness: .7 });
-  const deck = new T.Mesh(new T.BoxGeometry(.09, .008, .3), deckMat); deck.position.y = -.012; deck.castShadow = true; g.add(deck);
-  for (const z of [-.15, .15]) { const kick = new T.Mesh(new T.BoxGeometry(.09, .008, .04), deckMat); kick.position.set(0, -.006, z); kick.rotation.x = z < 0 ? .45 : -.45; g.add(kick); }
-  const stripe = new T.Mesh(new T.BoxGeometry(.092, .004, .2), edge); stripe.position.y = -.017; g.add(stripe);
+  // The deck, trucks and wheels are their own group so a flip turns the board under the rider.
+  const board = new T.Group(); board.name = 'Board'; g.add(board);
+  const deck = new T.Mesh(new T.BoxGeometry(.09, .008, .3), deckMat); deck.position.y = -.012; deck.castShadow = true; board.add(deck);
+  for (const z of [-.15, .15]) { const kick = new T.Mesh(new T.BoxGeometry(.09, .008, .04), deckMat); kick.position.set(0, -.006, z); kick.rotation.x = z < 0 ? .45 : -.45; board.add(kick); }
+  const stripe = new T.Mesh(new T.BoxGeometry(.092, .004, .2), edge); stripe.position.y = -.017; board.add(stripe);
   for (const z of [-.1, .1]) {
-    const truck = new T.Mesh(new T.BoxGeometry(.07, .012, .02), truckMat); truck.position.set(0, -.024, z); g.add(truck);
-    for (const x of [-.045, .045]) { const w = new T.Mesh(new T.CylinderGeometry(.026, .026, .022, 14), wheelMat); w.rotation.z = Math.PI / 2; w.position.set(x, -.03, z); w.castShadow = true; g.add(w); }
+    const truck = new T.Mesh(new T.BoxGeometry(.07, .012, .02), truckMat); truck.position.set(0, -.024, z); board.add(truck);
+    for (const x of [-.045, .045]) { const w = new T.Mesh(new T.CylinderGeometry(.026, .026, .022, 14), wheelMat); w.rotation.z = Math.PI / 2; w.position.set(x, -.03, z); w.castShadow = true; board.add(w); }
   }
   const rider = makeRobotBody(paint); rider.position.y = -.008; rider.rotation.y = Math.PI / 2; g.add(rider);
   // Skate stance: side-on, knees bent, arms out for balance.
   const { arms, legs } = rider.userData; legs[0].rotation.x = .35; legs[1].rotation.x = -.35; arms[0].rotation.z = .9; arms[1].rotation.z = -.9;
   rider.scale.y = .88;
-  g.userData = { rider, materials: [deckMat, edge, wheelMat, truckMat, ...rider.userData.materials] };
+  g.userData = { rider, board, materials: [deckMat, edge, wheelMat, truckMat, ...rider.userData.materials] };
   return g;
 }
 
-export function poseBoardRider(g, car, steer = 0) {
+export function poseBoardRider(g, car, steer = 0, trick = null) {
   g.position.set(...car.pos); g.quaternion.set(...car.q);
   g.translateY(-.022);
-  g.userData.rider.rotation.z = -steer * .25;   // lean into the carve
+  const { rider, board } = g.userData;
+  rider.rotation.z = -steer * .25;   // lean into the carve
+  // Tricks (physics/board-tricks.mjs): the board turns about its own axis, the rider crouches and
+  // reaches down for a grab. The deck pivots about its centre, a little below the rider's feet.
+  board.rotation.set(0, 0, 0); board.position.y = 0;
+  if (trick?.axis) board.rotation[trick.axis] = trick.angle;
+  const grab = trick?.grab, flip = !!trick?.axis, { arms, legs } = rider.userData;
+  // A flip: the rider tucks up off the deck so the chase camera sees the board turn beneath.
+  rider.scale.y = grab ? .7 : .88; rider.position.y = flip ? .07 : grab ? .02 : -.008;
+  board.position.y = Math.max(board.position.y, grab ? .025 : 0);
+  // Indy / Melon reach with one hand; Nosegrab / Tailgrab / Method reach fore or aft.
+  arms[0].rotation.set(0, 0, .9); arms[1].rotation.set(0, 0, -.9);
+  if (grab) { const reach = { Indy: [1, 0], Melon: [0, 1], Nosegrab: [-1.3, -1.3], Tailgrab: [1.3, 1.3], Method: [.6, -.6] }[grab] ?? [1, 0]; arms[0].rotation.set(reach[0], 0, .3); arms[1].rotation.set(reach[1], 0, -.3); }
+  legs[0].rotation.x = grab || flip ? .9 : .35; legs[1].rotation.x = grab || flip ? -.9 : -.35;
 }

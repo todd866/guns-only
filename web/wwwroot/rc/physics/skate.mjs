@@ -113,7 +113,8 @@ function nameAir(a) {
     const turns = Math.round(spin / 180) * 180;
     name = `${turns} ${grab ?? 'Spin'}`; points += { 180: 150, 360: 400, 540: 750 }[turns] ?? 1000;
   }
-  tricks.push([name, points]);
+  // A flip or grab from the board already names this air; a bare "Air" beside it is noise.
+  if (!(a.board && !grab && name === (assisted ? 'Backside Air' : 'Air'))) tricks.push([name, points]);
   if (a.special && !assisted && spin >= 900) tricks.push(['The 900', 9000]);
   else if (a.special && !assisted && spin >= 540) tricks.push(['Orbital 540', 3500]);
   else if (a.special && a.grab >= .75 && a.time >= 1 && a.rise >= 1) tricks.push(['Christ Air', 3000]);
@@ -141,6 +142,21 @@ function landAir(sk, a, at, up) {
   }
   if (sk.combo) sk.landed = { time: 0, transition: a.kind === 'return' || a.kind === 'transfer' };
 }
+
+// Free skate on the board anywhere in the world: the same combos, manuals and special meter,
+// with no clock, letters, gaps or goals. Frame: world [x, y, z] -> [x, z, y].
+export const STREET = Object.freeze({ id: 'street', name: 'STREET', rails: [], gaps: [], letters: [], goals: [], tape: null });
+export const streetFrame = p => [p[0], p[2], p[1]];
+export function createStreetSkate() { const sk = createSkate(STREET); sk.left = Infinity; sk.free = true; return sk; }
+
+/** A trick scored from outside the air/grind/manual detection (the board's flips and grabs). */
+export function scoreTrick(sk, name, points) {
+  if (sk.over) return;
+  addTrick(sk, name, points);
+  if (sk.air) sk.air.board = (sk.air.board ?? 0) + 1; else sk.landed = { time: 0 };
+}
+/** A bail from outside (landing mid-flip): the combo is lost and this air scores nothing. */
+export function bailRun(sk) { if (!sk.over) { sk.air = null; bail(sk); } }
 
 // One fixed physics step. frame(pos) returns park-local [u, v, h].
 export function stepSkate(sk, session, input, dt, frame) {

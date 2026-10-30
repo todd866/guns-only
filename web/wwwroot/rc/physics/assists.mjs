@@ -156,7 +156,8 @@ export function assistInput(a, car, raw, dt, world) {
   a.balanceTime = a.balance ? (a.balanceTime ?? 0) + dt : 0;
 
   a.skateAir = raw.skate && car.contacts === 0 ? (a.skateAir ?? 0) + dt : 0;
-  a.skateSpinning = a.skateAir > .12 && raw.drift && Math.abs(raw.steer || 0) > .25;
+  // The skateboard form spins on steer alone, as in THPS2; cars need the grab (drift) held.
+  a.skateSpinning = a.skateAir > .12 && (raw.drift || raw.boardSpin) && Math.abs(raw.steer || 0) > .25;
   if (a.skateSpinning) {
     // A held grab and steer spins in the air; the wheels-down assist still owns pitch/roll.
     torque[1] = (-raw.steer * 9 - car.ang[1]) * 8 / car.invInertia[1];
