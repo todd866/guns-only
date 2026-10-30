@@ -10,7 +10,7 @@ import {PORTAL_EVENT,portalHeight} from './portal-course.mjs';
 import {ROAD_EVENTS} from './road-events.mjs';
 // Authored activities in the real Nellis local metre frame. +x east, +z south.
 // Gameplay courses and landmark art are fiction; OSM supplies roads and footprints.
-export const BOUNDS = [-3800, -2300, 3250, 4050];
+export const BOUNDS = [-3800, -4600, 3600, 4050];   // north and east grown for Spirit Mountain (spirit-mountain.mjs)
 export const LOCATIONS = [
   {id:'gate',name:'Main Gate',short:'Main Gate',pos:[-607,0,-29],color:'#f8c35d',icon:'⌂',kind:'race',event:'gate-guard'},
   {id:'skatepark',name:'Neighbourhood Skatepark',short:'Skatepark',pos:RESIDENTIAL_START.pos,color:'#59cec4',icon:'↗',kind:'interior',track:'skatepark'},

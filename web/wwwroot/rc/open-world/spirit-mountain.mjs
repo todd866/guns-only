@@ -9,7 +9,7 @@
 export const MOUNTAIN = Object.freeze({
   centre: [2300, -3250], radius: 1250, peak: 230,
   grade: .08, hairpinGrade: .05, hairpinRadius: 15, legSpan: .72,   // radians either side of due south
-  roadHalf: 3.5, shelf: 6.5, falloff: 21, summit: 80, step: 4,
+  roadHalf: 2.75, shelf: 6.5, falloff: 21, summit: 80, plateau: 28, step: 4,   // summit: where the road stops climbing; plateau: the flat top around its end
   valleys: [{ angle: 1.25, from: 140, depth: 75, width: 170 }, { angle: -1.95, from: 200, depth: 60, width: 150 }],
 });
 const M = MOUNTAIN, [CX, CZ] = M.centre;
@@ -92,7 +92,7 @@ export function mountainHeight(x, z) {
   if (x < MOUNTAIN_BOUNDS[0] || x > MOUNTAIN_BOUNDS[2] || z < MOUNTAIN_BOUNDS[1] || z > MOUNTAIN_BOUNDS[3]) return 0;
   let h = naturalHeight(x, z);
   const rs = Math.hypot(x - SUMMIT.at[0], z - SUMMIT.at[1]);
-  if (rs < M.summit + 40) { const w = smooth((M.summit + 40 - rs) / 40); h = h * (1 - w) + SUMMIT.y * w; }
+  if (rs < M.plateau + 30) { const w = smooth((M.plateau + 30 - rs) / 30); h = h * (1 - w) + SUMMIT.y * w; }
   const near = roadNear(x, z); if (!near.length) return h;
   const shelf = near.reduce((b, n) => n.d <= M.shelf && (!b || n.d < b.d) ? n : b, null); if (shelf) return shelf.y;
   let wn = 1, sum = 0, ws = 0;

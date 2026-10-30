@@ -3,7 +3,8 @@ import {buildingFrontage,exteriorRing,frontageWindowMask} from './building-front
 import {roadVerges} from './road-verges.mjs';
 import {roadsideDetail,desertScatter} from './roadside-detail.mjs';
 import {createSurfaceMaps} from './materials.js';
-import {groundTriangles,elevationAt} from './elevation.mjs';
+import {groundTriangles,elevationAt,terrainStep} from './elevation.mjs';
+import {inMountain,roadNear,MOUNTAIN} from './spirit-mountain.mjs';
 import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import * as T from '../../vendor/three.module.js';
@@ -38,7 +39,12 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null,
   function quad(k,a,b,c,d,shade=1){tri(k,a,b,c,shade);tri(k,a,c,d,shade);}
   function poly(k,ring,y,shade=1,clipResidential=false){const pts=clip(ring,b);if(pts.length<3)return;const v=pts.map(p=>new T.Vector2(...p)),faces=T.ShapeUtils.triangulateShape(v,[]);for(const [a,c,d]of faces){const p=[pts[a],pts[c],pts[d]],cross=(p[1][0]-p[0][0])*(p[2][1]-p[0][1])-(p[1][1]-p[0][1])*(p[2][0]-p[0][0]);if(cross>0)p.reverse();tri(k,...p.map(q=>[q[0],y,q[1]]),shade,clipResidential);}}
   function ribbon(k,a,c,w,y){const len=Math.hypot(c[0]-a[0],c[1]-a[1]);if(len<.01)return;const x=-(c[1]-a[1])/len*w/2,z=(c[0]-a[0])/len*w/2;poly(k,[[a[0]+x,a[1]+z],[c[0]+x,c[1]+z],[c[0]-x,c[1]-z],[a[0]-x,a[1]-z]],y,1,true);}
-  if(elevation){for(const points of groundTriangles(elevation,b,16,terrainSite))tri('sand',...points.map(p=>[p[0],p[1]-.025,p[2]]),1,true);}else poly('sand',[[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]],-.025,1,true);
+  // Spirit Mountain paints its own ground: the road as asphalt, gravel shoulders, darker rock on steep faces.
+  const mountainPaint=(p)=>{const cx=(p[0][0]+p[1][0]+p[2][0])/3,cz=(p[0][2]+p[1][2]+p[2][2])/3;if(!inMountain(cx,cz))return null;const near=roadNear(cx,cz),d=near.length?Math.min(...near.map(n=>n.d)):Infinity;
+   if(d<=MOUNTAIN.shelf)return ['gravel',1];   // the asphalt itself is the smooth ribbon (spirit-mountain.js)
+   const ux=p[1][0]-p[0][0],uy=p[1][1]-p[0][1],uz=p[1][2]-p[0][2],vx=p[2][0]-p[0][0],vy=p[2][1]-p[0][1],vz=p[2][2]-p[0][2],nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,up=Math.abs(ny)/Math.hypot(nx,ny,nz);
+   return ['sand',up<.85?.72:up<.95?.86:1];};
+  if(elevation){for(const points of groundTriangles(elevation,b,terrainStep(b),terrainSite)){const paint=mountainPaint(points)??['sand',1];tri(paint[0],...points.map(q=>[q[0],q[1]-.025,q[2]]),paint[1],true);}}else poly('sand',[[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]],-.025,1,true);
   for(const f of tile.features){const p=f.properties,g=f.geometry;
    if(p.building&&g.type==='Polygon'){const info=buildingInfo(f);if(!info)continue;const {h,area}=info,ring=exteriorRing(info.ring),shade=.88+(Number(f.id.replace(/\D/g,''))%11)*.014;poly('roof',ring,h,shade);const maskWindow=frontageWindowMask(f,tile.features);
     for(let i=1;i<ring.length;i++){const a=ring[i-1],c=ring[i],len=Math.hypot(c[0]-a[0],c[1]-a[1]);if(!len)continue;
@@ -115,6 +121,7 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null,
   // Open desert: creosote-like clumps (three crossed cards, slightly varied height and tone)
   // or a low stone, on bare sand only. Same two batches as the verge planting.
   if(elevation)for(const {x,z,size:s,stone} of desertScatter(tile,b,residentialBounds,460,sitePad)){
+   if(inMountain(x,z)&&roadNear(x,z).some(n=>n.d<MOUNTAIN.shelf+3))continue;   // never on Spirit Mountain's road
    const y=elevationAt(elevation,x,z,terrainSite)-.025,turn=(x*.37+z*.11)%Math.PI;
    if(stone){const r=s*.55,top=[x,y+r*.45,z];for(let j=0;j<5;j++){const a=turn+j*Math.PI*2/5,c=turn+(j+1)*Math.PI*2/5;tri('gravel',top,[x+Math.cos(c)*r,y+.005,z+Math.sin(c)*r*.8],[x+Math.cos(a)*r,y+.005,z+Math.sin(a)*r*.8],.72+j*.05);}continue;}
    for(let j=0;j<3;j++){const angle=turn+j*2.094,dx=Math.cos(angle)*s,dz=Math.sin(angle)*s,h=s*(.7+j*.12),tone=.68+j*.09;

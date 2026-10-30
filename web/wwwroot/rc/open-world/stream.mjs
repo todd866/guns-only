@@ -2,7 +2,8 @@ import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
 import {WATER_BODIES,basinTriangles} from '../physics/water.mjs';
 import {MINE_BOUNDS,mineWorldTris} from './mine.mjs';
 import {subtractBox} from './district-entrances.mjs';
-import {groundTriangles} from './elevation.mjs';
+import {groundTriangles,terrainStep} from './elevation.mjs';
+import {inMountain,mountainSurface} from './spirit-mountain.mjs';
 import {createWorld} from '../physics/world.mjs';
 import {BOUNDS,eventSurface} from './catalog.mjs';
 import {buildingInfo,addBuildingCollision,surfaceAt} from './geometry.mjs';
@@ -12,7 +13,7 @@ export function desiredTiles(pos,radius=2){const tx=Math.floor(pos[0]/SIZE),tz=M
 export function createStream({manifest,fetchTile,onLoad=()=>{},onDrop=()=>{},cacheLimit=64,elevation=null,residentialTerrain=null,terrainSite=null}){
  const available=new Set(manifest.tiles.map(t=>t.join(','))),loaded=new Map(),pending=new Map(),errors=new Map(),authored=createWorld(16);const cache=new Map();let wanted=new Set(),disposed=false;
  cacheLimit=Math.max(25,Math.floor(cacheLimit)||64);
- const ground=(x,z)=>eventSurface(x,z)??(inResidentialTerrain(x,z)?'grass':surfaceAt(x,z,loaded.get(tileKey(x,z))?.features??[]));
+ const ground=(x,z)=>(inMountain(x,z)?mountainSurface(x,z):null)??eventSurface(x,z)??(inResidentialTerrain(x,z)?'grass':surfaceAt(x,z,loaded.get(tileKey(x,z))?.features??[]));
  const inResidentialTerrain=(x,z)=>!!residentialTerrain&&x>=residentialTerrain.bounds[0]&&x<=residentialTerrain.bounds[2]&&z>=residentialTerrain.bounds[1]&&z<=residentialTerrain.bounds[3];
  const terrainClipBounds=[...DISTRICT_BOUNDS,...(residentialTerrain?.bounds?[residentialTerrain.bounds]:[]),...(terrainSite?.hole?[terrainSite.hole]:[]),...WATER_BODIES.map(b=>b.rect),MINE_BOUNDS];   // water basins replace the ground
  const inTerrainHole=(x,z)=>!!terrainSite?.hole&&x>=terrainSite.hole[0]&&x<=terrainSite.hole[2]&&z>=terrainSite.hole[1]&&z<=terrainSite.hole[3];
@@ -44,7 +45,7 @@ export function createStream({manifest,fetchTile,onLoad=()=>{},onDrop=()=>{},cac
   const job=(async()=>{try{
    const tile=available.has(key)?await fetchTile(key):{tile:key.split(',').map(Number),features:[]};
    if(disposed)return null;
-   tile.collision=createWorld(16);if(elevation){const [x,z]=tile.tile;for(const tri of groundTriangles(elevation,[x*SIZE,z*SIZE,(x+1)*SIZE,(z+1)*SIZE],16,terrainSite)){let parts=[tri];for(const d of terrainClipBounds){if(Math.min(...tri.map(p=>p[0]))>d[2]||Math.max(...tri.map(p=>p[0]))<d[0]||Math.min(...tri.map(p=>p[2]))>d[3]||Math.max(...tri.map(p=>p[2]))<d[1])continue;parts=parts.flatMap(t=>subtractBox(t,[d[0],-100,d[1],d[2],1000,d[3]]));}for(const part of parts)tile.collision.addTri(...part,'__terrain');}}for(const f of tile.features)if(f.properties.building&&f.geometry.type==='Polygon'){const info=buildingInfo(f);if(info)addBuildingCollision(tile.collision,info,f.properties.building==='roof');}
+   tile.collision=createWorld(16);if(elevation){const [x,z]=tile.tile;for(const tri of groundTriangles(elevation,[x*SIZE,z*SIZE,(x+1)*SIZE,(z+1)*SIZE],terrainStep([x*SIZE,z*SIZE,(x+1)*SIZE,(z+1)*SIZE]),terrainSite)){let parts=[tri];for(const d of terrainClipBounds){if(Math.min(...tri.map(p=>p[0]))>d[2]||Math.max(...tri.map(p=>p[0]))<d[0]||Math.min(...tri.map(p=>p[2]))>d[3]||Math.max(...tri.map(p=>p[2]))<d[1])continue;parts=parts.flatMap(t=>subtractBox(t,[d[0],-100,d[1],d[2],1000,d[3]]));}for(const part of parts)tile.collision.addTri(...part,'__terrain');}}for(const f of tile.features)if(f.properties.building&&f.geometry.type==='Polygon'){const info=buildingInfo(f);if(info)addBuildingCollision(tile.collision,info,f.properties.building==='roof');}
    errors.delete(key);return remember(key,tile);
   }catch(e){if(!disposed)errors.set(key,Date.now());return null;}})();
   pending.set(key,job);

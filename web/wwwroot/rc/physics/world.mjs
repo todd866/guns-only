@@ -11,7 +11,7 @@ export const SURFACES = {
   water: { grip: 0.65, roll: 0.18 },
   asphalt: { grip: 1.0, roll: 0.02 }, concrete: { grip: 1.0, roll: 0.02 }, wood: { grip: 0.95, roll: 0.025 },
   metal: { grip: 0.8, roll: 0.02 }, tile: { grip: 0.72, roll: 0.02 }, gymfloor: { grip: 0.55, roll: 0.015 },
-  gravel: { grip: 0.78, roll: 0.07 }, carpet: { grip: 0.9, roll: 0.07 }, rubber: { grip: 1.0, roll: 0.03, bounce: 2.2 }, grass: { grip: 0.72, roll: 0.09 }, dirt: { grip: 0.8, roll: 0.06 },
+  gravel: { grip: 0.78, roll: 0.07 }, carpet: { grip: 0.9, roll: 0.07 }, rubber: { grip: 1.0, roll: 0.03, bounce: 2.2 }, grass: { grip: 0.72, roll: 0.09 }, dirt: { grip: 0.8, roll: 0.06 }, rock: { grip: 0.85, roll: 0.04 },   // Spirit Mountain's steep faces
   // Rolled kerbs soften initial damping but retain enough bump damping for the
   // narrow chassis to land without a yawing hull strike.
   kerb: { grip: 1.0, roll: 0.02, damper: 0.55, bumpDamper: 0.65 },
