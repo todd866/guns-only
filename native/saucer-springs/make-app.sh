@@ -7,9 +7,10 @@ cd $here && swift build -c release
 app="$HOME/Applications/Saucer Springs.app"; stage=$(mktemp -d)/Saucer\ Springs.app
 mkdir -p "$stage/Contents/MacOS" "$stage/Contents/Resources"
 cp .build/release/SaucerSprings "$stage/Contents/MacOS/"
-cp Sources/SaucerSprings/Shaders.metal "$stage/Contents/Resources/"
+cp Sources/SaucerSprings/Shaders.metal Sources/SaucerSprings/rcsim.js "$stage/Contents/Resources/"
 cp "$world" "$stage/Contents/Resources/world.rcworld"
 [ -d "${world%.rcworld}.tex" ] && cp -R "${world%.rcworld}.tex" "$stage/Contents/Resources/world.tex"
+for ext in car col; do [ -f "${world%.rcworld}.$ext" ] && cp "${world%.rcworld}.$ext" "$stage/Contents/Resources/world.$ext"; done
 iconset=$(mktemp -d)/AppIcon.iconset; mkdir -p $iconset
 python3 icon/make-icon.py $iconset/icon_512x512@2x.png
 for s in 16 32 128 256 512; do sips -z $s $s $iconset/icon_512x512@2x.png --out $iconset/icon_${s}x${s}.png >/dev/null; sips -z $((s*2)) $((s*2)) $iconset/icon_512x512@2x.png --out $iconset/icon_${s}x${s}@2x.png >/dev/null; done

@@ -305,7 +305,10 @@ final class Driver {
     // Low chase camera behind the heading (as in the browser game), eased so it never snaps.
     let fwd = SIMD3(sin(p.yaw), 0, -cos(p.yaw)), want = p.pos - fwd * (p.mode == 0 ? 1.55 : 2.6) + SIMD3(0, p.mode == 0 ? 0.55 : 0.9, 0)
     cam = cam.map { $0 + (want - $0) * min(1, dt * 7) } ?? want
-    let look = simd_normalize(p.pos + SIMD3(0, 0.12, 0) - cam!)
+    // As in the browser: pull the camera in front of anything between it and the car.
+    let eye = p.pos + SIMD3(0, 0.12, 0), ray = cam! - eye, dist = simd_length(ray)
+    if dist > 0.01, let hit = sim.raycast(eye, ray / dist, dist) { cam = eye + ray / dist * max(0.15, hit - 0.12) }
+    let look = simd_normalize(eye - cam!)
     renderer.eye = cam!; renderer.yaw = atan2(look.x, -look.z); renderer.pitch = asin(look.y); renderer.resetAccumulation()
   }
 }

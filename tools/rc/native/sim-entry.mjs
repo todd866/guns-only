@@ -30,5 +30,7 @@ globalThis.RCSim = {
   },
   pose() { const c = s.car, r = readout(s); return [...c.pos, ...c.q, r.speed, r.yaw, s.flight.mode === 'fly' ? 1 : s.flight.mode === 'chute' ? 2 : 0]; },
   fly() { return toggleFlight(s.flight, s.car, { roam: true }); },
+  // Distance to the first surface along a ray, or -1: the chase camera pulls in front of walls.
+  raycast(ox, oy, oz, dx, dy, dz, max) { const h = world?.raycast([ox, oy, oz], [dx, dy, dz], max); return h ? h.dist : -1; },
   recover() { recover(s); },
 };

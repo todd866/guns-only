@@ -46,4 +46,8 @@ final class Sim {
   }
   @discardableResult func fly() -> String { rc.invokeMethod("fly", withArguments: [])?.toString() ?? "" }
   func recover() { rc.invokeMethod("recover", withArguments: []) }
+  func raycast(_ o: SIMD3<Float>, _ d: SIMD3<Float>, _ max: Float) -> Float? {
+    let r = rc.invokeMethod("raycast", withArguments: [o.x, o.y, o.z, d.x, d.y, d.z, max])?.toDouble() ?? -1
+    return r < 0 ? nil : Float(r)
+  }
 }

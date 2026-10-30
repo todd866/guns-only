@@ -563,7 +563,7 @@
             const sideways = returning ? 0.65 : -1.8;
             const [lo, hi] = a.vert ? [5.5, 8] : bowl ? [4.2, 5.45] : returning ? [5.5, 8.5] : [2.2, 3.4];
             car.vel = [drift[0] + a.inward[0] * sideways, clamp(car.vel[1], lo, hi), drift[2] + a.inward[2] * sideways];
-            state.arc = { kind: returning ? "return" : "exit", returning, yaw: a.yaw, turn: raw.steer < -0.15 ? -1 : 1, time: 0 };
+            state.arc = { kind: returning ? "return" : "exit", returning, yaw: a.yaw, turn: raw.steer < -0.15 ? -1 : 1, time: 0, inward: a.inward, apex: car.vel[1] / 9.81, vert: returning };
           }
           state.armed = null;
         }
@@ -582,12 +582,13 @@
       const t = clamp(arc.time / 0.65, 0, 1);
       yaw += Math.PI * arc.turn * t * t * (3 - 2 * t);
     } else if (arc.kind === "transfer" && Math.hypot(car.vel[0], car.vel[2]) > 0.8) yaw = arc.yaw = Math.atan2(car.vel[0], -car.vel[2]);
-    let targetUp = [0, 1, 0];
+    let targetUp = [0, 1, 0], aligning = false, clear = Infinity;
     if (world2 && arc.kind !== "exit" && car.vel[1] < 0) {
       const ground = world2.raycast(add(car.pos, [0, 0.3, 0]), [0, -1, 0], 8);
       if (ground && ground.normal[1] > 0.35) {
         targetUp = ground.normal;
-        const clearance = ground.dist - 0.3 - rideHeight(car.params);
+        aligning = true;
+        const clearance = clear = ground.dist - 0.3 - rideHeight(car.params);
         if (arc.returning && clearance < 0.8) {
           car.vel[1] = Math.max(car.vel[1], -(2.4 + Math.max(0, clearance) * 3));
           const inward2 = [-Math.sin(arc.yaw), 0, Math.cos(arc.yaw)], blend = 1 - Math.exp(-7 * dt);
@@ -596,12 +597,19 @@
         }
       }
     }
-    const forward = [Math.sin(yaw), 0, -Math.cos(yaw)];
+    let forward = [Math.sin(yaw), 0, -Math.cos(yaw)];
+    if (arc.vert && arc.inward && !arc.kick && (car.vel[1] > 0 || !aligning || clear > 1.1)) {
+      const s0 = clamp((arc.time - arc.apex * 0.45) / (arc.apex * 0.85), 0, 1), k = s0 * s0 * (3 - 2 * s0), side = scale(cross([0, 1, 0], arc.inward), arc.turn);
+      forward = norm(add(scale([0, 1, 0], Math.cos(Math.PI * k)), scale(side, Math.sin(Math.PI * k))));
+      const fall = clamp(-car.vel[1] / 7, 0, 1) * k;
+      forward = norm(add(forward, scale(arc.inward, fall * 0.4)));
+      targetUp = norm(add(arc.inward, scale([0, 1, 0], fall * 0.4)));
+    }
     const targetForward = norm(sub(forward, scale(targetUp, dot(forward, targetUp))));
     const error = scale(add(cross(carForward(car), targetForward), cross(carUp(car), targetUp)), 0.5);
     let acceleration = sub(scale(error, 144), scale(car.ang, 20));
-    const size = Math.hypot(...acceleration);
-    if (size > 100) acceleration = scale(acceleration, 100 / size);
+    const cap = arc.vert ? 180 : 100, size = Math.hypot(...acceleration);
+    if (size > cap) acceleration = scale(acceleration, cap / size);
     return rotate(car.q, unrotate(car.q, acceleration).map((v, i) => v / car.invInertia[i]));
   }
 
@@ -1214,6 +1222,11 @@
     },
     fly() {
       return toggleFlight(s.flight, s.car, { roam: true });
+    },
+    // Distance to the first surface along a ray, or -1: the chase camera pulls in front of walls.
+    raycast(ox, oy, oz, dx, dy, dz, max) {
+      const h = world?.raycast([ox, oy, oz], [dx, dy, dz], max);
+      return h ? h.dist : -1;
     },
     recover() {
       recover(s);
