@@ -34,6 +34,16 @@ vec4 livery(vec3 p){
   if (uPattern == 9) { vec2 q = p.xz * vec2(4.0, 6.0) + vec2(p.y * 2.0, 0.0), cell = floor(q), l = fract(q) - 0.5;   // scattered five-point stars
     float r = length(l), a = atan(l.y, l.x), k = 0.17 + 0.09 * cos(5.0 * a + livHash(cell) * 6.28);
     return vec4(uTrim, step(r, k) * step(0.45, livHash(cell + 7.0))); }
+  if (uPattern == 10) { // six seven: a big 67 on a white roundel across the roof, read from the chase camera
+    vec2 q = vec2((p.x + 0.44) / 0.88, (-p.z + 0.5) / 1.0);
+    if (p.y < 0.15 || q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) return vec4(uTrim, step(0.9, abs(p.x)) * step(-0.2, p.y));
+    float d = q.x < 0.5 ? 6.0 : 7.0; vec2 u = vec2(fract(q.x * 2.0), q.y); u = (u - vec2(0.16, 0.1)) / vec2(0.68, 0.8);
+    float t = 0.17, inx = step(0.0, u.x) * step(u.x, 1.0);
+    float a = inx * step(1.0 - t, u.y) * step(u.y, 1.0), g = inx * step(abs(u.y - 0.5), t * 0.5), dd = inx * step(0.0, u.y) * step(u.y, t);
+    float fl = step(0.0, u.x) * step(u.x, t) * step(0.5, u.y) * step(u.y, 1.0), el = step(0.0, u.x) * step(u.x, t) * step(0.0, u.y) * step(u.y, 0.5);
+    float br = step(1.0 - t, u.x) * step(u.x, 1.0) * step(0.5, u.y) * step(u.y, 1.0), cr = step(1.0 - t, u.x) * step(u.x, 1.0) * step(0.0, u.y) * step(u.y, 0.5);
+    float on = d < 6.5 ? max(max(max(a, g), max(dd, fl)), max(el, cr)) : max(max(a, br), cr);
+    return on > 0.5 ? vec4(0.06, 0.06, 0.08, 1.0) : vec4(0.97, 0.96, 0.92, 1.0); }
   return vec4(uTrim, 0.0);
 }`;
 
