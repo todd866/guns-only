@@ -119,3 +119,13 @@ test('free-skate curbs (airCapture) only catch from the air: rolling along one n
   stepSession(s, { throttle: 1, hop: true }, dt);
   assert.equal(s.skateRide.active, null, 'Space (hop) pops off');
 });
+
+test('the direction held as the board lands picks the THPS2 grind', async () => {
+  const { grindName, GRIND_POINTS } = await import('./grind.mjs');
+  assert.deepEqual([{}, { y: 1 }, { y: -1 }, { y: 1, x: -1 }, { y: 1, x: 1 }, { y: -1, x: -1 }, { y: -1, x: 1 }, { x: 1 }].map(grindName),
+    ['50-50', 'Nosegrind', '5-0', 'Crooked', 'Overcrook', 'Smith', 'Feeble', '50-50']);
+  assert.ok(GRIND_POINTS.Crooked > GRIND_POINTS['50-50']);
+  const r = setup(); r.launch(); for (let i = 0; i < 30; i++) { stepSession(r.s, { throttle: 1, grindDir: { x: -1, y: -1 } }, dt); r.events.push(...stepSkate(r.sk, r.s, {}, dt, frame)); }
+  assert.equal(r.s.skateRide.active?.name, 'Smith');
+  assert.ok(r.events.some(e => e.name === 'Smith' && e.points === 200));
+});

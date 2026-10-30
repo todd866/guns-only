@@ -85,6 +85,14 @@ function leave(s, reason, hop) {
   clearContacts(car); state.active = null; state.cooldown = .55;
   s.assist.quarter = {}; s.assist.drift = { ...createDrift(), held: state.held };
 }
+// THPS2 grinds by the direction held as the board lands on the rail ({ x, y }: right, up = +1).
+export const GRIND_POINTS = Object.freeze({ '50-50': 100, '5-0': 120, Nosegrind: 120, Crooked: 200, Overcrook: 220, Smith: 200, Feeble: 200, Boardslide: 150 });
+export function grindName({ x = 0, y = 0 } = {}) {
+  const h = Math.abs(x) >= .5 ? Math.sign(x) : 0, v = Math.abs(y) >= .5 ? Math.sign(y) : 0;
+  if (v > 0) return h < 0 ? 'Crooked' : h > 0 ? 'Overcrook' : 'Nosegrind';
+  if (v < 0) return h < 0 ? 'Smith' : h > 0 ? 'Feeble' : '5-0';
+  return '50-50';
+}
 function capture(s, raw) {
   const state = s.skateRide, c = s.car;
   if (state.cooldown > 0 || raw.brake || c.speed < .7 || carUp(c)[1] < .65) return;
@@ -110,7 +118,7 @@ function capture(s, raw) {
     if (!best || distance < best.distance) best = { rail: r, distance, along: seg.start + t * seg.length, speed, direction, sideways };
   }
   if (!best) return;
-  const name = best.sideways ? 'Boardslide' : raw.steer < -.3 ? 'Nosegrind' : raw.steer > .3 ? '5-0' : '50-50';
+  const name = best.sideways ? 'Boardslide' : raw.grindDir ? grindName(raw.grindDir) : raw.steer < -.3 ? 'Nosegrind' : raw.steer > .3 ? '5-0' : '50-50';
   state.active = { rail: best.rail, distance: best.along, speed: best.speed, direction: best.direction, sideways: best.sideways, name, balance: createBalance(), time: 0, id: ++state.serial };
   state.manual = null; s.assist.quarter = {}; s.assist.drift = { ...createDrift(), held: state.held };
 }

@@ -4,7 +4,7 @@
 // Pure: the caller supplies a frame that maps world positions into the park's [u, v, h].
 import { dot, rotate } from './math.mjs';
 import { carUp } from './car.mjs';
-import { bindSkateRails, createBalance, stepBalance } from './grind.mjs';
+import { bindSkateRails, createBalance, stepBalance, GRIND_POINTS } from './grind.mjs';
 
 // A landing banks the combo after `revert` seconds unless the hop button reverts it (on a
 // transition) or the car rolls into a manual.
@@ -180,7 +180,7 @@ export function stepSkate(sk, session, input, dt, frame) {
   if (grind) {
     if (sk.air) { landAir(sk, sk.air, at, up); sk.air = null; }
     if (sk.grindId !== grind.id) {
-      sk.grindId = grind.id; sk.grindRate = addTrick(sk, grind.name, 100);
+      sk.grindId = grind.id; sk.grindRate = addTrick(sk, grind.name, GRIND_POINTS[grind.name] ?? 100);
     }
     const points = 180 * dt * sk.grindRate; sk.combo.base += points; chargeSpecial(sk, points * sk.combo.tricks.length);
     if (sk.specialActive && grind.time >= 2 && !grind.special) { addTrick(sk, 'Meteor Grind', 1800); grind.special = true; }

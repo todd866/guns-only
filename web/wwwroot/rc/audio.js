@@ -89,6 +89,15 @@ export class SoundKit {
     this.squealGain.gain.setTargetAtTime(live && speed > 2.5 ? slip * 0.06 : 0, t, 0.04);
   }
 
+  // Grinding a rail or curb: a metallic scrape that rises with speed, while the board is on it.
+  grinding(on, speed = 0) {
+    if (!this.ctx || !this.noiseBuf) return;
+    this.grindLoop ??= this.loopNoise('bandpass', 2400, 4);
+    const t = this.ctx.currentTime;
+    this.grindLoop.f.frequency.setTargetAtTime(1700 + speed * 160, t, 0.05);
+    this.grindLoop.gain.gain.setTargetAtTime(on ? Math.min(0.32, 0.12 + speed * 0.025) : 0, t, on ? 0.02 : 0.06);
+  }
+
   // One-shots.
   burst({ type = 'lowpass', freq = 400, dur = 0.15, level = 0.4, sweep = null }) {
     if (!this.ctx) return;
