@@ -273,7 +273,8 @@ function drawFlightHud(){const mode=race.roam?s.flight.mode:null;
  if(mode!==hudMode){if(hudMode&&!mode)callout('🛬 LANDED · back to driving');hudMode=mode;hud.hidden=!mode;}
  if(!mode)return;
  const dpr=Math.min(2,devicePixelRatio||1),W=innerWidth,H=innerHeight;if(hud.width!==Math.round(W*dpr)||hud.height!==Math.round(H*dpr)){hud.width=Math.round(W*dpr);hud.height=Math.round(H*dpr);}
- const c=s.car,q=new T.Quaternion(c.q[0],c.q[1],c.q[2],c.q[3]),f=new T.Vector3(0,0,-1).applyQuaternion(q),rt=new T.Vector3(1,0,0).applyQuaternion(q),up=new T.Vector3(0,1,0).applyQuaternion(q);
+ // Attitude from the view itself (the chase camera rides the car), so the ladder sits on the real horizon.
+ const c=s.car,q=camera.quaternion,f=new T.Vector3(0,0,-1).applyQuaternion(q),rt=new T.Vector3(1,0,0).applyQuaternion(q),up=new T.Vector3(0,1,0).applyQuaternion(q);
  const pitch=Math.asin(Math.max(-1,Math.min(1,f.y))),roll=Math.atan2(-rt.y,up.y),heading=(Math.atan2(f.x,-f.z)*180/Math.PI+360)%360;
  const ground=course.world.raycast([c.pos[0],c.pos[1]+.05,c.pos[2]],[0,-1,0],400),agl=ground?ground.dist:null;
  const G='#7dff9c',ink=(w=2)=>{hg.lineWidth=w;hg.strokeStyle=G;hg.fillStyle=G;hg.shadowColor='rgba(0,20,8,.85)';hg.shadowBlur=4;};
@@ -281,14 +282,14 @@ function drawFlightHud(){const mode=race.roam?s.flight.mode:null;
  const cx=W/2,cy=H*.46,pxPerDeg=Math.min(W,H)*.012;
  // Pitch ladder and horizon, rolled about the waterline.
  hg.save();hg.translate(cx,cy);hg.rotate(-roll);
- for(let d=-30;d<=30;d+=10){const y=(pitch*180/Math.PI-d)*pxPerDeg;if(Math.abs(y)>H*.32)continue;const w=d===0?W*.22:W*.06;
+ for(let d=-90;d<=90;d+=10){const y=(pitch*180/Math.PI-d)*pxPerDeg;if(Math.abs(y)>H*.32)continue;const w=d===0?W*.22:W*.06;
   hg.setLineDash(d<0?[8,6]:[]);hg.beginPath();hg.moveTo(-w,y);hg.lineTo(-w*.25,y);hg.moveTo(w*.25,y);hg.lineTo(w,y);hg.stroke();
   if(d){hg.textAlign='right';hg.fillText(Math.abs(d),-w-6,y);hg.textAlign='left';hg.fillText(Math.abs(d),w+6,y);}}
  hg.setLineDash([]);hg.restore();
  // Waterline (where the nose points).
  hg.beginPath();hg.moveTo(cx-34,cy);hg.lineTo(cx-12,cy);hg.lineTo(cx-6,cy+8);hg.moveTo(cx+34,cy);hg.lineTo(cx+12,cy);hg.lineTo(cx+6,cy+8);hg.stroke();
  // Heading tape.
- const ty=H*.1;hg.textAlign='center';for(let d=-30;d<=30;d+=5){const hdg=Math.round(heading/5)*5+d,x=cx+(hdg-heading)*6;if(Math.abs(x-cx)>W*.22)continue;const v=((hdg%360)+360)%360;hg.beginPath();hg.moveTo(x,ty);hg.lineTo(x,ty+(v%10?6:12));hg.stroke();if(v%10===0)hg.fillText(String(v/10).padStart(2,'0'),x,ty+24);}
+ const ty=H*.74;hg.textAlign='center';for(let d=-30;d<=30;d+=5){const hdg=Math.round(heading/5)*5+d,x=cx+(hdg-heading)*6;if(Math.abs(x-cx)>W*.22)continue;const v=((hdg%360)+360)%360;hg.beginPath();hg.moveTo(x,ty);hg.lineTo(x,ty+(v%10?6:12));hg.stroke();if(v%10===0)hg.fillText(String(v/10).padStart(2,'0'),x,ty+24);}
  hg.beginPath();hg.moveTo(cx,ty-4);hg.lineTo(cx-6,ty-14);hg.lineTo(cx+6,ty-14);hg.closePath();hg.fill();
  // Speed (left) and height above ground (right) boxes.
  const box=(x,label,value)=>{hg.strokeRect(x-44,cy-16,88,32);hg.textAlign='center';hg.font='600 20px ui-monospace,Menlo,monospace';hg.fillText(value,x,cy);hg.font='600 12px ui-monospace,Menlo,monospace';hg.fillText(label,x,cy+30);};
@@ -475,7 +476,7 @@ function skateStep(input){if(!skate)return;const def=SKATE_PARKS[skatePark];if(M
  for(const e of stepSkate(skate,s,{...input,drift:input.drift||performance.now()<skateGrabUntil},1/120,def.frame)){skateHud.event(e);if(e.type==='gap'||e.type==='tape'||e.type==='letter')audio.coin();else if(e.type==='bail')audio.impact(4);else if(e.type==='goal')audio.gate();
   else if(e.type==='over'){const run=skate,id=skatePark,saved=skateSaved(id);audio.finish();saved.goals=[...run.goals];saved.best=Math.max(saved.best,run.score);saved.gaps=[...new Set([...saved.gaps,...run.gapsFound])];try{localStorage.setItem(def.key,JSON.stringify(saved));}catch{}endSkate('time');skateCard(id,run);return;}}}
 function enterLocation(){if(!openWorld||paused||!race.roam)return;if(skateParkAt()&&!skate){skateCard(skateParkAt());return;}if(openWorld.activity()&&!openWorld.activity().done){const tee=openWorld.resetActivity();if(tee)placeCar(s.car,[tee.pos[0],rideHeight(s.car.params)+.02,tee.pos[2]],tee.yaw);else if(openWorld.activity()?.done){audio.finish();callout(`BOWLING · ${openWorld.activity().score}/10`);}return;}const p=openWorld.near(s.car.pos);if(!p)return;if(p.game){const tee=openWorld.startActivity(p.game);telemetry.activityStart(p.game);placeCar(s.car,[tee.pos[0],rideHeight(s.car.params)+.02,tee.pos[2]],tee.yaw);callout(p.game==='golf'?'CAR GOLF · 3 HOLES':'STRIKE · 2 DELIVERIES');return;}if(p.kind==='discovery'||!canEnter(openWorld.progress,p))ui.open('map');else location.href=openWorld.eventURL(p);}
-const ui=createWorldUI({world:openWorld,getState:()=>({pos:s.car.pos,yaw:readout(s).yaw,paused,roam:race.roam,started,skate:!!skateParkAt()&&!skate,skating:!!skate}),pause,applyShell,onGarage:g=>telemetry.garage(g),travel:travelTo,interact:enterLocation,search:location.search,onOpen:which=>{if(which==='map')telemetry.mapOpen();}});
+const ui=createWorldUI({world:openWorld,getState:()=>({pos:s.car.pos,yaw:readout(s).yaw,paused,roam:race.roam,started,flying:!!s.flight.mode,skate:!!skateParkAt()&&!skate,skating:!!skate}),pause,applyShell,onGarage:g=>telemetry.garage(g),travel:travelTo,interact:enterLocation,search:location.search,onOpen:which=>{if(which==='map')telemetry.mapOpen();}});
 let cupStorage;try{cupStorage=sessionStorage;}catch{}let cup=loadCup(cupStorage);const cupId=new URLSearchParams(location.search).get('cup');if(!cupId||!CUP_COURSES[Number(cupId)]||cup?.id!==cupId||!cup.events.includes(openWorld?.selected.id)||(cup&&cup.events.indexOf(openWorld?.selected.id)>cup.results.length))cup=null;
 function cupURL(event,id){const q=new URLSearchParams(location.search);q.set('track','hub');q.set('event',event);q.set('mode','race');q.set('cup',id);return '?'+q;}
 const raceMenu=createRaceMenu({progress:()=>ui.progress,search:location.search,onStartCup:index=>{const c=CUP_COURSES[index];cup=createCup(String(index),c.courses.map(c=>c[0]),['YOU',...race.rivals.map(r=>r.callsign)]);saveCup(cup,cupStorage);location.href=cupURL(cup.events[0],cup.id);}});$('choose-course').onclick=()=>{pause(true);raceMenu.open();};
@@ -521,7 +522,13 @@ const splats=openWorld.seasonStep(c.pos,c.vel,now/1000);if(splats.length){pumpki
  // Sweep the smoothed position too: damping must not carry the camera through a wall.
  const actualRay=[camera.position.x-eye[0],camera.position.y-eye[1],camera.position.z-eye[2]],actualDistance=Math.hypot(...actualRay);if(actualDistance>.01){const obstruction=course.world.raycast(eye,actualRay.map(v=>v/actualDistance),actualDistance);if(obstruction){const k=Math.max(.08,obstruction.dist-.08)/actualDistance;camera.position.set(eye[0]+actualRay[0]*k,eye[1]+actualRay[1]*k,eye[2]+actualRay[2]*k);}}
  const portrait=camera.aspect<.8,portraitAim=-.3-Math.max(0,740-innerHeight)*.003;
- if(vertArc)target.set(r.x,r.y+.1,r.z);else target.set(r.x+Math.sin(camYaw)*1.05,r.y+(portrait?portraitAim:.18),r.z-Math.cos(camYaw)*1.05);camera.lookAt(target);
+ if(vertArc)target.set(r.x,r.y+.1,r.z);else target.set(r.x+Math.sin(camYaw)*1.05,r.y+(portrait?portraitAim:.18),r.z-Math.cos(camYaw)*1.05);
+ // Flying, the camera rides behind the car along its own nose and rolls with it, like a jet's
+ // chase view, so the HUD horizon matches the real one. On the ground the camera stays level.
+ if(s.flight.mode==='fly'){const q=new T.Quaternion(c.q[0],c.q[1],c.q[2],c.q[3]),fw=new T.Vector3(0,0,-1).applyQuaternion(q),cu=new T.Vector3(0,1,0).applyQuaternion(q);
+  desired.set(r.x,r.y,r.z).addScaledVector(fw,-2.3).addScaledVector(cu,.55);camera.position.lerp(desired,1-Math.exp(-dt*9));camera.up.lerp(cu,1-Math.exp(-dt*6)).normalize();target.set(r.x,r.y,r.z).addScaledVector(fw,3);}
+ else camera.up.lerp(new T.Vector3(0,1,0),1-Math.exp(-dt*6)).normalize();
+ camera.lookAt(target);
  if(ui.panel()==='garage'){const a=now*.00022,d=portrait?1.7:1.05;camera.position.set(r.x+Math.sin(a)*d,r.y+(portrait?.75:.48),r.z+Math.cos(a)*d);camera.fov=48;if(portrait)camera.clearViewOffset();else camera.setViewOffset(innerWidth,innerHeight,(innerWidth>900?330:315)/2,0,innerWidth,innerHeight);camera.updateProjectionMatrix();camera.lookAt(r.x,r.y+(portrait?portraitAim:.08),r.z);}else if(camera.view?.enabled)camera.clearViewOffset();
  gates.forEach((g,i)=>{const next=i===(s.gate===cps.length-1?0:s.gate);g.userData.arch.material=next?archLit:archMat;g.userData.label.visible=false;g.userData.label.quaternion.copy(camera.quaternion);});aliens.forEach((a,i)=>{a.position.y=.4+Math.sin(now*.0015+i)*.07;});
  $('speed').textContent=Math.round(r.speed*3.6);$('clock').hidden=race.roam&&!race.furball;$('clock').textContent=format(race.furball?race.furball.left:s.time);drawLives(now,dt);drawPickups(now);drawFlightHud();drawLine(now);drawRoam(now);drawCoins(now);$('gate').textContent=race.furball?`FURBALL · 🎈${race.furball.out.has(s.car)?0:race.furball.lives.get(s.car)} · ${race.rivals.filter(r=>!race.furball.out.has(r.session.car)).length} bandits`:race.roam?(openWorld?nearestLocation(s.car.pos).short:'FREE DRIVE'):`${race.rivals.length?`P${place()}/${race.rivals.length+1} · `:''}${s.laps>1?`LAP ${s.lap}/${s.laps}`:`${Math.min(s.gate+1,cps.length)}/${cps.length}`}`;if(!$('banner').dataset.callout)$('banner').hidden=!retreatActive(race);$('secret').hidden=!course.secrets.length;$('secret').textContent=openWorld?`◇ ${openWorld.progress.specimens.length}/${SPECIMENS.length} badges${expedition(openWorld.progress).complete?' ★':''}`:`◇ ${s.found}/${course.secrets.length}`;drawMap();polish?polish.render():renderer.render(scene,camera);
