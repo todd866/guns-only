@@ -1,4 +1,4 @@
-// Free-drive flight (owner, 2026-10-30): Space toggles the afterburner (owner: a toggle, not held); Enter lifts the car
+// Free-drive flight (owner, 2026-10-30): F toggles the afterburner (owner: a toggle, not held); Enter lifts the car
 // off and flies it; Enter again pops a parachute that floats it back to the ground. Never in races.
 // Controls follow the guns-only jet: ↑ push (nose down), ↓ pull, ←/→ roll, A/D rudder, W/S power.
 // This is an arcade flyer, not an aerodynamic model: the car goes where its nose points, banking
@@ -9,7 +9,7 @@ export const FLIGHT = Object.freeze({
   takeoff: 5, climbFor: .7, minSpeed: 7, maxSpeed: 18, burner: 26, startPower: .45, powerRate: .6,
   accel: 2.2, diveGain: 4, pitchRate: 1.5, rollRate: 2.4, yawRate: .7, bankTurn: 1.3, levelRoll: .9,
   chuteSink: 1.5, chuteDrag: 1.2, chuteLevel: 3, ceiling: 90, land: .32, burnerBoost: 1.8,
-  ollie: 3.2,   // the skateboard form's Space hop, m/s up (main.js)
+  ollie: 3.2, hop: 2.4,   // Space: the skateboard's ollie and the car's hop, m/s up (main.js)
   // The easy flyer (kid mode): steer banks and turns, up climbs, down descends, speed looks after
   // itself, and it holds a safe height over the ground unless you are coming down to land.
   easy: Object.freeze({ cruise: 12, bank: .45, bankRate: 4, turn: 2, climb: .35, pitchRate: 3, takeoffPitch: .3, floor: 3, lookAhead: .7 }),

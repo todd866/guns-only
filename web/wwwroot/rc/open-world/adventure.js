@@ -35,7 +35,7 @@ export function createAdventure(scene, world) {
     unlockLegend() { inventory.legend = true; save(); },
     /** While the excavator fight is on: where the camera should look (the boss), else null. */
     bossFrame: p => bossAwake && !boss.freed && roomAt(mineLocal(p)) === 'R5' ? boss.origin : null,
-    /** fight = { robot, input: { attack, lock }, mode } while on foot; null in the car. */
+    /** fight = { robot, input: { attack (Q), use (E: the item), lock }, mode } while on foot; null in the car. */
     step(pos, dt, fight = null) {
       mine.update(dt); time += dt;
       toys.sync(enemies, time, dt, () => MINE.anchor[1]);
@@ -82,7 +82,7 @@ export function createAdventure(scene, world) {
       for (const o of OPENINGS) if (o.door && !state.open.has(o.door) && near(pos, doorAt(o), DOORS[o.door].kind === 'dig' ? .75 : .55, .6)) {
         // Cracked rock: punch it with the claw to dig through; without it, a hint.
         if (DOORS[o.door].kind === 'dig') {
-          if (hasItem(inventory, 'claw') && fight?.input?.attack && digDoor(state, o.door)) { world.openGate?.(`mine:${o.door}`); mine.openDoor(o.door); events.push({ door: o.door, opened: true, dug: true }); }
+          if (hasItem(inventory, 'claw') && (fight?.input?.use || fight?.input?.attack) && digDoor(state, o.door)) { world.openGate?.(`mine:${o.door}`); mine.openDoor(o.door); events.push({ door: o.door, opened: true, dug: true }); }
           else if (!hasItem(inventory, 'claw') && lastBump !== o.door) events.push({ door: o.door, locked: 'dig' });
           lastBump = o.door; continue;
         }

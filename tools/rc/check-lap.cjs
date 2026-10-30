@@ -19,7 +19,7 @@ while(Date.now()-t0<90000){st=await page.evaluate(()=>window.__gunsOnlyRC.snapsh
  const p=pts[(node+2)%pts.length];const a=Math.atan2(p[0]-st.x,-(p[1]-st.z));const e=Math.atan2(Math.sin(a-st.yaw),Math.cos(a-st.yaw));
  const want=new Set();if(st.speed<(Math.abs(e)>.5?3:7))want.add('KeyW');if(e>.08)want.add('KeyD');if(e<-.08)want.add('KeyA');
  for(const k of held)if(!want.has(k)){await page.keyboard.up(k);held.delete(k);}for(const k of want)if(!held.has(k)){await page.keyboard.down(k);held.add(k);}
- if(process.env.FIRE&&st.item)await page.keyboard.press('KeyF');
+ if(process.env.FIRE&&st.item)await page.keyboard.press('KeyQ');
  await page.waitForTimeout(60);}
 for(const k of held)await page.keyboard.up(k);await page.screenshot({path:`${OUT}/end.png`});
 const gpu=await page.evaluate(()=>{const gl=document.createElement('canvas').getContext('webgl2'),e=gl.getExtension('WEBGL_debug_renderer_info');return e?gl.getParameter(e.UNMASKED_RENDERER_WEBGL):'?';});
