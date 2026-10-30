@@ -1,8 +1,11 @@
 import {createMine} from './mine.js';
 import {createBadToys} from './bad-toys.js';
-import {createFighter,createEnemy,stepCombat,reviveFighter} from '../physics/combat.mjs';
-import {CHESTS,PLATES,OPENINGS,MINE_BOUNDS,MINE_ENEMIES,ROOM_ENTRANCES,MINE,mineWorld,mineLocal,roomAt,createMineState} from './mine.mjs';
-import {openChest,pressPlate,tryDoor} from '../physics/dungeon.mjs';
+import {createExcavator} from './excavator.js';
+import {createGoodAlien} from './good-alien.js';
+import {createBoss,stepBoss} from '../physics/boss.mjs';
+import {createFighter,createEnemy,stepCombat,reviveFighter,roomHelp} from '../physics/combat.mjs';
+import {CHESTS,PLATES,OPENINGS,MINE_BOUNDS,MINE_ENEMIES,ROOM_ENTRANCES,MINE,BOSS_AT,mineWorld,mineLocal,roomAt,createMineState} from './mine.mjs';
+import {openChest,pressPlate,tryDoor,defeatBoss} from '../physics/dungeon.mjs';
 
 // The adventure layer in the open world (docs/design/adventure). For now: the Old Silver Mine, played
 // Zelda-style by touch: walk into a chest to open it, onto a plate to press it, and up to a locked
@@ -11,16 +14,23 @@ export function createAdventure(scene, world) {
   const mine = createMine(scene), state = createMineState(), toys = createBadToys(scene);
   const enemies = MINE_ENEMIES.map(e => Object.assign(createEnemy(e.id, mineWorld(e.at)), { room: e.room }));
   const rooms = {}; let fighter = null, time = 0;
+  // The excavator wakes when you first walk into its hall, and stays freed once beaten.
+  const boss = createBoss(mineWorld(BOSS_AT), MINE.yaw), digger = createExcavator(scene, mineWorld(BOSS_AT), MINE.yaw); let bossAwake = false;
+  const alien = createGoodAlien(scene, mineWorld([0, 0, -23.8]));
   const near = (p, at, r, dy = .5) => Math.hypot(p[0] - at[0], p[2] - at[2]) < r && Math.abs(p[1] - at[1]) < dy;
   const doorAt = o => mineWorld(o.wall === 'x' ? [o.at, 0, (o.span[0] + o.span[1]) / 2] : [(o.span[0] + o.span[1]) / 2, 0, o.at]);
   const inside = p => p[0] >= MINE_BOUNDS[0] && p[0] <= MINE_BOUNDS[2] && p[2] >= MINE_BOUNDS[1] && p[2] <= MINE_BOUNDS[3];
   let lastBump = null;
   return {
-    state, inside, fighter: () => fighter,
+    state, inside, boss, fighter: () => fighter,
+    /** While the excavator fight is on: where the camera should look (the boss), else null. */
+    bossFrame: p => bossAwake && !boss.freed && roomAt(mineLocal(p)) === 'R5' ? boss.origin : null,
     /** fight = { robot, input: { attack, lock }, mode } while on foot; null in the car. */
     step(pos, dt, fight = null) {
       mine.update(dt); time += dt;
       toys.sync(enemies, time, dt, () => MINE.anchor[1]);
+      digger.sync(boss, time, dt, MINE.anchor[1]);
+      alien.sync(time, dt, alien.freed ? (fight?.robot?.pos ?? pos) : null);
       if (!inside(pos)) return [];
       const events = [];
       if (fight?.robot) {
@@ -32,7 +42,17 @@ export function createAdventure(scene, world) {
           if (ev.knockout) { room.knockouts++; reviveFighter(fighter); const back = mineWorld(ROOM_ENTRANCES[here] ?? ROOM_ENTRANCES.R0); fight.robot.pos = [...back]; fight.robot.vel = [0, 0, 0]; }
           if (ev.drop === 'battery') fighter.batteries = Math.min(fighter.max, fighter.batteries + 1);
         }
+        if (here === 'R5' && !boss.freed) {
+          if (!bossAwake) { bossAwake = true; events.push({ boss: 'wake' }); }
+          for (const ev of stepBoss(boss, fight.robot, fighter, fight.input, roomHelp(room), dt)) {
+            events.push(ev);
+            if (ev.freed) for (const door of defeatBoss(state)) { world.openGate?.(`mine:${door}`); mine.openDoor(door); events.push({ door, opened: true }); }
+            if (ev.knockout) { room.knockouts++; reviveFighter(fighter); fight.robot.pos = [...mineWorld(ROOM_ENTRANCES.R5)]; fight.robot.vel = [0, 0, 0]; Object.assign(boss, createBoss(boss.origin, boss.yaw), { hits: boss.hits }); }
+          }
+        }
       }
+      // The rescue: walk up to the jar once the excavator is freed.
+      if (boss.freed && !alien.freed && near(pos, mineWorld([0, 0, -23.8]), .6, .6)) { alien.free(); state.rescued = true; events.push({ rescued: 'alien' }); }
       for (const [id, c] of Object.entries(CHESTS)) if (near(pos, mineWorld(c.at), .32, .35)) {
         const got = openChest(state, id); if (got) { mine.openChest(id); events.push({ chest: id, got }); }
       }
@@ -49,6 +69,6 @@ export function createAdventure(scene, world) {
       if (!OPENINGS.some(o => o.door && near(pos, doorAt(o), .7, .6))) lastBump = null;
       return events;
     },
-    dispose() { mine.dispose(); toys.dispose(); },
+    dispose() { mine.dispose(); toys.dispose(); digger.dispose(); alien.dispose(); },
   };
 }

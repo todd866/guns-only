@@ -32,7 +32,7 @@ export const OPENINGS = Object.freeze([
   { a: 'R1', b: 'R3', wall: 'z', at: -8, span: [-1, 1], door: 'A' },
   { a: 'R1', b: 'R4', wall: 'x', at: -4, span: [-5, -3], door: 'P' },
   { a: 'R3', b: 'R5', wall: 'z', at: -14, span: [-1, 1], door: 'B' },
-  { a: 'R5', b: 'R6', wall: 'z', at: -22, span: [-1.5, 1.5] },
+  { a: 'R5', b: 'R6', wall: 'z', at: -22, span: [-1.5, 1.5], door: 'C' },
 ]);
 // Solid features: [x0, x1, z0, z1, y0, y1, surface]. The entrance beam leaves a 22 cm crawl gap.
 export const FEATURES = Object.freeze([
@@ -40,7 +40,12 @@ export const FEATURES = Object.freeze([
   { name: 'east stage', box: [6, 8.5, -5.5, -2.5, 0, .35], surface: 'wood' },
   { name: 'west step', box: [-8.5, -6.5, -5.5, -2.5, 0, .3], surface: 'wood' },
   { name: 'west top', box: [-8.5, -7.5, -5.5, -2.5, .3, .62], surface: 'wood' },
+  // The boss: a toy excavator at the hall's north end, its cab step in front (physics/boss.mjs).
+  { name: 'excavator cab step', box: [-1.2, 1.2, -19.3, -18.7, 0, .3], surface: 'metal' },
+  { name: 'excavator body', box: [-1.2, 1.2, -21.2, -19.3, 0, .9], surface: 'metal' },
 ]);
+// The excavator's origin (its cab), local; it faces south, toward the big-key door.
+export const BOSS_AT = Object.freeze([0, 0, -20.5]);
 export const CHESTS = Object.freeze({
   K1: { room: 'R2', at: [7.2, .35, -4], holds: 'small' },
   BK: { room: 'R4', at: [-8, .62, -4], holds: 'big' },
@@ -57,7 +62,7 @@ export const ROOM_ENTRANCES = Object.freeze({ R0: [0, 0, 5], R1: [0, 0, -.6], R2
 export function roomAt([x, , z]) { return ROOMS.find(r => x >= r.x[0] && x <= r.x[1] && z >= r.z[0] && z <= r.z[1])?.id ?? null; }
 export const mineLocal = ([x, y, z]) => { const a = MINE.anchor, c = Math.cos(MINE.yaw), s = Math.sin(MINE.yaw), dx = x - a[0], dz = z - a[2]; return [dx * c - dz * s, y - a[1], dx * s + dz * c]; };
 
-export const DOORS = Object.freeze({ A: { kind: 'small' }, P: { kind: 'plate', plate: 'P1' }, B: { kind: 'big' } });
+export const DOORS = Object.freeze({ A: { kind: 'small' }, P: { kind: 'plate', plate: 'P1' }, B: { kind: 'big' }, C: { kind: 'boss' } });
 
 export const MINE_DUNGEON = Object.freeze({
   start: 'R0', boss: 'R5',

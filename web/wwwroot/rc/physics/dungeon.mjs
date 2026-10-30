@@ -5,6 +5,7 @@
 
 /**
  * A dungeon: { rooms: [{ id, links: [{ to, door?: doorId }] }], doors: { id: { kind: 'small'|'big'|'plate', plate? } },
+ * Doors of kind 'boss' open when defeatBoss() is called.
  * chests: { id: { room, holds: 'small'|'big'|item } }, plates: { id: { room } }, start, boss }.
  */
 export function createDungeon(def) {
@@ -50,7 +51,16 @@ export function tryDoor(d, id) {
   if (!def || d.open.has(id) || !frontier(d).includes(id)) return { ok: false, why: 'not here' };
   if (def.kind === 'small') { if (d.keys < 1) return { ok: false, why: 'locked' }; d.keys--; d.open.add(id); return { ok: true }; }
   if (def.kind === 'big') { if (!d.bigKey) return { ok: false, why: 'big key' }; d.open.add(id); return { ok: true }; }
+  if (def.kind === 'boss') return { ok: false, why: 'boss' };
   return { ok: false, why: 'a switch opens this' };
+}
+
+/** The boss is beaten: its doors open (the way on to the rescue). */
+export function defeatBoss(d) {
+  d.bossBeaten = true;
+  const opened = Object.entries(d.def.doors).filter(([id, def]) => def.kind === 'boss' && !d.open.has(id)).map(([id]) => id);
+  for (const id of opened) d.open.add(id);
+  return opened;
 }
 
 /**

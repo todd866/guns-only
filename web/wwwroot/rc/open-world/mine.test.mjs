@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld } from '../physics/world.mjs';
 import { createRobot, stepRobot } from '../physics/robot.mjs';
-import { checkDungeon, openChest, pressPlate, tryDoor, reachable } from '../physics/dungeon.mjs';
+import { checkDungeon, openChest, pressPlate, tryDoor, reachable, defeatBoss } from '../physics/dungeon.mjs';
 import { buildMine, doorTris, MINE_DUNGEON, CHESTS, PLATES, createMineState, mineWorldTris, MINE } from './mine.mjs';
 
 test('the mine is a fair Ocarina-style dungeon: one small-key door at a time, and the boss is reachable', () => {
@@ -59,4 +59,12 @@ test('in the world, gated door triangles block until the gate opens', () => {
   assert.ok(w.raycast(from, dir, 3)?.dist < 2.2, 'door A is shut');
   w.openGate('mine:A');
   const hit = w.raycast(from, dir, 3); assert.ok(!hit || hit.dist > 2.2, 'door A is open');
+});
+
+test('the alien cell stays shut until the excavator is freed', () => {
+  const r = checkDungeon(MINE_DUNGEON), d = r.d;
+  assert.ok(!reachable(d).has('R6'), 'cell shut while the boss is up');
+  assert.equal(tryDoor(d, 'C').why, 'boss');
+  assert.deepEqual(defeatBoss(d), ['C']);
+  assert.ok(reachable(d).has('R6'), 'cell open after the boss');
 });
