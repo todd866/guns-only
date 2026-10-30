@@ -116,6 +116,19 @@ you will recognise later (cracked rock, a gap, a dark room). The world also hide
 Zelda bombable wall). Free block-by-block digging is confined to **one dedicated place**, so it
 stays special and the rest of the world keeps its authored routes.
 
+## The mountain, the river and the dam (owner, 30 Oct)
+
+Not built yet: today the only water is the wave pool and the horizon mountains are a backdrop.
+- **Spirit Mountain**: climbable (Forza Horizon's mountain), switchback roads for the car, valleys
+  to fly through, the spirit cave at the summit, the Old Silver Mine on its lower slope.
+- **The river** flows out of the mountain past the base, under the train bridge; jet boats with
+  afterburner on the existing boat physics.
+- **The dam**: the river ends in a dam and a deep reservoir (Hoover Dam and Lake Mead). You can
+  **dive underwater**, and on the bottom is the **drowned town** (Lake Mead really drowned St.
+  Thomas, Nevada, which resurfaced when the water dropped).
+- **In the upside-down there is no dam**: the river runs wild down the old valley and the drowned
+  town stands on dry land as a walk-in dungeon. Same place, two ways in (ALttP's Light/Dark World).
+
 ## Dungeons: real-ish places
 
 Ocarina's rule, kept for a 6-year-old: **one locked door at a time**, so a key is never wasted.
