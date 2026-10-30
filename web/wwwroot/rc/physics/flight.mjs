@@ -9,7 +9,10 @@ export const FLIGHT = Object.freeze({
   // Owner, 31 Oct: "make it faster". Speeds roughly doubled; the world streams fine at burner.
   takeoff: 5, climbFor: .7, minSpeed: 12, maxSpeed: 32, burner: 42, startPower: .5, powerRate: .6,
   accel: 1.6, diveGain: 6, pitchRate: 1.6, rollRate: 2.8, yawRate: .7, bankTurn: 1.1, levelRoll: .9,
-  chuteSink: 1.5, chuteDrag: 1.2, chuteLevel: 3, ceiling: 140, land: .32, burnerBoost: 1.8,
+  // Owner, 31 Oct: a much faster parachute, and the car fires cold-gas retro thrusters at the last
+  // second for a soft landing (the Roadster demo). The chute brings it down at chuteSink; the
+  // retros light when the height left is what it takes to brake to `retroLand` at `retroAccel`.
+  chuteSink: 6, chuteDrag: 1.6, chuteLevel: 3, ceiling: 140, land: .32, burnerBoost: 1.8, retroAccel: 14, retroLand: .5, retroMargin: .35,
   // Kid mode flies the real controls with an Auto-GCAS, like the real F-16's: if the path ahead
   // meets the ground, it rolls the wings level and pulls up until it's safe, then hands back.
   gcas: Object.freeze({ look: [.35, .8, 1.4], floor: 4, hold: .5, roll: 4 }),
@@ -94,8 +97,14 @@ export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
     // Parachute: wings level, forward speed bleeds off, a steady gentle sink.
     const level = levelQuat(car), k = Math.min(1, FLIGHT.chuteLevel * dt);
     car.q = quatNorm(car.q.map((v, i) => v + (level[i] * Math.sign(dot4(car.q, level) || 1) - v) * k));
-    const drag = Math.exp(-FLIGHT.chuteDrag * dt);
-    car.vel = [car.vel[0] * drag, car.vel[1] + (-FLIGHT.chuteSink - car.vel[1]) * Math.min(1, 3 * dt), car.vel[2] * drag];
+    const drag = Math.exp(-FLIGHT.chuteDrag * dt), below = groundBelow(world, car.pos, 80);
+    // Retro burn: once the ground is as close as the braking distance, the thrusters take over from
+    // the chute and brake to a soft touchdown.
+    const sink = -car.vel[1], need = (sink * sink - FLIGHT.retroLand ** 2) / (2 * FLIGHT.retroAccel) + FLIGHT.retroMargin;
+    f.retro = !!below && (f.retro || below.dist < need) && sink > FLIGHT.retroLand * .9;
+    const vy = f.retro ? Math.min(-FLIGHT.retroLand, car.vel[1] + FLIGHT.retroAccel * dt) : car.vel[1] + (-FLIGHT.chuteSink - car.vel[1]) * Math.min(1, 3 * dt);
+    car.vel = [car.vel[0] * drag, vy, car.vel[2] * drag];
+    if (f.retro) f.retros = (f.retros ?? 0) + dt;
   }
   car.ang = [0, 0, 0];
   // Move, stopping at anything in the way.

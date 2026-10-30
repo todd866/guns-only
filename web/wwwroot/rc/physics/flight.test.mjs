@@ -142,3 +142,15 @@ test('without the assist a dive reaches the ground, and full power is quick now'
   const t = roam(field()); toggleFlight(t.flight, t.car); run(t, 1, { flight: { pitch: .3 } }); run(t, 4, { flight: { power: 1 } });
   assert.ok(t.flight.speed > 25, `speed ${t.flight.speed}`);
 });
+
+test('the parachute comes down fast, and the retros fire at the last moment for a soft touchdown', () => {
+  const s = roam(field());
+  toggleFlight(s.flight, s.car); run(s, 3, { flight: { pitch: .7, power: 1 } });   // up high
+  toggleFlight(s.flight, s.car); assert.equal(s.flight.mode, 'chute');
+  const y0 = s.car.pos[1]; let fired = null, last = 0, t = 0;
+  while (s.flight.mode === 'chute' && t < 30) { last = s.car.vel[1]; run(s, 1 / 120, { flight: {} }); t += 1 / 120; if (s.flight.retro && fired == null) fired = s.car.pos[1]; }
+  assert.equal(s.flight.mode, null, 'landed');
+  assert.ok(y0 / t > 3.5, `came down fast: ${(y0 / t).toFixed(1)} m/s from ${y0.toFixed(0)} m`);
+  assert.ok(fired != null && fired < 3, `retros lit low: ${fired?.toFixed(2)} m`);
+  assert.ok(last > -1, `soft touchdown: ${last.toFixed(2)} m/s`);
+});
