@@ -73,7 +73,8 @@ export function progress(s) {
   return s.finished ? s.laps * cps.length + 1 : (s.lap - 1) * cps.length + g + Math.max(0, 1 - left / seg);
 }
 
-export const retreatActive = race => race.clock >= race.retreat.at && race.clock < race.retreat.at + race.retreat.length;
+// Free drive has its own retreat game (physics/retreat.mjs); this forced stop is for races.
+export const retreatActive = race => !race.roam && race.clock >= race.retreat.at && race.clock < race.retreat.at + race.retreat.length;
 
 // 1-based place: finished cars by finish order, then everyone else by lap progress.
 export function placeOf(race, s) {

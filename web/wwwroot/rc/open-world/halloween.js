@@ -59,7 +59,9 @@ export function createHalloween(scene,world,{porches=[],heightAt=()=>0}={}){
  // Tombstones on the lawn of every third dressed yard.
  porches.forEach((p,i)=>{if(i%3)return;const l=p.lawn,yaw=p.yaw;add(new T.BoxGeometry(.5,.62,.12),'#8d9196',[l.x,l.y+.31,l.z],{yaw:yaw+(i%2?.12:-.1)});add(new T.CylinderGeometry(.25,.25,.12,12,1,false,0,Math.PI),'#8d9196',[l.x,l.y+.62,l.z],{rot:new T.Quaternion().setFromEuler(new T.Euler(Math.PI/2,0,0)).premultiply(new T.Quaternion().setFromAxisAngle(up,yaw+(i%2?.12:-.1)))});add(new T.BoxGeometry(.3,.04,.02),'#4d5156',[l.x+Math.sin(yaw)*.07,l.y+.5,l.z+Math.cos(yaw)*.07],{yaw});});
  const props=mergeGeometries(parts,false);parts.forEach(g=>g.dispose());props.computeBoundingSphere();const propsMat=keep(new T.MeshStandardMaterial({vertexColors:true,roughness:.8}));const propsMesh=new T.Mesh(keep(props),propsMat);propsMesh.castShadow=true;root.add(propsMesh);
- {const tex=keep(labelTexture('HAPPY HALLOWEEN')),mid=at(ba,br,2.6),sign=new T.Mesh(keep(new T.PlaneGeometry(bw-.3,bw/6.4)),keep(new T.MeshBasicMaterial({map:tex,side:T.DoubleSide})));sign.position.set(...mid);sign.rotation.y=faceYaw;root.add(sign);}
+ {const tex=keep(labelTexture('HAPPY HALLOWEEN')),mid=at(ba,br,2.6),sign=new T.Mesh(keep(new T.PlaneGeometry(bw-.3,bw/6.4)),keep(new T.MeshBasicMaterial({map:tex})));sign.position.set(...mid);sign.rotation.y=faceYaw;root.add(sign);
+  // The back reads the right way round too (a double-sided plane shows it mirrored).
+  const back=sign.clone();back.rotation.y=faceYaw+Math.PI;back.position.set(mid[0]-Math.sin(faceYaw)*.01,mid[1],mid[2]-Math.cos(faceYaw)*.01);root.add(back);}
 
  // Floating ghosts and circling bats over the patch.
  const ghostGeo=keep(mergeGeometries([new T.SphereGeometry(.42,14,10,0,Math.PI*2,0,Math.PI/2).translate(0,.3,0),new T.CylinderGeometry(.42,.56,.6,14,1,true)].map(g=>g.toNonIndexed()))),ghostMat=keep(new T.MeshStandardMaterial({color:'#f6f6f2',roughness:.5,transparent:true,opacity:.88,emissive:'#b8c6ff',emissiveIntensity:.25}));
