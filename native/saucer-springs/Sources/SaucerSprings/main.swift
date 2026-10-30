@@ -256,7 +256,7 @@ final class Renderer {
     frame &+= 1; accumulated += 1
   }
 
-  var moving = false, drive: (() -> Void)? = nil, driveFrames = 0
+  var moving = false, drive: (() -> Void)? = nil, driveFrames = 0, lookTarget: SIMD3<Float>? = nil, atEye: SIMD3<Float>? = nil
   func shot(to path: String, width: Int = 1280, height: Int = 720, samples: Int = 96) throws -> Double {
     let cd = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: colourFormat, width: width, height: height, mipmapped: false)
     cd.usage = [.renderTarget, .shaderRead]; cd.storageMode = .shared
@@ -265,6 +265,8 @@ final class Renderer {
     let start = eye
     for i in 0..<(samples + driveFrames) {
       if i < driveFrames { drive?() }
+      if i == driveFrames && driveFrames > 0 { accumulated = 0 }   // the still starts clean, no chase-camera history
+      if i >= driveFrames, let t = lookTarget { if let a = atEye { eye = a }; let d = simd_normalize(t - eye); yaw = atan2(d.x, -d.z); pitch = asin(d.y) }
       // --moving: strafe the camera sideways at ~6 m/s at 60 fps for the whole capture.
       if moving { let f = forward; eye = start + simd_normalize(SIMD3(-f.z, 0, f.x)) * Float(i) * 0.1; moved = true }
       let cb = queue.makeCommandBuffer()!; encode(into: cb, output: colour); cb.commit(); cb.waitUntilCompleted()
@@ -344,7 +346,23 @@ final class View: MTKView {
 }
 
 let args = CommandLine.arguments
+// Default: the game, i.e. the same web build that ships to the website, in a native window.
+// --metal (or --shot) runs the Metal ray-traced renderer on an exported world instead.
+if !args.contains("--metal") && !args.contains("--shot") {   // (--snapshot is a game-mode QA capture)
+  let web = args.firstIndex(of: "--web").map { URL(fileURLWithPath: args[$0 + 1]) } ?? Bundle.main.resourceURL!.appendingPathComponent("web")
+  guard FileManager.default.fileExists(atPath: web.appendingPathComponent("rc/index.html").path) else { print("no game build at \(web.path) (make-app.sh packages it)"); exit(2) }
+  if let i = args.firstIndex(of: "--snapshot") {
+    snapshotGame(root: web, to: args[i + 1], wait: args.firstIndex(of: "--wait").flatMap { Double(args[$0 + 1]) } ?? 15, clickStart: args.contains("--click-start"))
+  }
+  let app = NSApplication.shared
+  app.setActivationPolicy(.regular); installMenu()
+  let game = GameWindow(root: web)
+  app.activate(ignoringOtherApps: true)
+  withExtendedLifetime(game) { app.run() }
+  exit(0)
+}
 let worldPath = args.count >= 2 && !args[1].hasPrefix("--") ? args[1] : Bundle.main.path(forResource: "world", ofType: "rcworld")
+// (Metal mode from here on.)
 guard let worldPath else { print("usage: SaucerSprings <world.rcworld> [--shot out.png] [--at x,y,z,yaw,pitch]"); exit(2) }
 let device = MTLCreateSystemDefaultDevice()!
 guard device.supportsRaytracing else { print("this GPU has no Metal ray tracing"); exit(1) }
@@ -361,7 +379,7 @@ if car != nil, FileManager.default.fileExists(atPath: base + ".col"), !args.cont
 print(String(format: "%@: %d vertices, %d triangles, load+BVH %.2f s", device.name, world.vertexCount, world.indexCount / 3, CACurrentMediaTime() - t0))
 if let i = args.firstIndex(of: "--at"), i + 1 < args.count {
   let v = args[i + 1].split(separator: ",").compactMap { Float($0) }
-  if v.count >= 3 { renderer.eye = SIMD3(v[0], v[1], v[2]) }; if v.count >= 4 { renderer.yaw = v[3] }; if v.count >= 5 { renderer.pitch = v[4] }
+  if v.count >= 3 { renderer.eye = SIMD3(v[0], v[1], v[2]); renderer.atEye = renderer.eye }; if v.count >= 4 { renderer.yaw = v[3] }; if v.count >= 5 { renderer.pitch = v[4] }
 }
 if let i = args.firstIndex(of: "--shot"), i + 1 < args.count {
   let samples = args.firstIndex(of: "--samples").flatMap { Int(args[$0 + 1]) } ?? 96
@@ -370,12 +388,17 @@ if let i = args.firstIndex(of: "--shot"), i + 1 < args.count {
   if let d = args.firstIndex(of: "--drive").flatMap({ Float(args[$0 + 1]) }), let driver {
     renderer.drive = { driver.update(keys: [13], dt: 1 / 60) }; renderer.driveFrames = Int(d * 60)
   }
-  let ms = try renderer.shot(to: args[i + 1], samples: samples)
+  let size = args.firstIndex(of: "--size").map { args[$0 + 1].split(separator: "x").compactMap { Int($0) } } ?? [1280, 720]
+  // --look x,y,z: aim the --at camera at a point (for framing stills such as the app icon).
+  if let l = args.firstIndex(of: "--look").map({ args[$0 + 1].split(separator: ",").compactMap { Float($0) } }), l.count == 3 {
+    renderer.lookTarget = SIMD3(l[0], l[1], l[2])
+  }
+  let ms = try renderer.shot(to: args[i + 1], width: size[0], height: size[1], samples: samples)
   print(String(format: "frame GPU %.2f ms", ms)); exit(0)
 }
 
 let app = NSApplication.shared
-app.setActivationPolicy(.regular)
+app.setActivationPolicy(.regular); installMenu()
 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
 window.title = "Saucer Springs"
 let view = View(frame: window.contentLayoutRect, device: device)

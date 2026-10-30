@@ -4,15 +4,18 @@
 set -e
 here=${0:A:h}; world=${1:-$HOME/.local/state/rc-native/neighbourhood.rcworld}
 cd $here && swift build -c release
-app="$HOME/Applications/Saucer Springs.app"; stage=$(mktemp -d)/Saucer\ Springs.app
+app="/Applications/Saucer Springs.app"; stage=$(mktemp -d)/Saucer\ Springs.app
 mkdir -p "$stage/Contents/MacOS" "$stage/Contents/Resources"
 cp .build/release/SaucerSprings "$stage/Contents/MacOS/"
 cp Sources/SaucerSprings/Shaders.metal Sources/SaucerSprings/rcsim.js "$stage/Contents/Resources/"
+# The game: the same packaged web build the website ships (tools/rc/package-rc.mjs), so the app and
+# guns-only.com/rc never drift apart.
+web=$(mktemp -d)/web; (cd $here/../.. && node tools/rc/package-rc.mjs --out "$web" >/dev/null) && cp -R "$web" "$stage/Contents/Resources/web"
 cp "$world" "$stage/Contents/Resources/world.rcworld"
 [ -d "${world%.rcworld}.tex" ] && cp -R "${world%.rcworld}.tex" "$stage/Contents/Resources/world.tex"
 for ext in car col; do [ -f "${world%.rcworld}.$ext" ] && cp "${world%.rcworld}.$ext" "$stage/Contents/Resources/world.$ext"; done
 iconset=$(mktemp -d)/AppIcon.iconset; mkdir -p $iconset
-python3 icon/make-icon.py $iconset/icon_512x512@2x.png
+cp icon/icon-1024.png $iconset/icon_512x512@2x.png   # from a real render: icon/make-icon.py icon/hero.png icon/icon-1024.png
 for s in 16 32 128 256 512; do sips -z $s $s $iconset/icon_512x512@2x.png --out $iconset/icon_${s}x${s}.png >/dev/null; sips -z $((s*2)) $((s*2)) $iconset/icon_512x512@2x.png --out $iconset/icon_${s}x${s}@2x.png >/dev/null; done
 iconutil -c icns $iconset -o "$stage/Contents/Resources/AppIcon.icns"
 cat > "$stage/Contents/Info.plist" <<PLIST
@@ -28,5 +31,5 @@ cat > "$stage/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 codesign --force --deep --sign - "$stage" >/dev/null 2>&1 || true
-mkdir -p "$HOME/Applications"; [ -d "$app" ] && trash "$app"; mv "$stage" "$app"
+[ -d "$app" ] && trash "$app"; mv "$stage" "$app"
 touch "$app"; echo "installed $app"
