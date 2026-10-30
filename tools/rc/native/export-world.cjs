@@ -38,7 +38,9 @@ const {chromium}=require('../../../web/smoke/node_modules/playwright');const pat
      // three.js samples with flipY (v up); the PNG rows run top-down.
      U.push(u,mat.map?.flipY===false?v:1-v);M.push(mi);}
     if(idx)for(let i=0;i<idx.count;i++)I.push(v0+idx.getX(i));else for(let i=0;i<pos.count;i++)I.push(v0+i);};
-   scene.traverseVisible(o=>{if(!o.isMesh||o.isSkinnedMesh)return;const mat=Array.isArray(o.material)?o.material[0]:o.material;
+   // The player's car moves: it is exported on its own (car-local), never baked into the world.
+   const carRoot=window.__gunsOnlyRC.carObject(),inCar=o=>{for(let q=o;q;q=q.parent)if(q===carRoot)return true;return false;};
+   scene.traverseVisible(o=>{if(!o.isMesh||o.isSkinnedMesh||inCar(o))return;const mat=Array.isArray(o.material)?o.material[0]:o.material;
     if(!mat||mat.isShaderMaterial||mat.isRawShaderMaterial||(mat.transparent&&mat.opacity<.5&&!mat.map)){skipped++;return;}
     if(o.isInstancedMesh){for(let k=0;k<o.count;k++){o.getMatrixAt(k,Mx);if(Mx.elements[0]===0&&Mx.elements[5]===0)continue;add(o.geometry,mat,Mx.premultiply(o.matrixWorld).clone());}}
     else add(o.geometry,mat,o.matrixWorld);});
@@ -56,6 +58,15 @@ const {chromium}=require('../../../web/smoke/node_modules/playwright');const pat
   const texDir=out.replace(/\.rcworld$/,'')+'.tex';fs.mkdirSync(texDir,{recursive:true});
   for(let i=0;i<info.textures;i++){const url=await p.evaluate(i=>window.__rcTextures[i],i);fs.writeFileSync(path.join(texDir,String(i).padStart(3,'0')+'.png'),Buffer.from(url.split(',')[1],'base64'));}
   console.log(JSON.stringify({...info,file:fs.statSync(out).size,errs}));
+  // The car (<out>.car, RCW2) in car-local space with plain colours (material 0 = untextured).
+  const car=await p.evaluate(()=>{const car=window.__gunsOnlyRC.carObject();car.updateMatrixWorld(true);const inv=car.matrixWorld.clone().invert(),P=[],N=[],C=[],I=[];
+   car.traverseVisible(o=>{if(!o.isMesh)return;const mat=Array.isArray(o.material)?o.material[0]:o.material;if(!mat||mat.isShaderMaterial||(mat.transparent&&mat.opacity<.5))return;const g=o.geometry,pos=g.attributes.position,nor=g.attributes.normal,col=g.attributes.color,m=inv.clone().multiply(o.matrixWorld),nm=m.clone().invert().transpose(),e=m.elements,ne=nm.elements,base=mat.color?[mat.color.r,mat.color.g,mat.color.b]:[1,1,1],v0=P.length/3;
+    for(let i=0;i<pos.count;i++){const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);P.push(e[0]*x+e[4]*y+e[8]*z+e[12],e[1]*x+e[5]*y+e[9]*z+e[13],e[2]*x+e[6]*y+e[10]*z+e[14]);if(nor){const a=nor.getX(i),b=nor.getY(i),c=nor.getZ(i);let nx=ne[0]*a+ne[4]*b+ne[8]*c,ny=ne[1]*a+ne[5]*b+ne[9]*c,nz=ne[2]*a+ne[6]*b+ne[10]*c;const l=Math.hypot(nx,ny,nz)||1;N.push(nx/l,ny/l,nz/l);}else N.push(0,1,0);const vc=col?[col.getX(i),col.getY(i),col.getZ(i)]:[1,1,1];C.push(...[0,1,2].map(k=>Math.min(255,Math.round(base[k]*vc[k]*255))),255);}
+    if(g.index)for(let i=0;i<g.index.count;i++)I.push(v0+g.index.getX(i));else for(let i=0;i<pos.count;i++)I.push(v0+i);});
+   return {P,N,C,I};});
+  {const nv=car.P.length/3,h=Buffer.from(JSON.stringify({vertices:nv,indices:car.I.length,spawn:[0,0,0],yaw:0,materials:[{tex:-1,alpha:false}],textures:0})),pad=(4-(8+h.length)%4)%4,hb=Buffer.alloc(4),mBytes=nv*2+((4-(nv*2)%4)%4);hb.writeUInt32LE(h.length+pad);
+   fs.writeFileSync(out.replace(/\.rcworld$/,'')+'.car',Buffer.concat([Buffer.from('RCW2'),hb,h,Buffer.alloc(pad),Buffer.from(new Float32Array(car.P).buffer),Buffer.from(new Float32Array(car.N).buffer),Buffer.from(new Uint8Array(car.C).buffer),Buffer.alloc(nv*8),Buffer.alloc(mBytes),Buffer.from(new Uint32Array(car.I).buffer)]));
+   console.log(JSON.stringify({carTriangles:car.I.length/3}));}
   // Collision (<out>.col): the physics world's own triangles within the radius, surfaces resolved,
   // so the native build steps the same car physics on the same ground. 'RCC1', u32 headerBytes,
   // JSON {tris, surfaces, flatGround}, pad to 4, f32 9 per triangle, u8 surface index per triangle.

@@ -25,11 +25,11 @@ struct VOut { float4 pos [[position]]; float3 world; float3 normal; float3 colou
 
 vertex VOut worldVertex(uint vid [[vertex_id]], const device packed_float3 *P [[buffer(0)]], const device packed_float3 *N [[buffer(1)]],
                         const device uchar4 *C [[buffer(2)]], const device float2 *UV [[buffer(3)]], const device ushort *M [[buffer(4)]],
-                        constant Uniforms &u [[buffer(5)]]) {
-  VOut o; float3 p = float3(P[vid]);
+                        constant Uniforms &u [[buffer(5)]], constant float4x4 &model [[buffer(6)]]) {
+  VOut o; float3 p = (model * float4(float3(P[vid]), 1)).xyz;
   o.pos = u.viewProj * float4(p, 1);
   o.pos.xy += u.jitter * o.pos.w;   // sub-pixel jitter for accumulated anti-aliasing
-  o.world = p; o.normal = float3(N[vid]); o.colour = float3(C[vid].rgb) / 255.0; o.uv = UV[vid]; o.material = M[vid]; return o;
+  o.world = p; o.normal = (model * float4(float3(N[vid]), 0)).xyz; o.colour = float3(C[vid].rgb) / 255.0; o.uv = UV[vid]; o.material = M[vid]; return o;
 }
 
 static float h2(float2 q) { return fract(sin(dot(q, float2(127.1, 311.7))) * 43758.5453); }
@@ -61,10 +61,12 @@ static float3 aces(float3 x) { return saturate((x * (2.51 * x + 0.03)) / (x * (2
 
 static float hash(uint2 p, uint f) { uint h = p.x * 1973u + p.y * 9277u + f * 26699u + 7u; h = (h ^ (h >> 13)) * 0x5bd1e995u; h ^= h >> 15; return float(h & 0xffffffu) / 16777216.0; }
 
+// Instance 0 is the world, instance 1 the player's car (moved every frame).
 struct Scene {
-  primitive_acceleration_structure accel;
+  instance_acceleration_structure accel;
   const device uint *indices; const device uint *cutout; const device uchar4 *colours; const device float2 *uvs; const device ushort *mats;
   constant Material *materials; texture2d_array<half> tex; sampler smp;
+  const device packed_float3 *carP; const device uint *carI; const device uchar4 *carC;
 };
 
 // Geometry 0 holds the opaque triangles, geometry 1 the alpha-tested leaf cards.
@@ -81,7 +83,7 @@ static float4 surfaceAlbedo(const thread Scene &s, uint geom, uint prim, float2 
 
 // Any-hit visibility that respects alpha-tested foliage (leaf cards cast leaf-shaped shadows).
 static bool occluded(const thread Scene &s, float3 o, float3 d, float tmax) {
-  intersection_query<triangle_data> q; intersection_params p; p.accept_any_intersection(true);
+  intersection_query<instancing, triangle_data> q; intersection_params p; p.accept_any_intersection(true);
   q.reset(ray(o, d, 0.003, tmax), s.accel, p);
   while (q.next())   // only leaf cards come back as candidates
     if (surfaceAlbedo(s, 1, q.get_candidate_primitive_id(), q.get_candidate_triangle_barycentric_coord()).a > .5) q.commit_triangle_intersection();
@@ -90,16 +92,24 @@ static bool occluded(const thread Scene &s, float3 o, float3 d, float tmax) {
 
 struct Hit { bool hit; float3 pos; float3 normal; float4 albedo; };
 static Hit closest(const thread Scene &s, const device packed_float3 *P, float3 o, float3 d, float tmax) {
-  intersection_query<triangle_data> q; intersection_params p;
+  intersection_query<instancing, triangle_data> q; intersection_params p;
   q.reset(ray(o, d, 0.003, tmax), s.accel, p);
   while (q.next())
     if (surfaceAlbedo(s, 1, q.get_candidate_primitive_id(), q.get_candidate_triangle_barycentric_coord()).a > .5) q.commit_triangle_intersection();
   Hit h; h.hit = q.get_committed_intersection_type() != intersection_type::none;
   if (h.hit) {
     uint prim = q.get_committed_primitive_id(), geom = q.get_committed_geometry_id(); float2 bary = q.get_committed_triangle_barycentric_coord();
-    const device uint *t = tri(s, geom, prim); float3 a = float3(P[t[0]]), b = float3(P[t[1]]), c = float3(P[t[2]]);
-    h.pos = o + d * q.get_committed_distance(); h.normal = normalize(cross(b - a, c - a)); if (dot(h.normal, d) > 0) h.normal = -h.normal;
-    h.albedo = surfaceAlbedo(s, geom, prim, bary);
+    h.pos = o + d * q.get_committed_distance();
+    if (q.get_committed_instance_id() == 1) {   // the car: its own buffers, normal through its transform
+      const device uint *t = s.carI + prim * 3; float3 a = float3(s.carP[t[0]]), b = float3(s.carP[t[1]]), c = float3(s.carP[t[2]]);
+      float4x3 m = q.get_committed_object_to_world_transform();
+      h.normal = normalize(float3x3(m[0], m[1], m[2]) * cross(b - a, c - a));
+      h.albedo = float4(float3(s.carC[t[0]].rgb) / 255.0, 1);
+    } else {
+      const device uint *t = tri(s, geom, prim); float3 a = float3(P[t[0]]), b = float3(P[t[1]]), c = float3(P[t[2]]);
+      h.normal = normalize(cross(b - a, c - a)); h.albedo = surfaceAlbedo(s, geom, prim, bary);
+    }
+    if (dot(h.normal, d) > 0) h.normal = -h.normal;
   }
   return h;
 }
@@ -115,11 +125,12 @@ static float3 sunCone(float3 sun, float r1, float r2) {   // ~0.6° disc: soft s
 }
 
 [[early_fragment_tests]] fragment float4 worldFragment(VOut in [[stage_in]], constant Uniforms &u [[buffer(0)]],
-                              primitive_acceleration_structure accel [[buffer(1)]],
+                              instance_acceleration_structure accel [[buffer(1)]],
                               const device packed_float3 *P [[buffer(2)]], const device uint *I [[buffer(3)]], const device uchar4 *C [[buffer(4)]],
                               const device float2 *UV [[buffer(5)]], const device ushort *M [[buffer(6)]], constant Material *materials [[buffer(7)]],
-                              const device uint *cutout [[buffer(8)]], texture2d_array<half> tex [[texture(0)]], sampler smp [[sampler(0)]]) {
-  Scene s { accel, I, cutout, C, UV, M, materials, tex, smp };
+                              const device uint *cutout [[buffer(8)]], const device packed_float3 *carP [[buffer(9)]], const device uint *carI [[buffer(10)]],
+                              const device uchar4 *carC [[buffer(11)]], texture2d_array<half> tex [[texture(0)]], sampler smp [[sampler(0)]]) {
+  Scene s { accel, I, cutout, C, UV, M, materials, tex, smp, carP, carI, carC };
   // Depth == leaves one shading per visible pixel. Cut-out texels are cut here too: a decal overlay
   // (graffiti) sits on the same plane as its wall, so its empty texels would otherwise paint over it.
   Material m = materials[in.material];

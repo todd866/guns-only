@@ -6,6 +6,6 @@ let package = Package(
   name: "SaucerSprings",
   platforms: [.macOS(.v15)],
   targets: [
-    .executableTarget(name: "SaucerSprings", resources: [.copy("Shaders.metal")]),
+    .executableTarget(name: "SaucerSprings", resources: [.copy("Shaders.metal"), .copy("rcsim.js")]),
   ]
 )
