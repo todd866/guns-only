@@ -5,6 +5,19 @@ Time (N64)**. Everything else is flavour on that structure: Toy Story, Stranger 
 small-town uncanny, the desert south-west, and an original fantasy spirit world. The player is the
 owner's 6-year-old. The research sources are in `research-zelda.md` and `research-setting.md`.
 
+## The rule above all: it should feel infinite (owner, 30 Oct)
+
+"If you're a six year old, you're not gonna quickly explore everything. If anything it'll take
+years. But it should feel like there's an infinity of things to do in this world."
+
+- Never show the edges: no completion %, no checklists. The map shows only what you've found.
+- Something small within ~30 s of driving anywhere: pumpkins, rails, ramps, cells, talking toys.
+- Visible long before reachable: the mountain, the high rail, the door in the dam.
+- The world changes, so old places are new: seasons, day/night, weather, the upside-down.
+- Layers on the same ground: each form and item reveals a different game in the same streets.
+- Rumours, not quest markers. Ten minutes of pottering about is a whole session.
+- Measure it: distinct places and time between discoveries per session (telemetry).
+
 ## The story in one breath
 
 The Air Force has captured some aliens and is holding them in a hangar on Nellis. They are the
