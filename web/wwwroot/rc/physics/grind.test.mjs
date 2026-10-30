@@ -103,3 +103,19 @@ test('the final combo can land into a manual after the run clock expires', () =>
   assert.ok(!r.sk.over && r.s.skateRide.manual, 'clock waits for the manual');
   r.drive(.8, { throttle: 1 }); assert.ok(r.sk.over && r.sk.score > 1000);
 });
+
+test('free-skate curbs (airCapture) only catch from the air: rolling along one never grinds, an ollie onto it does', async () => {
+  const { streetPark } = await import('./skate.mjs');
+  const world = createWorld(4); world.addQuad([-50, 0, -50], [-50, 0, 50], [50, 0, 50], [50, 0, -50], 'concrete');
+  const park = streetPark([{ id: 'curb', kind: 'ledge', pts: [[0, 0, .03], [0, -30, .03]] }]);
+  const s = createSession({ world, checkpoints: [[0, 0], [0, -40]], secrets: [], start: { pos: [0, .5, -.1], yaw: 0 } }, { mode: 'kid' }); s.roam = true;
+  setSkateRails(s, park, worldPoint);
+  placeCar(s.car, [0, rideHeight(s.car.params) + .02, -1], 0);
+  let grinds = 0; for (let i = 0; i < 120; i++) { stepSession(s, { throttle: 1 }, dt); if (s.skateRide.active) grinds++; }
+  assert.equal(grinds, 0, 'rolling along the curb');
+  placeCar(s.car, [.1, .5, -8], 0); s.car.vel = [0, -1, -4]; s.car.speed = 4; s.car.forwardSpeed = 4;
+  for (let i = 0; i < 40 && !s.skateRide.active; i++) stepSession(s, { throttle: 1 }, dt);
+  assert.ok(s.skateRide.active, 'ollied onto it');
+  stepSession(s, { throttle: 1, hop: true }, dt);
+  assert.equal(s.skateRide.active, null, 'Space (hop) pops off');
+});

@@ -145,7 +145,9 @@ function landAir(sk, a, at, up) {
 
 // Free skate on the board anywhere in the world: the same combos, manuals and special meter,
 // with no clock, letters, gaps or goals. Frame: world [x, y, z] -> [x, z, y].
-export const STREET = Object.freeze({ id: 'street', name: 'STREET', rails: [], gaps: [], letters: [], goals: [], tape: null });
+export const STREET = Object.freeze({ id: 'street', name: 'STREET', rails: [], gaps: [], letters: [], goals: [], tape: null, airCapture: true });
+/** The street park with a fresh set of grindable rails (open-world/street-rails.mjs). */
+export const streetPark = rails => Object.freeze({ ...STREET, rails });
 export const streetFrame = p => [p[0], p[2], p[1]];
 export function createStreetSkate() { const sk = createSkate(STREET); sk.left = Infinity; sk.free = true; return sk; }
 

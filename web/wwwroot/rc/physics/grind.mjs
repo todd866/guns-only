@@ -16,12 +16,17 @@ export function stepBalance(b, steer, dt, mode = 'kid') {
 
 const installed = new WeakMap();
 export function installRailCollisions(world, park, toWorld) {
-  let parks = installed.get(world); if (!parks) installed.set(world, parks = new Set());
-  if (parks.has(park)) return; parks.add(park);
+  let done = installed.get(world); if (!done) installed.set(world, done = new Set());
   // The existing drawn handrail tubes had no collision. Give their tops a narrow riding cap.
-  for (const r of park.rails ?? []) if (r.kind === 'rail' || r.kind === 'coping') for (let i = 1; i < r.pts.length; i++) {
+  // Keyed per rail, so free skate (which borrows every park's rails) and the park's own run
+  // never cap the same tube twice.
+  for (const r of park.rails ?? []) {
+    const key = r.key ?? `${park.id}:${r.id}`;
+    if (done.has(key)) continue; done.add(key);
+    if (r.kind === 'rail' || r.kind === 'coping') for (let i = 1; i < r.pts.length; i++) {
     const a = toWorld(r.pts[i - 1]), b = toWorld(r.pts[i]), d = norm(sub(b, a)), side = scale(norm([d[2], 0, -d[0]]), .035);
     world.addQuad(sub(a, side), sub(b, side), add(b, side), add(a, side), 'concrete');
+    }
   }
 }
 
@@ -83,6 +88,8 @@ function leave(s, reason, hop) {
 function capture(s, raw) {
   const state = s.skateRide, c = s.car;
   if (state.cooldown > 0 || raw.brake || c.speed < .7 || carUp(c)[1] < .65) return;
+  // Free skate's curbs line every road: there you ollie onto a grind, as THPS2's grind button.
+  if (state.park.airCapture && c.contacts > 0) return;
   const forward = horizontal(carForward(c)), travel = horizontal(c.vel); let best = null;
   for (const r of state.rails) for (const seg of r.segments) {
     const d = sub(seg.b, seg.a), h2 = d[0] ** 2 + d[2] ** 2;
