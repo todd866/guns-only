@@ -12,7 +12,7 @@ export const FLIGHT = Object.freeze({
   ollie: 3.2,   // the skateboard form's Space hop, m/s up (main.js)
   // The easy flyer (kid mode): steer banks and turns, up climbs, down descends, speed looks after
   // itself, and it holds a safe height over the ground unless you are coming down to land.
-  easy: Object.freeze({ cruise: 12, bank: .6, bankRate: 4, turn: 1.5, climb: .35, pitchRate: 3, takeoffPitch: .3, floor: 3, lookAhead: .7 }),
+  easy: Object.freeze({ cruise: 12, bank: .45, bankRate: 4, turn: 2, climb: .35, pitchRate: 3, takeoffPitch: .3, floor: 3, lookAhead: .7 }),
 });
 
 export function createFlight() { return { mode: null, speed: 0, power: FLIGHT.startPower, climb: 0, flights: 0, chutes: 0 }; }

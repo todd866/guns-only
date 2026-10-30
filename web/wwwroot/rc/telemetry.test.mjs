@@ -142,3 +142,12 @@ test("garage changes and Halloween pumpkin smashes are recorded, sprees thinned 
   const totals = of("pumpkin").map((r) => r.total);
   assert.equal(totals.length, 31); assert.deepEqual(totals.slice(-3), [29, 30, 40]);
 });
+
+test("form switches and flight mode changes are recorded with a coarse position", async () => {
+  const rows = []; const t = createRCTelemetry({ storage: { getItem: () => null }, locationObject: { hostname: "guns-only.com", search: "" }, outbox: noIdbOutbox(), fetchImpl: async (_url, options) => { rows.push(...JSON.parse(options.body).rows); return { status: 200, ok: true }; } });
+  t.form("board"); t.flight({ mode: "fly", from: "ground", easy: true, at: [2483, 40, -1712] }); t.flight({ mode: "land", from: "chute", easy: true, at: [2500, 3, -1700] });
+  t.endSession(); await t.flush({ force: true });
+  assert.equal(rows.find((row) => row.code === "form").form, "board");
+  const f = rows.filter((row) => row.code === "flight");
+  assert.deepEqual(f.map((row) => [row.mode, row.from, row.easy, row.x, row.z]), [["fly", "ground", true, 2480, -1710], ["land", "chute", true, 2500, -1700]]);
+});
