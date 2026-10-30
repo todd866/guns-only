@@ -1,5 +1,5 @@
 import * as T from '../../vendor/three.module.js';
-import {mountainHeight,MOUNTAIN_BOUNDS,ROAD,MOUNTAIN,LAKE,damTris,damSpan,townTris,valleyPoint,TOWN,DAM_PARAPET} from './spirit-mountain.mjs';
+import {mountainHeight,MOUNTAIN_BOUNDS,ROAD,MOUNTAIN,LAKE,damTris,damSpan,townTris,valleyPoint,TOWN,DAM_PARAPET,STREAM,SPRING} from './spirit-mountain.mjs';
 import {SIZE} from './stream.mjs';
 import {createWaterSurface} from './water-surface.js';
 import {WATER} from '../physics/water.mjs';
@@ -81,12 +81,37 @@ export function createMountainView(scene) {
   const xs = corners.map(p => p[0]), zs = corners.map(p => p[2]), w = Math.max(...xs) - Math.min(...xs), d = Math.max(...zs) - Math.min(...zs);
   const lake = createWaterSurface({ size: [w, d], segments: [Math.round(w / 3), Math.round(d / 3)], position: [(Math.max(...xs) + Math.min(...xs)) / 2, LAKE.level, (Math.max(...zs) + Math.min(...zs)) / 2], swell: LAKE.swell, shallow: '#2a8fa0', deep: '#0b3f5c' });
   lake.mesh.name = 'SpiritReservoir'; root.add(lake.mesh);
+  // The spring and waterfall: white water streaming down a ribbon (a scrolling streak texture),
+  // a rock arch over the cave it rises from, and spray where it hits the reservoir.
+  const streaks = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 256; const x = c.getContext('2d'); x.fillStyle = '#9fd3e6'; x.fillRect(0, 0, 64, 256);
+    for (let i = 0; i < 90; i++) { x.fillStyle = `rgba(255,255,255,${.25 + Math.random() * .6})`; x.fillRect(Math.random() * 64, Math.random() * 256, 1 + Math.random() * 3, 12 + Math.random() * 40); }
+    const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.colorSpace = T.SRGBColorSpace; return t; })();
+  const streamMat = new T.MeshStandardMaterial({ map: streaks, transparent: true, opacity: .88, roughness: .25, side: T.DoubleSide, depthWrite: false });
+  { const v = [], uv = [], idx = []; let run = 0;
+    STREAM.forEach((p, i) => { const q = STREAM[Math.min(STREAM.length - 1, i + 1)], o = STREAM[Math.max(0, i - 1)], da = q.along - o.along, dc = q.across - o.across, n = Math.hypot(da, dc) || 1;
+      const L = valleyPoint(p.along - dc / n * p.width / 2, p.across + da / n * p.width / 2, p.y), R = valleyPoint(p.along + dc / n * p.width / 2, p.across - da / n * p.width / 2, p.y);
+      if (i) { const prev = STREAM[i - 1]; run += Math.hypot(p.along - prev.along, p.y - prev.y); }
+      v.push(...L, ...R); uv.push(0, run / 8, 1, run / 8); if (i) { const k = (i - 1) * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); } });
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(v, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+    const m = new T.Mesh(g, streamMat); m.name = 'SpringStream'; root.add(m); }
+  const rockMat = new T.MeshStandardMaterial({ color: '#7d6650', roughness: .95 }), darkMat = new T.MeshBasicMaterial({ color: '#0d0a08' });
+  { const head = STREAM[0], at = valleyPoint(head.along - 3, head.across, head.y - .3), back = valleyPoint(head.along - 4, head.across, 0), front = valleyPoint(head.along + 4, head.across, 0);
+    const cave = new T.Group(); cave.name = 'SpringCave'; cave.position.set(...at); cave.rotation.y = Math.atan2(front[0] - back[0], front[2] - back[2]); root.add(cave);
+    const arch = new T.Mesh(new T.TorusGeometry(4.2, 1.6, 10, 18, Math.PI), rockMat); arch.castShadow = true; cave.add(arch);
+    const mouth = new T.Mesh(new T.CircleGeometry(3.6, 24, 0, Math.PI), darkMat); mouth.position.z = -.6; cave.add(mouth);
+    for (const [x, y, s] of [[-5.5, .5, 2.2], [5.6, .2, 2.6], [-4, 4.8, 1.8], [3.5, 5.2, 2]]) { const r = new T.Mesh(new T.DodecahedronGeometry(s), rockMat); r.position.set(x, y, -1); r.castShadow = true; cave.add(r); } }
+  const sprayMat = new T.MeshStandardMaterial({ color: '#ffffff', emissive: '#dff4ff', emissiveIntensity: .45, transparent: true, opacity: .35, roughness: 1, depthWrite: false }), spray = [];
+  // Each puff gets its own material so it fades on its own.
+  { const foot = STREAM.at(-1); for (let i = 0; i < 14; i++) { const m = new T.Mesh(new T.SphereGeometry(1, 8, 6), sprayMat.clone()); m.position.set(...valleyPoint(foot.along + (i % 4) - 1, foot.across + ((i * 7) % 9 - 4) * .9, foot.y)); m.userData.phase = i * .9; root.add(m); spray.push(m); } }
+  let streamTime = 0;
   return {
     /** The upside-down has no dam: the water drains and the drowned town stands in the open. */
     setDam(on) { LAKE.active = on; dam.visible = on; lake.mesh.visible = on; },
     /** The streamed tile at key now has (or no longer has) detailed ground. */
     tileLoaded(key, on) { const m = chunks.get(key); if (m) m.visible = !on; },
-    update(day) { farMat.color.setScalar(.15 + .85 * day); lake.update(WATER.time); },
-    dispose() { root.removeFromParent(); root.traverse(o => o.geometry?.dispose()); [farMat, roadMat, lineMat, damMat, townMat, crestMat, parMat, holeMat, trimMat].forEach(m => m.dispose()); lake.dispose(); },
+    update(day) { farMat.color.setScalar(.15 + .85 * day); lake.update(WATER.time);
+      streamTime += 1 / 60; streaks.offset.y = -streamTime * 1.6;
+      for (const m of spray) { const t = (streamTime * .8 + m.userData.phase) % 1; m.scale.setScalar(.4 + t * 1.4); m.position.y = LAKE.level + t * 2.2; m.material.opacity = .35 * (1 - t); } },
+    dispose() { root.removeFromParent(); root.traverse(o => o.geometry?.dispose()); [farMat, roadMat, lineMat, damMat, townMat, crestMat, parMat, holeMat, trimMat, streamMat, rockMat, darkMat, sprayMat].forEach(m => m.dispose()); lake.dispose(); spray.forEach(m => m.material.dispose()); streaks.dispose(); },
   };
 }

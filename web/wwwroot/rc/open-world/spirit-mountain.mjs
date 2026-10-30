@@ -190,3 +190,18 @@ function orientedBox([a0, a1, c0, c1, h], y0 = M.lake.floor - .5) {
     const ctr = [0, 1, 2].map(i => (a[i] + b[i] + c[i]) / 3 - mid[i]); return n[0] * ctr[0] + n[1] * ctr[1] + n[2] * ctr[2] >= 0 ? [a, b, c] : [a, c, b]; });
 }
 export const townTris = () => TOWN.flatMap(b => orientedBox(b));
+
+// The spring and its waterfall: a stream rises from a cave mouth high in the east valley, tumbles
+// down the valley floor and drops over the cliff above the reservoir. Visual (spirit-mountain.js);
+// points { along, across, y, width } in the valley frame, the last two being the fall's lip and foot.
+export const SPRING = Object.freeze({ along: 318, lip: 466, foot: 474 });
+export const STREAM = (() => {
+  const pts = [];
+  for (let a = SPRING.along; a <= SPRING.lip; a += 4) {
+    const c = Math.sin(a / 23) * 5 + Math.sin(a / 9) * 1.5, p = valleyPoint(a, c);
+    pts.push({ along: a, across: c, y: mountainHeight(p[0], p[2]) + .08, width: 3 + (a - SPRING.along) / (SPRING.lip - SPRING.along) * 3 });
+  }
+  const last = pts.at(-1);
+  pts.push({ along: SPRING.foot, across: last.across, y: M.lake.level, width: last.width + 1.5 });
+  return Object.freeze(pts);
+})();
