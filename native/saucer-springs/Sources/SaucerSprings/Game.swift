@@ -39,6 +39,8 @@ final class GameWindow: NSObject, WKUIDelegate {
     config.setURLSchemeHandler(files, forURLScheme: "rcgame")
     config.mediaTypesRequiringUserActionForPlayback = []
     config.preferences.isElementFullscreenEnabled = true
+    // Off-screen QA must run at full rate: WebKit otherwise throttles a hidden window's frames to nothing.
+    if offscreen { config.preferences.inactiveSchedulingPolicy = .none }
     let frame = NSRect(x: 0, y: 0, width: 1440, height: 900)
     web = WKWebView(frame: frame, configuration: config)
     web.isInspectable = true
@@ -71,6 +73,8 @@ func installMenu() {
 
 // --snapshot out.png [--wait seconds] [--click-start]: run the game off-screen and save what it shows.
 func snapshotGame(root: URL, to path: String, wait: Double, clickStart: Bool) {
+  // A hidden QA window is a background app to macOS: keep App Nap from throttling it.
+  let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "frame-rate QA"); _ = awake
   let app = NSApplication.shared; app.setActivationPolicy(.prohibited)
   let game = GameWindow(root: root, offscreen: true)
   DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
@@ -94,6 +98,8 @@ func snapshotGame(root: URL, to path: String, wait: Double, clickStart: Bool) {
 // at a real window size, drives it with tools/rc/native/drive-script.js, and reports the game's own
 // frame times (p50/p95 over its last 600 frames) and the pixels it renders.
 func perfGame(root: URL, out: String, size: NSSize, seconds: Double, drive: String) {
+  // A hidden QA window is a background app to macOS: keep App Nap from throttling it.
+  let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "frame-rate QA"); _ = awake
   let app = NSApplication.shared; app.setActivationPolicy(.prohibited)
   let game = GameWindow(root: root, offscreen: true)
   game.window.setContentSize(size)
@@ -104,7 +110,7 @@ func perfGame(root: URL, out: String, size: NSSize, seconds: Double, drive: Stri
           DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             game.web.evaluateJavaScript(drive) { _, _ in
               DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-                let js = "JSON.stringify({frames: window.__gunsOnlyRC.frames(), dpr: devicePixelRatio, css: [innerWidth, innerHeight], pixels: Math.round(innerWidth * innerHeight * Math.min(devicePixelRatio, 1.75) ** 2), load: null})"
+                let js = "JSON.stringify({profile: window.__gunsOnlyRC.profile?.(), frames: window.__gunsOnlyRC.frames(), dpr: devicePixelRatio, css: [innerWidth, innerHeight], pixels: Math.round(innerWidth * innerHeight * Math.min(devicePixelRatio, 1.75) ** 2), load: null})"
                 game.web.evaluateJavaScript(js) { r, _ in
                   let text = (r as? String) ?? "{}"; try? text.write(toFile: out, atomically: true, encoding: .utf8); print(text); exit(0)
                 }

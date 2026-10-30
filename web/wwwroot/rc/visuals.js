@@ -228,5 +228,5 @@ export async function setupPolish({ renderer, scene, camera, indoor, world = fal
   composer.addPass(new UnrealBloomPass(new T.Vector2(w, h), indoor ? .22 : .10, .35, indoor ? .92 : 1.6));
   composer.addPass(new OutputPass());
   composer.addPass(new SMAAPass(w * renderer.getPixelRatio(), h * renderer.getPixelRatio()));
-  return { render: () => composer.render(), resize: (W, H) => { composer.setSize(W, H); ao?.setSize(W / 2, H / 2); } };
+  return { render: () => composer.render(), resize: (W, H) => { composer.setSize(W, H); ao?.setSize(W / 2, H / 2); }, setPixelRatio: r => composer.setPixelRatio(r) };
 }
