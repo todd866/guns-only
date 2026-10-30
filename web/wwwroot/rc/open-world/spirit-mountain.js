@@ -10,7 +10,25 @@ import {WATER} from '../physics/water.mjs';
 //   that tile's detailed ground is loaded, so the two never fight.
 // - The road: a smooth ribbon just above the carved shelf, with a dashed centre line, so its edges
 //   are clean instead of following the 4 m ground triangles.
-export function createMountainView(scene) {
+/** The whole map's ground, far off: one 64 m mesh of the playable terrain (no mountain, which has
+ *  its own far view), unfogged and hazed like the horizon ranges, sunk 3 m so the detailed tiles
+ *  always cover it up close. It is what you see below you from the summit. */
+export function createFarGround(scene, elevation, bounds) {
+  const STEP = 64, nx = Math.ceil((bounds[2] - bounds[0]) / STEP) + 1, nz = Math.ceil((bounds[3] - bounds[1]) / STEP) + 1;
+  const pos = new Float32Array(nx * nz * 3), col = new Float32Array(nx * nz * 3), idx = [], c = new T.Color(), sand = new T.Color('#c4ab84'), haze = new T.Color('#9fb7c6');
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const x = bounds[0] + i * STEP, z = bounds[1] + j * STEP, k = j * nx + i, y = elevation(x, z) - mountainHeight(x, z);
+    pos.set([x, y - 3, z], k * 3); c.copy(sand).multiplyScalar(.9 + .1 * Math.sin(x / 310) * Math.sin(z / 270)).lerp(haze, .25); col.set([c.r, c.g, c.b], k * 3);
+  }
+  for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) { const a = j * nx + i; idx.push(a, a + nx, a + 1, a + 1, a + nx, a + nx + 1); }
+  const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('color', new T.BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+  const mat = new T.MeshLambertMaterial({ vertexColors: true, fog: false }), mesh = new T.Mesh(g, mat); mesh.name = 'FarGround'; scene.add(mesh);
+  return { update(day) { mat.color.setScalar(.15 + .85 * day); }, dispose() { mesh.removeFromParent(); g.dispose(); mat.dispose(); } };
+}
+
+/** ground(x, z): the full ground height (the playable terrain plus the mountain), which the road
+ *  ribbon must follow: near the foot the mountain sits on up to 9 m of the desert's own relief. */
+export function createMountainView(scene, ground = mountainHeight) {
   const root = new T.Group(); root.name = 'SpiritMountain'; scene.add(root);
   const base = new T.Color('#b69b78'), rock = new T.Color('#9a7f62'), haze = new T.Color('#8faec4'), c = new T.Color();
   const farMat = new T.MeshLambertMaterial({ vertexColors: true, fog: false }), chunks = new Map(), STEP = 16;
@@ -31,7 +49,8 @@ export function createMountainView(scene) {
   const roadMat = new T.MeshStandardMaterial({ color: '#3e4448', roughness: .9 }), lineMat = new T.MeshStandardMaterial({ color: '#e8d27a', roughness: .6 });
   const ribbon = (half, y, keep) => { const v = [], idx = [];
     for (let i = 0; i < ROAD.length; i++) { const a = ROAD[Math.max(0, i - 1)], b = ROAD[Math.min(ROAD.length - 1, i + 1)], len = Math.hypot(b.x - a.x, b.z - a.z) || 1, nx = -(b.z - a.z) / len * half, nz = (b.x - a.x) / len * half, p = ROAD[i];
-      v.push(p.x + nx, p.y + y, p.z + nz, p.x - nx, p.y + y, p.z - nz);
+      const base = ground(p.x, p.z) - mountainHeight(p.x, p.z) + p.y;   // the road's own height plus the desert under it
+      v.push(p.x + nx, base + y, p.z + nz, p.x - nx, base + y, p.z - nz);
       if (i && keep(i)) { const k = (i - 1) * 2; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); } }
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(v, 3)); g.setIndex(idx); g.computeVertexNormals(); return g; };
   const road = new T.Mesh(ribbon(MOUNTAIN.roadHalf, .03, () => true), roadMat); road.receiveShadow = true; road.name = 'MountainRoad'; root.add(road);

@@ -71,7 +71,9 @@ let track='hub',district=null,districtError=null,openWorld=null;let adventure=nu
 let underState=null;function underwater(){const b=bodyAt(camera.position.x,camera.position.z),under=!!b&&camera.position.y<waterHeight(b,camera.position.x,camera.position.z)-.05;
  // The sky rewrites the fog's colour every frame (before this), so the tint is re-applied while under.
  if(under){underState??={near:scene.fog.near,far:scene.fog.far,bg:scene.background,water:new T.Color('#1e5964')};scene.fog.color.copy(underState.water);scene.fog.near=.5;scene.fog.far=26;scene.background=underState.water;}
- else if(underState){scene.fog.near=underState.near;scene.fog.far=underState.far;scene.background=underState.bg;underState=null;}}
+ else if(underState){scene.fog.near=underState.near;scene.fog.far=underState.far;scene.background=underState.bg;underState=null;}
+ // Up high (Spirit Mountain, flying) the haze recedes, so the summit looks out over the world.
+ if(!under&&openWorld){const h=Math.max(0,camera.position.y);scene.fog.near=280+h*4;scene.fog.far=680+h*12;}}
 try{openWorld=await loadOpenWorld(location.search);}catch(error){
  const brief=document.getElementById('brief');
  brief.hidden=false;brief.dataset.loadFailed='true';brief.replaceChildren();
