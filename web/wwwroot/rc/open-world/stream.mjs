@@ -17,6 +17,9 @@ export function createStream({manifest,fetchTile,onLoad=()=>{},onDrop=()=>{},cac
  function candidates(a,b){const out=[];for(let x=Math.floor(Math.min(a[0],b[0])/SIZE);x<=Math.floor(Math.max(a[0],b[0])/SIZE);x++)for(let z=Math.floor(Math.min(a[2],b[2])/SIZE);z<=Math.floor(Math.max(a[2],b[2])/SIZE);z++){const tile=loaded.get(`${x},${z}`);if(tile)out.push(tile);}return out;}
  if(residentialTerrain?.triangles)for(const [a,b,c] of residentialTerrain.triangles())authored.addTri(a,b,c,'grass');
  const world={addTri:authored.addTri,addQuad:authored.addQuad,
+  // Every collision triangle currently loaded, '__terrain' resolved to its surface (native export).
+  triangles(){const out=[...authored.tris];for(const t of loaded.values())for(const tri of t.collision?.tris??[])out.push(tri.surface==='__terrain'?{...tri,surface:ground((tri.a[0]+tri.b[0]+tri.c[0])/3,(tri.a[2]+tri.b[2]+tri.c[2])/3)}:tri);return out;},
+  flatGround:!elevation,
   raycast(origin,dir,maxDist){let best=authored.raycast(origin,dir,maxDist);const end=origin.map((v,i)=>v+dir[i]*maxDist);for(const t of candidates(origin,end)){const hit=t.collision.raycast(origin,dir,maxDist);if(hit&&(!best||hit.dist<best.dist)){if(hit.surface==='__terrain')hit.surface=ground(hit.point[0],hit.point[2]);best=hit;}}
     if(!elevation&&dir[1]<-1e-10){const dist=-origin[1]/dir[1];if(dist>=0&&dist<=maxDist){const p=origin.map((v,i)=>v+dir[i]*dist);if(!inResidentialTerrain(p[0],p[2])&&!inTerrainHole(p[0],p[2])&&(!best||dist<best.dist))best={point:p,normal:[0,1,0],dist,surface:ground(p[0],p[2])};}}return best;},
   sphereContacts(c,r,out=[]){authored.sphereContacts(c,r,out);const seen=new Set();for(const t of candidates([c[0]-r,c[1],c[2]-r],[c[0]+r,c[1],c[2]+r]))for(const p of t.collision.sphereContacts(c,r)){if(p.surface==='__terrain')p.surface=ground(p.point[0],p.point[2]);const key=[...p.point,...p.normal].map(v=>v.toFixed(5)).join(',');if(!seen.has(key)){out.push(p);seen.add(key);}}

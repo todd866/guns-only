@@ -56,4 +56,16 @@ const {chromium}=require('../../../web/smoke/node_modules/playwright');const pat
   const texDir=out.replace(/\.rcworld$/,'')+'.tex';fs.mkdirSync(texDir,{recursive:true});
   for(let i=0;i<info.textures;i++){const url=await p.evaluate(i=>window.__rcTextures[i],i);fs.writeFileSync(path.join(texDir,String(i).padStart(3,'0')+'.png'),Buffer.from(url.split(',')[1],'base64'));}
   console.log(JSON.stringify({...info,file:fs.statSync(out).size,errs}));
+  // Collision (<out>.col): the physics world's own triangles within the radius, surfaces resolved,
+  // so the native build steps the same car physics on the same ground. 'RCC1', u32 headerBytes,
+  // JSON {tris, surfaces, flatGround}, pad to 4, f32 9 per triangle, u8 surface index per triangle.
+  const col=await p.evaluate(radius=>{const w=window.__gunsOnlyRC.collision(),s=window.__gunsOnlyRC.snapshot(),names=[],idx=new Map(),keep=[];
+   for(const t of w.triangles()){const cx=(t.a[0]+t.b[0]+t.c[0])/3,cz=(t.a[2]+t.b[2]+t.c[2])/3;if(Math.hypot(cx-s.x,cz-s.z)>radius)continue;if(!idx.has(t.surface)){idx.set(t.surface,names.length);names.push(t.surface);}keep.push(t);}
+   const head=new TextEncoder().encode(JSON.stringify({tris:keep.length,surfaces:names,flatGround:!!w.flatGround})),pad=(4-(8+head.length)%4)%4,n=keep.length;
+   const buf=new Uint8Array(8+head.length+pad+n*36+n),dv=new DataView(buf.buffer);buf.set([82,67,67,49]);dv.setUint32(4,head.length+pad,true);buf.set(head,8);
+   const f=new Float32Array(n*9);keep.forEach((t,i)=>f.set([...t.a,...t.b,...t.c],i*9));let o=8+head.length+pad;buf.set(new Uint8Array(f.buffer),o);o+=n*36;keep.forEach((t,i)=>buf[o+i]=idx.get(t.surface));
+   window.__rcExport=buf;return {bytes:buf.length,tris:n,surfaces:names};},radius);
+  const cfd=fs.openSync(out.replace(/\.rcworld$/,'')+'.col','w');
+  for(let at=0;at<col.bytes;at+=CH){const b64=await p.evaluate(([a,n])=>{const s=window.__rcExport.subarray(a,a+n);let bin='';for(let i=0;i<s.length;i+=32768)bin+=String.fromCharCode.apply(null,s.subarray(i,i+32768));return btoa(bin);},[at,CH]);fs.writeSync(cfd,Buffer.from(b64,'base64'));}
+  fs.closeSync(cfd);console.log(JSON.stringify({collision:col.tris,surfaces:col.surfaces}));
  }finally{await b?.close();srv.close();}})().catch(e=>{console.error(e);process.exitCode=1});

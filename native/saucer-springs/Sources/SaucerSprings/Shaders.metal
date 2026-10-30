@@ -11,11 +11,13 @@ using namespace raytracing;
 
 struct Uniforms {
   float4x4 viewProj;
+  float4x4 invViewProj;   // current, with this frame's jitter (matches the depth it reconstructs)
+  float4x4 prevViewProj;  // last frame's, for reprojection
   float4 eye;        // xyz camera position, w = time
   float4 sun;        // xyz direction toward the sun, w = sun strength
   float4 fog;        // x = start, y = end
   uint2 size; uint frame; uint accumulated;
-  float2 jitter; float2 pad;
+  float2 jitter; float historyCap; float pad;
 };
 struct Material { int tex; int alpha; };
 
@@ -112,20 +114,21 @@ static float3 sunCone(float3 sun, float r1, float r2) {   // ~0.6° disc: soft s
   return normalize(sun + t * cos(a) * r + b * sin(a) * r);
 }
 
-fragment float4 worldFragment(VOut in [[stage_in]], constant Uniforms &u [[buffer(0)]],
+[[early_fragment_tests]] fragment float4 worldFragment(VOut in [[stage_in]], constant Uniforms &u [[buffer(0)]],
                               primitive_acceleration_structure accel [[buffer(1)]],
                               const device packed_float3 *P [[buffer(2)]], const device uint *I [[buffer(3)]], const device uchar4 *C [[buffer(4)]],
                               const device float2 *UV [[buffer(5)]], const device ushort *M [[buffer(6)]], constant Material *materials [[buffer(7)]],
                               const device uint *cutout [[buffer(8)]], texture2d_array<half> tex [[texture(0)]], sampler smp [[sampler(0)]]) {
   Scene s { accel, I, cutout, C, UV, M, materials, tex, smp };
-  // The depth pre-pass already cut the leaf cards; with depth == only the visible surface shades.
+  // Depth == leaves one shading per visible pixel. Cut-out texels are cut here too: a decal overlay
+  // (graffiti) sits on the same plane as its wall, so its empty texels would otherwise paint over it.
   Material m = materials[in.material];
   float3 albedo = in.colour;
-  if (m.tex >= 0) albedo *= float3(tex.sample(smp, in.uv, m.tex).rgb);
+  if (m.tex >= 0) { half4 t = tex.sample(smp, in.uv, m.tex); if (m.alpha && t.a < .5) discard_fragment(); albedo *= float3(t.rgb); }
   float3 v = normalize(u.eye.xyz - in.world), n = normalize(in.normal); if (dot(n, v) < 0) n = -n;
   float3 o = in.world + n * 0.008, sunDir = normalize(u.sun.xyz);
   uint2 px = uint2(in.pos.xy); uint f = u.frame;
-  float3 sunL = float3(1.0, .90, .76) * u.sun.w;
+  float3 sunL = float3(1.0, .86, .68) * u.sun.w;   // late-afternoon warmth
 
   // Direct sun, soft-shadowed.
   float3 sd = sunCone(sunDir, hash(px, f * 5 + 1), hash(px.yx, f * 5 + 2));
@@ -169,17 +172,44 @@ fragment float4 skyFragment(SkyOut in [[stage_in]], constant Uniforms &u [[buffe
 }
 
 // Accumulate the HDR frame into a running mean, then tone-map to the display.
-kernel void accumulate(texture2d<float, access::read> frame [[texture(0)]], texture2d<float, access::read_write> accum [[texture(1)]],
+// Temporal accumulation with reprojection. Each pixel finds where its surface was last frame and
+// blends with that history; a 3x3 neighbourhood clamp rejects history that no longer fits (things
+// that moved into view), so a moving camera stays clean without smearing. A still camera keeps
+// accumulating toward a converged, anti-aliased image.
+kernel void accumulate(texture2d<float, access::read> frame [[texture(0)]], texture2d<float, access::sample> history [[texture(1)]],
+                       texture2d<float, access::write> out [[texture(2)]], depth2d<float, access::read> depth [[texture(3)]],
                        constant Uniforms &u [[buffer(0)]], uint2 gid [[thread_position_in_grid]]) {
-  if (gid.x >= accum.get_width() || gid.y >= accum.get_height()) return;
-  float4 c = frame.read(gid); float k = 1.0 / float(u.accumulated + 1);
-  accum.write(u.accumulated == 0 ? c : mix(accum.read(gid), c, k), gid);
+  uint w = out.get_width(), h = out.get_height(); if (gid.x >= w || gid.y >= h) return;
+  float4 c = frame.read(gid);
+  if (u.accumulated == 0) { out.write(float4(c.rgb, 1), gid); return; }
+  float d = depth.read(gid);
+  float2 uv = (float2(gid) + .5) / float2(w, h), ndc = float2(uv.x * 2 - 1, 1 - uv.y * 2);
+  float2 prevUV = uv;
+  // A still camera reads its own pixel: no resampling, so stills converge without any blur.
+  if (d < 1 && u.historyCap < 64) {
+    float4 wp = u.invViewProj * float4(ndc, d, 1); wp /= wp.w;
+    float4 pc = u.prevViewProj * wp; pc /= pc.w; prevUV = float2(pc.x * .5 + .5, .5 - pc.y * .5);
+  }
+  if (any(prevUV < 0) || any(prevUV > 1)) { out.write(float4(c.rgb, 1), gid); return; }
+  constexpr sampler s(filter::linear, address::clamp_to_edge);
+  float4 hist = history.sample(s, prevUV);
+  float3 lo = c.rgb, hi = c.rgb, m1 = 0, m2 = 0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    float3 n = frame.read(uint2(clamp(int2(gid) + int2(x, y), int2(0), int2(w - 1, h - 1)))).rgb; m1 += n; m2 += n * n; lo = min(lo, n); hi = max(hi, n);
+  }
+  // While moving, clamp history to the neighbourhood's spread (variance box, widened for noise).
+  if (u.historyCap < 64) { float3 mean = m1 / 9, sd = sqrt(max(0.0, m2 / 9 - mean * mean)); hist.rgb = clamp(hist.rgb, min(lo, mean - sd * 1.5), max(hi, mean + sd * 1.5)); }
+  float n = min(hist.a + 1, u.historyCap);
+  out.write(float4(mix(hist.rgb, c.rgb, 1.0 / n), n), gid);
 }
 struct PostOut { float4 pos [[position]]; float2 uv; };
 vertex PostOut postVertex(uint vid [[vertex_id]]) { float2 p = float2((vid << 1) & 2, vid & 2); PostOut o; o.pos = float4(p * 2 - 1, 0, 1); o.uv = float2(p.x, 1 - p.y); return o; }
-fragment float4 postFragment(PostOut in [[stage_in]], texture2d<float> accum [[texture(0)]]) {
-  constexpr sampler s(filter::linear);
-  float3 c = accum.sample(s, in.uv).rgb * 0.5;
+fragment float4 postFragment(PostOut in [[stage_in]], texture2d<float> accum [[texture(0)]], texture2d<float> bloom [[texture(1)]]) {
+  constexpr sampler s(filter::linear), m(filter::linear, mip_filter::linear);
+  // Bloom from the blurred mip chain: only what is brighter than paper white spills over.
+  float3 glow = 0; float wsum = 0;
+  for (int k = 2; k <= 6; k++) { float w = 1.0 / float(k); glow += max(0.0, bloom.sample(m, in.uv, level(float(k))).rgb - 1.6) * w; wsum += w; }
+  float3 c = (accum.sample(s, in.uv).rgb + glow / wsum * .35) * 0.5;
   c = aces(c);
   // Gentle grade: lift saturation a touch and vignette the corners.
   // ACES on each channel skews saturated oranges toward yellow; restore the hue with the

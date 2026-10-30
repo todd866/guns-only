@@ -11,6 +11,8 @@ import simd
 
 struct Uniforms {
   var viewProj: simd_float4x4
+  var invViewProj: simd_float4x4
+  var prevViewProj: simd_float4x4
   var eye: SIMD4<Float>
   var sun: SIMD4<Float>
   var fog: SIMD4<Float>
@@ -18,7 +20,8 @@ struct Uniforms {
   var frame: UInt32
   var accumulated: UInt32
   var jitter: SIMD2<Float>
-  var pad: SIMD2<Float> = .zero
+  var historyCap: Float
+  var pad: Float = 0
 }
 struct Material { var tex: Int32; var alpha: Int32 }
 
@@ -91,7 +94,7 @@ final class Renderer {
   let materials: MTLBuffer, fallbackTexture: MTLTexture
   var accel: MTLAccelerationStructure!
   var eye: SIMD3<Float>, yaw: Float, pitch: Float = -0.08, frame: UInt32 = 0, accumulated: UInt32 = 0
-  var hdr: MTLTexture?, accum: MTLTexture?, depth: MTLTexture?
+  var hdr: MTLTexture?, accum: [MTLTexture] = [], bloom: MTLTexture?, depth: MTLTexture?, prevVP: simd_float4x4? = nil, moved = true
   let colourFormat: MTLPixelFormat = .bgra8Unorm_srgb
 
   init(device: MTLDevice, world: World) throws {
@@ -145,12 +148,16 @@ final class Renderer {
   }
 
   var forward: SIMD3<Float> { SIMD3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch)) }
-  func resetAccumulation() { accumulated = 0 }
+  // Camera motion keeps history (reprojected); only a jump or resize starts over.
+  func resetAccumulation() { moved = true }
 
   func targets(_ w: Int, _ h: Int) {
     if hdr?.width == w && hdr?.height == h { return }
     func tex(_ f: MTLPixelFormat, _ usage: MTLTextureUsage) -> MTLTexture { let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: f, width: w, height: h, mipmapped: false); d.usage = usage; d.storageMode = .private; return device.makeTexture(descriptor: d)! }
-    hdr = tex(.rgba16Float, [.renderTarget, .shaderRead]); accum = tex(.rgba32Float, [.shaderRead, .shaderWrite]); depth = tex(.depth32Float, .renderTarget); accumulated = 0
+    hdr = tex(.rgba16Float, [.renderTarget, .shaderRead]); accum = [tex(.rgba16Float, [.shaderRead, .shaderWrite]), tex(.rgba16Float, [.shaderRead, .shaderWrite])]
+    depth = tex(.depth32Float, [.renderTarget, .shaderRead]); accumulated = 0
+    let bd = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: w, height: h, mipmapped: true); bd.usage = .shaderRead; bd.storageMode = .private
+    bloom = device.makeTexture(descriptor: bd)
   }
 
   // Halton(2,3) sub-pixel offsets for anti-aliasing under accumulation.
@@ -161,12 +168,15 @@ final class Renderer {
     let proj = perspective(fovy: 60 * .pi / 180, aspect: Float(w) / Float(h), near: 0.05, far: 2000)
     let vp = proj * lookAt(eye: eye, forward: forward)
     let j = SIMD2((halton(accumulated + 1, 2) - 0.5) * 2 / Float(w), (halton(accumulated + 1, 3) - 0.5) * 2 / Float(h))
-    var u = Uniforms(viewProj: vp, eye: SIMD4(eye, 0), sun: SIMD4(world.sun, 3.2), fog: SIMD4(300, 1100, 0, 0),
-                     size: SIMD2(UInt32(w), UInt32(h)), frame: frame, accumulated: accumulated, jitter: j)
+    // The rasteriser draws with sub-pixel jitter, so reconstruct positions with the jittered inverse.
+    var jm = matrix_identity_float4x4; jm.columns.3 = SIMD4(j.x, j.y, 0, 1)
+    var u = Uniforms(viewProj: vp, invViewProj: (jm * vp).inverse, prevViewProj: prevVP ?? vp, eye: SIMD4(eye, 0), sun: SIMD4(world.sun, 3.2), fog: SIMD4(300, 1100, 0, 0),
+                     size: SIMD2(UInt32(w), UInt32(h)), frame: frame, accumulated: accumulated, jitter: j, historyCap: moved ? 10 : 4096)
+    prevVP = vp; moved = false
     var inv = vp.inverse
     let rp = MTLRenderPassDescriptor()
     rp.colorAttachments[0].texture = hdr; rp.colorAttachments[0].loadAction = .clear; rp.colorAttachments[0].storeAction = .store
-    rp.depthAttachment.texture = depth; rp.depthAttachment.loadAction = .clear; rp.depthAttachment.clearDepth = 1; rp.depthAttachment.storeAction = .dontCare
+    rp.depthAttachment.texture = depth; rp.depthAttachment.loadAction = .clear; rp.depthAttachment.clearDepth = 1; rp.depthAttachment.storeAction = .store
     let enc = cb.makeRenderCommandEncoder(descriptor: rp)!
     enc.setRenderPipelineState(skyPipeline)
     enc.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
@@ -188,20 +198,29 @@ final class Renderer {
     enc.drawIndexedPrimitives(type: .triangle, indexCount: world.indexCount, indexType: .uint32, indexBuffer: world.indices, indexBufferOffset: 0)
     enc.endEncoding()
     let ce = cb.makeComputeCommandEncoder()!
-    ce.setComputePipelineState(accumulate); ce.setTexture(hdr, index: 0); ce.setTexture(accum, index: 1); ce.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
+    let current = accum[Int(frame % 2)], previous = accum[Int((frame + 1) % 2)]
+    ce.setComputePipelineState(accumulate); ce.setTexture(hdr, index: 0); ce.setTexture(previous, index: 1); ce.setTexture(current, index: 2); ce.setTexture(depth, index: 3)
+    ce.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
     ce.dispatchThreads(MTLSize(width: w, height: h, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1)); ce.endEncoding()
+    let bl = cb.makeBlitCommandEncoder()!
+    bl.copy(from: current, sourceSlice: 0, sourceLevel: 0, to: bloom!, destinationSlice: 0, destinationLevel: 0, sliceCount: 1, levelCount: 1)
+    bl.generateMipmaps(for: bloom!); bl.endEncoding()
     let pp = MTLRenderPassDescriptor(); pp.colorAttachments[0].texture = output; pp.colorAttachments[0].loadAction = .dontCare; pp.colorAttachments[0].storeAction = .store
     let pe = cb.makeRenderCommandEncoder(descriptor: pp)!
-    pe.setRenderPipelineState(postPipeline); pe.setFragmentTexture(accum, index: 0); pe.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3); pe.endEncoding()
+    pe.setRenderPipelineState(postPipeline); pe.setFragmentTexture(current, index: 0); pe.setFragmentTexture(bloom, index: 1); pe.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3); pe.endEncoding()
     frame &+= 1; accumulated += 1
   }
 
+  var moving = false
   func shot(to path: String, width: Int = 1280, height: Int = 720, samples: Int = 96) throws -> Double {
     let cd = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: colourFormat, width: width, height: height, mipmapped: false)
     cd.usage = [.renderTarget, .shaderRead]; cd.storageMode = .shared
     let colour = device.makeTexture(descriptor: cd)!
     var gpu: Double = 0
+    let start = eye
     for i in 0..<samples {
+      // --moving: strafe the camera sideways at ~6 m/s at 60 fps for the whole capture.
+      if moving { let f = forward; eye = start + simd_normalize(SIMD3(-f.z, 0, f.x)) * Float(i) * 0.1; moved = true }
       let cb = queue.makeCommandBuffer()!; encode(into: cb, output: colour); cb.commit(); cb.waitUntilCompleted()
       if let e = cb.error { throw e }
       if i == 1 { gpu = (cb.gpuEndTime - cb.gpuStartTime) * 1000 }
@@ -253,6 +272,7 @@ if let i = args.firstIndex(of: "--at"), i + 1 < args.count {
 }
 if let i = args.firstIndex(of: "--shot"), i + 1 < args.count {
   let samples = args.firstIndex(of: "--samples").flatMap { Int(args[$0 + 1]) } ?? 96
+  renderer.moving = args.contains("--moving")
   let ms = try renderer.shot(to: args[i + 1], samples: samples)
   print(String(format: "frame GPU %.2f ms", ms)); exit(0)
 }
