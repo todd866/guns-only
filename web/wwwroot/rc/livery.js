@@ -27,6 +27,13 @@ vec4 livery(vec3 p){
     float eye = step(length(vec2(abs(p.x) - 0.45, (p.z + 0.45) * 1.4)), 0.09) * step(0.0, p.y);
     vec3 c = mix(vec3(0.55, 0.06, 0.1), vec3(0.97), (1.0 - teeth));
     return eye > 0.5 ? vec4(0.05, 0.05, 0.06, 1.0) : vec4(c, mouth); }
+  if (uPattern == 7) { float zig = (abs(fract(p.z * 2.2) - 0.5) * 4.0 - 1.0) * 0.16 - 0.08;   // a bolt along each flank
+    return vec4(mix(uTrim, vec3(1.0), 0.15), step(abs(p.y - zig), 0.075)); }
+  if (uPattern == 8) { float s = sin(p.z * 17.0 + livNoise(p.xy * 3.0) * 3.0 + abs(p.x) * 5.0);   // jagged stripes across
+    return vec4(uTrim, step(0.55, s) * step(-0.7, p.y)); }
+  if (uPattern == 9) { vec2 q = p.xz * vec2(4.0, 6.0) + vec2(p.y * 2.0, 0.0), cell = floor(q), l = fract(q) - 0.5;   // scattered five-point stars
+    float r = length(l), a = atan(l.y, l.x), k = 0.17 + 0.09 * cos(5.0 * a + livHash(cell) * 6.28);
+    return vec4(uTrim, step(r, k) * step(0.45, livHash(cell + 7.0))); }
   return vec4(uTrim, 0.0);
 }`;
 

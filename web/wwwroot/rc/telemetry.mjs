@@ -159,14 +159,17 @@ export function createRCTelemetry({
   function visit(place) { if (!place || place === lastPlace) return; lastPlace = place; record("visit", { place: short(place) }); }
   function activityStart(game) { record("activity_start", { game: short(game, 16) }); }
   function activityEnd({ game, score, total } = {}) { record("activity_end", { game: short(game, 16), score: finite(score), total: finite(total) }); }
-  function mapOpen() { record("map_open", {}); }
-  function recover(how) { record("recover", { how: ["key", "button", "auto"].includes(how) ? how : "unknown" }); }
-  function heartbeat({ doing, place, metres, recoveries } = {}) { record("heartbeat", { doing: short(doing, 16), place: place ? short(place) : null, metres: Math.round(finite(metres, 0)), recoveries: finite(recoveries, 0) }); }
+  // Where, coarsely: the car's world x and z rounded to 10 m (anonymous; enough to find the spot a
+  // player got stuck or lost, nothing finer). Optional on map_open, recover and heartbeat.
+  const where = at => Array.isArray(at) && Number.isFinite(at[0]) && Number.isFinite(at[2]) ? { x: Math.round(at[0] / 10) * 10, z: Math.round(at[2] / 10) * 10 } : {};
+  function mapOpen(at) { record("map_open", { ...where(at) }); }
+  function recover(how, at) { record("recover", { how: ["key", "button", "auto"].includes(how) ? how : "unknown", ...where(at) }); }
+  function heartbeat({ doing, place, metres, recoveries, at } = {}) { record("heartbeat", { doing: short(doing, 16), place: place ? short(place) : null, metres: Math.round(finite(metres, 0)), recoveries: finite(recoveries, 0), ...where(at) }); }
   function itemUse(item) { if (ITEMS.has(item)) record("item_use", { item }); }
   // Halloween pumpkins: every smash up to 30, then every tenth, so a smashing spree stays small.
   function pumpkin(total) { const n = Math.round(finite(total, 0)); if (n > 0 && (n <= 30 || n % 10 === 0)) record("pumpkin", { total: n }); }
   function garage({ body, shell, paint, pattern } = {}) { record("garage", { body: short(body, 16), shell: short(shell, 16), paint: short(paint, 24), pattern: short(pattern, 16) }); }
-  function playmate({ dest, result } = {}) { record("playmate", { dest: short(dest, 24), result: short(result, 12) }); }
+  function playmate({ dest, result, closed } = {}) { record("playmate", { dest: short(dest, 24), result: short(result, 12), ...(Number.isFinite(closed) ? { closed: Math.round(closed) } : {}) }); }
   function mute(value) { record("mute", { muted: Boolean(value) }); }
   function observeFrame(deltaMs, activeFrame = true) {
     const eligible = activeFrame && previousActiveFrame;

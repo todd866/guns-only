@@ -6,6 +6,9 @@ import { readout } from './session.mjs';
 
 export const PLAYMATE = Object.freeze({
   firstAfter: [35, 60], gap: [70, 120], range: [220, 650], behind: 14, arrive: 14, timeout: 180,
+  // Telemetry 2026-10-30: two of three invites were ignored and hung about for minutes. A rival
+  // whose challenge isn't taken up (the player gets no closer for this long) gives up early.
+  ignored: 45,
   top: { kid: 10.5, bigKid: 12.5 }, ease: 40, easeTo: .72, look: 3.2,
 });
 
@@ -77,10 +80,15 @@ export function stepPlaymates(state, { player, rivals, mode = 'kid', world, time
     const rivalIn = Math.hypot(rpos[0] - dest[0], rpos[2] - dest[2]) < PLAYMATE.arrive;
     // Ease off when far ahead of the player on the road, so the race stays a race.
     const f = a.rival.follow, gap = pathLeft(a.playerPath, 0, pos) - pathLeft(f.path, f.i, rpos);
+    // Progress toward the finish, as the crow flies (the player's own path is measured from its start).
+    const left = Math.hypot(pos[0] - dest[0], pos[2] - dest[2]);
     f.ease = gap > PLAYMATE.ease ? PLAYMATE.easeTo : 1;
-    if (playerIn || rivalIn || a.time > PLAYMATE.timeout) {
+    a.startLeft ??= left;
+    if (a.bestLeft == null || left < a.bestLeft - 5) { a.bestLeft = left; a.idle = 0; } else a.idle = (a.idle ?? 0) + dt;
+    const ignored = a.idle > PLAYMATE.ignored;
+    if (playerIn || rivalIn || a.time > PLAYMATE.timeout || ignored) {
       state.active = null; state.next = lerp(PLAYMATE.gap, state.rng());
-      if (a.time > PLAYMATE.timeout && !playerIn && !rivalIn) return { timeout: { dest: a.dest, rival: a.rival } };
+      if (!playerIn && !rivalIn) return { timeout: { dest: a.dest, rival: a.rival, ignored, closed: Math.max(0, Math.round(a.startLeft - a.bestLeft)) } };
       const winner = playerIn ? 'player' : 'rival';
       if (winner === 'player') state.wins++;
       return { finish: { winner, dest: a.dest, rival: a.rival, time: a.time } };

@@ -18,6 +18,9 @@ export function createWorldUI({world,getState,pause,applyShell,travel,interact,s
   if(id==='stripes'){x.fillRect(14,0,7,48);x.fillRect(27,0,7,48);}else if(id==='twotone'){x.fillRect(0,26,48,22);}else if(id==='checker'){for(let i=0;i<6;i++)for(let j=0;j<6;j++)if((i+j)%2)x.fillRect(i*8,j*8,8,8);}
   else if(id==='camo'){for(const [cx,cy,r] of [[10,12,8],[34,10,7],[24,30,9],[8,38,6],[40,36,7]]){x.beginPath();x.ellipse(cx,cy,r,r*.7,cx,0,7);x.fill();}}
   else if(id==='flames'){x.beginPath();x.moveTo(0,48);for(let i=0;i<=6;i++)x.lineTo(i*8,i%2?14:26);x.lineTo(48,48);x.fill();x.fillStyle='#ffd23f';x.beginPath();x.moveTo(0,48);for(let i=0;i<=6;i++)x.lineTo(i*8,i%2?28:36);x.lineTo(48,48);x.fill();}
+  else if(id==='lightning'){x.lineWidth=5;x.strokeStyle=trim;x.beginPath();x.moveTo(0,22);for(let i=1;i<=6;i++)x.lineTo(i*8,i%2?32:16);x.stroke();}
+  else if(id==='tiger'){for(let i=0;i<5;i++){x.beginPath();x.moveTo(i*10+2,0);x.lineTo(i*10+8,0);x.lineTo(i*10+3,24);x.lineTo(i*10+9,48);x.lineTo(i*10+4,48);x.lineTo(i*10-1,24);x.fill();}}
+  else if(id==='stars'){for(const [cx,cy,r] of [[12,12,7],[34,18,6],[18,36,6],[40,40,5]]){x.beginPath();for(let k=0;k<10;k++){const a=-Math.PI/2+k*Math.PI/5,rr=k%2?r*.45:r;x.lineTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr);}x.fill();}}
   else if(id==='shark'){x.fillStyle='#8c1018';x.fillRect(0,26,48,16);x.fillStyle='#f6f6f6';x.beginPath();for(let i=0;i<6;i++){x.moveTo(i*8,26);x.lineTo(i*8+4,33);x.lineTo(i*8+8,26);}x.fill();x.fillStyle='#111';x.beginPath();x.arc(36,12,4,0,7);x.fill();}
   return c.toDataURL();};
  const livery=()=>{for(const b of $('trim').children)b.setAttribute('aria-pressed',String(b.dataset.trim===progress.trim));for(const b of $('pattern').children){b.style.setProperty('--preview',`url(${preview(b.dataset.pattern,progress.paint,progress.trim)})`);b.setAttribute('aria-pressed',String(b.dataset.pattern===progress.pattern));}};

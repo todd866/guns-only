@@ -24,6 +24,9 @@ export const LOCATIONS = [
   {id:'dirt',name:'Desert Whoops',short:'Whoops',pos:[1800,0,1450],color:'#e2a16d',icon:'🏁',kind:'race',event:'whoops'},
   {id:'golf',name:'Sunrise Vista',short:'Golf',pos:[-330,0,2776],color:'#a8d485',icon:'◇',kind:'activity',game:'golf',event:'fairway-rally'},
   {id:'zoo',name:'Petting Zoo',short:'Petting Zoo',pos:[-1361,0,2074],color:'#78d2d0',icon:'◇',kind:'discovery'},
+  // The foot of Spirit Mountain's road (spirit-mountain.mjs): the owner's son kept driving for the horizon mountains.
+  {id:'mountain',name:'Spirit Mountain',short:'Spirit Mtn',pos:[2480,0,-1700],   // the trailhead on flat ground, 350 m short of the road's foot
+  color:'#d9b47a',icon:'▲',kind:'discovery'},
   {id:'rec',name:'Strike Recreation',short:'Bowling',pos:[-1020,0,1260],color:'#e4ad89',icon:'◇',kind:'activity',game:'bowling',event:'rink-drift'},
   {id:'diamond',name:'Baseball Diamond',short:'Baseball',pos:[-1327,0,1490],color:'#e5c68d',icon:'🏁',kind:'race',event:'round-bases'},
   {id:'boneyard',name:'Desert Boneyard',short:'Boneyard',pos:[2350,0,1600],color:'#c6b99c',icon:'🏁',kind:'race',event:'wing-walker'},

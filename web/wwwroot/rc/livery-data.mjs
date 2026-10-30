@@ -2,6 +2,8 @@
 export const LIVERIES = Object.freeze([
   { id: 'solid', name: 'Solid' }, { id: 'stripes', name: 'Racing stripes' }, { id: 'twotone', name: 'Two-tone' },
   { id: 'checker', name: 'Checker' }, { id: 'camo', name: 'Camo' }, { id: 'flames', name: 'Flames' }, { id: 'shark', name: 'Shark mouth' },
+  // Added after the owner's son's first long garage session (camo and flames were his favourites).
+  { id: 'lightning', name: 'Lightning' }, { id: 'tiger', name: 'Tiger stripes' }, { id: 'stars', name: 'Stars' },
 ]);
 export const TRIMS = Object.freeze([
   { name: 'White', color: '#f4f1e6' }, { name: 'Black', color: '#1d2226' }, { name: 'Race red', color: '#d8322b' },
