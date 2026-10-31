@@ -23,7 +23,13 @@ import {
   parTo
 } from './open-world/country-club.mjs';
 import {swingPowerOf} from './open-world/golf-swing.mjs';
-import {approachLane, rollBowling, scoreFrames, frameMarks} from './open-world/bowling.mjs';
+import {
+  approachLane,
+  rollBowling,
+  scoreFrames,
+  frameMarks,
+  switchBowlingLane
+} from './open-world/bowling.mjs';
 import {
   HOT_WHEELS,
   boost as hwBoost,
@@ -3902,7 +3908,7 @@ function bowlingPress() {
     g = openWorld.activity();
     robot.yaw = 0;
     telemetry.activityStart('bowling');
-  }
+  } else if (!g.done && lane.id !== g.lane && switchBowlingLane(g, lane.id)) robot.yaw = 0;
   if (bowlingCanRoll()) bowlingHold = 0;
   return g?.kind === 'bowling';
 }
