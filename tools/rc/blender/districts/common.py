@@ -659,6 +659,97 @@ def bake_ao(objs, distance=1.6, samples=24, floor=.38):
     return {'raw_min': round(lo, 3), 'raw_max': round(hi, 3), 'floor': floor, 'distance_m': distance, 'samples': samples}
 
 
+# Corner contact AO, baked at the join stage for every district (audit 3.4.2): the deterministic
+# per-corner ray bake of bake_hero.py, against the district's own geometry plus a ground plane at
+# the district datum, so wall/floor creases, under-eaves and post bases read darker without the
+# per-tile ground strips the game found too costly. Distance-weighted hits within REACH metres
+# keep it a contact effect: open faces (more than ~REACH from anything) stay at full albedo. The
+# result is the darker of this and the existing Cycles AO per corner (no double darkening), and
+# this pass alone never takes a corner below CORNER_AO_CLAMP[0].
+CORNER_AO_RAYS = 16
+CORNER_AO_REACH = .9
+CORNER_AO_STRENGTH = 1.1
+CORNER_AO_CLAMP = (.55, 1.0)
+CORNER_AO = None   # stats of the last corner_ao() run, recorded in provenance
+
+
+def corner_ao(ground_z=0.0):
+    global CORNER_AO
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+    t0 = __import__('time').time()
+    skip = ('VIS_decal_', 'VIS_far_')          # same exclusions as bake_ao: not occluders, not baked
+    objs = [o for o in _vis_meshes() if not o.name.startswith(skip)]
+    verts, polys = [], []
+    for o in objs:
+        mw, base = o.matrix_world, len(verts)
+        verts.extend(mw @ v.co for v in o.data.vertices)
+        polys.extend([base + i for i in p.vertices] for p in o.data.polygons)
+    bvh = BVHTree.FromPolygons(verts, polys, epsilon=0.0)
+    golden = math.pi * (3 - math.sqrt(5))
+    n = CORNER_AO_RAYS
+    lo, total, darkened, corners = 1.0, 0.0, 0, 0
+    for o in objs:
+        me, mw = o.data, o.matrix_world
+        nm = mw.to_3x3().inverted_safe().transposed()
+        attr = me.color_attributes.get('AO')
+        if attr is None:
+            attr = me.color_attributes.new('AO', 'BYTE_COLOR', 'CORNER')
+            attr.data.foreach_set('color', [1.0] * (len(attr.data) * 4))
+        me.color_attributes.active_color = attr
+        me.color_attributes.render_color_index = me.color_attributes.active_color_index
+        buf = [0.0] * (len(attr.data) * 4)
+        attr.data.foreach_get('color', buf)
+        cn = me.corner_normals
+        cache = {}
+        for li, loop in enumerate(me.loops):
+            nrm = (nm @ cn[li].vector).normalized()
+            key = (loop.vertex_index, round(nrm.x, 2), round(nrm.y, 2), round(nrm.z, 2))
+            mult = cache.get(key)
+            if mult is None:
+                co = mw @ me.vertices[loop.vertex_index].co
+                u = nrm.cross(Vector((0, 1, 0)))
+                if u.length < .01:
+                    u = nrm.cross(Vector((1, 0, 0)))
+                u.normalize()
+                w = nrm.cross(u).normalized()
+                origin = co + nrm * .006
+                occ = 0.0
+                for k in range(n):
+                    q = (k + .5) / n
+                    theta = golden * k
+                    rad = math.sqrt(max(0., 1 - q * q))
+                    d = (u * math.cos(theta) + w * math.sin(theta)) * rad + nrm * q
+                    t = CORNER_AO_REACH
+                    hit = bvh.ray_cast(origin, d, CORNER_AO_REACH)
+                    if hit[0] is not None:
+                        t = hit[3]
+                    if d.z < -1e-4 and origin.z >= ground_z:
+                        t = min(t, (origin.z - ground_z) / -d.z)
+                    if t < CORNER_AO_REACH:
+                        occ += q * (1 - t / CORNER_AO_REACH)     # cosine-weighted, like diffuse light
+                mult = max(CORNER_AO_CLAMP[0], min(CORNER_AO_CLAMP[1], 1 - CORNER_AO_STRENGTH * occ / (n / 2)))
+                cache[key] = mult
+            i = li * 4
+            a = min(buf[i], mult)
+            if a < buf[i] - .004:
+                darkened += 1
+            buf[i] = buf[i + 1] = buf[i + 2] = a
+            buf[i + 3] = 1.0
+            lo = min(lo, mult)
+            total += mult
+            corners += 1
+        attr.data.foreach_set('color', buf)
+    CORNER_AO = {'method': 'per-corner hemisphere rays (bake_hero.py pattern) against district geometry '
+                           'plus a ground plane; cosine- and distance-weighted; min() with the Cycles AO',
+                 'rays': n, 'reach_m': CORNER_AO_REACH, 'strength': CORNER_AO_STRENGTH,
+                 'clamp': list(CORNER_AO_CLAMP), 'ground_z_m': ground_z, 'min_multiplier': round(lo, 3),
+                 'mean_multiplier': round(total / max(1, corners), 4), 'corners': corners,
+                 'corners_darkened': darkened, 'seconds': round(__import__('time').time() - t0, 1)}
+    print('CORNER_AO', json.dumps(CORNER_AO))
+    return CORNER_AO
+
+
 def _vis_meshes():
     return [o for o in ROOT.children if o.type == 'MESH' and o.name.startswith('VIS_')]
 
@@ -673,6 +764,7 @@ def join_visuals_by_material():
     active_object/selected_editable_objects from the context) and verifies its own result, so
     an un-join fails the bake rather than shipping.
     """
+    corner_ao()
     groups = {}
     for o in _vis_meshes():
         groups.setdefault(o.data.materials[0].name, []).append(o)
@@ -748,6 +840,8 @@ def write_provenance(path, extra):
             'license': 'MIT (original procedural geometry and flat PBR materials)', 'external_assets': [],
             'reference_game_assets': 'none; no Re-Volt/RVGL model, texture or data was read'}
     data.update(extra)
+    if CORNER_AO:
+        data['vertex_contact_ao'] = CORNER_AO
     Path(path).write_text(json.dumps(data, indent=2) + '\n')
 
 
