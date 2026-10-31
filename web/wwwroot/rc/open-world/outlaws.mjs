@@ -40,7 +40,11 @@ const flat = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 export function createGang() {
   return {
     enemies: OUTLAW_POSTS.map((p, i) =>
-      Object.assign(createEnemy(`outlaw-${i}`, p, 'outlaw'), {home: [...p]})
+      Object.assign(createEnemy(`outlaw-${i}`, p, 'outlaw'), {
+        home: [...p],
+        stunned: 0,
+        stunLooted: false
+      })
     ),
     fighter: null,
     room: {knockouts: 0},
@@ -59,10 +63,22 @@ export function stepGang(gang, o) {
   const ev = [],
     dt = o.dt ?? 1 / 60,
     here = o.era === 'past' && flat(o.pos, TOWN_CENTRE) < OUTLAWS.reach;
+  for (const e of gang.enemies) {
+    e.stunned = Math.max(0, (e.stunned ?? 0) - dt);
+    if (!e.stunned && e.state === 'stunned') {
+      e.state = 'idle';
+      e.t = 0;
+    }
+  }
   // Leave the past and the gang regroups for next time, unless the street was cleared.
   if (!here) {
     if (o.era !== 'past' && !gang.out && !gang.cleared)
-      for (const e of gang.enemies) Object.assign(e, createEnemy(e.id, e.home, 'outlaw'), {home: e.home});
+      for (const e of gang.enemies)
+        Object.assign(e, createEnemy(e.id, e.home, 'outlaw'), {
+          home: e.home,
+          stunned: 0,
+          stunLooted: false
+        });
     gang.out = o.era !== 'past';
     return ev;
   }
@@ -75,11 +91,17 @@ export function stepGang(gang, o) {
       const d = flat(e.pos, o.pos);
       e.t = (e.t ?? 0) + dt;
       e.hitFlash = Math.max(0, (e.hitFlash ?? 0) - dt);
-      if (d < OUTLAWS.stompRadius && o.speed > OUTLAWS.stompSpeed) {
+      // A stunned toy isn't stomped (owner: "you can stun them and steal their batteries"): riding
+      // into it loots it (main.js), and it winds back up later minus what you took.
+      if (!(e.stunned > 0) && d < OUTLAWS.stompRadius && o.speed > OUTLAWS.stompSpeed) {
         e.alive = false;
         e.popped = 1;
         e.hp = 0;
         ev.push({stomp: e.id, popped: e.id});
+        continue;
+      }
+      if (e.stunned > 0) {
+        e.state = 'stunned';
         continue;
       }
       e.state = 'idle';
@@ -92,7 +114,14 @@ export function stepGang(gang, o) {
     }
   } else if (o.robot) {
     gang.fighter ??= createFighter(o.mode ?? 'kid');
-    for (const e of stepCombat(o.robot, gang.fighter, live, o.input ?? {}, gang.room, dt)) {
+    for (const e of stepCombat(
+      o.robot,
+      gang.fighter,
+      live.filter(e => e.stunned <= 0),
+      o.input ?? {},
+      gang.room,
+      dt
+    )) {
       ev.push(e);
       if (e.knockout) {
         gang.room.knockouts++;
@@ -108,4 +137,14 @@ export function stepGang(gang, o) {
     ev.push({cleared: true});
   }
   return ev;
+}
+
+/** Stun an outlaw for a short spell. Returns false for a dead or missing target. */
+export function stunOutlaw(enemy, seconds = 4) {
+  if (!enemy || enemy.alive === false) return false;
+  if ((enemy.stunned ?? 0) <= 0) enemy.stunLooted = false;
+  enemy.stunned = Math.max(0, Number(seconds) || 0);
+  enemy.state = 'stunned';
+  enemy.t = 0;
+  return true;
 }

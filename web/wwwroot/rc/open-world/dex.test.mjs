@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DEX, loadDex, see, pages, earn, spend, GOLD} from './dex.mjs';
+import {DEX, loadDex, see, pages, earn, spend, addLoot, GOLD} from './dex.mjs';
 
 test('the book has a page for every kind of dinosaur in the herd roster', () => {
   assert.deepEqual(
@@ -37,4 +37,23 @@ test('gold: earned in whole coins, never negative, never spent beyond the purse'
   assert.equal(dex.gold, 0);
   assert.equal(loadDex({gold: -4}).gold, 0);
   assert.equal(loadDex({gold: 1e9}).gold, GOLD.max);
+});
+
+test('batteries and parts load cleanly and addLoot accepts only safe positive integers', () => {
+  const dex = loadDex({batteries: 2, parts: 3.5});
+  assert.equal(dex.batteries, 2);
+  assert.equal(dex.parts, 0);
+  assert.deepEqual(addLoot(dex, {batteries: 1, parts: 2}), {batteries: 1, parts: 2});
+  assert.deepEqual(addLoot(dex, {batteries: -3, parts: 1.5}), {batteries: 0, parts: 0});
+  assert.equal(dex.batteries, 3);
+  assert.equal(dex.parts, 2);
+  for (const invalid of [-1, 0.5, '2', Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
+    const clean = loadDex({batteries: invalid, parts: invalid});
+    assert.equal(clean.batteries, 0);
+    assert.equal(clean.parts, 0);
+  }
+  const full = loadDex({batteries: Number.MAX_SAFE_INTEGER, parts: Number.MAX_SAFE_INTEGER});
+  addLoot(full, {batteries: 1, parts: 2});
+  assert.equal(full.batteries, Number.MAX_SAFE_INTEGER);
+  assert.equal(full.parts, Number.MAX_SAFE_INTEGER);
 });

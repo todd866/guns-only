@@ -58,7 +58,11 @@ import {
   DINO_KINDS
 } from './open-world/herd.mjs';
 import {prepareCharacters, spawnCharacter, hasCharacter} from './open-world/characters.js';
-import {loadDex, see, pages, earn, GOLD, SEE_RANGE} from './open-world/dex.mjs';
+import {loadDex, see, pages, earn, addLoot, GOLD, SEE_RANGE} from './open-world/dex.mjs';
+import {createArrows, loose, stepArrows} from './open-world/arrows.mjs';
+import {createArrowView} from './open-world/arrows.js';
+import {stunOutlaw, OUTLAWS} from './open-world/outlaws.mjs';
+import {stunSteer} from './open-world/meadow.mjs';
 import {createPortraits} from './open-world/portraits.js';
 import {ask, typing} from './open-world/type-prompt.js';
 import {renderHint} from './key-hints.js';
@@ -1144,7 +1148,8 @@ window.addEventListener('keydown', e => {
     recover(s);
   }
   if (e.code === 'KeyQ' && !paused) {
-    if (form === 'board' && boardTricks.air > 0) flipQueued = dirOf(stick());
+    if (bowRiding()) bowLoose();
+    else if (form === 'board' && boardTricks.air > 0) flipQueued = dirOf(stick());
     else {
       fireQueued = true;
       punchQueued = true;
@@ -2512,6 +2517,96 @@ let portalTravelling = false,
   riggedLoad = null,
   rigs = new Map(),
   rigsLoading = new Set();
+const bowState = createArrows(),
+  bowView = createArrowView(scene),
+  bowOrigin = new T.Vector3();
+const bowRiding = () => openWorld?.era() === 'past' && !!(toyDino?.visible || riggedDino?.root.visible);
+
+function bowTargets() {
+  const targets = (openWorld?.gang?.()?.enemies ?? []).map(enemy => ({
+    id: enemy.id,
+    pos: [
+      enemy.pos[0],
+      (openWorld.groundAt?.(enemy.pos[0], enemy.pos[2]) ?? enemy.pos[1]) + 0.15,
+      enemy.pos[2]
+    ],
+    alive: enemy.alive,
+    toy: enemy,
+    stun: stunOutlaw,
+    // The gang's stomp contact is a little wider than the nose's loot reach. Grab first.
+    reach: OUTLAWS.stompRadius
+  }));
+  for (const [i, steer] of (openWorld?.meadow?.()?.round?.steers ?? []).entries()) {
+    steer.id ??= i;
+    targets.push({
+      id: `steer-${steer.id}`,
+      pos: [steer.pos[0], (openWorld.groundAt?.(steer.pos[0], steer.pos[1]) ?? 0) + 1.1, steer.pos[1]],
+      alive: steer.alive !== false,
+      toy: steer,
+      stun: stunSteer,
+      reach: 1.6
+    });
+  }
+  return targets;
+}
+
+function bowLoose() {
+  if (!bowRiding() || paused || !race.roam) return;
+  const rider = riggedDino?.root.visible ? riggedDino.rider : toyDino?.userData.rider;
+  if (rider) rider.getWorldPosition(bowOrigin);
+  else bowOrigin.fromArray(s.car.pos).y += 1.1;
+  bowOrigin.y += 0.35;
+  if (loose(bowState, {from: bowOrigin.toArray(), heading: readout(s).yaw, targets: bowTargets()})) {
+    audio.zap();
+    beep('⚡ Zap!', 'happy', 1000);
+  }
+}
+
+function bowStep(dt) {
+  if (paused) return;
+  const past = openWorld?.era() === 'past',
+    targets = past && race.roam ? bowTargets() : [];
+  if (!bowRiding() || !race.roam) bowState.arrows.length = 0;
+  for (const event of stepArrows(bowState, dt, targets)) {
+    if (event.hit == null) continue;
+    const target = targets.find(t => t.id === event.hit);
+    if (target?.stun(target.toy)) {
+      audio.zap();
+      beep('⚡ Zap!', 'happy', 1000);
+    }
+  }
+  if (bowRiding() && race.roam) {
+    let batteries = 0,
+      parts = 0;
+    for (const target of targets) {
+      if (!target.alive || !(target.toy.stunned > 0) || target.toy.stunLooted) continue;
+      if (Math.hypot(target.pos[0] - s.car.pos[0], target.pos[2] - s.car.pos[2]) > target.reach) continue;
+      // Don't collect from the ground while flying overhead on a winged mount.
+      const feet = s.car.pos[1] - rideHeight(s.car.params),
+        ground = openWorld.groundAt?.(target.pos[0], target.pos[2]) ?? target.pos[1] - 1;
+      if (Math.abs(feet - ground) > 1.6) continue;
+      target.toy.stunLooted = true;
+      batteries++;
+      parts += 1 + Math.floor(Math.random() * 2);
+    }
+    if (batteries) {
+      addLoot(dexState(), {batteries, parts});
+      saveDex();
+      audio.creature(herd().herd[herd().mount]?.kind ?? 'rex', 'call');
+      beep(
+        `🔋 Got ${batteries === 1 ? 'a battery' : `${batteries} batteries`}! ⚙️ Got ${parts} ${parts === 1 ? 'part' : 'parts'}!`,
+        'proud',
+        2600
+      );
+    }
+  }
+  bowView.update(
+    bowState,
+    targets.filter(t => t.alive && t.toy.stunned > 0),
+    dt
+  );
+}
+
 // The Lake Town's outlaws (open-world/outlaws.mjs): ride the dinosaur through them, or fight on foot.
 let outlawWarned = false;
 function outlawStep(dt) {
@@ -2676,6 +2771,8 @@ function saveDex() {
     pr = openWorld.progress;
   pr.dexSeen = [...d.seen];
   pr.gold = d.gold;
+  pr.batteries = d.batteries;
+  pr.parts = d.parts;
   openWorld.save();
 }
 // A new page: any wild one (or one of yours) close enough to see, checked a few times a second.
@@ -3938,6 +4035,8 @@ const ui = createWorldUI({
           .herd.filter(d => d.kind === kind)
           .map(d => d.name),
       gold: dexState().gold,
+      batteries: dexState().batteries,
+      parts: dexState().parts,
       portrait: (model, ready) => (portraits ??= createPortraits(renderer)).get(model, ready)
     },
   world: openWorld,
@@ -4018,6 +4117,7 @@ $('return-world').onclick = () => {
   );
 };
 window.addEventListener('pagehide', () => {
+  bowView.dispose();
   openWorld?.dispose();
   worldSky?.dispose();
 });
@@ -4367,6 +4467,7 @@ function frame(now) {
           telemetry.playmate({dest: t.dest.id, result: t.ignored ? 'ignored' : 'timeout', closed: t.closed});
         }
       }
+      bowStep(dt);
       outlawStep(dt);
       digStep(dt, now);
       wildStep(dt, openWorld?.era?.() === 'past');
@@ -4927,6 +5028,13 @@ function frame(now) {
 }
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
 window.__gunsOnlyRC = {
+  bow: () => ({
+    arrows: bowState.arrows.length,
+    stunned: bowTargets()
+      .filter(t => t.alive && t.toy.stunned > 0)
+      .map(t => t.id),
+    loot: {batteries: dexState().batteries, parts: dexState().parts}
+  }),
   form: () => form,
   qaEra: era => openWorld?.qaEra?.(era),
   roundup: () =>

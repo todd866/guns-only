@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MEADOW, STEER, createRoundup, stepRoundup} from './meadow.mjs';
+import {MEADOW, STEER, createRoundup, stepRoundup, stunSteer} from './meadow.mjs';
 
 const box = MEADOW.corral.box,
   mouth = [(MEADOW.corral.gate[0] + MEADOW.corral.gate[1]) / 2, box[1]];
@@ -59,4 +59,32 @@ test('a patient herder can pen the whole herd', () => {
     for (const e of stepRoundup(st, dl > 3 && nearSteer ? null : me, 1 / 30)) if (e.done) done = e;
   }
   assert.ok(done, `penned ${st.penned} of ${st.steers.length}`);
+});
+
+test('a stunned steer does not move or separate, and recovers after its timer', () => {
+  const st = createRoundup(),
+    s = st.steers[0],
+    before = [...s.pos];
+  st.steers[1].pos = [s.pos[0] + 0.1, s.pos[1]];
+  st.steers = st.steers.slice(0, 2);
+  stunSteer(st.steers[1]);
+  assert.equal(stunSteer(s), true);
+  const held = [...s.pos];
+  stepRoundup(st, [s.pos[0] + 1, s.pos[1]], 0.5);
+  assert.deepEqual(s.pos, held);
+  assert.equal(s.stunned, 3.5);
+  assert.equal(st.started, null, 'the stunned steer does not start shying');
+  stepRoundup(st, [s.pos[0] + 1, s.pos[1]], 3.5);
+  assert.notDeepEqual(s.pos, before);
+});
+
+test('refreshing a steer stun preserves loot state, while a new stun resets it', () => {
+  const s = createRoundup().steers[0];
+  stunSteer(s);
+  s.stunLooted = true;
+  stunSteer(s, 2);
+  assert.equal(s.stunLooted, true);
+  s.stunned = 0;
+  stunSteer(s, 2);
+  assert.equal(s.stunLooted, false);
 });
