@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createWorld} from './world.mjs';
 import {createCar, stepCar} from './car.mjs';
-import {legendCarParams, LEGEND_CARS, mountParams} from './vehicles.mjs';
+import {legendCarParams, LEGEND_CARS, mountParams, DINO_MOUNTS} from './vehicles.mjs';
 
 const flat = () => {
   const w = createWorld();
@@ -66,4 +66,23 @@ test("the dark world's dinosaur mount drives upright, rides on its springs and k
   assert.ok(top > 10 && top < 14, `top ${top.toFixed(1)} m/s`);
   assert.ok((p.mass * 9.81) / 4 / p.spring < p.restLength * 0.8, 'sag within travel');
   assert.ok(p.size[2] > legendCarParams('starter').size[2] * 2.2, 'about twice and a half the car');
+});
+
+test('every kind of ridden dinosaur drives upright and keeps to its own pace', () => {
+  const tops = {};
+  for (const kind of Object.keys(DINO_MOUNTS)) {
+    const w = flat(),
+      p = mountParams(kind),
+      c = createCar(p, [0, 1, 0], 0);
+    let top = 0,
+      upright = true;
+    for (let i = 0; i < 120 * 10; i++) {
+      stepCar(c, {throttle: 1, steer: i > 600 ? 0.5 : 0}, w, 1 / 120);
+      top = Math.max(top, Math.hypot(c.vel[0], c.vel[2]));
+      if (1 - 2 * (c.q[0] * c.q[0] + c.q[2] * c.q[2]) < 0.3) upright = false;
+    }
+    assert.ok(upright, `${kind} stays upright`);
+    tops[kind] = top;
+  }
+  assert.ok(tops.raptor > tops.rex && tops.rex > tops.longneck, JSON.stringify(tops));
 });

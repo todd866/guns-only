@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {loadHerd, befriend, called, wildLeft, wildNear, WILD, HERD_MAX} from './herd.mjs';
+import {loadHerd, befriend, called, wildLeft, wildNear, WILD, HERD_MAX, NEST} from './herd.mjs';
+import {mountainHeight, ROAD} from './spirit-mountain.mjs';
 import {valleyFrame} from './spirit-mountain.mjs';
 
 test('the first dinosaur named before the herd existed carries over', () => {
@@ -58,7 +59,7 @@ test('calling: a name picks that dinosaur (spelling-tolerant), a general call pi
 });
 
 test('wild dinosaurs live on the flat lake floor, clear of the town and the farm', () => {
-  for (const w of WILD) {
+  for (const w of WILD.filter(w => !w.far)) {
     const f = valleyFrame(w.home[0], w.home[2]);
     assert.ok(
       f.along > 520 && f.along < 620 && f.across > 40 && f.across < 100,
@@ -68,4 +69,19 @@ test('wild dinosaurs live on the flat lake floor, clear of the town and the farm
   const s = loadHerd({});
   assert.equal(wildNear(s, WILD[0].home).id, 'wild-1');
   assert.equal(wildNear(s, [0, 0, 0]), null);
+});
+
+test('the quetzalcoatlus nests high on the mountain road, on flat ground you can ride up to', () => {
+  assert.ok(WILD.some(w => w.kind === 'quetzal' && w.far));
+  const h = mountainHeight(NEST[0], NEST[2]);
+  assert.ok(h > 150, `nest height ${h}`);
+  for (const [dx, dz] of [
+    [2, 0],
+    [-2, 0],
+    [0, 2],
+    [0, -2]
+  ])
+    assert.ok(Math.abs(mountainHeight(NEST[0] + dx, NEST[2] + dz) - h) < 0.5, 'flat around the nest');
+  const road = Math.min(...ROAD.map(p => Math.hypot(p.x - NEST[0], p.z - NEST[2])));
+  assert.ok(road < 12, `${road} m from the road`);
 });

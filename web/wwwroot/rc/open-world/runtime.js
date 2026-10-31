@@ -46,7 +46,7 @@ import {createGang, stepGang} from './outlaws.mjs';
 import {createDig, stepDig, digFloor} from './dig.mjs';
 import {createDigView} from './dig.js';
 import {preparePlacementKit, loadPlacements, instantiatePlacements} from './placements.js';
-import {createTimeGates} from './dark-world.mjs';
+import {createTimeGates, darkPlaceById} from './dark-world.mjs';
 import {buildLandmarks} from './landmarks.js';
 import {createPettingZoo} from './petting-zoo.js';
 import {createJetDecks} from './jet-decks.js';
@@ -695,8 +695,31 @@ export async function loadOpenWorld(search) {
       return distance(pos, p.pos) < 9 ? p : null;
     },
     async travel(id) {
+      // A dark-world place (dark-world.mjs DARK_PLACES): jump there and into the past.
+      const dark = darkPlaceById(id);
+      if (dark) {
+        const [x, z] = dark.at,
+          pos = [x, elevationAt(elevation, x, z), z];
+        if (!(await stream.prepare(pos))) return null;
+        await stream.update(pos);
+        if (!stream.ready(pos)) return null;
+        timeGates.goTo('past');
+        setEra('past');
+        if (!progress.timeCrossed) {
+          progress.timeCrossed = true;
+          saveProgress(storage, progress);
+        }
+        golf = null;
+        target = null;
+        route = [];
+        return {arrival: {pos, yaw: dark.yaw}, era: 'past'};
+      }
       const p = locationById(id);
       if (!p || !canVisit(progress, p)) return null;
+      if (timeGates.era() === 'past') {
+        timeGates.goTo('present');
+        setEra('present');
+      }
       if (p.track && p.track in DISTRICT_ZONES && !districts.courses.has(p.track))
         try {
           await districts.loadRest();

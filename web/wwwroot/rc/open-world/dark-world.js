@@ -1,6 +1,7 @@
 import * as T from '../../vendor/three.module.js';
 import {TIME_GATES, GATE_RADIUS, gateAwake} from './dark-world.mjs';
 import {valleyPoint, TOWN, MOUNTAIN} from './spirit-mountain.mjs';
+import {NEST} from './herd.mjs';
 
 // The dark world, drawn (rules: dark-world.mjs). Two things:
 // - the time gates: a ring of stones round a turning amber swirl when awake, plain stone asleep
@@ -103,6 +104,44 @@ export function createDarkWorld(scene, ground = () => 0) {
   });
 
   // The Lake Town, in the past. Pieces are boxes in the valley frame, turned to its axis.
+  // The quetzalcoatlus nest (herd.mjs NEST): a big ring of twigs and three speckled eggs on the shelf
+  // of the mountain road's high hairpin, seen from the Lake Town in the past.
+  const nest = new T.Group();
+  nest.name = 'QuetzalNest';
+  nest.visible = false;
+  nest.position.set(NEST[0], ground(NEST[0], NEST[2]), NEST[2]);
+  root.add(nest);
+  {
+    const twig = mat('#6b4a2a', {roughness: 1}),
+      straw = mat('#c9a35a', {roughness: 1}),
+      egg = mat('#efe6cf', {roughness: 0.6});
+    const ring = new T.Mesh(new T.TorusGeometry(2.2, 0.55, 8, 28), twig);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.4;
+    ring.castShadow = ring.receiveShadow = true;
+    nest.add(ring);
+    const bed = new T.Mesh(new T.CylinderGeometry(2.0, 2.2, 0.35, 24), straw);
+    bed.position.y = 0.18;
+    nest.add(bed);
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2,
+        st = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 1.8, 5), twig);
+      st.position.set(Math.cos(a) * 2.5, 0.55, Math.sin(a) * 2.5);
+      st.rotation.set(0.9, a, 0.4);
+      nest.add(st);
+    }
+    for (const [x, z] of [
+      [0.5, 0.3],
+      [-0.4, 0.5],
+      [0.1, -0.5]
+    ]) {
+      const e = new T.Mesh(new T.SphereGeometry(0.32, 14, 10), egg);
+      e.scale.y = 1.3;
+      e.position.set(x, 0.62, z);
+      e.castShadow = true;
+      nest.add(e);
+    }
+  }
   const town = new T.Group();
   town.name = 'LakeTownPast';
   town.visible = false;
@@ -280,6 +319,7 @@ export function createDarkWorld(scene, ground = () => 0) {
       const nearTown =
         pos && Math.hypot(pos[0] - valleyPoint(580, 0)[0], pos[2] - valleyPoint(580, 0)[2]) < 700;
       town.visible = era === 'past' && !!nearTown;
+      nest.visible = era === 'past' && !!pos && Math.hypot(pos[0] - NEST[0], pos[2] - NEST[2]) < 900;
       for (const g of gates) {
         const here = g.gate.era === era,
           awake = gateAwake(g.gate, crossed),

@@ -3,7 +3,8 @@
 // lake is gone and the town on its floor is alive; the car is a toy dinosaur you ride, the robot a toy cowboy.
 // Gates link two places rather than the same spot in the other time. Pure: the runtime resolves
 // ground heights, swaps the world and saves; this file only decides who goes where.
-import {SUMMIT, valleyPoint, inMountain} from './spirit-mountain.mjs';
+import {SUMMIT, valleyPoint, inMountain, ROAD} from './spirit-mountain.mjs';
+import {NEST} from './herd.mjs';
 import {PLAZA} from './town-plaza.mjs';
 
 /** A yaw facing from a to b (the car's convention: yaw 0 faces -z). */
@@ -125,3 +126,61 @@ export function createTimeGates(initial = {}) {
     }
   });
 }
+
+// The place list's dark-world tab (owner, 31 Oct: "the place list can be organized into light
+// world / dark world"; "you can just use the map selector to jump there"). Picking one jumps you
+// there and into the past. Positions on flat ground; yaw as the car's (0 faces -z).
+const place = (id, name, short, p, look, color) =>
+  Object.freeze({
+    id,
+    name,
+    short,
+    at: [p[0], p[2]],
+    yaw: facing([p[0], p[2]], [look[0], look[2]]),
+    color,
+    past: true
+  });
+const NEST_ROAD = (() => {
+  // A road point about 12 m back at the nest's height: room for a 4.5 m wingspan.
+  const off = q =>
+    Math.abs(Math.hypot(q.x - NEST[0], q.z - NEST[2]) - 12) + (Math.abs(q.y - NEST[1]) > 3 ? 1e3 : 0);
+  const p = ROAD.reduce((a, b) => (off(b) < off(a) ? b : a));
+  return [p.x, 0, p.z];
+})();
+export const DARK_PLACES = Object.freeze([
+  place(
+    'past-lake-town',
+    'The Lake Town, long ago',
+    'Lake Town',
+    valleyPoint(546, 0),
+    valleyPoint(600, 0),
+    '#d8a85a'
+  ),
+  place(
+    'past-farm',
+    'The steam farm, long ago',
+    'Steam farm',
+    valleyPoint(560, -28),
+    valleyPoint(575, -48),
+    '#9fbf5a'
+  ),
+  place(
+    'past-wild',
+    'Wild dinosaurs',
+    'Wild dinosaurs',
+    valleyPoint(560, 30),
+    valleyPoint(575, 50),
+    '#5fa8d8'
+  ),
+  place(
+    'past-summit',
+    'Spirit Mountain summit, long ago',
+    'Summit',
+    [SUMMIT_OUT[0], 0, SUMMIT_OUT[1]],
+    [SUMMIT_OUT[0] - 10, 0, SUMMIT_OUT[1]],
+    '#b89ae0'
+  ),
+  // The quetzalcoatlus nest: you arrive on the road beside it (the climb is the fun way up, never a wall).
+  place('past-nest', 'The quetzalcoatlus nest', 'Quetzal nest', NEST_ROAD, NEST, '#e8d6b0')
+]);
+export const darkPlaceById = id => DARK_PLACES.find(p => p.id === id) ?? null;

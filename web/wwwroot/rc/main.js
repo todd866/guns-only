@@ -48,8 +48,16 @@ import {
   tintDino,
   wildDino
 } from './toy-western-bodies.js';
-import {loadHerd, befriend, called, wildLeft, wildNear, DINO_COLOURS} from './open-world/herd.mjs';
-import {prepareCharacters, spawnCharacter} from './open-world/characters.js';
+import {
+  loadHerd,
+  befriend,
+  called,
+  wildLeft,
+  wildNear,
+  DINO_COLOURS,
+  DINO_KINDS
+} from './open-world/herd.mjs';
+import {prepareCharacters, spawnCharacter, hasCharacter} from './open-world/characters.js';
 import {ask, typing} from './open-world/type-prompt.js';
 import {say, nameFrom} from './open-world/typed.mjs';
 import {createAdventure} from './open-world/adventure.js';
@@ -1106,17 +1114,26 @@ window.addEventListener('keydown', e => {
     !paused &&
     (e.target === canvas || !e.target.closest?.('button,input,select,textarea,a,[tabindex]'))
   ) {
-    if (race.roam && !skate && !adventure?.underground(s.car.pos)) {
+    // In the dark world only a flier flies (the quetzalcoatlus, won at its nest); the rest stay on the ground.
+    const pastRide = openWorld?.era?.() === 'past' && form === 'car',
+      flier = !!DINO_KINDS[herd().herd[herd().mount]?.kind]?.flies;
+    if (pastRide && !flier && !s.flight.mode)
+      callout(`🦖 ${dinoName()} can't fly! The quetzalcoatlus nests high on Spirit Mountain`, 3200);
+    else if (race.roam && !skate && !adventure?.underground(s.car.pos)) {
       const was = s.flight.mode,
         m = toggleFlight(s.flight, s.car, {roam: true});
       if (m !== was) {
         audio.boost();
         callout(
-          m === 'fly'
-            ? mode === 'kid'
-              ? '✈ FLYING · ↓ pull up · ↑ dive · ←→ roll · W power · F afterburner · Enter = parachute'
-              : '✈ AIRBORNE · Enter = parachute'
-            : '🪂 PARACHUTE',
+          winged()
+            ? m === 'fly'
+              ? `🪶 FLYING ${dinoName().toUpperCase()} · ↓ climb · ↑ dive · ←→ turn · W flap · Enter = glide down`
+              : '🪶 GLIDING DOWN'
+            : m === 'fly'
+              ? mode === 'kid'
+                ? '✈ FLYING · ↓ pull up · ↑ dive · ←→ roll · W power · F afterburner · Enter = parachute'
+                : '✈ AIRBORNE · Enter = parachute'
+              : '🪂 PARACHUTE',
           2400
         );
       }
@@ -1382,9 +1399,17 @@ const SPARK = ['#4fc3ff', '#ffa020', '#d84bff'];
 const hud = $('flight-hud'),
   hg = hud.getContext('2d');
 let hudMode = null;
+// Riding a winged dinosaur (the quetzalcoatlus): it flies on the same flight model, but without the
+// jet's HUD, flame, parachute or retro thrusters; it flaps, glides and lands by itself.
+const winged = () => !!(riggedDino?.root.visible && riggedDino.actions.has('glide'));
 function drawFlightHud() {
-  const mode = race.roam && !robot ? s.flight.mode : null;
-  if (mode !== hudMode) {
+  const mode = race.roam && !robot && !winged() ? s.flight.mode : null;
+  if (winged() && !s.flight.mode && hudMode === 'wing') callout('🪶 Landed!');
+  if (winged()) {
+    hudMode = s.flight.mode ? 'wing' : null;
+    hud.hidden = true;
+  }
+  if (mode !== hudMode && !winged()) {
     if (hudMode && !mode) callout('🛬 LANDED · back to driving');
     hudMode = mode;
     hud.hidden = !mode;
@@ -1523,7 +1548,7 @@ function drawFlightHud() {
 let retroJets = null,
   retroWas = false;
 function retroFx(now) {
-  const on = s.flight.mode === 'chute' && !!s.flight.retro && !robot;
+  const on = s.flight.mode === 'chute' && !!s.flight.retro && !robot && !winged();
   if (on && !retroJets) {
     retroJets = new T.Group();
     const m = new T.MeshBasicMaterial({
@@ -1567,7 +1592,7 @@ function drawPickups(now) {
   });
   for (const m of fxPool.values()) m.visible = false;
   // Afterburner flame out of the tail, and the parachute canopy over a floating car.
-  if (burning) {
+  if (burning && !winged()) {
     const f = fxMesh('burner', () => {
       const g = new T.Group(),
         outer = new T.Mesh(
@@ -1598,7 +1623,7 @@ function drawPickups(now) {
     f.translateY(0.03);
     f.scale.set(1, 1, 0.8 + Math.random() * 0.5);
   }
-  if (s.flight.mode === 'chute') {
+  if (s.flight.mode === 'chute' && !winged()) {
     const c = fxMesh('chute', () => {
       const g = new T.Group(),
         canopy = new T.Mesh(
@@ -2436,7 +2461,9 @@ let portalTravelling = false,
   toyDino = null,
   toyCowboy = null,
   riggedDino = null,
-  riggedLoad = null;
+  riggedLoad = null,
+  rigs = new Map(),
+  rigsLoading = new Set();
 // The Lake Town's outlaws (open-world/outlaws.mjs): ride the dinosaur through them, or fight on foot.
 let outlawWarned = false;
 function outlawStep(dt) {
@@ -2611,6 +2638,11 @@ function sayAloud() {
         mountUp();
         callout(`🦖 ${who.dino.name} comes running!`, 3200);
       } else if (swap) {
+        // A different dinosaur under you: its own body and pace (physics/vehicles.mjs DINO_MOUNTS).
+        const p = roamCarParams(),
+          pos = [...s.car.pos];
+        pos[1] += rideHeight(p) - rideHeight(s.car.params) + 0.05;
+        Object.assign(s.car, createCar(p, pos, readout(s).yaw));
         callout(`🦖 ${who.dino.name} swaps in!`, 3200);
         audio.pickup();
       } else callout(`🦖 ${who.dino.name} is right here, under you!`, 3200);
@@ -2647,7 +2679,7 @@ function nameDino() {
 const wildViews = new Map();
 let wildAsking = null;
 function wildStep(dt, past) {
-  if (!riggedDino || !openWorld) {
+  if (!openWorld || !past) {
     for (const v of wildViews.values()) v.root.visible = false;
     return;
   }
@@ -2657,7 +2689,14 @@ function wildStep(dt, past) {
     t = performance.now() / 1000;
   for (const w of wildLeft(h))
     if (!wildViews.has(w.id)) {
-      const d = wildDino(tintDino(spawnCharacter(scene, 'dino', {clip: 'idle'}), DINO_COLOURS[w.colour]));
+      // Each kind's own model, loaded the first time one is near; T. rexes in their colour pairs.
+      const kind = DINO_KINDS[w.kind];
+      if (!hasCharacter(kind.model)) {
+        prepareCharacters([kind.model]).catch(() => {});
+        continue;
+      }
+      const d = wildDino(spawnCharacter(scene, kind.model, {clip: 'idle'}));
+      if (kind.tint) tintDino(d, DINO_COLOURS[w.colour]);
       wildViews.set(w.id, d);
     }
   for (const [id, d] of wildViews) {
@@ -2666,14 +2705,15 @@ function wildStep(dt, past) {
       d.root.visible = false;
       continue;
     }
-    const near = past && Math.hypot(me[0] - w.home[0], me[2] - w.home[2]) < 160;
+    // The nest's flier is seen from the Lake Town; the others only when you're close.
+    const near = past && Math.hypot(me[0] - w.home[0], me[2] - w.home[2]) < (w.far ? 700 : 160);
     d.root.visible = near;
     if (!near) continue;
     // A lazy wander round its spot: walk a slow circle, stop to look about.
     const a = t * 0.18 + id.length,
-      walk = Math.sin(t * 0.25 + id.length) > -0.2,
-      x = w.home[0] + Math.cos(a) * 2.5,
-      z = w.home[2] + Math.sin(a) * 2.5;
+      walk = !w.still && Math.sin(t * 0.25 + id.length) > -0.2,
+      x = w.home[0] + (w.still ? 0 : Math.cos(a) * 2.5),
+      z = w.home[2] + (w.still ? 0 : Math.sin(a) * 2.5);
     d.root.position.set(x, openWorld.groundAt?.(x, z) ?? 8, z);
     d.root.rotation.y = walk ? -a : d.root.rotation.y;
     d.play(walk ? 'walk' : 'idle');
@@ -2683,7 +2723,7 @@ function wildStep(dt, past) {
   const w = past && robot && !wildAsking && !typing() ? wildNear(h, me) : null;
   if (w) {
     wildAsking = w.id;
-    askTyped('🦖 A wild T. rex sniffs you! Give it a name to make friends:', {
+    askTyped(`🦖 A wild ${DINO_KINDS[w.kind].name} sniffs you! Give it a name to make friends:`, {
       placeholder: 'Spike',
       max: 12
     }).then(v => {
@@ -2697,13 +2737,23 @@ function wildStep(dt, past) {
       saveHerd();
       audio.finish();
       callout(d ? `🦖 ${d.name} joined your herd! Y + ${d.name} to ride it` : '🦖 Your herd is full!', 4500);
+      // The quetzalcoatlus: straight onto its back, ready to fly.
+      if (d && DINO_KINDS[d.kind]?.flies && robot) {
+        herd().mount = herd().herd.indexOf(d);
+        saveHerd();
+        mountUp();
+        callout(
+          `🪶 You're on ${d.name}'s back! Enter to fly · ↓ pull up · ←→ turn · Enter again to come down`,
+          6000
+        );
+      }
       wildAsking = null;
     });
   }
 }
 // The car form's physics: in the dark world (the past) it is the ridden dinosaur's bigger body.
 function roamCarParams() {
-  if (openWorld?.era?.() === 'past') return mountParams();
+  if (openWorld?.era?.() === 'past') return mountParams(herd().herd[herd().mount]?.kind ?? 'rex');
   return urlMode === 'legend'
     ? legendCarParams(LEGEND_CARS[adventure?.inventory.car] ? adventure.inventory.car : 'starter')
     : vehicleParams(bodyKind === 'jet' || !bodyKind ? 'buggy' : bodyKind);
@@ -2760,7 +2810,15 @@ async function travelTo(id) {
   const p = await openWorld?.travel(id);
   if (!p) return false;
   const {pos, yaw} = p.arrival;
-  placeCar(s.car, [pos[0], pos[1] + rideHeight(s.car.params) + 0.02, pos[2]], yaw);
+  document.body.classList.toggle('era-past', openWorld.era?.() === 'past');
+  if (robot) {
+    robot.pos = [pos[0], pos[1] + 0.05, pos[2]];
+    robot.vel = [0, 0, 0];
+    robot.yaw = yaw;
+  } else {
+    const cp = roamCarParams();
+    Object.assign(s.car, createCar(cp, [pos[0], pos[1] + rideHeight(cp) + 0.02, pos[2]], yaw));
+  }
   acc = 0;
   cameraCar = null;
   camera.position.set(pos[0] - Math.sin(yaw) * 2, pos[1] + 0.8, pos[2] + Math.cos(yaw) * 2);
@@ -4013,25 +4071,40 @@ function frame(now) {
   {
     const past = openWorld?.era?.() === 'past';
     polish?.setOld?.(past ? 0.65 : 0); // The ridden dinosaur: the rigged one (open-world/characters.js) once loaded, the parts-built one until then.
-    if (past && !riggedLoad)
-      riggedLoad = prepareCharacters(['dino'])
-        .then(ok => {
-          if (ok) riggedDino = rideRiggedDino(spawnCharacter(scene, 'dino'));
-          if (riggedDino) riggedDino.root.visible = false;
-        })
-        .catch(() => {});
+    // One rig per kind (open-world/herd.mjs DINO_KINDS), loaded the first time that kind is ridden;
+    // until it's ready the last rig (or the parts-built dinosaur) stands in.
+    if (past) {
+      const active = herd().herd[herd().mount],
+        model = DINO_KINDS[active?.kind ?? 'rex']?.model ?? 'dino';
+      if (!rigs.has(model) && !rigsLoading.has(model)) {
+        rigsLoading.add(model);
+        prepareCharacters([model])
+          .then(ok => {
+            if (!ok) return;
+            const d = rideRiggedDino(spawnCharacter(scene, model));
+            d.root.visible = false;
+            rigs.set(model, d);
+          })
+          .catch(() => {});
+      }
+      const want = rigs.get(model);
+      if (want && want !== riggedDino) {
+        if (riggedDino) riggedDino.root.visible = false;
+        riggedDino = want;
+      }
+    }
     if (past && form === 'car') {
       car.visible = false;
       if (!typing()) nameDino();
       if (riggedDino) {
         const a = herd().herd[herd().mount];
-        if (a && riggedDino.tinted !== a)
+        if (a && riggedDino.tinted !== a && DINO_KINDS[a.kind]?.tint && riggedDino.kind === 'dino')
           riggedDino.tinted = tintDino(riggedDino, DINO_COLOURS[a.colour]) && a;
       }
       if (riggedDino) {
         if (toyDino) toyDino.visible = false;
         riggedDino.root.visible = true;
-        poseRiggedDino(riggedDino, s.car, rideHeight(s.car.params), dt);
+        poseRiggedDino(riggedDino, s.car, rideHeight(s.car.params), dt, s.flight.mode);
       } else {
         if (!toyDino) {
           toyDino = makeToyDino();
