@@ -54,7 +54,7 @@ test('a robot can play hole 1 with the picked club, straight at the pin, and hol
   let at = [h.tee[0], 0, h.tee[1]], done = false;
   for (let s = 0; s < 12 && !done; s++) {
     const lie = lieAt(h, [at[0], at[2]]), dist = Math.hypot(h.green[0] - at[0], h.green[1] - at[2]), club = pickClub(lie, dist), yaw = Math.atan2(h.green[0] - at[0], -(h.green[1] - at[2]));
-    const power = club === 'putter' ? Math.min(1, Math.sqrt(2 * .9 * dist) / 9) : club === 'driver' ? Math.min(1, dist / 125) : Math.min(1, dist / (club === 'iron' ? 95 : 50));
+    const roll = { green: 1.6, fairway: 5.5, tee: 5.5, rough: 10, sand: 18 }[lie] ?? 5.5, power = club === 'putter' ? Math.min(1, Math.sqrt(2 * roll * (dist + .3)) / 9) : club === 'driver' ? Math.min(1, dist / 115) : Math.min(1, dist / (club === 'iron' ? 90 : 42));
     const b = strike(at, yaw, club, power); r.strokes++;
     for (let i = 0; i < 120 * 30 && !b.rest; i++) { stepBall(b, () => 0, (x, z) => lieAt(h, [x, z]), 1 / 120); if (holed(h, b)) { done = true; break; } }
     at = b.pos;

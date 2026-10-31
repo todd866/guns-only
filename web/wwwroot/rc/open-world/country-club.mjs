@@ -37,8 +37,8 @@ export const CLUB = Object.freeze({
 
 // The ball's world: what it lands and rolls on.
 export const LIE = Object.freeze({
-  green: { roll: .9, bounce: .25 }, fairway: { roll: 2.6, bounce: .3 }, tee: { roll: 2.6, bounce: .3 },
-  rough: { roll: 6, bounce: .2 }, sand: { roll: 14, bounce: .05 }, water: null,
+  green: { roll: 1.6, bounce: .25 }, fairway: { roll: 5.5, bounce: .3 }, tee: { roll: 5.5, bounce: .3 },
+  rough: { roll: 10, bounce: .2 }, sand: { roll: 18, bounce: .05 }, water: null,
 });
 const segDist = (p, a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz || 1))); return Math.hypot(a[0] + dx * t - p[0], a[1] + dz * t - p[1]); };
 export const holeLine = h => h.bend ? [h.tee, h.bend, h.green] : [h.tee, h.green];
@@ -55,9 +55,9 @@ export function lieAt(h, p) {
 
 // Clubs: picked for you from the distance to the pin (a kid shouldn't have to know a 7-iron).
 export const CLUBS = Object.freeze({
-  driver: { loft: 13, speed: 38 }, iron: { loft: 26, speed: 30 }, wedge: { loft: 46, speed: 21 }, putter: { loft: 0, speed: 9 },
+  driver: { loft: 18, speed: 48 }, iron: { loft: 26, speed: 36 }, wedge: { loft: 46, speed: 21 }, putter: { loft: 0, speed: 9 },
 });
-export function pickClub(lie, toPin) { if (lie === 'green') return 'putter'; if (lie !== 'sand' && toPin > 105) return 'driver'; if (toPin > 50) return 'iron'; return 'wedge'; }
+export function pickClub(lie, toPin) { if (lie === 'green' || (lie !== 'sand' && toPin < 15)) return 'putter'; if (lie !== 'sand' && toPin > 105) return 'driver'; if (toPin > 50) return 'iron'; return 'wedge'; }
 
 /** Hit: a new ball flight from `at` ([x, y, z]) toward heading yaw (forward (sin, -cos)), power 0..1. */
 export function strike(at, yaw, club, power) {

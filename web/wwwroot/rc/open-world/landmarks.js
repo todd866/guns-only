@@ -78,7 +78,7 @@ export function buildLandmarks(scene,world,progress=loadProgress(),roads=[],bake
  for(const x of [-570,-540,-510]){cylinder(x,2,3350,.12,4,'#e9c27d');const shade=new T.Mesh(new T.ConeGeometry(4,1,12),mat('#e18d89'));shade.position.set(x,4.4,3350);root.add(shade);}
  for(const [x0,z0,x1,z1]of SAND_ZONES)box((x0+x1)/2,.04,(z0+z1)/2,x1-x0,.025,z1-z0,'#d7bd8c');
  // Golf and collection landmarks with friendly science-fiction rewards.
- const golf=LOCATIONS.find(p=>p.id==='golf');for(let i=0;i<3;i++){const x=golf.pos[0]+i*15-15,z=golf.pos[2]-12;const green=new T.Mesh(new T.CircleGeometry(10,28),mat('#87ac73'));green.rotation.x=-Math.PI/2;green.position.set(x,.03,z);root.add(green);cylinder(x,1.5,z,.035,3,'#e9d6a6');box(x+.6,2.6,z,1.2,.7,.03,'#ecb45d');}
+ // The golf course is the country club now (country-club.js).
  // The petting zoo's jets are their own module now (petting-zoo.js).
  const lab=LOCATIONS.find(p=>p.id==='lab'),labUnlocked=canEnter(progress,lab);box(2500,4,-1225,32,8,20,'#768886',true);box(2500,3,-1214.9,8,6,.1,'#244d50');if(labUnlocked){
  const saucer=new T.Group();saucer.position.set(2500,9,-1210);const disc=new T.Mesh(new T.SphereGeometry(1,32,12),mat('#b9d5c9',.25));disc.scale.set(7,.8,7);saucer.add(disc);const dome=new T.Mesh(new T.SphereGeometry(1,20,12),mat('#74baa6',.25));dome.position.y=.7;dome.scale.set(2.7,1.4,2.7);saucer.add(dome);scene.add(saucer);dynamic.push(t=>{saucer.rotation.y=t*.15;saucer.position.y=9+Math.sin(t*.7)*.5;});}
