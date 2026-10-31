@@ -149,6 +149,24 @@ export class SoundKit {
       this.playSample(voice, voice === 'dino_roar' ? 0.32 : 0.3, (voice === 'dino_roar' ? 1.25 : 1) * deep);
     }
   }
+  // On-foot hero: a tin-toy tap (robot) or a boot clop (past-era cowboy). strength 0..1 follows speed.
+  footstep(who = 'robot', strength = 1) {
+    if (!this.ctx) return;
+    (this.heard ??= {})[`foot:${who}`] = (this.heard[`foot:${who}`] ?? 0) + 1;
+    if (!this.ready(`foot-${who}`, 0.12)) return;
+    const s = Math.max(0, Math.min(1, strength)),
+      pitch = 0.94 + Math.random() * 0.12,
+      level = (0.85 + Math.random() * 0.3) * (0.12 + s * 0.28);
+    if (who === 'cowboy') {
+      if (this.playSample('bump', level, pitch * 0.72)) return;
+      this.burst({type: 'lowpass', freq: 160 * pitch, dur: 0.07, level, q: 1.4});
+      this.tone(110 * pitch, 0, 0.055, {level: level * 0.85, glide: 70 * pitch, attack: 0.002});
+    } else {
+      if (this.playSample('bump', level * 0.9, pitch * 1.45)) return;
+      this.tone(920 * pitch, 0, 0.032, {type: 'triangle', level: level * 0.75, cutoff: 4200, attack: 0.001});
+      this.burst({type: 'bandpass', freq: 2800 * pitch, dur: 0.035, level: level * 0.55, q: 2.5});
+    }
+  }
   playSample(name, level, rate = 1) {
     const b = this.samples?.[name];
     if (!b) return false;
