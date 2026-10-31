@@ -1,0 +1,27 @@
+{
+  "kind": "quetzal",
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+  "software": false,
+  "frameMs": {
+    "p50": 16.7,
+    "p95": 18.4,
+    "max": 18.7
+  },
+  "drawCalls": 8,
+  "triangles": 9450,
+  "clips": {
+    "run": {
+      "screenshot": "evidence/rc-characters/web-quetzal-run.png",
+      "calls": 8
+    },
+    "flap": {
+      "screenshot": "evidence/rc-characters/web-quetzal-flap.png",
+      "calls": 8
+    },
+    "glide": {
+      "screenshot": "evidence/rc-characters/web-quetzal-glide.png",
+      "calls": 8
+    }
+  },
+  "errs": []
+}

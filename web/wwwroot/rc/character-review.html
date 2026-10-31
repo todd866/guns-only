@@ -48,11 +48,14 @@ const ground = new T.Mesh(new T.PlaneGeometry(40, 40), new T.MeshStandardMateria
 ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 const proxyMat = new T.MeshStandardMaterial({color: 0x9a9ca2, roughness: .6});
 const proxy = () => { const m = new T.Mesh(new T.BoxGeometry(.28, .20, .42), proxyMat); m.castShadow = m.receiveShadow = true; return m; };
-const beside = proxy(); beside.position.set(.45, .10, -.25); scene.add(beside);
+const kind = new URLSearchParams(location.search).get('kind') || 'dino', def = CHARACTERS[kind];
+if (!def) throw Error(`unknown kind ${kind}`);
+const k = Math.max(def.lengthM, (def.spanM ?? 0) * 0.75) / 1.31; // frame every kind like the 1.31 m dino
+const beside = proxy(); beside.position.set(.45 * k + .1, .10, -.25 * k); scene.add(beside);
 
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
-camera.position.set(1.55, .78, -1.35); camera.lookAt(0, .3, -.05);
+camera.position.set(1.55 * k, .78 * k, -1.35 * k); camera.lookAt(0, .3 * k, -.05);
 
 let dino = null, last = performance.now(), calls = 0;
 function frame(now) {
@@ -62,12 +65,12 @@ function frame(now) {
  requestAnimationFrame(frame);
 }
 
-const ready = prepareCharacters(['dino']).then(ok => {
- if (!ok) throw Error('dino.glb failed to load');
- dino = spawnCharacter(scene, 'dino', {position: [0, 0, 0], yaw: 0});
+const ready = prepareCharacters([kind]).then(ok => {
+ if (!ok) throw Error(`${kind}.glb failed to load`);
+ dino = spawnCharacter(scene, kind, {position: [0, 0, 0], yaw: 0});
  const rider = proxy(); rider.position.y = .10; dino.saddle().add(rider);
  const bar = document.getElementById('clips');
- for (const name of Object.keys(CHARACTERS.dino.clips)) {
+ for (const name of Object.keys(def.clips)) {
   const b = document.createElement('button'); b.textContent = name; b.onclick = () => play(name); bar.append(b);
  }
  play('idle');
@@ -75,9 +78,10 @@ const ready = prepareCharacters(['dino']).then(ok => {
  return true;
 });
 function play(name) {
- dino.play(name, {fade: .2, then: name === 'jump' ? 'idle' : null});
+ const after = {jump: 'idle', takeoff: 'flap', land: 'idle'}[name] ?? null;
+ dino.play(name, {fade: .2, then: after});
  for (const b of document.querySelectorAll('#clips button')) b.setAttribute('aria-pressed', String(b.textContent === name));
- stateEl.textContent = `clip ${name}`;
+ stateEl.textContent = `${kind} · clip ${name}`;
 }
 function frameTimes(n = 300) {
  return new Promise(r => { const s = []; let prev = performance.now();

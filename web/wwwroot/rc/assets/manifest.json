@@ -343,6 +343,182 @@
       "sizeBytes": 220853
     },
     {
+      "budgets": {
+        "max_bytes": 600000,
+        "max_materials": 6,
+        "max_primitives": 6,
+        "max_triangles": 10000
+      },
+      "id": "characters-longneck-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "characters/longneck.provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "characters/longneck.glb"
+        }
+      ],
+      "path": "characters/longneck.glb",
+      "provenance": "characters/longneck.provenance.json",
+      "sha256": "f6c88f051db0f1b8ce1b8f1b6f261075d7e13420fe4b4754cf29e56e849c0bf9",
+      "sizeBytes": 445348
+    },
+    {
+      "derivedFrom": "characters/longneck.glb",
+      "id": "characters-longneck-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "characters/longneck.provenance.json"
+      },
+      "locked": false,
+      "path": "characters/longneck.glb.gz",
+      "provenance": "characters/longneck.provenance.json",
+      "sha256": "3c4d6919f923ced511fed073448df33a0b8b815022b5d6dd2d2ec0d3cd99836f",
+      "sizeBytes": 243174
+    },
+    {
+      "budgets": {
+        "max_bytes": 600000,
+        "max_materials": 6,
+        "max_primitives": 6,
+        "max_triangles": 10000
+      },
+      "id": "characters-quetzal-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "characters/quetzal.provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "characters/quetzal.glb"
+        }
+      ],
+      "path": "characters/quetzal.glb",
+      "provenance": "characters/quetzal.provenance.json",
+      "sha256": "1f1ae48719f4143bc1020e229f47fe0da76bd1eac871a649ea7854f18220e338",
+      "sizeBytes": 596936
+    },
+    {
+      "derivedFrom": "characters/quetzal.glb",
+      "id": "characters-quetzal-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "characters/quetzal.provenance.json"
+      },
+      "locked": false,
+      "path": "characters/quetzal.glb.gz",
+      "provenance": "characters/quetzal.provenance.json",
+      "sha256": "bb52315af8a52f9c0ed5440fb6742c894873834634d44247ffd501593cc56cbf",
+      "sizeBytes": 241507
+    },
+    {
+      "budgets": {
+        "max_bytes": 600000,
+        "max_materials": 6,
+        "max_primitives": 6,
+        "max_triangles": 10000
+      },
+      "id": "characters-raptor-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "characters/raptor.provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "characters/raptor.glb"
+        }
+      ],
+      "path": "characters/raptor.glb",
+      "provenance": "characters/raptor.provenance.json",
+      "sha256": "ed32d610f09ea58956622d45cc7fcd1df1dacd7ab4e63f0ee47c13bd6a5c1370",
+      "sizeBytes": 367824
+    },
+    {
+      "derivedFrom": "characters/raptor.glb",
+      "id": "characters-raptor-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "characters/raptor.provenance.json"
+      },
+      "locked": false,
+      "path": "characters/raptor.glb.gz",
+      "provenance": "characters/raptor.provenance.json",
+      "sha256": "107dd144554c411dc5e4c8ae71d7789eb28669184ba3bf29dc667c92a0610a2f",
+      "sizeBytes": 189470
+    },
+    {
+      "budgets": {
+        "max_bytes": 600000,
+        "max_materials": 6,
+        "max_primitives": 6,
+        "max_triangles": 10000
+      },
+      "id": "characters-triceratops-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "characters/triceratops.provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "characters/triceratops.glb"
+        }
+      ],
+      "path": "characters/triceratops.glb",
+      "provenance": "characters/triceratops.provenance.json",
+      "sha256": "94c0eab98294c62d1a522d4ff3d370d5d582a45414d923db0bd3e2e2ec6ede22",
+      "sizeBytes": 438600
+    },
+    {
+      "derivedFrom": "characters/triceratops.glb",
+      "id": "characters-triceratops-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "characters/triceratops.provenance.json"
+      },
+      "locked": false,
+      "path": "characters/triceratops.glb.gz",
+      "provenance": "characters/triceratops.provenance.json",
+      "sha256": "c771628da8ae8878fb92eecfc0faa5bbe8b71905fe550905613516a75fd10c61",
+      "sizeBytes": 224131
+    },
+    {
       "id": "districts-bx-glb",
       "kind": "model",
       "license": {
