@@ -461,7 +461,7 @@ let cameraCar=null;
 const desired=new T.Vector3(),target=new T.Vector3(),map=$('map').getContext('2d');
 // Minimap fits the route's bounding box.
 const mapBox=(()=>{const xs=cps.map(c=>c[0]),zs=cps.map(c=>c[1]),cx=(Math.min(...xs)+Math.max(...xs))/2,cz=(Math.min(...zs)+Math.max(...zs))/2,k=Math.min(150/(Math.max(...xs)-Math.min(...xs)+10),130/(Math.max(...zs)-Math.min(...zs)+10));return track?{cx,cz,k}:{cx:0,cz:0,k:null};})();
-function drawMap(){drawDetailedMinimap(map,{world:openWorld,course,race,player:s,yaw:readout(s).yaw});}
+function drawMap(){drawDetailedMinimap(map,{world:openWorld,course,race,player:s,yaw:readout(s).yaw,route:openWorld?.route?.()});}
 let reported=false;
 // 3-2-1-GO: nobody moves until GO (Re-Volt start).
 let countdown=-1,lastBeep=0;function startCountdown(){telemetry.raceStart({kind:race.furball?'furball':'race',track:telemetryTrack,mode});countdown=2.999;lastBeep=4;}
