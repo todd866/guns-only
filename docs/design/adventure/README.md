@@ -29,6 +29,24 @@ stop the break-in, you cross the base, climb **the mountain** where the river be
 through its old gate into the dark world. The creatures of the mountain help a toy that carries the
 good aliens' light.
 
+## Story thesis: the Odyssey, hidden (owner, 31 Oct)
+
+The game is to be called **RC Odyssey** (the rename is happening on the adventure branch). Owner:
+"the upper world can be like the Troy portion of the Odyssey and the upside down can represent the
+Odyssey part of it. Make it very kid-level and not noticeable, but that can be the kinda overall
+story thesis."
+
+- **The light world is the siege: getting in.** The base, its war machines and walls, the aliens
+  held behind them, a small toy that wakes and sneaks past the guards.
+- **The dark world is the long way home.** Strange places and monsters (outlaws, bad toys, the Rat
+  King, the Lake Town, the mountain gate), helpers and gifts along the way, and one home to reach:
+  the bedroom floor where the toy woke up.
+
+**The rule: a 6-year-old never sees it.** No Homer names and no explaining. It is a spine for
+choosing what to build: when a new dungeon, boss or gift is needed, pick the Odyssey beat it can
+rhyme with, then hide the rhyme. A one-eyed digger, a song that lures you off the road, a long
+sleep, a disguise, a bow only you can draw.
+
 ## The shape of the game (owner, 30 Oct)
 
 **First half: the open world with dungeon sites.** You explore the base as the RC car and the
