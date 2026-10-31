@@ -127,13 +127,15 @@ break-in begins.
 
 Owner: "obviously the whole thing is just made up, but it's gotta have an internally coherent
 world." Every new piece has to fit these; if one doesn't, change the piece, not the rule.
-- **Everything that moves on its own is a toy brought to life**, either by the good aliens (a toy
+- **Every toy that moves on its own was brought to life**, either by the good aliens (a toy
   that wakes as itself, with a personality) or by the bad aliens (a toy made to be a soldier, with
-  no one inside). The land's creatures and spirits are the only other living things you meet, and
-  they're the land's own, older than both.
-- **The dinosaurs are toys too**: old toy dinosaurs from the toy box, woken by the good aliens'
-  light, which is why there are dinosaurs in 1900. They're bigger than the toy cowboy because they
-  were bigger toys.
+  no one inside). Everything else alive is an animal (the land's creatures, the dinosaurs) or a
+  spirit of the land, older than both.
+- **The dinosaurs are in between** (owner: "they're alive but they're dumb lizards"). They are
+  animals of the dark world: alive, not machines, but with no inner life to speak of. They eat,
+  sleep, sun themselves, spook at loud noises and follow whoever feeds them. Neither side owns
+  them: the outlaws ride them too. You win one over and name it, the way you'd name a pet, and it
+  comes when called. They never break and are never hurt; a frightened one runs off and comes back.
 - **The dark world is the same valley long ago.** You get there only through the spirit gates and
   the glowing portal layer underground, and what you change there shows up in the present.
 - **People are giants in the background**: they never talk to toys, and no one real is ever hurt.
