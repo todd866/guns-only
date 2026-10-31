@@ -95,11 +95,14 @@ export function createAdventure(scene, world) {
     bossFrame: p => bossAwake && !boss.freed && roomAt(mineLocal(p)) === 'R5' ? boss.origin : null,
     /** fight = { robot, input: { attack (Q), use (E: the item), lock }, mode } while on foot; null in the car. */
     step(pos, dt, fight = null, ride = null) {
+      // The mine is drawn only near it (inside, or close enough to see its entrance): far off it was
+      // still in view and costing draw calls across the map.
+      mine.root.visible = inside(pos) || Math.hypot(pos[0] - MINE.anchor[0], pos[2] - MINE.anchor[2]) < 150;
       mine.update(dt); time += dt;
       toys.sync(enemies, time, dt, () => MINE.anchor[1]);
       digger.sync(boss, time, dt, MINE.anchor[1]);
       alien.sync(time, dt, alien.freed ? (fight?.robot?.pos ?? pos) : null);
-      sewer.update(dt, rat);
+      sewer.show(inSewer(pos)); sewer.update(dt, rat);
       if (inSewer(pos)) return sewerStep(pos, ride && { ...ride, dt, punch: fight?.input?.attack });
       if (!inside(pos)) return [];
       const events = [];

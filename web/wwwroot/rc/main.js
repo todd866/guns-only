@@ -262,6 +262,10 @@ function resize(){renderer.setSize(innerWidth,innerHeight,false);polish?.resize(
 // Rivals are tinted clones of whichever buggy is current (prototype, then the Blender asset).
 // Rivals wear aggressor-squadron colours (Nellis nod): ghost blue, desert tan, splinter grey, flanker blue, arctic white.
 const RIVAL_PAINT=['#5d7fa3','#c9a46c','#8c969c','#3f5f8a','#dfe6ea'];let rivalVis=[],rivalSource=null;
+// Rival cars cost ~15 draws each, again in each of the two shadow maps. Past 25 m their shadows
+// can't be seen (the sun's shadow box is tighter than that around the player), and parked in free
+// drive past 150 m they can't be seen at all.
+function rivalLod(v,car,me){const d=Math.hypot(car.pos[0]-me.pos[0],car.pos[2]-me.pos[2]),cast=d<25,show=!race.roam||d<150;if(v.cast!==cast){v.cast=cast;v.group.traverse(o=>{if(o.isMesh)o.castShadow=cast;});}if(!show)v.group.visible=false;}
 function syncRivals(){if(rivalSource===car&&rivalVis.length===race.rivals.length)return;rivalVis.forEach(v=>{disposeJet(v.group);scene.remove(v.group);});rivalSource=car;
  rivalVis=race.rivals.map((_,i)=>{const group=car.clone(true);unbatchCarParts(group);group.getObjectByName('VehicleBody')?.removeFromParent();fitJetShell(group,JET_KINDS[(i+1)%5],RIVAL_PAINT[i%5]);clearcoat(group);paintNoseArt(group.getObjectByName('JetShell'),{});batchCarParts(group);scene.add(group);
   const named=['FL','FR','RL','RR'].map(n=>({pivot:group.getObjectByName('Steer_'+n),wheel:group.getObjectByName('Wheel_'+n),front:n[0]==='F'}));
@@ -448,7 +452,9 @@ const coinGeo=new T.CylinderGeometry(.11,.11,.025,24);coinGeo.rotateX(Math.PI/2)
 const coinMat=new T.MeshPhysicalMaterial({color:'#ffcc33',metalness:.9,roughness:.25,clearcoat:1,emissive:'#8a5a00',emissiveIntensity:.35});
 const ghostMat=new T.MeshBasicMaterial({color:'#ffe9a8',transparent:true,opacity:.25,depthWrite:false});
 const coinMeshes=(course.coins??[]).map(c=>{const m=new T.Mesh(coinGeo,banked.has(c.name)?ghostMat:coinMat);m.position.set(c.x,c.y+.12,c.z);m.castShadow=true;scene.add(m);return m;});
-function drawCoins(now){(course.coins??[]).forEach((c,i)=>{const m=coinMeshes[i];m.rotation.y=now*.004+i;m.visible=!s.coins.includes(c.name);});
+function drawCoins(now){const at=s.car.pos;(course.coins??[]).forEach((c,i)=>{const m=coinMeshes[i];m.rotation.y=now*.004+i;
+ // An 11 cm coin is sub-pixel past ~120 m; drawing all of them across the base cost ~40 draw calls.
+ m.visible=!s.coins.includes(c.name)&&Math.hypot(c.x-at[0],c.z-at[2])<120;});
  for(const n of s.coins)if(!banked.has(n)){banked.add(n);try{localStorage.setItem(COIN_KEY,JSON.stringify([...banked]));}catch{}}
  const total=course.coins?.length??0;$('coins').hidden=!total;$('coins').textContent=`🪙 ${banked.size}/${total}`;}
 // Rival callsign tags float above each car.
@@ -630,7 +636,7 @@ edgeHint(now);legendStart();if(adventure){const here=robot?robot.pos:s.car.pos;{
  {const g=s.skateRide?.active;audio.grinding(!!g&&!paused,g?.speed??0);if(g&&g.id!==lastGrind)audio.landing(2.5);lastGrind=g?.id??null;}
  audio.update({speed:r.speed,throttle:lastThrottle,slip:c.wheels.filter(w=>w.slip).length/4,surface:c.wheels.find(w=>w.surface)?.surface,paused:paused||countdown>0});if(track)followSun(sun,car.position);if(worldSky){if(!paused)worldElapsed+=dt;const light=worldSky.update(worldElapsed,c.pos,c.pos[0]>9000||(!!openWorld.selected.night&&!openWorld.locked));openWorld.lighting(light.day,c.pos);}
  if(!paused){for(const cc of [c,...race.rivals.map(rv=>rv.session.car)])fx.carFeedback(cc,dt);for(const e of race.events.splice(0))if(e.type==='splash'){fx.splash(e.car?.pos??e.pos);audio.splash();}else if(e.type==='boom'){fx.boom(e.car?.pos??e.pos);audio.impact(5);}else if(e.type==='winchester'&&e.car===s.car){callout('WINCHESTER');audio.radio();}else if(e.type==='downed'){fx.boom(e.car.pos);let msg=e.by===s.car?'SPLASH ONE':e.left===2&&!race.furball.out.has(s.car)?'LAST MAN STANDING':null;if(e.by===s.car){const was=artTier(aceKills);aceKills++;try{localStorage.setItem('guns-only.rc.kills',aceKills);}catch{}if(artTier(aceKills)>was)msg+=` · NOSE ART: ${NOSE_ART[was].name}`;}paintKillMarks();if(msg){callout(msg);audio.radio();}}else if(e.type==='furball-over')furballOver(e.winner);}fx.update(dt);
- poseCar(car,wheels,c);syncRivals();race.rivals.forEach((rv,i)=>poseCar(rivalVis[i].group,rivalVis[i].wheels,rv.session.car));
+ poseCar(car,wheels,c);syncRivals();race.rivals.forEach((rv,i)=>{poseCar(rivalVis[i].group,rivalVis[i].wheels,rv.session.car);rivalLod(rivalVis[i],rv.session.car,c);});
  // Low chase camera behind the heading; pulled in front of any wall between it and the car.
  if(cameraCar)camera.position.add(new T.Vector3(r.x-cameraCar[0],r.y-cameraCar[1],r.z-cameraCar[2]));cameraCar=[r.x,r.y,r.z];
  // A vert air points the nose at the sky, so its heading means nothing: hold the heading the car
