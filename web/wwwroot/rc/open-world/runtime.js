@@ -55,6 +55,8 @@ import {createJetDecks} from './jet-decks.js';
 import {createTrickOrTreatVisual} from './trick-or-treat.js';
 import {createBooster} from './booster.js';
 import {createFlyingSchool} from './flying-school.js';
+import {createDeliveryVisual} from './deliveries.js';
+import {deliveryStops} from './deliveries.mjs';
 import {SCHOOL} from './flying-school.mjs';
 import {buildHighSchool} from './high-school.js';
 import {createHotWheels} from './hot-wheels.js';
@@ -385,6 +387,7 @@ export async function loadOpenWorld(search) {
     trickOrTreat,
     booster,
     flyingSchool,
+    deliveries,
     highSchool,
     bowlingAlley,
     hotWheels,
@@ -570,8 +573,9 @@ export async function loadOpenWorld(search) {
       }
       return event;
     },
-    route: () => route,
-    target: () => target,
+    route: () => (deliveries?.state.active && !deliveries.state.paused ? deliveries.state.route : route),
+    target: () =>
+      deliveries?.state.active && !deliveries.state.paused ? deliveries.state.destination : target,
     loadBackground() {
       districts.loadRest().catch(error => console.warn('RC district unavailable:', error));
     },
@@ -584,8 +588,21 @@ export async function loadOpenWorld(search) {
       schoolyard.attach(scene);
       residentialYards.attach(scene);
       flyovers = createFlyovers(scene);
+      const porches = residentialPorches(residentialData, {terrain: residentialTerrain});
+      deliveries = createDeliveryVisual(
+        scene,
+        deliveryStops(porches, [
+          ...LOCATIONS,
+          // The existing chapel's front door is at (-350, -592), in base-life.js.
+          {id: 'chapel', short: 'Chapel', pos: [-350, 0, -587]}
+        ]),
+        {
+          heightAt: (x, z) =>
+            inResidential([x, 0, z]) ? residentialTerrain.heightAt(x, z) : elevationAt(elevation, x, z),
+          routeTo: routeFor
+        }
+      );
       if (season === 'halloween') {
-        const porches = residentialPorches(residentialData, {terrain: residentialTerrain});
         trickOrTreat = createTrickOrTreatVisual(scene, porches);
         halloween = createHalloween(scene, stream.world, {
           porches,
@@ -681,6 +698,10 @@ export async function loadOpenWorld(search) {
     },
     stopSchool: () => flyingSchool?.stop(),
     schoolStep: (dt, pilot) => flyingSchool?.step(dt, pilot) ?? [],
+    deliveries: () => deliveries?.state,
+    startDeliveries: driver => deliveries?.start(driver),
+    deliveryStep: (dt, driver) => deliveries?.step(dt, driver) ?? [],
+    drawDeliveries: (dt, car, options) => deliveries?.draw(dt, car, options),
     trickOrTreat: (pos, trick, time, dt) => trickOrTreat?.step(pos, trick, time, dt) ?? [],
     candy: () => trickOrTreat?.state.candy ?? null,
     treatHouses: () => trickOrTreat?.houses ?? [],
@@ -863,6 +884,7 @@ export async function loadOpenWorld(search) {
       highSchool?.dispose();
       booster?.dispose();
       flyingSchool?.dispose();
+      deliveries?.dispose();
       trickOrTreat?.dispose();
       zoo?.dispose();
       jetDecks?.dispose();
