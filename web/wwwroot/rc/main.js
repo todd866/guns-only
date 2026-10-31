@@ -5265,15 +5265,15 @@ function frame(now) {
     camera.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
     target.set(r.x, r.y, r.z).addScaledVector(fw, 3);
   } else camera.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
-  // A steady court view keeps both players and the high, gentle ball in sight.
-  // The normal toy chase camera is only 1.4 m behind the robot.
+  // A steady court view from behind your baseline, low like a TV end view: both players and the ball
+  // read at toy size (an overhead view from 18 m up shrank the 1 m robots and the ball to dots).
   if (tennisEligible() && openWorld.tennis()?.active) {
     const [x, z] = TENNIS.center,
       y = golfGround(x, z);
     const zoom = Math.max(1, 0.55 / camera.aspect);
-    camera.position.set(x, y + 18 * zoom, z + 22 * zoom);
+    camera.position.set(x, y + 5 * zoom, z + TENNIS.halfLength + 5 * zoom);
     camera.up.set(0, 1, 0);
-    target.set(x, y + 0.5, z);
+    target.set(x, y + 0.4, z - 3);
   }
   camera.lookAt(target);
   digCamera(now);

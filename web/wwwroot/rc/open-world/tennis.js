@@ -16,6 +16,7 @@ export function createTennisCourt(scene, heightAt = () => 0) {
     K(new T.MeshStandardMaterial({color: '#f5d849', roughness: 0.62}))
   );
   ball.castShadow = true;
+  ball.scale.setScalar(2.5); // drawn bigger than its 10 cm physics radius so a child can follow it
 
   const racketHandle = K(new T.CylinderGeometry(0.012, 0.012, 0.12, 8));
   const racketHead = K(new T.TorusGeometry(0.07, 0.012, 6, 16));
