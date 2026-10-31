@@ -5,15 +5,38 @@ import {DIG, PORTAL_DEPTH, createDig, stepDig, digFloor, layerAt} from './dig.mj
 // Holds E for `seconds`, stopping once through (in the game the era flips to the present there).
 const hold = (s, seconds, extra = {}) => {
   const ev = [];
-  for (let t = 0; t < seconds && !ev.some(e => e.through); t += 1 / 60)
+  for (let t = 0; t < seconds + DIG.startHold && !ev.some(e => e.through); t += 1 / 60)
     ev.push(...stepDig(s, {era: 'past', pos: [10, 0, 20], ground: 0, holding: true, dt: 1 / 60, ...extra}));
   return ev;
 };
 
-test('only in the dark world', () => {
-  const s = createDig();
-  assert.deepEqual(stepDig(s, {era: 'present', pos: [0, 0, 0], ground: 0, holding: true}), []);
-  assert.equal(s.active, false);
+test("digs in either world, and a tap of E (an item's use) never starts one", () => {
+  for (const era of ['past', 'present']) {
+    const s = createDig();
+    assert.deepEqual(stepDig(s, {era, pos: [0, 0, 0], ground: 0, holding: true, dt: 0.1}), [], 'a tap');
+    stepDig(s, {era, pos: [0, 0, 0], ground: 0, holding: false, dt: 0.1});
+    assert.equal(s.active, false);
+    const ev = [];
+    for (let i = 0; i < 10; i++)
+      ev.push(...stepDig(s, {era, pos: [0, 0, 0], ground: 0, holding: true, dt: 0.05}));
+    assert.ok(
+      ev.some(e => e.start),
+      era
+    );
+  }
+});
+
+test('the portal layer lets you out into the other world', () => {
+  for (const [era, to] of [
+    ['past', 'present'],
+    ['present', 'past']
+  ]) {
+    const s = createDig(),
+      ev = [];
+    for (let t = 0; t < 10 && !ev.some(e => e.through); t += 1 / 60)
+      ev.push(...stepDig(s, {era, pos: [1, 0, 2], ground: 0, holding: true, dt: 1 / 60}));
+    assert.equal(ev.find(e => e.through).to, to);
+  }
 });
 
 test('holding E digs block by block through the layers, down to the portal and through to the light world', () => {
@@ -50,6 +73,6 @@ test('letting go pauses, Space climbs out, walking off an untouched hole calls i
   );
   assert.equal(s.active, false);
   const t = createDig();
-  stepDig(t, {era: 'past', pos: [10, 0, 20], ground: 0, holding: true, dt: 0.01});
+  stepDig(t, {era: 'past', pos: [10, 0, 20], ground: 0, holding: true, dt: DIG.startHold + 0.01});
   assert.ok(stepDig(t, {era: 'past', pos: [11, 0, 20], ground: 0, holding: true, dt: 0.01}).some(e => e.out));
 });

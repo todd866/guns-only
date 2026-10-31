@@ -172,6 +172,30 @@ world." Every new piece has to fit these; if one doesn't, change the piece, not 
 | Ocarina songs (warp, puzzles) | **Signal tunes**: the alien light hums a few notes that open doors and call you home |
 | Epona | Car mode itself is your horse: the fast way across the map |
 
+## The hero beeps; the words are for reading (owner, 31 Oct)
+
+Owner: "in terms of pedagogical value for Jake, his character only talks in robot noises and then it
+shows what's happening with text, noting that it's gotta be pretty simple for a six year old."
+
+- **The hero never speaks words.** Beeps, chirps, whirs and a happy trill or a sad droop: a robot
+  voice made from a few synth sounds, its pitch and rhythm carrying the feeling.
+- **A short line of text says what happened**, under the beep: "Rexy is here!", "You found gold!",
+  "Too deep! Go up." That makes the reading worth doing, because it tells him what his toy meant.
+- **Six-year-old reading level** for everything he has to read in play: short common words, two
+  to five words where possible, one idea per line, no symbols standing in for words (no "·", "→"
+  or "≥"), numbers as digits. Key hints are a picture of the key, not a sentence: [E] dig.
+- **Keys as they look on his MacBook Air** (owner: "he's looking at a macbook air keyboard, 'enter'
+  doesn't necessarily mean anything"; "we can also show a zoomed in picture of the keyboard").
+  A hint draws the key with its own printed legend: `return`, never "Enter"; the space bar is a
+  blank bar. Beside the line, a zoomed-in picture of that corner of the keyboard shows the key
+  lit, so he finds it by shape and place (built: `key-hints.js`).
+- **Other characters may talk**, in the same simple text; the good toys' lines carry their
+  personalities. The hero stays a beeping robot.
+- **Telemetry:** check which lines he waits to read and which he skips, and shorten the skipped
+  ones.
+- **To do:** sweep today's callouts (many are long, packed with symbols and written for adults)
+  into this voice, and add the robot voice to `audio.js`.
+
 ## Typing short messages (owner, 31 Oct)
 
 Owner: "the other thing that would really be age-appropriate for him is game interactions that
@@ -337,6 +361,46 @@ pterosaur kite. In the slice the dinosaur still uses the car's physics underneat
   present, are open in the past.
 - **A steam train** runs the valley line where the present-day train bridge stands.
 
+**Two separate worlds, the same playable space** (owner, 31 Oct): "light world and dark world should
+both have the same playable spaces. If that extends past the base, no problem, just make a bigger
+world." And: "dark and light worlds *are* separate." So the dark world is its own world, not the
+light world with things hidden and swapped: you are in one or the other, crossing by the portals
+(time gates, digging down). It has the same extent and lie of the land, so wherever you can drive in
+one you can drive in the other, and the twins table below says what stands at each place in each
+world. Wherever the world grows, both grow. (The slice held the past only round the mountain and
+valley and faded you home outside it, dark-world.mjs pastHolds; that limit goes.)
+
+**Try anything; the physics decides, and things break** (owner, 31 Oct): "if you're driving a big
+fast rc car with street tyres, then it should break if you try and use it on a dirt track in the
+dark world, but you should be allowed to try." And: "we need a damage model eventually too."
+- Nothing is gated by vehicle or world: any car can go anywhere either world lets you drive. Fit is
+  physics, not a rule (the flight game's precedent: gear down lands anywhere, an unsuitable surface
+  rips the gear off).
+- A damage model, eventually: parts wear and break by what you put them through (street tyres
+  shredding on rock, low suspension bottoming out on a dirt track, a hard landing bending an arm),
+  and the car shows it and drives like it (a wobble, a pull to one side, a lost wheel), limping, not
+  dying, then fixed in the Garage. Kid mode is gentler, never off.
+- The point is the trade-off, not punishment (owner: "if you break your car you can just load up
+  another one, but it means that driving a really big fast powerful car has consequences, meanwhile
+  a small tough rally car or monster truck can do basically anything"). A broken car costs a trip to
+  the Garage, nothing more. Fast street cars rule the tarmac and suffer off it; the rally car and
+  the monster truck are slower but go anywhere. Choosing the car for the place becomes a decision.
+- Recovery is instant (owner: "crash, press R, car or robot or whatever reassembles, it's not that
+  big of a deal, but you can't just do anything"): R puts any form back together on the spot, as it
+  already resets a stuck car. Breaking costs a moment, never progress, but it does stop you.
+
+**The underground is Minecraft** (owner, 31 Oct): "we want the underground to be like minecraft,
+with stuff you can dig up, crafting, and these portals that randomly appear. The only difference tho
+is that not everything is persistent between sessions, like, if I dig a big hole and destroy the
+base, next time I login it might not be there. But the underground cavern setup will always be the
+same." And: "eventually we can make a thing where you can reinforce your mine shaft and then it
+becomes persistent."
+- Under both worlds: a fixed cavern layout (the same every session), things to dig up, crafting,
+  and portals between the worlds that turn up at random as you dig.
+- What you dig and break is not kept between sessions: a hole through the base can be healed next
+  time. The caverns themselves never change.
+- Later: reinforce a mine shaft (timbering) and that shaft persists.
+
 **Why people are here, then and now** (owner, 31 Oct: "certain places attract people... we'll
 need to think about this stuff, always"). The rule: every place in the present exists for a reason
 the land gave it, and the past shows that reason raw. In a desert valley the reason is nearly always
@@ -359,6 +423,13 @@ and what was here then?
 alongside on your dinosaur and jumping aboard; a stampede of plastic cattle (and loose dinosaurs) down the main street; a high-noon cork-gun
 duel (hit the outlaw toy's hat and he pops apart, as all bad toys do); lassoing a runaway stagecoach;
 a sheriff's star as the small-key equivalent in the Lake Town.
+
+**Digging is the robot's whole point** (owner, 31 Oct): "the main attraction of transforming into
+a robot-person-like toy in the light and dark worlds is the ability to do minecraft digging, and from
+there we have a whole game built around it with zelda-like features." On foot, in either world, you
+can dig: straight down through the layers to the portal layer and out the other side into the
+other world (the upside down, both ways), and the blocks you dig are what you build with. The
+Zelda structure (dungeons, items, bosses) sits on top of the digging, not beside it.
 
 **A Minecraft vibe: steam farming and digging** (owner, 31 Oct): "if we're doing old timey with
 dinosaurs maybe we can have some old steam harvesting equipment and farming and stuff like that.
@@ -396,6 +467,26 @@ side, the way a western does, with nothing real at stake:
   people (there are none to hurt) and never the land's creatures and spirits: the tortoise elder and
   the spring help whoever is kind to them, either side. No real crimes beyond toy-box mischief, and
   no permanent lock-out: switch sides on a later visit, and both endings get you home.
+
+**Collect, earn, build a ranch** (owner, 31 Oct): "this is where the whole thing can be a bit
+pokemon, like, have a pokedex style thing of different dinosaurs and creatures, hell maybe the
+player can buy a dinosaur ranch from enough mining y'know? build an economy into it, make them buy
+supplies in town, play some veterinarian medicine, etc etc. But they're the only flying RC car /
+transformer in the dark world. Fish outta water."
+- **The Dino Book** (our own, not a copy of any game's): one page per kind of toy animal and
+  creature, a silhouette until you've seen one, its picture once seen, a star once befriended. It
+  fills as you explore, which is the "visible before reachable" rule as a collection.
+- **An economy small enough for a 6-year-old**: gold from digging (the gold seam) and from jobs
+  (herding, harvesting, rounding up strays) is the one currency. The general store sells supplies:
+  feed to win over shy dinosaurs, medicine, seed, a lasso. Prices are small whole numbers.
+- **The ranch**: save up and buy the dinosaur ranch outside the Lake Town; your herd lives there,
+  you build pens and a barn with the blocks you dig, and it grows as you do.
+- **Vet medicine**: a hurt or sick toy animal (a thorn in a paw, a cold, a lost key-wind) needs the
+  right supplies and a little care game (choose the bandage, warm the blanket, wind the key). Animals
+  you've nursed are friends for good.
+- **Fish out of water**: in the dark world you're the only toy who can transform and fly. Toys and
+  animals there have never seen an RC car; they stare, follow and gossip, and the outlaws want what
+  you are.
 
 **Portals all over the map** (owner, 31 Oct). The spirit cave is the first crossing, not the only
 one. Once you've been through it, portals around the world wake up, and each links two places

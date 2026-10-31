@@ -58,7 +58,10 @@ import {
   DINO_KINDS
 } from './open-world/herd.mjs';
 import {prepareCharacters, spawnCharacter, hasCharacter} from './open-world/characters.js';
+import {loadDex, see, pages, earn, GOLD, SEE_RANGE} from './open-world/dex.mjs';
+import {createPortraits} from './open-world/portraits.js';
 import {ask, typing} from './open-world/type-prompt.js';
+import {renderHint} from './key-hints.js';
 import {say, nameFrom} from './open-world/typed.mjs';
 import {createAdventure} from './open-world/adventure.js';
 import {createIntro} from './open-world/intro.js';
@@ -1117,8 +1120,7 @@ window.addEventListener('keydown', e => {
     // In the dark world only a flier flies (the quetzalcoatlus, won at its nest); the rest stay on the ground.
     const pastRide = openWorld?.era?.() === 'past' && form === 'car',
       flier = !!DINO_KINDS[herd().herd[herd().mount]?.kind]?.flies;
-    if (pastRide && !flier && !s.flight.mode)
-      callout(`🦖 ${dinoName()} can't fly! The quetzalcoatlus nests high on Spirit Mountain`, 3200);
+    if (pastRide && !flier && !s.flight.mode) beep(`🦖 ${dinoName()} can't fly!`, 'sad');
     else if (race.roam && !skate && !adventure?.underground(s.car.pos)) {
       const was = s.flight.mode,
         m = toggleFlight(s.flight, s.car, {roam: true});
@@ -1127,12 +1129,12 @@ window.addEventListener('keydown', e => {
         callout(
           winged()
             ? m === 'fly'
-              ? `🪶 FLYING ${dinoName().toUpperCase()} · ↓ climb · ↑ dive · ←→ turn · W flap · Enter = glide down`
-              : '🪶 GLIDING DOWN'
+              ? '🪶 Fly! [return] land'
+              : '🪶 Going down!'
             : m === 'fly'
               ? mode === 'kid'
-                ? '✈ FLYING · ↓ pull up · ↑ dive · ←→ roll · W power · F afterburner · Enter = parachute'
-                : '✈ AIRBORNE · Enter = parachute'
+                ? '✈ Flying! [down] climb · [up] dive · [return] parachute'
+                : '✈ Flying! [return] parachute'
               : '🪂 PARACHUTE',
           2400
         );
@@ -1404,13 +1406,13 @@ let hudMode = null;
 const winged = () => !!(riggedDino?.root.visible && riggedDino.actions.has('glide'));
 function drawFlightHud() {
   const mode = race.roam && !robot && !winged() ? s.flight.mode : null;
-  if (winged() && !s.flight.mode && hudMode === 'wing') callout('🪶 Landed!');
+  if (winged() && !s.flight.mode && hudMode === 'wing') beep('🪶 Landed!', 'happy');
   if (winged()) {
     hudMode = s.flight.mode ? 'wing' : null;
     hud.hidden = true;
   }
   if (mode !== hudMode && !winged()) {
-    if (hudMode && !mode) callout('🛬 LANDED · back to driving');
+    if (hudMode && !mode) callout('🛬 Landed!');
     hudMode = mode;
     hud.hidden = !mode;
   }
@@ -1541,7 +1543,7 @@ function drawFlightHud() {
     hg.textAlign = 'left';
   } else hg.fillText('🪂 CHUTE', px, py + 12);
   hg.textAlign = 'center';
-  hg.fillText(mode === 'fly' ? '⏎ parachute · F afterburner' : 'drifting down…', cx, H * 0.86);
+  hg.fillText(mode === 'fly' ? '⏎ parachute · F zoom' : 'floating down…', cx, H * 0.86);
 }
 // Cold-gas retro thrusters under the car for the last second of a parachute landing (physics/flight.mjs):
 // four white puffs pointing down, with a hiss when they light.
@@ -1941,7 +1943,7 @@ function edgeHint(now) {
   edgeHintAt = now;
   openWorld.navigate('mountain', s.car.pos);
   audio.radio();
-  callout('🏔️ Edge of the map! Follow the line to SPIRIT MOUNTAIN', 5000);
+  callout('🏔️ The end of the map! Follow the line to Spirit Mountain', 5000);
 }
 let stuckHinted = false;
 function stuckHint() {
@@ -1955,17 +1957,24 @@ function stuckHint() {
   }
   if (stuckHinted) return;
   stuckHinted = true;
-  callout(navigator.maxTouchPoints > 0 ? 'Stuck? Tap Recover' : 'Stuck? Press R');
+  callout(navigator.maxTouchPoints > 0 ? 'Stuck? Tap Recover' : 'Stuck? [R] fixes it');
+}
+// The hero only beeps (docs/design/adventure: "The hero beeps; the words are for reading"): a robot
+// sound for the feeling, and one short plain line, readable by a six-year-old, for what happened.
+function beep(text, mood = 'happy', ms = 2600) {
+  callout(text, ms);
+  renderHint($('banner'), '🤖 ' + text); // [return] etc. drawn as his MacBook Air's keys
+  audio.robot(mood);
 }
 function callout(text, ms = 1600) {
   const b = $('banner');
-  b.textContent = '📻 ' + text;
+  renderHint(b, '📻 ' + text); // [key] tokens drawn as key caps; plain text otherwise
   b.hidden = false;
   b.dataset.callout = '1';
   clearTimeout(calloutTimer);
   calloutTimer = setTimeout(() => {
     delete b.dataset.callout;
-    b.textContent = '🎺 RETREAT · everyone stops for the flag';
+    b.textContent = '🎺 Flag time! Everyone stops';
     b.hidden = !retreatActive(race);
   }, ms);
 }
@@ -2368,7 +2377,7 @@ function transform() {
     s.car.vel = [0, 0, 0];
     s.car.ang = [0, 0, 0];
     form = 'robot';
-    callout('🤖 ROBOT · T for the board');
+    callout('🤖 Robot! [T] skateboard');
   }
   // The Legend of Spirit Mountain: the skateboard is the Sewers' item, so until it's found T skips it.
   else if (
@@ -2383,7 +2392,7 @@ function transform() {
     robotBody.visible = false;
     car.visible = true;
     form = 'car';
-    callout(openWorld?.era?.() === 'past' ? `🦖 RIDING ${dinoName().toUpperCase()}` : '🚗 CAR');
+    callout(openWorld?.era?.() === 'past' ? `🦖 ${dinoName()}!` : '🚗 CAR');
   } else if (form === 'robot') {
     const p = vehicleParams('board'),
       pos = [robot.pos[0], robot.pos[1] + rideHeight(p) + 0.02, robot.pos[2]];
@@ -2397,7 +2406,7 @@ function transform() {
     boardRider.visible = true;
     form = 'board';
     startStreet();
-    callout('🛹 SKATEBOARD · Space ollie · in the air: Q flip · E grab · ←→ spin', 3200);
+    callout('🛹 Skateboard! [space] jump · in the air: [Q] flip, [E] grab, [left] [right] spin', 3200);
   } else {
     const p = carParams(),
       pos = [...s.car.pos];
@@ -2494,59 +2503,50 @@ function outlawStep(dt) {
   if (inTown && !outlawWarned) {
     outlawWarned = true;
     audio.radio();
-    callout(
-      riding
-        ? '🤠 OUTLAWS IN TOWN! Run them down with your dinosaur'
-        : '🤠 OUTLAWS IN TOWN! Q to punch · Shift to lock on',
-      4200
-    );
+    callout(riding ? '🤠 Bad toys! Run them down!' : '🤠 Bad toys! [Q] punch', 4200);
   }
   if (openWorld.era() !== 'past') outlawWarned = false;
   for (const e of ev) {
     if (e.stomp) {
       audio.impact(6);
-      callout(`💥 ${dinoName()} STOMPS! ${g.enemies.filter(x => x.alive).length} outlaws left`, 1600);
+      beep(`💥 Stomp! ${g.enemies.filter(x => x.alive).length} left`, 'happy', 1600);
     } else if (e.popped) {
       audio.impact(5);
     } else if (e.hurt) {
       audio.impact(3);
-      callout(`💥 Ouch! 🔋 ${e.batteries}`, 1200);
+      beep(`💥 Ouch! 🔋 ${e.batteries}`, 'sad', 1200);
     }
     if (e.home && robot) {
       robot.pos = [...e.home];
       robot.vel = [0, 0, 0];
-      callout('💫 Knocked out · back to the top of the street');
+      beep('💫 Bonk! Try again.', 'sad');
     }
     if (e.cleared) {
       audio.finish();
-      callout(
-        e.reward
-          ? '⭐ THE LAKE TOWN IS FREE! New in the Garage: the SHERIFF STAR'
-          : '⭐ THE LAKE TOWN IS FREE! The outlaws are just toys again',
-        5500
-      );
+      callout(e.reward ? '⭐ The town is free! New paint!' : '⭐ The town is free!', 5500);
       const pr = openWorld.progress;
       if (!pr.playerName)
         setTimeout(
           () =>
-            askTyped('⭐ The sheriff tips his hat: "What\'s your name, deputy?"', {
+            askTyped('⭐ "What is your name?"', {
               placeholder: 'your name',
               max: 12
             }).then(v => {
               pr.playerName = nameFrom(v, 'Partner');
               openWorld.save();
-              callout(`⭐ "Thank you kindly, Deputy ${pr.playerName}!"`, 4500);
+              callout(`⭐ "Thank you, ${pr.playerName}!"`, 4000);
             }),
           2600
         );
-      else callout(`⭐ "Thank you kindly, Deputy ${pr.playerName}!"`, 4500);
+      else callout(`⭐ "Thank you, ${pr.playerName}!"`, 4000);
     }
   }
 }
 // Dig down to the light world (open-world/dig.mjs): in the past, on foot, hold E; Space climbs out.
 let flipFrom = 0;
 function digStep(dt, now) {
-  if (!openWorld?.dig || !robot || paused || !race.roam) return;
+  // Not in the dungeons: the mine and the sewers keep their own authored digging.
+  if (!openWorld?.dig || !robot || paused || !race.roam || adventure?.underground(robot.pos)) return;
   const ev = openWorld.dig({
     pos: robot.pos,
     holding: keys.has('KeyE'),
@@ -2555,10 +2555,12 @@ function digStep(dt, now) {
     time: now / 1000
   });
   for (const e of ev) {
-    if (e.start) callout('⛏️ DIGGING! Hold E to dig down · Space to climb out', 3000);
+    if (e.start) beep('⛏️ Dig down! [space] up', 'happy', 3000);
     else if (e.block === 'gold') {
       audio.coin();
-      callout('✨ GOLD!', 1400);
+      const n = earn(dexState(), GOLD.seam);
+      saveDex();
+      beep(`✨ Gold! +${n}`, 'proud', 1800);
     } else if (e.block === 'portal') {
       audio.radio();
     } else if (e.block) audio.impact(2);
@@ -2571,7 +2573,8 @@ function digStep(dt, now) {
       document.body.classList.remove('portal-flash');
       void document.body.offsetWidth;
       document.body.classList.add('portal-flash');
-      callout('🙃 You dug right through… into the light world! Literally the upside down', 4500);
+      document.body.classList.toggle('era-past', e.to === 'past');
+      callout(e.to === 'past' ? '🙃 Long ago! Upside down!' : '🙃 Back to now! Upside down!', 4500);
     }
   }
   const floor = openWorld.digging() ? openWorld.digFloor() : null;
@@ -2623,8 +2626,45 @@ function saveHerd() {
   openWorld.save();
 }
 const dinoName = () => herd().herd[herd().mount]?.name || 'Rex';
+// The Dino Book and the purse (open-world/dex.mjs): kinds seen, gold dug up; portraits drawn once per kind.
+let dexState_ = null,
+  portraits = null,
+  dexLook = 0;
+const dexState = () => (dexState_ ??= loadDex(openWorld?.progress ?? {}));
+function saveDex() {
+  const d = dexState(),
+    pr = openWorld.progress;
+  pr.dexSeen = [...d.seen];
+  pr.gold = d.gold;
+  openWorld.save();
+}
+// A new page: any wild one (or one of yours) close enough to see, checked a few times a second.
+function dexStep(dt, past) {
+  const g = $('gold');
+  if (g) {
+    const show = past || dexState().gold > 0;
+    if (g.hidden === show) g.hidden = !show;
+    if (show) g.textContent = `💰 ${dexState().gold}`;
+  }
+  if (!past || (dexLook -= dt) > 0) return;
+  dexLook = 0.4;
+  const me = robot ? robot.pos : s.car.pos;
+  for (const [id, d] of wildViews) {
+    const w = wildLeft(herd()).find(x => x.id === id);
+    if (!w || !d.root.visible) continue;
+    if (
+      Math.hypot(d.root.position.x - me[0], d.root.position.z - me[2]) > (w.far ? SEE_RANGE * 3 : SEE_RANGE)
+    )
+      continue;
+    if (see(dexState(), w.kind)) {
+      saveDex();
+      audio.radio();
+      beep(`📖 New page: ${DINO_KINDS[w.kind].name}!`, 'wow', 3200);
+    }
+  }
+}
 function sayAloud() {
-  askTyped('💬 Say something:', {placeholder: 'hello'}).then(v => {
+  askTyped('💬 Say:', {placeholder: 'hello'}).then(v => {
     if (v == null) return;
     const past = openWorld.era?.() === 'past',
       who = called(herd(), v);
@@ -2636,20 +2676,20 @@ function sayAloud() {
       saveHerd();
       if (robot) {
         mountUp();
-        callout(`🦖 ${who.dino.name} comes running!`, 3200);
+        beep(`🦖 ${who.dino.name} is here!`, 'happy');
       } else if (swap) {
         // A different dinosaur under you: its own body and pace (physics/vehicles.mjs DINO_MOUNTS).
         const p = roamCarParams(),
           pos = [...s.car.pos];
         pos[1] += rideHeight(p) - rideHeight(s.car.params) + 0.05;
         Object.assign(s.car, createCar(p, pos, readout(s).yaw));
-        callout(`🦖 ${who.dino.name} swaps in!`, 3200);
+        beep(`🦖 ${who.dino.name} is here!`, 'happy');
         audio.pickup();
-      } else callout(`🦖 ${who.dino.name} is right here, under you!`, 3200);
+      } else beep(`🦖 You are on ${who.dino.name}!`, 'ask');
       return;
     }
     const r = say(v, {era: past ? 'past' : 'present', mount: who?.dino.name ?? dinoName(), onFoot: !!robot});
-    if (r.reply) callout(r.reply, 3200);
+    if (r.reply) beep(r.reply, 'happy', 3200);
   });
 }
 // Off foot and onto the dinosaur (the T cycle's robot→car step, without the board in between).
@@ -2668,11 +2708,11 @@ let dinoAsked = false;
 function nameDino() {
   if (dinoAsked || herd().herd.length) return;
   dinoAsked = true;
-  askTyped('🦖 Your dinosaur needs a name!', {placeholder: 'Rex', max: 12}).then(v => {
+  askTyped('🦖 Name your dino!', {placeholder: 'Rex', max: 12}).then(v => {
     const d = befriend(herd(), {kind: 'rex', name: nameFrom(v, 'Rex'), colour: 0});
     herd().mount = herd().herd.indexOf(d);
     saveHerd();
-    callout(`🦖 ${d.name}! ROOOAR! · Y and say its name to call it`, 4200);
+    beep(`🦖 ${d.name}! Roar!`, 'wow', 3000);
   });
 }
 // Wild dinosaurs on the lake floor: walk up to one on foot and name it to make friends.
@@ -2723,7 +2763,7 @@ function wildStep(dt, past) {
   const w = past && robot && !wildAsking && !typing() ? wildNear(h, me) : null;
   if (w) {
     wildAsking = w.id;
-    askTyped(`🦖 A wild ${DINO_KINDS[w.kind].name} sniffs you! Give it a name to make friends:`, {
+    askTyped(`🦖 A wild ${DINO_KINDS[w.kind].name}! Name it:`, {
       placeholder: 'Spike',
       max: 12
     }).then(v => {
@@ -2736,16 +2776,13 @@ function wildStep(dt, past) {
       const d = befriend(herd(), {kind: w.kind, name: nameFrom(v, 'Spike'), colour: w.colour, wild: w.id});
       saveHerd();
       audio.finish();
-      callout(d ? `🦖 ${d.name} joined your herd! Y + ${d.name} to ride it` : '🦖 Your herd is full!', 4500);
+      beep(d ? `🦖 ${d.name} is your friend!` : '🦖 Too many dinos!', d ? 'happy' : 'sad', 3500);
       // The quetzalcoatlus: straight onto its back, ready to fly.
       if (d && DINO_KINDS[d.kind]?.flies && robot) {
         herd().mount = herd().herd.indexOf(d);
         saveHerd();
         mountUp();
-        callout(
-          `🪶 You're on ${d.name}'s back! Enter to fly · ↓ pull up · ←→ turn · Enter again to come down`,
-          6000
-        );
+        beep(`🪶 ${d.name}! [return] fly`, 'wow', 4000);
       }
       wildAsking = null;
     });
@@ -2792,12 +2829,12 @@ function timeTrip(trip) {
   audio.pickup();
   callout(
     trip.gate === 'fade'
-      ? '⌛ The past fades… back to now'
+      ? '⌛ Back to now!'
       : past
         ? trip.gate === 'town'
-          ? '⏳ LONG AGO · the town at the bottom of the lake, before the dam'
-          : '⏳ LONG AGO · before the base, before the dam'
-        : '⌛ BACK TO NOW',
+          ? '⏳ Long ago! The old town.'
+          : '⏳ Long ago!'
+        : '⌛ Back to now!',
     4200
   );
 }
@@ -3050,10 +3087,7 @@ function climbLadder(l) {
   cameraCar = null;
   camHeading = null;
   audio.gate();
-  callout(
-    l.down ? '🕳️ THE SEWERS · fall in the slime and it sweeps you back' : '🪜 Back up in the street',
-    2800
-  );
+  callout(l.down ? '🕳️ The sewers! Try not to fall in the slime' : '🪜 Back up in the street', 2800);
   if (street) refreshStreetRails();
 }
 function startStreet() {
@@ -3068,10 +3102,10 @@ function startStreet() {
 function ratEvent(ev) {
   if (ev.wake) {
     audio.radio();
-    callout('👑 THE RAT KING! Ride the rim · drop in and land on him', 4200);
+    callout('👑 The Rat King! Jump down on top of him', 4200);
   } else if (ev.tell === 'rear') {
     audio.radio();
-    callout('🐀 He rears up · get out of the way!', 1600);
+    callout('🐀 He is going to charge · move!', 1600);
   } else if (ev.charge) {
     audio.impact(2);
   } else if (ev.bump) {
@@ -3087,14 +3121,14 @@ function ratEvent(ev) {
   } else if (ev.ratHit) {
     audio.splash();
     audio.impact(5);
-    callout(ev.ratHit < 3 ? `👑 HIT ${ev.ratHit}/3 · the sewage rises!` : '👑 HIT 3/3!', 2600);
+    callout(ev.ratHit < 3 ? `👑 Hit! ${ev.ratHit} of 3 · the slime is rising!` : '👑 Hit! 3 of 3!', 2600);
   } else if (ev.ratFreed) {
     audio.finish();
-    callout('👑 The crown pops off! The Rat King is just a big friendly rat · the battery cage opens', 5000);
+    callout('👑 His crown fell off! Now he is a nice rat · the battery box is open', 5000);
   } else if (ev.ratGrab) {
-    callout('🛹 Grab on the way in (E) to hit him', 2000);
+    callout('🛹 Hold [E] to grab as you land on him', 2000);
   } else if (ev.ratDodge) {
-    callout('🐀 Too quick on foot · ride the board (T)', 2000);
+    callout('🐀 Too fast! Get on your skateboard [T]', 2000);
   }
 }
 // F (or Y on a pad) toggles boost in free drive; in the air it's the afterburner. Shown on the
@@ -3105,11 +3139,11 @@ function toggleBoost() {
   callout(
     boostOn
       ? s.flight.mode
-        ? '🔥 AFTERBURNER ON · F = off'
-        : '🔥 BOOST ON · F = off'
+        ? '🔥 Afterburner on · [F] off'
+        : '🔥 Boost on · [F] off'
       : s.flight.mode
-        ? 'AFTERBURNER OFF'
-        : 'BOOST OFF',
+        ? 'Afterburner off'
+        : 'Boost off',
     900
   );
 }
@@ -3134,7 +3168,7 @@ function retreatStep(dt) {
         `🎺 ${word}! ${e.start === 'reveille' ? 'Sunrise' : 'Sunset'} · stop for the flag!`,
         RETREAT.grace * 1000
       );
-    } else if (e.stopped) callout('🫡 Hold still for the flag…', RETREAT.hold * 1000 + 300);
+    } else if (e.stopped) callout('🫡 Stay still for the flag…', RETREAT.hold * 1000 + 300);
     else if (e.done) {
       audio.finish();
       const pr = openWorld.progress;
@@ -3150,16 +3184,16 @@ function boosterEvent(e) {
   if (e.boom) {
     audio.impact(6);
     setTimeout(() => audio.impact(5), 180);
-    callout('💥 Sonic boom! A rocket booster is coming in to land at LZ-1 · look up!', 4500);
+    callout('💥 BOOM! A rocket is coming down to land · look up!', 4500);
   } else if (e.burn) {
     audio.boost();
-    callout('🚀 Landing burn!', 2000);
+    callout('🚀 Fire! It is slowing down!', 2000);
   } else if (e.landed) {
     audio.finish();
     const pr = openWorld.progress;
     pr.boosters = (pr.boosters ?? 0) + 1;
     openWorld.save();
-    callout('🚀 The booster landed on LZ-1!', 3000);
+    callout('🚀 The rocket landed!', 3000);
   }
 }
 // The Hot Wheels track (open-world/hot-wheels.mjs): boosters shove, the channel steers, and the loop
@@ -3233,7 +3267,7 @@ function cartStep() {
   if (!cartProp) return;
   const p = s.car.pos,
     d = Math.hypot(p[0] - CART_AT[0], p[2] - CART_AT[1]);
-  cartProp.visible = openWorld.progress.body !== 'golf' && d < 300;
+  cartProp.visible = openWorld.progress.body !== 'golf' && d < 300 && openWorld.era?.() !== 'past';
   if (cartProp.visible && cartProp.position.y < -50) {
     const hit = course.world.raycast([CART_AT[0], 60, CART_AT[1]], [0, -1, 0], 120);
     if (hit) cartProp.position.y = hit.point[1] + 0.16;
@@ -3241,7 +3275,7 @@ function cartStep() {
   if (cartNear() && !cartHinted) {
     cartHinted = true;
     audio.radio();
-    callout('🛺 A GOLF CART! Press E to drive it', 3500);
+    callout('🛺 A golf cart! [E] drive it', 3500);
   } else if (d > 8) cartHinted = false;
 }
 function hopInCart() {
@@ -3253,7 +3287,7 @@ function hopInCart() {
   cartProp.visible = false;
   audio.finish();
   telemetry.discover('golf-cart', 'item');
-  callout('🛺 You took the golf cart! Swap any time in the Garage', 4000);
+  callout('🛺 The golf cart is yours! Change cars in the Garage', 4000);
 }
 // Robot golf at the country club (open-world/country-club.mjs). As the robot, walk onto the 1st
 // tee and a round starts. Stand at the ball, turn to aim (kid mode snaps to the pin when you're
@@ -3307,7 +3341,7 @@ function golfTee() {
   robot.pos = [h.tee[0] - Math.sin(yaw) * 0.5, golfRestAt[1] + 0.02, h.tee[1] + Math.cos(yaw) * 0.5];
   robot.vel = [0, 0, 0];
   robot.yaw = yaw;
-  callout(`⛳ HOLE ${h.n} · PAR ${h.par} · ${Math.round(toPin(golfRound, h.tee))} m · hold E to swing`, 3500);
+  callout(`⛳ Hole ${h.n} · par ${h.par} · hold [E], let go to hit`, 3500);
 }
 function golfRelease() {
   const held = golfHold;
@@ -3335,8 +3369,32 @@ function golfScoreName(n, par) {
         n - par
       ] ?? `${n} strokes`);
 }
+// The roundup at the spring meadow, the club's twin in the past (open-world/meadow.mjs): the cattle
+// shy away from your dinosaur; herd them through the corral gate. Callouts and a best time.
+function roundupStep(dt) {
+  if (!openWorld?.meadowStep || !race.roam) return;
+  for (const e of openWorld.meadowStep(dt, robot ? robot.pos : s.car.pos)) {
+    if (e.start) {
+      audio.radio();
+      callout('🐄 Round up the cows! Chase them into the pen', 4500);
+    } else if (e.penned && e.penned < e.of) {
+      audio.coin();
+      callout(`🐄 ${e.penned} of ${e.of} in the pen`, 1800);
+    } else if (e.done) {
+      audio.finish();
+      const pr = openWorld.progress,
+        best = pr.roundupBest ?? null,
+        t = Math.round(e.time);
+      if (best == null || t < best) {
+        pr.roundupBest = t;
+        openWorld.save();
+      }
+      callout(`🤠 All the cows are in! ${t} seconds${best == null || t < best ? ' · NEW BEST' : ''}`, 6000);
+    }
+  }
+}
 function golfStep(dt) {
-  if (!openWorld || !race.roam) {
+  if (!openWorld || !race.roam || openWorld.era?.() === 'past') {
     return;
   }
   if (!golfRound) {
@@ -3394,22 +3452,22 @@ function golfStep(dt) {
       if (e?.water) {
         audio.splash();
         golfRound.strokes++;
-        callout('💦 In the water! +1 · drop where you hit it', 2600);
+        callout('💦 Splash! In the water · 1 extra shot', 2600);
         golfRestAt = [...golfDropAt];
         golfBall = null;
         golfWait = 1.2;
         break;
       }
-      if (e?.landed && e.landed === 'sand') callout('🏖️ In the bunker', 1500);
+      if (e?.landed && e.landed === 'sand') callout('🏖️ In the sand!', 1500);
       if (e?.rest) {
         golfRestAt = [...golfBall.pos];
         golfBall = null;
         golfWait = 1;
         if (pickUp(golfRound)) {
-          callout(`⛳ Picked up · on to the next hole`, 2600);
+          callout(`⛳ Next hole!`, 2600);
           finishHole(golfRound);
           golfWait = 2;
-        } else if (e.rest === 'green') callout('⛳ On the green! The putter is out', 1600);
+        } else if (e.rest === 'green') callout('⛳ On the green! Now a little putt', 1600);
         break;
       }
     }
@@ -3665,7 +3723,7 @@ function boardStep(input) {
         if (sh?.opened) {
           audio.finish();
           callout('🛹 THE SHRINE OPENS!', 3000);
-        } else if (sh) callout(`🛹 ${sh.shrine}-trick combo · the shrine wants ${sh.need}`);
+        } else if (sh) callout(`🛹 ${sh.shrine} tricks in a row · you need ${sh.need}`);
       }
     }
 }
@@ -3778,6 +3836,7 @@ function statRows() {
     ['🫡', 'Perfect retreats & reveilles', num(pr.retreats)],
     ['🚀', 'Booster landings seen', num(pr.boosters)],
     ['⛳', 'Best golf round', pr.golfRoundBest ? `${pr.golfRoundBest}` : '–'],
+    ['🤠', 'Fastest roundup', pr.roundupBest ? `${pr.roundupBest} s` : '–'],
     ['🎳', 'Bowling best', pr.bowlingBest ? `${pr.bowlingBest}/10` : '–'],
     ['⛳', 'Golf best', pr.golfBest ? `${pr.golfBest} hits` : '–'],
     ...(adventure
@@ -3790,6 +3849,12 @@ function statRows() {
 }
 const ui = createWorldUI({
   stats: statRows,
+  dex: () =>
+    openWorld && {
+      pages: pages(dexState(), herd().herd),
+      gold: dexState().gold,
+      portrait: (model, ready) => (portraits ??= createPortraits(renderer)).get(model, ready)
+    },
   world: openWorld,
   getState: () => ({
     pos: s.car.pos,
@@ -4219,6 +4284,7 @@ function frame(now) {
       outlawStep(dt);
       digStep(dt, now);
       wildStep(dt, openWorld?.era?.() === 'past');
+      dexStep(dt, openWorld?.era?.() === 'past');
       edgeHint(now);
       legendStart();
       if (adventure) {
@@ -4227,10 +4293,7 @@ function frame(now) {
           const lh = !paused && adventure.ladder(here);
           if (lh && !ladderHint) {
             ladderHint = true;
-            callout(
-              lh.down ? '🕳️ A MANHOLE · press E to climb down' : '🪜 A LADDER · press E to climb up',
-              2600
-            );
+            callout(lh.down ? '🕳️ A manhole! [E] climb down' : '🪜 A ladder! [E] climb up', 2600);
           } else if (!lh) ladderHint = false;
         }
         const attackNow = !!robot && punchQueued,
@@ -4253,8 +4316,8 @@ function frame(now) {
             audio.splash();
             callout(
               ev.bowl
-                ? '🌊 Washed out of the bowl! Stay on the dry side'
-                : '🌊 Swept back by the slime! Grind the pipes to cross'
+                ? '🌊 Splash! Stay where it is dry'
+                : '🌊 Whoosh! The slime took you back · ride the pipes across'
             );
             if (robot) {
               robot.pos = [...ev.washed];
@@ -4272,7 +4335,7 @@ function frame(now) {
           } else if (ev.hurt) {
             audio.impact(3);
           } else if (ev.knockout) {
-            callout('💫 Knocked out · back to the doorway');
+            callout('💫 Bonk! Back to the door');
           }
           if (ev.item) {
             telemetry.discover(ev.item, 'item');
@@ -4280,14 +4343,12 @@ function frame(now) {
             callout(`${ev.icon} You got the ${ev.name.toUpperCase()}! ${ev.does}`, 5000);
           } else if (ev.cell) {
             audio.coin();
-            callout(
-              ev.battery ? '🔋 A NEW BATTERY! Four cells make one' : `🔋 Battery cell ${ev.cell}/${ev.of}`
-            );
+            callout(ev.battery ? '🔋 A new battery!' : `🔋 Battery cell ${ev.cell}/${ev.of}`);
           } else if (ev.dug) {
             audio.impact(6);
             callout('⛏️ The rock crumbles!');
           } else if (ev.locked === 'dig') {
-            callout('🪨 Cracked rock… something strong could dig through');
+            callout('🪨 Cracked rock… you need something strong to dig');
           } else if (ev.spiritMark) {
             audio.radio();
             intro.play(camera.position, [robot.pos[0], robot.pos[1], robot.pos[2]], () => {
@@ -4296,26 +4357,26 @@ function frame(now) {
               robot.yaw = Math.PI;
               adventure.unlockLegend();
               $('menu-legend').hidden = false;
-              callout('🏔️ THE LEGEND OF SPIRIT MOUNTAIN unlocked · it’s on the menu', 5000);
+              callout('🏔️ New game! The Legend of Spirit Mountain is on the menu', 5000);
             });
           } else if (ev.rescued) {
             audio.finish();
-            callout('✨ You freed a good alien! It glows… it wants to show you the mountain');
+            callout('✨ You saved a nice alien! It wants to show you the mountain');
           } else if (ev.boss === 'wake') {
             audio.radio();
-            callout('⚠️ The excavator wakes! Watch its arm…');
+            callout('⚠️ The digger woke up! Watch its arm');
           } else if (ev.tell === 'sweep') {
-            callout('↔️ ARM SWEEP · jump or hop on the step');
+            callout('↔️ Here comes the arm! [space] jump');
           } else if (ev.tell === 'slam') {
             callout('🎯 Move off the red ring!');
           } else if (ev.slam) {
             audio.impact(6);
-            callout('💥 Stuck! Climb the step · punch the red box (Q)');
+            callout('💥 It is stuck! Climb up and [Q] punch the red box');
           } else if (ev.hit === 'boss') {
             audio.impact(5);
           } else if (ev.freed) {
             audio.finish();
-            callout('💙 The excavator is free! The way north is open');
+            callout('💙 The digger is free! A door opened');
           }
           if (ev.got === 'small') {
             audio.coin();
@@ -4329,13 +4390,13 @@ function frame(now) {
           } else if (ev.opened) {
             audio.gate();
           } else if (ev.locked === 'locked') {
-            callout('🔒 Locked · find a small key');
+            callout('🔒 Locked · find a key');
           } else if (ev.locked === 'boss') {
-            callout('🚧 The excavator blocks the way');
+            callout('🚧 The digger is in the way');
           } else if (ev.locked === 'big key') {
             callout('🔒 This lock needs the BIG KEY');
           } else if (ev.locked === 'combo') {
-            callout(`🛹 A TRICK SHRINE · land a ${mode === 'kid' ? 2 : 4}-trick combo here`, 3200);
+            callout(`🛹 A trick door! Do ${mode === 'kid' ? 2 : 4} tricks in a row here`, 3200);
           } else if (ev.locked) {
             callout('🔒 ' + ev.locked);
           }
@@ -4352,6 +4413,7 @@ function frame(now) {
       }
       trickOrTreatStep(robot ? robot.pos : c.pos, dt, now);
       golfStep(dt);
+      roundupStep(dt);
       cartStep();
       retreatStep(dt);
       if (!paused) for (const e of openWorld.boosterStep(dt, c.pos)) boosterEvent(e);
@@ -4392,7 +4454,7 @@ function frame(now) {
       }
       const collected = openWorld.collect(s.seen);
       if (collected.unlocked) {
-        callout('DREAMLAND UNLOCKED');
+        callout('NEW PLACE: DREAMLAND');
         openWorld.navigate('lab', c.pos);
       } else if (collected.found.length) {
         callout(collected.found.at(-1).name + ' badge found');
@@ -4759,6 +4821,12 @@ function frame(now) {
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
 window.__gunsOnlyRC = {
   form: () => form,
+  qaEra: era => openWorld?.qaEra?.(era),
+  roundup: () =>
+    openWorld?.meadow?.()?.round && {
+      penned: openWorld.meadow().round.penned,
+      steers: openWorld.meadow().round.steers.map(s => s.pos.map(v => +v.toFixed(1)))
+    },
   golf: () => ({
     hole: golfRound?.hole,
     strokes: golfRound?.strokes,
@@ -4769,6 +4837,7 @@ window.__gunsOnlyRC = {
   }),
   era: () => openWorld?.era?.() ?? 'present',
   toyDino: () => toyDino,
+  dex: () => openWorld && {seen: [...dexState().seen], gold: dexState().gold},
   herd: () =>
     herdState && {
       herd: herd().herd,

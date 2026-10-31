@@ -371,6 +371,51 @@ export class SoundKit {
     this.bell(987.8, 0, 0.3, 0.07);
     this.bell(1318.5, 0.09, 0.45, 0.06);
   }
+  // The hero's voice (docs/design/adventure: "The hero beeps; the words are for reading"): he never
+  // speaks words, only robot chirps whose shape carries the feeling. Square-wave blips, filtered
+  // soft, a little room. mood: happy (rising), sad (falling), wow (a big swoop up), proud (a little
+  // arpeggio), ask (up at the end).
+  robot(mood = 'happy') {
+    if (!this.ready('robot', 0.35)) return;
+    const shapes = {
+        happy: [
+          [620, 880, 0.07],
+          [880, 760, 0.06],
+          [1050, 1400, 0.09]
+        ],
+        sad: [
+          [700, 520, 0.16],
+          [520, 330, 0.24]
+        ],
+        wow: [
+          [480, 1500, 0.22],
+          [1500, 1250, 0.08]
+        ],
+        proud: [
+          [523, 523, 0.07],
+          [659, 659, 0.07],
+          [784, 784, 0.07],
+          [1047, 1100, 0.14]
+        ],
+        ask: [
+          [640, 620, 0.08],
+          [700, 1050, 0.14]
+        ]
+      },
+      notes = shapes[mood] ?? shapes.happy;
+    let at = 0;
+    for (const [from, to, dur] of notes) {
+      this.tone(from, at, dur, {
+        type: 'square',
+        level: 0.05,
+        glide: to,
+        attack: 0.005,
+        cutoff: 2200,
+        wet: 0.2
+      });
+      at += dur + 0.035;
+    }
+  }
   beep(go = false) {
     if (!this.ready(go ? 'go' : 'beep', 0.2)) return;
     this.tone(go ? 880 : 440, 0, go ? 0.5 : 0.22, {type: 'triangle', level: 0.12, cutoff: 2500, wet: 0.3});

@@ -716,6 +716,7 @@ export function loadProgress(storage) {
     discovered: ['gate', ...ids(v?.discovered, LOCATIONS).filter(id => id !== 'gate')],
     specimens: ids(v?.specimens, SPECIMENS),
     golfRoundBest: Number.isInteger(v?.golfRoundBest) && v.golfRoundBest > 0 ? v.golfRoundBest : null,
+    roundupBest: Number.isInteger(v?.roundupBest) && v.roundupBest > 0 ? v.roundupBest : null,
     bowlingBest:
       Number.isInteger(v?.bowlingBest) && v.bowlingBest >= 0 && v.bowlingBest <= 10 ? v.bowlingBest : 0,
     golfBest: Number.isInteger(v?.golfBest) && v.golfBest > 0 ? v.golfBest : null,
@@ -739,6 +740,9 @@ export function loadProgress(storage) {
       Number.isInteger(v?.pumpkinBest) && v.pumpkinBest > PUMPKIN_RECORD ? v.pumpkinBest : PUMPKIN_RECORD,
     timeCrossed: v?.timeCrossed === true,
     lakeTownFreed: v?.lakeTownFreed === true,
+    // The Dino Book's pages seen and the gold dug up (dex.mjs cleans them).
+    dexSeen: Array.isArray(v?.dexSeen) ? v.dexSeen.filter(k => typeof k === 'string').slice(0, 32) : [],
+    gold: Number.isInteger(v?.gold) && v.gold > 0 ? v.gold : 0,
     dinoName: typeof v?.dinoName === 'string' ? v.dinoName.slice(0, 12) : null,
     herd: Array.isArray(v?.herd) ? v.herd.slice(0, 12) : [],
     mount: Number.isInteger(v?.mount) ? v.mount : 0,

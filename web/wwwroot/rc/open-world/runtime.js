@@ -46,7 +46,7 @@ import {createGang, stepGang} from './outlaws.mjs';
 import {createDig, stepDig, digFloor} from './dig.mjs';
 import {createDigView} from './dig.js';
 import {preparePlacementKit, loadPlacements, instantiatePlacements} from './placements.js';
-import {createTimeGates, darkPlaceById} from './dark-world.mjs';
+import {createTimeGates, crossTimeGate, darkPlaceById, pastHolds} from './dark-world.mjs';
 import {buildLandmarks} from './landmarks.js';
 import {createPettingZoo} from './petting-zoo.js';
 import {createJetDecks} from './jet-decks.js';
@@ -55,6 +55,7 @@ import {createBooster} from './booster.js';
 import {buildHighSchool} from './high-school.js';
 import {createHotWheels} from './hot-wheels.js';
 import {createCountryClub} from './country-club.js';
+import {createMeadow} from './meadow.js';
 import {
   LOCATIONS,
   EVENTS,
@@ -336,6 +337,13 @@ export async function loadOpenWorld(search) {
     farmScene = null;
   const setEra = era => {
     const past = era === 'past';
+    if (past) {
+      stream.world.openGate('era-club');
+      stream.world.closeGate('era-meadow');
+    } else {
+      stream.world.closeGate('era-club');
+      stream.world.openGate('era-meadow');
+    }
     mountainView?.setPast(past);
     if (past) stream.world.openGate('era-dam');
     else stream.world.closeGate('era-dam');
@@ -371,6 +379,7 @@ export async function loadOpenWorld(search) {
     highSchool,
     hotWheels,
     club,
+    meadow,
     route = [],
     target = null,
     lastTile = '',
@@ -433,12 +442,20 @@ export async function loadOpenWorld(search) {
     // Dig down to the light world (dig.mjs): o = { pos, holding, climb, dt, time }. Breaking the portal
     // layer flips to the present; the through event carries where to come out of the ground.
     dig(o) {
-      const ground = elevationAt(elevation, o.pos[0], o.pos[2]),
-        ev = stepDig(dig, {...o, era: timeGates.era(), ground});
+      // Until the dark world is its own world the size of the light one (owner ruling, 31 Oct; the
+      // next refactor), digging in the present only goes down where the past exists: the mountain.
+      const era = timeGates.era(),
+        here = era === 'past' || pastHolds(o.pos[0], o.pos[2]),
+        ground = elevationAt(elevation, o.pos[0], o.pos[2]),
+        ev = stepDig(dig, {...o, holding: o.holding && here, era, ground});
       for (const e of ev)
         if (e.through) {
-          timeGates.goTo('present', o.time);
-          setEra('present');
+          timeGates.goTo(e.to, o.time);
+          setEra(e.to);
+          if (e.to === 'past' && !progress.timeCrossed) {
+            progress.timeCrossed = true;
+            saveProgress(storage, progress);
+          }
           e.position = [e.through[0], elevationAt(elevation, e.through[0], e.through[1]), e.through[1]];
         }
       digView?.update(dig, o.dt, ev);
@@ -448,28 +465,29 @@ export async function loadOpenWorld(search) {
     digging: () => dig.active,
     digFloor: () => digFloor(dig),
     digCamera: () => digView?.camera(dig) ?? null,
+    // A time gate (dark-world.mjs crossTimeGate): the destination loads first; the era, the
+    // first-crossing flag and the world switch only change once it has.
     async timeGate(pos, time) {
       if (gateBusy) return null;
-      const trip = timeGates.step(pos, {
-        crossed: !!progress.timeCrossed,
-        now: time,
-        groundAt: (x, z) => elevationAt(elevation, x, z)
-      });
-      if (!trip) return null;
       gateBusy = true;
       try {
+        const trip = await crossTimeGate(timeGates, pos, {
+          crossed: !!progress.timeCrossed,
+          now: time,
+          groundAt: (x, z) => elevationAt(elevation, x, z),
+          prepare: async position => {
+            if (!(await stream.prepare(position))) return false;
+            await stream.update(position);
+            return stream.ready(position);
+          }
+        });
+        if (!trip) return null;
         setEra(trip.to);
         if (trip.to === 'past' && !progress.timeCrossed) {
           progress.timeCrossed = true;
           saveProgress(storage, progress);
         }
-        const [x, z] = trip.at,
-          position = [x, elevationAt(elevation, x, z), z];
-        if (trip.gate !== 'fade') {
-          if (!(await stream.prepare(position))) return {...trip, position};
-          await stream.update(position);
-        }
-        return {...trip, position};
+        return trip;
       } finally {
         gateBusy = false;
       }
@@ -596,12 +614,37 @@ export async function loadOpenWorld(search) {
       jetDecks = createJetDecks(scene, stream.world);
       booster = createBooster(scene, (x, z) => elevationAt(elevation, x, z));
       hotWheels = createHotWheels(scene, stream.world);
-      club = createCountryClub(scene, stream.world, (x, z) => elevationAt(elevation, x, z));
+      // The club in the present, the spring meadow in the past (meadow.js): each one's collision on
+      // its own era gate, so neither leaves invisible walls in the other time.
+      club = createCountryClub(
+        scene,
+        {
+          addTri: (a, b, c, s) => stream.world.addTri(a, b, c, s, 'era-club'),
+          addQuad: (a, b, c, d, s) => {
+            stream.world.addTri(a, b, c, s, 'era-club');
+            stream.world.addTri(a, c, d, s, 'era-club');
+          },
+          raycast: stream.world.raycast
+        },
+        (x, z) => elevationAt(elevation, x, z)
+      );
+      meadow = createMeadow(scene, stream.world, (x, z) => elevationAt(elevation, x, z));
+      if (timeGates.era() === 'past') stream.world.openGate('era-club');
+      else stream.world.openGate('era-meadow');
       corridor = buildCorridorArt(scene);
     },
     season,
     hotWheels: () => hotWheels,
     club: () => club,
+    meadow: () => meadow,
+    /** QA only: jump straight to an era (headless captures can't easily drive through a gate). */
+    qaEra(era) {
+      timeGates.goTo(era, 0);
+      setEra(era);
+    },
+    /** The roundup at the spring meadow (past only): returns its events. */
+    meadowStep: (dt, pos) =>
+      meadow?.step(dt, pos ? [pos[0], pos[2]] : null, timeGates.era() === 'past') ?? [],
     boosterStep: (dt, pos) => booster?.step(dt, pos) ?? [],
     booster: () => booster,
     trickOrTreat: (pos, trick, time, dt) => trickOrTreat?.step(pos, trick, time, dt) ?? [],
@@ -665,7 +708,7 @@ export async function loadOpenWorld(search) {
       landmarks?.update(time, pos, camera);
       highSchool?.update?.(1 / 60);
       hotWheels?.update(1 / 60);
-      club?.update(1 / 60, pos);
+      club?.update(1 / 60, pos, timeGates.era() !== 'past');
       activities?.update(time, pos);
       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
       bowlingVisual?.update(golf);
@@ -779,6 +822,7 @@ export async function loadOpenWorld(search) {
       venue = null;
       halloween?.dispose();
       club?.dispose();
+      meadow?.dispose();
       hotWheels?.dispose();
       highSchool?.dispose();
       booster?.dispose();

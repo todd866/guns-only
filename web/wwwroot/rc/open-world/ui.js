@@ -32,7 +32,8 @@ export function createWorldUI({
   search,
   onOpen,
   onGarage,
-  stats
+  stats,
+  dex
 }) {
   let placeWorld = null,
     panel = null,
@@ -261,6 +262,8 @@ export function createWorldUI({
     garage.hidden = which !== 'garage';
     $('keys-panel').hidden = which !== 'keys';
     $('stats-panel').hidden = which !== 'stats';
+    $('dex-panel').hidden = which !== 'dex';
+    if (which === 'dex') drawDex();
     if (which === 'stats')
       $('stats-rows').innerHTML = (stats?.() ?? [])
         .map(
@@ -278,7 +281,9 @@ export function createWorldUI({
           ? garage
           : which === 'stats'
             ? $('stats-panel')
-            : $('keys-panel');
+            : which === 'dex'
+              ? $('dex-panel')
+              : $('keys-panel');
     isolated = [...document.body.children].filter(el => el !== active).map(el => [el, el.inert]);
     for (const [el] of isolated) el.inert = true;
     if (which === 'map') {
@@ -292,14 +297,21 @@ export function createWorldUI({
           ? 'garage-close'
           : which === 'stats'
             ? 'stats-close'
-            : 'keys-close'
+            : which === 'dex'
+              ? 'dex-close'
+              : 'keys-close'
     ).focus();
   }
   function close() {
     if (travelling) return;
     for (const [el, value] of isolated) el.inert = value;
     isolated = [];
-    modal.hidden = garage.hidden = $('keys-panel').hidden = $('stats-panel').hidden = true;
+    modal.hidden =
+      garage.hidden =
+      $('keys-panel').hidden =
+      $('stats-panel').hidden =
+      $('dex-panel').hidden =
+        true;
     panel = null;
     document.body.classList.remove('modal-open');
     pause(wasPaused);
@@ -311,9 +323,25 @@ export function createWorldUI({
     $('garage-close').onclick =
     $('keys-close').onclick =
     $('stats-close').onclick =
+    $('dex-close').onclick =
       close;
   $('keys').onclick = () => open('keys');
   $('menu-stats').onclick = () => open('stats');
+  $('menu-dex').onclick = () => open('dex');
+  // The Dino Book (dex.mjs): one row per kind, [portrait] [name] [★ befriended]; a silhouette and ??? until seen.
+  function drawDex() {
+    const d = dex?.();
+    if (!d) return;
+    $('dex-count').textContent =
+      `${d.pages.filter(p => p.seen).length}/${d.pages.length} seen · 💰 ${d.gold}`;
+    $('dex-count').title = 'Kinds seen out of every kind in the book · gold dug up';
+    $('dex-rows').innerHTML = d.pages
+      .map(p => {
+        const pic = d.portrait(p.model, () => panel === 'dex' && drawDex());
+        return `<div class="dex-row${p.seen ? '' : ' unseen'}" title="${p.seen ? p.name : 'Not seen yet: explore the dark world'}"><span class="dex-pic">${pic ? `<img src="${pic}" alt="">` : ''}</span><span class="dex-name">${p.seen ? p.name : '???'}</span><span class="dex-mark" title="${p.friends ? `${p.friends} in your herd` : p.seen ? 'Seen, not yet a friend' : 'Not seen yet'}">${p.friends ? '★'.repeat(Math.min(3, p.friends)) + (p.friends > 3 ? `×${p.friends}` : '') : p.seen ? '·' : ''}</span></div>`;
+      })
+      .join('');
+  }
   $('garage').onclick = $('menu-garage').onclick = () => open('garage');
   $('atlas').onclick = $('menu-map').onclick = () => {
     if (world) open('map');
@@ -343,7 +371,9 @@ export function createWorldUI({
             ? garage
             : panel === 'stats'
               ? $('stats-panel')
-              : $('keys-panel'),
+              : panel === 'dex'
+                ? $('dex-panel')
+                : $('keys-panel'),
       items = [...root.querySelectorAll('button:not(:disabled),select:not(:disabled),a[href]')];
     if (!items.length) return;
     e.preventDefault();
@@ -702,7 +732,7 @@ export function createWorldUI({
                       ? [`${p.short} · Map`, 'Tab']
                       : p.id === 'skatepark'
                         ? ['Race', 'E']
-                        : [`${p.name} · Enter`, 'E'])
+                        : [`${p.name} · Go in`, 'E'])
           );
       }
     },

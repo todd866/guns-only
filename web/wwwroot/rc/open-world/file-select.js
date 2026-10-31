@@ -2,9 +2,16 @@ import {SLOT_COUNT, readSlots, createSlot, useSlot, eraseSlot, slotSave} from '.
 import {createInventory, ITEMS} from '../physics/items.mjs';
 import {LEGEND_CARS} from '../physics/vehicles.mjs';
 import {COMBAT} from '../physics/combat.mjs';
+import {keyCap} from '../key-hints.js';
+
+// "[return] play" → text with each [key] drawn as a key cap.
+const capped = text =>
+  String(text)
+    .split(/\[([^\]]+)\]/)
+    .map((p, i) => (i % 2 ? keyCap(p) : document.createTextNode(p)));
 
 // Zelda's file select for The Legend of Spirit Mountain: three files, one row each
-// ([slot] [name] [items] [batteries] [car]). Keyboard first: arrows choose, Enter plays (or names a
+// ([slot] [name] [items] [batteries] [car]). Keyboard first: arrows choose, return plays (or names a
 // new file), Delete twice erases. Names stay in this browser (physics/save-slots.mjs).
 export function createFileSelect({onPlay}) {
   const el = document.createElement('div');
@@ -61,12 +68,16 @@ export function createFileSelect({onPlay}) {
         `<span class="bat" title="Batteries">${inv ? `🔋×${COMBAT.batteries.kid + inv.extraBatteries}` : ''}</span><span class="car" title="Car">${car ? car.name : ''}</span>`;
       list.appendChild(li);
     });
-    keys.innerHTML =
-      erasing >= 0
-        ? `<span class="warn">Delete again to erase file ${erasing + 1} · Esc keeps it</span>`
-        : naming
-          ? 'Type a name · Enter to start · Esc to cancel'
-          : '↑ ↓ choose · Enter play · Delete erase · Esc close';
+    keys.replaceChildren(
+      ...capped(
+        erasing >= 0
+          ? `[delete] again to wipe file ${erasing + 1} · [esc] keeps it`
+          : naming
+            ? 'Type a name · [return] go · [esc] back'
+            : '[up] [down] pick · [return] play · [delete] wipe · [esc] close'
+      )
+    );
+    keys.classList.toggle('warn', erasing >= 0);
     const input = list.querySelector('input');
     if (input) {
       input.focus();
