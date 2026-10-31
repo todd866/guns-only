@@ -151,3 +151,10 @@ test("form switches and flight mode changes are recorded with a coarse position"
   const f = rows.filter((row) => row.code === "flight");
   assert.deepEqual(f.map((row) => [row.mode, row.from, row.assist, row.x, row.z]), [["fly", "ground", true, 2480, -1710], ["land", "chute", true, 2500, -1700]]);
 });
+
+test("a first discovery is recorded with what and what kind", async () => {
+  const rows = []; const t = createRCTelemetry({ storage: { getItem: () => "enabled" }, locationObject: { hostname: "guns-only.com", search: "" }, outbox: noIdbOutbox(), fetchImpl: async (_url, options) => { rows.push(...JSON.parse(options.body).rows); return { status: 200, ok: true }; } });
+  t.discover("zoo", "place"); t.discover("board", "item"); t.discover(null);
+  t.endSession(); await t.flush({ force: true });
+  assert.deepEqual(rows.filter((row) => row.code === "discover").map((row) => [row.id, row.kind]), [["zoo", "place"], ["board", "item"]]);
+});
