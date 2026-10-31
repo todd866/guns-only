@@ -360,6 +360,13 @@ alongside on your dinosaur and jumping aboard; a stampede of plastic cattle (and
 duel (hit the outlaw toy's hat and he pops apart, as all bad toys do); lassoing a runaway stagecoach;
 a sheriff's star as the small-key equivalent in the Lake Town.
 
+**Digging is the robot's whole point** (owner, 31 Oct): "the main attraction of transforming into
+a robot-person-like toy in the light and dark worlds is the ability to do minecraft digging, and from
+there we have a whole game built around it with zelda-like features." On foot, in either world, you
+can dig: straight down through the layers to the portal layer and out the other side into the
+other world (the upside down, both ways), and the blocks you dig are what you build with. The
+Zelda structure (dungeons, items, bosses) sits on top of the digging, not beside it.
+
 **A Minecraft vibe: steam farming and digging** (owner, 31 Oct): "if we're doing old timey with
 dinosaurs maybe we can have some old steam harvesting equipment and farming and stuff like that.
 Make it almost a minecraft vibe in this game world. Maybe also you can always mine-craft mine down
