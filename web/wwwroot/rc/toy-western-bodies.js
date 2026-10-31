@@ -139,3 +139,22 @@ export function poseRiggedDino(d, car, rideHeight = .1, dt = 1 / 60) {
   }
   d.update(dt);
 }
+
+// Each dinosaur in its own colours (open-world/herd.mjs DINO_COLOURS): the body and spike materials
+// are cloned for this instance the first time, so tinting one never recolours the others.
+export function tintDino(d, [body, spikes]) {
+  if (!d.tint) {
+    d.tint = {};
+    d.root.traverse(o => { if (!o.isMesh) return; const one = m => { if (m.name === 'Dino_Green' || m.name === 'Dino_Orange') { const c = (d.tint[m.name] ??= m.clone()); return c; } return m; };
+      o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); });
+  }
+  d.tint.Dino_Green?.color.set(body); d.tint.Dino_Orange?.color.set(spikes);
+  return d;
+}
+/** A wild one: no saddle (it hasn't been ridden). */
+export function wildDino(d) {
+  d.root.traverse(o => { if (!o.isMesh) return; const one = m => { if (m.name !== 'Saddle_Brown') return m; const c = m.clone(); c.visible = false; return c; };
+    o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); });
+  d.root.scale.setScalar(RIG_SCALE);
+  return d;
+}
