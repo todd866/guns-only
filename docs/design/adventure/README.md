@@ -43,7 +43,7 @@ roads, or fly to the top and parachute down. At the top is the **big spirit cave
 
 **Second half: the dark world, which is the past** (owner, 31 Oct). The spirit cave is a portal,
 as in SNES Zelda, but it takes you **back in time**: the same map a hundred-odd years ago, before the
-base, the dam and the lake. **You turn into an old-fashioned toy**: the RC car becomes a **toy horse**
+base, the dam and the lake. **You turn into an old-fashioned toy**: the RC car becomes a **toy dinosaur you ride**
 and the robot becomes a **toy cowboy**. The second set of dungeons and the finale are there. Unlike the
 first half's mostly peaceful overworld (enemies live in the dungeons), **the dark world is full of
 enemies out in the open**, the way ALttP's Dark World is far more hostile than the Light World: bad
@@ -61,7 +61,7 @@ break-in begins.
 | 3 pendants, then the Master Sword | 3 first dungeons, each freeing one alien and giving one **form** |
 | Death Mountain; first Dark World portal on top | **The mountain**: drive up it, fly its valleys; the gate is at the top |
 | Dark World = same map, transformed | **The dark world is the past**: the same valley and mountain, before the base and the dam, as a toy western |
-| Link turns into a bunny in the Dark World | You turn into an old toy: car → toy horse, robot → toy cowboy (below) |
+| Link turns into a bunny in the Dark World | You turn into an old toy: car → a ridden toy dinosaur, robot → toy cowboy (below) |
 | Magic Mirror (one-way back to the Light World) | A gift from the mountain's guardians that lets you slip back at the same spot |
 | Items as keys (Power Glove, Flippers, Hookshot) | Your **forms** and a few toy gadgets (below) |
 | **Agahnim**, the wizard who took over the castle by bewitching the king | **The base leadership, corrupted by the bad aliens.** The commander's orders turn strange; the base helps the invasion without knowing it. The Agahnim fight is the end of act one |
@@ -163,10 +163,19 @@ change (the keyboard rule above), only the toy:
 
 | Present | Past | What only it can do in the past |
 |---|---|---|
-| RC car | **Toy horse** (wind-up, painted) | Gallop the open range, jump fences and gulches, outrun a stagecoach. Whistle (E) and it comes |
+| RC car | **Toy dinosaur, ridden** by the toy cowboy | Run the open range, leap gulches, outrun a stagecoach. Whistle (E) and it comes |
 | Walking robot | **Toy cowboy** (tin figure, jointed arms) | Climb, crawl and push, as the robot does; lasso posts and steers; cork-gun duels |
 | Skateboard | **Mine-rail handcar** | Ride the rails through the mountain and the mine, both ways in time |
 | Flying suit | **Paper kite / toy balloon** | Glide off the mesas on the canyon winds |
+
+**You ride dinosaurs, not horses** (owner, 31 Oct): "instead of riding horses you're riding
+dinosaurs. This does two things: one, it's hilarious. And two: it makes the characters bigger.
+Like, you're a large-ish toy, then you ride dinosaurs that aren't full size but they're much bigger
+than you." The scale rule: the cowboy stays toy-sized, and his mount is a toy dinosaur well under
+real size but about four times his height (built: a painted T. rex, 1.2 m to the top of its head,
+the cowboy in the saddle, the camera pulled back to frame both). Later dinosaurs can be the
+dungeon items' twins too: a long-neck to reach high ledges, a triceratops to charge gates, a
+pterosaur kite. In the slice the dinosaur still uses the car's physics underneath.
 
 **What's different in the past.** Same map, so everything old has a new place:
 - **No base**: open desert, a stage road where the runway will be, a fort-like stockade where the
@@ -177,8 +186,8 @@ change (the keyboard rule above), only the toy:
   present, are open in the past.
 - **A steam train** runs the valley line where the present-day train bridge stands.
 
-**Western set pieces, all toy-sized and no one gets hurt:** a train robbery you foil by galloping
-alongside and jumping aboard; a stampede of plastic cattle down the main street; a high-noon cork-gun
+**Western set pieces, all toy-sized and no one gets hurt:** a train robbery you foil by running
+alongside on your dinosaur and jumping aboard; a stampede of plastic cattle (and loose dinosaurs) down the main street; a high-noon cork-gun
 duel (hit the outlaw toy's hat and he pops apart, as all bad toys do); lassoing a runaway stagecoach;
 a sheriff's star as the small-key equivalent in the Lake Town.
 
@@ -191,7 +200,7 @@ bottom of the dam lake**, which in the past is the Lake Town's main street, dry.
   needs (the Spirit Lamp shows the hidden ones).
 - Some are **quick ways home**, some are **one-way surprises**: the town portal lands you in the
   middle of an outlaw gang, the skatepark bowl drops you into the old mine.
-- They make the world feel bigger, not smaller: they never replace driving or galloping there, and
+- They make the world feel bigger, not smaller: they never replace driving or riding there, and
   the map marks a portal only after you've used it.
 
 **Back and forth.** The Moon Mirror takes you home at the same spot, and the spirit cave takes you
