@@ -223,6 +223,24 @@ pterosaur kite. In the slice the dinosaur still uses the car's physics underneat
   present, are open in the past.
 - **A steam train** runs the valley line where the present-day train bridge stands.
 
+**Why people are here, then and now** (owner, 31 Oct: "certain places attract people... we'll
+need to think about this stuff, always"). The rule: every place in the present exists for a reason
+the land gave it, and the past shows that reason raw. In a desert valley the reason is nearly always
+water (Las Vegas is Spanish for "the meadows", after the spring-fed grassland travellers stopped
+at). Every new venue answers two questions when it is built, not later: why do people come here,
+and what was here then?
+
+| Present | Why people come | Past |
+|---|---|---|
+| Runway | long, flat, hard ground | the stage road |
+| Hangar | shelter and work | the stockade |
+| Lake and dam | water, stored | the green river valley and the Lake Town |
+| Country club (golf, clubhouse, tennis, minigolf) | water on the surface: the greenest spot on the base | **a spring meadow on the cattle trail**: cattle graze the "fairways" and loose dinosaurs come to drink; the clubhouse is a ranch house with a windmill pump, trough and chuck wagon; the tennis courts are the corrals; the minigolf is a horseshoe pitch; golf becomes the **roundup**, steering steers into pens from your dinosaur with the lasso as the club (the same aim-power-landing skill) |
+| Waterpark | water for fun | the swimming hole at the river bend |
+| BX shopping | trade | the trading post |
+| Housing | people live near work | homesteads and the steam farmland |
+| Spirit Mountain | the high point you see from everywhere | the lookout, and the working mine |
+
 **Western set pieces, all toy-sized and no one gets hurt:** a train robbery you foil by running
 alongside on your dinosaur and jumping aboard; a stampede of plastic cattle (and loose dinosaurs) down the main street; a high-noon cork-gun
 duel (hit the outlaw toy's hat and he pops apart, as all bad toys do); lassoing a runaway stagecoach;
