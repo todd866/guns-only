@@ -39,6 +39,7 @@ import {SCHOOL} from './open-world/flying-school.mjs';
 import {SKY_STEER_HINT, skyLandingText, skyDiveCamera} from './open-world/sky-dive.mjs';
 import {createSkyDiveReport} from './open-world/sky-dive.js';
 import {TENNIS, onTennisCourt, tennisStart, tennisAssist} from './open-world/tennis.mjs';
+import {STUNT_JUMPS} from './open-world/stunt-jumps.mjs';
 import {applyLivery} from './livery.js';
 import {batchCarParts, unbatchCarParts} from './car-batch.js';
 import {createRobot, stepRobot} from './physics/robot.mjs';
@@ -4057,6 +4058,21 @@ let totTrick = null,
   candyRun = 0,
   candyRecord = null,
   pumpkinRecord = null;
+function stuntEnabled() {
+  return !!(openWorld && race.roam && !robot && !skate && form !== 'board' && !s.flight.mode);
+}
+function stuntStep(dt) {
+  for (const e of openWorld?.stuntStep(dt, s.car, stuntEnabled()) ?? []) {
+    if (e.type === 'found') {
+      if (e.fresh) {
+        openWorld.progress.stuntJumps.push(e.id);
+        openWorld.save();
+      }
+      audio.finish();
+      callout(`🚀 Stunt jump! ${e.count} of ${STUNT_JUMPS.length}`, 3000);
+    } else if (e.type === 'miss') callout('💥 So close! Try faster', 2400);
+  }
+}
 function trickOrTreatStep(pos, dt, now) {
   if (!openWorld?.trickOrTreat || !race.roam || s.flight.mode) return;
   if (robot) {
@@ -4415,6 +4431,7 @@ function statRows() {
     ['🎃', 'Pumpkins this time', num(pumpkinsSmashed)],
     ['🎃', 'Pumpkins ever', num(pr.pumpkins)],
     ['📍', 'Places found', num(pr.discovered?.length)],
+    ['🚀', 'Stunt jumps', `${pr.stuntJumps?.length ?? 0} of ${STUNT_JUMPS.length}`],
     ['🦎', 'Desert finds', num(pr.specimens?.length)],
     ['🏁', 'Races won', num(Object.keys(pr.raceWins ?? {}).length)],
     ['🛹', 'Best skate score', num(skateBest)],
@@ -4607,7 +4624,8 @@ function frame(now) {
     $('pause').textContent = '⏸';
     if (!race.roam) startCountdown();
   }
-  const dt = frameSeconds(now, last);
+  const timeScale = openWorld?.stuntScale(s.car, Math.max(0, now - last) / 1000, stuntEnabled()) ?? 1,
+    dt = frameSeconds(now, last) * timeScale;
   telemetry.observeFrame(Math.max(0, now - last), !paused && countdown <= 0 && !document.hidden);
   frameMs.push(Math.max(0, now - last));
   if (frameMs.length > 600) frameMs.shift();
@@ -4701,6 +4719,7 @@ function frame(now) {
       if (openWorld)
         for (const session of [s, ...race.rivals.map(r => r.session)]) openWorld.step(session.car, 1 / 120);
       if (schoolPrev) schoolStep(schoolPrev, 1 / 120);
+      stuntStep(1 / 120);
       if (openWorld && race.roam) {
         bowlingPrepare(1 / 120);
         const activity = openWorld.stepActivity(

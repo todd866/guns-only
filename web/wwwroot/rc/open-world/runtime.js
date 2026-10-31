@@ -57,6 +57,8 @@ import {createBooster} from './booster.js';
 import {createFlyingSchool} from './flying-school.js';
 import {createTennisCourt} from './tennis.js';
 import {SCHOOL} from './flying-school.mjs';
+import {buildStuntJumps} from './stunt-jumps.js';
+import {createStuntJumps, stepStuntJumps, stuntTimeScale} from './stunt-jumps.mjs';
 import {buildHighSchool} from './high-school.js';
 import {createHotWheels} from './hot-wheels.js';
 import {createCountryClub} from './country-club.js';
@@ -141,6 +143,7 @@ export async function loadOpenWorld(search) {
     storage = localStorage;
   } catch {}
   const progress = loadProgress(storage),
+    stuntState = createStuntJumps(progress.stuntJumps, (x, z) => elevationAt(elevation, x, z)),
     explicitEntry = q.has('event') || q.has('from') || q.has('at'),
     requested = eventById(q.get('event')),
     requestedPlace = requested && locationById(requested.location),
@@ -394,6 +397,7 @@ export async function loadOpenWorld(search) {
     booster,
     flyingSchool,
     tennis,
+    stuntJumps,
     highSchool,
     bowlingAlley,
     hotWheels,
@@ -680,6 +684,7 @@ export async function loadOpenWorld(search) {
       booster = createBooster(scene, (x, z) => elevationAt(elevation, x, z));
       flyingSchool = createFlyingSchool(scene, (x, z) => elevationAt(elevation, x, z));
       tennis = createTennisCourt(scene, (x, z) => elevationAt(elevation, x, z));
+      stuntJumps = buildStuntJumps(scene, stream.world, stuntState.heightAt);
       hotWheels = createHotWheels(scene, stream.world);
       // The club in the present, the spring meadow in the past (meadow.js): each one's collision on
       // its own era gate, so neither leaves invisible walls in the other time.
@@ -728,6 +733,8 @@ export async function loadOpenWorld(search) {
     stopTennis: () => tennis?.stop(),
     tennisSwing: player => tennis?.swing(player) ?? false,
     tennisStep: (dt, player) => tennis?.step(dt, player) ?? [],
+    stuntStep: (dt, car, enabled) => stepStuntJumps(stuntState, car, dt, enabled),
+    stuntScale: (car, dt, enabled) => stuntTimeScale(stuntState, car, dt, enabled),
     trickOrTreat: (pos, trick, time, dt) => trickOrTreat?.step(pos, trick, time, dt) ?? [],
     candy: () => trickOrTreat?.state.candy ?? null,
     treatHouses: () => trickOrTreat?.houses ?? [],
@@ -915,6 +922,7 @@ export async function loadOpenWorld(search) {
       booster?.dispose();
       flyingSchool?.dispose();
       tennis?.dispose();
+      stuntJumps?.dispose();
       trickOrTreat?.dispose();
       zoo?.dispose();
       jetDecks?.dispose();
