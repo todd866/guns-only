@@ -66,6 +66,26 @@ function parse(argv) {
 
 function pct(s, q) { return s[Math.min(s.length - 1, Math.floor(s.length * q))]; }
 
+// Runs in the page. Coplanar sand shoulders/gravel verges can pick different depth winners
+// while the chase projection is still easing: position-only or pixel agreement is insufficient.
+function settleCamera() {
+  return new Promise((resolve, reject) => {
+    const R = window.__gunsOnlyRC, pose = () => { const c = R.camera(); return [...c.pos, c.yaw, c.pitch, c.fov]; };
+    const deadline = performance.now() + 30000;
+    let last = pose(), calm = 0, frames = 0;
+    const sample = () => {
+      const cur = pose(), delta = Math.max(...cur.map((v, i) => Math.abs(v - last[i])));
+      last = cur; frames++;
+      // Require numerical convergence of the slower FOV damping as well as the camera position.
+      calm = delta < 1e-10 ? calm + 1 : 0;
+      if (calm >= 30) resolve({ frames, calm });
+      else if (performance.now() >= deadline) reject(Error(`camera pose did not settle within 30s (delta=${delta}, pose=${JSON.stringify(cur)})`));
+      else requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+}
+
 async function capture(outdir, names, allowSoftware) {
   const { chromium } = require(process.env.PLAYWRIGHT_MODULE || [path.join(ROOT, 'web/smoke/node_modules/playwright'), path.join(ROOT, '../../web/smoke/node_modules/playwright')].find(p => fs.existsSync(p)));
   const cfg = JSON.parse(fs.readFileSync(VIEWS_FILE, 'utf8'));
@@ -97,11 +117,7 @@ async function capture(outdir, names, allowSoftware) {
           R.place([pos[0], y, pos[2]], yaw);
         }, v);
         await p.waitForFunction(() => { const s = window.__gunsOnlyRC.snapshot(); return !s.world || s.world.ready; }, null, { timeout: 90000 });
-        const settled = await p.evaluate(() => new Promise(res => {
-          const R = window.__gunsOnlyRC; let last = R.camera().pos, calm = 0, n = 0;
-          const f = () => { const c = R.camera().pos, d = Math.hypot(c[0] - last[0], c[1] - last[1], c[2] - last[2]); last = c; calm = d < 0.002 ? calm + 1 : 0; n++; if (calm >= 20 || n > 600) res({ frames: n, calm }); else requestAnimationFrame(f); };
-          requestAnimationFrame(f);
-        }));
+        const settled = await p.evaluate(settleCamera);
         // Ground detail (pebbles, cracks, scatter) streams in cell by cell after a teleport: let its queue drain.
         await p.waitForFunction(() => { const n = window.__gunsOnlyRC.nearDetail?.(); return !n || n.queued === 0; }, null, { timeout: 60000 });
         await p.evaluate(() => document.querySelector('#pause').click());
@@ -166,7 +182,7 @@ function bless(outdir, refdir) {
   if (stale.length) console.log('note: stale reference stills not in this capture: ' + stale.join(', '));
 }
 
-module.exports = { pixelMad, diffBuffers, judge, thresholdsFor };
+module.exports = { pixelMad, diffBuffers, judge, thresholdsFor, settleCamera };
 
 if (require.main === module) {
   const [cmd, outdir, ...rest] = process.argv.slice(2), o = parse(rest);
