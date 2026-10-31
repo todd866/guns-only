@@ -60,8 +60,14 @@ export function say(text, {era = 'present', mount = 'Dino', onFoot = false} = {}
       ? {reply: `🦖 ${mount} is here!`, call: 'mount'}
       : {reply: `🦖 You are on ${mount}!`, call: null};
   if (calling) return {reply: `🦖 ${mount} lives long ago.`, call: null};
+  // A little Spanish (design doc), checked before English: "si" is one slip from "hi". In the past
+  // the toys greet in both, so he hears "hola" next to the word he knows.
+  if (sounds(t, 'hola')) return {reply: era === 'past' ? '🤠 ¡Hola, amigo!' : '👋 ¡Hola!', call: null};
+  if (sounds(t, 'gracias')) return {reply: '🤠 ¡De nada!', call: null};
+  if (sounds(t, 'adios')) return {reply: '👋 ¡Adiós, amigo!', call: null};
+  if (t === 'si') return {reply: '👍 ¡Sí!', call: null};
   if (['hi', 'hello', 'hey', 'howdy'].some(w => sounds(t, w)))
-    return {reply: era === 'past' ? '🤠 Howdy, partner!' : '👋 Hello!', call: null};
+    return {reply: era === 'past' ? '🤠 ¡Hola! Howdy!' : '👋 Hello!', call: null};
   if (sounds(t, 'yeehaw') || sounds(t, 'yee haw')) return {reply: '🤠 YEEHAW!', call: null};
   if (sounds(t, 'six seven') || t === '67') return {reply: '6️⃣7️⃣ SIX SEVEN!', call: null};
   return {reply: `💬 "${String(text).trim().slice(0, 24)}"`, call: null};

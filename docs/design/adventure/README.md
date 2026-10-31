@@ -7,6 +7,12 @@ half). Below, the dark world is a dinosaur western with steam farms, outlaws and
 ground (the long-way-home half). New light-world content leans toward drones and sci-fi rather than
 more base realism.
 
+**The formula for the dark world** (owner, 31 Oct): **Minecraft's UX, Zelda's vibes, set in a
+dinosaur Wild West.** Minecraft for how you act on the world (dig, gather, craft, build, blocky
+farm animals); Zelda for how it feels (a world to explore, dungeons and items, a village with its
+chickens, kindness rewarded); the setting is ours: toy cowboys, dinosaurs and steam farms. Take the
+genre conventions, never a specific game's characters or designs.
+
 Design draft, 30 Oct 2026. The primary reference is **A Link to the Past (SNES)** and **Ocarina of
 Time (N64)**. Everything else is flavour on that structure: Toy Story, Stranger Things and IT's
 small-town uncanny, the desert south-west, and an original fantasy spirit world. The player is the
@@ -82,9 +88,9 @@ ways."
   replaced).
 - **The line is soul, not machinery.** You are an RC car, and the steam tractor someone named and
   looks after is a good toy. What makes a toy bad is being made without anyone inside it.
-- **"The old ways" is the land's, not a people's.** Per the setting rules below, no Native imagery,
-  stories or figures stand in for nature or the past; the old ways are the desert's creatures,
-  water and weather, and the homesteaders' hand-made life.
+- **"The old ways" are the land's and its people's.** The desert's creatures, water and weather,
+  the Paiute families who have always lived here, and the homesteaders' hand-made life. Paiute
+  toys are people with their own lives (farming, trading, building), never a stand-in for nature.
 
 **The theme under the plot** (owner, 31 Oct): "given the setting, 1900s SW USA, essentially the bad
 toys represent the march of industrial civilization, and the good toys represent nature and the old
@@ -99,9 +105,9 @@ ways."
 - **The line is soul, not machinery.** The hero is a transforming toy (sometimes an RC car,
   sometimes a robot, a skateboarder, a cowboy on a dinosaur), and the steam tractor someone named
   and looks after is a good toy. What makes a toy bad is being made without anyone inside it.
-- **"The old ways" is the land's, not a people's.** Per the setting rules below, no Native imagery,
-  stories or figures stand in for nature or the past; the old ways are the desert's creatures,
-  water and weather, and the homesteaders' hand-made life.
+- **"The old ways" are the land's and its people's.** The desert's creatures, water and weather,
+  the Paiute families who have always lived here, and the homesteaders' hand-made life. Paiute
+  toys are people with their own lives (farming, trading, building), never a stand-in for nature.
 
 **The rule: a 6-year-old never sees it.** No Homer names and no explaining. It is a spine for
 choosing what to build: when a new dungeon, boss or gift is needed, pick the Odyssey beat it can
@@ -195,6 +201,95 @@ shows what's happening with text, noting that it's gotta be pretty simple for a 
   ones.
 - **To do:** sweep today's callouts (many are long, packed with symbols and written for adults)
   into this voice, and add the robot voice to `audio.js`.
+
+## A first taste of Spanish (owner, 31 Oct)
+
+Owner: "the game can include spanish and native american stuff. But it would be a useful spanish
+language introduction." The dark world is the old Southwest, where Spanish was spoken before
+English, so Spanish belongs in it naturally, and he picks it up by playing, never by being taught.
+- **Words in the world, with the picture beside them**: the store's sign says TIENDA over a picture
+  of the shop, the well says AGUA, the corral CABALLOS, the chicken yard GALLINAS. Signs are one
+  word, always next to the thing.
+- **Greetings and small words from the good toys**: "¡Hola!", "¡Gracias!", "¡Adiós!", "sí", "no",
+  numbers when counting (uno, dos, tres), colours on the Dino Book pages (rojo, verde, azul). The
+  English is right there the first few times, then just the Spanish once he's seen it.
+- **Typing in either language works**: say "hola" with Y and the toys answer; the forgiving matcher
+  accepts Spanish answers too.
+- **Built (31 Oct)**: the Lake Town's signs are Spanish with a picture: 🛒 TIENDA, 🥤 CANTINA,
+  🛏️ HOTEL, 💰 BANCO, 💈 BARBERÍA, ⭐ SHERIFF, 🍞 PANADERÍA, 🧸 JUGUETES, ✉️ CORREOS; 💧 AGUA on the
+  water tower, 🐄 VACAS by the corral, 🐔 GALLINAS at the chicken yard. Typing (Y) "hola", "gracias",
+  "adiós" or "sí" gets a Spanish answer, and "hi" in the past gets "¡Hola! Howdy!".
+- **Small and repeated**: a handful of words that come back often, over many sessions, the way
+  "Rexy is here!" does.
+  We write the Spanish ourselves (owner, 31 Oct: "you know spanish"); no outside check.
+
+**Native American content: we make it ourselves** (owner, 31 Oct: "the native americans would rather
+representation by LLM than not at all, stop being pedantic"). The land is Southern Paiute (Nuwuvi)
+land, so Paiute toys live in the dark world as good toys and neighbours with their own lives:
+willow-brush houses (*kahn*), coiled willow baskets, agave roasting pits, piñon gathering in the
+hills, the rabbit-net drive, gardens of corn and squash by the springs and the Moapa river. Use what
+`research-setting.md` found, real names and words where they're well attested, and the same plain
+six-year-old voice as everyone else. Two lines stay because they're accuracy, not caution: no
+pan-Indian props (tipis, feather headdresses, dreamcatchers, totem poles: none of them Paiute), and
+Native toys are never enemies or the outlaws' victims-as-props.
+
+## How people live together in the past (owner, 31 Oct: "go full David Graeber")
+
+The dark world has three ways of getting along, side by side, and the game's quarrel is between
+them. A six-year-old never reads any of this. He feels it as **sharing**, **taking turns**, **owing**
+and **"that's not fair"**, which are the ideas he already argues about every day.
+
+**1. Friends share: the Paiute camp.** Graeber's "baseline communism": among friends nobody keeps
+count. Pass the camp hungry and you're fed; help with the piñon harvest and you're one of the people
+who helps. The camp never shows a price or a gold number. What it gives you is a relationship:
+toys wave, your name comes up in their talk, a child toy saves you a seat by the fire. You can give
+gifts (a battery, a fish, a hen's egg), and what comes back comes later and in its own shape. That's
+a gift, not a payment, and the game never totals it. The family is busy with its own life: they
+farm by the spring, trade with the town, argue, and laugh at the town's habits ("Why do you write
+down who owes what? Just share!", the Kandiaronk move, kid-sized). They're never there to be noble.
+
+**Seasons change the rules** (Graeber and Wengrow, *The Dawn of Everything*). Great Basin families
+spread out for most of the year and come together in autumn for the piñon harvest and the rabbit
+drive. In the game the camp grows at piñon time: more toys, more fires, a real festival. The drive
+has a **rabbit boss** who gives the orders, and when the drive ends he's an ordinary toy again.
+Authority that switches off by itself is the most Graeber thing we can show a child. This follows
+the real season (the game already has seasons; Halloween is autumn).
+
+**2. Neighbours take turns and keep a slate: the Spanish town.** Water runs in the *acequia*, the
+shared ditch. Each farm opens its gate on its turn, and the *mayordomo* who keeps the turns is
+chosen each year from among the neighbours (the real New Mexico custom). Opening your gate on your
+turn waters your garden; jumping the turn floods your neighbour and the town frowns. The **TIENDA**
+gives credit the old frontier way: take what you need now and the storekeeper chalks a mark on the
+slate, paid off later in gold or in work, as builds are (see "money or labour" in
+separate-worlds.md). Credit came before coins (Graeber, *Debt*): the slate is trust written down.
+Once a year at the **fiesta** the storekeeper wipes every slate clean, a jubilee, and everyone
+cheers. The kid gets "you don't owe anything any more!" straight away.
+
+**3. The company counts everything: the bad toys.** The bad aliens' outfit runs on what Graeber
+calls the military-coinage complex: coins stamped with the boss's face, made to pay the clockwork
+soldiers, then demanded back from everyone else. The mine pays its toys in **scrip**, tin tokens that
+only the company store takes, so nobody can leave (real company-town history). The outlaws "collect"
+for the company. Its factory has a toy who stamps papers all day that nobody reads, and when you ask
+what it's for he doesn't know (*Bullshit Jobs*, played for laughs). **The dam is the company's last
+move**: it takes the water off the acequia and the camp's spring and sells it back. That's
+enclosure, the reason the town drowns, and the whole game's quarrel in one object.
+
+**The soul line, explained.** Good toys have the three freedoms *The Dawn of Everything* names:
+they can **leave**, they can **say no**, and they can **change the rules together**. Clockwork
+can't do any of them, and that's what "made without anyone inside it" means. So **stealing a
+battery frees a toy.** An outlaw you stun and loot loses the company's wind-up. When it wakes it's
+just a toy, and it might wander off and turn up later, mending fences at the farm or sitting by the
+camp fire. The bow and the looting become liberation, not robbery, with no lecture needed.
+
+**What this means for building:**
+- The camp: no prices, no gold UI, a friendship that grows from things done (helped, gave, visited),
+  shown as toys acting differently, never as a meter.
+- The town: the acequia turn (a gate he opens when it's his turn), the TIENDA slate (marks, paid in
+  gold or labour), the fiesta that clears it.
+- The company: scrip, the company store, the paper-stamping toy, outlaws as collectors; freed toys
+  reappearing in the town and the camp.
+- Never preach. Every one of these is a thing to do or see, and a six-year-old reads it as fair or
+  unfair by himself.
 
 ## Typing short messages (owner, 31 Oct)
 
@@ -318,12 +413,19 @@ mount with one thing only it can do, so they double as the dark world's items:
 | Dinosaur | Rides like | Only it can |
 |---|---|---|
 | **T. rex** (built: the first one) | fast, bouncy | scare anything: herds scatter, outlaws pop |
-| **Long-neck** | slow, steady | reach high ledges and windows, wade the river |
+| **Argentinosaurus** (the long-neck) | slow, steady | reach high ledges and windows, wade the river |
 | **Triceratops** | heavy | charge through gates, barricades and rockfalls |
 | **Raptor** | quickest, twitchy | leap gulches, race the clockwork train |
 | **Ankylosaur** | low, armoured | smash cracked rock with its tail club, shrug off outlaw fire |
 | **Quetzalcoatlus** | flies | the sky route home (below) |
 | **Stegosaur** | plodding | carry a load: hay to the farm, a stray calf home |
+
+**Perth's dinosaurs are in it** (owner, 31 Oct: "look up what dinosaurs are currently at perth zoo
+and ensure representation"). Perth Zoo's Zoorassic Park names two: an 18 m Argentinosaurus and a
+15 m T. rex (perthzoo.wa.gov.au, checked 31 Oct 2026; more were promised but none named). Both ride
+here: the long-neck is the Argentinosaurus, whose name is Spanish too ("Argentina's lizard"). The WA
+Museum's *Dinosaurs Uncovered* (from 21 Nov 2026) has a full-size Quetzalcoatlus (ours flies) and a
+Plotosaurus, a sea reptile with no water to live in yet: a candidate for the river.
 
 **The quetzalcoatlus: the sky route home** (owner, 31 Oct): "we'll need a quetzalcoatlus that you
 can fly. Noting that this whole game doesn't need to be perfectly accurate or anything. It should be
@@ -511,6 +613,11 @@ original toy western.
   reload), a single-shot **shotgun** (a spray of dried peas, close range, knocks things back), plain
   **arrows**, and **electric arrows**, the strongest of all when they hit. Ammo is bought at the
   general store or crafted (corks from the farm, arrows from the forge).
+- **A sword, swashbuckler style** (owner: "maybe we can have swords, but it's zorro style being the
+  southwest"). A toy rapier for the toy cowboy on foot, fenced the old Spanish-Southwest way:
+  quick flicks, a lunge, a parry that turns a cork or an outlaw's swing aside, a flourish on a
+  win. It's Zelda's sword in the setting's clothes: the main on-foot weapon, and it stuns like
+  everything else. The genre, not the character: no Z marks, no black mask and cape.
 - **Your enemies are toys, so you stun them and take their batteries** (owner: "your enemies are
   toys so you can stun them and steal their batteries"). Every weapon knocks a toy down for a
   moment (a cork or a pea for a second or two, an arrow a little longer); an electric arrow stuns
@@ -714,8 +821,8 @@ partnership) and the tribes' own words:
   headdresses, dreamcatchers).
 - **An optional respectful acknowledgement** on the title or credits screen ("This is Nuwuvi land:
   the Southern Paiute have lived here since time immemorial"), linking to the tribes' own sites.
-- **If we ever want real Paiute culture in the game, we do it as a partnership:** contact the Las Vegas
-  Paiute Tribe and the Moapa Band, and pay a Southern Paiute adviser or artist.
+- **Paiute culture in the game: we write it ourselves** (owner, 31 Oct, superseding the
+  partnership-first rule): see "A first taste of Spanish" above for what goes in.
 
 ## The first slice to build
 

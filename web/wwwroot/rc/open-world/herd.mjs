@@ -9,7 +9,9 @@ import {sounds, clean} from './typed.mjs';
 export const DINO_KINDS = Object.freeze({
   rex: Object.freeze({name: 'T. rex', model: 'dino', can: 'scare', tint: true}),
   raptor: Object.freeze({name: 'Raptor', model: 'raptor', can: 'leap'}),
-  longneck: Object.freeze({name: 'Long-neck', model: 'longneck', can: 'reach'}),
+  // The long-neck is an Argentinosaurus, the giant at Perth Zoo's Zoorassic Park (with its T. rex;
+  // owner, 31 Oct: "ensure representation"). Its name is Spanish too: Argentina's lizard.
+  longneck: Object.freeze({name: 'Argentinosaurus', model: 'longneck', can: 'reach'}),
   triceratops: Object.freeze({name: 'Triceratops', model: 'triceratops', can: 'charge'}),
   // The sky route home (design doc): won at its nest high on Spirit Mountain, and the only one that flies.
   quetzal: Object.freeze({name: 'Quetzalcoatlus', model: 'quetzal', can: 'fly', flies: true})

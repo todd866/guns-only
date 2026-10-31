@@ -58,6 +58,17 @@ export function frameMarks(f, index) {
     })
     .join(' ');
 }
+export const canSwitchBowlingLane = g =>
+  !!(g?.kind === 'bowling' && !g.done && g.delivery === 1 && !g.launched && !g.ball);
+export function switchBowlingLane(g, lane) {
+  if (!canSwitchBowlingLane(g) || !LANES[lane - 1] || g.lane === lane) return false;
+  g.lane = lane;
+  g.pins = pinRack(lane);
+  g.rackDown = 0;
+  g.elapsed = 0;
+  g.settling = 0;
+  return true;
+}
 export function createBowling({lane = 1, control = 'car', mode = 'kid'} = {}) {
   if (!LANES[lane - 1] || (control === 'car' && lane !== 1)) throw new RangeError('Bowling lane');
   return {

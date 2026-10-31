@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DEX, loadDex, see, pages, earn, spend, addLoot, GOLD} from './dex.mjs';
+import {DEX, loadDex, see, pages, earn, spend, addLoot, takeLoot, GOLD} from './dex.mjs';
 
 test('the book has a page for every kind of dinosaur in the herd roster', () => {
   assert.deepEqual(
@@ -56,4 +56,13 @@ test('batteries and parts load cleanly and addLoot accepts only safe positive in
   addLoot(full, {batteries: 1, parts: 2});
   assert.equal(full.batteries, Number.MAX_SAFE_INTEGER);
   assert.equal(full.parts, Number.MAX_SAFE_INTEGER);
+});
+
+test('takeLoot removes only what you have', () => {
+  const dex = loadDex({batteries: 2, parts: 1});
+  assert.deepEqual(takeLoot(dex, {batteries: 1}), {batteries: 1, parts: 0});
+  assert.equal(dex.batteries, 1);
+  assert.deepEqual(takeLoot(dex, {batteries: 5, parts: 2}), {batteries: 1, parts: 1});
+  assert.equal(dex.batteries, 0);
+  assert.equal(dex.parts, 0);
 });

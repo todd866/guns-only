@@ -41,7 +41,8 @@ test('world art builds finite batched meshes; all authored races remain driveabl
       triangles < 330000,
       `${triangles} triangles`
     );
-    assert.equal(landmarks.rings.size, LOCATIONS.length);
+    // The Canyon Run's gold gates are its marker (landmarks.js skips its ring).
+    assert.equal(landmarks.rings.size, LOCATIONS.filter(p => p.game !== 'canyon-run').length);
     for (const e of EVENTS.filter(e => !e.battle)) {
       const course = eventCourse(e, stream.world),
         race = createRace(course, {opponents: 0, mode: 'bigKid'}),

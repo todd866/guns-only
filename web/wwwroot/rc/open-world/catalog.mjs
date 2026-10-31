@@ -1,6 +1,9 @@
-import {FRONT_DOOR_POS} from './bowling-alley.mjs';
+import {FRONT_DOOR_POS, ALLEY_RACE_POINTS} from './bowling-alley.mjs';
 import {NY} from './under-bridge.mjs';
 import {SCHOOL} from './flying-school.mjs';
+import {STUNT_JUMPS} from './stunt-jumps.mjs';
+import {CLOUDS} from './clouds.mjs';
+import {CANYON_RUN} from './canyon-run.mjs';
 import {LIVERIES, TRIMS} from '../livery-data.mjs';
 import {plazaWorld, PLAZA_PARK} from './town-plaza.mjs';
 import {playgroundWorld, PLAYGROUND_PARK} from './playground.mjs';
@@ -11,10 +14,21 @@ import {CLASSIC_LOCATIONS, CLASSIC_EVENTS} from './classic-courses.mjs';
 import {VENUE_LOCATIONS, VENUE_EVENTS} from './expansion-venues.mjs';
 import {PORTAL_EVENT, portalHeight} from './portal-course.mjs';
 import {ROAD_EVENTS} from './road-events.mjs';
+import {SKY_JUMPS} from './sky-dive.mjs';
 // Authored activities in the real Nellis local metre frame. +x east, +z south.
 // Gameplay courses and landmark art are fiction; OSM supplies roads and footprints.
 export const BOUNDS = [-3800, -4600, 3600, 4050]; // north and east grown for Spirit Mountain (spirit-mountain.mjs)
 export const LOCATIONS = [
+  ...SKY_JUMPS.filter(j => j.place !== false).map(j => ({
+    id: j.id,
+    name: j.name,
+    short: j.name,
+    pos: [j.pad[0], 0, j.pad[1]],
+    color: '#f6c944',
+    icon: '🪂',
+    kind: 'activity',
+    game: 'sky-dive'
+  })),
   {
     id: 'gate',
     name: 'Main Gate',
@@ -105,6 +119,7 @@ export const LOCATIONS = [
     kind: 'activity',
     game: 'flying-school'
   },
+  CANYON_RUN.location,
   {
     id: 'wic',
     name: 'WIC PlayPlace',
@@ -173,7 +188,7 @@ export const LOCATIONS = [
     icon: '◇',
     kind: 'activity',
     game: 'bowling',
-    event: 'rink-drift'
+    event: 'alley-cat'
   },
   {
     id: 'diamond',
@@ -517,6 +532,25 @@ export const EVENTS = [
     ],
     half: 5,
     medals: [42, 57, 80]
+  },
+  // Appended last on purpose: acceptance-balance.test.mjs drives every event in order on one shared
+  // world, and inserting one mid-list shifted Splash Down's reference run into a stall (31 Oct).
+  {
+    id: 'alley-cat',
+    name: 'Alley Cat',
+    location: 'rec',
+    kind: 'circuit',
+    night: true,
+    surface: 'gymfloor',
+    points: ALLEY_RACE_POINTS,
+    // Indoor turns need a shorter look ahead than the outdoor roads.
+    aiHandling: {topSpeed: 5.5, cornerSpeed: 1.5, reach: 0.6, behind: 1.3, look: 0.7, lookSpeed: 0.18},
+    grid: Array.from({length: 8}, (_, i) => ({
+      pos: [ALLEY_RACE_POINTS[0][0], 0, ALLEY_RACE_POINTS[0][1] + i * 0.75],
+      yaw: 0
+    })),
+    half: 0.8,
+    medals: [20, 28, 40]
   }
 ];
 EVENTS.push(
@@ -569,6 +603,8 @@ export function eventCourse(event, world) {
   return {
     world,
     event,
+    aiHandling: event.aiHandling,
+    grid: event.grid,
     outOfBounds:
       event.alien && event.id !== 'night-wave'
         ? pos => pos[1] < -3
@@ -727,6 +763,9 @@ export function loadProgress(storage) {
   return {
     discovered: ['gate', ...ids(v?.discovered, LOCATIONS).filter(id => id !== 'gate')],
     specimens: ids(v?.specimens, SPECIMENS),
+    skyJumps: Number.isSafeInteger(v?.skyJumps) && v.skyJumps >= 0 ? v.skyJumps : 0,
+    bestLanding: Number.isFinite(v?.bestLanding) && v.bestLanding >= 0 ? v.bestLanding : null,
+    stuntJumps: ids(v?.stuntJumps, STUNT_JUMPS),
     golfRoundBest: Number.isInteger(v?.golfRoundBest) && v.golfRoundBest > 0 ? v.golfRoundBest : null,
     roundupBest: Number.isInteger(v?.roundupBest) && v.roundupBest > 0 ? v.roundupBest : null,
     // Version 1 stored one frame (0–10), never a ten-frame record. Even a new zero is a record.
@@ -753,7 +792,15 @@ export function loadProgress(storage) {
     pattern: LIVERIES.some(l => l.id === v?.pattern) ? v.pattern : 'solid',
     pumpkins: Number.isInteger(v?.pumpkins) && v.pumpkins > 0 ? v.pumpkins : 0,
     boosters: Number.isInteger(v?.boosters) && v.boosters > 0 ? v.boosters : 0,
+    clouds: ids(v?.clouds, CLOUDS),
+    canyonBest:
+      typeof v?.canyonBest === 'number' && Number.isFinite(v.canyonBest) && v.canyonBest > 0
+        ? v.canyonBest
+        : null,
     flyingSchool: Number.isInteger(v?.flyingSchool) && v.flyingSchool > 0 ? v.flyingSchool : 0,
+    tennisWins: Number.isSafeInteger(v?.tennisWins) && v.tennisWins >= 0 ? v.tennisWins : 0,
+    parcelsDelivered:
+      Number.isSafeInteger(v?.parcelsDelivered) && v.parcelsDelivered > 0 ? v.parcelsDelivered : 0,
     flyingStars:
       Number.isInteger(v?.flyingStars) && v.flyingStars >= 3 && v.flyingStars <= 9 ? v.flyingStars : 0,
     retreats: Number.isInteger(v?.retreats) && v.retreats > 0 ? v.retreats : 0,
