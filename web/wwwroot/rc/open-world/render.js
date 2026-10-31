@@ -5,6 +5,7 @@ import {roadsideDetail, desertScatter} from './roadside-detail.mjs';
 import {createSurfaceMaps} from './materials.js';
 import {groundTriangles, elevationAt, terrainStep} from './elevation.mjs';
 import {inMountain, roadNear, MOUNTAIN, LAKE} from './spirit-mountain.mjs';
+import {canyonDepth, canyonStrata} from './canyon.mjs';
 import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import * as T from '../../vendor/three.module.js';
@@ -25,6 +26,8 @@ const PALETTE = {
   light: '#e6efc2',
   scrub: '#7e8561',
   gravel: '#a58e70',
+  // The canyon's walls: layered red-brown rock (canyonStrata shades the bands); never pasture-tinted.
+  rock: '#b7714a',
   reflector: '#e3c48a',
   windowLight: '#4d6d78'
 };
@@ -233,6 +236,19 @@ export function createTileRenderer(scene, elevation = null, residentialTerrain =
         true
       );
     }
+    const canyonPaint = p => {
+      const x = (p[0][0] + p[1][0] + p[2][0]) / 3,
+        z = (p[0][2] + p[1][2] + p[2][2]) / 3;
+      if (canyonDepth(x, z) <= 0) return null;
+      const a = p[1].map((v, i) => v - p[0][i]),
+        b = p[2].map((v, i) => v - p[0][i]),
+        nx = a[1] * b[2] - a[2] * b[1],
+        ny = a[2] * b[0] - a[0] * b[2],
+        nz = a[0] * b[1] - a[1] * b[0],
+        steep = Math.hypot(nx, nz) > Math.abs(ny) * 0.55,
+        y = (p[0][1] + p[1][1] + p[2][1]) / 3;
+      return steep ? ['rock', canyonStrata(y)] : ['sand', 1.08];
+    };
     // Spirit Mountain paints its own ground: the road as asphalt, gravel shoulders, darker rock on steep faces.
     const mountainPaint = p => {
       const cx = (p[0][0] + p[1][0] + p[2][0]) / 3,
@@ -255,7 +271,7 @@ export function createTileRenderer(scene, elevation = null, residentialTerrain =
     };
     if (elevation) {
       for (const points of groundTriangles(elevation, b, terrainStep(b), terrainSite)) {
-        const paint = mountainPaint(points) ?? ['sand', 1];
+        const paint = canyonPaint(points) ?? mountainPaint(points) ?? ['sand', 1];
         tri(paint[0], ...points.map(q => [q[0], q[1] - 0.025, q[2]]), paint[1], true);
       }
     } else
