@@ -367,3 +367,27 @@ tools/rc/native/check-app-frames.sh 1440x900 15
 # Flight asset validation (the contract RC should adopt)
 node tools/assets/validate-manifests.mjs --strict --pack content/packs/korea-1950s/pack.json
 ```
+
+## 7. Progress ledger
+
+Kept current by the agent actioning this audit. Commits are on `feature/rc-pipeline` (cut from
+`feature/rc-next` at `a981342a`) unless stated. Nothing here is pushed or deployed.
+
+| Date | Item | Where | State |
+| --- | --- | --- | --- |
+| 2026-10-31 | 3.3.1 Blender sources out of the served tree; validator refuses sources there; `.rc-*/` ignored | `9d9d2fa2` | done |
+| 2026-10-31 | Audit + today's frames committed | `6723efec` | done |
+| 2026-10-31 | 3.2 esbuild bundle mode in `package-rc.mjs` (opt-in `--bundle`, no source edits; 203→7 JS files, 224→29 requests to first drivable frame) | `18ba0381` | done |
+| 2026-10-31 | 3.2 `bin/deploy-rc` packages in bundle mode after check-release, check-new-player and check-mobile passed on the bundled site (Apple M5) | `c8cb579d` | done |
+| 2026-10-31 | 3.3.3 served `assets/manifest.json` (44 entries: licence, provenance, sha256, budgets, single-LOD declaration) + `asset-manifest.mjs update/check` in the deploy gate | `b298fa66` | done |
+| 2026-10-31 | 3.3.4 hero GLB provenance recorded (MIT, from the export scripts); gate runs the strict check, no unknown licences | `e1294ae3` | done |
+| 2026-10-31 | 3.1 `bin/deploy-rc` writes the "RC live" revision line into `docs/STATUS.md` on production deploys | `fd5edb7a` | done |
+| 2026-10-31 | 3.9.4 feel-infinite metrics in `analytics-report.mjs` (places/session, gaps, quiet stretch; proxy = first `visit` per place because `discover()` emits no event) | `5f935ea8` | done; add a real `discover` event in the game (rc-adventure agent) |
+| 2026-10-31 | 3.4.8 RC look gate: fixed views, perceptual diff, reference stills | subagent, queued behind foreign heavy-slot holders | in progress |
+| 2026-10-31 | 3.11 six detached `codex-improve-*` worktrees removed (commit in `main`, nothing uncommitted) | main checkout | done |
+| 2026-10-31 | 3.4.1–3.4.7 shadows, AO, vegetation, smoke, draw calls, bowl-wall wedge | rc-adventure agent (`feature/rc-adventure`), accepted; wedge first; `1f834b65` added park skirts | queued behind the owner's own queue |
+| 2026-10-31 | 3.4.5 sky/air profile, 3.9.3 seasons as data | dark-world agent declined pending Ian | open |
+| 2026-10-31 | Owner: dark-world mounts are dinosaurs (toy rider, sub-real-size but much bigger mount) | `cd86b488` on `feature/rc-dark-world` | done |
+| 2026-10-31 | 3.2 Prettier reformat | dropped: dense one-line JS is deliberate house style; Ian's call | decision |
+| 2026-10-31 | 3.1 trunk: fast-forward `main` to the RC branch and push | needs Ian; note `feature/rc-adventure` is ahead of `feature/rc-next` and is what deploys | decision |
+| — | 3.5 shared visual profile, 3.6 native scene sync, 3.8 finer DEM, 3.9.1 prop kit + placement JSON, 3.10 flight look-gate corpus refresh | not started | open |
