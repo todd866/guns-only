@@ -56,7 +56,7 @@ test("the browser and installed-app descriptions match the six production experi
   assert.match(manifest.description, /F-22 guns-only dogfighting/);
   assert.match(manifest.description, /Rapier high-altitude balloon intercept/);
   assert.match(manifest.description, /AH-1G Cobra Canyon/);
-  assert.match(manifest.description, /Saucer Springs AFB RC exploration and racing/);
+  assert.match(manifest.description, /RC Odyssey exploration and racing/);
   assert.match(manifest.description, /Top Gun ACM/);
   assert.match(manifest.description, /Okanagan Fire Boss/);
   assert.doesNotMatch(catalogue, /Seven flight experiences/);

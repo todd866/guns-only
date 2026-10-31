@@ -3980,7 +3980,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   }),
   "area-51": Object.freeze({
     kicker: "Off duty · base housing",
-    title: "Saucer Springs AFB",
+    title: "RC Odyssey",
     sortie: "Explore · race · battle",
     configuration: "1:10 toy buggy · rigid-body four-wheel physics · kid mode on (B toggles Big Kid)",
     brief: "Start at the neighbourhood skatepark, explore the base, and join nearby races.",

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Ship Saucer Springs AFB on its own: RC tests -> package -> headless boot smoke of the package -> deploy to
+# Ship RC Odyssey on its own: RC tests -> package -> headless boot smoke of the package -> deploy to
 # the guns-only-rc Vercel project -> smoke the live site. About 5 minutes. guns-only.com/rc/ is a
 # rewrite to this project (web/wwwroot/vercel.json), so the main site picks it up with no deploy.
 # The main pipeline (bin/check, CI, the F-22 frame gate) never sees RC changes and keeps its full
