@@ -280,8 +280,24 @@ Dark World. T just switches between riding and on foot (built). The keys don't c
 | RC car | **Riding the toy dinosaur** | Run the open range, leap gulches, outrun a stagecoach, stomp outlaws. Say its name (Y) and it comes |
 | Walking robot | **The toy cowboy on foot** (tin figure, jointed arms) | Climb, crawl and push, as the robot does; dig straight down; lasso posts and steers; cork-gun duels |
 
-Later dinosaurs can stand in for the other forms rather than new gadgets: a long-neck to reach
-high ledges (the skateboard's job), a pterosaur to glide off the mesas (the flying suit's).
+**All sorts of dinosaurs** (owner, 31 Oct). The dark world is full of toy dinosaurs: wild herds
+on the range, ones the homesteaders keep, ones the outlaws ride. Each kind you win over is a
+mount with one thing only it can do, so they double as the dark world's items:
+
+| Dinosaur | Rides like | Only it can |
+|---|---|---|
+| **T. rex** (built: the first one) | fast, bouncy | scare anything: herds scatter, outlaws pop |
+| **Long-neck** | slow, steady | reach high ledges and windows, wade the river |
+| **Triceratops** | heavy | charge through gates, barricades and rockfalls |
+| **Raptor** | quickest, twitchy | leap gulches, race the clockwork train |
+| **Ankylosaur** | low, armoured | smash cracked rock with its tail club, shrug off outlaw fire |
+| **Pterosaur** | glides | soar off the mesas on the canyon winds |
+| **Stegosaur** | plodding | carry a load: hay to the farm, a stray calf home |
+
+Which scares whom follows size: cows and horses mix with the plant-eaters but scatter from a
+T. rex; the smaller dinosaurs give a T. rex a wide berth too. Win one over by feeding or herding
+it, then name it (typed) and call it by name; your herd lives at the farm and any one you've
+named comes when called.
 
 **You ride dinosaurs, not horses** (owner, 31 Oct): "instead of riding horses you're riding
 dinosaurs. This does two things: one, it's hilarious. And two: it makes the characters bigger.
