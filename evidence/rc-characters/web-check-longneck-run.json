@@ -1,0 +1,19 @@
+{
+  "kind": "longneck",
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+  "software": false,
+  "frameMs": {
+    "p50": 16.7,
+    "p95": 18.1,
+    "max": 18.7
+  },
+  "drawCalls": 8,
+  "triangles": 9294,
+  "clips": {
+    "run": {
+      "screenshot": "evidence/rc-characters/web-longneck-run.png",
+      "calls": 8
+    }
+  },
+  "errs": []
+}

@@ -1,0 +1,53 @@
+{
+  "asset": "characters/raptor.glb",
+  "generator": "tools/rc/blender/character_dino.py",
+  "blender": "5.2.0 LTS",
+  "license": "MIT (original authored geometry, rig, animation and materials; repository MIT)",
+  "external_assets": [],
+  "editable_source": "assets/rc/characters/raptor.blend",
+  "stats": {
+    "triangles": 8280,
+    "remesh_triangles_before_decimate": 47136,
+    "bones": 17,
+    "deform_bones": 16,
+    "vertices_weighted_by_fallback": 0,
+    "extent_m_blender_xyz": [
+      0.22,
+      0.986,
+      0.536
+    ],
+    "glb_bytes": 367824,
+    "clips": {
+      "idle": {
+        "frames": 120,
+        "seconds": 2.0,
+        "loop": true,
+        "ground_speed_mps": 0.0
+      },
+      "walk": {
+        "frames": 48,
+        "seconds": 0.8,
+        "loop": true,
+        "ground_speed_mps": 0.292
+      },
+      "run": {
+        "frames": 24,
+        "seconds": 0.4,
+        "loop": true,
+        "ground_speed_mps": 1.125
+      },
+      "jump": {
+        "frames": 48,
+        "seconds": 0.8,
+        "loop": false,
+        "ground_speed_mps": 0.0
+      },
+      "gallop": {
+        "frames": 24,
+        "seconds": 0.4,
+        "loop": true,
+        "ground_speed_mps": 3.667
+      }
+    }
+  }
+}

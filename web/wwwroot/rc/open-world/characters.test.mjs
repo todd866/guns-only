@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as T from '../../vendor/three.module.js';
 import {GLTFLoader} from '../../vendor/three/addons/loaders/GLTFLoader.js';
-import {CHARACTERS, normaliseClipName, resolveClip, planTransition, findNode, cloneSkinned,
+import {CHARACTERS, CHARACTER_KINDS, normaliseClipName, resolveClip, planTransition, findNode, cloneSkinned,
  registerCharacterTemplate, spawnCharacter, disposeCharacter} from './characters.js';
 
 // A two-bone skinned stand-in with the contract's clip names and a Saddle empty on the spine.
@@ -80,46 +80,61 @@ test('spawn, cross-fade, one-shot jump returns to a loop, saddle follows the spi
  disposeCharacter(a); assert.equal(a.root.parent, null); assert.equal(scene.children.length, 1);
 });
 
-test('the shipped dino.glb meets the rig and clip contract', async () => {
- const file = new URL('../assets/characters/dino.glb', import.meta.url);
- const bytes = fs.readFileSync(file), buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length);
- const gltf = await new GLTFLoader().parseAsync(buffer, '');
- const names = ['root', 'spine_01', 'spine_02', 'neck', 'head', 'jaw', 'tail_01', 'tail_02', 'tail_03',
-  ...['L', 'R'].flatMap(s => ['thigh_', 'shin_', 'foot_', 'arm_'].map(b => b + s))];
+const BASE_BONES = ['root', 'spine_01', 'spine_02', 'neck', 'head', 'jaw', 'tail_01', 'tail_02', 'tail_03',
+ ...['L', 'R'].flatMap(s => ['thigh_', 'shin_', 'foot_', 'arm_'].map(b => b + s))];
+const sides = names => ['L', 'R'].flatMap(s => names.map(b => `${b}_${s}`));
+const EXTRA_BONES = {
+ dino: [], raptor: [], triceratops: sides(['forearm', 'hand']), longneck: ['neck_02', ...sides(['forearm', 'hand'])],
+ quetzal: ['neck_02', ...sides(['forearm', 'hand', 'wing_shoulder', 'wing_elbow', 'wing_wrist', 'wing_finger_01', 'wing_finger_02'])],
+};
+const gltfs = new Map();
+async function loadKind(kind) {
+ if (!gltfs.has(kind)) {
+  const bytes = fs.readFileSync(new URL(`../assets/${CHARACTERS[kind].file}`, import.meta.url));
+  gltfs.set(kind, await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length), ''));
+ }
+ return gltfs.get(kind);
+}
+const FEET = ['foot_L', 'foot_R', 'hand_L', 'hand_R'];
+
+for (const kind of CHARACTER_KINDS) test(`${kind}.glb meets the rig, clip and Saddle contract`, async () => {
+ const gltf = await loadKind(kind), def = CHARACTERS[kind];
  let skinned = 0;
- gltf.scene.traverse(o => { if (o.isSkinnedMesh) { skinned++; assert.deepEqual(o.skeleton.bones.map(b => b.name).sort(), [...names].sort()); } });
- assert.equal(skinned >= 1, true, 'one skinned mesh (one primitive per material)');
- for (const [name, spec] of Object.entries(CHARACTERS.dino.clips)) assert.ok(Math.abs(resolveClip('dino', name, gltf.animations).duration - spec.seconds) < 1e-3, name);
- registerCharacterTemplate('dino', gltf);
- const c = spawnCharacter(new T.Scene(), 'dino');
+ gltf.scene.traverse(o => { if (o.isSkinnedMesh) { skinned++; assert.deepEqual(o.skeleton.bones.map(b => b.name).sort(), [...BASE_BONES, ...EXTRA_BONES[kind]].sort()); } });
+ assert.ok(skinned >= 1, 'a skinned mesh');
+ assert.deepEqual(gltf.animations.map(c => normaliseClipName(c.name)).sort(), Object.keys(def.clips).sort(), 'clip set');
+ for (const [name, spec] of Object.entries(def.clips)) assert.ok(Math.abs(resolveClip(kind, name, gltf.animations).duration - spec.seconds) < 1e-3, `${name} duration`);
+ registerCharacterTemplate(kind, gltf);
+ const c = spawnCharacter(new T.Scene(), kind);
  c.root.updateMatrixWorld(true);
  const box = new T.Box3().setFromObject(c.root), size = box.getSize(new T.Vector3());
- assert.ok(size.z > 1.05 && size.z < 1.4, `length ${size.z} m is 2.5-3.3 buggy lengths`);
- const seat = c.saddle().getWorldPosition(new T.Vector3());
- assert.ok(seat.y > 0.38 && seat.y < 0.5, `saddle height ${seat.y}`);
+ assert.ok(Math.abs(size.z - def.lengthM) / def.lengthM < 0.06, `length ${size.z.toFixed(3)} m vs ${def.lengthM}`);
+ if (def.spanM) assert.ok(Math.abs(size.x - def.spanM) < 0.1, `wingspan ${size.x}`);
  assert.ok(Math.abs(box.min.y) < 0.01, `feet on the ground ${box.min.y}`);
- assert.ok(c.mouth().getWorldPosition(new T.Vector3()).z < -0.5, 'mouth is forward (-Z)');
+ const seat = c.saddle().getWorldPosition(new T.Vector3()), mouth = c.mouth().getWorldPosition(new T.Vector3());
+ assert.ok(seat.y > 0.3 && seat.y < box.max.y, `saddle height ${seat.y}`);
+ assert.ok(mouth.z < -0.3, `mouth is forward (-Z): ${mouth.z}`);
+ if (kind === 'dino') assert.ok(seat.y > 0.38 && seat.y < 0.5, `dino saddle height ${seat.y}`);
+ disposeCharacter(c);
 });
 
 // Sample the exported clip finely: while a foot is on the ground it must sweep backwards at the clip's
-// declared ground speed (so moving the root at that speed leaves the foot planted), and the gallop must
-// have a flight phase with both feet off the ground.
-export function stanceSpeed(gltf, clipName, steps = 600) {
- registerCharacterTemplate('dino', gltf);
- const c = spawnCharacter(new T.Scene(), 'dino', {clip: clipName}), clip = c.actions.get(clipName).getClip(), dt = clip.duration / steps;
- const feet = ['foot_L', 'foot_R'].map(n => findNode(c.root, n)), p = new T.Vector3(), samples = [];
- let ground = Infinity;
+// declared ground speed (so moving the root at that speed leaves the foot planted).
+export function stanceSpeed(kind, gltf, clipName, steps = 600) {
+ registerCharacterTemplate(kind, gltf);
+ const c = spawnCharacter(new T.Scene(), kind, {clip: clipName}), action = c.actions.get(clipName), dt = action.getClip().duration / steps;
+ const feet = FEET.map(n => findNode(c.root, n)).filter(Boolean), p = new T.Vector3(), samples = [];
  for (let k = 0; k <= steps; k++) {
-  c.actions.get(clipName).time = k * dt; c.mixer.update(0); c.root.updateMatrixWorld(true);
-  samples.push(feet.map(f => f.getWorldPosition(p).toArray())); ground = Math.min(ground, ...samples[k].map(v => v[1]));
+  action.time = k * dt; c.mixer.update(0); c.root.updateMatrixWorld(true);
+  samples.push(feet.map(f => f.getWorldPosition(p).toArray()));
  }
- const speeds = [], contact = 0.01; let flight = 0;
+ const ground = feet.map((_, f) => Math.min(...samples.map(s => s[f][1]))), speeds = [], contact = 0.01; let flight = 0;
  for (let k = 1; k < samples.length; k++) {
   let down = 0;
-  for (let f = 0; f < 2; f++) {
+  for (let f = 0; f < feet.length; f++) {
    const [a, b] = [samples[k - 1][f], samples[k][f]];
-   if (a[1] - ground < contact && b[1] - ground < contact) { speeds.push((b[2] - a[2]) / dt); down++; }
-   else if (b[1] - ground < contact) down++;
+   if (a[1] - ground[f] < contact && b[1] - ground[f] < contact) { speeds.push((b[2] - a[2]) / dt); down++; }
+   else if (b[1] - ground[f] < contact) down++;
   }
   if (!down) flight++;
  }
@@ -128,12 +143,31 @@ export function stanceSpeed(gltf, clipName, steps = 600) {
  return {median: speeds[speeds.length >> 1], flightShare: flight / steps};
 }
 
-test('gallop: stance feet sweep back at the declared 4 m/s and both feet leave the ground', async () => {
- const bytes = fs.readFileSync(new URL('../assets/characters/dino.glb', import.meta.url));
- const gltf = await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length), '');
- const g = stanceSpeed(gltf, 'gallop'), w = stanceSpeed(gltf, 'walk');
- console.log(`measured stance speed: gallop ${g.median.toFixed(3)} m/s (flight ${(g.flightShare * 100).toFixed(0)}% of the loop), walk ${w.median.toFixed(3)} m/s`);
- assert.ok(Math.abs(g.median - CHARACTERS.dino.clips.gallop.groundSpeedMps) < 0.25, `gallop stance speed ${g.median}`);
- assert.ok(g.flightShare > 0.4, `gallop flight share ${g.flightShare}`);
- assert.ok(Math.abs(w.median - CHARACTERS.dino.clips.walk.groundSpeedMps) < 0.05, `walk stance speed ${w.median}`);
+const measured = {};
+for (const kind of CHARACTER_KINDS) test(`${kind}: stance feet sweep back at each gait's declared ground speed`, async () => {
+ const gltf = await loadKind(kind); measured[kind] = {};
+ for (const gait of ['walk', 'run', 'gallop']) {
+  const want = CHARACTERS[kind].clips[gait].groundSpeedMps, m = stanceSpeed(kind, gltf, gait);
+  measured[kind][gait] = +m.median.toFixed(3);
+  assert.ok(Math.abs(m.median - want) < Math.max(0.05, want * 0.12), `${kind} ${gait} stance ${m.median} vs ${want}`);
+  if (gait === 'gallop') assert.ok(m.flightShare > 0.25, `${kind} gallop has flight phases (${m.flightShare})`);
+ }
+ console.log(`measured stance speed ${kind}: ${JSON.stringify(measured[kind])}`);
+});
+
+test('quetzal: wings fold away on the ground and the walking arms fold away in the air', async () => {
+ const gltf = await loadKind('quetzal'); registerCharacterTemplate('quetzal', gltf);
+ const c = spawnCharacter(new T.Scene(), 'quetzal'), wing = findNode(c.root, 'wing_shoulder_L'), arm = findNode(c.root, 'arm_L'), hips = findNode(c.root, 'spine_01');
+ const at = (clip, u) => { for (const a of c.actions.values()) a.stop(); const a = c.actions.get(clip); a.play(); a.time = a.getClip().duration * u; c.mixer.update(0); c.root.updateMatrixWorld(true); };
+ at('idle', 0); const restHips = hips.getWorldPosition(new T.Vector3()).y;
+ assert.ok(wing.scale.x < 0.05 && arm.scale.x > 0.95, `idle: wing ${wing.scale.x} arm ${arm.scale.x}`);
+ for (const clip of ['flap', 'glide']) {
+  at(clip, 0.3);
+  assert.ok(wing.scale.x > 0.95 && arm.scale.x < 0.05, `${clip}: wing ${wing.scale.x} arm ${arm.scale.x}`);
+  assert.ok(hips.getWorldPosition(new T.Vector3()).y - restHips > 0.2, `${clip} holds the body up`);
+ }
+ at('takeoff', 0); assert.ok(wing.scale.x < 0.05, 'takeoff starts folded'); at('takeoff', 1); assert.ok(wing.scale.x > 0.95, 'takeoff ends spread');
+ at('land', 0); assert.ok(wing.scale.x > 0.95, 'land starts spread'); at('land', 1); assert.ok(wing.scale.x < 0.05 && arm.scale.x > 0.95, 'land ends folded');
+ assert.equal(CHARACTERS.quetzal.clips.flap.loop, true); assert.equal(CHARACTERS.quetzal.clips.takeoff.loop, false);
+ disposeCharacter(c);
 });

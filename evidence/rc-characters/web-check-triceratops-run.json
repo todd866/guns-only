@@ -1,0 +1,19 @@
+{
+  "kind": "triceratops",
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+  "software": false,
+  "frameMs": {
+    "p50": 16.7,
+    "p95": 18.2,
+    "max": 18.6
+  },
+  "drawCalls": 8,
+  "triangles": 9934,
+  "clips": {
+    "run": {
+      "screenshot": "evidence/rc-characters/web-triceratops-run.png",
+      "calls": 8
+    }
+  },
+  "errs": []
+}
