@@ -27,7 +27,11 @@ glow wakes a toy: **you**, an RC car on a kid's bedroom floor. **Both kinds of a
 life** (owner, 31 Oct): the good aliens wake toys as themselves, with their own personalities, and
 the bad aliens animate toys to be their bad guys, faceless soldiers with no one inside (which is
 why those just break). The bad aliens' signal can also bewitch a named toy for a while, and those
-are the bosses you free. So there are **good toys and bad toys**. To free the aliens and
+are the bosses you free. So there are **good toys and bad toys**.
+Owner: "'bad' toys basically don't have a soul, they're just mindless machines, whereas the 'good'
+toys have a personality." **Show it, never say it:** bad toys are identical, tick and whir, march
+in step, have glowing dots for eyes and no voice; good toys are each different, have faces that
+react, little idle habits and voices (and names you can type). To free the aliens and
 stop the break-in, you cross the base, climb **the mountain** where the river begins, and pass
 through its old gate into the dark world. The creatures of the mountain help a toy that carries the
 good aliens' light.
