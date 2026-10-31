@@ -1,0 +1,794 @@
+{
+  "assets": [
+    {
+      "budgets": {
+        "max_bytes": 2000000,
+        "max_materials": 10,
+        "max_primitives": 12,
+        "max_triangles": 25000
+      },
+      "id": "aircraft-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "aircraft.glb"
+        }
+      ],
+      "path": "aircraft.glb",
+      "provenance": "provenance.json",
+      "sha256": "49e36f44e99cb844d6894430b59ad31f2471e826219ec6bbb1e519fd8784c0c5",
+      "sizeBytes": 228340
+    },
+    {
+      "derivedFrom": "aircraft.glb",
+      "id": "aircraft-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "provenance.json"
+      },
+      "locked": false,
+      "path": "aircraft.glb.gz",
+      "provenance": "provenance.json",
+      "sha256": "efcf8f82c11dffa94f4be48a98d8171685963de3588ba4ec6e335d1090cd8bce",
+      "sizeBytes": 98328
+    },
+    {
+      "id": "audio-bump-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "SpeedyVelcro (CC0, credit appreciated)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/SpeedyVelcro/sounds/566117/"
+      },
+      "locked": false,
+      "path": "audio/bump.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "ce325750995a4aa7502485731837683ae5922e07ca2b587de8714ab65d2fea6e",
+      "sizeBytes": 4641
+    },
+    {
+      "id": "audio-bump-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "SpeedyVelcro (CC0, credit appreciated)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/SpeedyVelcro/sounds/566117/"
+      },
+      "locked": false,
+      "path": "audio/bump.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "9c3de5b20c8164a16e9b304d3cf5baf4a2887499512c4c6e177d0431e6e02bf7",
+      "sizeBytes": 9394
+    },
+    {
+      "id": "audio-gravel-loop-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "Heosound (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/Heosound/sounds/825296/"
+      },
+      "locked": false,
+      "path": "audio/gravel_loop.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "51c67c9ee08f8dcba5079bdc2a5a0d4c8bb46b94a237a1a40f31bcac0b19b8ca",
+      "sizeBytes": 39332
+    },
+    {
+      "id": "audio-gravel-loop-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "Heosound (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/Heosound/sounds/825296/"
+      },
+      "locked": false,
+      "path": "audio/gravel_loop.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "ff094d1b48c9aa5be1f7350cb609d2144932e4041c7918a14921736ac075378e",
+      "sizeBytes": 58230
+    },
+    {
+      "id": "audio-landing-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "sgrowe (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/sgrowe/sounds/342539/"
+      },
+      "locked": false,
+      "path": "audio/landing.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "f3857e653e3bc86625a2db1992fe870683714f930e0db757a7eef8522a0d4700",
+      "sizeBytes": 10911
+    },
+    {
+      "id": "audio-landing-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "sgrowe (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/sgrowe/sounds/342539/"
+      },
+      "locked": false,
+      "path": "audio/landing.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "f33ebfcf82a1dc606a3309fddad67f68b9df1afce461e8043fa71f4f2d1920d7",
+      "sizeBytes": 16408
+    },
+    {
+      "id": "audio-motor-high-loop-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "hookhead (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/hookhead/sounds/16031/"
+      },
+      "locked": false,
+      "path": "audio/motor_high_loop.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "71a84fe9fd68dcc323c3f522bca05886a6b2f2283ff00c1f695d163ea98bf833",
+      "sizeBytes": 38078
+    },
+    {
+      "id": "audio-motor-high-loop-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "hookhead (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/hookhead/sounds/16031/"
+      },
+      "locked": false,
+      "path": "audio/motor_high_loop.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "07abf0b7590e28f31ba608ee7bbe0c502709ee4cf65b7c52bec22156e40c0d01",
+      "sizeBytes": 71517
+    },
+    {
+      "id": "audio-motor-loop-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "\"TOYMech-Blue Snowball Microphone, CU_Car, RC, Motor\" by designerschoice (Nicholas Judy), CC BY 4.0; edited: trimmed, looped, normalised",
+        "id": "CC-BY-4.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/designerschoice/sounds/818585/"
+      },
+      "locked": false,
+      "path": "audio/motor_loop.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "f6a88f466a71b5f5fca7c2fef24c0278c4397317276ff98c92d2646aaa28d3bc",
+      "sizeBytes": 39332
+    },
+    {
+      "id": "audio-motor-loop-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "\"TOYMech-Blue Snowball Microphone, CU_Car, RC, Motor\" by designerschoice (Nicholas Judy), CC BY 4.0; edited: trimmed, looped, normalised",
+        "id": "CC-BY-4.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/designerschoice/sounds/818585/"
+      },
+      "locked": false,
+      "path": "audio/motor_loop.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "586b0778b1d7f6944abe1a06716cb712be7e9259815111332379740e243c9d43",
+      "sizeBytes": 69108
+    },
+    {
+      "id": "audio-servo-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "\"rc_car_wheel_turn.wav\" by plingativator, CC BY 4.0; edited: trimmed, normalised",
+        "id": "CC-BY-4.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/plingativator/sounds/188917/"
+      },
+      "locked": false,
+      "path": "audio/servo.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "876845603b2979a28da91dba6405c7402574bbb0a3ba917755b8336c61f8526d",
+      "sizeBytes": 23449
+    },
+    {
+      "id": "audio-servo-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "\"rc_car_wheel_turn.wav\" by plingativator, CC BY 4.0; edited: trimmed, normalised",
+        "id": "CC-BY-4.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/plingativator/sounds/188917/"
+      },
+      "locked": false,
+      "path": "audio/servo.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "3bd36b80e44b698c8715485d903a244dd0d37a72066fb5373c95a17e84916734",
+      "sizeBytes": 42283
+    },
+    {
+      "id": "audio-squeal-loop-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "johnnydekk (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/johnnydekk/sounds/614627/"
+      },
+      "locked": false,
+      "path": "audio/squeal_loop.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "a2ee983a3b8711d48f34d4fb0299e25f8f1c671a254b42a6de4a8d6892e9a0f2",
+      "sizeBytes": 39332
+    },
+    {
+      "id": "audio-squeal-loop-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "johnnydekk (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/johnnydekk/sounds/614627/"
+      },
+      "locked": false,
+      "path": "audio/squeal_loop.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "26d736dae0f8ec686d0872486e8b137647fd2de712df4a9bd8f31ae0631cfe05",
+      "sizeBytes": 60078
+    },
+    {
+      "budgets": {
+        "max_bytes": 2500000,
+        "max_materials": 9,
+        "max_primitives": 32,
+        "max_triangles": 18000
+      },
+      "id": "buggy-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "buggy.glb"
+        }
+      ],
+      "path": "buggy.glb",
+      "provenance": "provenance.json",
+      "sha256": "d9eb0d5f4f1c16b9824722c40b8d14c3a54f725dc6a638c45a155d4da6d7a81b",
+      "sizeBytes": 416836
+    },
+    {
+      "derivedFrom": "buggy.glb",
+      "id": "buggy-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "provenance.json"
+      },
+      "locked": false,
+      "path": "buggy.glb.gz",
+      "provenance": "provenance.json",
+      "sha256": "cb14fae483f00eba3c574f596fc6a14813c9dbf404d4e15f56f84b560f9d3394",
+      "sizeBytes": 125699
+    },
+    {
+      "id": "districts-bx-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "districts/bx.provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "districts/bx.glb"
+        }
+      ],
+      "path": "districts/bx.glb",
+      "provenance": "districts/bx.provenance.json",
+      "sha256": "d97e5f22b989072b8355792dbcaacc5cbf513c3e5fd11a668707d0ffad0c228b",
+      "sizeBytes": 7150844
+    },
+    {
+      "derivedFrom": "districts/bx.glb",
+      "id": "districts-bx-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "districts/bx.provenance.json"
+      },
+      "locked": false,
+      "path": "districts/bx.glb.gz",
+      "provenance": "districts/bx.provenance.json",
+      "sha256": "95267c7e9bedc35ed613eff12e0e99e0a56dd7ca5b56aa31243209a33f2e0bfe",
+      "sizeBytes": 1233544
+    },
+    {
+      "id": "districts-housing-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "districts/housing.provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "districts/housing.glb"
+        }
+      ],
+      "path": "districts/housing.glb",
+      "provenance": "districts/housing.provenance.json",
+      "sha256": "8e20d4db949f73a9743f1e49cb4d097107cf66c6473f6665a1fd4b10f43b1dd2",
+      "sizeBytes": 7683020
+    },
+    {
+      "derivedFrom": "districts/housing.glb",
+      "id": "districts-housing-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "districts/housing.provenance.json"
+      },
+      "locked": false,
+      "path": "districts/housing.glb.gz",
+      "provenance": "districts/housing.provenance.json",
+      "sha256": "3f5d77ea1ae4311311537bfc3d277aeac969e84a26a7ad5e4e3073b73c04fb64",
+      "sizeBytes": 1467304
+    },
+    {
+      "id": "districts-school-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "districts/school.provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "districts/school.glb"
+        }
+      ],
+      "path": "districts/school.glb",
+      "provenance": "districts/school.provenance.json",
+      "sha256": "97b7ca03d0d98026b5b2bb9b63492e886b415a7e9ca0b25c2a30ab3cfec594bb",
+      "sizeBytes": 5507540
+    },
+    {
+      "derivedFrom": "districts/school.glb",
+      "id": "districts-school-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "districts/school.provenance.json"
+      },
+      "locked": false,
+      "path": "districts/school.glb.gz",
+      "provenance": "districts/school.provenance.json",
+      "sha256": "0a4650e25ed94bac331a946b0b86b0f86ed6f8ff66604d63488fc38d9c242902",
+      "sizeBytes": 939908
+    },
+    {
+      "id": "districts-skatepark-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "districts/skatepark.provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "districts/skatepark.glb"
+        }
+      ],
+      "path": "districts/skatepark.glb",
+      "provenance": "districts/skatepark.provenance.json",
+      "sha256": "0cc55bb3d4d21603dda0bf9792ecee6873d097872fb4cd38e17f2c8828363c58",
+      "sizeBytes": 2758528
+    },
+    {
+      "derivedFrom": "districts/skatepark.glb",
+      "id": "districts-skatepark-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "districts/skatepark.provenance.json"
+      },
+      "locked": false,
+      "path": "districts/skatepark.glb.gz",
+      "provenance": "districts/skatepark.provenance.json",
+      "sha256": "732f93690989764e48d193801aa120ef4835e294201c6bd23516f4acfab66fc8",
+      "sizeBytes": 724158
+    },
+    {
+      "id": "env-goegap-1k-hdr",
+      "kind": "environment",
+      "license": {
+        "attribution": "Poly Haven (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "Poly Haven \"Goegap\" (stated only in a code comment, web/wwwroot/rc/visuals.js; no download record or README beside the file)"
+      },
+      "locked": false,
+      "note": "CC0 claim is unverified: confirm against polyhaven.com/a/goegap and record a provenance file",
+      "path": "env/goegap_1k.hdr",
+      "provenance": "unknown",
+      "sha256": "56bb97ac7fcbfcbc91116adfb96e26b9da54475dabb7ec2c442f41bf99cda085",
+      "sizeBytes": 1361485
+    },
+    {
+      "id": "foliage-deciduous-cluster-png",
+      "kind": "texture",
+      "license": {
+        "attribution": "Original image generated for this game (OpenAI image generation, 2026-10-24); repository MIT",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "foliage/deciduous-cluster.provenance.json"
+      },
+      "locked": false,
+      "path": "foliage/deciduous-cluster.png",
+      "provenance": "foliage/deciduous-cluster.provenance.json",
+      "sha256": "04bfd6dec25cd8bd4b09c5188782c054bb2b80ed7a6770986520a4e45cd86140",
+      "sizeBytes": 1848568
+    },
+    {
+      "id": "foliage-deciduous-cluster-webp",
+      "kind": "texture",
+      "license": {
+        "attribution": "Original image generated for this game (OpenAI image generation, 2026-10-24); repository MIT",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "foliage/deciduous-cluster.provenance.json"
+      },
+      "locked": false,
+      "path": "foliage/deciduous-cluster.webp",
+      "provenance": "foliage/deciduous-cluster.provenance.json",
+      "sha256": "29d09158a9a9bd43ed1994e8f1f6b79c534d85e8fe1b9f4d6caeb043207976ed",
+      "sizeBytes": 470754
+    },
+    {
+      "budgets": {
+        "max_bytes": 7000000,
+        "max_materials": 12,
+        "max_primitives": 72,
+        "max_triangles": 90000
+      },
+      "id": "hangar-slice-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "hangar-slice.glb"
+        }
+      ],
+      "path": "hangar-slice.glb",
+      "provenance": "provenance.json",
+      "sha256": "d6ef5ae0586a01c073234cce5040694a0a798ee318ae1d922aec53dbe9c7de1a",
+      "sizeBytes": 590456
+    },
+    {
+      "derivedFrom": "hangar-slice.glb",
+      "id": "hangar-slice-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "provenance.json"
+      },
+      "locked": false,
+      "path": "hangar-slice.glb.gz",
+      "provenance": "provenance.json",
+      "sha256": "d3516219c317c98c4a7f2ab328bc50def01885bff1ff6534ffb34525696762f0",
+      "sizeBytes": 121134
+    },
+    {
+      "id": "heroes-a-10-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "",
+        "id": "unknown",
+        "redistributable": false,
+        "source": "unknown"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "heroes/A-10.glb"
+        }
+      ],
+      "note": "no provenance recorded; a human must supply source and licence",
+      "path": "heroes/A-10.glb",
+      "provenance": "unknown",
+      "sha256": "b3c1791e26081fee226d8063a96afb4c1e8ced732f487f5b2ff0486cfc171a82",
+      "sizeBytes": 184576
+    },
+    {
+      "derivedFrom": "heroes/A-10.glb",
+      "id": "heroes-a-10-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "",
+        "id": "unknown",
+        "redistributable": false,
+        "source": "unknown"
+      },
+      "locked": false,
+      "note": "no provenance recorded; a human must supply source and licence",
+      "path": "heroes/A-10.glb.gz",
+      "provenance": "unknown",
+      "sha256": "a4352117ad0870e49b5aa47bfd77fa691aee362d12d93ef7d1f233d423f32796",
+      "sizeBytes": 51301
+    },
+    {
+      "id": "heroes-b-52-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "",
+        "id": "unknown",
+        "redistributable": false,
+        "source": "unknown"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "heroes/B-52.glb"
+        }
+      ],
+      "note": "no provenance recorded; a human must supply source and licence",
+      "path": "heroes/B-52.glb",
+      "provenance": "unknown",
+      "sha256": "7b691f8dfd31bb6c90c0cf62b784b92cb2500aa3d21a99a0d882c35774693e34",
+      "sizeBytes": 199384
+    },
+    {
+      "derivedFrom": "heroes/B-52.glb",
+      "id": "heroes-b-52-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "",
+        "id": "unknown",
+        "redistributable": false,
+        "source": "unknown"
+      },
+      "locked": false,
+      "note": "no provenance recorded; a human must supply source and licence",
+      "path": "heroes/B-52.glb.gz",
+      "provenance": "unknown",
+      "sha256": "34be1b1e2d607d124d7ef753643697f4b822eb19464ed48874e8751b81f847ce",
+      "sizeBytes": 43197
+    },
+    {
+      "id": "heroes-c-17-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "",
+        "id": "unknown",
+        "redistributable": false,
+        "source": "unknown"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "heroes/C-17.glb"
+        }
+      ],
+      "note": "no provenance recorded; a human must supply source and licence",
+      "path": "heroes/C-17.glb",
+      "provenance": "unknown",
+      "sha256": "79aeef1b7d7854421841753606f485ef6a15c19ddc0f1521ce2f96939b8e12fa",
+      "sizeBytes": 185660
+    },
+    {
+      "derivedFrom": "heroes/C-17.glb",
+      "id": "heroes-c-17-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "",
+        "id": "unknown",
+        "redistributable": false,
+        "source": "unknown"
+      },
+      "locked": false,
+      "note": "no provenance recorded; a human must supply source and licence",
+      "path": "heroes/C-17.glb.gz",
+      "provenance": "unknown",
+      "sha256": "6a08319067e6c637f9bd6f0da50d138e12364239f8ca6e35e38412889735159a",
+      "sizeBytes": 52031
+    },
+    {
+      "id": "heroes-landmarks-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "",
+        "id": "unknown",
+        "redistributable": false,
+        "source": "unknown"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "heroes/landmarks.glb"
+        }
+      ],
+      "note": "no provenance recorded; a human must supply source and licence",
+      "path": "heroes/landmarks.glb",
+      "provenance": "unknown",
+      "sha256": "437c3708bfff42469f0e4bcb4c91a587939fc334a5a6fe588a7e8af075faa858",
+      "sizeBytes": 6309948
+    },
+    {
+      "derivedFrom": "heroes/landmarks.glb",
+      "id": "heroes-landmarks-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "",
+        "id": "unknown",
+        "redistributable": false,
+        "source": "unknown"
+      },
+      "locked": false,
+      "note": "no provenance recorded; a human must supply source and licence",
+      "path": "heroes/landmarks.glb.gz",
+      "provenance": "unknown",
+      "sha256": "9068bdb15c95761b0df688c9d8edcd3eb81ca76a1c19600416ddda1a858fd7fd",
+      "sizeBytes": 881821
+    },
+    {
+      "id": "materials-park-paint-atlas-png",
+      "kind": "texture",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "materials/park-paint-atlas.provenance.json"
+      },
+      "locked": false,
+      "path": "materials/park-paint-atlas.png",
+      "provenance": "materials/park-paint-atlas.provenance.json",
+      "sha256": "401b13a631e6318a22d60fa08430c007b767ed2af8c8689c80c80d10b5c88f3f",
+      "sizeBytes": 4046998
+    },
+    {
+      "id": "materials-park-paint-atlas-webp",
+      "kind": "texture",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "materials/park-paint-atlas.provenance.json"
+      },
+      "locked": false,
+      "path": "materials/park-paint-atlas.webp",
+      "provenance": "materials/park-paint-atlas.provenance.json",
+      "sha256": "3c9d4b822fb2057114baaace35705e84095e636d343aa4c55e54973dce27c45d",
+      "sizeBytes": 186616
+    },
+    {
+      "budgets": {
+        "max_bytes": 2000000,
+        "max_materials": 10,
+        "max_primitives": 12,
+        "max_triangles": 25000
+      },
+      "id": "quarters-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "quarters.glb"
+        }
+      ],
+      "path": "quarters.glb",
+      "provenance": "provenance.json",
+      "sha256": "6a887e4e2c65020f03fb69a0e126e13b6836444fedcc08245e0c2e457ea919a9",
+      "sizeBytes": 200044
+    },
+    {
+      "derivedFrom": "quarters.glb",
+      "id": "quarters-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "provenance.json"
+      },
+      "locked": false,
+      "path": "quarters.glb.gz",
+      "provenance": "provenance.json",
+      "sha256": "c2d7293c98a970e9355b2672e16421b1c8a0daf853d7515a9db6b68c5751d5d7",
+      "sizeBytes": 61428
+    },
+    {
+      "id": "world",
+      "kind": "world-data",
+      "license": {
+        "attribution": "© OpenStreetMap contributors (ODbL 1.0); world/residential-terrain.json is licensed under the Open Government Licence - Ontario",
+        "id": "ODbL-1.0",
+        "redistributable": true,
+        "source": "world/LICENSE.md"
+      },
+      "locked": false,
+      "path": "world/",
+      "provenance": "world/LICENSE.md",
+      "sha256": "e742b11249d6760e51ba0a2932f079ebd82f1b516f0fad6676c60cb1f33bc94c",
+      "sizeBytes": 3955165
+    }
+  ],
+  "version": 1
+}
