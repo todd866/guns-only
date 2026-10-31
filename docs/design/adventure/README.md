@@ -361,6 +361,9 @@ dark world, but you should be allowed to try." And: "we need a damage model even
   a small tough rally car or monster truck can do basically anything"). A broken car costs a trip to
   the Garage, nothing more. Fast street cars rule the tarmac and suffer off it; the rally car and
   the monster truck are slower but go anywhere. Choosing the car for the place becomes a decision.
+- Recovery is instant (owner: "crash, press R, car or robot or whatever reassembles, it's not that
+  big of a deal, but you can't just do anything"): R puts any form back together on the spot, as it
+  already resets a stuck car. Breaking costs a moment, never progress, but it does stop you.
 
 **The underground is Minecraft** (owner, 31 Oct): "we want the underground to be like minecraft,
 with stuff you can dig up, crafting, and these portals that randomly appear. The only difference tho
