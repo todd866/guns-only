@@ -3349,6 +3349,12 @@ function ratEvent(ev) {
 // instruments while it's on, and on the flight HUD as AB.
 function toggleBoost() {
   if (paused || robot || !race.roam || skate) return;
+  // Flying School's rings are set for normal speed: a scripted kid pilot loops 8 of 8 rings at
+  // normal power and 0 of 8 with the afterburner (flying-school-pilot.test.mjs).
+  if (!boostOn && openWorld?.school()?.active) {
+    callout('✈ No zoom in Flying School!', 1800);
+    return;
+  }
   boostOn = !boostOn;
   callout(
     boostOn
