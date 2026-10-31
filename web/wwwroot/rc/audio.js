@@ -74,17 +74,29 @@ export class SoundKit {
   async loadSamples() {
     const ext = new Audio().canPlayType('audio/ogg; codecs="vorbis"') ? 'ogg' : 'mp3';
     await Promise.all(
-      ['motor_loop', 'motor_high_loop', 'squeal_loop', 'gravel_loop', 'bump', 'landing', 'servo'].map(
-        async name => {
-          try {
-            const res = await fetch(`./assets/audio/${name}.${ext}`);
-            if (!res.ok) return;
-            this.samples[name] = await this.ctx.decodeAudioData(await res.arrayBuffer());
-          } catch {
-            /* keep the synthesized fallback */
-          }
+      [
+        'motor_loop',
+        'motor_high_loop',
+        'squeal_loop',
+        'gravel_loop',
+        'bump',
+        'landing',
+        'servo',
+        // The dark world's creatures (SOURCES.md): footfalls, calls, wingbeats.
+        'dino_step',
+        'dino_roar',
+        'dino_chirp',
+        'dino_snort',
+        'wing_flap'
+      ].map(async name => {
+        try {
+          const res = await fetch(`./assets/audio/${name}.${ext}`);
+          if (!res.ok) return;
+          this.samples[name] = await this.ctx.decodeAudioData(await res.arrayBuffer());
+        } catch {
+          /* keep the synthesized fallback */
         }
-      )
+      })
     );
     const loop = (name, level = 0) => {
       const b = this.samples[name];
@@ -103,6 +115,35 @@ export class SoundKit {
     this.squealRec = loop('squeal_loop');
     this.gravel = loop('gravel_loop');
     if (this.motorLow) this.motorGain.gain.value = 0; // the recording takes over from the synth
+  }
+  // A creature in the dark world. kind: rex, raptor, longneck, triceratops, quetzal. what: step
+  // (a footfall; strength 0..1 with speed), call (its voice: the T. rex roars, the raptor chirps,
+  // the long-neck's roar is low and slow, the triceratops snorts, the quetzalcoatlus cries), snort
+  // (an idle breath), flap (a wingbeat). Toy-sized: the recordings are pitched up a little.
+  creature(kind = 'rex', what = 'step', strength = 1) {
+    if (!this.ctx) return;
+    (this.heard ??= {})[`${kind}:${what}`] = (this.heard[`${kind}:${what}`] ?? 0) + 1; // QA: what played
+    const deep = {rex: 1, raptor: 1.25, longneck: 0.72, triceratops: 0.85, quetzal: 1.1}[kind] ?? 1;
+    if (what === 'step') {
+      if (!this.ready('dino-step', 0.08)) return;
+      this.playSample('dino_step', 0.18 + strength * 0.32, 1.15 * deep) || this.impact(1 + strength * 2);
+    } else if (what === 'flap') {
+      if (!this.ready('wing', 0.25)) return;
+      this.playSample('wing_flap', 0.22 + strength * 0.25, 1.05) ||
+        this.burst({freq: 300, dur: 0.18, level: 0.15});
+    } else if (what === 'snort') {
+      if (!this.ready('snort', 1.5)) return;
+      this.playSample('dino_snort', 0.22, 1.1 * deep);
+    } else {
+      if (!this.ready('call', 1.2)) return;
+      const voice =
+        kind === 'raptor' || kind === 'quetzal'
+          ? 'dino_chirp'
+          : kind === 'triceratops'
+            ? 'dino_snort'
+            : 'dino_roar';
+      this.playSample(voice, voice === 'dino_roar' ? 0.32 : 0.3, (voice === 'dino_roar' ? 1.25 : 1) * deep);
+    }
   }
   playSample(name, level, rate = 1) {
     const b = this.samples?.[name];
@@ -140,10 +181,13 @@ export class SoundKit {
       this.master.gain.setTargetAtTime(this.silent || m ? 0 : 0.45, this.ctx.currentTime, 0.05);
   }
 
-  update({speed, throttle, slip, paused, surface}) {
+  // body: what you're in. 'car' and 'board' roll on wheels; a dinosaur ('dino'), the flier and the
+  // robot never play the motor, tyres or gravel: their sounds are footfalls and calls (creature()).
+  update({speed, throttle, slip, paused, surface, body = 'car'}) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime,
-      live = !paused;
+      wheels = body === 'car' || body === 'board',
+      live = !paused && wheels;
     // Slow random pitch drift so the short motor loop never repeats exactly.
     this.drift = Math.max(-0.05, Math.min(0.05, (this.drift || 0) + (Math.random() - 0.5) * 0.004));
     if (this.motorLow) {

@@ -2510,6 +2510,7 @@ function outlawStep(dt) {
     if (e.stomp) {
       audio.impact(6);
       beep(`💥 Stomp! ${g.enemies.filter(x => x.alive).length} left`, 'happy', 1600);
+      audio.creature(herd().herd[herd().mount]?.kind ?? 'rex', 'call');
     } else if (e.popped) {
       audio.impact(5);
     } else if (e.hurt) {
@@ -2677,6 +2678,7 @@ function sayAloud() {
       if (robot) {
         mountUp();
         beep(`🦖 ${who.dino.name} is here!`, 'happy');
+        audio.creature(who.dino.kind, 'call');
       } else if (swap) {
         // A different dinosaur under you: its own body and pace (physics/vehicles.mjs DINO_MOUNTS).
         const p = roamCarParams(),
@@ -2684,7 +2686,7 @@ function sayAloud() {
         pos[1] += rideHeight(p) - rideHeight(s.car.params) + 0.05;
         Object.assign(s.car, createCar(p, pos, readout(s).yaw));
         beep(`🦖 ${who.dino.name} is here!`, 'happy');
-        audio.pickup();
+        audio.creature(who.dino.kind, 'call');
       } else beep(`🦖 You are on ${who.dino.name}!`, 'ask');
       return;
     }
@@ -2777,6 +2779,7 @@ function wildStep(dt, past) {
       saveHerd();
       audio.finish();
       beep(d ? `🦖 ${d.name} is your friend!` : '🦖 Too many dinos!', d ? 'happy' : 'sad', 3500);
+      if (d) audio.creature(d.kind, 'call');
       // The quetzalcoatlus: straight onto its back, ready to fly.
       if (d && DINO_KINDS[d.kind]?.flies && robot) {
         herd().mount = herd().herd.indexOf(d);
@@ -2786,6 +2789,35 @@ function wildStep(dt, past) {
       }
       wildAsking = null;
     });
+  }
+}
+// The ridden dinosaur's sounds (audio.creature): a footfall at each foot-down of its walk, run or
+// gallop clip, a wingbeat at each flap, and a snort when it has stood still a while.
+let dinoPhase = null,
+  dinoStill = 0;
+function dinoSounds(dt) {
+  const d = riggedDino;
+  if (!d?.root.visible || paused) {
+    dinoPhase = null;
+    return;
+  }
+  const kind = herd().herd[herd().mount]?.kind ?? 'rex',
+    a = d.actions.get(d.clip),
+    dur = a?.getClip().duration || 1,
+    ph = a ? (a.time / dur) % 1 : 0,
+    speed = Math.hypot(s.car.vel[0], s.car.vel[2]);
+  if (dinoPhase !== null && dinoPhase !== ph) {
+    const crossed = at => (dinoPhase < at && ph >= at) || (dinoPhase > ph && (at >= dinoPhase || ph >= at));
+    if (['walk', 'run', 'gallop'].includes(d.clip) && (crossed(0) || crossed(0.5)))
+      audio.creature(kind, 'step', Math.min(1, speed / 10));
+    if (d.clip === 'flap' && crossed(0.2)) audio.creature(kind, 'flap', 0.8);
+    if (d.clip === 'takeoff' && crossed(0.3)) audio.creature(kind, 'flap', 1);
+  }
+  dinoPhase = ph;
+  dinoStill = speed < 0.3 ? dinoStill + dt : 0;
+  if (dinoStill > 6) {
+    dinoStill = -Math.random() * 4;
+    audio.creature(kind, 'snort');
   }
 }
 // The car form's physics: in the dark world (the past) it is the ridden dinosaur's bigger body.
@@ -4515,8 +4547,17 @@ function frame(now) {
     throttle: lastThrottle,
     slip: c.wheels.filter(w => w.slip).length / 4,
     surface: c.wheels.find(w => w.surface)?.surface,
-    paused: paused || countdown > 0
+    paused: paused || countdown > 0,
+    body:
+      toyDino?.visible || riggedDino?.root.visible
+        ? 'dino'
+        : robot
+          ? 'robot'
+          : form === 'board'
+            ? 'board'
+            : 'car'
   });
+  dinoSounds(dt);
   if (track) followSun(sun, car.position);
   if (worldSky) {
     if (!paused) worldElapsed += dt;
@@ -4837,6 +4878,7 @@ window.__gunsOnlyRC = {
   }),
   era: () => openWorld?.era?.() ?? 'present',
   toyDino: () => toyDino,
+  sounds: () => ({heard: {...(audio.heard ?? {})}, motor: +(audio.motorLow?.gain.gain.value ?? 0).toFixed(3)}),
   dex: () => openWorld && {seen: [...dexState().seen], gold: dexState().gold},
   herd: () =>
     herdState && {
