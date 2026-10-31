@@ -219,3 +219,15 @@ test('one instanced gate mesh visible before start, hides in races and disposes'
   assert.equal(scene.children.length, 0);
   assert.equal(disposed.size, 3);
 });
+
+test('a missed gate never blocks the run: flying through a later gate moves on to it', () => {
+  const st = createCanyonRun({heightAt});
+  assert.ok(stepCanyonRun(st, segment(st.gates[0]), 1)[0].start);
+  // Miss gates 1 and 2, fly through gate 3: the run continues from gate 4.
+  const e = stepCanyonRun(st, segment(st.gates[3]), 10);
+  assert.equal(st.next, 4);
+  assert.equal(e[0].gate, 4);
+  for (let i = 4; i < 10; i++) stepCanyonRun(st, segment(st.gates[i]), 10);
+  assert.equal(st.active, false);
+  assert.ok(st.best > 0);
+});

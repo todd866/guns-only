@@ -204,6 +204,9 @@ test('runtime refuses racing during bowling and bowling during racing, then unlo
     world = await loadOpenWorld('?at=rec&mode=drive');
     assert.ok(world.startActivity('bowling', {lane: 1}));
     const game = world.activity();
+    // A game nobody has rolled in yet (the robot just crossed an approach) never blocks a race.
+    assert.ok(world.canRace());
+    game.launched = true; // a ball is out: now racing waits
     assert.equal(world.canRace(), false);
     assert.equal(world.eventURL(locationById('rec')), null);
     assert.equal(world.setRacing(true), false);
