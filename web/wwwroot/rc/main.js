@@ -941,10 +941,20 @@ $('resume').onclick = () => {
   pause(false);
   canvas.focus();
 };
+function raceReady() {
+  if (!openWorld || openWorld.canRace()) return true;
+  callout('🎳 Finish bowling first');
+  return false;
+}
+function visitRace(place, kind = 'race') {
+  const url = openWorld.eventURL(place, kind);
+  if (url) location.href = url;
+}
 $('menu-race').onclick = () => {
+  if (!raceReady()) return;
   if (openWorld && race.roam) {
     const p = nearestLocation(s.car.pos);
-    location.href = openWorld.eventURL(p.event || p.track ? p : locationById('ramp'));
+    visitRace(p.event || p.track ? p : locationById('ramp'));
     return;
   }
   telemetry.firstInput('button');
@@ -983,8 +993,9 @@ function legendStart() {
   }
 }
 $('menu-furball').onclick = () => {
+  if (!raceReady()) return;
   if (openWorld) {
-    location.href = openWorld.eventURL(locationById('ramp'), 'furball');
+    visitRace(locationById('ramp'), 'furball');
     return;
   }
   telemetry.firstInput('button');
@@ -2218,6 +2229,7 @@ function drawLives(now, dt) {
   });
 }
 function startRace() {
+  if (!raceReady() || openWorld?.setRacing(true) === false) return;
   race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures});
   s = race.player;
   reported = false;
@@ -2343,6 +2355,7 @@ let reported = false;
 let countdown = -1,
   lastBeep = 0;
 function startCountdown() {
+  if (openWorld?.selected.id === 'alley-cat') callout('🎳 Alley Cat! Race through the bowling alley', 4500);
   telemetry.raceStart({kind: race.furball ? 'furball' : 'race', track: telemetryTrack, mode});
   countdown = 2.999;
   lastBeep = 4;
@@ -3199,7 +3212,7 @@ function skateCard(id, run = null) {
   pause(true);
   if (race)
     $('skate-race').onclick = () => {
-      location.href = openWorld.eventURL(race);
+      visitRace(race);
     };
   $('skate-go').onclick = () => {
     if (run) telemetry.choice('skate_again');
@@ -4229,13 +4242,14 @@ function enterLocation() {
   if (p.game === 'flying-school') return;
   if (p.game) {
     const tee = openWorld.startActivity(p.game, {mode});
+    if (!tee) return;
     telemetry.activityStart(p.game);
     placeCar(s.car, [tee.pos[0], rideHeight(s.car.params) + 0.02, tee.pos[2]], tee.yaw);
     callout(p.game === 'golf' ? 'CAR GOLF · 3 HOLES' : '🎳 Car Bowling · drive at the pins!');
     return;
   }
   if (p.kind === 'discovery' || !canEnter(openWorld.progress, p)) ui.open('map');
-  else location.href = openWorld.eventURL(p);
+  else visitRace(p);
 }
 // The stats page (owner, 31 Oct: "kinda need a stats page"): records and counts, never a
 // completion total (the world should feel endless). Rows: [icon, label, value].
@@ -4349,6 +4363,7 @@ const raceMenu = createRaceMenu({
   progress: () => ui.progress,
   search: location.search,
   onStartCup: index => {
+    if (!raceReady()) return;
     const c = CUP_COURSES[index];
     cup = createCup(
       String(index),
@@ -4360,6 +4375,7 @@ const raceMenu = createRaceMenu({
   }
 });
 $('choose-course').onclick = () => {
+  if (!raceReady()) return;
   pause(true);
   raceMenu.open();
 };
