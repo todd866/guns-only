@@ -1,0 +1,166 @@
+{
+  "capturedAt": "2026-10-31T01:32:25.928Z",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+  "views": {
+    "skatepark-hub": {
+      "camera": {
+        "pos": [
+          -3022.46,
+          0.79,
+          -775.29
+        ],
+        "yaw": -0.466,
+        "pitch": -0.152,
+        "fov": 60.02331285741672
+      },
+      "settled": {
+        "frames": 46,
+        "calm": 20
+      },
+      "frameMs": {
+        "samples": 300,
+        "p50": 16.7,
+        "p95": 17.3,
+        "p99": 33.3,
+        "max": 33.4
+      },
+      "drawCalls": 598,
+      "pixelRatio": 1,
+      "errors": []
+    },
+    "skatepark-bowl": {
+      "camera": {
+        "pos": [
+          -3033.75,
+          0.79,
+          -793.36
+        ],
+        "yaw": 1.9,
+        "pitch": -0.152,
+        "fov": 60.00935885910491
+      },
+      "settled": {
+        "frames": 36,
+        "calm": 20
+      },
+      "frameMs": {
+        "samples": 300,
+        "p50": 16.7,
+        "p95": 33.4,
+        "p99": 66.7,
+        "max": 149.9
+      },
+      "drawCalls": 1349,
+      "pixelRatio": 1,
+      "errors": []
+    },
+    "housing-street": {
+      "camera": {
+        "pos": [
+          -1285,
+          0.65,
+          -1130.64
+        ],
+        "yaw": 0,
+        "pitch": -0.152,
+        "fov": 60.020242112493634
+      },
+      "settled": {
+        "frames": 24,
+        "calm": 20
+      },
+      "frameMs": {
+        "samples": 300,
+        "p50": 16.7,
+        "p95": 17.2,
+        "p99": 17.6,
+        "max": 17.7
+      },
+      "drawCalls": 298,
+      "pixelRatio": 1,
+      "errors": []
+    },
+    "housing-corner": {
+      "camera": {
+        "pos": [
+          -1285.92,
+          0.65,
+          -1133
+        ],
+        "yaw": 2.4,
+        "pitch": -0.152,
+        "fov": 60.014169818903696
+      },
+      "settled": {
+        "frames": 27,
+        "calm": 20
+      },
+      "frameMs": {
+        "samples": 300,
+        "p50": 16.7,
+        "p95": 17.2,
+        "p99": 17.6,
+        "max": 17.7
+      },
+      "drawCalls": 1051,
+      "pixelRatio": 1,
+      "errors": []
+    },
+    "bx-apron": {
+      "camera": {
+        "pos": [
+          -546.98,
+          0.65,
+          791.95
+        ],
+        "yaw": 0.8,
+        "pitch": -0.152,
+        "fov": 60.00654823434116
+      },
+      "settled": {
+        "frames": 20,
+        "calm": 20
+      },
+      "frameMs": {
+        "samples": 300,
+        "p50": 16.7,
+        "p95": 17.5,
+        "p99": 17.7,
+        "max": 33.8
+      },
+      "drawCalls": 684,
+      "pixelRatio": 1,
+      "errors": []
+    },
+    "desert-mountain": {
+      "camera": {
+        "pos": [
+          2480,
+          0.65,
+          -898.64
+        ],
+        "yaw": 0,
+        "pitch": -0.152,
+        "fov": 60.02239818444277
+      },
+      "settled": {
+        "frames": 35,
+        "calm": 20
+      },
+      "frameMs": {
+        "samples": 300,
+        "p50": 16.7,
+        "p95": 17.5,
+        "p99": 17.6,
+        "max": 17.7
+      },
+      "drawCalls": 550,
+      "pixelRatio": 1,
+      "errors": []
+    }
+  }
+}
