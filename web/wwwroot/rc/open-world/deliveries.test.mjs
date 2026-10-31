@@ -6,7 +6,8 @@ import {
   deliveryStops,
   pickDropoff,
   startDeliveries,
-  stepDeliveries
+  stepDeliveries,
+  stopDeliveries
 } from './deliveries.mjs';
 import {loadProgress, saveProgress} from './catalog.mjs';
 const origin = DELIVERY.pickup;
@@ -40,7 +41,7 @@ const newRun = options => {
 const deliver = (state, seconds = 0.1) =>
   stepDeliveries(state, driver([...state.destination.pos]), seconds).find(e => e.delivered);
 
-test('drop-offs use porch positions and only school, hangars and chapel; overlapping rings are avoided', () => {
+test('drop-offs use porch positions and named base places; overlapping rings are avoided', () => {
   assert.deepEqual(
     stops.map(s => s.id),
     ['porch-12', 'porch-34', 'school', 'hangars', 'chapel']
@@ -248,5 +249,29 @@ test('total parcels survive save/load and old saves start at zero', () => {
   for (const value of [-1, 1.5, '3', null]) {
     saved = JSON.stringify({parcelsDelivered: value});
     assert.equal(loadProgress(storage).parcelsDelivered, 0);
+  }
+});
+
+test('a run can always be stopped (Places travel or [E]), and a new one can start after', () => {
+  const state = newRun();
+  assert.equal(state.active, true);
+  assert.equal(stopDeliveries(state), true);
+  assert.equal(state.active, false);
+  assert.equal(state.destination, null);
+  assert.deepEqual(stepDeliveries(state, driver(origin), 0.1), []);
+  assert.equal(stopDeliveries(state), false);
+  assert.ok(startDeliveries(state, driver()));
+});
+
+test('every drop-off stays near the dock when near places exist', () => {
+  const far = {x: -3000, z: -1000},
+    near = [
+      {id: 'school', short: 'School', pos: [-579 + 600, 0, 700]},
+      {id: 'rec', short: 'Bowling', pos: [-579, 0, 700 + 650]}
+    ],
+    all = deliveryStops([far, far], near);
+  for (let i = 0; i < 20; i++) {
+    const d = pickDropoff(all, null, () => i / 20);
+    assert.ok(Math.hypot(d.pos[0] - DELIVERY.pickup[0], d.pos[2] - DELIVERY.pickup[2]) <= DELIVERY.reach);
   }
 });

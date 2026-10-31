@@ -166,6 +166,13 @@ function bumpEvent(state, driver) {
   return null;
 }
 
+/** End a run early (Places travel, or [E] mid-run): nothing is lost, the run just stops. */
+export function stopDeliveries(state) {
+  if (!state.active) return false;
+  Object.assign(state, {active: false, paused: false, destination: null, route: [], wobble: 0});
+  return true;
+}
+
 export function stepDeliveries(state, driver, dt = 0) {
   if (!state.active) return [];
   const events = [];

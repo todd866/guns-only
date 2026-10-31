@@ -754,6 +754,7 @@ export async function loadOpenWorld(search) {
     stuntScale: (car, dt, enabled) => stuntTimeScale(stuntState, car, dt, enabled),
     deliveries: () => deliveries?.state,
     startDeliveries: driver => deliveries?.start(driver),
+    stopDeliveries: () => deliveries?.stop() ?? false,
     deliveryStep: (dt, driver) => deliveries?.step(dt, driver) ?? [],
     drawDeliveries: (dt, car, options) => deliveries?.draw(dt, car, options),
     trickOrTreat: (pos, trick, time, dt) => trickOrTreat?.step(pos, trick, time, dt) ?? [],

@@ -1,5 +1,5 @@
 import * as T from '../../vendor/three.module.js';
-import {DELIVERY, createDeliveries, startDeliveries, stepDeliveries} from './deliveries.mjs';
+import {DELIVERY, createDeliveries, startDeliveries, stepDeliveries, stopDeliveries} from './deliveries.mjs';
 
 // Prepare the whole job's art once: the next parcel and marker never need a download.
 export function createDeliveryVisual(scene, stops, {heightAt = () => 0, routeTo} = {}) {
@@ -78,6 +78,7 @@ export function createDeliveryVisual(scene, stops, {heightAt = () => 0, routeTo}
   return {
     state,
     start: driver => startDeliveries(state, driver),
+    stop: () => stopDeliveries(state),
     step: (dt, driver) => stepDeliveries(state, driver, dt),
     draw(dt, car, {present = true, driving = false} = {}) {
       clock += dt;

@@ -3056,6 +3056,7 @@ async function travelTo(id) {
   openWorld.stopSchool();
   hideSchoolCard();
   tennisStop();
+  openWorld.stopDeliveries();
   const {pos, yaw} = p.arrival;
   openWorld.cancelSkyJump();
   skyReport?.hide();
@@ -4416,16 +4417,23 @@ function skyJumpStep() {
 }
 function enterLocation() {
   if (!openWorld || paused || !race.roam) return;
-  if (deliveryNear() && openWorld.startDeliveries(deliveryDriver())) {
-    deliveryReportUntil = 0;
-    audio.pickup();
-    callout('📦 Follow the line!', 3000);
-    return;
-  }
+  // A run in progress comes first: [E] ends it (as it ends a Flying School lesson), so a child can
+  // always get out, and no second minigame starts on top of it.
   if (openWorld.school()?.active) {
     openWorld.stopSchool();
     hideSchoolCard();
     callout('', 0);
+    return;
+  }
+  if (openWorld.deliveries()?.active) {
+    openWorld.stopDeliveries();
+    callout('📦 Deliveries stopped', 2000);
+    return;
+  }
+  if (deliveryNear() && openWorld.startDeliveries(deliveryDriver())) {
+    deliveryReportUntil = 0;
+    audio.pickup();
+    callout('📦 Follow the line!', 3000);
     return;
   }
   if (s.flight.mode || openWorld.skyDive().active) return;
