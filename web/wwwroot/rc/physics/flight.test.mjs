@@ -196,14 +196,19 @@ test('a winged mount keeps the bank you put in, hands off (no levelling)', () =>
   const before = Math.abs(bankOf());
   run(s, 1.5, {flight: {assist: true, proximity: true}});
   assert.ok(before > 0.4, `banked ${before.toFixed(2)}`);
-  assert.ok(Math.abs(bankOf()) > before * 0.85, `bank held: ${before.toFixed(2)} → ${Math.abs(bankOf()).toFixed(2)}`);
+  assert.ok(
+    Math.abs(bankOf()) > before * 0.85,
+    `bank held: ${before.toFixed(2)} → ${Math.abs(bankOf()).toFixed(2)}`
+  );
 });
 
 test('a winged mount diving at the ground is saved late, through its bank, and never hits', () => {
   const s = roam(field());
   toggleFlight(s.flight, s.car);
   run(s, 4, {flight: {power: 1, pitch: -1, assist: true, proximity: true}}); // climb away
-  let low = Infinity, hit = false, assistedAt = null;
+  let low = Infinity,
+    hit = false,
+    assistedAt = null;
   run(s, 8, t => {
     if (s.car.pos[1] < 0.35 && s.flight.mode === 'fly') hit = true;
     if (s.flight.gcas > 0 && assistedAt === null) assistedAt = s.car.pos[1];
