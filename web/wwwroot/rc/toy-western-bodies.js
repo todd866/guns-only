@@ -131,8 +131,11 @@ export function poseRiggedDino(d, car, rideHeight = .1, dt = 1 / 60) {
   d.air = airborne ? d.air + dt : 0;
   if (d.air > .18 && d.clip !== 'jump') d.play('jump', { then: 'run', fade: .1 });
   else if (!airborne && d.clip !== 'jump') {
-    const clip = speed < .25 ? 'idle' : speed < 2.2 ? 'walk' : 'run';
-    d.play(clip, { timeScale: clip === 'idle' ? 1 : Math.min(3, Math.max(.5, speed / (ground[clip] * RIG_SCALE * (clip === 'run' ? 6 : 4)))) });
+    // A gallop clip (no foot slide near 4 m/s at export scale) takes over at speed once the GLB has
+    // one; until then the run clip stretches to cover it.
+    const gallop = d.actions.has('gallop'), clip = speed < .25 ? 'idle' : speed < 2.2 ? 'walk' : gallop && speed > 5 ? 'gallop' : 'run';
+    const rate = clip === 'gallop' ? Math.min(2.2, speed / (4 * RIG_SCALE)) : speed / (ground[clip] * RIG_SCALE * (clip === 'run' ? (gallop ? 2 : 6) : 4));
+    d.play(clip, { timeScale: clip === 'idle' ? 1 : Math.min(3, Math.max(.5, rate)) });
   }
   d.update(dt);
 }
