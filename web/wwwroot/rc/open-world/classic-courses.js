@@ -1,90 +1,352 @@
 import * as T from '../../vendor/three.module.js';
-import { mergeGeometries } from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
-import { addBox } from '../physics/world.mjs';
-import { CLASSIC_LOCATIONS, CLASSIC_EVENTS } from './classic-courses.mjs';
+import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
+import {addBox} from '../physics/world.mjs';
+import {CLASSIC_LOCATIONS, CLASSIC_EVENTS} from './classic-courses.mjs';
 
 export function createClassicCourses(scene, world) {
   if (!scene?.add) throw new TypeError('createClassicCourses requires a scene');
-  const root = new T.Group(); root.name = 'ClassicCourses'; scene.add(root);
-  const mats = new Map(), dynamic = [];
-  const mat = (c, rough = .78) => { const k = c + rough; if (!mats.has(k)) mats.set(k, new T.MeshStandardMaterial({ color: c, roughness: rough })); return mats.get(k); };
-  const box = (p,x,y,z,w,h,d,c,solid=false) => { const m=new T.Mesh(new T.BoxGeometry(w,h,d),mat(c));m.position.set(x,y,z);p.add(m);if(solid&&world?.addTri)addBox(world,x,z,w,d,y-h/2,y+h/2,'wood');return m; };
-  const cyl = (p,x,y,z,r,h,c) => { const m=new T.Mesh(new T.CylinderGeometry(r,r,h,10),mat(c));m.position.set(x,y,z);p.add(m);return m; };
-  const beam = (p,a,b,width,y,c) => { const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz),m=box(p,(a[0]+b[0])/2,y,(a[1]+b[1])/2,width,.18,len,c);m.rotation.y=Math.atan2(dx,dz);return m; };
-  const surface=(a,b,width,surfaceName)=>{
-    const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz)||1,rx=-dz/len*width/2,rz=dx/len*width/2;
-    const A=[a[0]-rx,a[2],a[1]-rz],B=[a[0]+rx,a[2],a[1]+rz],C=[b[0]+rx,b[2],b[1]+rz],D=[b[0]-rx,b[2],b[1]-rz];
-    world.addQuad(A,B,C,D,surfaceName);const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute([...A,...B,...C,...A,...C,...D],3));geo.computeVertexNormals();const mesh=new T.Mesh(geo,mat(surfaceName==='wood'?'#9c704b':surfaceName==='dirt'?'#a7835e':'#535d65'));mesh.receiveShadow=true;root.add(mesh);
+  const root = new T.Group();
+  root.name = 'ClassicCourses';
+  scene.add(root);
+  const mats = new Map(),
+    dynamic = [];
+  const mat = (c, rough = 0.78) => {
+    const k = c + rough;
+    if (!mats.has(k)) mats.set(k, new T.MeshStandardMaterial({color: c, roughness: rough}));
+    return mats.get(k);
   };
-  const dyn = name => { const g=new T.Group();g.name=name;g.userData.dynamic=true;root.add(g);dynamic.push(g);return g; };
+  const box = (p, x, y, z, w, h, d, c, solid = false) => {
+    const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat(c));
+    m.position.set(x, y, z);
+    p.add(m);
+    if (solid && world?.addTri) addBox(world, x, z, w, d, y - h / 2, y + h / 2, 'wood');
+    return m;
+  };
+  const cyl = (p, x, y, z, r, h, c) => {
+    const m = new T.Mesh(new T.CylinderGeometry(r, r, h, 10), mat(c));
+    m.position.set(x, y, z);
+    p.add(m);
+    return m;
+  };
+  const beam = (p, a, b, width, y, c) => {
+    const dx = b[0] - a[0],
+      dz = b[1] - a[1],
+      len = Math.hypot(dx, dz),
+      m = box(p, (a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2, width, 0.18, len, c);
+    m.rotation.y = Math.atan2(dx, dz);
+    return m;
+  };
+  const surface = (a, b, width, surfaceName) => {
+    const dx = b[0] - a[0],
+      dz = b[1] - a[1],
+      len = Math.hypot(dx, dz) || 1,
+      rx = ((-dz / len) * width) / 2,
+      rz = ((dx / len) * width) / 2;
+    const A = [a[0] - rx, a[2], a[1] - rz],
+      B = [a[0] + rx, a[2], a[1] + rz],
+      C = [b[0] + rx, b[2], b[1] + rz],
+      D = [b[0] - rx, b[2], b[1] - rz];
+    world.addQuad(A, B, C, D, surfaceName);
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.Float32BufferAttribute([...A, ...B, ...C, ...A, ...C, ...D], 3));
+    geo.computeVertexNormals();
+    const mesh = new T.Mesh(
+      geo,
+      mat(surfaceName === 'wood' ? '#9c704b' : surfaceName === 'dirt' ? '#a7835e' : '#535d65')
+    );
+    mesh.receiveShadow = true;
+    root.add(mesh);
+  };
+  const dyn = name => {
+    const g = new T.Group();
+    g.name = name;
+    g.userData.dynamic = true;
+    root.add(g);
+    dynamic.push(g);
+    return g;
+  };
 
   // Base Traffic: broad road loop with lane furniture and moving base vehicles.
-  const traffic = new T.Group();traffic.name='Course_base-traffic';root.add(traffic);
-  for(const [x,z] of [[-470,40],[-350,180],[-430,430],[-546,720],[-720,660],[-850,450]]){cyl(traffic,x,.18,z,.22,.36,'#d5b46a');cyl(traffic,x,.42,z,.08,.5,'#52727a');}
-  for(const [x,z] of [[-390,80],[-790,520],[-650,680]]){box(traffic,x,.16,z,4,.32,1.2,'#e9e1be');box(traffic,x,.38,z,3,.14,.12,'#c7b679');}
-  const vans=dyn('BaseTraffic_moving'); vans.userData.role='deterministic traffic; yields before trapping';
-  const serviceVehicle=(g,color,index)=>{
+  const traffic = new T.Group();
+  traffic.name = 'Course_base-traffic';
+  root.add(traffic);
+  for (const [x, z] of [
+    [-470, 40],
+    [-350, 180],
+    [-430, 430],
+    [-546, 720],
+    [-720, 660],
+    [-850, 450]
+  ]) {
+    cyl(traffic, x, 0.18, z, 0.22, 0.36, '#d5b46a');
+    cyl(traffic, x, 0.42, z, 0.08, 0.5, '#52727a');
+  }
+  for (const [x, z] of [
+    [-390, 80],
+    [-790, 520],
+    [-650, 680]
+  ]) {
+    box(traffic, x, 0.16, z, 4, 0.32, 1.2, '#e9e1be');
+    box(traffic, x, 0.38, z, 3, 0.14, 0.12, '#c7b679');
+  }
+  const vans = dyn('BaseTraffic_moving');
+  vans.userData.role = 'deterministic traffic; yields before trapping';
+  const serviceVehicle = (g, color, index) => {
     // Bevelled service pickup: a sloping glazed cab, open cargo bed and tyre arches.
-    const rounded=(x,y,z,w,h,d,c,r=.08)=>{
-      const shape=new T.Shape(),hw=w/2-r,hh=h/2-r;
-      shape.moveTo(-hw,-hh);shape.lineTo(hw,-hh);shape.lineTo(hw,hh);shape.lineTo(-hw,hh);shape.closePath();
-      const geo=new T.ExtrudeGeometry(shape,{depth:d-2*r,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:r,bevelThickness:r,curveSegments:2});geo.translate(0,0,-d/2+r);
-      const m=new T.Mesh(geo,mat(c,.48));m.position.set(x,y,z);g.add(m);return m;
+    const rounded = (x, y, z, w, h, d, c, r = 0.08) => {
+      const shape = new T.Shape(),
+        hw = w / 2 - r,
+        hh = h / 2 - r;
+      shape.moveTo(-hw, -hh);
+      shape.lineTo(hw, -hh);
+      shape.lineTo(hw, hh);
+      shape.lineTo(-hw, hh);
+      shape.closePath();
+      const geo = new T.ExtrudeGeometry(shape, {
+        depth: d - 2 * r,
+        bevelEnabled: true,
+        bevelSegments: 2,
+        steps: 1,
+        bevelSize: r,
+        bevelThickness: r,
+        curveSegments: 2
+      });
+      geo.translate(0, 0, -d / 2 + r);
+      const m = new T.Mesh(geo, mat(c, 0.48));
+      m.position.set(x, y, z);
+      g.add(m);
+      return m;
     };
-    rounded(0,.48,.12,1.85,.46,3.7,color);
-    rounded(0,.72,-1.15,1.8,.3,1.05,color);
-    rounded(0,1.05,-.35,1.72,.75,1.5,color);
-    const glass=box(g,0,1.13,-1.11,1.48,.43,.035,'#284c60');glass.rotation.x=-.19;
-    for(const x of [-.865,.865]){box(g,x,1.13,-.37,.025,.44,1.13,'#284c60');box(g,x,.89,-.20,.04,.04,.17,'#dce3d8');rounded(x*1.15,1.03,-.82,.22,.15,.28,color,.035);}
-    // Lower dark bed floor is visible between the side rails, rather than a solid cuboid.
-    box(g,0,.72,1.08,1.5,.08,1.5,'#47565a');
-    for(const x of [-.83,.83])rounded(x,.86,1.10,.18,.36,1.6,color,.04);
-    rounded(0,.86,1.86,1.82,.35,.16,color,.04);
-    for(const x of [-.65,.65]){rounded(x,.66,-1.77,.34,.19,.08,'#fff2c3',.025);box(g,x,.74,1.96,.17,.22,.03,'#c7543e');}
-    box(g,0,.55,-1.78,.82,.2,.08,'#293f47');
-    for(const z of [-1.85,1.99])rounded(0,.36,z,1.9,.14,.16,'#9ba9ac',.035);
-    for(const x of [-.94,.94])for(const z of [-1.2,1.25]){
-      const tyre=new T.Mesh(new T.TorusGeometry(.255,.10,8,16),mat('#263438'));tyre.rotation.y=Math.PI/2;tyre.position.set(x,.35,z);g.add(tyre);
-      cyl(g,x,.35,z,.18,.20,index===1?'#d0b77a':'#a6b6b8').rotation.z=Math.PI/2;
+    rounded(0, 0.48, 0.12, 1.85, 0.46, 3.7, color);
+    rounded(0, 0.72, -1.15, 1.8, 0.3, 1.05, color);
+    rounded(0, 1.05, -0.35, 1.72, 0.75, 1.5, color);
+    const glass = box(g, 0, 1.13, -1.11, 1.48, 0.43, 0.035, '#284c60');
+    glass.rotation.x = -0.19;
+    for (const x of [-0.865, 0.865]) {
+      box(g, x, 1.13, -0.37, 0.025, 0.44, 1.13, '#284c60');
+      box(g, x, 0.89, -0.2, 0.04, 0.04, 0.17, '#dce3d8');
+      rounded(x * 1.15, 1.03, -0.82, 0.22, 0.15, 0.28, color, 0.035);
     }
+    // Lower dark bed floor is visible between the side rails, rather than a solid cuboid.
+    box(g, 0, 0.72, 1.08, 1.5, 0.08, 1.5, '#47565a');
+    for (const x of [-0.83, 0.83]) rounded(x, 0.86, 1.1, 0.18, 0.36, 1.6, color, 0.04);
+    rounded(0, 0.86, 1.86, 1.82, 0.35, 0.16, color, 0.04);
+    for (const x of [-0.65, 0.65]) {
+      rounded(x, 0.66, -1.77, 0.34, 0.19, 0.08, '#fff2c3', 0.025);
+      box(g, x, 0.74, 1.96, 0.17, 0.22, 0.03, '#c7543e');
+    }
+    box(g, 0, 0.55, -1.78, 0.82, 0.2, 0.08, '#293f47');
+    for (const z of [-1.85, 1.99]) rounded(0, 0.36, z, 1.9, 0.14, 0.16, '#9ba9ac', 0.035);
+    for (const x of [-0.94, 0.94])
+      for (const z of [-1.2, 1.25]) {
+        const tyre = new T.Mesh(new T.TorusGeometry(0.255, 0.1, 8, 16), mat('#263438'));
+        tyre.rotation.y = Math.PI / 2;
+        tyre.position.set(x, 0.35, z);
+        g.add(tyre);
+        cyl(g, x, 0.35, z, 0.18, 0.2, index === 1 ? '#d0b77a' : '#a6b6b8').rotation.z = Math.PI / 2;
+      }
 
     // The complete vehicle moves as one object; merge its fixed details by material.
     // Bevels and wheel arches should add shape, not dozens of draw calls per van.
-    g.updateMatrixWorld(true);const batches=new Map();
-    for(const mesh of [...g.children]){let geo=mesh.geometry.clone().applyMatrix4(mesh.matrix);if(geo.index){const flat=geo.toNonIndexed();geo.dispose();geo=flat;}if(!batches.has(mesh.material))batches.set(mesh.material,[]);batches.get(mesh.material).push(geo);mesh.geometry.dispose();mesh.removeFromParent();}
-    for(const [material,geometries]of batches){g.add(new T.Mesh(mergeGeometries(geometries,false),material));geometries.forEach(geo=>geo.dispose());}
+    g.updateMatrixWorld(true);
+    const batches = new Map();
+    for (const mesh of [...g.children]) {
+      let geo = mesh.geometry.clone().applyMatrix4(mesh.matrix);
+      if (geo.index) {
+        const flat = geo.toNonIndexed();
+        geo.dispose();
+        geo = flat;
+      }
+      if (!batches.has(mesh.material)) batches.set(mesh.material, []);
+      batches.get(mesh.material).push(geo);
+      mesh.geometry.dispose();
+      mesh.removeFromParent();
+    }
+    for (const [material, geometries] of batches) {
+      g.add(new T.Mesh(mergeGeometries(geometries, false), material));
+      geometries.forEach(geo => geo.dispose());
+    }
   };
-  for(let i=0;i<3;i++){const g=new T.Group();g.name=`BaseTraffic_van_${i}`;serviceVehicle(g,['#d8a64e','#7899a4','#a85e54'][i],i);g.position.set(-570+i*25,0,-53);g.traverse(o=>{if(o.isMesh)o.castShadow=o.receiveShadow=true;});vans.add(g);}
+  for (let i = 0; i < 3; i++) {
+    const g = new T.Group();
+    g.name = `BaseTraffic_van_${i}`;
+    serviceVehicle(g, ['#d8a64e', '#7899a4', '#a85e54'][i], i);
+    g.position.set(-570 + i * 25, 0, -53);
+    g.traverse(o => {
+      if (o.isMesh) o.castShadow = o.receiveShadow = true;
+    });
+    vans.add(g);
+  }
 
   // Quarry Run: terraces, ridge walls and a visible rolling foam boulder hazard.
-  const quarry=new T.Group();quarry.name='Course_quarry-run';root.add(quarry);
-  for(const [x,z,w,d,h] of [[1980,1370,65,8,2],[2140,1450,80,9,3],[2070,1580,70,8,2]])box(quarry,x,h/2,z,w,h,d,'#8e6c4f');
-  for(const [x,z,r] of [[2010,1340,4],[2160,1480,5],[2070,1550,3]]){const b=new T.Mesh(new T.DodecahedronGeometry(r,1),mat('#a97953'));b.position.set(x,r*.6,z);quarry.add(b);}
-  const rocks=dyn('Quarry_rolling-rocks');rocks.userData.role='soft foam boulder contact';for(let i=0;i<3;i++){const r=new T.Mesh(new T.DodecahedronGeometry(1.8,1),mat('#c38b61'));r.position.set(1990+i*70,1.5,1375+i*55);rocks.add(r);}
+  const quarry = new T.Group();
+  quarry.name = 'Course_quarry-run';
+  root.add(quarry);
+  for (const [x, z, w, d, h] of [
+    [1980, 1370, 65, 8, 2],
+    [2140, 1450, 80, 9, 3],
+    [2070, 1580, 70, 8, 2]
+  ])
+    box(quarry, x, h / 2, z, w, h, d, '#8e6c4f');
+  for (const [x, z, r] of [
+    [2010, 1340, 4],
+    [2160, 1480, 5],
+    [2070, 1550, 3]
+  ]) {
+    const b = new T.Mesh(new T.DodecahedronGeometry(r, 1), mat('#a97953'));
+    b.position.set(x, r * 0.6, z);
+    quarry.add(b);
+  }
+  const rocks = dyn('Quarry_rolling-rocks');
+  rocks.userData.role = 'soft foam boulder contact';
+  for (let i = 0; i < 3; i++) {
+    const r = new T.Mesh(new T.DodecahedronGeometry(1.8, 1), mat('#c38b61'));
+    r.position.set(1990 + i * 70, 1.5, 1375 + i * 55);
+    rocks.add(r);
+  }
 
   // Demo Team Circuit: hangar-sized pipe tunnel, smooth tarmac loop, tyres on edges.
-  const demo=new T.Group();demo.name='Course_demo-team-circuit';root.add(demo);
-  box(demo,690,3,450,85,6,10,'#75858a',false);box(demo,645,3,425,3,6,50,'#75858a',false);box(demo,735,3,425,3,6,50,'#75858a',false);
-  const pipe=new T.Mesh(new T.CylinderGeometry(4,4,14,20,1,true,0,Math.PI),mat('#b1c6c5'));pipe.rotation.z=Math.PI/2;pipe.position.set(700,4,430);demo.add(pipe);
-  for(const [x,z] of [[690,330],[790,350],[640,510],[780,500]])for(const dx of [-2,2])cyl(demo,x+dx,.5,z,.38,.75,'#2c3b3f');
+  const demo = new T.Group();
+  demo.name = 'Course_demo-team-circuit';
+  root.add(demo);
+  box(demo, 690, 3, 450, 85, 6, 10, '#75858a', false);
+  box(demo, 645, 3, 425, 3, 6, 50, '#75858a', false);
+  box(demo, 735, 3, 425, 3, 6, 50, '#75858a', false);
+  const pipe = new T.Mesh(new T.CylinderGeometry(4, 4, 14, 20, 1, true, 0, Math.PI), mat('#b1c6c5'));
+  pipe.rotation.z = Math.PI / 2;
+  pipe.position.set(700, 4, 430);
+  demo.add(pipe);
+  for (const [x, z] of [
+    [690, 330],
+    [790, 350],
+    [640, 510],
+    [780, 500]
+  ])
+    for (const dx of [-2, 2]) cyl(demo, x + dx, 0.5, z, 0.38, 0.75, '#2c3b3f');
 
   // After Hours Boardwalk: raised wood deck over lagoon, ramps at both ends, rail gaps.
-  const board=dyn('Course_after-hours-boardwalk');board.userData.role='raised boardwalk with shallow recovery shelves';
-  const pts=CLASSIC_EVENTS.find(e=>e.id==='after-hours-boardwalk').points;
-  for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];surface(a,b,7,'wood');for(const side of [-1,1]){const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz),nx=-dz/len*3.2,nz=dx/len*3.2;beam(board,[a[0]+nx,a[1]+nz],[b[0]+nx,b[1]+nz],.12,Math.max(.7,(a[2]+b[2])*.5+1),'#6d513d');}}
-  for(const [x,z] of [[-530,3360],[-480,3415],[-575,3415]]){cyl(board,x,1,z,.16,2,'#7a563f');box(board,x,2,z,2.8,.12,.12,'#e0b16c');}
+  const board = dyn('Course_after-hours-boardwalk');
+  board.userData.role = 'raised boardwalk with shallow recovery shelves';
+  const pts = CLASSIC_EVENTS.find(e => e.id === 'after-hours-boardwalk').points;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1],
+      b = pts[i];
+    surface(a, b, 7, 'wood');
+    for (const side of [-1, 1]) {
+      const dx = b[0] - a[0],
+        dz = b[1] - a[1],
+        len = Math.hypot(dx, dz),
+        nx = (-dz / len) * 3.2,
+        nz = (dx / len) * 3.2;
+      beam(
+        board,
+        [a[0] + nx, a[1] + nz],
+        [b[0] + nx, b[1] + nz],
+        0.12,
+        Math.max(0.7, (a[2] + b[2]) * 0.5 + 1),
+        '#6d513d'
+      );
+    }
+  }
+  for (const [x, z] of [
+    [-530, 3360],
+    [-480, 3415],
+    [-575, 3415]
+  ]) {
+    cyl(board, x, 1, z, 0.16, 2, '#7a563f');
+    box(board, x, 2, z, 2.8, 0.12, 0.12, '#e0b16c');
+  }
 
-  for (const event of CLASSIC_EVENTS.filter(e => e.id === 'quarry-run' || e.id === 'demo-team-circuit')) for (let i = 1; i < event.points.length; i++) surface(event.points[i - 1], event.points[i], event.half * 2, event.surface);
+  for (const event of CLASSIC_EVENTS.filter(e => e.id === 'quarry-run' || e.id === 'demo-team-circuit'))
+    for (let i = 1; i < event.points.length; i++)
+      surface(event.points[i - 1], event.points[i], event.half * 2, event.surface);
 
   // Static batch by material; dynamic hazards remain independent.
-  root.updateMatrixWorld(true);const groups=new Map(),staticMeshes=[];
-  const hasDynamicAncestor=(object)=>{for(let p=object.parent;p;p=p.parent)if(p.userData?.dynamic)return true;return false;};
-  root.traverse(o=>{if(o.isMesh&&!o.userData.dynamic&&!hasDynamicAncestor(o))staticMeshes.push(o);});
-  for(const o of staticMeshes){let g=o.geometry.clone().applyMatrix4(o.matrixWorld);if(g.index){const f=g.toNonIndexed();g.dispose();g=f;}const k=o.material.color.getHexString();if(groups.has(k))groups.get(k).push(g);else groups.set(k,[g]);o.removeFromParent();o.geometry.dispose();}
-  for(const [k,gs] of groups){const g=mergeGeometries(gs,false);gs.forEach(x=>x.dispose());const m=new T.Mesh(g,mat('#'+k));m.name='ClassicStatic_'+k;m.castShadow=m.receiveShadow=true;root.add(m);}
+  root.updateMatrixWorld(true);
+  const groups = new Map(),
+    staticMeshes = [];
+  const hasDynamicAncestor = object => {
+    for (let p = object.parent; p; p = p.parent) if (p.userData?.dynamic) return true;
+    return false;
+  };
+  root.traverse(o => {
+    if (o.isMesh && !o.userData.dynamic && !hasDynamicAncestor(o)) staticMeshes.push(o);
+  });
+  for (const o of staticMeshes) {
+    let g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+    if (g.index) {
+      const f = g.toNonIndexed();
+      g.dispose();
+      g = f;
+    }
+    const k = o.material.color.getHexString();
+    if (groups.has(k)) groups.get(k).push(g);
+    else groups.set(k, [g]);
+    o.removeFromParent();
+    o.geometry.dispose();
+  }
+  for (const [k, gs] of groups) {
+    const g = mergeGeometries(gs, false);
+    gs.forEach(x => x.dispose());
+    const m = new T.Mesh(g, mat('#' + k));
+    m.name = 'ClassicStatic_' + k;
+    m.castShadow = m.receiveShadow = true;
+    root.add(m);
+  }
 
-  const update=(time=0)=>{const t=Number(time)||0;vans.position.set(0,0,0);vans.children.forEach((v,i)=>{v.position.x=-570+i*25+Math.sin(t*.08+i)*9;v.position.z=-53+Math.cos(t*.08+i)*8;v.rotation.y=Math.sin(t*.08+i)*.2;});rocks.children.forEach((r,i)=>{r.position.x=1990+i*70+Math.sin(t*.45+i)*18;r.position.z=1375+i*55+Math.cos(t*.45+i)*10;r.rotation.x=t*.7;r.rotation.z=t*.5;});};
-  const stepHazards=(car,dt=1/60,time=0)=>{const pos=car?.pos||car;if(!Array.isArray(pos)||pos.length<3)return[];const t=Number(time)||0,out=[];for(const v of vans.children){const x=vans.position.x+v.position.x,z=vans.position.z+v.position.z;if(Math.hypot(pos[0]-x,pos[2]-z)<4)out.push({type:'traffic-bump',venue:'hq',speedScale:.78,push:[pos[0]-x,0,pos[2]-z],dt});}for(const r of rocks.children){const x=rocks.position.x+r.position.x,z=rocks.position.z+r.position.z;if(Math.hypot(pos[0]-x,pos[2]-z)<4)out.push({type:'rolling-rock',venue:'quarry',speedScale:.65,push:[pos[0]-x,0,pos[2]-z],dt});}return out;};
-  const dispose=()=>{root.removeFromParent();root.traverse(o=>{o.geometry?.dispose();if(o.material)o.material.dispose();});mats.clear();};
-  return {root,locations:CLASSIC_LOCATIONS,events:CLASSIC_EVENTS,update,stepHazards,dispose};
+  const update = (time = 0) => {
+    const t = Number(time) || 0;
+    vans.position.set(0, 0, 0);
+    vans.children.forEach((v, i) => {
+      v.position.x = -570 + i * 25 + Math.sin(t * 0.08 + i) * 9;
+      v.position.z = -53 + Math.cos(t * 0.08 + i) * 8;
+      v.rotation.y = Math.sin(t * 0.08 + i) * 0.2;
+    });
+    rocks.children.forEach((r, i) => {
+      r.position.x = 1990 + i * 70 + Math.sin(t * 0.45 + i) * 18;
+      r.position.z = 1375 + i * 55 + Math.cos(t * 0.45 + i) * 10;
+      r.rotation.x = t * 0.7;
+      r.rotation.z = t * 0.5;
+    });
+  };
+  const stepHazards = (car, dt = 1 / 60, time = 0) => {
+    const pos = car?.pos || car;
+    if (!Array.isArray(pos) || pos.length < 3) return [];
+    const t = Number(time) || 0,
+      out = [];
+    for (const v of vans.children) {
+      const x = vans.position.x + v.position.x,
+        z = vans.position.z + v.position.z;
+      if (Math.hypot(pos[0] - x, pos[2] - z) < 4)
+        out.push({
+          type: 'traffic-bump',
+          venue: 'hq',
+          speedScale: 0.78,
+          push: [pos[0] - x, 0, pos[2] - z],
+          dt
+        });
+    }
+    for (const r of rocks.children) {
+      const x = rocks.position.x + r.position.x,
+        z = rocks.position.z + r.position.z;
+      if (Math.hypot(pos[0] - x, pos[2] - z) < 4)
+        out.push({
+          type: 'rolling-rock',
+          venue: 'quarry',
+          speedScale: 0.65,
+          push: [pos[0] - x, 0, pos[2] - z],
+          dt
+        });
+    }
+    return out;
+  };
+  const dispose = () => {
+    root.removeFromParent();
+    root.traverse(o => {
+      o.geometry?.dispose();
+      if (o.material) o.material.dispose();
+    });
+    mats.clear();
+  };
+  return {root, locations: CLASSIC_LOCATIONS, events: CLASSIC_EVENTS, update, stepHazards, dispose};
 }

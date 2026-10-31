@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-10-31T01:32:25.928Z",
+  "capturedAt": "2026-10-31T04:57:19.965Z",
   "viewport": {
     "width": 1280,
     "height": 800
@@ -15,7 +15,7 @@
         ],
         "yaw": -0.466,
         "pitch": -0.152,
-        "fov": 60.02331285741672
+        "fov": 60.02437259702284
       },
       "settled": {
         "frames": 46,
@@ -24,11 +24,11 @@
       "frameMs": {
         "samples": 300,
         "p50": 16.7,
-        "p95": 17.3,
-        "p99": 33.3,
-        "max": 33.4
+        "p95": 16.8,
+        "p99": 17.4,
+        "max": 33.3
       },
-      "drawCalls": 598,
+      "drawCalls": 476,
       "pixelRatio": 1,
       "errors": []
     },
@@ -41,7 +41,7 @@
         ],
         "yaw": 1.9,
         "pitch": -0.152,
-        "fov": 60.00935885910491
+        "fov": 60.00989220657939
       },
       "settled": {
         "frames": 36,
@@ -50,11 +50,11 @@
       "frameMs": {
         "samples": 300,
         "p50": 16.7,
-        "p95": 33.4,
-        "p99": 66.7,
-        "max": 149.9
+        "p95": 33.3,
+        "p99": 33.4,
+        "max": 34.2
       },
-      "drawCalls": 1349,
+      "drawCalls": 1118,
       "pixelRatio": 1,
       "errors": []
     },
@@ -67,20 +67,20 @@
         ],
         "yaw": 0,
         "pitch": -0.152,
-        "fov": 60.020242112493634
+        "fov": 60.019928362538636
       },
       "settled": {
-        "frames": 24,
+        "frames": 25,
         "calm": 20
       },
       "frameMs": {
         "samples": 300,
         "p50": 16.7,
-        "p95": 17.2,
-        "p99": 17.6,
-        "max": 17.7
+        "p95": 17.3,
+        "p99": 17.5,
+        "max": 17.6
       },
-      "drawCalls": 298,
+      "drawCalls": 270,
       "pixelRatio": 1,
       "errors": []
     },
@@ -93,20 +93,20 @@
         ],
         "yaw": 2.4,
         "pitch": -0.152,
-        "fov": 60.014169818903696
+        "fov": 60.01779893243632
       },
       "settled": {
-        "frames": 27,
+        "frames": 28,
         "calm": 20
       },
       "frameMs": {
         "samples": 300,
         "p50": 16.7,
         "p95": 17.2,
-        "p99": 17.6,
-        "max": 17.7
+        "p99": 17.4,
+        "max": 17.6
       },
-      "drawCalls": 1051,
+      "drawCalls": 881,
       "pixelRatio": 1,
       "errors": []
     },
@@ -119,20 +119,20 @@
         ],
         "yaw": 0.8,
         "pitch": -0.152,
-        "fov": 60.00654823434116
+        "fov": 60.0117891552095
       },
       "settled": {
-        "frames": 20,
+        "frames": 21,
         "calm": 20
       },
       "frameMs": {
         "samples": 300,
         "p50": 16.7,
-        "p95": 17.5,
+        "p95": 17.4,
         "p99": 17.7,
-        "max": 33.8
+        "max": 17.7
       },
-      "drawCalls": 684,
+      "drawCalls": 664,
       "pixelRatio": 1,
       "errors": []
     },
@@ -145,7 +145,7 @@
         ],
         "yaw": 0,
         "pitch": -0.152,
-        "fov": 60.02239818444277
+        "fov": 60.03280458564378
       },
       "settled": {
         "frames": 35,
@@ -155,10 +155,10 @@
         "samples": 300,
         "p50": 16.7,
         "p95": 17.5,
-        "p99": 17.6,
-        "max": 17.7
+        "p99": 17.7,
+        "max": 17.8
       },
-      "drawCalls": 550,
+      "drawCalls": 500,
       "pixelRatio": 1,
       "errors": []
     }

@@ -1,5 +1,12 @@
 # Saucer Springs: the adventure layer
 
+**The pitch** (owner, 31 Oct): "essentially the game is dinosaur-western-minecraft vs
+near-future-scifi drone-game with aliens." Above, the light world is near-future sci-fi on the
+base: the transforming toy, toy jets and drones, the captured good aliens, security bots (the siege
+half). Below, the dark world is a dinosaur western with steam farms, outlaws and diggable blocky
+ground (the long-way-home half). New light-world content leans toward drones and sci-fi rather than
+more base realism.
+
 Design draft, 30 Oct 2026. The primary reference is **A Link to the Past (SNES)** and **Ocarina of
 Time (N64)**. Everything else is flavour on that structure: Toy Story, Stranger Things and IT's
 small-town uncanny, the desert south-west, and an original fantasy spirit world. The player is the
@@ -23,8 +30,29 @@ years. But it should feel like there's an infinity of things to do in this world
 The Air Force has captured some aliens and is holding them in a hangar on Nellis. They are the
 **good** aliens: they came to protect us from the **bad** aliens, who want to break into our world
 from the **dark world**. One night a captured alien reaches out with the last of its power, and the
-glow wakes a toy: **you**, an RC car on a kid's bedroom floor. The good aliens wake toys; the bad
-aliens' signal takes them over. So there are **good toys and bad toys**. To free the aliens and
+glow wakes a toy: **you**, an RC car on a kid's bedroom floor. **Both kinds of alien bring toys to
+life** (owner, 31 Oct): the good aliens wake toys as themselves, with their own personalities, and
+the bad aliens animate toys to be their bad guys, faceless soldiers with no one inside (which is
+why those just break). The bad aliens' signal can also bewitch a named toy for a while, and those
+are the bosses you free. So there are **good toys and bad toys**.
+Owner: "'bad' toys basically don't have a soul, they're just mindless machines, whereas the 'good'
+toys have a personality." **Show it, never say it:** bad toys are identical, tick and whir, march
+in step, have glowing dots for eyes and no voice; good toys are each different, have faces that
+react, little idle habits and voices (and names you can type).
+
+Owner: "there's some bad toys that are as much as dumb-LLM-smart, they can talk and stuff, but
+they're NPCs. Whereas the good toy characters have feelings and an inner life." So talking isn't
+the line; an inner life is.
+- **Talking bad toys are NPCs**: the outlaw boss, a shopkeeper bot, a gate guard that asks for a
+  password. They chat like a cheerful chatbot: polite, eager, a bit repetitive, sure of themselves
+  when wrong, and they don't remember you from last time. Their lines are written, not generated
+  live: they're meant to sound hollow, not to be unpredictable.
+- **Good toys have an inner life**: they remember you and what you did, have moods, wants and
+  fears, change over the game, and sometimes say something you didn't expect. The freed aliens
+  and your crew are the ones you care about.
+- **When a talking bad toy loses, it winds down**: the key stops turning and it slumps mid-sentence
+  ("Thank you for your patien…"). It doesn't shatter, and it can be wound up again; only the silent
+  ones burst into springs. To free the aliens and
 stop the break-in, you cross the base, climb **the mountain** where the river begins, and pass
 through its old gate into the dark world. The creatures of the mountain help a toy that carries the
 good aliens' light.
@@ -41,6 +69,39 @@ story thesis."
 - **The dark world is the long way home.** Strange places and monsters (outlaws, bad toys, the Rat
   King, the Lake Town, the mountain gate), helpers and gifts along the way, and one home to reach:
   the bedroom floor where the toy woke up.
+
+**The theme under the plot** (owner, 31 Oct): "given the setting, 1900s SW USA, essentially the bad
+toys represent the march of industrial civilization, and the good toys represent nature and the old
+ways."
+- **Bad toys are the machine that doesn't care**: identical clockwork soldiers, the mine that eats
+  the mountain, the factory in the BX basement, and in the end the dam itself. In the present the
+  march has won: the valley is a reservoir and the town lies drowned under it. The dark world is the
+  time before, when it could still go either way.
+- **Good toys are nature and the old ways**: the land's creatures and spirits, the river and the
+  spring, and homestead craft (the hand pump, the windmill, the farm, things mended rather than
+  replaced).
+- **The line is soul, not machinery.** You are an RC car, and the steam tractor someone named and
+  looks after is a good toy. What makes a toy bad is being made without anyone inside it.
+- **"The old ways" is the land's, not a people's.** Per the setting rules below, no Native imagery,
+  stories or figures stand in for nature or the past; the old ways are the desert's creatures,
+  water and weather, and the homesteaders' hand-made life.
+
+**The theme under the plot** (owner, 31 Oct): "given the setting, 1900s SW USA, essentially the bad
+toys represent the march of industrial civilization, and the good toys represent nature and the old
+ways."
+- **Bad toys are the machine that doesn't care**: identical clockwork soldiers, the mine that eats
+  the mountain, the factory in the BX basement, and in the end the dam itself. In the present the
+  march has won: the valley is a reservoir and the town lies drowned under it. The dark world is the
+  time before, when it could still go either way.
+- **Good toys are nature and the old ways**: the land's creatures and spirits, the river and the
+  spring, and homestead craft (the hand pump, the windmill, the farm, things mended rather than
+  replaced).
+- **The line is soul, not machinery.** The hero is a transforming toy (sometimes an RC car,
+  sometimes a robot, a skateboarder, a cowboy on a dinosaur), and the steam tractor someone named
+  and looks after is a good toy. What makes a toy bad is being made without anyone inside it.
+- **"The old ways" is the land's, not a people's.** Per the setting rules below, no Native imagery,
+  stories or figures stand in for nature or the past; the old ways are the desert's creatures,
+  water and weather, and the homesteaders' hand-made life.
 
 **The rule: a 6-year-old never sees it.** No Homer names and no explaining. It is a spine for
 choosing what to build: when a new dungeon, boss or gift is needed, pick the Odyssey beat it can
@@ -68,6 +129,28 @@ enemies out in the open**, the way ALttP's Dark World is far more hostile than t
 toys ride the trails, outlaw gangs hold the passes, and every road is contested. The bad aliens'
 signal reaches back in time too. That's why the old toys there have gone bad, and it's where the
 break-in begins.
+
+## The world's own rules
+
+Owner: "obviously the whole thing is just made up, but it's gotta have an internally coherent
+world." Every new piece has to fit these; if one doesn't, change the piece, not the rule.
+- **Every toy that moves on its own was brought to life**, either by the good aliens (a toy
+  that wakes as itself, with a personality) or by the bad aliens (a toy made to be a soldier, with
+  no one inside). The toy animals sit in between (below), and the land's creatures and spirits are
+  the land's own, older than both.
+- **Toy animals are in between** (owner: dinosaurs are "kinda in-between, they're alive but they're
+  dumb lizards ... but they're toy dinosaurs, it's all a bit Lego Movie"). Toy dinosaurs, cows and
+  horses are alive the way animals are: instincts, no inner life. They eat, sleep, spook and follow
+  whoever feeds them. **Cows, horses and the plant-eating dinosaurs mix happily, but everyone is
+  scared of a T. rex** (owner); yours is one, so ride up and the herd scatters, which is how you
+  herd them. Neither side owns them; the outlaws ride dinosaurs too. You
+  win a dinosaur over and name it like a pet. Toy animals never break and are never hurt: a
+  frightened one runs off and comes back.
+- **The dark world is the same valley long ago.** You get there only through the spirit gates and
+  the glowing portal layer underground, and what you change there shows up in the present.
+- **People are giants in the background**: they never talk to toys, and no one real is ever hurt.
+- **Nothing breaks that has someone inside it.** Soulless toys burst into springs; toys with a self
+  are won over, freed or wound back up.
 
 ## How it maps onto Zelda
 
@@ -195,15 +278,46 @@ And the dam disappears and there's a town down there under where the lake is. It
 
 This is our own toy western, not a copy of any game: original toys, town and story.
 
-**Every form has an old-time twin**, as Link becomes a bunny in the Dark World. The keys don't
-change (the keyboard rule above), only the toy:
+**In the dark world he's mostly a toy that rides dinosaurs** (owner, 31 Oct). The transforming toy
+becomes a little toy cowboy, and his dinosaur is his main way about, as Link becomes a bunny in the
+Dark World. T just switches between riding and on foot (built). The keys don't change:
 
 | Present | Past | What only it can do in the past |
 |---|---|---|
-| RC car | **Toy dinosaur, ridden** by the toy cowboy | Run the open range, leap gulches, outrun a stagecoach. Whistle (E) and it comes |
-| Walking robot | **Toy cowboy** (tin figure, jointed arms) | Climb, crawl and push, as the robot does; lasso posts and steers; cork-gun duels |
-| Skateboard | **Mine-rail handcar** | Ride the rails through the mountain and the mine, both ways in time |
-| Flying suit | **Paper kite / toy balloon** | Glide off the mesas on the canyon winds |
+| RC car | **Riding the toy dinosaur** | Run the open range, leap gulches, outrun a stagecoach, stomp outlaws. Say its name (Y) and it comes |
+| Walking robot | **The toy cowboy on foot** (tin figure, jointed arms) | Climb, crawl and push, as the robot does; dig straight down; lasso posts and steers; cork-gun duels |
+
+**All sorts of dinosaurs** (owner, 31 Oct). The dark world is full of toy dinosaurs: wild herds
+on the range, ones the homesteaders keep, ones the outlaws ride. Each kind you win over is a
+mount with one thing only it can do, so they double as the dark world's items:
+
+| Dinosaur | Rides like | Only it can |
+|---|---|---|
+| **T. rex** (built: the first one) | fast, bouncy | scare anything: herds scatter, outlaws pop |
+| **Long-neck** | slow, steady | reach high ledges and windows, wade the river |
+| **Triceratops** | heavy | charge through gates, barricades and rockfalls |
+| **Raptor** | quickest, twitchy | leap gulches, race the clockwork train |
+| **Ankylosaur** | low, armoured | smash cracked rock with its tail club, shrug off outlaw fire |
+| **Quetzalcoatlus** | flies | the sky route home (below) |
+| **Stegosaur** | plodding | carry a load: hay to the farm, a stray calf home |
+
+**The quetzalcoatlus: the sky route home** (owner, 31 Oct): "we'll need a quetzalcoatlus that you
+can fly. Noting that this whole game doesn't need to be perfectly accurate or anything. It should be
+that you have to climb to a quetzalcoatlus nest then you can go for a ride." A giant toy pterosaur
+nests high on Spirit Mountain in the past, its nest visible from the valley floor, wings over the
+crag. Getting there is the challenge: a climb as the cowboy (ledges, handholds) and dinosaur jumps
+up the switchbacks. Reach the nest and it's yours: E to climb on, then fly the whole dark world on
+the toy jet's flight model with the kid-mode easy flyer and Auto-GCAS (flap to climb, glide to
+swoop, land anywhere flat). Once befriended it joins the herd, and its name calls it from anywhere.
+Accuracy is not the point: it's a big friendly flying dinosaur.
+The climb is the fun way up, never a wall (owner: "you can just use the map selector to jump
+there"). The nest is a place on the map's place list like any other, and so are the Lake Town and
+the farm. Picking a dark-world place jumps you there and into the past.
+
+Which scares whom follows size: cows and horses mix with the plant-eaters but scatter from a
+T. rex; the smaller dinosaurs give a T. rex a wide berth too. Win one over by feeding or herding
+it, then name it (typed) and call it by name; your herd lives at the farm and any one you've
+named comes when called.
 
 **You ride dinosaurs, not horses** (owner, 31 Oct): "instead of riding horses you're riding
 dinosaurs. This does two things: one, it's hilarious. And two: it makes the characters bigger.
@@ -222,6 +336,24 @@ pterosaur kite. In the slice the dinosaur still uses the car's physics underneat
 - **The Old Silver Mine is working**: carts, a stamp mill, lamps lit. Its deep levels, sealed in the
   present, are open in the past.
 - **A steam train** runs the valley line where the present-day train bridge stands.
+
+**Why people are here, then and now** (owner, 31 Oct: "certain places attract people... we'll
+need to think about this stuff, always"). The rule: every place in the present exists for a reason
+the land gave it, and the past shows that reason raw. In a desert valley the reason is nearly always
+water (Las Vegas is Spanish for "the meadows", after the spring-fed grassland travellers stopped
+at). Every new venue answers two questions when it is built, not later: why do people come here,
+and what was here then?
+
+| Present | Why people come | Past |
+|---|---|---|
+| Runway | long, flat, hard ground | the stage road |
+| Hangar | shelter and work | the stockade |
+| Lake and dam | water, stored | the green river valley and the Lake Town |
+| Country club (golf, clubhouse, tennis, minigolf) | water on the surface: the greenest spot on the base | **a spring meadow on the cattle trail**: cattle graze the "fairways" and loose dinosaurs come to drink; the clubhouse is a ranch house with a windmill pump, trough and chuck wagon; the tennis courts are the corrals; the minigolf is a horseshoe pitch; golf becomes the **roundup**, steering steers into pens from your dinosaur with the lasso as the club (the same aim-power-landing skill) |
+| Waterpark | water for fun | the swimming hole at the river bend |
+| BX shopping | trade | the trading post |
+| Housing | people live near work | homesteads and the steam farmland |
+| Spirit Mountain | the high point you see from everywhere | the lookout, and the working mine |
 
 **Western set pieces, all toy-sized and no one gets hurt:** a train robbery you foil by running
 alongside on your dinosaur and jumping aboard; a stampede of plastic cattle (and loose dinosaurs) down the main street; a high-noon cork-gun
@@ -247,6 +379,24 @@ then."
 - **Blocky and buildable** comes next: the dug blocks are the start of a block set the cowboy can
   place to build a little hut, a bridge or a ramp.
 
+**Good guy or bad guy** (owner, 31 Oct): "you can be a good guy or a bad guy in the upside down,
+except that it's all just toys and aliens and spirits and stuff." The dark world lets you pick a
+side, the way a western does, with nothing real at stake:
+- **The sheriff's side** (built: stomp the outlaw gang, free the Lake Town, the Sheriff star).
+- **The outlaws' side**: the gang's boss asks you to ride with them (a typed yes or no). Say yes and
+  they're your gang: mischief jobs instead of fights (rob the toy bank of chocolate coins, rustle the
+  plastic cattle, hold up the clockwork train), the sheriff's posse of good toys chases you, and the
+  rewards are outlaw ones (a bandana livery, a black hat for the cowboy).
+- **What breaks and what doesn't** (owner, 31 Oct: "if my dinosaur stomps an enemy it's just a
+  toy with no personality and it breaks"). Faceless enemies (wind-up outlaws, tin soldiers, bad
+  drones) have no name and no lines; stomped or punched, they burst into springs, cogs and bits of
+  tin. Anything with a name and a personality (the sheriff, the gang's boss, the Rat King, a freed
+  alien) is never broken: it's won over, freed or befriended, on either side.
+- **It's only ever toys.** Bad means siding with the bad aliens' toys, never hurting
+  people (there are none to hurt) and never the land's creatures and spirits: the tortoise elder and
+  the spring help whoever is kind to them, either side. No real crimes beyond toy-box mischief, and
+  no permanent lock-out: switch sides on a later visit, and both endings get you home.
+
 **Portals all over the map** (owner, 31 Oct). The spirit cave is the first crossing, not the only
 one. Once you've been through it, portals around the world wake up, and each links two places
 rather than the same spot in the other time. Example: **a portal in the base town drops you at the
@@ -265,7 +415,7 @@ present; bury a chest in the past and dig it up with the claw today.
 
 **What we don't do here.** No "cowboys and Indians" toys and no Native enemies or props. This is
 Southern Paiute land in both times (see the setting rules below), and the past makes that matter
-more. The outlaws are the bad aliens' taken-over toys. The frontier is drawn from real settler
+more. The outlaws are toys the bad aliens brought to life to be their gang. The frontier is drawn from real settler
 history (mining towns, stage roads, the railway), and the real history in it is checked before it
 goes in.
 
@@ -367,7 +517,7 @@ Drones bring the base to life and give it its first-act threat:
 - **Big drones** (MQ-9 style) circling overhead and taxiing on the runway, as set dressing and
   as obstacles.
 - Under the corrupted leadership the bots get **meaner**: red lights, faster patrols. In the
-  dark world, the old toys they've taken over are clockwork outlaws with alien glow in their eyes.
+  dark world, the toys they animate are clockwork outlaws with alien glow in their eyes.
 
 ## Difficulty a 6-year-old can win (owner, 30 Oct)
 

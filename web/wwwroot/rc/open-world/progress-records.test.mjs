@@ -1,4 +1,26 @@
-import test from 'node:test';import assert from 'node:assert/strict';
-import {loadProgress,recordFinish,expedition,SPECIMENS} from './catalog.mjs';
-test('legacy one-lap records remain progress but cannot become three-lap medals',()=>{const s=loadProgress({getItem:()=>JSON.stringify({wins:{'gate-guard':20}})});assert.equal(s.wins['gate-guard'],20);assert.equal(s.raceWins['gate-guard'],undefined);recordFinish(s,'gate-guard',80);assert.equal(s.raceWins['gate-guard'],80);assert.equal(s.wins['gate-guard'],20);});
-test('new-format finale records complete the expedition independently of legacy records',()=>{const early=['district-housing','district-bx','district-school','splash-down','demo-team-circuit','supply-line','ramp-rat','wing-walker'];const raceWins=Object.fromEntries([...early,'dreamland','night-wave'].map(id=>[id,180]));const s=loadProgress({getItem:()=>JSON.stringify({specimens:SPECIMENS.map(p=>p.id),raceWins})});assert.equal(expedition(s).complete,true);});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {loadProgress, recordFinish, expedition, SPECIMENS} from './catalog.mjs';
+test('legacy one-lap records remain progress but cannot become three-lap medals', () => {
+  const s = loadProgress({getItem: () => JSON.stringify({wins: {'gate-guard': 20}})});
+  assert.equal(s.wins['gate-guard'], 20);
+  assert.equal(s.raceWins['gate-guard'], undefined);
+  recordFinish(s, 'gate-guard', 80);
+  assert.equal(s.raceWins['gate-guard'], 80);
+  assert.equal(s.wins['gate-guard'], 20);
+});
+test('new-format finale records complete the expedition independently of legacy records', () => {
+  const early = [
+    'district-housing',
+    'district-bx',
+    'district-school',
+    'splash-down',
+    'demo-team-circuit',
+    'supply-line',
+    'ramp-rat',
+    'wing-walker'
+  ];
+  const raceWins = Object.fromEntries([...early, 'dreamland', 'night-wave'].map(id => [id, 180]));
+  const s = loadProgress({getItem: () => JSON.stringify({specimens: SPECIMENS.map(p => p.id), raceWins})});
+  assert.equal(expedition(s).complete, true);
+});

@@ -4,8 +4,8 @@ import * as T from '../vendor/three.module.js';
 // workplace"). The bodies have no paint UVs, so a pattern is drawn procedurally in the car's own
 // frame: x across, y up, z nose (-1) to tail (+1), each normalised to the painted parts' box.
 // The paint materials are recognised by their colour and patched in place.
-import { LIVERIES, TRIMS } from './livery-data.mjs';
-export { LIVERIES, TRIMS };
+import {LIVERIES, TRIMS} from './livery-data.mjs';
+export {LIVERIES, TRIMS};
 const PATTERN = Object.fromEntries(LIVERIES.map((l, i) => [l.id, i]));
 
 const MASK = `
@@ -56,27 +56,61 @@ vec4 livery(vec3 p){
 }`;
 
 /** Patch the paint on `root` (the car group). Safe to call again after a body or paint change. */
-export function applyLivery(root, { paint, trim = TRIMS[0].color, pattern = 'solid' } = {}) {
+export function applyLivery(root, {paint, trim = TRIMS[0].color, pattern = 'solid'} = {}) {
   if (!root) return 0;
-  const target = new T.Color(paint).getHexString(), meshes = [];
+  const target = new T.Color(paint).getHexString(),
+    meshes = [];
   root.updateMatrixWorld(true);
-  root.traverse(o => { if (o.isMesh && o.visible !== false && o.material?.color && !Array.isArray(o.material) && o.material.color.getHexString() === target) meshes.push(o); });
+  root.traverse(o => {
+    if (
+      o.isMesh &&
+      o.visible !== false &&
+      o.material?.color &&
+      !Array.isArray(o.material) &&
+      o.material.color.getHexString() === target
+    )
+      meshes.push(o);
+  });
   if (!meshes.length) return 0;
-  const inv = new T.Matrix4().copy(root.matrixWorld).invert(), box = new T.Box3(), v = new T.Vector3();
-  for (const m of meshes) { const pos = m.geometry.attributes.position, to = new T.Matrix4().multiplyMatrices(inv, m.matrixWorld); for (let i = 0; i < pos.count; i += 3) box.expandByPoint(v.fromBufferAttribute(pos, i).applyMatrix4(to)); }
+  const inv = new T.Matrix4().copy(root.matrixWorld).invert(),
+    box = new T.Box3(),
+    v = new T.Vector3();
+  for (const m of meshes) {
+    const pos = m.geometry.attributes.position,
+      to = new T.Matrix4().multiplyMatrices(inv, m.matrixWorld);
+    for (let i = 0; i < pos.count; i += 3) box.expandByPoint(v.fromBufferAttribute(pos, i).applyMatrix4(to));
+  }
   const size = box.getSize(new T.Vector3()).max(new T.Vector3(1e-3, 1e-3, 1e-3));
-  const u = root.userData.livery ??= { uInv: { value: new T.Matrix4() }, uMin: { value: new T.Vector3() }, uSize: { value: new T.Vector3(1, 1, 1) }, uTrim: { value: new T.Color() }, uPattern: { value: 0 } };
-  u.uMin.value.copy(box.min); u.uSize.value.copy(size); u.uTrim.value.set(trim); u.uPattern.value = PATTERN[pattern] ?? 0;
+  const u = (root.userData.livery ??= {
+    uInv: {value: new T.Matrix4()},
+    uMin: {value: new T.Vector3()},
+    uSize: {value: new T.Vector3(1, 1, 1)},
+    uTrim: {value: new T.Color()},
+    uPattern: {value: 0}
+  });
+  u.uMin.value.copy(box.min);
+  u.uSize.value.copy(size);
+  u.uTrim.value.set(trim);
+  u.uPattern.value = PATTERN[pattern] ?? 0;
   for (const m of meshes) {
     m.onBeforeRender = () => u.uInv.value.copy(root.matrixWorld).invert();
     if (m.material.userData.livery === u) continue;
     m.material.userData.livery = u;
     m.material.onBeforeCompile = shader => {
       Object.assign(shader.uniforms, u);
-      shader.vertexShader = 'uniform mat4 uInv; uniform vec3 uMin; uniform vec3 uSize; varying vec3 vLiv;\n' + shader.vertexShader.replace('#include <begin_vertex>',
-        '#include <begin_vertex>\n vLiv = ((uInv * modelMatrix * vec4(transformed, 1.0)).xyz - uMin) / uSize * 2.0 - 1.0;');
-      shader.fragmentShader = MASK + '\n' + shader.fragmentShader.replace('#include <color_fragment>',
-        '#include <color_fragment>\n { vec4 l = livery(vLiv); diffuseColor.rgb = mix(diffuseColor.rgb, l.rgb, l.a); }');
+      shader.vertexShader =
+        'uniform mat4 uInv; uniform vec3 uMin; uniform vec3 uSize; varying vec3 vLiv;\n' +
+        shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          '#include <begin_vertex>\n vLiv = ((uInv * modelMatrix * vec4(transformed, 1.0)).xyz - uMin) / uSize * 2.0 - 1.0;'
+        );
+      shader.fragmentShader =
+        MASK +
+        '\n' +
+        shader.fragmentShader.replace(
+          '#include <color_fragment>',
+          '#include <color_fragment>\n { vec4 l = livery(vLiv); diffuseColor.rgb = mix(diffuseColor.rgb, l.rgb, l.a); }'
+        );
     };
     m.material.customProgramCacheKey = () => 'rc-livery';
     m.material.needsUpdate = true;

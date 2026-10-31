@@ -1,7 +1,85 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {FENCE_SOURCE,fenceSegments} from './fences.mjs';
-const source=(a,b,gates=[])=>({ways:[{id:1,points:[a,b]}],gates:gates.map(pos=>({pos}))});
-const run=opts=>fenceSegments({bounds:[-100,-100,100,100],districtBounds:[],...opts});
-test('public OSM fences retain finite IDs and renderable in-world segments',()=>{assert.equal(FENCE_SOURCE.ways.length,45);assert.equal(FENCE_SOURCE.gates.length,186);const out=fenceSegments();assert.ok(out.length>20);for(const w of FENCE_SOURCE.ways)for(const p of w.points)assert.ok(p.every(Number.isFinite));});
-test('gate at segment endpoint removes full radius and central gate opens both sides',()=>{assert.deepEqual(run({source:source([0,0],[10,0],[[0,0]])}).map(s=>s.a),[[3,0]]);assert.deepEqual(run({source:source([-10,0],[10,0],[[0,0]])}).map(s=>[s.a,s.b]),[[[-10,0],[-3,0]],[[3,0],[10,0]]]);});
-test('perpendicular, shallow angle and parallel road corridors really remove walls',()=>{for(const road of [[[-20,-20],[20,20]],[[-20,-2],[20,2]],[[-20,1],[20,1]]]){const out=run({source:source([-10,0],[10,0]),roads:[{points:road}]});for(const s of out)for(let i=0;i<=10;i++){const p=s.a.map((v,k)=>v+(s.b[k]-v)*i/10),[u,v]=road,dx=v[0]-u[0],dz=v[1]-u[1];assert.ok(Math.abs((p[0]-u[0])*dz-(p[1]-u[1])*dx)/Math.hypot(dx,dz)>=3-1e-6);}}});
-test('bounds clip crossing fences and exclude outside while district and event cuts retain the rest',()=>{assert.deepEqual(run({source:source([-200,0],[200,0]),districtBounds:[[-2,-2,2,2]]}).map(s=>[s.a,s.b]),[[[-100,0],[-2,0]],[[2,0],[100,0]]]);assert.equal(run({source:source([200,0],[300,0])}).length,0);assert.equal(run({source:source([-10,0],[10,0]),eventSegments:[[[-20,0],[20,0]]]}).length,0);});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {FENCE_SOURCE, fenceSegments} from './fences.mjs';
+const source = (a, b, gates = []) => ({ways: [{id: 1, points: [a, b]}], gates: gates.map(pos => ({pos}))});
+const run = opts => fenceSegments({bounds: [-100, -100, 100, 100], districtBounds: [], ...opts});
+test('public OSM fences retain finite IDs and renderable in-world segments', () => {
+  assert.equal(FENCE_SOURCE.ways.length, 45);
+  assert.equal(FENCE_SOURCE.gates.length, 186);
+  const out = fenceSegments();
+  assert.ok(out.length > 20);
+  for (const w of FENCE_SOURCE.ways) for (const p of w.points) assert.ok(p.every(Number.isFinite));
+});
+test('gate at segment endpoint removes full radius and central gate opens both sides', () => {
+  assert.deepEqual(
+    run({source: source([0, 0], [10, 0], [[0, 0]])}).map(s => s.a),
+    [[3, 0]]
+  );
+  assert.deepEqual(
+    run({source: source([-10, 0], [10, 0], [[0, 0]])}).map(s => [s.a, s.b]),
+    [
+      [
+        [-10, 0],
+        [-3, 0]
+      ],
+      [
+        [3, 0],
+        [10, 0]
+      ]
+    ]
+  );
+});
+test('perpendicular, shallow angle and parallel road corridors really remove walls', () => {
+  for (const road of [
+    [
+      [-20, -20],
+      [20, 20]
+    ],
+    [
+      [-20, -2],
+      [20, 2]
+    ],
+    [
+      [-20, 1],
+      [20, 1]
+    ]
+  ]) {
+    const out = run({source: source([-10, 0], [10, 0]), roads: [{points: road}]});
+    for (const s of out)
+      for (let i = 0; i <= 10; i++) {
+        const p = s.a.map((v, k) => v + ((s.b[k] - v) * i) / 10),
+          [u, v] = road,
+          dx = v[0] - u[0],
+          dz = v[1] - u[1];
+        assert.ok(Math.abs((p[0] - u[0]) * dz - (p[1] - u[1]) * dx) / Math.hypot(dx, dz) >= 3 - 1e-6);
+      }
+  }
+});
+test('bounds clip crossing fences and exclude outside while district and event cuts retain the rest', () => {
+  assert.deepEqual(
+    run({source: source([-200, 0], [200, 0]), districtBounds: [[-2, -2, 2, 2]]}).map(s => [s.a, s.b]),
+    [
+      [
+        [-100, 0],
+        [-2, 0]
+      ],
+      [
+        [2, 0],
+        [100, 0]
+      ]
+    ]
+  );
+  assert.equal(run({source: source([200, 0], [300, 0])}).length, 0);
+  assert.equal(
+    run({
+      source: source([-10, 0], [10, 0]),
+      eventSegments: [
+        [
+          [-20, 0],
+          [20, 0]
+        ]
+      ]
+    }).length,
+    0
+  );
+});

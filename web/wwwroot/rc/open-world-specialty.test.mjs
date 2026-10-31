@@ -1,8 +1,73 @@
-import test from 'node:test';import assert from 'node:assert/strict';
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import * as T from '../vendor/three.module.js';
-import {buildLandmarks} from './open-world/landmarks.js';import {createStream} from './open-world/stream.mjs';
-import {eventById,eventCourse,eventSurface} from './open-world/catalog.mjs';
-import {createRace,stepRace,driveInput} from './physics/race.mjs';import {createSession,stepSession,readout} from './physics/session.mjs';
-const stream=()=>createStream({manifest:{tiles:[]},fetchTile:()=>{}});
-test('Wing Walker skill line climbs the aircraft deck and rejoins to finish without recovery',()=>{const old=globalThis.document;globalThis.document={createElement:()=>({getContext:()=>new Proxy({},{get:()=>()=>{},set:()=>true})})};const world=stream();try{const art=buildLandmarks(new T.Scene(),world.world),race=createRace(eventCourse(eventById('wing-walker'),world.world),{opponents:0,mode:'bigKid'}),pilot={session:race.player,skill:.95,node:0};race.retreat.at=Infinity;let height=0,alt=false,steps=0,closest=Infinity;while(!race.player.finished&&steps++<120*180){stepRace(race,driveInput(race,pilot),1/120);height=Math.max(height,race.player.car.pos[1]);closest=Math.min(closest,Math.hypot(race.player.car.pos[0]-2426,race.player.car.pos[2]-1600));alt||=!!pilot.alt;}assert.ok(alt);assert.ok(height>2.5,`maximum height ${height}`);assert.ok(race.player.finished,JSON.stringify({closest,pos:race.player.car.pos,gate:race.player.gate,node:pilot.node,alt:pilot.altNode,recoveries:race.player.recoveries}));assert.equal(race.player.recoveries,0);art.dispose();assert.equal(art.rings.values().next().value.parent,null);}finally{world.dispose();globalThis.document=old;}});
-test('specialty surfaces change real car response and retain a safe ground plane',()=>{const world=stream();try{assert.equal(eventSurface(-940,1245),'gymfloor');assert.equal(eventSurface(-1327,1470),'dirt');assert.equal(eventSurface(-555,3388),'water');function drive(pos){const c=eventCourse(eventById('splash-down'),world.world);c.start={pos,yaw:0};const s=createSession(c,{mode:'bigKid'});s.roam=true;for(let i=0;i<90;i++)stepSession(s,{throttle:.5},1/120);assert.ok(s.car.pos[1]>=0);return readout(s).speed;}const water=drive([-555,0,3394]),dry=drive([-590,0,3394]);assert.ok(water<dry*.9,`water ${water}, dry ${dry}`);}finally{world.dispose();}});
+import {buildLandmarks} from './open-world/landmarks.js';
+import {createStream} from './open-world/stream.mjs';
+import {eventById, eventCourse, eventSurface} from './open-world/catalog.mjs';
+import {createRace, stepRace, driveInput} from './physics/race.mjs';
+import {createSession, stepSession, readout} from './physics/session.mjs';
+const stream = () => createStream({manifest: {tiles: []}, fetchTile: () => {}});
+test('Wing Walker skill line climbs the aircraft deck and rejoins to finish without recovery', () => {
+  const old = globalThis.document;
+  globalThis.document = {
+    createElement: () => ({getContext: () => new Proxy({}, {get: () => () => {}, set: () => true})})
+  };
+  const world = stream();
+  try {
+    const art = buildLandmarks(new T.Scene(), world.world),
+      race = createRace(eventCourse(eventById('wing-walker'), world.world), {opponents: 0, mode: 'bigKid'}),
+      pilot = {session: race.player, skill: 0.95, node: 0};
+    race.retreat.at = Infinity;
+    let height = 0,
+      alt = false,
+      steps = 0,
+      closest = Infinity;
+    while (!race.player.finished && steps++ < 120 * 180) {
+      stepRace(race, driveInput(race, pilot), 1 / 120);
+      height = Math.max(height, race.player.car.pos[1]);
+      closest = Math.min(closest, Math.hypot(race.player.car.pos[0] - 2426, race.player.car.pos[2] - 1600));
+      alt ||= !!pilot.alt;
+    }
+    assert.ok(alt);
+    assert.ok(height > 2.5, `maximum height ${height}`);
+    assert.ok(
+      race.player.finished,
+      JSON.stringify({
+        closest,
+        pos: race.player.car.pos,
+        gate: race.player.gate,
+        node: pilot.node,
+        alt: pilot.altNode,
+        recoveries: race.player.recoveries
+      })
+    );
+    assert.equal(race.player.recoveries, 0);
+    art.dispose();
+    assert.equal(art.rings.values().next().value.parent, null);
+  } finally {
+    world.dispose();
+    globalThis.document = old;
+  }
+});
+test('specialty surfaces change real car response and retain a safe ground plane', () => {
+  const world = stream();
+  try {
+    assert.equal(eventSurface(-940, 1245), 'gymfloor');
+    assert.equal(eventSurface(-1327, 1470), 'dirt');
+    assert.equal(eventSurface(-555, 3388), 'water');
+    function drive(pos) {
+      const c = eventCourse(eventById('splash-down'), world.world);
+      c.start = {pos, yaw: 0};
+      const s = createSession(c, {mode: 'bigKid'});
+      s.roam = true;
+      for (let i = 0; i < 90; i++) stepSession(s, {throttle: 0.5}, 1 / 120);
+      assert.ok(s.car.pos[1] >= 0);
+      return readout(s).speed;
+    }
+    const water = drive([-555, 0, 3394]),
+      dry = drive([-590, 0, 3394]);
+    assert.ok(water < dry * 0.9, `water ${water}, dry ${dry}`);
+  } finally {
+    world.dispose();
+  }
+});

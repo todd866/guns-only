@@ -1,5 +1,5 @@
-import { add, rotate, scale } from './physics/math.mjs';
-import { dangleSpot } from './physics/pickups.mjs';
+import {add, rotate, scale} from './physics/math.mjs';
+import {dangleSpot} from './physics/pickups.mjs';
 
 // Carried missiles are mounted on a small rear rack. Keep the presentation fixed
 // at the same point used by the defensive trailer collision, rather than making
@@ -11,6 +11,6 @@ export function heldMissilePose(car, index = 0, count = 1) {
   const dir = rotate(car.q, [0, 0, -1]);
   return {
     pos: add(add(dangleSpot(car), [0, 0.12, 0]), scale(right, spread)),
-    dir,
+    dir
   };
 }
