@@ -246,12 +246,14 @@ import { ShaderPass } from '../vendor/three/addons/postprocessing/ShaderPass.js'
 // golden-afternoon split), and a soft vignette that pulls the eye to the car.
 export const GRADE = Object.freeze({ saturation: 1.14, contrast: 1.07, warm: [.02, .008, -.014], cool: [-.012, .0, .016], vignette: .24 });
 export const gradeShader = (g = GRADE) => ({
-  uniforms: { tDiffuse: { value: null }, sat: { value: g.saturation }, contrast: { value: g.contrast }, warm: { value: new T.Vector3(...g.warm) }, cool: { value: new T.Vector3(...g.cool) }, vig: { value: g.vignette } },
+  uniforms: { tDiffuse: { value: null }, sat: { value: g.saturation }, contrast: { value: g.contrast }, warm: { value: new T.Vector3(...g.warm) }, cool: { value: new T.Vector3(...g.cool) }, vig: { value: g.vignette }, old: { value: 0 } },
   vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-  fragmentShader: `uniform sampler2D tDiffuse;uniform float sat,contrast,vig;uniform vec3 warm,cool;varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse;uniform float sat,contrast,vig,old;uniform vec3 warm,cool;varying vec2 vUv;
     void main(){vec4 c=texture2D(tDiffuse,vUv);vec3 x=c.rgb;float l=dot(x,vec3(.2126,.7152,.0722));
       x=mix(vec3(l),x,sat);x=(x-.5)*contrast+.5;x+=mix(cool,warm,smoothstep(.15,.85,l));
-      x*=1.-vig*smoothstep(.42,.9,distance(vUv,vec2(.5)));gl_FragColor=vec4(clamp(x,0.,1.),c.a);}`,
+      x*=1.-vig*smoothstep(.42,.9,distance(vUv,vec2(.5)));
+      // old: the dark world is the past, graded like an old hand-tinted photograph.
+      x=mix(x,vec3(dot(x,vec3(.393,.769,.189)),dot(x,vec3(.349,.686,.168)),dot(x,vec3(.272,.534,.131))),old);gl_FragColor=vec4(clamp(x,0.,1.),c.a);}`,
 });
 
 export async function setupPolish({ renderer, scene, camera, indoor, world = false }) {
@@ -271,7 +273,7 @@ export async function setupPolish({ renderer, scene, camera, indoor, world = fal
   if (ao) { ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.2, samples: 8 }); composer.addPass(ao); }
   composer.addPass(new UnrealBloomPass(new T.Vector2(w, h), indoor ? .22 : .10, .35, indoor ? .92 : 1.6));
   composer.addPass(new OutputPass());
-  if (!indoor) composer.addPass(new ShaderPass(gradeShader()));
+  const grade = indoor ? null : new ShaderPass(gradeShader()); if (grade) composer.addPass(grade);
   composer.addPass(new SMAAPass(w * renderer.getPixelRatio(), h * renderer.getPixelRatio()));
-  return { render: () => composer.render(), resize: (W, H) => { composer.setSize(W, H); ao?.setSize(W / 2, H / 2); }, setPixelRatio: r => composer.setPixelRatio(r) };
+  return { render: () => composer.render(), resize: (W, H) => { composer.setSize(W, H); ao?.setSize(W / 2, H / 2); }, setPixelRatio: r => composer.setPixelRatio(r), setOld: v => { if (grade) grade.uniforms.old.value = v; } };
 }

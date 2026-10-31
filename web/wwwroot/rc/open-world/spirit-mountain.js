@@ -105,6 +105,7 @@ export function createMountainView(scene, ground = mountainHeight) {
   const streaks = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 256; const x = c.getContext('2d'); x.fillStyle = '#9fd3e6'; x.fillRect(0, 0, 64, 256);
     for (let i = 0; i < 90; i++) { x.fillStyle = `rgba(255,255,255,${.25 + Math.random() * .6})`; x.fillRect(Math.random() * 64, Math.random() * 256, 1 + Math.random() * 3, 12 + Math.random() * 40); }
     const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.colorSpace = T.SRGBColorSpace; return t; })();
+  let springFoot = null;
   const streamMat = new T.MeshStandardMaterial({ map: streaks, transparent: true, opacity: .88, roughness: .25, side: T.DoubleSide, depthWrite: false });
   { const v = [], uv = [], idx = []; let run = 0;
     STREAM.forEach((p, i) => { const q = STREAM[Math.min(STREAM.length - 1, i + 1)], o = STREAM[Math.max(0, i - 1)], da = q.along - o.along, dc = q.across - o.across, n = Math.hypot(da, dc) || 1;
@@ -112,7 +113,7 @@ export function createMountainView(scene, ground = mountainHeight) {
       if (i) { const prev = STREAM[i - 1]; run += Math.hypot(p.along - prev.along, p.y - prev.y); }
       v.push(...L, ...R); uv.push(0, run / 8, 1, run / 8); if (i) { const k = (i - 1) * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); } });
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(v, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
-    const m = new T.Mesh(g, streamMat); m.name = 'SpringStream'; root.add(m); }
+    const m = new T.Mesh(g, streamMat); m.name = 'SpringStream'; root.add(m); springFoot = { pos: g.attributes.position, first: (STREAM.length - 1) * 2 }; }
   const rockMat = new T.MeshStandardMaterial({ color: '#7d6650', roughness: .95 }), darkMat = new T.MeshBasicMaterial({ color: '#0d0a08' });
   { const head = STREAM[0], at = valleyPoint(head.along - 3, head.across, head.y - .3), back = valleyPoint(head.along - 4, head.across, 0), front = valleyPoint(head.along + 4, head.across, 0);
     const cave = new T.Group(); cave.name = 'SpringCave'; cave.position.set(...at); cave.rotation.y = Math.atan2(front[0] - back[0], front[2] - back[2]); root.add(cave);
@@ -123,9 +124,20 @@ export function createMountainView(scene, ground = mountainHeight) {
   // Each puff gets its own material so it fades on its own.
   { const foot = STREAM.at(-1); for (let i = 0; i < 14; i++) { const m = new T.Mesh(new T.SphereGeometry(1, 8, 6), sprayMat.clone()); m.position.set(...valleyPoint(foot.along + (i % 4) - 1, foot.across + ((i * 7) % 9 - 4) * .9, foot.y)); m.userData.phase = i * .9; root.add(m); spray.push(m); } }
   let streamTime = 0;
+  const presentTown = townMat.color.clone(), presentHoles = holeMat.color.clone();
   return {
     /** The upside-down has no dam: the water drains and the drowned town stands in the open. */
     setDam(on) { LAKE.active = on; dam.visible = on; lake.mesh.visible = on; },
+    /** The dark world is the past (dark-world.mjs): the dam isn't built, so the lake is gone, the
+     *  town on its floor is dry fresh adobe with lit windows, and the waterfall falls to the valley
+     *  floor instead of the lake. */
+    setPast(on) {
+      this.setDam(!on);
+      townMat.color.set(on ? '#d8b98c' : presentTown); holeMat.color.set(on ? '#6b4a2e' : presentHoles);
+      spray.forEach(m => { m.visible = !on; });
+      if (springFoot) { const { pos, first } = springFoot, foot = STREAM.at(-1), p = valleyPoint(foot.along, foot.across), y = on ? ground(p[0], p[2]) + .1 : foot.y;
+        for (const k of [first, first + 1]) pos.setY(k, y); pos.needsUpdate = true; }
+    },
     /** The streamed tile at key now has (or no longer has) detailed ground. */
     tileLoaded(key, on) { const m = chunks.get(key); if (m) m.visible = !on; },
     update(day) { farMat.color.setScalar(.15 + .85 * day); lake.update(WATER.time);

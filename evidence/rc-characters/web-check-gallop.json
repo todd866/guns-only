@@ -1,0 +1,18 @@
+{
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+  "software": false,
+  "frameMs": {
+    "p50": 16.7,
+    "p95": 18.3,
+    "max": 18.7
+  },
+  "drawCalls": 8,
+  "triangles": 9178,
+  "clips": {
+    "gallop": {
+      "screenshot": "evidence/rc-characters/web-gallop.png",
+      "calls": 8
+    }
+  },
+  "errs": []
+}

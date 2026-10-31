@@ -44,6 +44,14 @@ vec4 livery(vec3 p){
     float br = step(1.0 - t, u.x) * step(u.x, 1.0) * step(0.5, u.y) * step(u.y, 1.0), cr = step(1.0 - t, u.x) * step(u.x, 1.0) * step(0.0, u.y) * step(u.y, 0.5);
     float on = d < 6.5 ? max(max(max(a, g), max(dd, fl)), max(el, cr)) : max(max(a, br), cr);
     return on > 0.5 ? vec4(0.06, 0.06, 0.08, 1.0) : vec4(0.97, 0.96, 0.92, 1.0); }
+  if (uPattern == 11) { // sheriff star: a big gold six-point star on each door and the bonnet, a gold pinstripe below
+    // (car bodies; the jet shells only show the pinstripe)
+    vec3 gold = vec3(0.95, 0.76, 0.25); vec2 q = vec2(0.0); bool on = false;
+    if (abs(p.x) > 0.55 && p.y < 0.2) { q = vec2(p.z / 0.42, (p.y + 0.12) / 0.3) * 0.5; on = true; }
+    else if (p.y > 0.0 && p.z < -0.25) { q = vec2(p.x / 0.5, (p.z + 0.62) / 0.3) * 0.5; on = true; }
+    if (on) { float r = length(q), a = atan(q.y, q.x), k = 0.34 + 0.14 * cos(6.0 * a);
+      if (r < k) return vec4(r < 0.12 ? vec3(0.6, 0.42, 0.1) : gold, 1.0); }
+    return vec4(gold, step(abs(p.y + 0.48), 0.03)); }
   return vec4(uTrim, 0.0);
 }`;
 

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Saucer Springs character review</title>
+<style>
+ html,body{margin:0;height:100%;overflow:hidden;background:#9fb4c0;font:12px/1.3 ui-monospace,Menlo,monospace}
+ canvas{display:block;width:100%;height:100%}
+ #hud{position:fixed;left:8px;bottom:8px;color:#fff;background:#0008;padding:4px 7px;border-radius:4px;white-space:nowrap}
+ #clips{position:fixed;left:8px;top:8px;display:flex;gap:4px}
+ #clips button{font:inherit;padding:3px 8px;border:0;border-radius:3px;background:#fff;cursor:pointer}
+ #clips button[aria-pressed=true]{background:#e5532a;color:#fff}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="clips"></div>
+<div id="hud">IN-ENGINE review · three r160 · characters.js · <span id="state">loading</span></div>
+<script type="module">
+// Review harness for the character pipeline: real engine, real loader, the game's renderer and
+// open-world lighting values (renderer/camera constants copied from rc/main.js; presets from visuals.js).
+// Grey boxes are buggy-size proxies (0.42 x 0.20 x 0.28 m): one beside the dinosaur, one riding the Saddle.
+import * as T from '../vendor/three.module.js';
+import {LIGHTING, applyLighting, studioEnvironment} from './visuals.js';
+import {CHARACTERS, prepareCharacters, spawnCharacter} from './open-world/characters.js';
+
+const canvas = document.getElementById('view'), stateEl = document.getElementById('state');
+const renderer = new T.WebGLRenderer({canvas, antialias: true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+renderer.outputColorSpace = T.SRGBColorSpace; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
+const scene = new T.Scene(); scene.background = new T.Color(0x9fb4c0);
+const camera = new T.PerspectiveCamera(63, 1, .06, 210);
+const hemi = new T.HemisphereLight(0xd5edf1, 0x5a624a, 1.5); scene.add(hemi);
+const sun = new T.DirectionalLight(0xffd6a0, 3.2); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); scene.add(sun, sun.target);
+const contactSun = new T.DirectionalLight(0xffe4bd, .65); contactSun.castShadow = true; contactSun.shadow.mapSize.set(1024, 1024);
+Object.assign(contactSun.shadow.camera, {left: -6, right: 6, top: 6, bottom: -6, near: .1, far: 30}); contactSun.shadow.bias = -.00015; contactSun.shadow.normalBias = .015;
+contactSun.position.set(-2, 6, 1.5); scene.add(contactSun, contactSun.target);
+applyLighting({renderer, hemi, sun, contactSun}, LIGHTING.outdoor);
+// open-world overrides from main.js
+Object.assign(sun.shadow.camera, {left: -38, right: 38, top: 38, bottom: -38}); sun.shadow.camera.updateProjectionMatrix();
+sun.userData.dir.set(-.95, 1, .7).normalize(); sun.color.set(0xffe4bf);
+sun.position.copy(sun.userData.dir).multiplyScalar(60);
+scene.environment = studioEnvironment(renderer); scene.environmentIntensity = .6;
+
+const ground = new T.Mesh(new T.PlaneGeometry(40, 40), new T.MeshStandardMaterial({color: 0xc9b089, roughness: .95}));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const proxyMat = new T.MeshStandardMaterial({color: 0x9a9ca2, roughness: .6});
+const proxy = () => { const m = new T.Mesh(new T.BoxGeometry(.28, .20, .42), proxyMat); m.castShadow = m.receiveShadow = true; return m; };
+const beside = proxy(); beside.position.set(.45, .10, -.25); scene.add(beside);
+
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+camera.position.set(1.55, .78, -1.35); camera.lookAt(0, .3, -.05);
+
+let dino = null, last = performance.now(), calls = 0;
+function frame(now) {
+ const dt = Math.min(.05, (now - last) / 1000); last = now;
+ dino?.update(dt);
+ renderer.render(scene, camera); calls = renderer.info.render.calls;
+ requestAnimationFrame(frame);
+}
+
+const ready = prepareCharacters(['dino']).then(ok => {
+ if (!ok) throw Error('dino.glb failed to load');
+ dino = spawnCharacter(scene, 'dino', {position: [0, 0, 0], yaw: 0});
+ const rider = proxy(); rider.position.y = .10; dino.saddle().add(rider);
+ const bar = document.getElementById('clips');
+ for (const name of Object.keys(CHARACTERS.dino.clips)) {
+  const b = document.createElement('button'); b.textContent = name; b.onclick = () => play(name); bar.append(b);
+ }
+ play('idle');
+ requestAnimationFrame(frame);
+ return true;
+});
+function play(name) {
+ dino.play(name, {fade: .2, then: name === 'jump' ? 'idle' : null});
+ for (const b of document.querySelectorAll('#clips button')) b.setAttribute('aria-pressed', String(b.textContent === name));
+ stateEl.textContent = `clip ${name}`;
+}
+function frameTimes(n = 300) {
+ return new Promise(r => { const s = []; let prev = performance.now();
+  const f = now => { s.push(now - prev); prev = now; if (s.length < n) requestAnimationFrame(f); else { s.sort((a, b) => a - b); r({p50: +s[Math.floor(n * .5)].toFixed(2), p95: +s[Math.floor(n * .95)].toFixed(2), max: +s[n - 1].toFixed(2)}); } };
+  requestAnimationFrame(f); });
+}
+function gpu() { const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info'); return gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER); }
+window.__characterReview = {ready, play, frameTimes, gpu, calls: () => calls, triangles: () => renderer.info.render.triangles, clip: () => dino?.clip};
+</script>
+</body>
+</html>

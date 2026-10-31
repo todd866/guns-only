@@ -269,11 +269,24 @@ for o in objs:
   for loop in o.data.loops:
    v=o.data.vertices[loop.vertex_index].co;grain=.96+.04*(math.sin(v.x*17.13+v.y*41.71)*43758.5453%1)
    color=attr.data[loop.index].color;attr.data[loop.index].color=(color[0]*grain,color[1]*grain,color[2]*grain,1)
-bpy.context.preferences.filepaths.save_version=0
-blend=R/'assets/rc/heroes/skatepark.blend';blend.parent.mkdir(parents=True,exist_ok=True)
-bpy.ops.wm.save_as_mainfile(filepath=str(blend),compress=True)
-stats=c.counts();c.join_visuals_by_material();out=R/'web/wwwroot/rc/assets/districts/skatepark.glb';c.export_glb(out)
-info={'generator':'tools/rc/blender/skatepark.py','license':'MIT original procedural geometry','external_assets':['../materials/park-paint-atlas.png (original generated paint; runtime texture)'],'frame':'park-centred local metres; north=-Z','footprint':[[-18.803,-20.0],[19.0,15.053]],'roam_start':[6,.15,8.7],'roam_yaw':-.14889,'hip':{'height_m':RISE,'run_m':RUN,'angle_degrees':90,'kind':'bowl-to-quarter convex junction','dimensions':'inferred, not surveyed'},'modules':['western bank-quarter-bank and steps','asymmetric two-height central table and divider','offset manual pads and separate flat rail','connected east quarter, hip and open bowl'],'geometry_confidence':{'plan':'approximate image digitization','elevations_and_radii':'inferred, not surveyed','apron_and_race_line':'authored for forgiving RC play'},'paint_uv':'feature-authored before batching','rolled_apron':{'rise_m':.14,'run_m':.9,'profile':'smoothstep','purpose':'forgiving gameplay edge outside digitized slab'},'berm':{'top_m':park_berm.TOP,'fall_m':park_berm.FALL,'purpose':'lawn meets the coping; the plaza is cut into a slope'},'lap_length_m':route.length,'vertex_ao':ao,**stats}
+# --out <path.glb> bakes elsewhere (diagnostics) and leaves the tracked .blend and GLB alone.
+OUT=Path(sys.argv[sys.argv.index('--out')+1]) if '--out' in sys.argv else None
+if OUT is None:
+ bpy.context.preferences.filepaths.save_version=0
+ blend=R/'assets/rc/heroes/skatepark.blend';blend.parent.mkdir(parents=True,exist_ok=True)
+ bpy.ops.wm.save_as_mainfile(filepath=str(blend),compress=True)
+# Draw-call budget: one visual primitive per material. A silent un-join would ship every
+# pre-join part (25 here) as its own primitive and draw call; fail the bake instead.
+# Raise this only when a material is deliberately added.
+VISUAL_PRIMITIVE_BUDGET=10
+stats=c.counts();joined=c.join_visuals_by_material();out=OUT or R/'web/wwwroot/rc/assets/districts/skatepark.glb'
+# Export to a temporary directory; the served GLB is replaced only once it is inside budget.
+import tempfile,shutil
+unchecked=Path(tempfile.mkdtemp(prefix='skatepark-bake-'))/'skatepark.glb';c.export_glb(unchecked)
+prims=c.glb_primitives(unchecked);print('SKATEPARK primitives visual=%d collision=%d (visual objects %d -> %d, budget %d)'%(*prims,*joined,VISUAL_PRIMITIVE_BUDGET))
+if prims[0]>VISUAL_PRIMITIVE_BUDGET:raise SystemExit(f'skatepark bake: {prims[0]} visual primitives exceeds budget {VISUAL_PRIMITIVE_BUDGET}; unchecked export left at {unchecked}')
+shutil.move(str(unchecked),str(out))
+info={'generator':'tools/rc/blender/skatepark.py','license':'MIT original procedural geometry','external_assets':['../materials/park-paint-atlas.png (original generated paint; runtime texture)'],'frame':'park-centred local metres; north=-Z','footprint':[[-18.803,-20.0],[19.0,15.053]],'roam_start':[6,.15,8.7],'roam_yaw':-.14889,'hip':{'height_m':RISE,'run_m':RUN,'angle_degrees':90,'kind':'bowl-to-quarter convex junction','dimensions':'inferred, not surveyed'},'modules':['western bank-quarter-bank and steps','asymmetric two-height central table and divider','offset manual pads and separate flat rail','connected east quarter, hip and open bowl'],'geometry_confidence':{'plan':'approximate image digitization','elevations_and_radii':'inferred, not surveyed','apron_and_race_line':'authored for forgiving RC play'},'paint_uv':'feature-authored before batching','rolled_apron':{'rise_m':.14,'run_m':.9,'profile':'smoothstep','purpose':'forgiving gameplay edge outside digitized slab'},'berm':{'top_m':park_berm.TOP,'fall_m':park_berm.FALL,'purpose':'lawn meets the coping; the plaza is cut into a slope'},'lap_length_m':route.length,'vertex_ao':ao,'vertex_contact_ao':c.CORNER_AO,**stats}
 out.with_suffix('.provenance.json').write_text(json.dumps(info,indent=2)+'\n')
 print('SKATEPARK',json.dumps(info))
 if '--render' in sys.argv:c.render_glb(out,R/'evidence/rc-open-world/skatepark',[('overview',(38,-49,42),(0,1,0),42),('toy-eye',(6,-12.7,1.8),(1,1,.6),24),('bowl',(1,3,6),(8,13,.5),32)])

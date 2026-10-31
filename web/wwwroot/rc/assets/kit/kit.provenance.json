@@ -1,0 +1,694 @@
+{
+  "asset": "kit/props.glb",
+  "generator": "tools/rc/blender/prop_kit.py",
+  "blender": "5.2.0 LTS",
+  "license": "MIT (original authored geometry and materials; repository MIT)",
+  "external_assets": [],
+  "editable_source": "assets/rc/kit/props.blend",
+  "conventions": "real-scale metres; each prop is a top-level node named after it with its origin at ground contact; runtime ignores the top-level transform; COL_<name> child is the collision proxy (extras.collider box|cylinder); <prop>@<n> nodes are kit variants; extras.attach {prop, offset (glTF, prop-local)} places an attach-only node (windmill-head: origin on the axle, spins about local Z, no collider)",
+  "stats": {
+    "props": 25,
+    "triangles": 13283,
+    "materials": [
+      "Kit_Paint",
+      "Kit_Metal",
+      "Kit_Wood"
+    ],
+    "glb_bytes": 773460,
+    "per_prop": {
+      "picnic-table": {
+        "triangles": 492,
+        "vertices": 280,
+        "materials": [
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          1.8,
+          1.42,
+          0.771
+        ],
+        "ground_contact_z": -0.0212,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0,
+            0.375
+          ],
+          "size_blender": [
+            1.8,
+            1.5,
+            0.75
+          ]
+        }
+      },
+      "bench": {
+        "triangles": 316,
+        "vertices": 184,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          1.8,
+          0.527,
+          0.868
+        ],
+        "ground_contact_z": -0.0041,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            -0.04,
+            0.43
+          ],
+          "size_blender": [
+            1.8,
+            0.58,
+            0.86
+          ]
+        }
+      },
+      "bin": {
+        "triangles": 256,
+        "vertices": 144,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint"
+        ],
+        "extent_m_blender_xyz": [
+          0.624,
+          0.64,
+          0.915
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "cylinder",
+          "centre_blender": [
+            0,
+            0,
+            0.46
+          ],
+          "size_blender": [
+            0.64,
+            0.92,
+            0.64
+          ]
+        }
+      },
+      "street-lamp": {
+        "triangles": 212,
+        "vertices": 118,
+        "materials": [
+          "Kit_Paint"
+        ],
+        "extent_m_blender_xyz": [
+          0.34,
+          1.7,
+          5.1
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "cylinder",
+          "centre_blender": [
+            0,
+            0,
+            2.55
+          ],
+          "size_blender": [
+            0.36,
+            5.1,
+            0.36
+          ]
+        }
+      },
+      "chain-link-fence-panel": {
+        "triangles": 544,
+        "vertices": 344,
+        "materials": [
+          "Kit_Metal"
+        ],
+        "extent_m_blender_xyz": [
+          3.11,
+          0.11,
+          1.925
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0,
+            0.93
+          ],
+          "size_blender": [
+            3.0,
+            0.2,
+            1.86
+          ]
+        }
+      },
+      "bollard": {
+        "triangles": 296,
+        "vertices": 158,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint"
+        ],
+        "extent_m_blender_xyz": [
+          0.28,
+          0.28,
+          0.96
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "cylinder",
+          "centre_blender": [
+            0,
+            0,
+            0.48
+          ],
+          "size_blender": [
+            0.26,
+            0.96,
+            0.26
+          ]
+        }
+      },
+      "traffic-cone": {
+        "triangles": 148,
+        "vertices": 80,
+        "materials": [
+          "Kit_Paint"
+        ],
+        "extent_m_blender_xyz": [
+          0.4,
+          0.4,
+          0.73
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "cylinder",
+          "centre_blender": [
+            0,
+            0,
+            0.36
+          ],
+          "size_blender": [
+            0.4,
+            0.72,
+            0.4
+          ]
+        }
+      },
+      "jersey-barrier": {
+        "triangles": 76,
+        "vertices": 48,
+        "materials": [
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          3.0,
+          0.6,
+          0.81
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0,
+            0.405
+          ],
+          "size_blender": [
+            3.0,
+            0.6,
+            0.81
+          ]
+        }
+      },
+      "sign-post": {
+        "triangles": 112,
+        "vertices": 64,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint"
+        ],
+        "extent_m_blender_xyz": [
+          1.3,
+          0.121,
+          2.24
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0.03,
+            1.12
+          ],
+          "size_blender": [
+            1.3,
+            0.16,
+            2.24
+          ]
+        }
+      },
+      "hay-bale": {
+        "triangles": 300,
+        "vertices": 160,
+        "materials": [
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          1.212,
+          1.214,
+          1.214
+        ],
+        "ground_contact_z": -0.007,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0,
+            0.6
+          ],
+          "size_blender": [
+            1.2,
+            1.2,
+            1.2
+          ]
+        }
+      },
+      "pumpkin": {
+        "triangles": 452,
+        "vertices": 230,
+        "materials": [
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          0.66,
+          0.66,
+          0.561
+        ],
+        "ground_contact_z": 0.0024,
+        "collider": {
+          "kind": "cylinder",
+          "centre_blender": [
+            0,
+            0,
+            0.25
+          ],
+          "size_blender": [
+            0.66,
+            0.5,
+            0.66
+          ]
+        }
+      },
+      "tent": {
+        "triangles": 87,
+        "vertices": 61,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          2.083,
+          1.825,
+          1.45
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0,
+            0.7
+          ],
+          "size_blender": [
+            2.1,
+            1.8,
+            1.4
+          ]
+        }
+      },
+      "water-tower": {
+        "triangles": 1232,
+        "vertices": 724,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          3.94,
+          3.94,
+          8.277
+        ],
+        "ground_contact_z": -0.0167,
+        "collider": {
+          "kind": "cylinder",
+          "centre_blender": [
+            0,
+            0,
+            4.0
+          ],
+          "size_blender": [
+            3.9,
+            8.0,
+            3.9
+          ]
+        }
+      },
+      "fuel-drum": {
+        "triangles": 260,
+        "vertices": 140,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint"
+        ],
+        "extent_m_blender_xyz": [
+          0.6,
+          0.6,
+          0.915
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "cylinder",
+          "centre_blender": [
+            0,
+            0,
+            0.45
+          ],
+          "size_blender": [
+            0.6,
+            0.9,
+            0.6
+          ]
+        }
+      },
+      "steam-tractor": {
+        "triangles": 1996,
+        "vertices": 1124,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          2.328,
+          3.82,
+          3.575
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0.0,
+            1.25
+          ],
+          "size_blender": [
+            2.1,
+            3.9,
+            2.5
+          ]
+        }
+      },
+      "thresher": {
+        "triangles": 1224,
+        "vertices": 708,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          2.088,
+          5.925,
+          3.868
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0.3,
+            1.4
+          ],
+          "size_blender": [
+            2.0,
+            5.4,
+            2.8
+          ]
+        }
+      },
+      "windmill": {
+        "triangles": 520,
+        "vertices": 328,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          3.3,
+          4.85,
+          8.965
+        ],
+        "ground_contact_z": -0.0145,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0,
+            4.0
+          ],
+          "size_blender": [
+            3.0,
+            3.0,
+            8.0
+          ]
+        },
+        "attach": {
+          "prop": "windmill-head",
+          "offset": [
+            0,
+            8.35,
+            -0.62
+          ]
+        }
+      },
+      "windmill-head": {
+        "triangles": 432,
+        "vertices": 268,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          5.558,
+          0.4,
+          5.558
+        ],
+        "ground_contact_z": -2.7789,
+        "collider": null
+      },
+      "hay-wagon": {
+        "triangles": 1444,
+        "vertices": 852,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          2.184,
+          4.711,
+          2.7
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0.3,
+            1.35
+          ],
+          "size_blender": [
+            2.2,
+            4.6,
+            2.7
+          ]
+        }
+      },
+      "water-pump": {
+        "triangles": 276,
+        "vertices": 154,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          1.1,
+          1.83,
+          1.82
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0.25,
+            0.7
+          ],
+          "size_blender": [
+            1.2,
+            1.5,
+            1.45
+          ]
+        }
+      },
+      "split-rail-fence": {
+        "triangles": 84,
+        "vertices": 56,
+        "materials": [
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          3.18,
+          0.28,
+          1.25
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0,
+            0.62
+          ],
+          "size_blender": [
+            3.1,
+            0.3,
+            1.24
+          ]
+        }
+      },
+      "crop-row": {
+        "triangles": 588,
+        "vertices": 392,
+        "materials": [
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          2.0,
+          0.56,
+          0.89
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0,
+            0.35
+          ],
+          "size_blender": [
+            2.0,
+            0.6,
+            0.7
+          ]
+        }
+      },
+      "crop-row@1": {
+        "triangles": 284,
+        "vertices": 168,
+        "materials": [
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          2.14,
+          0.56,
+          0.584
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0,
+            0.35
+          ],
+          "size_blender": [
+            2.0,
+            0.6,
+            0.7
+          ]
+        }
+      },
+      "scarecrow": {
+        "triangles": 368,
+        "vertices": 208,
+        "materials": [
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          1.72,
+          0.64,
+          2.32
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "box",
+          "centre_blender": [
+            0,
+            0,
+            1.15
+          ],
+          "size_blender": [
+            0.6,
+            0.4,
+            2.3
+          ]
+        }
+      },
+      "silo": {
+        "triangles": 1284,
+        "vertices": 692,
+        "materials": [
+          "Kit_Metal",
+          "Kit_Paint",
+          "Kit_Wood"
+        ],
+        "extent_m_blender_xyz": [
+          3.5,
+          3.5,
+          7.12
+        ],
+        "ground_contact_z": 0.0,
+        "collider": {
+          "kind": "cylinder",
+          "centre_blender": [
+            0,
+            0,
+            3.5
+          ],
+          "size_blender": [
+            3.5,
+            3.5,
+            7.0
+          ]
+        }
+      }
+    }
+  }
+}

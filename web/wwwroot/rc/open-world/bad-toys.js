@@ -3,9 +3,13 @@ import * as T from '../../vendor/three.module.js';
 // Bad toys, drawn: wind-up tin soldiers taken over by the bad aliens' signal: red tunic, tall hat,
 // a brass key turning in the back, and glowing red eyes. They tick when they walk, lean back and
 // flash on a wind-up (the tell a kid watches for), and pop apart into springs and cogs.
-export function createBadToys(scene) {
-  const root = new T.Group(); root.name = 'BadToys'; scene.add(root);
-  const mats = { tunic: new T.MeshStandardMaterial({ color: '#c33a2e', roughness: .45, metalness: .3 }), pants: new T.MeshStandardMaterial({ color: '#25395e', roughness: .5, metalness: .3 }),
+// look 'outlaw': the dark world's tin cowboys (outlaws.mjs): a dusty coat, a black wide-brimmed hat
+// and a red bandana over the face, the same red eyes.
+export function createBadToys(scene, { look = 'soldier' } = {}) {
+  const outlaw = look === 'outlaw';
+  const root = new T.Group(); root.name = outlaw ? 'Outlaws' : 'BadToys'; scene.add(root);
+  const mats = { tunic: new T.MeshStandardMaterial({ color: outlaw ? '#8a5a34' : '#c33a2e', roughness: .45, metalness: .3 }), pants: new T.MeshStandardMaterial({ color: outlaw ? '#3c3a40' : '#25395e', roughness: .5, metalness: .3 }),
+    bandana: new T.MeshStandardMaterial({ color: '#b02a22', roughness: .5 }),
     hat: new T.MeshStandardMaterial({ color: '#1d1d22', roughness: .5 }), brass: new T.MeshStandardMaterial({ color: '#d9a94a', roughness: .3, metalness: .85 }),
     eye: new T.MeshStandardMaterial({ color: '#ff2a2a', emissive: '#ff1010', emissiveIntensity: 2.5 }), flash: new T.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffb0a0', emissiveIntensity: 1.5 }) };
   const views = new Map(), bits = [];
@@ -14,7 +18,8 @@ export function createBadToys(scene) {
     const body = part(new T.CylinderGeometry(.045, .05, .1, 12), mats.tunic, 0, .15, 0);
     part(new T.CylinderGeometry(.04, .04, .08, 10), mats.pants, 0, .06, 0);
     part(new T.SphereGeometry(.035, 12, 10), mats.brass, 0, .23, 0);
-    part(new T.CylinderGeometry(.03, .032, .07, 10), mats.hat, 0, .285, 0);
+    if (outlaw) { part(new T.CylinderGeometry(.06, .06, .006, 16), mats.hat, 0, .262, 0); part(new T.CylinderGeometry(.026, .03, .04, 12), mats.hat, 0, .285, 0); part(new T.CylinderGeometry(.037, .037, .02, 12, 1, true, Math.PI - 1.2, 2.4), mats.bandana, 0, .218, 0); }
+    else part(new T.CylinderGeometry(.03, .032, .07, 10), mats.hat, 0, .285, 0);
     for (const x of [-.013, .013]) part(new T.SphereGeometry(.007, 8, 6), mats.eye, x, .235, -.03);
     const key = new T.Group(); key.position.set(0, .16, .055); g.add(key);
     const shaft = new T.Mesh(new T.CylinderGeometry(.006, .006, .03, 6), mats.brass); shaft.rotation.x = Math.PI / 2; key.add(shaft);
@@ -29,6 +34,7 @@ export function createBadToys(scene) {
     }
   };
   return {
+    root,
     /** Pose every enemy; pops burst once. groundAt(x, z) gives the floor height. */
     sync(enemies, time, dt, groundAt) {
       for (const e of enemies) {

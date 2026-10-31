@@ -138,10 +138,14 @@ async function staticSite() {
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
   const site = await staticSite();
-  const browser = await chromium.launch({ headless: true });
+  // TERRAIN_LOOK_CHANNEL=chromium selects full Chromium headless, which gets the hardware GPU
+  // (default headless-shell renders on SwiftShader; the corpus must be hardware-rendered).
+  const channel = process.env.TERRAIN_LOOK_CHANNEL || undefined;
+  const browser = await chromium.launch({ headless: true, ...(channel ? { channel } : {}) });
   const pageErrors = [];
   const requestFailures = [];
   const captures = [];
+  let renderer = null;
 
   try {
     const page = await browser.newPage({
@@ -149,6 +153,12 @@ async function main() {
       deviceScaleFactor: 1,
     });
     await site.install(page);
+    renderer = await page.evaluate(() => {
+      const gl = document.createElement("canvas").getContext("webgl2");
+      const info = gl?.getExtension("WEBGL_debug_renderer_info");
+      return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : "unknown";
+    });
+    console.log(`renderer: ${renderer} (browser ${browser.version()}, channel ${channel ?? "default"})`);
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
     page.on("requestfailed", (request) => requestFailures.push(
       `${request.method()} ${request.url()}: ${request.failure()?.errorText ?? "failed"}`,
@@ -221,6 +231,8 @@ async function main() {
       `${JSON.stringify({
         viewport: [1440, 900],
         lookGate: { theatre: "ukraine", softWorld: true },
+        renderer,
+        browser: { version: browser.version(), channel: channel ?? "default" },
         captures,
       }, null, 2)}\n`);
   } finally {
