@@ -102,11 +102,17 @@ async function capture(outdir, names, allowSoftware) {
           const f = () => { const c = R.camera().pos, d = Math.hypot(c[0] - last[0], c[1] - last[1], c[2] - last[2]); last = c; calm = d < 0.002 ? calm + 1 : 0; n++; if (calm >= 20 || n > 600) res({ frames: n, calm }); else requestAnimationFrame(f); };
           requestAnimationFrame(f);
         }));
+        // Ground detail (pebbles, cracks, scatter) streams in cell by cell after a teleport: let its queue drain.
+        await p.waitForFunction(() => { const n = window.__gunsOnlyRC.nearDetail?.(); return !n || n.queued === 0; }, null, { timeout: 60000 });
         await p.evaluate(() => document.querySelector('#pause').click());
         await p.waitForFunction(() => window.__gunsOnlyRC.snapshot().paused);
         // Pause menu and HUD are not part of the world look: hide everything but the canvas.
         await p.evaluate(() => { const cv = document.querySelector('#view'); document.querySelectorAll('body *').forEach(el => { if (el !== cv && !el.contains(cv)) { el.dataset.lgVis = el.style.visibility; el.style.setProperty('visibility', 'hidden', 'important'); } }); });
         await p.waitForTimeout(400);
+        // Paused, the frame must stop changing: re-shoot until two consecutive stills agree (late tiles/textures).
+        const F = await loadFeatures(), shot = async () => F.downsampleRgba(F.decodePng(await p.screenshot()), 160);
+        let prev = await shot(), stableTries = 0;
+        for (; stableTries < 20; stableTries++) { await p.waitForTimeout(700); const cur = await shot(); const d = pixelMad(prev, cur); prev = cur; if (d < 0.05) break; }
         const cam = await p.evaluate(() => window.__gunsOnlyRC.camera());
         await p.screenshot({ path: path.join(outdir, name + '.png') });
         // Frame statistics need a live sim: resume, sample 300 rAF intervals.
@@ -116,7 +122,7 @@ async function capture(outdir, names, allowSoftware) {
         const ft = await p.evaluate(() => new Promise(r => { const s = []; let last = performance.now(); const f = now => { s.push(now - last); last = now; if (s.length < 301) requestAnimationFrame(f); else r(s.slice(1)); }; requestAnimationFrame(f); }));
         ft.sort((a, c) => a - c);
         meta.views[name] = {
-          camera: { pos: cam.pos.map(x => +x.toFixed(2)), yaw: +cam.yaw.toFixed(3), pitch: +cam.pitch.toFixed(3), fov: cam.fov }, settled,
+          camera: { pos: cam.pos.map(x => +x.toFixed(2)), yaw: +cam.yaw.toFixed(3), pitch: +cam.pitch.toFixed(3), fov: cam.fov }, settled, stableTries,
           frameMs: { samples: ft.length, p50: +pct(ft, .5).toFixed(2), p95: +pct(ft, .95).toFixed(2), p99: +pct(ft, .99).toFixed(2), max: +ft[ft.length - 1].toFixed(2) },
           drawCalls: await p.evaluate(() => window.__gunsOnlyRC.renderer().calls),
           pixelRatio: await p.evaluate(() => devicePixelRatio), errors: errs,

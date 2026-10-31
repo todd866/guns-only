@@ -60,3 +60,14 @@ Per view, reusing `tools/look-gate/features.mjs` (needs `pngjs`: `npm ci --prefi
 Limits are in `tools/rc/look-thresholds.json` (`default`, overridable per view). They were set from
 the distances between two captures of the same build, with headroom. Re-measure (capture twice, compare
 the pair) after changing views, resolution or the gate itself.
+
+## Settling before the still
+
+A teleport leaves the world half built: ground detail (pebbles, cracks, scatter) streams in cell by cell
+through `nearDetail`, and late tiles or textures can still land after the camera has stopped. A 31c capture
+pair differed on the desert view (pixel MAD 3.5; the sand shoulder and asphalt were a different texture/tone)
+while the other five agreed to 0.002. So `capture` now waits for `__gunsOnlyRC.nearDetail().queued === 0`,
+pauses, and re-shoots until two consecutive paused stills agree (MAD < 0.05 at 160 px wide, max 20 tries;
+`stableTries` in `capture.json`). The two skatepark views never reach that bar (something there keeps
+animating while paused), so they use all 20 tries; their same-build noise is still small (pixel MAD up to 1.6).
+Not the cause: skid ribbons and smoke (they are not on screen in a teleported view).
