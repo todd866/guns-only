@@ -132,10 +132,21 @@ export function stepCanyonRun(st, pilot, dt = 0) {
   if (flightMode !== 'fly') return events;
   let fraction = -1;
   while (st.next < st.gates.length) {
-    const t = crossingFraction(prevPos, pos, st.gates[st.next]);
-    if (t === null || t < fraction) break;
+    // A missed gate never blocks the run: flying through any later gate moves on to it (turning back
+    // in a narrow canyon to re-thread a missed gate is too hard for a six-year-old).
+    let hit = -1,
+      t = null;
+    for (let j = st.next; j < st.gates.length; j++) {
+      const tj = crossingFraction(prevPos, pos, st.gates[j]);
+      if (tj !== null && tj >= fraction) {
+        hit = j;
+        t = tj;
+        break;
+      }
+    }
+    if (hit < 0) break;
     fraction = t;
-    st.next++;
+    st.next = hit + 1;
     if (st.next < st.gates.length) events.push({gate: st.next, of: CANYON_RUN.total});
     else {
       st.elapsed -= dt * (1 - t);
