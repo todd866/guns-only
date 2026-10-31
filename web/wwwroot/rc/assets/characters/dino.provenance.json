@@ -1,0 +1,47 @@
+{
+  "asset": "characters/dino.glb",
+  "generator": "tools/rc/blender/character_dino.py",
+  "blender": "5.2.0 LTS",
+  "license": "MIT (original authored geometry, rig, animation and materials; repository MIT)",
+  "external_assets": [],
+  "editable_source": "assets/rc/characters/dino.blend",
+  "stats": {
+    "triangles": 9152,
+    "remesh_triangles_before_decimate": 73828,
+    "bones": 17,
+    "deform_bones": 16,
+    "vertices_weighted_by_fallback": 0,
+    "extent_m_blender_xyz": [
+      0.392,
+      1.306,
+      0.651
+    ],
+    "glb_bytes": 355044,
+    "clips": {
+      "idle": {
+        "frames": 60,
+        "seconds": 2.0,
+        "loop": true,
+        "ground_speed_mps": 0.0
+      },
+      "walk": {
+        "frames": 30,
+        "seconds": 1.0,
+        "loop": true,
+        "ground_speed_mps": 0.3
+      },
+      "run": {
+        "frames": 18,
+        "seconds": 0.6,
+        "loop": true,
+        "ground_speed_mps": 0.833
+      },
+      "jump": {
+        "frames": 24,
+        "seconds": 0.8,
+        "loop": false,
+        "ground_speed_mps": 0.0
+      }
+    }
+  }
+}
