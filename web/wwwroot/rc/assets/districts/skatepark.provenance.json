@@ -59,8 +59,8 @@
     "distance_m": 1.4,
     "samples": 20
   },
-  "visual_triangles": 31492,
-  "collision_triangles": 21832,
+  "visual_triangles": 31210,
+  "collision_triangles": 21550,
   "collision_meshes": 31,
   "materials": 10
 }
