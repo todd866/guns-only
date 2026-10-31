@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as T from '../../vendor/three.module.js';
 import {GLTFLoader} from '../../vendor/three/addons/loaders/GLTFLoader.js';
+import {BOUNDS} from './catalog.mjs';
 import {nightRadiance} from './night-environment.js';
 test('baked hero GLBs retain upright metre geometry and varied corner AO', async () => {
   for (const name of ['B-52', 'C-17', 'A-10']) {
@@ -75,6 +76,8 @@ test('landmark bake preserves world bounds, tile batches and vertex colors', asy
   // outdoor ball return removed) is 85.5k in the same 54 meshes. Raise again only with a reason.
   assert.ok(triangles > 30000 && triangles < 100000);
   const box = new T.Box3().setFromObject(g.scene);
-  assert.ok(box.min.x >= -2610 && box.max.x <= 3260);
-  assert.ok(box.min.z >= -2310 && box.max.z <= 4060);
+  // The bake must stay inside the playable world (catalog BOUNDS, which grew for Spirit Mountain
+  // and the canyon), with a 50 m skirt for props that overhang the edge.
+  assert.ok(box.min.x >= BOUNDS[0] - 50 && box.max.x <= BOUNDS[2] + 50, `x ${box.min.x}..${box.max.x}`);
+  assert.ok(box.min.z >= BOUNDS[1] - 50 && box.max.z <= BOUNDS[3] + 50, `z ${box.min.z}..${box.max.z}`);
 });
