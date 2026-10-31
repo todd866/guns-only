@@ -1,25 +1,250 @@
-import {trafficLine,updateTraffic} from './open-world/traffic.mjs';
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
+import {trafficLine, updateTraffic} from './open-world/traffic.mjs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import * as T from '../vendor/three.module.js';
-import {LOCATIONS,EVENTS,BOUNDS,eventCourse,loadProgress,discover,recordFinish,rcLink} from './open-world/catalog.mjs';
-import {ALIEN_LOCATIONS,ALIEN_EVENTS} from './open-world/alien-world.mjs';
+import {
+  LOCATIONS,
+  EVENTS,
+  BOUNDS,
+  eventCourse,
+  loadProgress,
+  discover,
+  recordFinish,
+  rcLink
+} from './open-world/catalog.mjs';
+import {ALIEN_LOCATIONS, ALIEN_EVENTS} from './open-world/alien-world.mjs';
 import {buildActivities} from './open-world/activities.js';
 import {buildLandmarks} from './open-world/landmarks.js';
-import {createStream,desiredTiles} from './open-world/stream.mjs';
-import {surfaceAt,buildingInfo,addBuildingCollision} from './open-world/geometry.mjs';
-import {buildRoadGraph,roadRoute,recoveryPoint} from './open-world/navigation.mjs';
+import {createStream, desiredTiles} from './open-world/stream.mjs';
+import {surfaceAt, buildingInfo, addBuildingCollision} from './open-world/geometry.mjs';
+import {buildRoadGraph, roadRoute, recoveryPoint} from './open-world/navigation.mjs';
 import {createWorld} from './physics/world.mjs';
-import {createRace,stepRace,driveInput} from './physics/race.mjs';
-const emptyStream=()=>createStream({manifest:{tiles:[]},fetchTile:()=>{throw Error('unexpected');}});
-const canvasStub=()=>({getContext:()=>new Proxy({},{get:()=>()=>{},set:()=>true})});
-test('all world events can be completed by driving the actual rigid-body car',()=>{const oldDocument=globalThis.document;globalThis.document={createElement:canvasStub};const stream=emptyStream(),scene=new T.Scene(),activities=buildActivities(scene,stream.world),landmarks=buildLandmarks(scene,stream.world,undefined,[]);try{for(const e of EVENTS.filter(event=>!event.battle)){const course=eventCourse(e,stream.world),race=createRace(course,{opponents:0,mode:'bigKid'}),pilot={session:race.player,skill:.9,node:0};race.retreat.at=Infinity;let steps=0;while(!race.player.finished&&steps++<120*(e.road?2400:600)){stepRace(race,driveInput(race,pilot),1/120);activities.update(steps/120,race.player.car.pos);activities.step(race.player.car,1/120);}const s=race.player;assert.ok(s.finished,`${e.id}: gate ${s.gate}/${course.checkpoints.length}, ${s.car.pos}`);assert.ok(s.car.pos.every(Number.isFinite));}}finally{landmarks.dispose();activities.dispose();stream.dispose();globalThis.document=oldDocument;}});
-test('stream handles a seam, bounds, unloaded space and stale responses',async()=>{let resolveFar;const dropped=[];const stream=createStream({manifest:{tiles:[[0,0],[1,0],[8,0]]},fetchTile:async key=>key==='8,0'?new Promise(r=>resolveFar=r):({tile:key.split(',').map(Number),features:[]}),onDrop:key=>dropped.push(key)});await stream.update([255,0,20]);assert.ok(stream.ready([255,0,20]));assert.equal(stream.world.raycast([256,.2,20],[0,-1,0],1).point[1],0);const far=stream.update([2100,0,0]);await stream.update([0,0,0]);resolveFar({tile:[8,0],features:[]});await far;assert.equal(stream.loaded.has('8,0'),false);assert.ok(stream.loaded.size<=25);assert.ok(desiredTiles([0,0,0]).length===25);stream.dispose();assert.equal(stream.loaded.size,0);});
-test('failed downloads never advertise ready, then retry safely',async()=>{const stream=createStream({manifest:{tiles:[[0,0]]},fetchTile:async()=>{throw Error('offline');}});await stream.update([0,0,0]);assert.equal(stream.ready([0,0,0]),false);assert.equal(stream.stats().failed,1);assert.equal(stream.world.raycast([0,1,0],[0,-1,0],2).point[1],0);});
-test('building walls collide from every outside face, roads preserve their surface',()=>{const f={bbox:[0,0,10,10],properties:{building:'yes'},geometry:{type:'Polygon',coordinates:[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}};const w=createWorld(),info=buildingInfo(f);addBuildingCollision(w,info);for(const [a,d]of [[[-1,1,5],[1,0,0]],[[11,1,5],[-1,0,0]],[[5,1,-1],[0,0,1]],[[5,1,11],[0,0,-1]]])assert.ok(w.raycast(a,d,2));const road={bbox:[0,0,20,0],properties:{highway:'residential'},geometry:{type:'LineString',coordinates:[[0,0],[20,0]]}};assert.equal(surfaceAt(4,2,[road]),'asphalt');assert.equal(surfaceAt(4,20,[road]),'dirt');});
-test('discovery unlocks only nearby destinations, records stay per event, corrupt storage is safe',()=>{const state=loadProgress({getItem:()=>'{bad'});assert.deepEqual(state.discovered,['gate']);assert.equal(discover(state,LOCATIONS.find(p=>p.id==='ramp').pos)[0].id,'ramp');assert.deepEqual(discover(state,LOCATIONS.find(p=>p.id==='ramp').pos),[]);recordFinish(state,'ramp-rat',55);recordFinish(state,'ramp-rat',60);recordFinish(state,'whoops',47);assert.equal(state.wins['ramp-rat'],55);assert.equal(state.wins.whoops,47);recordFinish(state,'whoops',NaN);assert.equal(state.wins.whoops,47);});
-test('navigation follows connected roads and event links preserve silent QA',()=>{const graph=buildRoadGraph([{kind:'residential',points:[[0,0],[0,10],[10,10],[10,0]]}]);const r=roadRoute(graph,[0,0],[10,0]);assert.ok(r.some(p=>p[1]===10));assert.equal(rcLink({track:'hub',from:'bx'},'?track=bx&event=whoops&mode=race&audioQa=silent'),'?audioQa=silent&track=hub&from=bx');});
-test('redistributed base tiles stay bounded while alien locations use their authored frame',()=>{const root=new URL('./assets/world/',import.meta.url),manifest=JSON.parse(fs.readFileSync(new URL('manifest.json',root)));assert.equal(manifest.license,'ODbL');assert.ok(!manifest.source.includes('/Users/'));assert.ok(manifest.tiles.length>300);for(const [x,z]of manifest.tiles)assert.ok((x+1)*256>=BOUNDS[0]&&x*256<=BOUNDS[2]&&(z+1)*256>=BOUNDS[1]&&z*256<=BOUNDS[3]);const alienIds=new Set(ALIEN_LOCATIONS.map(p=>p.id));for(const p of LOCATIONS.filter(p=>!p.alien))assert.ok(p.pos[0]>=BOUNDS[0]&&p.pos[0]<=BOUNDS[2]&&p.pos[2]>=BOUNDS[1]&&p.pos[2]<=BOUNDS[3],`${p.id} escaped base bounds`);for(const p of LOCATIONS.filter(p=>p.alien))assert.ok(p.pos[0]>9000&&p.pos[2]>=-300&&p.pos[2]<=700,`${p.id} is not in alien frame`);for(const e of ALIEN_EVENTS)assert.ok(e.points.every(([x,z,y])=>x>9000&&z>=-300&&z<=700&&y>=0&&y<=18),`${e.id} escaped alien authored frame`);});
+import {createRace, stepRace, driveInput} from './physics/race.mjs';
+const emptyStream = () =>
+  createStream({
+    manifest: {tiles: []},
+    fetchTile: () => {
+      throw Error('unexpected');
+    }
+  });
+const canvasStub = () => ({getContext: () => new Proxy({}, {get: () => () => {}, set: () => true})});
+test('all world events can be completed by driving the actual rigid-body car', () => {
+  const oldDocument = globalThis.document;
+  globalThis.document = {createElement: canvasStub};
+  const stream = emptyStream(),
+    scene = new T.Scene(),
+    activities = buildActivities(scene, stream.world),
+    landmarks = buildLandmarks(scene, stream.world, undefined, []);
+  try {
+    for (const e of EVENTS.filter(event => !event.battle)) {
+      const course = eventCourse(e, stream.world),
+        race = createRace(course, {opponents: 0, mode: 'bigKid'}),
+        pilot = {session: race.player, skill: 0.9, node: 0};
+      race.retreat.at = Infinity;
+      let steps = 0;
+      while (!race.player.finished && steps++ < 120 * (e.road ? 2400 : 600)) {
+        stepRace(race, driveInput(race, pilot), 1 / 120);
+        activities.update(steps / 120, race.player.car.pos);
+        activities.step(race.player.car, 1 / 120);
+      }
+      const s = race.player;
+      assert.ok(s.finished, `${e.id}: gate ${s.gate}/${course.checkpoints.length}, ${s.car.pos}`);
+      assert.ok(s.car.pos.every(Number.isFinite));
+    }
+  } finally {
+    landmarks.dispose();
+    activities.dispose();
+    stream.dispose();
+    globalThis.document = oldDocument;
+  }
+});
+test('stream handles a seam, bounds, unloaded space and stale responses', async () => {
+  let resolveFar;
+  const dropped = [];
+  const stream = createStream({
+    manifest: {
+      tiles: [
+        [0, 0],
+        [1, 0],
+        [8, 0]
+      ]
+    },
+    fetchTile: async key =>
+      key === '8,0' ? new Promise(r => (resolveFar = r)) : {tile: key.split(',').map(Number), features: []},
+    onDrop: key => dropped.push(key)
+  });
+  await stream.update([255, 0, 20]);
+  assert.ok(stream.ready([255, 0, 20]));
+  assert.equal(stream.world.raycast([256, 0.2, 20], [0, -1, 0], 1).point[1], 0);
+  const far = stream.update([2100, 0, 0]);
+  await stream.update([0, 0, 0]);
+  resolveFar({tile: [8, 0], features: []});
+  await far;
+  assert.equal(stream.loaded.has('8,0'), false);
+  assert.ok(stream.loaded.size <= 25);
+  assert.ok(desiredTiles([0, 0, 0]).length === 25);
+  stream.dispose();
+  assert.equal(stream.loaded.size, 0);
+});
+test('failed downloads never advertise ready, then retry safely', async () => {
+  const stream = createStream({
+    manifest: {tiles: [[0, 0]]},
+    fetchTile: async () => {
+      throw Error('offline');
+    }
+  });
+  await stream.update([0, 0, 0]);
+  assert.equal(stream.ready([0, 0, 0]), false);
+  assert.equal(stream.stats().failed, 1);
+  assert.equal(stream.world.raycast([0, 1, 0], [0, -1, 0], 2).point[1], 0);
+});
+test('building walls collide from every outside face, roads preserve their surface', () => {
+  const f = {
+    bbox: [0, 0, 10, 10],
+    properties: {building: 'yes'},
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0]
+        ]
+      ]
+    }
+  };
+  const w = createWorld(),
+    info = buildingInfo(f);
+  addBuildingCollision(w, info);
+  for (const [a, d] of [
+    [
+      [-1, 1, 5],
+      [1, 0, 0]
+    ],
+    [
+      [11, 1, 5],
+      [-1, 0, 0]
+    ],
+    [
+      [5, 1, -1],
+      [0, 0, 1]
+    ],
+    [
+      [5, 1, 11],
+      [0, 0, -1]
+    ]
+  ])
+    assert.ok(w.raycast(a, d, 2));
+  const road = {
+    bbox: [0, 0, 20, 0],
+    properties: {highway: 'residential'},
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [20, 0]
+      ]
+    }
+  };
+  assert.equal(surfaceAt(4, 2, [road]), 'asphalt');
+  assert.equal(surfaceAt(4, 20, [road]), 'dirt');
+});
+test('discovery unlocks only nearby destinations, records stay per event, corrupt storage is safe', () => {
+  const state = loadProgress({getItem: () => '{bad'});
+  assert.deepEqual(state.discovered, ['gate']);
+  assert.equal(discover(state, LOCATIONS.find(p => p.id === 'ramp').pos)[0].id, 'ramp');
+  assert.deepEqual(discover(state, LOCATIONS.find(p => p.id === 'ramp').pos), []);
+  recordFinish(state, 'ramp-rat', 55);
+  recordFinish(state, 'ramp-rat', 60);
+  recordFinish(state, 'whoops', 47);
+  assert.equal(state.wins['ramp-rat'], 55);
+  assert.equal(state.wins.whoops, 47);
+  recordFinish(state, 'whoops', NaN);
+  assert.equal(state.wins.whoops, 47);
+});
+test('navigation follows connected roads and event links preserve silent QA', () => {
+  const graph = buildRoadGraph([
+    {
+      kind: 'residential',
+      points: [
+        [0, 0],
+        [0, 10],
+        [10, 10],
+        [10, 0]
+      ]
+    }
+  ]);
+  const r = roadRoute(graph, [0, 0], [10, 0]);
+  assert.ok(r.some(p => p[1] === 10));
+  assert.equal(
+    rcLink({track: 'hub', from: 'bx'}, '?track=bx&event=whoops&mode=race&audioQa=silent'),
+    '?audioQa=silent&track=hub&from=bx'
+  );
+});
+test('redistributed base tiles stay bounded while alien locations use their authored frame', () => {
+  const root = new URL('./assets/world/', import.meta.url),
+    manifest = JSON.parse(fs.readFileSync(new URL('manifest.json', root)));
+  assert.equal(manifest.license, 'ODbL');
+  assert.ok(!manifest.source.includes('/Users/'));
+  assert.ok(manifest.tiles.length > 300);
+  for (const [x, z] of manifest.tiles)
+    assert.ok(
+      (x + 1) * 256 >= BOUNDS[0] && x * 256 <= BOUNDS[2] && (z + 1) * 256 >= BOUNDS[1] && z * 256 <= BOUNDS[3]
+    );
+  const alienIds = new Set(ALIEN_LOCATIONS.map(p => p.id));
+  for (const p of LOCATIONS.filter(p => !p.alien))
+    assert.ok(
+      p.pos[0] >= BOUNDS[0] && p.pos[0] <= BOUNDS[2] && p.pos[2] >= BOUNDS[1] && p.pos[2] <= BOUNDS[3],
+      `${p.id} escaped base bounds`
+    );
+  for (const p of LOCATIONS.filter(p => p.alien))
+    assert.ok(p.pos[0] > 9000 && p.pos[2] >= -300 && p.pos[2] <= 700, `${p.id} is not in alien frame`);
+  for (const e of ALIEN_EVENTS)
+    assert.ok(
+      e.points.every(([x, z, y]) => x > 9000 && z >= -300 && z <= 700 && y >= 0 && y <= 18),
+      `${e.id} escaped alien authored frame`
+    );
+});
 
-test('open-world recovery never teleports back to a distant event',()=>{const roads=[{kind:'residential',points:[[1000,1000],[1100,1000]]}];assert.deepEqual(recoveryPoint(roads,[1050,2,1004]).pos,[1050,0,1000]);assert.deepEqual(recoveryPoint(roads,[1700,2,1800]).pos,[1700,0,1800]);});
+test('open-world recovery never teleports back to a distant event', () => {
+  const roads = [
+    {
+      kind: 'residential',
+      points: [
+        [1000, 1000],
+        [1100, 1000]
+      ]
+    }
+  ];
+  assert.deepEqual(recoveryPoint(roads, [1050, 2, 1004]).pos, [1050, 0, 1000]);
+  assert.deepEqual(recoveryPoint(roads, [1700, 2, 1800]).pos, [1700, 0, 1800]);
+});
 
-test('free-drive traffic stays on a nearby road patrol and never relocates an active racer',()=>{const roads=[{kind:'residential',points:[[-200,0],[0,0],[200,0]]}],line=trafficLine(roads,[0,0,4]);assert.ok(line.length>40);assert.ok(line.every(p=>Math.abs(p[1])===1.1&&Math.abs(p[0])<=90));const stream=emptyStream(),race=createRace(eventCourse(EVENTS[0],stream.world),{opponents:3,roam:true});race.player.car.pos=[0,.13,4];const old=race.rivals.map(r=>[...r.session.car.pos]);updateTraffic(race,roads,{ready:()=>true},null);assert.ok(race.rivals.every(r=>Math.hypot(r.session.car.pos[0],r.session.car.pos[2]-4)<110));race.roam=false;const p=race.rivals[0].session.car.pos;updateTraffic(race,roads,{ready:()=>true},null);assert.equal(race.rivals[0].session.car.pos,p);});
+test('free-drive traffic stays on a nearby road patrol and never relocates an active racer', () => {
+  const roads = [
+      {
+        kind: 'residential',
+        points: [
+          [-200, 0],
+          [0, 0],
+          [200, 0]
+        ]
+      }
+    ],
+    line = trafficLine(roads, [0, 0, 4]);
+  assert.ok(line.length > 40);
+  assert.ok(line.every(p => Math.abs(p[1]) === 1.1 && Math.abs(p[0]) <= 90));
+  const stream = emptyStream(),
+    race = createRace(eventCourse(EVENTS[0], stream.world), {opponents: 3, roam: true});
+  race.player.car.pos = [0, 0.13, 4];
+  const old = race.rivals.map(r => [...r.session.car.pos]);
+  updateTraffic(race, roads, {ready: () => true}, null);
+  assert.ok(race.rivals.every(r => Math.hypot(r.session.car.pos[0], r.session.car.pos[2] - 4) < 110));
+  race.roam = false;
+  const p = race.rivals[0].session.car.pos;
+  updateTraffic(race, roads, {ready: () => true}, null);
+  assert.equal(race.rivals[0].session.car.pos, p);
+});

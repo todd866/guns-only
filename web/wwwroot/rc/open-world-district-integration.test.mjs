@@ -1,12 +1,135 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
-import {loadOpenWorld} from './open-world/runtime.js';import {DISTRICT_ZONES,districtOffset} from './open-world/district-zones.mjs';import {createSession,stepSession,recover} from './physics/session.mjs';import {createRace,stepRace,driveInput} from './physics/race.mjs';
-const fetchLocal=async url=>new Response(fs.readFileSync(new URL(String(url),import.meta.url)));
-test('every district entrance is driveable inward and outward in the streamed source world',async()=>{const old=globalThis.fetch;globalThis.fetch=fetchLocal;try{for(const [id,d]of Object.entries(DISTRICT_ZONES)){const w=await loadOpenWorld('?at='+id),end={housing:43,bx:38,school:-7}[id]+districtOffset(id)[2],c={...w.course,start:{pos:[d.anchor[0],0,d.anchor[2]+5],yaw:0}},s=createSession(c,{mode:'bigKid'});s.roam=true;let i=0;while(s.car.pos[2]>end&&i++<120*40)stepSession(s,{throttle:.4},1/120);assert.ok(s.car.pos[2]<=end,`${id} entrance blocked at ${s.car.pos}`);i=0;while(s.car.pos[2]<d.anchor[2]+4&&i++<120*50)stepSession(s,{throttle:-1},1/120);assert.ok(s.car.pos[2]>=d.anchor[2]+4,`${id} exit blocked ${s.car.pos}`);assert.equal(s.recoveries,0);w.dispose();}}finally{globalThis.fetch=old;}});
-test('hub district event links retain world collision and global specimen identities',async()=>{const old=globalThis.fetch;globalThis.fetch=fetchLocal;try{for(const id of Object.keys(DISTRICT_ZONES)){const w=await loadOpenWorld('?event=district-'+id+'&mode=race');assert.equal(w.selected.district,id);assert.ok(w.course.start.pos[0]<-400);assert.equal(w.course.secrets.length,15);assert.match(w.eventURL({id,track:id}),/track=hub&event=district-/);const race=createRace(w.course,{opponents:0,mode:'bigKid'}),pilot={session:race.player,skill:.8,node:0};race.retreat.at=Infinity;for(let i=0;i<120*180&&!race.player.finished;i++)stepRace(race,driveInput(race,pilot),1/120);assert.ok(race.player.finished,`${id} gate ${race.player.gate} pos ${race.player.car.pos}`);w.dispose();}}finally{globalThis.fetch=old;}});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {loadOpenWorld} from './open-world/runtime.js';
+import {DISTRICT_ZONES, districtOffset} from './open-world/district-zones.mjs';
+import {createSession, stepSession, recover} from './physics/session.mjs';
+import {createRace, stepRace, driveInput} from './physics/race.mjs';
+const fetchLocal = async url => new Response(fs.readFileSync(new URL(String(url), import.meta.url)));
+test('every district entrance is driveable inward and outward in the streamed source world', async () => {
+  const old = globalThis.fetch;
+  globalThis.fetch = fetchLocal;
+  try {
+    for (const [id, d] of Object.entries(DISTRICT_ZONES)) {
+      const w = await loadOpenWorld('?at=' + id),
+        end = {housing: 43, bx: 38, school: -7}[id] + districtOffset(id)[2],
+        c = {...w.course, start: {pos: [d.anchor[0], 0, d.anchor[2] + 5], yaw: 0}},
+        s = createSession(c, {mode: 'bigKid'});
+      s.roam = true;
+      let i = 0;
+      while (s.car.pos[2] > end && i++ < 120 * 40) stepSession(s, {throttle: 0.4}, 1 / 120);
+      assert.ok(s.car.pos[2] <= end, `${id} entrance blocked at ${s.car.pos}`);
+      i = 0;
+      while (s.car.pos[2] < d.anchor[2] + 4 && i++ < 120 * 50) stepSession(s, {throttle: -1}, 1 / 120);
+      assert.ok(s.car.pos[2] >= d.anchor[2] + 4, `${id} exit blocked ${s.car.pos}`);
+      assert.equal(s.recoveries, 0);
+      w.dispose();
+    }
+  } finally {
+    globalThis.fetch = old;
+  }
+});
+test('hub district event links retain world collision and global specimen identities', async () => {
+  const old = globalThis.fetch;
+  globalThis.fetch = fetchLocal;
+  try {
+    for (const id of Object.keys(DISTRICT_ZONES)) {
+      const w = await loadOpenWorld('?event=district-' + id + '&mode=race');
+      assert.equal(w.selected.district, id);
+      assert.ok(w.course.start.pos[0] < -400);
+      assert.equal(w.course.secrets.length, 15);
+      assert.match(w.eventURL({id, track: id}), /track=hub&event=district-/);
+      const race = createRace(w.course, {opponents: 0, mode: 'bigKid'}),
+        pilot = {session: race.player, skill: 0.8, node: 0};
+      race.retreat.at = Infinity;
+      for (let i = 0; i < 120 * 180 && !race.player.finished; i++)
+        stepRace(race, driveInput(race, pilot), 1 / 120);
+      assert.ok(race.player.finished, `${id} gate ${race.player.gate} pos ${race.player.car.pos}`);
+      w.dispose();
+    }
+  } finally {
+    globalThis.fetch = old;
+  }
+});
 
-test('free-drive recovery inside district shells stays on the floor',async()=>{const old=globalThis.fetch;globalThis.fetch=fetchLocal;try{for(const id of Object.keys(DISTRICT_ZONES)){const w=await loadOpenWorld('?event=district-'+id),s=createSession(w.course,{mode:'bigKid'});s.roam=true;recover(s);assert.ok(s.car.pos[1]<1,`${id} recovery on roof ${s.car.pos}`);assert.equal(s.recoveries,1);w.dispose();}}finally{globalThis.fetch=old;}});
+test('free-drive recovery inside district shells stays on the floor', async () => {
+  const old = globalThis.fetch;
+  globalThis.fetch = fetchLocal;
+  try {
+    for (const id of Object.keys(DISTRICT_ZONES)) {
+      const w = await loadOpenWorld('?event=district-' + id),
+        s = createSession(w.course, {mode: 'bigKid'});
+      s.roam = true;
+      recover(s);
+      assert.ok(s.car.pos[1] < 1, `${id} recovery on roof ${s.car.pos}`);
+      assert.equal(s.recoveries, 1);
+      w.dispose();
+    }
+  } finally {
+    globalThis.fetch = old;
+  }
+});
 
-test('navigation from inside each district includes its doorway and reaches the outside destination',async()=>{const old=globalThis.fetch;globalThis.fetch=fetchLocal;try{for(const id of Object.keys(DISTRICT_ZONES)){const w=await loadOpenWorld('?event=district-'+id),p=w.course.ai[5].pos;w.navigate('gate',p);const r=w.route(),a=DISTRICT_ZONES[id].anchor;assert.ok(r.some(q=>Math.hypot(q[0]-a[0],q[1]-a[2])<.01),id+' entrance');assert.deepEqual(r.at(-1),[-607,-29]);assert.ok(r.length>5);w.dispose();}}finally{globalThis.fetch=old;}});
+test('navigation from inside each district includes its doorway and reaches the outside destination', async () => {
+  const old = globalThis.fetch;
+  globalThis.fetch = fetchLocal;
+  try {
+    for (const id of Object.keys(DISTRICT_ZONES)) {
+      const w = await loadOpenWorld('?event=district-' + id),
+        p = w.course.ai[5].pos;
+      w.navigate('gate', p);
+      const r = w.route(),
+        a = DISTRICT_ZONES[id].anchor;
+      assert.ok(
+        r.some(q => Math.hypot(q[0] - a[0], q[1] - a[2]) < 0.01),
+        id + ' entrance'
+      );
+      assert.deepEqual(r.at(-1), [-607, -29]);
+      assert.ok(r.length > 5);
+      w.dispose();
+    }
+  } finally {
+    globalThis.fetch = old;
+  }
+});
 
-test('authored forecourt connection is driveable between the public road components',async()=>{const old=globalThis.fetch;globalThis.fetch=fetchLocal;try{const w=await loadOpenWorld(''),a=[10.9,0,-552.3],b=[-4.9,0,-567.1],yaw=Math.atan2(b[0]-a[0],-(b[2]-a[2])),s=createSession({...w.course,start:{pos:a,yaw}},{mode:'bigKid'});s.roam=true;await w.stream.update(a);assert.ok(w.stream.ready(a));for(let i=0;i<120*10&&Math.hypot(s.car.pos[0]-b[0],s.car.pos[2]-b[2])>2;i++)stepSession(s,{throttle:.4},1/120);assert.ok(Math.hypot(s.car.pos[0]-b[0],s.car.pos[2]-b[2])<2);assert.equal(s.recoveries,0);w.dispose();}finally{globalThis.fetch=old;}});
-test('recovery on a high sourced hillside stays above terrain',async()=>{const old=globalThis.fetch;globalThis.fetch=fetchLocal;try{const w=await loadOpenWorld(''),p=[2784,42,3584];await w.stream.update(p);const safe=w.course.recoveryPoint(p);assert.ok(safe.groundY>20);const s=createSession({...w.course,start:{pos:p,yaw:0}},{mode:'bigKid'});s.roam=true;recover(s);assert.ok(s.car.pos[1]>safe.groundY);assert.ok(s.car.pos[1]<safe.groundY+1);w.dispose();}finally{globalThis.fetch=old;}});
+test('authored forecourt connection is driveable between the public road components', async () => {
+  const old = globalThis.fetch;
+  globalThis.fetch = fetchLocal;
+  try {
+    const w = await loadOpenWorld(''),
+      a = [10.9, 0, -552.3],
+      b = [-4.9, 0, -567.1],
+      yaw = Math.atan2(b[0] - a[0], -(b[2] - a[2])),
+      s = createSession({...w.course, start: {pos: a, yaw}}, {mode: 'bigKid'});
+    s.roam = true;
+    await w.stream.update(a);
+    assert.ok(w.stream.ready(a));
+    for (let i = 0; i < 120 * 10 && Math.hypot(s.car.pos[0] - b[0], s.car.pos[2] - b[2]) > 2; i++)
+      stepSession(s, {throttle: 0.4}, 1 / 120);
+    assert.ok(Math.hypot(s.car.pos[0] - b[0], s.car.pos[2] - b[2]) < 2);
+    assert.equal(s.recoveries, 0);
+    w.dispose();
+  } finally {
+    globalThis.fetch = old;
+  }
+});
+test('recovery on a high sourced hillside stays above terrain', async () => {
+  const old = globalThis.fetch;
+  globalThis.fetch = fetchLocal;
+  try {
+    const w = await loadOpenWorld(''),
+      p = [2784, 42, 3584];
+    await w.stream.update(p);
+    const safe = w.course.recoveryPoint(p);
+    assert.ok(safe.groundY > 20);
+    const s = createSession({...w.course, start: {pos: p, yaw: 0}}, {mode: 'bigKid'});
+    s.roam = true;
+    recover(s);
+    assert.ok(s.car.pos[1] > safe.groundY);
+    assert.ok(s.car.pos[1] < safe.groundY + 1);
+    w.dispose();
+  } finally {
+    globalThis.fetch = old;
+  }
+});

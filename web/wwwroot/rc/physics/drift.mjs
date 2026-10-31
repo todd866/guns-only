@@ -28,14 +28,27 @@ export const DRIFT = Object.freeze({
   // The slide settles at this slip angle (radians) instead of swinging ever wider, and a
   // release straightens most of the remaining slip so the turbo points down the road.
   maxSlip: 0.45,
-  straighten: 0.7,
+  straighten: 0.7
 });
 
 export function createDrift() {
-  return { held: false, active: false, hopTime: 0, airTime: 0, cooldown: 0, direction: 0, charge: 0, tier: 0, turbo: 0, fired: 0 };
+  return {
+    held: false,
+    active: false,
+    hopTime: 0,
+    airTime: 0,
+    cooldown: 0,
+    direction: 0,
+    charge: 0,
+    tier: 0,
+    turbo: 0,
+    fired: 0
+  };
 }
 
-export function driftTier(charge) { return DRIFT.tiers.reduce((t, at) => charge >= at ? t + 1 : t, 0); }
+export function driftTier(charge) {
+  return DRIFT.tiers.reduce((t, at) => (charge >= at ? t + 1 : t), 0);
+}
 
 export function stepDrift(state, car, raw = {}, dt = 1 / 120, upright = 1, mode = 'bigKid') {
   const pressed = !!raw.drift;
@@ -44,7 +57,8 @@ export function stepDrift(state, car, raw = {}, dt = 1 / 120, upright = 1, mode 
   state.cooldown = Math.max(0, state.cooldown - dt);
   state.turbo = Math.max(0, state.turbo - dt);
   state.fired = 0;
-  let hop = 0, kick = 0;
+  let hop = 0,
+    kick = 0;
 
   if (edge && state.cooldown <= 0 && car.grounded && upright > 0.65 && car.forwardSpeed >= DRIFT.minSpeed) {
     state.active = true;
@@ -52,7 +66,9 @@ export function stepDrift(state, car, raw = {}, dt = 1 / 120, upright = 1, mode 
     state.airTime = 0;
     state.cooldown = DRIFT.cooldown;
     state.direction = Math.sign(raw.steer || 0);
-    state.charge = 0; state.tier = 0; state.entry = car.forwardSpeed;
+    state.charge = 0;
+    state.tier = 0;
+    state.entry = car.forwardSpeed;
     hop = DRIFT.hop;
   }
 
@@ -81,22 +97,38 @@ export function stepDrift(state, car, raw = {}, dt = 1 / 120, upright = 1, mode 
       state.hopTime = 0;
       state.airTime = 0;
       state.direction = 0;
-      state.charge = 0; state.tier = 0;
+      state.charge = 0;
+      state.tier = 0;
     }
   }
 
   const turbo = state.turbo > 0 ? DRIFT.turboBoost : 1;
-  if (!state.active) return { active: false, hop, kick, turbo, fired: state.fired, tier: 0, lateralGripScale: 1, yawTarget: 0, yawGain: 0 };
+  if (!state.active)
+    return {
+      active: false,
+      hop,
+      kick,
+      turbo,
+      fired: state.fired,
+      tier: 0,
+      lateralGripScale: 1,
+      yawTarget: 0,
+      yawGain: 0
+    };
   const into = state.direction * Math.max(-1, Math.min(1, raw.steer || 0));
   return {
     active: true,
-    hop, kick, turbo, fired: 0,
+    hop,
+    kick,
+    turbo,
+    fired: 0,
     tier: state.tier,
     carry: state.entry * DRIFT.carry,
     lateralGripScale: DRIFT.lateralGripScale,
     // Car yaw is opposite the body's positive world-Y angular velocity, so assistInput
     // converts this target into a bounded PD torque. A zero direction means no steering bias.
-    yawTarget: -state.direction * Math.min(DRIFT.maxYaw, car.forwardSpeed * DRIFT.yawRate) * (1 + DRIFT.trim * into),
-    yawGain: DRIFT.yawGain,
+    yawTarget:
+      -state.direction * Math.min(DRIFT.maxYaw, car.forwardSpeed * DRIFT.yawRate) * (1 + DRIFT.trim * into),
+    yawGain: DRIFT.yawGain
   };
 }

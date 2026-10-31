@@ -8,12 +8,16 @@ export const INTRO_CARDS = Object.freeze([
   'Long ago, good aliens came to Saucer Springs.',
   'Their light woke the toys.',
   'Now bad aliens are sending a signal from the other side…',
-  '…through the spirit cave, high on the mountain.',
+  '…through the spirit cave, high on the mountain.'
 ]);
-export const TITLE = Object.freeze({ pre: 'The Legend of', name: 'SPIRIT MOUNTAIN' });
+export const TITLE = Object.freeze({pre: 'The Legend of', name: 'SPIRIT MOUNTAIN'});
 
 export function createIntro(root = document.body) {
-  const el = document.createElement('div'); el.id = 'intro'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-live', 'polite');
+  const el = document.createElement('div');
+  el.id = 'intro';
+  el.hidden = true;
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-live', 'polite');
   el.innerHTML = `<style>
 body.cinematic :is(#instruments,#item,#map,#banner,#pause,#mute,#atlas,#garage,#mode,#destination,#interact,#flight-hud){visibility:hidden}
 #intro{position:fixed;inset:0;z-index:1000;pointer-events:none;font-family:Georgia,'Times New Roman',serif;color:#f4ecd6}
@@ -30,35 +34,80 @@ body.cinematic :is(#instruments,#item,#map,#banner,#pause,#mute,#atlas,#garage,#
 </style><div class="bar top"></div><div class="bar bot"></div><div class="card"></div>
 <div class="title"><i>${TITLE.pre}</i><b>${TITLE.name}</b><small>NEW GAME UNLOCKED · PRESS ENTER</small></div><div class="next">ENTER ▸</div>`;
   root.appendChild(el);
-  const card = el.querySelector('.card'), title = el.querySelector('.title'), next = el.querySelector('.next');
-  let active = false, i = -1, t = 0, from = null, over = null, onDone = null;
+  const card = el.querySelector('.card'),
+    title = el.querySelector('.title'),
+    next = el.querySelector('.next');
+  let active = false,
+    i = -1,
+    t = 0,
+    from = null,
+    over = null,
+    onDone = null;
   const show = n => {
-    i = n; t = 0;
-    if (i < INTRO_CARDS.length) { card.classList.remove('show'); setTimeout(() => { card.textContent = INTRO_CARDS[i]; card.classList.add('show'); }, i ? 450 : 1200); }
-    else { card.classList.remove('show'); title.classList.add('show'); next.hidden = true; }
+    i = n;
+    t = 0;
+    if (i < INTRO_CARDS.length) {
+      card.classList.remove('show');
+      setTimeout(
+        () => {
+          card.textContent = INTRO_CARDS[i];
+          card.classList.add('show');
+        },
+        i ? 450 : 1200
+      );
+    } else {
+      card.classList.remove('show');
+      title.classList.add('show');
+      next.hidden = true;
+    }
   };
   return {
-    get active() { return active; },
+    get active() {
+      return active;
+    },
     /** from: where the camera starts; over: a world point to rise above and look out from. */
     play(start, above, done) {
-      active = true; document.body.classList.add('cinematic'); from = start.clone(); over = new T.Vector3(...above); onDone = done; el.hidden = false; next.hidden = false;
-      title.classList.remove('show'); requestAnimationFrame(() => el.classList.add('on')); show(0);
+      active = true;
+      document.body.classList.add('cinematic');
+      from = start.clone();
+      over = new T.Vector3(...above);
+      onDone = done;
+      el.hidden = false;
+      next.hidden = false;
+      title.classList.remove('show');
+      requestAnimationFrame(() => el.classList.add('on'));
+      show(0);
     },
     advance() {
       if (!active) return;
       if (i < INTRO_CARDS.length) show(i + 1);
-      else { active = false; document.body.classList.remove('cinematic'); el.classList.remove('on'); title.classList.remove('show'); card.classList.remove('show'); setTimeout(() => { el.hidden = true; }, 1200); onDone?.(); }
+      else {
+        active = false;
+        document.body.classList.remove('cinematic');
+        el.classList.remove('on');
+        title.classList.remove('show');
+        card.classList.remove('show');
+        setTimeout(() => {
+          el.hidden = true;
+        }, 1200);
+        onDone?.();
+      }
     },
     /** Each frame while active: auto-advance the story cards and fly the camera. */
     update(dt, camera) {
       if (!active) return;
-      t += dt; if (i < INTRO_CARDS.length && t > 5.5) show(i + 1);
+      t += dt;
+      if (i < INTRO_CARDS.length && t > 5.5) show(i + 1);
       // One continuous rise from the robot up through the hill to a high, slowly turning view.
-      const k = Math.min(1, (i + Math.min(1, t / 5.5)) / (INTRO_CARDS.length + 1)), e = k * k * (3 - 2 * k);
-      const a = .6 + e * 1.4, high = new T.Vector3(over.x + Math.sin(a) * 26, over.y + 22, over.z + Math.cos(a) * 26);
+      const k = Math.min(1, (i + Math.min(1, t / 5.5)) / (INTRO_CARDS.length + 1)),
+        e = k * k * (3 - 2 * k);
+      const a = 0.6 + e * 1.4,
+        high = new T.Vector3(over.x + Math.sin(a) * 26, over.y + 22, over.z + Math.cos(a) * 26);
       camera.position.lerpVectors(from, high, e);
       camera.lookAt(over.x - Math.sin(a) * 40, over.y + 6 * e, over.z - Math.cos(a) * 40);
     },
-    dispose() { el.remove(); },
+    dispose() {
+      el.remove();
+    }
   };
 }

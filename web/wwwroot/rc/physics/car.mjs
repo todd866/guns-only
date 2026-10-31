@@ -2,79 +2,144 @@
 // friction tyres, plus hull spheres that collide with the triangle world. Original model; SI
 // units; car-local axes are +X right, +Y up, −Z forward. Re-Volt informed the *form* of the
 // model (see docs/area-51-build-plan.md); none of its code or data is used.
-import { add, sub, scale, madd, dot, cross, len, norm, rotate, unrotate, quatIntegrate, quatIdentity, quatAxisAngle, yawOf } from './math.mjs';
-import { SURFACES, TRANSITION_SURFACES } from './world.mjs';
+import {
+  add,
+  sub,
+  scale,
+  madd,
+  dot,
+  cross,
+  len,
+  norm,
+  rotate,
+  unrotate,
+  quatIntegrate,
+  quatIdentity,
+  quatAxisAngle,
+  yawOf
+} from './math.mjs';
+import {SURFACES, TRANSITION_SURFACES} from './world.mjs';
 
 // 1:10 electric buggy. Values are fiction, chosen for toy-scale feel and checked by tests.
 export const BUGGY = {
   mass: 1.8,
-  size: [0.18, 0.08, 0.42],            // body box for inertia, metres
+  size: [0.18, 0.08, 0.42], // body box for inertia, metres
   inertiaScale: 1.0,
-  wheelMassFraction: .15,
+  wheelMassFraction: 0.15,
   // Provisional 1:10 envelope: 420 mm long, 280 mm outside wheels, 116 mm tyres.
-  wheels: [                           // attach points relative to the centre of mass
-    { at: [-0.115, 0, -0.14], front: true }, { at: [0.115, 0, -0.14], front: true },
-    { at: [-0.115, 0, 0.14], front: false }, { at: [0.115, 0, 0.14], front: false },
+  wheels: [
+    // attach points relative to the centre of mass
+    {at: [-0.115, 0, -0.14], front: true},
+    {at: [0.115, 0, -0.14], front: true},
+    {at: [-0.115, 0, 0.14], front: false},
+    {at: [0.115, 0, 0.14], front: false}
   ],
-  wheelRadius: 0.058, wheelWidth: 0.05,
-  restLength: 0.05,                  // attach point to wheel centre at full droop
-  spring: 450, damper: 12,             // per wheel, N/m and N·s/m
-  bumpAt: 0.032, bumpSpring: 4000, bumpDamper: 40, // bump rubber: absorbs before the hull touches
-  staticFriction: [1.6, 1.52],        // front, rear (rear a little lower: it lets go first)
+  wheelRadius: 0.058,
+  wheelWidth: 0.05,
+  restLength: 0.05, // attach point to wheel centre at full droop
+  spring: 450,
+  damper: 12, // per wheel, N/m and N·s/m
+  bumpAt: 0.032,
+  bumpSpring: 4000,
+  bumpDamper: 40, // bump rubber: absorbs before the hull touches
+  staticFriction: [1.6, 1.52], // front, rear (rear a little lower: it lets go first)
   kineticFriction: [1.2, 1.12],
-  lateralStiffness: 0.5,              // fraction of the per-wheel lateral slip removed per substep
-  rollCentre: 0.72,                    // tyre forces act this fraction of the way up to the CoM
-  driveForce: 26, topSpeed: 14, reverseSpeed: 5, brakeForce: 30,
-  maxSteer: 0.5, steerRate: 5,
-  downforce: 0.04,                    // N per (m/s)²
-  linearDrag: 0.012, angularDrag: 0.4,
+  lateralStiffness: 0.5, // fraction of the per-wheel lateral slip removed per substep
+  rollCentre: 0.72, // tyre forces act this fraction of the way up to the CoM
+  driveForce: 26,
+  topSpeed: 14,
+  reverseSpeed: 5,
+  brakeForce: 30,
+  maxSteer: 0.5,
+  steerRate: 5,
+  downforce: 0.04, // N per (m/s)²
+  linearDrag: 0.012,
+  angularDrag: 0.4,
   // Hull: body corners act as bump stops when the suspension bottoms out, plus roof and nose.
   hull: [
-    { at: [-0.072, -0.028, -0.15], r: 0.028 }, { at: [0.072, -0.028, -0.15], r: 0.028 },
-    { at: [-0.072, -0.028, 0.15], r: 0.028 }, { at: [0.072, -0.028, 0.15], r: 0.028 },
-    { at: [0, 0.022, -0.18], r: 0.03 }, { at: [0, 0.022, 0.18], r: 0.03 },
-    { at: [0, 0.055, 0], r: 0.04 }, { at: [-0.06, 0.035, 0], r: 0.03 }, { at: [0.06, 0.035, 0], r: 0.03 },
+    {at: [-0.072, -0.028, -0.15], r: 0.028},
+    {at: [0.072, -0.028, -0.15], r: 0.028},
+    {at: [-0.072, -0.028, 0.15], r: 0.028},
+    {at: [0.072, -0.028, 0.15], r: 0.028},
+    {at: [0, 0.022, -0.18], r: 0.03},
+    {at: [0, 0.022, 0.18], r: 0.03},
+    {at: [0, 0.055, 0], r: 0.04},
+    {at: [-0.06, 0.035, 0], r: 0.03},
+    {at: [0.06, 0.035, 0], r: 0.03}
   ],
-  restitution: 0.25, hullFriction: 0.45,
+  restitution: 0.25,
+  hullFriction: 0.45
 };
 
-const G = 9.81, SUBSTEPS = 4;
+const G = 9.81,
+  SUBSTEPS = 4;
 // Model units to metres; wheel and shell fitting lives in vehicle-pose.mjs.
 export const VISUAL_SCALE = 0.56;
 
 export function createCar(params = BUGGY, pos = [0, 0.1, 0], yaw = 0) {
-  const [w, h, l] = params.size, m = params.mass, k = params.inertiaScale;
-  const wheelMass = m * (params.wheelMassFraction ?? 0) / params.wheels.length, bodyMass = m - wheelMass * params.wheels.length;
-  const inertia = [h * h + l * l, w * w + l * l, w * w + h * h].map(v => bodyMass * v / 12);
+  const [w, h, l] = params.size,
+    m = params.mass,
+    k = params.inertiaScale;
+  const wheelMass = (m * (params.wheelMassFraction ?? 0)) / params.wheels.length,
+    bodyMass = m - wheelMass * params.wheels.length;
+  const inertia = [h * h + l * l, w * w + l * l, w * w + h * h].map(v => (bodyMass * v) / 12);
   // The outboard wheels carry mass too; a narrow body box alone understates roll inertia.
   for (const wheel of params.wheels) {
-    const [x, atY, z] = wheel.at, y = atY - params.restLength + m * G / 4 / params.spring;
-    const r2 = params.wheelRadius ** 2, radial = (3 * r2 + (params.wheelWidth ?? 0) ** 2) / 12;
+    const [x, atY, z] = wheel.at,
+      y = atY - params.restLength + (m * G) / 4 / params.spring;
+    const r2 = params.wheelRadius ** 2,
+      radial = (3 * r2 + (params.wheelWidth ?? 0) ** 2) / 12;
     inertia[0] += wheelMass * (y * y + z * z + r2 / 2);
     inertia[1] += wheelMass * (x * x + z * z + radial);
     inertia[2] += wheelMass * (x * x + y * y + radial);
   }
   return {
-    params, invInertia: inertia.map(i => 1 / (i * k)),
-    pos: [...pos], q: quatAxisAngle([0, 1, 0], -yaw), vel: [0, 0, 0], ang: [0, 0, 0],
-    steer: 0, wheels: params.wheels.map(() => ({ compression: params.mass * G / 4 / params.spring, contact: false, spin: 0, slip: 0, surface: null })),
-    grounded: false, contacts: 0, impact: 0, speed: 0, forwardSpeed: 0, placement: 0,
+    params,
+    invInertia: inertia.map(i => 1 / (i * k)),
+    pos: [...pos],
+    q: quatAxisAngle([0, 1, 0], -yaw),
+    vel: [0, 0, 0],
+    ang: [0, 0, 0],
+    steer: 0,
+    wheels: params.wheels.map(() => ({
+      compression: (params.mass * G) / 4 / params.spring,
+      contact: false,
+      spin: 0,
+      slip: 0,
+      surface: null
+    })),
+    grounded: false,
+    contacts: 0,
+    impact: 0,
+    speed: 0,
+    forwardSpeed: 0,
+    placement: 0
   };
 }
 
 // Resting height of the centre of mass above flat ground, for spawning.
 export function rideHeight(p = BUGGY) {
-  const sag = p.mass * G / 4 / p.spring;
+  const sag = (p.mass * G) / 4 / p.spring;
   return p.restLength - sag + p.wheelRadius - p.wheels[0].at[1];
 }
 
 export function placeCar(car, pos, yaw) {
   car.placement = (car.placement ?? 0) + 1;
-  car.pos = [...pos]; car.q = quatAxisAngle([0, 1, 0], -yaw); car.vel = [0, 0, 0]; car.ang = [0, 0, 0]; car.steer = 0;
+  car.pos = [...pos];
+  car.q = quatAxisAngle([0, 1, 0], -yaw);
+  car.vel = [0, 0, 0];
+  car.ang = [0, 0, 0];
+  car.steer = 0;
 }
 
-const applyInvInertia = (car, v) => rotate(car.q, unrotate(car.q, v).map((x, i) => x * car.invInertia[i]));
-export function pointVelocity(car, p) { return add(car.vel, cross(car.ang, sub(p, car.pos))); }
+const applyInvInertia = (car, v) =>
+  rotate(
+    car.q,
+    unrotate(car.q, v).map((x, i) => x * car.invInertia[i])
+  );
+export function pointVelocity(car, p) {
+  return add(car.vel, cross(car.ang, sub(p, car.pos)));
+}
 export function applyImpulse(car, j, at) {
   car.vel = madd(car.vel, j, 1 / car.params.mass);
   car.ang = add(car.ang, applyInvInertia(car, cross(sub(at, car.pos), j)));
@@ -84,9 +149,11 @@ export function applyImpulse(car, j, at) {
 export function stepCar(car, input, world, dt = 1 / 120) {
   const p = car.params;
   const steerTarget = Math.max(-1, Math.min(1, input.steer || 0)) * (input.steerLimit ?? p.maxSteer);
-  const sd = steerTarget - car.steer, maxD = p.steerRate * dt;
+  const sd = steerTarget - car.steer,
+    maxD = p.steerRate * dt;
   car.steer += Math.max(-maxD, Math.min(maxD, sd));
-  car.impact = 0; car.wallImpact = 0;
+  car.impact = 0;
+  car.wallImpact = 0;
   const h = dt / SUBSTEPS;
   for (let i = 0; i < SUBSTEPS; i++) substep(car, input, world, h);
   car.speed = len(car.vel);
@@ -94,32 +161,65 @@ export function stepCar(car, input, world, dt = 1 / 120) {
 }
 
 function substep(car, input, world, dt) {
-  const p = car.params, m = p.mass, up = rotate(car.q, [0, 1, 0]), fwd = rotate(car.q, [0, 0, -1]);
-  let force = [0, -G * m, 0], torque = [0, 0, 0];
-  const addForce = (f, at) => { force = add(force, f); torque = add(torque, cross(sub(at, car.pos), f)); };
+  const p = car.params,
+    m = p.mass,
+    up = rotate(car.q, [0, 1, 0]),
+    fwd = rotate(car.q, [0, 0, -1]);
+  let force = [0, -G * m, 0],
+    torque = [0, 0, 0];
+  const addForce = (f, at) => {
+    force = add(force, f);
+    torque = add(torque, cross(sub(at, car.pos), f));
+  };
   const throttle = Math.max(-1, Math.min(1, input.throttle || 0));
   const vFwd = dot(car.vel, fwd);
   // Throttle opposite to motion brakes first, then reverses (RC-transmitter behaviour).
   const braking = !!input.brake || (throttle !== 0 && vFwd * throttle < -0.3);
   let drive = 0;
-  const boost = input.boost ?? 1;   // zoom pickup: more push and a higher top end
-  if (!braking && throttle > 0) drive = throttle * p.driveForce * boost * Math.max(0, 1 - vFwd / (p.topSpeed * boost));
-  if (!braking && throttle < 0) drive = throttle * p.driveForce * 0.6 * Math.max(0, 1 + vFwd / p.reverseSpeed);
+  const boost = input.boost ?? 1; // zoom pickup: more push and a higher top end
+  if (!braking && throttle > 0)
+    drive = throttle * p.driveForce * boost * Math.max(0, 1 - vFwd / (p.topSpeed * boost));
+  if (!braking && throttle < 0)
+    drive = throttle * p.driveForce * 0.6 * Math.max(0, 1 + vFwd / p.reverseSpeed);
   const grip = input.gripScale ?? 1;
 
   let contacts = 0;
   car.wheels.forEach((ws, i) => {
-    const wp = p.wheels[i], attach = add(car.pos, rotate(car.q, wp.at)), reach = p.restLength + p.wheelRadius;
+    const wp = p.wheels[i],
+      attach = add(car.pos, rotate(car.q, wp.at)),
+      reach = p.restLength + p.wheelRadius;
     const hit = world.raycast(attach, scale(up, -1), reach);
-    if (!hit) { ws.contact = false; ws.compression = 0; ws.surface = null; ws.slip = 0; ws.contactPoint = null; ws.contactNormal = null; return; }
+    if (!hit) {
+      ws.contact = false;
+      ws.compression = 0;
+      ws.surface = null;
+      ws.slip = 0;
+      ws.contactPoint = null;
+      ws.contactNormal = null;
+      return;
+    }
     contacts++;
-    const compression = reach - hit.dist, vAttach = pointVelocity(car, attach);
+    const compression = reach - hit.dist,
+      vAttach = pointVelocity(car, attach);
     const rate = -dot(vAttach, up);
     const surf = SURFACES[hit.surface] || SURFACES.concrete;
-    const bump = compression > p.bumpAt, bounce = surf.bounce ?? 1;
+    const bump = compression > p.bumpAt,
+      bounce = surf.bounce ?? 1;
     // A bouncy surface (trampoline) is a stiffer, nearly undamped spring under the wheel.
-    const springF = Math.max(0, p.spring * bounce * compression + (bump ? p.bumpSpring * (compression - p.bumpAt) + (surf.bumpDamper ?? 1) * p.bumpDamper * Math.max(0, rate) / bounce : 0) + (surf.damper ?? 1) * p.damper * rate / (bounce * bounce));
-    ws.contact = true; ws.compression = compression; ws.surface = hit.surface; ws.contactPoint = hit.point; ws.contactNormal = hit.normal;
+    const springF = Math.max(
+      0,
+      p.spring * bounce * compression +
+        (bump
+          ? p.bumpSpring * (compression - p.bumpAt) +
+            ((surf.bumpDamper ?? 1) * p.bumpDamper * Math.max(0, rate)) / bounce
+          : 0) +
+        ((surf.damper ?? 1) * p.damper * rate) / (bounce * bounce)
+    );
+    ws.contact = true;
+    ws.compression = compression;
+    ws.surface = hit.surface;
+    ws.contactPoint = hit.point;
+    ws.contactNormal = hit.normal;
     addForce(scale(up, springF), attach);
 
     // Tyre: forces in the contact plane, applied part-way up toward the CoM (roll centre).
@@ -128,26 +228,38 @@ function substep(car, input, world, dt) {
     let wf = steerQ ? rotate(steerQ, fwd) : fwd;
     wf = norm(sub(wf, scale(n, dot(wf, n))));
     const wl = norm(cross(wf, n));
-    const vp = pointVelocity(car, hit.point), vLong = dot(vp, wf), vLat = dot(vp, wl);
-    const load = springF, axle = wp.front ? 0 : 1;
-    const muS = p.staticFriction[axle] * surf.grip * grip, muK = p.kineticFriction[axle] * surf.grip * grip;
-    let fLat = -vLat * (m / 4) / dt * p.lateralStiffness * (input.lateralGripScale ?? 1);
+    const vp = pointVelocity(car, hit.point),
+      vLong = dot(vp, wf),
+      vLat = dot(vp, wl);
+    const load = springF,
+      axle = wp.front ? 0 : 1;
+    const muS = p.staticFriction[axle] * surf.grip * grip,
+      muK = p.kineticFriction[axle] * surf.grip * grip;
+    let fLat = ((-vLat * (m / 4)) / dt) * p.lateralStiffness * (input.lateralGripScale ?? 1);
     let fLong = drive / 4 - Math.sign(vLong) * Math.min(1, Math.abs(vLong) * 5) * surf.roll * load;
-    if (braking) fLong += -Math.sign(vLong) * Math.min(p.brakeForce / 4, Math.abs(vLong) * (m / 4) / dt * 0.5);
-    const total = Math.hypot(fLat, fLong), limitS = muS * load;
-    if (total > limitS && total > 0) { const s = muK * load / total; fLat *= s; fLong *= s; ws.slip = 1; } else ws.slip = 0;
+    if (braking)
+      fLong += -Math.sign(vLong) * Math.min(p.brakeForce / 4, ((Math.abs(vLong) * (m / 4)) / dt) * 0.5);
+    const total = Math.hypot(fLat, fLong),
+      limitS = muS * load;
+    if (total > limitS && total > 0) {
+      const s = (muK * load) / total;
+      fLat *= s;
+      fLong *= s;
+      ws.slip = 1;
+    } else ws.slip = 0;
     const at = add(hit.point, scale(sub(car.pos, hit.point), p.rollCentre));
     addForce(add(scale(wl, fLat), scale(wf, fLong)), at);
-    ws.spin += vLong / p.wheelRadius * dt;
+    ws.spin += (vLong / p.wheelRadius) * dt;
   });
-  car.contacts = contacts; car.grounded = contacts > 0;
+  car.contacts = contacts;
+  car.grounded = contacts > 0;
 
   // Downforce along the body's down axis, aerodynamic and rolling drag.
   const speed = len(car.vel);
   if (contacts) force = madd(force, up, -p.downforce * speed * speed);
   force = madd(force, car.vel, -p.linearDrag * speed);
   torque = madd(torque, car.ang, -p.angularDrag * 0.01);
-  if (input.torque) torque = add(torque, input.torque);   // assists act through torque, see assists.mjs
+  if (input.torque) torque = add(torque, input.torque); // assists act through torque, see assists.mjs
 
   car.vel = madd(car.vel, force, dt / m);
   car.ang = add(car.ang, scale(applyInvInertia(car, torque), dt));
@@ -161,44 +273,63 @@ function substep(car, input, world, dt) {
 // over a few iterations with accumulated (clamped) impulses so the result does not depend on
 // which corner happened to be checked first.
 function solveHull(car, world) {
-  const p = car.params, m = p.mass, contacts = [];
+  const p = car.params,
+    m = p.mass,
+    contacts = [];
   for (const s of p.hull) {
     for (const ct of world.sphereContacts(add(car.pos, rotate(car.q, s.at)), s.r)) {
-      const twin = contacts.find(f => dot(f.normal, ct.normal) > 0.99 && len(sub(f.point, ct.point)) < s.r * 2);
-      if (!twin) contacts.push(ct); else if (ct.depth > twin.depth) Object.assign(twin, ct);
+      const twin = contacts.find(
+        f => dot(f.normal, ct.normal) > 0.99 && len(sub(f.point, ct.point)) < s.r * 2
+      );
+      if (!twin) contacts.push(ct);
+      else if (ct.depth > twin.depth) Object.assign(twin, ct);
     }
   }
   if (!contacts.length) return;
   const push = [];
   for (const ct of contacts) {
     const same = push.find(f => dot(f.normal, ct.normal) > 0.99);
-    if (!same) push.push({ normal: ct.normal, depth: ct.depth }); else same.depth = Math.max(same.depth, ct.depth);
+    if (!same) push.push({normal: ct.normal, depth: ct.depth});
+    else same.depth = Math.max(same.depth, ct.depth);
   }
   for (const f of push) car.pos = madd(car.pos, f.normal, f.depth * 0.8);
   for (const ct of contacts) {
     ct.r = sub(ct.point, car.pos);
     ct.kN = 1 / m + dot(ct.normal, cross(applyInvInertia(car, cross(ct.r, ct.normal)), ct.r));
     const vn = dot(pointVelocity(car, ct.point), ct.normal);
-    ct.bias = vn < -0.5 ? -p.restitution * vn : 0; ct.jn = 0; ct.jt = [0, 0, 0];
+    ct.bias = vn < -0.5 ? -p.restitution * vn : 0;
+    ct.jn = 0;
+    ct.jt = [0, 0, 0];
     car.impact = Math.max(car.impact, -vn);
     // Riding an upward-facing quarter transition is intentional, even near vertical.
-    if (Math.abs(ct.normal[1]) < 0.5 && !(TRANSITION_SURFACES.has(ct.surface) && ct.normal[1] > .05)) car.wallImpact = Math.max(car.wallImpact, -vn);
+    if (Math.abs(ct.normal[1]) < 0.5 && !(TRANSITION_SURFACES.has(ct.surface) && ct.normal[1] > 0.05))
+      car.wallImpact = Math.max(car.wallImpact, -vn);
   }
-  for (let it = 0; it < 6; it++) for (const ct of contacts) {
-    const vRel = pointVelocity(car, ct.point), vn = dot(vRel, ct.normal);
-    const jn = Math.max(0, ct.jn + (ct.bias - vn) / ct.kN), dj = jn - ct.jn; ct.jn = jn;
-    if (dj) applyImpulse(car, scale(ct.normal, dj), ct.point);
-    const v2 = pointVelocity(car, ct.point), vt = sub(v2, scale(ct.normal, dot(v2, ct.normal))), vtl = len(vt);
-    if (vtl < 1e-6) continue;
-    const t = scale(vt, 1 / vtl), kT = 1 / m + dot(t, cross(applyInvInertia(car, cross(ct.r, t)), ct.r));
-    let jt = madd(ct.jt, t, -vtl / kT); const jl = len(jt), max = p.hullFriction * ct.jn;
-    if (jl > max) jt = scale(jt, max / jl);
-    applyImpulse(car, sub(jt, ct.jt), ct.point); ct.jt = jt;
-  }
+  for (let it = 0; it < 6; it++)
+    for (const ct of contacts) {
+      const vRel = pointVelocity(car, ct.point),
+        vn = dot(vRel, ct.normal);
+      const jn = Math.max(0, ct.jn + (ct.bias - vn) / ct.kN),
+        dj = jn - ct.jn;
+      ct.jn = jn;
+      if (dj) applyImpulse(car, scale(ct.normal, dj), ct.point);
+      const v2 = pointVelocity(car, ct.point),
+        vt = sub(v2, scale(ct.normal, dot(v2, ct.normal))),
+        vtl = len(vt);
+      if (vtl < 1e-6) continue;
+      const t = scale(vt, 1 / vtl),
+        kT = 1 / m + dot(t, cross(applyInvInertia(car, cross(ct.r, t)), ct.r));
+      let jt = madd(ct.jt, t, -vtl / kT);
+      const jl = len(jt),
+        max = p.hullFriction * ct.jn;
+      if (jl > max) jt = scale(jt, max / jl);
+      applyImpulse(car, sub(jt, ct.jt), ct.point);
+      ct.jt = jt;
+    }
 }
 
 // Readouts the renderer and HUD use.
 export const carUp = car => rotate(car.q, [0, 1, 0]);
 export const carForward = car => rotate(car.q, [0, 0, -1]);
 export const carYaw = car => yawOf(car.q);
-export { quatIdentity };
+export {quatIdentity};
