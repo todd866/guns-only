@@ -29,7 +29,7 @@ REPO = Path(__file__).resolve().parents[3]
 BLEND = REPO / 'assets/rc/characters/dino.blend'
 GLB = REPO / 'web/wwwroot/rc/assets/characters/dino.glb'
 PROVENANCE = GLB.with_name('dino.provenance.json')
-FPS = 30
+FPS = 60  # keys every 1/60 s: the gallop's stance sweeps 13 cm per 1/30 s, and slerp between sparser keys sinks the foot ~2 cm
 BODY_TRIANGLES = 6000      # target for the decimated soft skin; rigid parts add ~1.5k
 VOXEL = 0.0065
 
@@ -438,6 +438,38 @@ def run(t):
                 arm_L=0.35 + 0.55 * math.sin(TAU * t), arm_R=0.35 - 0.55 * math.sin(TAU * t))
 
 
+GALLOP_DUTY, GALLOP_STRIDE, GALLOP_LAG = 0.15, 0.30, 0.08  # per-foot ground contact share, stance travel (m), R-foot lag
+
+
+def gallop_pelvis(u):
+    """Bounding body: a short low stance (both feet, slightly staggered), then a long flight arc."""
+    u %= 1.0; land = GALLOP_DUTY + GALLOP_LAG
+    if u < land: return -0.03 - 0.012 * math.sin(math.pi * u / land)
+    return -0.03 + 0.15 * math.sin(math.pi * (u - land) / (1 - land))
+
+
+def gallop_foot(u, body_dz):
+    """Stance: ankle sweeps back at ground speed. Swing: tuck under the rising body, then reach forward to land."""
+    u %= 1.0
+    if u < GALLOP_DUTY: return (GALLOP_STRIDE / 2 - GALLOP_STRIDE * u / GALLOP_DUTY, 0.0), 0.0
+    s = (u - GALLOP_DUTY) / (1 - GALLOP_DUTY)
+    y = -GALLOP_STRIDE / 2 + GALLOP_STRIDE * smooth(s) - 0.06 * math.sin(math.pi * s)  # kick back, then reach
+    z = max(0.0, body_dz + 0.03) * math.sin(math.pi * s) ** 0.5 + 0.06 * math.sin(math.pi * s)
+    return (y, z), -0.5 * math.sin(math.pi * s) * (1 - s) + 0.25 * math.sin(math.pi * s) * s
+
+
+def gallop(t):
+    dz = gallop_pelvis(t)
+    aL, toeL = gallop_foot(t, dz); aR, toeR = gallop_foot(t - GALLOP_LAG, dz)
+    w = TAU * t
+    return dict(dz=dz, pitch=-0.08 + 0.12 * math.sin(w - TAU * 0.1), chest=-0.05, yaw=0.03 * math.sin(w),
+                neck=0.12 - 0.12 * math.sin(w - TAU * 0.3), head=0.10 + 0.16 * math.sin(w - TAU * 0.35),
+                jaw=0.42 + 0.1 * math.sin(2 * w),
+                tail=[(0.05 - 0.10 * math.sin(w - TAU * 0.1 - 0.8 * (i + 1)), 0.05 * math.sin(w - 0.9 * i)) for i in range(3)],
+                ankle_L=aL, ankle_R=aR, toe_L=toeL, toe_R=toeR,
+                arm_L=-0.7 + 0.25 * math.sin(2 * w), arm_R=-0.7 + 0.25 * math.sin(2 * w + 1.2))
+
+
 JUMP = dict(
     dz=[(0, 0), (5, -0.07), (8, 0.10), (12, 0.22), (16, 0.10), (18, 0.0), (20, -0.06), (24, 0)],
     pitch=[(0, 0), (5, -0.18), (8, 0.15), (12, 0.05), (17, -0.05), (20, -0.12), (24, 0)],
@@ -463,10 +495,11 @@ def jump_pose(rig, f):
 
 
 CLIPS = {  # name: (frames, loop, ground speed m/s at which feet do not slide)
-    'idle': (60, True, 0.0),
-    'walk': (30, True, round(0.18 / (0.6 * 1.0), 3)),
-    'run': (18, True, round(0.20 / (0.4 * 0.6), 3)),
-    'jump': (24, False, 0.0),
+    'idle': (2 * FPS, True, 0.0),
+    'walk': (FPS, True, round(0.18 / (0.6 * 1.0), 3)),
+    'run': (round(0.6 * FPS), True, round(0.20 / (0.4 * 0.6), 3)),
+    'jump': (round(0.8 * FPS), False, 0.0),
+    'gallop': (round(0.5 * FPS), True, round(GALLOP_STRIDE / (GALLOP_DUTY * 0.5), 3)),
 }
 
 
@@ -475,7 +508,7 @@ def author_actions(arm):
     for name, (frames, loop, _) in CLIPS.items():
         act = bpy.data.actions.new(name); act.use_fake_user = True; ad.action = act; rig.prev = {}
         for f in range(frames + 1):
-            P = jump_pose(rig, f) if name == 'jump' else {'idle': idle, 'walk': walk, 'run': run}[name](f / frames)
+            P = jump_pose(rig, f * 30 / FPS) if name == 'jump' else {'idle': idle, 'walk': walk, 'run': run, 'gallop': gallop}[name](f / frames)
             rig.pose(f, P)
         act.use_frame_range = True; act.frame_start = 0; act.frame_end = frames; act.use_cyclic = loop
         for fc in fcurves(act):
@@ -508,7 +541,7 @@ def export(arm, mesh, empties):
                               export_materials='EXPORT', export_image_format='NONE', export_texcoords=False)
 
 
-def review_render(out, arm):
+def review_render(out, arm, only=None):
     out.mkdir(parents=True, exist_ok=True); scene = bpy.context.scene
     for eng in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'):
         try: scene.render.engine = eng; break
@@ -538,7 +571,8 @@ def review_render(out, arm):
     for tr in ad.nla_tracks: tr.mute = True
     target = Vector((0, 0.0, 0.32))
     shots = [('front', (0.0, 2.6, 0.55), None, 0), ('side', (2.7, 0.0, 0.45), None, 0), ('three-quarter', (1.9, 1.75, 0.85), None, 0),
-             ('mid-run', (1.9, 1.75, 0.75), 'run', 5), ('jump-apex', (2.2, 1.2, 0.7), 'jump', 12)]
+             ('mid-run', (1.9, 1.75, 0.75), 'run', FPS // 6), ('jump-apex', (2.2, 1.2, 0.7), 'jump', FPS * 2 // 5), ('gallop', (1.9, 1.75, 0.8), 'gallop', FPS // 5)]
+    if only: shots = [x for x in shots if x[0] in only]
     paths = []
     for name, pos, clip, frame in shots:
         ad.action = bpy.data.actions[clip] if clip else None
@@ -552,7 +586,7 @@ def review_render(out, arm):
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument('--render', type=Path)
+    ap = argparse.ArgumentParser(); ap.add_argument('--render', type=Path); ap.add_argument('--shots', help='comma list of review shots (default all)')
     args = ap.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
     clear(); mats = make_materials()
     mesh, remesh_tris = build_skin(mats)
@@ -572,7 +606,7 @@ def main():
     PROVENANCE.write_text(json.dumps({'asset': 'characters/dino.glb', 'generator': 'tools/rc/blender/character_dino.py', 'blender': bpy.app.version_string,
                                       'license': 'MIT (original authored geometry, rig, animation and materials; repository MIT)', 'external_assets': [],
                                       'editable_source': 'assets/rc/characters/dino.blend', 'stats': stats}, indent=2) + '\n')
-    if args.render: stats['renders'] = review_render(args.render if args.render.is_absolute() else REPO / args.render, arm)
+    if args.render: stats['renders'] = review_render(args.render if args.render.is_absolute() else REPO / args.render, arm, args.shots.split(',') if args.shots else None)
     print('DINO_STATS ' + json.dumps(stats))
 
 

@@ -16,31 +16,37 @@
       1.306,
       0.651
     ],
-    "glb_bytes": 355044,
+    "glb_bytes": 407764,
     "clips": {
       "idle": {
-        "frames": 60,
+        "frames": 120,
         "seconds": 2.0,
         "loop": true,
         "ground_speed_mps": 0.0
       },
       "walk": {
-        "frames": 30,
+        "frames": 60,
         "seconds": 1.0,
         "loop": true,
         "ground_speed_mps": 0.3
       },
       "run": {
-        "frames": 18,
+        "frames": 36,
         "seconds": 0.6,
         "loop": true,
         "ground_speed_mps": 0.833
       },
       "jump": {
-        "frames": 24,
+        "frames": 48,
         "seconds": 0.8,
         "loop": false,
         "ground_speed_mps": 0.0
+      },
+      "gallop": {
+        "frames": 30,
+        "seconds": 0.5,
+        "loop": true,
+        "ground_speed_mps": 4.0
       }
     }
   }

@@ -19,6 +19,7 @@ export const CHARACTERS = Object.freeze({
    walk: {loop: true, seconds: 1.0, groundSpeedMps: 0.3},
    run: {loop: true, seconds: 0.6, groundSpeedMps: 0.833},
    jump: {loop: false, seconds: 0.8, groundSpeedMps: 0},
+   gallop: {loop: true, seconds: 0.5, groundSpeedMps: 4.0},
   },
  },
 });
