@@ -4135,7 +4135,7 @@ function frame(now) {
   if (robot && robotBody) poseRobotBody(robotBody, robot);
   {
     const past = openWorld?.era?.() === 'past';
-    polish?.setOld?.(past ? 0.65 : 0); // The ridden dinosaur: the rigged one (open-world/characters.js) once loaded, the parts-built one until then.
+    polish?.setOld?.(past ? 0.35 : 0); // The ridden dinosaur: the rigged one (open-world/characters.js) once loaded, the parts-built one until then.
     // One rig per kind (open-world/herd.mjs DINO_KINDS), loaded the first time that kind is ridden;
     // until it's ready the last rig (or the parts-built dinosaur) stands in.
     if (past) {
