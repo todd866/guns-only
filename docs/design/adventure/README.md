@@ -123,6 +123,23 @@ toys ride the trails, outlaw gangs hold the passes, and every road is contested.
 signal reaches back in time too. That's why the old toys there have gone bad, and it's where the
 break-in begins.
 
+## The world's own rules
+
+Owner: "obviously the whole thing is just made up, but it's gotta have an internally coherent
+world." Every new piece has to fit these; if one doesn't, change the piece, not the rule.
+- **Everything that moves on its own is a toy brought to life**, either by the good aliens (a toy
+  that wakes as itself, with a personality) or by the bad aliens (a toy made to be a soldier, with
+  no one inside). The land's creatures and spirits are the only other living things you meet, and
+  they're the land's own, older than both.
+- **The dinosaurs are toys too**: old toy dinosaurs from the toy box, woken by the good aliens'
+  light, which is why there are dinosaurs in 1900. They're bigger than the toy cowboy because they
+  were bigger toys.
+- **The dark world is the same valley long ago.** You get there only through the spirit gates and
+  the glowing portal layer underground, and what you change there shows up in the present.
+- **People are giants in the background**: they never talk to toys, and no one real is ever hurt.
+- **Nothing breaks that has someone inside it.** Soulless toys burst into springs; toys with a self
+  are won over, freed or wound back up.
+
 ## How it maps onto Zelda
 
 | Zelda | Saucer Springs |
@@ -249,15 +266,17 @@ And the dam disappears and there's a town down there under where the lake is. It
 
 This is our own toy western, not a copy of any game: original toys, town and story.
 
-**Every form has an old-time twin**, as Link becomes a bunny in the Dark World. The keys don't
-change (the keyboard rule above), only the toy:
+**In the dark world he's mostly a toy that rides dinosaurs** (owner, 31 Oct). The transforming toy
+becomes a little toy cowboy, and his dinosaur is his main way about, as Link becomes a bunny in the
+Dark World. T just switches between riding and on foot (built). The keys don't change:
 
 | Present | Past | What only it can do in the past |
 |---|---|---|
-| RC car | **Toy dinosaur, ridden** by the toy cowboy | Run the open range, leap gulches, outrun a stagecoach. Whistle (E) and it comes |
-| Walking robot | **Toy cowboy** (tin figure, jointed arms) | Climb, crawl and push, as the robot does; lasso posts and steers; cork-gun duels |
-| Skateboard | **Mine-rail handcar** | Ride the rails through the mountain and the mine, both ways in time |
-| Flying suit | **Paper kite / toy balloon** | Glide off the mesas on the canyon winds |
+| RC car | **Riding the toy dinosaur** | Run the open range, leap gulches, outrun a stagecoach, stomp outlaws. Say its name (Y) and it comes |
+| Walking robot | **The toy cowboy on foot** (tin figure, jointed arms) | Climb, crawl and push, as the robot does; dig straight down; lasso posts and steers; cork-gun duels |
+
+Later dinosaurs can stand in for the other forms rather than new gadgets: a long-neck to reach
+high ledges (the skateboard's job), a pterosaur to glide off the mesas (the flying suit's).
 
 **You ride dinosaurs, not horses** (owner, 31 Oct): "instead of riding horses you're riding
 dinosaurs. This does two things: one, it's hilarious. And two: it makes the characters bigger.
