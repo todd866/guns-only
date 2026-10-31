@@ -346,6 +346,18 @@ one you can drive in the other, and the twins table below says what stands at ea
 world. Wherever the world grows, both grow. (The slice held the past only round the mountain and
 valley and faded you home outside it, dark-world.mjs pastHolds; that limit goes.)
 
+**The underground is Minecraft** (owner, 31 Oct): "we want the underground to be like minecraft,
+with stuff you can dig up, crafting, and these portals that randomly appear. The only difference tho
+is that not everything is persistent between sessions, like, if I dig a big hole and destroy the
+base, next time I login it might not be there. But the underground cavern setup will always be the
+same." And: "eventually we can make a thing where you can reinforce your mine shaft and then it
+becomes persistent."
+- Under both worlds: a fixed cavern layout (the same every session), things to dig up, crafting,
+  and portals between the worlds that turn up at random as you dig.
+- What you dig and break is not kept between sessions: a hole through the base can be healed next
+  time. The caverns themselves never change.
+- Later: reinforce a mine shaft (timbering) and that shaft persists.
+
 **Why people are here, then and now** (owner, 31 Oct: "certain places attract people... we'll
 need to think about this stuff, always"). The rule: every place in the present exists for a reason
 the land gave it, and the past shows that reason raw. In a desert valley the reason is nearly always
