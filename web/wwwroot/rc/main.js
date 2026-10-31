@@ -5005,6 +5005,13 @@ function frame(now) {
             : 'car'
   });
   dinoSounds(dt);
+  if (openWorld?.chickens && !paused)
+    for (const e of openWorld.chickens({
+      pos: robot ? robot.pos : s.car.pos,
+      riding: !!(toyDino?.visible || riggedDino?.root.visible),
+      dt
+    }))
+      if (e.scatter) audio.creature('hen', 'cluck');
   if (track) followSun(sun, car.position);
   if (worldSky) {
     if (!paused) worldElapsed += dt;
@@ -5344,6 +5351,8 @@ window.__gunsOnlyRC = {
   }),
   era: () => openWorld?.era?.() ?? 'present',
   toyDino: () => toyDino,
+  flock: () =>
+    openWorld?.flock?.()?.hens.map(h => ({state: h.state, x: +h.x.toFixed(1), z: +h.z.toFixed(1)})),
   sounds: () => ({
     heard: {...(audio.heard ?? {})},
     motor: +(audio.motorLow?.gain.gain.value ?? 0).toFixed(3)
