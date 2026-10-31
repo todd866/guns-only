@@ -152,7 +152,9 @@ export function startSchool(st, {mode = 'kid', groundY = 0} = {}) {
     landingReady: false,
     lessonRecorded: false,
     card: [],
-    reported: false
+    reported: false,
+    lastMode: null,
+    touchdownAt: null
   });
   return {lessonStart: 1, start: st.lessons[0].start};
 }
@@ -205,8 +207,18 @@ export function stepSchool(st, {pos, prevPos, flightMode, speed = 0, onGround = 
     st.landingReady = true;
     events.push({landing: true});
   }
+  // A touchdown inside the box counts at any speed (a toy plane: touchdown keeps 70% of a flying speed
+  // of at least 12 m/s, so "under 8 m/s" alone made most fly-in landings roll out of the box first).
+  // Rolling in slowly after landing elsewhere still counts too.
+  if ((st.lastMode === 'fly' || st.lastMode === 'chute') && flightMode == null) st.touchdownAt = st.elapsed;
+  st.lastMode = flightMode;
+  const touchedDown = st.touchdownAt != null && st.elapsed - st.touchdownAt < 1; // grounded may lag a frame
   const legalLanding =
-    st.lesson === 2 && flightMode === null && onGround && speed < 8 && landingBoxContains(pos, st.groundY);
+    st.lesson === 2 &&
+    flightMode == null &&
+    onGround &&
+    (touchedDown || speed < 8) &&
+    landingBoxContains(pos, st.groundY);
   if (!st.lessonRecorded && (st.lesson < 2 ? timedOut || ringsDone : legalLanding)) {
     st.lessonRecorded = true;
     const stars = starsFor(st.passed, lesson.rings.length);
