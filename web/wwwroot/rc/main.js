@@ -58,6 +58,8 @@ import {
   DINO_KINDS
 } from './open-world/herd.mjs';
 import {prepareCharacters, spawnCharacter, hasCharacter} from './open-world/characters.js';
+import {loadDex, see, pages, earn, GOLD, SEE_RANGE} from './open-world/dex.mjs';
+import {createPortraits} from './open-world/portraits.js';
 import {ask, typing} from './open-world/type-prompt.js';
 import {say, nameFrom} from './open-world/typed.mjs';
 import {createAdventure} from './open-world/adventure.js';
@@ -2546,7 +2548,8 @@ function outlawStep(dt) {
 // Dig down to the light world (open-world/dig.mjs): in the past, on foot, hold E; Space climbs out.
 let flipFrom = 0;
 function digStep(dt, now) {
-  if (!openWorld?.dig || !robot || paused || !race.roam) return;
+  // Not in the dungeons: the mine and the sewers keep their own authored digging.
+  if (!openWorld?.dig || !robot || paused || !race.roam || adventure?.underground(robot.pos)) return;
   const ev = openWorld.dig({
     pos: robot.pos,
     holding: keys.has('KeyE'),
@@ -2558,7 +2561,9 @@ function digStep(dt, now) {
     if (e.start) callout('⛏️ DIGGING! Hold E to dig down · Space to climb out', 3000);
     else if (e.block === 'gold') {
       audio.coin();
-      callout('✨ GOLD!', 1400);
+      const n = earn(dexState(), GOLD.seam);
+      saveDex();
+      callout(`✨ GOLD! 💰 +${n} · ${dexState().gold}`, 1800);
     } else if (e.block === 'portal') {
       audio.radio();
     } else if (e.block) audio.impact(2);
@@ -2571,7 +2576,13 @@ function digStep(dt, now) {
       document.body.classList.remove('portal-flash');
       void document.body.offsetWidth;
       document.body.classList.add('portal-flash');
-      callout('🙃 You dug right through… into the light world! Literally the upside down', 4500);
+      document.body.classList.toggle('era-past', e.to === 'past');
+      callout(
+        e.to === 'past'
+          ? '🙃 You dug right through… into the dark world, long ago! Literally the upside down'
+          : '🙃 You dug right through… into the light world! Literally the upside down',
+        4500
+      );
     }
   }
   const floor = openWorld.digging() ? openWorld.digFloor() : null;
@@ -2623,6 +2634,43 @@ function saveHerd() {
   openWorld.save();
 }
 const dinoName = () => herd().herd[herd().mount]?.name || 'Rex';
+// The Dino Book and the purse (open-world/dex.mjs): kinds seen, gold dug up; portraits drawn once per kind.
+let dexState_ = null,
+  portraits = null,
+  dexLook = 0;
+const dexState = () => (dexState_ ??= loadDex(openWorld?.progress ?? {}));
+function saveDex() {
+  const d = dexState(),
+    pr = openWorld.progress;
+  pr.dexSeen = [...d.seen];
+  pr.gold = d.gold;
+  openWorld.save();
+}
+// A new page: any wild one (or one of yours) close enough to see, checked a few times a second.
+function dexStep(dt, past) {
+  const g = $('gold');
+  if (g) {
+    const show = past || dexState().gold > 0;
+    if (g.hidden === show) g.hidden = !show;
+    if (show) g.textContent = `💰 ${dexState().gold}`;
+  }
+  if (!past || (dexLook -= dt) > 0) return;
+  dexLook = 0.4;
+  const me = robot ? robot.pos : s.car.pos;
+  for (const [id, d] of wildViews) {
+    const w = wildLeft(herd()).find(x => x.id === id);
+    if (!w || !d.root.visible) continue;
+    if (
+      Math.hypot(d.root.position.x - me[0], d.root.position.z - me[2]) > (w.far ? SEE_RANGE * 3 : SEE_RANGE)
+    )
+      continue;
+    if (see(dexState(), w.kind)) {
+      saveDex();
+      audio.radio();
+      callout(`📖 New in the Dino Book: ${DINO_KINDS[w.kind].name}!`, 3200);
+    }
+  }
+}
 function sayAloud() {
   askTyped('💬 Say something:', {placeholder: 'hello'}).then(v => {
     if (v == null) return;
@@ -3790,6 +3838,12 @@ function statRows() {
 }
 const ui = createWorldUI({
   stats: statRows,
+  dex: () =>
+    openWorld && {
+      pages: pages(dexState(), herd().herd),
+      gold: dexState().gold,
+      portrait: (model, ready) => (portraits ??= createPortraits(renderer)).get(model, ready)
+    },
   world: openWorld,
   getState: () => ({
     pos: s.car.pos,
@@ -4219,6 +4273,7 @@ function frame(now) {
       outlawStep(dt);
       digStep(dt, now);
       wildStep(dt, openWorld?.era?.() === 'past');
+      dexStep(dt, openWorld?.era?.() === 'past');
       edgeHint(now);
       legendStart();
       if (adventure) {
@@ -4769,6 +4824,7 @@ window.__gunsOnlyRC = {
   }),
   era: () => openWorld?.era?.() ?? 'present',
   toyDino: () => toyDino,
+  dex: () => openWorld && {seen: [...dexState().seen], gold: dexState().gold},
   herd: () =>
     herdState && {
       herd: herd().herd,

@@ -360,6 +360,13 @@ alongside on your dinosaur and jumping aboard; a stampede of plastic cattle (and
 duel (hit the outlaw toy's hat and he pops apart, as all bad toys do); lassoing a runaway stagecoach;
 a sheriff's star as the small-key equivalent in the Lake Town.
 
+**Digging is the robot's whole point** (owner, 31 Oct): "the main attraction of transforming into
+a robot-person-like toy in the light and dark worlds is the ability to do minecraft digging, and from
+there we have a whole game built around it with zelda-like features." On foot, in either world, you
+can dig: straight down through the layers to the portal layer and out the other side into the
+other world (the upside down, both ways), and the blocks you dig are what you build with. The
+Zelda structure (dungeons, items, bosses) sits on top of the digging, not beside it.
+
 **A Minecraft vibe: steam farming and digging** (owner, 31 Oct): "if we're doing old timey with
 dinosaurs maybe we can have some old steam harvesting equipment and farming and stuff like that.
 Make it almost a minecraft vibe in this game world. Maybe also you can always mine-craft mine down
@@ -396,6 +403,26 @@ side, the way a western does, with nothing real at stake:
   people (there are none to hurt) and never the land's creatures and spirits: the tortoise elder and
   the spring help whoever is kind to them, either side. No real crimes beyond toy-box mischief, and
   no permanent lock-out: switch sides on a later visit, and both endings get you home.
+
+**Collect, earn, build a ranch** (owner, 31 Oct): "this is where the whole thing can be a bit
+pokemon, like, have a pokedex style thing of different dinosaurs and creatures, hell maybe the
+player can buy a dinosaur ranch from enough mining y'know? build an economy into it, make them buy
+supplies in town, play some veterinarian medicine, etc etc. But they're the only flying RC car /
+transformer in the dark world. Fish outta water."
+- **The Dino Book** (our own, not a copy of any game's): one page per kind of toy animal and
+  creature, a silhouette until you've seen one, its picture once seen, a star once befriended. It
+  fills as you explore, which is the "visible before reachable" rule as a collection.
+- **An economy small enough for a 6-year-old**: gold from digging (the gold seam) and from jobs
+  (herding, harvesting, rounding up strays) is the one currency. The general store sells supplies:
+  feed to win over shy dinosaurs, medicine, seed, a lasso. Prices are small whole numbers.
+- **The ranch**: save up and buy the dinosaur ranch outside the Lake Town; your herd lives there,
+  you build pens and a barn with the blocks you dig, and it grows as you do.
+- **Vet medicine**: a hurt or sick toy animal (a thorn in a paw, a cold, a lost key-wind) needs the
+  right supplies and a little care game (choose the bandage, warm the blanket, wind the key). Animals
+  you've nursed are friends for good.
+- **Fish out of water**: in the dark world you're the only toy who can transform and fly. Toys and
+  animals there have never seen an RC car; they stare, follow and gossip, and the outlaws want what
+  you are.
 
 **Portals all over the map** (owner, 31 Oct). The spirit cave is the first crossing, not the only
 one. Once you've been through it, portals around the world wake up, and each links two places
