@@ -1,5 +1,6 @@
 import * as T from '../vendor/three.module.js';
 import {makeRobotBody, poseRobotBody} from './robot-body.js';
+import {CHARACTERS} from './open-world/characters.js';
 
 // The dark world's old toys (docs/design/adventure: the past is a toy western). Same physics as
 // the car and the robot; only the toy you see changes, as Link turns into a bunny.
@@ -220,8 +221,14 @@ export function poseRiggedDino(d, car, rideHeight = 0.1, dt = 1 / 60) {
   d.root.position.set(...car.pos);
   d.root.quaternion.set(...car.q);
   d.root.translateY(-rideHeight);
-  const speed = Math.hypot(car.vel[0], car.vel[2]),
-    ground = {walk: 0.3, run: 0.833},
+  // Each kind's own stride speeds (characters.js CHARACTERS[kind].clips[*].groundSpeedMps).
+  const clips = CHARACTERS[d.kind]?.clips ?? CHARACTERS.dino.clips,
+    speed = Math.hypot(car.vel[0], car.vel[2]),
+    ground = {
+      walk: clips.walk?.groundSpeedMps || 0.3,
+      run: clips.run?.groundSpeedMps || 0.833,
+      gallop: clips.gallop?.groundSpeedMps || 4
+    },
     airborne = car.contacts === 0;
   d.air = airborne ? d.air + dt : 0;
   if (d.air > 0.18 && d.clip !== 'jump') d.play('jump', {then: 'run', fade: 0.1});
@@ -232,7 +239,7 @@ export function poseRiggedDino(d, car, rideHeight = 0.1, dt = 1 / 60) {
       clip = speed < 0.25 ? 'idle' : speed < 2.2 ? 'walk' : gallop && speed > 5 ? 'gallop' : 'run';
     const rate =
       clip === 'gallop'
-        ? Math.min(2.2, speed / (4 * RIG_SCALE))
+        ? Math.min(2.2, speed / (ground.gallop * RIG_SCALE))
         : speed / (ground[clip] * RIG_SCALE * (clip === 'run' ? (gallop ? 2 : 6) : 4));
     d.play(clip, {timeScale: clip === 'idle' ? 1 : Math.min(3, Math.max(0.5, rate))});
   }
@@ -247,7 +254,7 @@ export function tintDino(d, [body, spikes]) {
     d.root.traverse(o => {
       if (!o.isMesh) return;
       const one = m => {
-        if (m.name === 'Dino_Green' || m.name === 'Dino_Orange') {
+        if (/(_Green|_Body|_Orange|_Accent)$/.test(m.name)) {
           const c = (d.tint[m.name] ??= m.clone());
           return c;
         }
@@ -256,8 +263,7 @@ export function tintDino(d, [body, spikes]) {
       o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material);
     });
   }
-  d.tint.Dino_Green?.color.set(body);
-  d.tint.Dino_Orange?.color.set(spikes);
+  for (const [name, m] of Object.entries(d.tint)) m.color.set(/(_Green|_Body)$/.test(name) ? body : spikes);
   return d;
 }
 /** A wild one: no saddle (it hasn't been ridden). */

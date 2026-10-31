@@ -1,15 +1,17 @@
 // Your herd of dinosaurs (docs/design/adventure: "if you befriend different dinos then you can
 // summon mounts"). Toy dinosaurs live wild in the dark world; walk up to one on foot, give it a
 // name and it joins your herd. Say a name (Y) and that one comes running to be ridden. Each kind
-// will have its own use (the design doc's roster); only the T. rex has a model so far, so the
-// herd is T. rexes in their own colours until the others arrive. Pure: saved state and matching.
+// has its own model, body and pace; T. rexes come in their own colour pairs, the other kinds wear
+// their own palettes. The quetzalcoatlus is won at its nest (nest.mjs). Pure: saved state and matching.
 import {valleyPoint} from './spirit-mountain.mjs';
 import {sounds, clean} from './typed.mjs';
 
 export const DINO_KINDS = Object.freeze({
-  rex: Object.freeze({name: 'T. rex', model: 'dino', can: 'scare'})
-  // The rest of the roster waits for models (characters.js): long-neck, triceratops, raptor,
-  // ankylosaur, pterosaur, stegosaur.
+  rex: Object.freeze({name: 'T. rex', model: 'dino', can: 'scare', tint: true}),
+  raptor: Object.freeze({name: 'Raptor', model: 'raptor', can: 'leap'}),
+  longneck: Object.freeze({name: 'Long-neck', model: 'longneck', can: 'reach'}),
+  triceratops: Object.freeze({name: 'Triceratops', model: 'triceratops', can: 'charge'})
+  // Still to come (design doc roster): ankylosaur, stegosaur; the quetzalcoatlus flies (nest.mjs).
 });
 // Body and spike colours, one pair per dinosaur in the order you befriend them.
 export const DINO_COLOURS = Object.freeze([
@@ -30,8 +32,9 @@ const at = (along, across) => {
 export const WILD = Object.freeze(
   [
     {id: 'wild-1', kind: 'rex', home: at(575, 50), colour: 1},
-    {id: 'wild-2', kind: 'rex', home: at(604, 50), colour: 2},
-    {id: 'wild-3', kind: 'rex', home: at(540, 47), colour: 3}
+    {id: 'wild-2', kind: 'raptor', home: at(604, 50), colour: 2},
+    {id: 'wild-3', kind: 'longneck', home: at(540, 47), colour: 3},
+    {id: 'wild-4', kind: 'triceratops', home: at(522, 52), colour: 4}
   ].map(Object.freeze)
 );
 export const BEFRIEND_RANGE = 3;

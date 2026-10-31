@@ -48,8 +48,16 @@ import {
   tintDino,
   wildDino
 } from './toy-western-bodies.js';
-import {loadHerd, befriend, called, wildLeft, wildNear, DINO_COLOURS} from './open-world/herd.mjs';
-import {prepareCharacters, spawnCharacter} from './open-world/characters.js';
+import {
+  loadHerd,
+  befriend,
+  called,
+  wildLeft,
+  wildNear,
+  DINO_COLOURS,
+  DINO_KINDS
+} from './open-world/herd.mjs';
+import {prepareCharacters, spawnCharacter, hasCharacter} from './open-world/characters.js';
 import {ask, typing} from './open-world/type-prompt.js';
 import {say, nameFrom} from './open-world/typed.mjs';
 import {createAdventure} from './open-world/adventure.js';
@@ -2436,7 +2444,9 @@ let portalTravelling = false,
   toyDino = null,
   toyCowboy = null,
   riggedDino = null,
-  riggedLoad = null;
+  riggedLoad = null,
+  rigs = new Map(),
+  rigsLoading = new Set();
 // The Lake Town's outlaws (open-world/outlaws.mjs): ride the dinosaur through them, or fight on foot.
 let outlawWarned = false;
 function outlawStep(dt) {
@@ -2611,6 +2621,11 @@ function sayAloud() {
         mountUp();
         callout(`🦖 ${who.dino.name} comes running!`, 3200);
       } else if (swap) {
+        // A different dinosaur under you: its own body and pace (physics/vehicles.mjs DINO_MOUNTS).
+        const p = roamCarParams(),
+          pos = [...s.car.pos];
+        pos[1] += rideHeight(p) - rideHeight(s.car.params) + 0.05;
+        Object.assign(s.car, createCar(p, pos, readout(s).yaw));
         callout(`🦖 ${who.dino.name} swaps in!`, 3200);
         audio.pickup();
       } else callout(`🦖 ${who.dino.name} is right here, under you!`, 3200);
@@ -2647,7 +2662,7 @@ function nameDino() {
 const wildViews = new Map();
 let wildAsking = null;
 function wildStep(dt, past) {
-  if (!riggedDino || !openWorld) {
+  if (!openWorld || !past) {
     for (const v of wildViews.values()) v.root.visible = false;
     return;
   }
@@ -2657,7 +2672,14 @@ function wildStep(dt, past) {
     t = performance.now() / 1000;
   for (const w of wildLeft(h))
     if (!wildViews.has(w.id)) {
-      const d = wildDino(tintDino(spawnCharacter(scene, 'dino', {clip: 'idle'}), DINO_COLOURS[w.colour]));
+      // Each kind's own model, loaded the first time one is near; T. rexes in their colour pairs.
+      const kind = DINO_KINDS[w.kind];
+      if (!hasCharacter(kind.model)) {
+        prepareCharacters([kind.model]).catch(() => {});
+        continue;
+      }
+      const d = wildDino(spawnCharacter(scene, kind.model, {clip: 'idle'}));
+      if (kind.tint) tintDino(d, DINO_COLOURS[w.colour]);
       wildViews.set(w.id, d);
     }
   for (const [id, d] of wildViews) {
@@ -2683,7 +2705,7 @@ function wildStep(dt, past) {
   const w = past && robot && !wildAsking && !typing() ? wildNear(h, me) : null;
   if (w) {
     wildAsking = w.id;
-    askTyped('🦖 A wild T. rex sniffs you! Give it a name to make friends:', {
+    askTyped(`🦖 A wild ${DINO_KINDS[w.kind].name} sniffs you! Give it a name to make friends:`, {
       placeholder: 'Spike',
       max: 12
     }).then(v => {
@@ -2703,7 +2725,7 @@ function wildStep(dt, past) {
 }
 // The car form's physics: in the dark world (the past) it is the ridden dinosaur's bigger body.
 function roamCarParams() {
-  if (openWorld?.era?.() === 'past') return mountParams();
+  if (openWorld?.era?.() === 'past') return mountParams(herd().herd[herd().mount]?.kind ?? 'rex');
   return urlMode === 'legend'
     ? legendCarParams(LEGEND_CARS[adventure?.inventory.car] ? adventure.inventory.car : 'starter')
     : vehicleParams(bodyKind === 'jet' || !bodyKind ? 'buggy' : bodyKind);
@@ -4021,19 +4043,34 @@ function frame(now) {
   {
     const past = openWorld?.era?.() === 'past';
     polish?.setOld?.(past ? 0.65 : 0); // The ridden dinosaur: the rigged one (open-world/characters.js) once loaded, the parts-built one until then.
-    if (past && !riggedLoad)
-      riggedLoad = prepareCharacters(['dino'])
-        .then(ok => {
-          if (ok) riggedDino = rideRiggedDino(spawnCharacter(scene, 'dino'));
-          if (riggedDino) riggedDino.root.visible = false;
-        })
-        .catch(() => {});
+    // One rig per kind (open-world/herd.mjs DINO_KINDS), loaded the first time that kind is ridden;
+    // until it's ready the last rig (or the parts-built dinosaur) stands in.
+    if (past) {
+      const active = herd().herd[herd().mount],
+        model = DINO_KINDS[active?.kind ?? 'rex']?.model ?? 'dino';
+      if (!rigs.has(model) && !rigsLoading.has(model)) {
+        rigsLoading.add(model);
+        prepareCharacters([model])
+          .then(ok => {
+            if (!ok) return;
+            const d = rideRiggedDino(spawnCharacter(scene, model));
+            d.root.visible = false;
+            rigs.set(model, d);
+          })
+          .catch(() => {});
+      }
+      const want = rigs.get(model);
+      if (want && want !== riggedDino) {
+        if (riggedDino) riggedDino.root.visible = false;
+        riggedDino = want;
+      }
+    }
     if (past && form === 'car') {
       car.visible = false;
       if (!typing()) nameDino();
       if (riggedDino) {
         const a = herd().herd[herd().mount];
-        if (a && riggedDino.tinted !== a)
+        if (a && riggedDino.tinted !== a && DINO_KINDS[a.kind]?.tint && riggedDino.kind === 'dino')
           riggedDino.tinted = tintDino(riggedDino, DINO_COLOURS[a.colour]) && a;
       }
       if (riggedDino) {
