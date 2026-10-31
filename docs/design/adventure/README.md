@@ -7,6 +7,12 @@ half). Below, the dark world is a dinosaur western with steam farms, outlaws and
 ground (the long-way-home half). New light-world content leans toward drones and sci-fi rather than
 more base realism.
 
+**The formula for the dark world** (owner, 31 Oct): **Minecraft's UX, Zelda's vibes, set in a
+dinosaur Wild West.** Minecraft for how you act on the world (dig, gather, craft, build, blocky
+farm animals); Zelda for how it feels (a world to explore, dungeons and items, a village with its
+chickens, kindness rewarded); the setting is ours: toy cowboys, dinosaurs and steam farms. Take the
+genre conventions, never a specific game's characters or designs.
+
 Design draft, 30 Oct 2026. The primary reference is **A Link to the Past (SNES)** and **Ocarina of
 Time (N64)**. Everything else is flavour on that structure: Toy Story, Stranger Things and IT's
 small-town uncanny, the desert south-west, and an original fantasy spirit world. The player is the
