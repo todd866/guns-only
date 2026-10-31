@@ -55,6 +55,7 @@ import {createBooster} from './booster.js';
 import {buildHighSchool} from './high-school.js';
 import {createHotWheels} from './hot-wheels.js';
 import {createCountryClub} from './country-club.js';
+import {createMeadow} from './meadow.js';
 import {
   LOCATIONS,
   EVENTS,
@@ -336,6 +337,13 @@ export async function loadOpenWorld(search) {
     farmScene = null;
   const setEra = era => {
     const past = era === 'past';
+    if (past) {
+      stream.world.openGate('era-club');
+      stream.world.closeGate('era-meadow');
+    } else {
+      stream.world.closeGate('era-club');
+      stream.world.openGate('era-meadow');
+    }
     mountainView?.setPast(past);
     if (past) stream.world.openGate('era-dam');
     else stream.world.closeGate('era-dam');
@@ -371,6 +379,7 @@ export async function loadOpenWorld(search) {
     highSchool,
     hotWheels,
     club,
+    meadow,
     route = [],
     target = null,
     lastTile = '',
@@ -605,12 +614,37 @@ export async function loadOpenWorld(search) {
       jetDecks = createJetDecks(scene, stream.world);
       booster = createBooster(scene, (x, z) => elevationAt(elevation, x, z));
       hotWheels = createHotWheels(scene, stream.world);
-      club = createCountryClub(scene, stream.world, (x, z) => elevationAt(elevation, x, z));
+      // The club in the present, the spring meadow in the past (meadow.js): each one's collision on
+      // its own era gate, so neither leaves invisible walls in the other time.
+      club = createCountryClub(
+        scene,
+        {
+          addTri: (a, b, c, s) => stream.world.addTri(a, b, c, s, 'era-club'),
+          addQuad: (a, b, c, d, s) => {
+            stream.world.addTri(a, b, c, s, 'era-club');
+            stream.world.addTri(a, c, d, s, 'era-club');
+          },
+          raycast: stream.world.raycast
+        },
+        (x, z) => elevationAt(elevation, x, z)
+      );
+      meadow = createMeadow(scene, stream.world, (x, z) => elevationAt(elevation, x, z));
+      if (timeGates.era() === 'past') stream.world.openGate('era-club');
+      else stream.world.openGate('era-meadow');
       corridor = buildCorridorArt(scene);
     },
     season,
     hotWheels: () => hotWheels,
     club: () => club,
+    meadow: () => meadow,
+    /** QA only: jump straight to an era (headless captures can't easily drive through a gate). */
+    qaEra(era) {
+      timeGates.goTo(era, 0);
+      setEra(era);
+    },
+    /** The roundup at the spring meadow (past only): returns its events. */
+    meadowStep: (dt, pos) =>
+      meadow?.step(dt, pos ? [pos[0], pos[2]] : null, timeGates.era() === 'past') ?? [],
     boosterStep: (dt, pos) => booster?.step(dt, pos) ?? [],
     booster: () => booster,
     trickOrTreat: (pos, trick, time, dt) => trickOrTreat?.step(pos, trick, time, dt) ?? [],
@@ -674,7 +708,7 @@ export async function loadOpenWorld(search) {
       landmarks?.update(time, pos, camera);
       highSchool?.update?.(1 / 60);
       hotWheels?.update(1 / 60);
-      club?.update(1 / 60, pos);
+      club?.update(1 / 60, pos, timeGates.era() !== 'past');
       activities?.update(time, pos);
       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
       bowlingVisual?.update(golf);
@@ -788,6 +822,7 @@ export async function loadOpenWorld(search) {
       venue = null;
       halloween?.dispose();
       club?.dispose();
+      meadow?.dispose();
       hotWheels?.dispose();
       highSchool?.dispose();
       booster?.dispose();

@@ -337,6 +337,38 @@ pterosaur kite. In the slice the dinosaur still uses the car's physics underneat
   present, are open in the past.
 - **A steam train** runs the valley line where the present-day train bridge stands.
 
+**Two separate worlds, the same playable space** (owner, 31 Oct): "light world and dark world should
+both have the same playable spaces. If that extends past the base, no problem, just make a bigger
+world." And: "dark and light worlds *are* separate." So the dark world is its own world, not the
+light world with things hidden and swapped: you are in one or the other, crossing by the portals
+(time gates, digging down). It has the same extent and lie of the land, so wherever you can drive in
+one you can drive in the other, and the twins table below says what stands at each place in each
+world. Wherever the world grows, both grow. (The slice held the past only round the mountain and
+valley and faded you home outside it, dark-world.mjs pastHolds; that limit goes.)
+
+**Try anything; the physics decides, and things break** (owner, 31 Oct): "if you're driving a big
+fast rc car with street tyres, then it should break if you try and use it on a dirt track in the
+dark world, but you should be allowed to try." And: "we need a damage model eventually too."
+- Nothing is gated by vehicle or world: any car can go anywhere either world lets you drive. Fit is
+  physics, not a rule (the flight game's precedent: gear down lands anywhere, an unsuitable surface
+  rips the gear off).
+- A damage model, eventually: parts wear and break by what you put them through (street tyres
+  shredding on rock, low suspension bottoming out on a dirt track, a hard landing bending an arm),
+  and the car shows it and drives like it (a wobble, a pull to one side, a lost wheel), limping, not
+  dying, then fixed in the Garage. Kid mode is gentler, never off.
+
+**The underground is Minecraft** (owner, 31 Oct): "we want the underground to be like minecraft,
+with stuff you can dig up, crafting, and these portals that randomly appear. The only difference tho
+is that not everything is persistent between sessions, like, if I dig a big hole and destroy the
+base, next time I login it might not be there. But the underground cavern setup will always be the
+same." And: "eventually we can make a thing where you can reinforce your mine shaft and then it
+becomes persistent."
+- Under both worlds: a fixed cavern layout (the same every session), things to dig up, crafting,
+  and portals between the worlds that turn up at random as you dig.
+- What you dig and break is not kept between sessions: a hole through the base can be healed next
+  time. The caverns themselves never change.
+- Later: reinforce a mine shaft (timbering) and that shaft persists.
+
 **Why people are here, then and now** (owner, 31 Oct: "certain places attract people... we'll
 need to think about this stuff, always"). The rule: every place in the present exists for a reason
 the land gave it, and the past shows that reason raw. In a desert valley the reason is nearly always
