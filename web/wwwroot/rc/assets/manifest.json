@@ -545,9 +545,9 @@
       "kind": "model",
       "license": {
         "attribution": "",
-        "id": "unknown",
-        "redistributable": false,
-        "source": "unknown"
+        "id": "MIT",
+        "redistributable": true,
+        "source": "repository (code-authored geometry via tools/rc/export-heroes.mjs / export-landmarks.mjs, baked by tools/rc/blender/bake_hero.py)"
       },
       "locked": false,
       "lods": [
@@ -557,9 +557,8 @@
           "source": "heroes/A-10.glb"
         }
       ],
-      "note": "no provenance recorded; a human must supply source and licence",
       "path": "heroes/A-10.glb",
-      "provenance": "unknown",
+      "provenance": "heroes/provenance.json",
       "sha256": "b3c1791e26081fee226d8063a96afb4c1e8ced732f487f5b2ff0486cfc171a82",
       "sizeBytes": 184576
     },
@@ -569,14 +568,13 @@
       "kind": "model",
       "license": {
         "attribution": "",
-        "id": "unknown",
-        "redistributable": false,
-        "source": "unknown"
+        "id": "MIT",
+        "redistributable": true,
+        "source": "repository (code-authored geometry via tools/rc/export-heroes.mjs / export-landmarks.mjs, baked by tools/rc/blender/bake_hero.py)"
       },
       "locked": false,
-      "note": "no provenance recorded; a human must supply source and licence",
       "path": "heroes/A-10.glb.gz",
-      "provenance": "unknown",
+      "provenance": "heroes/provenance.json",
       "sha256": "a4352117ad0870e49b5aa47bfd77fa691aee362d12d93ef7d1f233d423f32796",
       "sizeBytes": 51301
     },
@@ -585,9 +583,9 @@
       "kind": "model",
       "license": {
         "attribution": "",
-        "id": "unknown",
-        "redistributable": false,
-        "source": "unknown"
+        "id": "MIT",
+        "redistributable": true,
+        "source": "repository (code-authored geometry via tools/rc/export-heroes.mjs / export-landmarks.mjs, baked by tools/rc/blender/bake_hero.py)"
       },
       "locked": false,
       "lods": [
@@ -597,9 +595,8 @@
           "source": "heroes/B-52.glb"
         }
       ],
-      "note": "no provenance recorded; a human must supply source and licence",
       "path": "heroes/B-52.glb",
-      "provenance": "unknown",
+      "provenance": "heroes/provenance.json",
       "sha256": "7b691f8dfd31bb6c90c0cf62b784b92cb2500aa3d21a99a0d882c35774693e34",
       "sizeBytes": 199384
     },
@@ -609,14 +606,13 @@
       "kind": "model",
       "license": {
         "attribution": "",
-        "id": "unknown",
-        "redistributable": false,
-        "source": "unknown"
+        "id": "MIT",
+        "redistributable": true,
+        "source": "repository (code-authored geometry via tools/rc/export-heroes.mjs / export-landmarks.mjs, baked by tools/rc/blender/bake_hero.py)"
       },
       "locked": false,
-      "note": "no provenance recorded; a human must supply source and licence",
       "path": "heroes/B-52.glb.gz",
-      "provenance": "unknown",
+      "provenance": "heroes/provenance.json",
       "sha256": "34be1b1e2d607d124d7ef753643697f4b822eb19464ed48874e8751b81f847ce",
       "sizeBytes": 43197
     },
@@ -625,9 +621,9 @@
       "kind": "model",
       "license": {
         "attribution": "",
-        "id": "unknown",
-        "redistributable": false,
-        "source": "unknown"
+        "id": "MIT",
+        "redistributable": true,
+        "source": "repository (code-authored geometry via tools/rc/export-heroes.mjs / export-landmarks.mjs, baked by tools/rc/blender/bake_hero.py)"
       },
       "locked": false,
       "lods": [
@@ -637,9 +633,8 @@
           "source": "heroes/C-17.glb"
         }
       ],
-      "note": "no provenance recorded; a human must supply source and licence",
       "path": "heroes/C-17.glb",
-      "provenance": "unknown",
+      "provenance": "heroes/provenance.json",
       "sha256": "79aeef1b7d7854421841753606f485ef6a15c19ddc0f1521ce2f96939b8e12fa",
       "sizeBytes": 185660
     },
@@ -649,14 +644,13 @@
       "kind": "model",
       "license": {
         "attribution": "",
-        "id": "unknown",
-        "redistributable": false,
-        "source": "unknown"
+        "id": "MIT",
+        "redistributable": true,
+        "source": "repository (code-authored geometry via tools/rc/export-heroes.mjs / export-landmarks.mjs, baked by tools/rc/blender/bake_hero.py)"
       },
       "locked": false,
-      "note": "no provenance recorded; a human must supply source and licence",
       "path": "heroes/C-17.glb.gz",
-      "provenance": "unknown",
+      "provenance": "heroes/provenance.json",
       "sha256": "6a08319067e6c637f9bd6f0da50d138e12364239f8ca6e35e38412889735159a",
       "sizeBytes": 52031
     },
@@ -665,9 +659,9 @@
       "kind": "model",
       "license": {
         "attribution": "",
-        "id": "unknown",
-        "redistributable": false,
-        "source": "unknown"
+        "id": "MIT",
+        "redistributable": true,
+        "source": "repository (code-authored geometry via tools/rc/export-heroes.mjs / export-landmarks.mjs, baked by tools/rc/blender/bake_hero.py)"
       },
       "locked": false,
       "lods": [
@@ -677,9 +671,8 @@
           "source": "heroes/landmarks.glb"
         }
       ],
-      "note": "no provenance recorded; a human must supply source and licence",
       "path": "heroes/landmarks.glb",
-      "provenance": "unknown",
+      "provenance": "heroes/provenance.json",
       "sha256": "437c3708bfff42469f0e4bcb4c91a587939fc334a5a6fe588a7e8af075faa858",
       "sizeBytes": 6309948
     },
@@ -689,14 +682,13 @@
       "kind": "model",
       "license": {
         "attribution": "",
-        "id": "unknown",
-        "redistributable": false,
-        "source": "unknown"
+        "id": "MIT",
+        "redistributable": true,
+        "source": "repository (code-authored geometry via tools/rc/export-heroes.mjs / export-landmarks.mjs, baked by tools/rc/blender/bake_hero.py)"
       },
       "locked": false,
-      "note": "no provenance recorded; a human must supply source and licence",
       "path": "heroes/landmarks.glb.gz",
-      "provenance": "unknown",
+      "provenance": "heroes/provenance.json",
       "sha256": "9068bdb15c95761b0df688c9d8edcd3eb81ca76a1c19600416ddda1a858fd7fd",
       "sizeBytes": 881821
     },

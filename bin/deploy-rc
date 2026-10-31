@@ -26,7 +26,7 @@ echo "deploy-rc: unit tests"
 (cd web/wwwroot/rc && run_job node --test --test-concurrency=2) >"$evidence/unit-tests.txt" 2>&1 || { cat "$evidence/unit-tests.txt"; exit 1; }
 run_job node --test --test-concurrency=2 tools/rc/*.test.mjs tools/rc/harness/*.test.mjs >"$evidence/tool-tests.txt" 2>&1 || { cat "$evidence/tool-tests.txt"; exit 1; }
 echo "deploy-rc: asset manifest (licence, provenance, budgets, completeness)"
-run_job node tools/rc/asset-manifest.mjs check --allow-unknown-license
+run_job node tools/rc/asset-manifest.mjs check
 echo "deploy-rc: package"
 node tools/rc/package-rc.mjs --bundle --out "$dist"
 if [ ! -d web/smoke/node_modules/playwright ]; then (cd web/smoke && npm ci --ignore-scripts --no-audit --no-fund --silent && ./node_modules/.bin/playwright install chromium >/dev/null); fi

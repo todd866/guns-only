@@ -1,0 +1,12 @@
+{
+  "generator": "tools/rc/blender/bake_hero.py",
+  "inputs": {
+    "A-10.glb, B-52.glb, C-17.glb": "tools/rc/export-heroes.mjs → JSON from the original code-authored geometry in web/wwwroot/rc/open-world/aircraft-catalog.js",
+    "landmarks.glb": "tools/rc/export-landmarks.mjs → JSON from web/wwwroot/rc/open-world/landmarks.js"
+  },
+  "editable_sources": "assets/rc/heroes/*.blend (written by bake_hero.py; moved out of the served tree 2026-10-31)",
+  "license": "MIT (original authored geometry and materials; repository licence)",
+  "external_assets": [],
+  "reference_usage": "shapes follow public photographs of the aircraft types in silhouette only; no third-party mesh, texture or livery data",
+  "recorded": "2026-10-31, from the export scripts' own headers (audit 3.3)"
+}
