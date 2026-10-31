@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Saucer Springs placements review</title>
+<style>
+ html,body{margin:0;height:100%;overflow:hidden;background:#9fb4c0;font:12px/1.3 ui-monospace,Menlo,monospace}
+ canvas{display:block;width:100%;height:100%}
+ #hud{position:fixed;left:8px;bottom:8px;color:#fff;background:#0008;padding:4px 7px;border-radius:4px;white-space:nowrap}
+ #views{position:fixed;left:8px;top:8px;display:flex;gap:4px}
+ #views button{font:inherit;padding:3px 8px;border:0;border-radius:3px;background:#fff;cursor:pointer}
+ #views button[aria-pressed=true]{background:#e5532a;color:#fff}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="views"></div>
+<div id="hud">IN-ENGINE review · three r160 · placements.js · <span id="state">loading</span></div>
+<script type="module">
+// Review harness for the placement pipeline: real engine, real loader (preparePlacementKit + loadPlacements +
+// instantiatePlacements), the game's renderer constants (rc/main.js) and open-world LIGHTING.outdoor (visuals.js),
+// copied from character-review.html. The example file is drawn on a flat plane (y null snaps to 0 here; in the
+// game it snaps to the residential terrain). Grey box = buggy-size proxy (0.42 x 0.20 x 0.28 m) for scale.
+import * as T from '../vendor/three.module.js';
+import {LIGHTING, applyLighting, studioEnvironment} from './visuals.js';
+import {preparePlacementKit, loadPlacements, instantiatePlacements} from './open-world/placements.js';
+
+const canvas = document.getElementById('view'), stateEl = document.getElementById('state');
+const renderer = new T.WebGLRenderer({canvas, antialias: true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+renderer.outputColorSpace = T.SRGBColorSpace; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
+const scene = new T.Scene(); scene.background = new T.Color(0x9fb4c0);
+const camera = new T.PerspectiveCamera(63, 1, .06, 600);
+const hemi = new T.HemisphereLight(0xd5edf1, 0x5a624a, 1.5); scene.add(hemi);
+const sun = new T.DirectionalLight(0xffd6a0, 3.2); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); scene.add(sun, sun.target);
+const contactSun = new T.DirectionalLight(0xffe4bd, .65); contactSun.castShadow = true; contactSun.shadow.mapSize.set(1024, 1024);
+Object.assign(contactSun.shadow.camera, {left: -6, right: 6, top: 6, bottom: -6, near: .1, far: 30}); contactSun.shadow.bias = -.00015; contactSun.shadow.normalBias = .015;
+scene.add(contactSun, contactSun.target);
+applyLighting({renderer, hemi, sun, contactSun}, LIGHTING.outdoor);
+Object.assign(sun.shadow.camera, {left: -38, right: 38, top: 38, bottom: -38}); sun.shadow.camera.updateProjectionMatrix();
+sun.userData.dir.set(-.95, 1, .7).normalize(); sun.color.set(0xffe4bf);
+scene.environment = studioEnvironment(renderer); scene.environmentIntensity = .6;
+
+const groundMat = new T.MeshStandardMaterial({color: 0x6b8d4c, roughness: .95});
+const ground = new T.Mesh(new T.PlaneGeometry(1, 1), groundMat); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const proxy = new T.Mesh(new T.BoxGeometry(.28, .20, .42), new T.MeshStandardMaterial({color: 0x9a9ca2, roughness: .6})); proxy.castShadow = proxy.receiveShadow = true; scene.add(proxy);
+
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+
+function focus(cx, cz, span, eye) {
+ ground.position.set(cx, 0, cz); ground.scale.set(span * 3, span * 3, 1);
+ sun.target.position.set(cx, 0, cz); sun.position.copy(sun.userData.dir).multiplyScalar(60).add(sun.target.position);
+ const s = Math.max(20, span * .8); Object.assign(sun.shadow.camera, {left: -s, right: s, top: s, bottom: -s, far: 200}); sun.shadow.camera.updateProjectionMatrix();
+ contactSun.target.position.set(cx, 0, cz); contactSun.position.set(cx - 2, 6, cz + 1.5);
+ camera.position.set(cx + eye[0], eye[1], cz + eye[2]); camera.lookAt(cx, eye[3] ?? 0, cz);
+}
+const centroid = data => { const xs = data.items.map(i => i.pos[0]), zs = data.items.map(i => i.pos[2]);
+ return {cx: (Math.min(...xs) + Math.max(...xs)) / 2, cz: (Math.min(...zs) + Math.max(...zs)) / 2, span: Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs))}; };
+
+let kit = null, example = null, handle = null, view = null, calls = 0;
+const flat = {elevationAt: () => 0};
+const VIEWS = {
+ example: () => { const c = centroid(example); proxy.position.set(c.cx + 1, .1, c.cz + 6); focus(c.cx, c.cz, c.span, [8, 13, 29, 0]); return example; },
+ close: () => { const c = centroid(example); proxy.position.set(c.cx + 1, .1, c.cz + 6); focus(c.cx, c.cz, c.span, [5, 3.2, 12, .6]); return example; },
+ kit: () => {   // every kit prop in a line-up, 4 m apart
+  const items = kit.props.map((prop, i) => ({prop, pos: [(i % 7) * 4.5, null, Math.floor(i / 7) * 9], yaw: 20, scale: 1, variant: 0, collide: false}));
+  proxy.position.set(-2, .1, 3); focus(13.5, 4.5, 30, [0, 9, 22, 1.5]);
+  return {version: 1, name: 'kit-lineup', kit: kit.path, items};
+ },
+};
+function show(name, extra = null) {
+ handle?.dispose(); view = name;
+ const data = extra ?? VIEWS[name]();
+ handle = instantiatePlacements(scene, data, {kit, ...flat});
+ for (const b of document.querySelectorAll('#views button')) b.setAttribute('aria-pressed', String(b.textContent === name));
+ stateEl.textContent = `${data.name} · ${handle.counts.items} items · ${handle.counts.props} props · ${handle.counts.meshes} instanced meshes`;
+ return handle.counts;
+}
+// N copies of the example on a grid: the 300-prop cost check.
+function stress(copies = 8) {
+ const items = [];
+ for (let k = 0; k < copies; k++) for (const it of example.items) items.push({...it, pos: [it.pos[0] + (k % 4) * 45, null, it.pos[2] + Math.floor(k / 4) * 45]});
+ const c = centroid({items}); focus(c.cx, c.cz, c.span, [10, 45, 80, 0]); proxy.position.set(c.cx, .1, c.cz);
+ return show('stress', {...example, name: `stress-x${copies}`, items});
+}
+function render() { renderer.render(scene, camera); calls = renderer.info.render.calls; }
+function frame() { render(); requestAnimationFrame(frame); }
+// Draw calls the placements add (main + shadow passes): render once without them, once with.
+function placementCalls() { handle.root.visible = false; render(); const without = calls; handle.root.visible = true; render(); return {total: calls, withoutPlacements: without, placements: calls - without}; }
+
+const ready = (async () => {
+ kit = await preparePlacementKit('kit/props.glb');
+ example = await loadPlacements(new URL('assets/placements/example-picnic-area.json', document.baseURI).href, {kit});
+ const bar = document.getElementById('views');
+ for (const name of Object.keys(VIEWS)) { const b = document.createElement('button'); b.textContent = name; b.onclick = () => show(name); bar.append(b); }
+ show('example'); requestAnimationFrame(frame);
+ return {props: kit.props, items: example.items.length};
+})();
+function frameTimes(n = 300) {
+ return new Promise(r => { const s = []; let prev = performance.now();
+  const f = now => { s.push(now - prev); prev = now; if (s.length < n) requestAnimationFrame(f); else { s.sort((a, b) => a - b); r({p50: +s[Math.floor(n * .5)].toFixed(2), p95: +s[Math.floor(n * .95)].toFixed(2), max: +s[n - 1].toFixed(2)}); } };
+  requestAnimationFrame(f); });
+}
+function gpu() { const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info'); return gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER); }
+window.__placementsReview = {ready, show, stress, frameTimes, gpu, placementCalls, calls: () => calls, triangles: () => renderer.info.render.triangles, counts: () => handle?.counts, view: () => view};
+</script>
+</body>
+</html>

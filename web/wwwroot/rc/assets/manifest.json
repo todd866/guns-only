@@ -737,6 +737,50 @@
       "sizeBytes": 881821
     },
     {
+      "budgets": {
+        "max_bytes": 1500000,
+        "max_materials": 4,
+        "max_primitives": 64,
+        "max_triangles": 40000
+      },
+      "id": "kit-props-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "kit/kit.provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "kit/props.glb"
+        }
+      ],
+      "path": "kit/props.glb",
+      "provenance": "kit/kit.provenance.json",
+      "sha256": "3049227c840dbff9feae163773d0316fbe9bd1076a6f2d859545aad2bfb006fb",
+      "sizeBytes": 271624
+    },
+    {
+      "derivedFrom": "kit/props.glb",
+      "id": "kit-props-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "kit/kit.provenance.json"
+      },
+      "locked": false,
+      "path": "kit/props.glb.gz",
+      "provenance": "kit/kit.provenance.json",
+      "sha256": "a869023c3cb2943108f336d6e6165411c93d16a07851ef12ace15ee316eb1cf8",
+      "sizeBytes": 53604
+    },
+    {
       "id": "materials-park-paint-atlas-png",
       "kind": "texture",
       "license": {
@@ -765,6 +809,21 @@
       "provenance": "materials/park-paint-atlas.provenance.json",
       "sha256": "3c9d4b822fb2057114baaace35705e84095e636d343aa4c55e54973dce27c45d",
       "sizeBytes": 186616
+    },
+    {
+      "id": "placements-example-picnic-area-json",
+      "kind": "world-data",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "placements/example-picnic-area.provenance.json"
+      },
+      "locked": false,
+      "path": "placements/example-picnic-area.json",
+      "provenance": "placements/example-picnic-area.provenance.json",
+      "sha256": "3eeeb3b5c499783efdf9626d129b45115dc80813d8acbf77fb84244bd39d5d15",
+      "sizeBytes": 4653
     },
     {
       "budgets": {

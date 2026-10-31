@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guns-only.com/rc/placements.schema.json",
+  "title": "Saucer Springs placement file (v1)",
+  "description": "A venue as data: props from a kit GLB with a transform, colour variant and collision flag. Runtime checks the same essentials in web/wwwroot/rc/open-world/placements.js validatePlacements(). Format and authoring: docs/rc-placements.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "kit", "items"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "version": {"const": 1},
+    "name": {"type": "string", "minLength": 1},
+    "note": {"type": "string", "description": "Free text: where it is and why. Ignored at runtime."},
+    "kit": {"type": "string", "pattern": "^[\\w./-]+\\.glb$", "description": "Kit GLB path relative to web/wwwroot/rc/assets, e.g. kit/props.glb. Must not contain '..'."},
+    "palette": {
+      "type": "array", "minItems": 1, "maxItems": 16,
+      "items": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"},
+      "description": "sRGB multipliers indexed by item.variant; applied to a prop's Kit_Paint parts (every part if it has no paint). Index 0 should be #ffffff (authored colour). Default: placements.js DEFAULT_PALETTE."
+    },
+    "items": {
+      "type": "array", "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["prop", "pos"],
+        "properties": {
+          "prop": {"type": "string", "minLength": 1, "description": "Top-level node name in the kit GLB, e.g. bench."},
+          "pos": {
+            "type": "array", "minItems": 3, "maxItems": 3,
+            "prefixItems": [{"type": "number"}, {"type": ["number", "null"]}, {"type": "number"}],
+            "description": "World metres [x, y, z], three.js frame (+Y up). y null = snap the ground contact to the ground (world raycast, else elevationAt, else 0)."
+          },
+          "yaw": {"type": "number", "default": 0, "description": "Degrees about +Y, counter-clockwise seen from above. Yaw 0: the prop's front faces -Z."},
+          "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 20, "default": 1, "description": "Uniform scale about the ground contact."},
+          "variant": {"type": "integer", "minimum": 0, "default": 0, "description": "Index into palette (validated against its length)."},
+          "collide": {"type": "boolean", "default": true, "description": "Add the prop's COL_ proxy to the collision world."}
+        }
+      }
+    }
+  }
+}
