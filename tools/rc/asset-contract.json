@@ -38,7 +38,7 @@
     "wheelbase_m": 0.5,
     "track_m": 0.58,
     "origin": "simulation centre 0.23 m above level ground",
-    "wheel_pivots": "FL/FR local (\u00b10.29, -0.08, -0.25) in glTF; RL/RR z=+0.25",
+    "wheel_pivots": "FL/FR local (±0.29, -0.08, -0.25) in glTF; RL/RR z=+0.25",
     "motion": "Steer_* rotate local Y; Wheel_* rotate local X. Never animate the root scale.",
     "max_primitives": 32
   },
