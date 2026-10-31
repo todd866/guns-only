@@ -71,7 +71,9 @@ test('landmark bake preserves world bounds, tile batches and vertex colors', asy
   });
   assert.ok(tintedGround, 'export retains authored apron colors, not default white');
   assert.ok(meshes < 80 && meshes > 10);
-  assert.ok(triangles > 30000 && triangles < 70000);
+  // Budget, not a snapshot: the 23 Oct bake was 61.6k; the 31 Oct rebake (base dressing has grown,
+  // outdoor ball return removed) is 85.5k in the same 54 meshes. Raise again only with a reason.
+  assert.ok(triangles > 30000 && triangles < 100000);
   const box = new T.Box3().setFromObject(g.scene);
   assert.ok(box.min.x >= -2610 && box.max.x <= 3260);
   assert.ok(box.min.z >= -2310 && box.max.z <= 4060);
