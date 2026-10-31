@@ -125,6 +125,10 @@ crafting, and portals that appear at random.
     lining. They're crafted from what you dig (stone to bricks at the kiln, ore to nails at the
     forge) or bought with gold at the general store (lumber, rope, glass). Anything built from
     them is saved per world and is there next time.
+- **A lasting build always costs something: money or labour** (owner: "it should cost something,
+  either money or labor"). Money is gold at the store; labour is the work of crafting, a little
+  job each time (fire the kiln and pull the bricks out, saw the log, hammer the nails). There is
+  never a free way to make something last.
 - **Reinforced shafts persist** because their lining is a building material, crafted or bought.
 - That ties building to the economy: digging finds raw stuff and gold, crafting and the store turn
   them into materials, and materials make the ranch, pens and barn that last.
