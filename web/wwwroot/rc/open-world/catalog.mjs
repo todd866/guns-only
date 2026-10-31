@@ -11,10 +11,21 @@ import {CLASSIC_LOCATIONS, CLASSIC_EVENTS} from './classic-courses.mjs';
 import {VENUE_LOCATIONS, VENUE_EVENTS} from './expansion-venues.mjs';
 import {PORTAL_EVENT, portalHeight} from './portal-course.mjs';
 import {ROAD_EVENTS} from './road-events.mjs';
+import {SKY_JUMPS} from './sky-dive.mjs';
 // Authored activities in the real Nellis local metre frame. +x east, +z south.
 // Gameplay courses and landmark art are fiction; OSM supplies roads and footprints.
 export const BOUNDS = [-3800, -4600, 3600, 4050]; // north and east grown for Spirit Mountain (spirit-mountain.mjs)
 export const LOCATIONS = [
+  ...SKY_JUMPS.filter(j => j.place !== false).map(j => ({
+    id: j.id,
+    name: j.name,
+    short: j.name,
+    pos: [j.pad[0], 0, j.pad[1]],
+    color: '#f6c944',
+    icon: '🪂',
+    kind: 'activity',
+    game: 'sky-dive'
+  })),
   {
     id: 'gate',
     name: 'Main Gate',
@@ -748,6 +759,8 @@ export function loadProgress(storage) {
   return {
     discovered: ['gate', ...ids(v?.discovered, LOCATIONS).filter(id => id !== 'gate')],
     specimens: ids(v?.specimens, SPECIMENS),
+    skyJumps: Number.isSafeInteger(v?.skyJumps) && v.skyJumps >= 0 ? v.skyJumps : 0,
+    bestLanding: Number.isFinite(v?.bestLanding) && v.bestLanding >= 0 ? v.bestLanding : null,
     golfRoundBest: Number.isInteger(v?.golfRoundBest) && v.golfRoundBest > 0 ? v.golfRoundBest : null,
     roundupBest: Number.isInteger(v?.roundupBest) && v.roundupBest > 0 ? v.roundupBest : null,
     // Version 1 stored one frame (0–10), never a ten-frame record. Even a new zero is a record.

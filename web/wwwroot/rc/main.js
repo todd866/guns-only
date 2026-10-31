@@ -36,6 +36,8 @@ import {createRetreat, stepRetreat, RETREAT} from './physics/retreat.mjs';
 import {DRIVE_KEYS, drivingInput, flightInput, trickInput} from './driving-input.mjs';
 import {createFlight, toggleFlight, FLIGHT} from './physics/flight.mjs';
 import {SCHOOL} from './open-world/flying-school.mjs';
+import {SKY_STEER_HINT, skyLandingText, skyDiveCamera} from './open-world/sky-dive.mjs';
+import {createSkyDiveReport} from './open-world/sky-dive.js';
 import {applyLivery} from './livery.js';
 import {batchCarParts, unbatchCarParts} from './car-batch.js';
 import {createRobot, stepRobot} from './physics/robot.mjs';
@@ -1473,7 +1475,7 @@ function drawFlightHud() {
     hud.hidden = true;
   }
   if (mode !== hudMode && !winged()) {
-    if (hudMode && !mode) callout('🛬 Landed!');
+    if (hudMode && !mode && performance.now() > skyLandingUntil) callout('🛬 Landed!');
     hudMode = mode;
     hud.hidden = !mode;
   }
@@ -3046,6 +3048,9 @@ async function travelTo(id) {
   openWorld.stopSchool();
   hideSchoolCard();
   const {pos, yaw} = p.arrival;
+  openWorld.cancelSkyJump();
+  skyReport?.hide();
+  s.flight.mode = null;
   document.body.classList.toggle('era-past', openWorld.era?.() === 'past');
   if (robot) {
     robot.pos = [pos[0], pos[1] + 0.05, pos[2]];
@@ -4200,12 +4205,38 @@ function skateStep(input) {
     }
   }
 }
+let skyReport = null,
+  skyLandingUntil = 0;
+function skyJumpStep() {
+  if (!openWorld || !race.roam) return;
+  const report = openWorld.stepSkyJump(s.car, s.flight);
+  if (!report) return;
+  skyLandingUntil = performance.now() + 7000;
+  (skyReport ??= createSkyDiveReport()).show(report);
+  audio.finish();
+  callout(skyLandingText(report), 5000);
+}
 function enterLocation() {
   if (!openWorld || paused || !race.roam) return;
   if (openWorld.school()?.active) {
     openWorld.stopSchool();
     hideSchoolCard();
     callout('', 0);
+    return;
+  }
+  if (s.flight.mode || openWorld.skyDive().active) return;
+  if (!robot && form === 'car' && !skate && openWorld.skyJumpNear(s.car.pos)) {
+    if (openWorld.startSkyJump(s.car, s.flight)) {
+      skyReport?.hide();
+      boostOn = false;
+      keys.clear();
+      touchControls?.reset();
+      fireQueued = hopQueued = false;
+      acc = 0;
+      cameraCar = null;
+      audio.radio();
+      callout(SKY_STEER_HINT, 6500);
+    }
     return;
   }
   if (
@@ -4240,6 +4271,7 @@ function enterLocation() {
   const p = openWorld.near(s.car.pos);
   if (!p) return;
   if (p.game === 'flying-school') return;
+  if (p.game === 'sky-dive') return;
   if (p.game) {
     const tee = openWorld.startActivity(p.game, {mode});
     if (!tee) return;
@@ -4277,6 +4309,8 @@ function statRows() {
     ['🚀', 'Booster landings seen', num(pr.boosters)],
     ['✈', 'Flying School trips', num(pr.flyingSchool)],
     ['⭐', 'Flying School best', pr.flyingStars ? `${pr.flyingStars}/9` : '–'],
+    ['🪂', 'Sky jumps', num(pr.skyJumps)],
+    ['🎯', 'Best landing', pr.bestLanding == null ? '–' : `${pr.bestLanding.toFixed(1)} m`],
     ['⛳', 'Best golf round', pr.golfRoundBest ? `${pr.golfRoundBest}` : '–'],
     ['🤠', 'Fastest roundup', pr.roundupBest ? `${pr.roundupBest} s` : '–'],
     ['🎳', 'Bowling best', pr.bowlingBest != null ? `${pr.bowlingBest}/300` : '–'],
@@ -4312,6 +4346,7 @@ const ui = createWorldUI({
     roam: race.roam,
     started,
     flying: !!s.flight.mode,
+    skyJump: !robot && form === 'car' && !skate ? openWorld?.skyJumpNear(s.car.pos)?.id : null,
     skate: !!skateParkAt() && !skate,
     skating: !!skate
   }),
@@ -4505,6 +4540,7 @@ function frame(now) {
         : drive;
       // A winged dinosaur flies with the proximity assist in every mode (no levelling, a late save).
       const fl = {...flightInput(keys), assist: mode === 'kid' || winged(), proximity: winged()};
+      if (s.flight.mode === 'chute') fl.steer = drive.steer;
       fl.burner = boostOn && race.roam && !skate;
       {
         const was = burning;
@@ -4542,6 +4578,7 @@ function frame(now) {
         1 / 120
       );
       hotWheelsPost();
+      skyJumpStep();
       skateStep(skateInput);
       boardStep(skateInput);
       if (openWorld)
@@ -5107,7 +5144,9 @@ function frame(now) {
   const camYaw = camHeading + lookYaw;
   // The boss fight pulls back and up so the robot and the whole excavator share the frame.
   // Riding a dinosaur in the dark world (the past) puts the toy up high: the camera pulls back with it.
-  const mount = riggedDino?.root.visible ? 2 : toyDino?.visible ? 2.6 : 1,
+  const jumpCamera =
+      s.flight.mode === 'chute' && openWorld?.skyDive().active ? skyDiveCamera(c.pos, camYaw) : null,
+    mount = riggedDino?.root.visible ? 2 : toyDino?.visible ? 2.6 : 1,
     back = bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount,
     eye = [r.x, r.y + 0.12 * mount, r.z];
   desired.set(
@@ -5115,6 +5154,7 @@ function frame(now) {
     r.y + (bossAt ? 0.95 : mount > 1 ? 0.8 * mount : 0.55) + Math.sin(lookPitch) * back,
     r.z + Math.cos(camYaw) * back * Math.cos(lookPitch)
   );
+  if (jumpCamera) desired.fromArray(jumpCamera.eye);
   const ray = [desired.x - eye[0], desired.y - eye[1], desired.z - eye[2]],
     dist = Math.hypot(...ray),
     hit = course.world.raycast(
@@ -5145,7 +5185,8 @@ function frame(now) {
   }
   const portrait = camera.aspect < 0.8,
     portraitAim = -0.3 - Math.max(0, 740 - innerHeight) * 0.003;
-  if (vertArc) target.set(r.x, r.y + 0.1, r.z);
+  if (jumpCamera) target.fromArray(jumpCamera.look);
+  else if (vertArc) target.set(r.x, r.y + 0.1, r.z);
   else
     target.set(
       r.x + Math.sin(camYaw) * 1.05,

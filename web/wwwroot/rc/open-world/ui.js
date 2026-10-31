@@ -23,6 +23,7 @@ import {JET_KINDS, JET_NAMES} from '../jets.js';
 import {LIVERIES, TRIMS, liveryUnlocked, PUMPKIN_CAR} from '../livery-data.mjs';
 import {DARK_PLACES} from './dark-world.mjs';
 import {createDinoInspect} from './inspect.js';
+import {SKY_HINT} from './sky-dive.mjs';
 const $ = id => document.getElementById(id);
 // One map, one destination. Controls remain ordinary labelled buttons on touch and keyboard.
 export function createWorldUI({
@@ -780,6 +781,10 @@ export function createWorldUI({
     if (interactText === text + key) return;
     interactText = text + key;
     const button = $('interact');
+    if (key == null) {
+      renderHint(button, text);
+      return;
+    }
     if (text.startsWith('🎳')) renderHint(button, key ? `${text} [${key}]` : text);
     else {
       const cap = document.createElement('kbd');
@@ -829,8 +834,14 @@ export function createWorldUI({
         const p = world.near(s.pos),
           golf = world.activity();
         $('interact').hidden =
-          (!p && !s.skate && (!golf || golf.done)) || !s.roam || s.paused || s.skating || s.flying;
-        if (s.robot && (p?.game === 'bowling' || golf?.kind === 'bowling')) {
+          (!p && !s.skate && (!golf || golf.done)) ||
+          !s.roam ||
+          s.paused ||
+          s.skating ||
+          s.flying ||
+          (p?.game === 'sky-dive' && !s.skyJump);
+        if (s.skyJump) interactLabel(SKY_HINT, null);
+        else if (s.robot && (p?.game === 'bowling' || golf?.kind === 'bowling')) {
           const ready = approachLane(s.pos);
           $('interact').hidden ||= !!golf?.launched;
           interactLabel(
@@ -855,17 +866,19 @@ export function createWorldUI({
               ? ['🛹 Skate', 'E']
               : p.game === 'bowling'
                 ? ['🎳 Car Bowling · Play', 'E']
-                : p.game === 'golf'
-                  ? ['Car Golf · Play', 'E']
-                  : p.game === 'flying-school'
-                    ? ['Flying School · Play', 'E']
-                    : !canEnter(progress, p)
-                      ? [`◇ ${progress.specimens.length}/${SPECIMENS.length} · Map`, 'Tab']
-                      : p.kind === 'discovery'
-                        ? [`${p.short} · Map`, 'Tab']
-                        : p.id === 'skatepark'
-                          ? ['Race', 'E']
-                          : [`${p.name} · Go in`, 'E'])
+                : p.game === 'sky-dive'
+                  ? [SKY_HINT, null]
+                  : p.game === 'golf'
+                    ? ['Car Golf · Play', 'E']
+                    : p.game === 'flying-school'
+                      ? ['Flying School · Play', 'E']
+                      : !canEnter(progress, p)
+                        ? [`◇ ${progress.specimens.length}/${SPECIMENS.length} · Map`, 'Tab']
+                        : p.kind === 'discovery'
+                          ? [`${p.short} · Map`, 'Tab']
+                          : p.id === 'skatepark'
+                            ? ['Race', 'E']
+                            : [`${p.name} · Go in`, 'E'])
           );
       }
     },
