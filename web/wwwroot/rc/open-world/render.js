@@ -274,7 +274,7 @@ export function createTileRenderer(scene, elevation = null, residentialTerrain =
     if (elevation) {
       for (const points of groundTriangles(elevation, b, terrainStep(b), terrainSite)) {
         const paint = canyonPaint(points) ?? mountainPaint(points) ?? ['sand', 1];
-        tri(paint[0], ...points.map(q => [q[0], q[1] - 0.025, q[2]]), paint[1], true);
+        tri(paint[0], ...points.map(q => [q[0], q[1] - 0.025, q[2]]), paint[1], true, true);
       }
     } else
       poly(
