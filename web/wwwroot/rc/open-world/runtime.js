@@ -45,6 +45,8 @@ import {createCanyonView, canyonFarGround} from './canyon.js';
 import {createDarkWorld} from './dark-world.js';
 import {createFlock, stepFlock, YARD} from './chickens.mjs';
 import {createChickens} from './chickens.js';
+import {createCamp, stepCamp, CAMP, NEAR_RANGE} from './paiute-camp.mjs';
+import {createPaiuteCamp} from './paiute-camp.js';
 import {createBadToys} from './bad-toys.js';
 import {createGang, stepGang} from './outlaws.mjs';
 import {createDig, stepDig, digFloor} from './dig.mjs';
@@ -366,8 +368,10 @@ export async function loadOpenWorld(search) {
   let darkClock = null,
     outlawView = null,
     chickenView = null,
+    campView = null,
     outlawClock = 0;
   const flock = createFlock(),
+    campLife = createCamp(),
     gang = createGang(),
     dig = createDig();
   let digView = null,
@@ -499,6 +503,18 @@ export async function loadOpenWorld(search) {
       return ev;
     },
     flock: () => flock,
+    // Southern Paiute camp (paiute-camp.mjs): past era only, family life by the water.
+    paiuteCamp(o) {
+      const past = timeGates.era() === 'past',
+        near = past && Math.hypot(o.pos[0] - CAMP.centre[0], o.pos[2] - CAMP.centre[1]) < NEAR_RANGE;
+      if (!near) {
+        campView?.update(campLife, o.dt, false);
+        return;
+      }
+      stepCamp(campLife, o.dt);
+      campView?.update(campLife, o.dt, true, (x, z) => elevationAt(elevation, x, z));
+    },
+    campLife: () => campLife,
     groundAt: (x, z) => elevationAt(elevation, x, z),
     // Dig down to the light world (dig.mjs): o = { pos, holding, climb, dt, time }. Breaking the portal
     // layer flips to the present; the through event carries where to come out of the ground.
@@ -721,6 +737,7 @@ export async function loadOpenWorld(search) {
       darkWorld = createDarkWorld(scene, (x, z) => elevationAt(elevation, x, z));
       outlawView = createBadToys(scene, {look: 'outlaw'});
       chickenView = createChickens(scene);
+      campView = createPaiuteCamp(scene);
       digView = createDigView(scene);
       farmScene = scene;
       stream.world.openGate('era-farm');
