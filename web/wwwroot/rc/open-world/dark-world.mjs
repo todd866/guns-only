@@ -217,6 +217,14 @@ export const DARK_PLACES = Object.freeze([
     '#9fbf5a'
   ),
   place(
+    'past-camp',
+    'The Paiute camp, long ago',
+    'Paiute camp',
+    valleyPoint(626, -40),
+    valleyPoint(638, -47),
+    '#c87848'
+  ),
+  place(
     'past-wild',
     'Wild dinosaurs',
     'Wild dinosaurs',
