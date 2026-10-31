@@ -36,6 +36,7 @@ import {createRetreat, stepRetreat, RETREAT} from './physics/retreat.mjs';
 import {DRIVE_KEYS, drivingInput, flightInput, trickInput} from './driving-input.mjs';
 import {createFlight, toggleFlight, FLIGHT} from './physics/flight.mjs';
 import {SCHOOL} from './open-world/flying-school.mjs';
+import {TENNIS, onTennisCourt, tennisStart, tennisAssist} from './open-world/tennis.mjs';
 import {applyLivery} from './livery.js';
 import {batchCarParts, unbatchCarParts} from './car-batch.js';
 import {createRobot, stepRobot} from './physics/robot.mjs';
@@ -901,6 +902,7 @@ function pause(value) {
   if (!value) audio.start();
   keys.clear();
   bowlingHold = null;
+  tennisHold = null;
   touchControls?.reset();
   fireQueued = false;
   $('pause').textContent = paused ? '▶' : '⏸';
@@ -1078,7 +1080,9 @@ window.addEventListener('keydown', e => {
     keys.add('KeyE');
     if (!e.repeat) {
       const lad = !paused && adventure?.ladder(robot ? robot.pos : s.car.pos);
-      if (lad) climbLadder(lad);
+      if (robot && tennisPress()) {
+        /* start here, then hold to hit */
+      } else if (lad) climbLadder(lad);
       else if (robot && bowlingPress()) {
         /* holding to roll */
       } else if (robot && golfCanSwing()) golfHold = 0;
@@ -1100,7 +1104,7 @@ window.addEventListener('keydown', e => {
     );
     return;
   }
-  if (lookMode && e.code.startsWith('Arrow')) {
+  if (lookMode && e.code.startsWith('Arrow') && !openWorld?.tennis()?.active) {
     e.preventDefault();
     lookKeys.add(e.code);
     return;
@@ -1198,6 +1202,7 @@ window.addEventListener('keyup', e => {
   lookKeys.delete(e.code);
   if (e.code === 'KeyE' && bowlingHold != null) bowlingRelease();
   if (e.code === 'KeyE' && golfHold != null) golfRelease();
+  if (e.code === 'KeyE' && tennisHold != null) tennisRelease();
 });
 window.addEventListener('blur', () => pause(true));
 document.addEventListener('visibilitychange', () => {
@@ -2413,6 +2418,7 @@ function disposeJet(group) {
 // The robot is its own controller; the board rides the car physics with board tuning, so every
 // skate-park trick, grind and gap scores for it too.
 function transform() {
+  tennisStop();
   const r = readout(s),
     paint = openWorld?.progress?.paint ?? '#f28c28',
     carParams = roamCarParams;
@@ -3032,6 +3038,7 @@ async function travelTo(id) {
   if (!p) return false;
   openWorld.stopSchool();
   hideSchoolCard();
+  tennisStop();
   const {pos, yaw} = p.arrival;
   document.body.classList.toggle('era-past', openWorld.era?.() === 'past');
   if (robot) {
@@ -3496,6 +3503,112 @@ function schoolFrame() {
   if (near && !schoolNear) callout('✈ Flying School! [E] start', 3500);
   schoolNear = near;
 }
+// Tennis starts by walking onto the left court. Its score and hold meter share
+// one small row; all key hints go through callout/renderHint.
+let tennisHold = null,
+  tennisNear = false,
+  tennisAimHint = false;
+const tennisEligible = () => !!(openWorld && started && race.roam && robot && openWorld.era() !== 'past');
+function tennisStop() {
+  openWorld?.stopTennis();
+  tennisHold = null;
+  tennisNear = false;
+  $('tennis-hud').hidden = true;
+}
+function tennisPress() {
+  if (!tennisEligible() || paused || ui.panel()) return false;
+  const game = openWorld.tennis();
+  if (!game || !onTennisCourt(robot.pos, game.active ? 4 : 0)) return false;
+  if (!game.active) {
+    openWorld.startTennis(mode);
+    hideSchoolCard();
+    // A golf round can follow the robot here; its pending ball placement must
+    // not move the player off the court halfway through a rally.
+    golfRound = golfBall = golfRestAt = golfHold = null;
+    golfWait = 0;
+    if (golfMesh) golfMesh.visible = false;
+    golfHud();
+    const at = tennisStart();
+    robot.pos = [at[0], golfGround(at[0], at[2]) + 0.02, at[2]];
+    robot.vel = [0, 0, 0];
+    robot.climb = null;
+    robot.yaw = 0;
+    lookMode = false;
+    lookKeys.clear();
+    lookYaw = lookPitch = 0;
+    useQueued = false;
+    tennisAimHint = false;
+    callout('🎾 Hold [E], let go to hit', 4000);
+  } else {
+    tennisHold = 0;
+    if (!tennisAimHint) {
+      callout('🎾 [left] [right] aim', 2200);
+      tennisAimHint = true;
+    }
+  }
+  return true;
+}
+function tennisRelease() {
+  const held = tennisHold;
+  tennisHold = null;
+  if (held == null || !tennisEligible() || paused || ui.panel()) return;
+  const aim =
+    Number(keys.has('ArrowRight') || keys.has('KeyD')) - Number(keys.has('ArrowLeft') || keys.has('KeyA'));
+  if (openWorld.tennisSwing({...robot, power: swingPowerOf(held), aim})) audio.impact(1);
+  else if (openWorld.tennis()?.ball) callout('🎾 Wait for the ball!', 1500);
+}
+function tennisStep(dt, drive) {
+  const game = openWorld?.tennis();
+  if (!game?.active) return;
+  if (!tennisEligible() || !onTennisCourt(robot.pos, 4)) {
+    tennisStop();
+    return;
+  }
+  game.mode = mode;
+  if (tennisHold != null) tennisHold += dt;
+  if (Math.abs(drive.throttle) < 0.1) {
+    const [dx, , dz] = tennisAssist(game, robot.pos, dt);
+    robot.pos[0] += dx;
+    robot.pos[2] += dz;
+    robot.walkPhase += Math.hypot(dx, dz) * 9;
+  }
+  for (const e of openWorld.tennisStep(dt, robot)) {
+    if (e.point) {
+      tennisHold = null;
+      audio.coin();
+      callout(e.point === 'you' ? '🎾 Point to you!' : '🎾 Point to bot!', 1700);
+    } else if (e.win) {
+      if (e.win === 'you') {
+        const pr = openWorld.progress;
+        pr.tennisWins = Math.min(Number.MAX_SAFE_INTEGER, (pr.tennisWins ?? 0) + 1);
+        openWorld.save();
+      }
+      audio.finish();
+      callout(e.win === 'you' ? '🎾 You win!' : '🎾 Bot wins! Play again!', 4000);
+    } else if (e.hit) audio.impact(1);
+    else if (e.serve) callout('🎾 Hold [E], let go to hit', 2600);
+  }
+}
+function tennisFrame() {
+  const game = openWorld?.tennis();
+  const here = tennisEligible() && onTennisCourt(robot.pos, 4);
+  if (!here && (game?.active || game?.done)) tennisStop();
+  if (paused || ui.panel()) tennisHold = null;
+  const near = here && !paused && !ui.panel() && onTennisCourt(robot.pos);
+  if (near && !tennisNear && !game?.active && !game?.done) callout('🎾 Tennis! [E] play', 3500);
+  tennisNear = near;
+  $('tennis-hud').hidden = !here || !(game?.active || game?.done) || paused || !!ui.panel();
+  if (!game) return;
+  const score = `${game.score.you} – ${game.score.bot}`;
+  if ($('tennis-score').textContent !== score) $('tennis-score').textContent = score;
+  const meter = $('tennis-meter');
+  meter.hidden = tennisHold == null;
+  if (tennisHold != null) {
+    const power = swingPowerOf(tennisHold);
+    meter.style.setProperty('--p', power.toFixed(3));
+    meter.setAttribute('aria-valuenow', String(Math.round(power * 100)));
+  }
+}
 // The Hot Wheels track (open-world/hot-wheels.mjs): boosters shove, the channel steers, and the loop
 // is a ride once you arrive at it fast enough.
 let hwLoop = null,
@@ -3804,6 +3917,7 @@ function golfStep(dt) {
   if (!openWorld || !race.roam || openWorld.era?.() === 'past') {
     return;
   }
+  if (openWorld.tennis()?.active) return;
   if (!golfRound) {
     if (robot) {
       const t = CLUB_HOLES[0].tee;
@@ -4263,6 +4377,7 @@ function statRows() {
     ['🚀', 'Booster landings seen', num(pr.boosters)],
     ['✈', 'Flying School trips', num(pr.flyingSchool)],
     ['⭐', 'Flying School best', pr.flyingStars ? `${pr.flyingStars}/9` : '–'],
+    ['🎾', 'Tennis wins', num(pr.tennisWins)],
     ['⛳', 'Best golf round', pr.golfRoundBest ? `${pr.golfRoundBest}` : '–'],
     ['🤠', 'Fastest roundup', pr.roundupBest ? `${pr.roundupBest} s` : '–'],
     ['🎳', 'Bowling best', pr.bowlingBest != null ? `${pr.bowlingBest}/300` : '–'],
@@ -4308,6 +4423,7 @@ const ui = createWorldUI({
   interact: enterLocation,
   search: location.search,
   onOpen: which => {
+    tennisHold = null;
     if (which === 'map') telemetry.mapOpen(s.car.pos);
   }
 });
@@ -4508,6 +4624,7 @@ function frame(now) {
         );
       }
       hotWheelsPre();
+      tennisStep(1 / 120, drive);
       const schoolPrev = openWorld?.school()?.active ? [...s.car.pos] : null;
       stepRace(
         race,
@@ -4590,6 +4707,7 @@ function frame(now) {
   }
   document.body.classList.toggle('race-mode', !race.roam && started && !paused);
   document.body.classList.toggle('driving', started && !paused);
+  tennisFrame();
   const r = robot
       ? {
           ...readout(s),
@@ -5147,6 +5265,16 @@ function frame(now) {
     camera.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
     target.set(r.x, r.y, r.z).addScaledVector(fw, 3);
   } else camera.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
+  // A steady court view keeps both players and the high, gentle ball in sight.
+  // The normal toy chase camera is only 1.4 m behind the robot.
+  if (tennisEligible() && openWorld.tennis()?.active) {
+    const [x, z] = TENNIS.center,
+      y = golfGround(x, z);
+    const zoom = Math.max(1, 0.55 / camera.aspect);
+    camera.position.set(x, y + 18 * zoom, z + 22 * zoom);
+    camera.up.set(0, 1, 0);
+    target.set(x, y + 0.5, z);
+  }
   camera.lookAt(target);
   digCamera(now);
   if (intro.active) intro.update(dt, camera);
