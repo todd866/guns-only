@@ -3063,6 +3063,10 @@ async function travelTo(id) {
     robot.pos = [pos[0], pos[1] + 0.05, pos[2]];
     robot.vel = [0, 0, 0];
     robot.yaw = yaw;
+    // The parked car comes too: the world streams (and the sim waits) around s.car, so leaving it
+    // behind froze a jump made on foot at "Road downloading..." for good.
+    s.car.pos = [pos[0], pos[1] + rideHeight(s.car.params) + 0.02, pos[2]];
+    s.car.vel = [0, 0, 0];
   } else {
     const cp = roamCarParams();
     Object.assign(s.car, createCar(cp, [pos[0], pos[1] + rideHeight(cp) + 0.02, pos[2]], yaw));
