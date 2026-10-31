@@ -44,6 +44,7 @@ export function createDinoInspect({
     disposed = true;
     if (frame !== null) cancelAnimationFrame(frame);
     events.abort();
+    for (const [type, fn] of listeners.splice(0)) canvas.removeEventListener(type, fn);
     releasePointer();
     resize?.disconnect();
     disposeCharacter(character);
@@ -85,7 +86,14 @@ export function createDinoInspect({
       fail(error);
     }
   }
-  const listen = (type, fn) => canvas.addEventListener(type, fn, {signal: events.signal});
+  // Listeners are removed explicitly on close, not left to the AbortSignal alone: Node's
+  // EventTarget holds the signal's removal hook weakly, so a garbage collection at the wrong
+  // moment could leave a listener registered (seen on Node 24.21 under test).
+  const listeners = [];
+  const listen = (type, fn) => {
+    listeners.push([type, fn]);
+    canvas.addEventListener(type, fn, {signal: events.signal});
+  };
   listen('pointerdown', e => {
     if (!e.isPrimary || e.button !== 0) return;
     e.preventDefault();
