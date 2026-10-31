@@ -113,18 +113,27 @@ crafting, and portals that appear at random.
 
 - **The cavern layout is deterministic and permanent.** It's generated from a fixed seed per world
   and region, so the same caves, seams and caverns are always there.
-- **Digs disappear; builds persist** (owner: "I want digs to disappear but builds to be
-  persistent"). Removal, meaning every hole and excavation, lives in session state and resets
-  next session, even a hole that wrecks the base. Placement, meaning every block placed and
-  anything built (including a shaft's reinforcing lining), is saved per world and is there next
-  time. A placed block sitting in a hole that has since refilled stays where it was placed.
-- **Reinforced shafts persist** because reinforcing places a lining, which counts as a build.
+- **Digs disappear; real builds persist** (owner: "I want digs to disappear but builds to be
+  persistent", and "it can't just be 'I dug up some dirt and now I'm putting it here and it's
+  persistent', you should need some level of crafting or buying lumber or whatever to make a
+  persistent structure"). Three kinds of change:
+  - **Removal** (holes, excavations) lives in session state and resets next session, even a hole
+    that wrecks the base.
+  - **Loose blocks** (raw dirt, stone, clay you dug up and set down) are just as temporary: they
+    reset with the dig they came from.
+  - **Building materials** make something last: lumber, bricks, beams, a shaft's reinforcing
+    lining. They're crafted from what you dig (stone to bricks at the kiln, ore to nails at the
+    forge) or bought with gold at the general store (lumber, rope, glass). Anything built from
+    them is saved per world and is there next time.
+- **Reinforced shafts persist** because their lining is a building material, crafted or bought.
+- That ties building to the economy: digging finds raw stuff and gold, crafting and the store turn
+  them into materials, and materials make the ranch, pens and barn that last.
 - **The portal layer is the floor of every underground.** Digging through it is an identity
   crossing into the other world's underground ceiling, emerging at the surface above, so every
   x,z has somewhere to come out.
 - **Random portals** are session-seeded, so they appear in different places each visit.
-- Persistence follows directly from the world model: deterministic layout (recipe), removals
-  (session state), and placements and builds (per-world save).
+- Persistence follows directly from the world model: deterministic layout (recipe), removals and
+  loose blocks (session state), and builds from building materials (per-world save).
 
 ## Migration order
 
