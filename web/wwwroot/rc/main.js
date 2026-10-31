@@ -4366,7 +4366,7 @@ function enterLocation() {
       cameraCar = null;
       audio.radio();
       callout(SKY_STEER_HINT, 6500);
-    }
+    } else callout('🪂 Almost ready… [E] again', 2000); // the sky above is still loading
     return;
   }
   if (
