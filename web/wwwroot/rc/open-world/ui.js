@@ -732,7 +732,7 @@ export function createWorldUI({
                       ? [`${p.short} · Map`, 'Tab']
                       : p.id === 'skatepark'
                         ? ['Race', 'E']
-                        : [`${p.name} · Enter`, 'E'])
+                        : [`${p.name} · Go in`, 'E'])
           );
       }
     },

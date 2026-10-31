@@ -86,9 +86,17 @@ export function keyCap(name) {
   const k = find(name),
     el = document.createElement('kbd');
   el.className = 'keycap' + (k && k.w > 1.4 ? ' wide' : '');
-  el.textContent = !k ? name : k.label === 'space' ? '' : k.label;
+  // The up and down arrows share one split key; the cap shows the half to press.
+  const half = {up: '▲', down: '▼'}[name.toLowerCase()];
+  el.textContent = half ?? (!k ? name : k.label === 'space' ? '' : k.label);
   if (k?.label === 'space') el.classList.add('space');
-  el.title = k ? (k.label === 'space' ? 'the long bar at the bottom' : `the ${k.label} key`) : name;
+  el.title = half
+    ? `the ${name.toLowerCase()} arrow`
+    : k
+      ? k.label === 'space'
+        ? 'the long bar at the bottom'
+        : `the ${k.label} key`
+      : name;
   return el;
 }
 
