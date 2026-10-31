@@ -255,6 +255,11 @@ side, the way a western does, with nothing real at stake:
   they're your gang: mischief jobs instead of fights (rob the toy bank of chocolate coins, rustle the
   plastic cattle, hold up the clockwork train), the sheriff's posse of good toys chases you, and the
   rewards are outlaw ones (a bandana livery, a black hat for the cowboy).
+- **What breaks and what doesn't** (owner, 31 Oct: "if my dinosaur stomps an enemy it's just a
+  toy with no personality and it breaks"). Faceless enemies (wind-up outlaws, tin soldiers, bad
+  drones) have no name and no lines; stomped or punched, they burst into springs, cogs and bits of
+  tin. Anything with a name and a personality (the sheriff, the gang's boss, the Rat King, a freed
+  alien) is never broken: it's won over, freed or befriended, on either side.
 - **It's only ever toys.** Bad means siding with the bad aliens' taken-over toys, never hurting
   people (there are none to hurt) and never the land's creatures and spirits: the tortoise elder and
   the spring help whoever is kind to them, either side. No real crimes beyond toy-box mischief, and
