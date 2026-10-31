@@ -1,4 +1,4 @@
-import {FRONT_DOOR_POS} from './bowling-alley.mjs';
+import {FRONT_DOOR_POS, ALLEY_RACE_POINTS} from './bowling-alley.mjs';
 import {NY} from './under-bridge.mjs';
 import {LIVERIES, TRIMS} from '../livery-data.mjs';
 import {plazaWorld, PLAZA_PARK} from './town-plaza.mjs';
@@ -162,7 +162,7 @@ export const LOCATIONS = [
     icon: '◇',
     kind: 'activity',
     game: 'bowling',
-    event: 'rink-drift'
+    event: 'alley-cat'
   },
   {
     id: 'diamond',
@@ -392,6 +392,23 @@ export const EVENTS = [
     medals: [70, 95, 130]
   },
   {
+    id: 'alley-cat',
+    name: 'Alley Cat',
+    location: 'rec',
+    kind: 'circuit',
+    night: true,
+    surface: 'gymfloor',
+    points: ALLEY_RACE_POINTS,
+    // Indoor turns need a shorter look ahead than the outdoor roads.
+    aiHandling: {topSpeed: 5.5, cornerSpeed: 1.5, reach: 0.6, behind: 1.3, look: 0.7, lookSpeed: 0.18},
+    grid: Array.from({length: 8}, (_, i) => ({
+      pos: [ALLEY_RACE_POINTS[0][0], 0, ALLEY_RACE_POINTS[0][1] + i * 0.75],
+      yaw: 0
+    })),
+    half: 0.8,
+    medals: [20, 28, 40]
+  },
+  {
     id: 'rink-drift',
     name: 'Rink Drift',
     location: 'rec',
@@ -558,6 +575,8 @@ export function eventCourse(event, world) {
   return {
     world,
     event,
+    aiHandling: event.aiHandling,
+    grid: event.grid,
     outOfBounds:
       event.alien && event.id !== 'night-wave'
         ? pos => pos[1] < -3

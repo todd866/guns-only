@@ -67,6 +67,65 @@ export const LANES = Object.freeze(
   )
 );
 
+export const RACE_LANES = Object.freeze([1, 6]);
+export const PINSETTER_Z = LANES[0].endZ - 0.8;
+export const BALL_RETURN_Z = LANES[0].startZ + 1.1;
+// Leave a car-width turning aisle between the counter and the stepped west wall.
+export const SNACK_COUNTER = Object.freeze({x: minX + 7, z: LANES[0].startZ - 3});
+// Stay within the mapped shell. The two outside lanes open beneath the
+// pinsetters into a maintenance corridor; the approach crosses all five returns.
+const down = LANES[0],
+  back = LANES[5],
+  front = DOORS[0].center,
+  side = DOORS[1].center,
+  snack = SNACK_COUNTER;
+export const ALLEY_RACE_POINTS = Object.freeze(
+  [
+    [front[0], front[1] + 3],
+    [front[0], front[1] - 1],
+    [front[0] - 1, front[1] - 3.5],
+    [down.x, down.approachZ + 1],
+    [down.x, down.startZ],
+    [down.x, down.startZ - 6],
+    [down.x, down.startZ - 12],
+    [down.x, down.headZ],
+    [down.x, PINSETTER_Z],
+    [down.x + 0.5, PINSETTER_Z - 2],
+    [down.x + 2, PINSETTER_Z - 3.5],
+    [front[0], PINSETTER_Z - 3.9],
+    [back.x - 2, PINSETTER_Z - 3.5],
+    [back.x - 0.5, PINSETTER_Z - 2],
+    [back.x, PINSETTER_Z],
+    [back.x, back.headZ],
+    [back.x, back.startZ - 12],
+    [back.x, back.startZ - 6],
+    [back.x, back.startZ - 1],
+    [back.x - 0.8, BALL_RETURN_Z],
+    [(LANES[4].x + LANES[5].x) / 2 - 1, BALL_RETURN_Z],
+    [(LANES[0].x + LANES[1].x) / 2, BALL_RETURN_Z],
+    [down.x - 2, BALL_RETURN_Z],
+    [snack.x + 4, snack.z + 2.5],
+    [snack.x + 2.5, snack.z],
+    [snack.x + 1.2, snack.z - 1.8],
+    [snack.x - 0.5, snack.z - 2.3],
+    [snack.x - 2, snack.z - 1],
+    [snack.x - 2, snack.z + 1],
+    [snack.x - 0.5, snack.z + 2.5],
+    [snack.x + 4, side[1] - 2],
+    [down.x, side[1]],
+    [front[0], side[1]],
+    [side[0] - 6, side[1]],
+    [side[0] - 2, side[1]],
+    [side[0] + 2, side[1]],
+    [side[0] + 4, side[1] + 2],
+    [side[0] + 4, front[1] + 2],
+    [side[0] + 1, front[1] + 5],
+    [front[0] + 7, front[1] + 7],
+    [front[0] + 2, front[1] + 6],
+    [front[0], front[1] + 3]
+  ].map(Object.freeze)
+);
+
 // Cut the two openings out of the mapped perimeter; render and collision use
 // these same solid runs, including the small jogs in the original footprint.
 export const COLLISION_WALLS = Object.freeze(

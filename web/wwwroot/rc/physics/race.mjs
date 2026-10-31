@@ -135,7 +135,8 @@ export function placeOf(race, s) {
 export function driveInput(race, rival) {
   const s = rival.session,
     r = readout(s),
-    n = race.line.length;
+    n = race.line.length,
+    handling = race.course.aiHandling;
   // Skill routes: aces branch onto an ALT line at its entry node and rejoin at its exit.
   if (!rival.alt && rival.skill >= 0.9)
     for (const a of race.alts)
@@ -155,8 +156,9 @@ export function driveInput(race, rival) {
       dz = p[1] - r.z;
     const ahead = dx * Math.sin(r.yaw) - dz * Math.cos(r.yaw);
     if (
-      Math.hypot(dx, dz) < Math.max(onAlt ? 0.9 : 1.5, p[2] * 0.8) ||
-      (ahead < 0 && Math.hypot(dx, dz) < (onAlt ? 2 : 6))
+      Math.hypot(dx, dz) <
+        (onAlt ? Math.max(0.9, p[2] * 0.8) : (handling?.reach ?? Math.max(1.5, p[2] * 0.8))) ||
+      (ahead < 0 && Math.hypot(dx, dz) < (onAlt ? 2 : (handling?.behind ?? 6)))
     )
       node++;
     else break;
@@ -169,7 +171,7 @@ export function driveInput(race, rival) {
     }
   } else rival.node = node;
   // Careful on a skill route: shorter look-ahead, lower top speed.
-  const look = onAlt ? 1 + r.speed * 0.2 : 1.6 + r.speed * 0.35;
+  const look = onAlt ? 1 + r.speed * 0.2 : (handling?.look ?? 1.6) + r.speed * (handling?.lookSpeed ?? 0.35);
   let target = at(node),
     i = node;
   while (Math.hypot(target[0] - r.x, target[1] - r.z) < look && i < node + m) target = at(++i);
@@ -178,7 +180,7 @@ export function driveInput(race, rival) {
   // Speed profile: each upcoming corner allows a speed from its turn angle; the car may carry
   // more speed while it still has room to brake down to it (v² = vc² + 2·a·d).
   const BRAKE = 5.5,
-    top = (onAlt ? 5.5 : 13) * rival.skill;
+    top = (onAlt ? 5.5 : (handling?.topSpeed ?? 13)) * rival.skill;
   let vmax = top,
     dist = Math.hypot(at(node)[0] - r.x, at(node)[1] - r.z);
   for (let k = 0; k < 4; k++) {
@@ -188,7 +190,7 @@ export function driveInput(race, rival) {
     const h1 = Math.atan2(b[0] - a[0], b[1] - a[1]),
       h2 = Math.atan2(c[0] - b[0], c[1] - b[1]);
     const turn = Math.abs(Math.atan2(Math.sin(h2 - h1), Math.cos(h2 - h1)));
-    const vc = Math.max(3.5, top * (1 - (turn / Math.PI) * 1.5));
+    const vc = Math.max(handling?.cornerSpeed ?? 3.5, top * (1 - (turn / Math.PI) * 1.5));
     vmax = Math.min(vmax, Math.sqrt(vc * vc + 2 * BRAKE * dist));
     dist += Math.hypot(c[0] - b[0], c[1] - b[1]);
   }

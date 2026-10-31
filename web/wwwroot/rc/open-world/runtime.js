@@ -319,6 +319,8 @@ export async function loadOpenWorld(search) {
   course.outOfBounds = pos => (pos[0] > 9000 && pos[1] < -3) || !!eventBounds?.(pos);
   course.coins = LOCATIONS.map(p => ({name: `WORLD_${p.id}`, x: p.pos[0] + 4, y: 0.15, z: p.pos[2] + 2}));
   course.secrets = SPECIMENS;
+  let racing = !locked && (selected.battle || ['race', 'furball'].includes(q.get('mode')));
+  const canRace = () => golf?.kind !== 'bowling' || golf.done;
   let golf = null,
     golfVisual = null,
     bowlingVisual = null;
@@ -498,6 +500,8 @@ export async function loadOpenWorld(search) {
       activities?.step(car, dt);
     },
     traffic(race) {
+      racing = !race.roam;
+      if (racing) golf = null;
       landmarks?.setRacing(!race.roam);
       if (
         !race.roam ||
@@ -518,6 +522,12 @@ export async function loadOpenWorld(search) {
     at,
     search,
     activity: () => golf,
+    canRace,
+    setRacing(value) {
+      if (value && !canRace()) return false;
+      racing = value;
+      return true;
+    },
     districtAt(pos) {
       if (Math.hypot(pos[0] - RESIDENTIAL_PARK.anchor[0], pos[2] - RESIDENTIAL_PARK.anchor[2]) < 40)
         return {id: 'skatepark', course: districts.courses.get('skatepark')};
@@ -529,6 +539,7 @@ export async function loadOpenWorld(search) {
       return null;
     },
     startActivity(kind, options = {}) {
+      if (racing) return null;
       golf = kind === 'bowling' ? createBowling(options) : createGolf();
       return kind === 'bowling' ? bowlingTee(golf.lane) : golfTee(golf);
     },
@@ -720,7 +731,7 @@ export async function loadOpenWorld(search) {
       club?.update(1 / 60, pos, timeGates.era() !== 'past');
       activities?.update(time, pos);
       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
-      bowlingVisual?.update(golf);
+      bowlingVisual?.update(golf, racing ? selected.id : null);
       bowlingAlley?.update(golf?.kind === 'bowling' ? golf : null, playerPos);
       const key = pos.map((v, i) => (i === 1 ? 0 : Math.floor(v / 64))).join(',');
       if (key !== lastTile || stream.errors.size) {
@@ -821,6 +832,7 @@ export async function loadOpenWorld(search) {
       saveProgress(storage, progress);
     },
     eventURL(p, kind = 'race') {
+      if (!canRace()) return null;
       if (!canEnter(progress, p)) return rcLink({track: 'hub', at: p.id}, search);
       return rcLink(
         {track: 'hub', event: p.event ?? (p.track ? 'district-' + p.track : 'ramp-rat'), mode: kind},

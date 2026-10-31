@@ -406,7 +406,8 @@ export function createWorldUI({
     $('world-race').onclick = () => {
       const e = eventById($('world-event').value),
         p = locationById(e.location);
-      if (canEnterEvent(progress, e)) location.href = world.eventURL({...p, track: null, event: e.id});
+      const url = canEnterEvent(progress, e) && world.eventURL({...p, track: null, event: e.id});
+      if (url) location.href = url;
     };
     $('destinations').replaceChildren();
     // Two tabs (owner: the place list organised into light world / dark world); the dark world's places jump you into the past.
@@ -561,14 +562,16 @@ export function createWorldUI({
       }
     const chosen = eventById($('world-event').value),
       unlocked = canEnterEvent(progress, chosen);
-    $('world-race').disabled = travelling || !unlocked;
+    $('world-race').disabled = travelling || !unlocked || !world.canRace();
     $('map-close').disabled = travelling;
     $('world-event').disabled = travelling;
-    $('world-race').title = unlocked
-      ? 'Start selected event'
-      : chosen.id === 'dreamland'
-        ? 'Finish base cups and find every badge to unlock'
-        : 'This event is still locked';
+    $('world-race').title = !world.canRace()
+      ? '🎳 Finish bowling first'
+      : unlocked
+        ? 'Start selected event'
+        : chosen.id === 'dreamland'
+          ? 'Finish base cups and find every badge to unlock'
+          : 'This event is still locked';
     const w = map.width,
       h = map.height,
       s = getState(),
