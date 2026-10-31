@@ -3079,6 +3079,10 @@ async function travelTo(id) {
   lastThrottle = 0;
   const p = await openWorld?.travel(id);
   if (!p) return false;
+  if (openWorld.activity()?.kind === 'bowling') {
+    openWorld.cancelActivity(); // a ball left rolling would freeze its frame and keep races locked
+    bowlingHold = null;
+  }
   openWorld.stopSchool();
   hideSchoolCard();
   tennisStop();

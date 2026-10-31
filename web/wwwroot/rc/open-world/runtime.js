@@ -349,7 +349,12 @@ export async function loadOpenWorld(search) {
   }));
   course.secrets = SPECIMENS;
   let racing = !locked && (selected.battle || ['race', 'furball'].includes(q.get('mode')));
-  const canRace = () => golf?.kind !== 'bowling' || golf.done;
+  // Bowling locks races only once a ball has been rolled: walking across a lane approach (which sets up
+  // a game) must never keep a child out of Alley Cat.
+  const canRace = () =>
+    golf?.kind !== 'bowling' ||
+    golf.done ||
+    (!golf.launched && !golf.ball && golf.frames.every(frame => frame.length === 0));
   let golf = null,
     golfVisual = null,
     bowlingVisual = null;
