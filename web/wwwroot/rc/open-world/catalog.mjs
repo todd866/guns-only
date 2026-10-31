@@ -1,6 +1,7 @@
 import {FRONT_DOOR_POS} from './bowling-alley.mjs';
 import {NY} from './under-bridge.mjs';
 import {SCHOOL} from './flying-school.mjs';
+import {STUNT_JUMPS} from './stunt-jumps.mjs';
 import {LIVERIES, TRIMS} from '../livery-data.mjs';
 import {plazaWorld, PLAZA_PARK} from './town-plaza.mjs';
 import {playgroundWorld, PLAYGROUND_PARK} from './playground.mjs';
@@ -727,6 +728,7 @@ export function loadProgress(storage) {
   return {
     discovered: ['gate', ...ids(v?.discovered, LOCATIONS).filter(id => id !== 'gate')],
     specimens: ids(v?.specimens, SPECIMENS),
+    stuntJumps: ids(v?.stuntJumps, STUNT_JUMPS),
     golfRoundBest: Number.isInteger(v?.golfRoundBest) && v.golfRoundBest > 0 ? v.golfRoundBest : null,
     roundupBest: Number.isInteger(v?.roundupBest) && v.roundupBest > 0 ? v.roundupBest : null,
     // Version 1 stored one frame (0–10), never a ten-frame record. Even a new zero is a record.
