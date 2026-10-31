@@ -23,8 +23,11 @@ years. But it should feel like there's an infinity of things to do in this world
 The Air Force has captured some aliens and is holding them in a hangar on Nellis. They are the
 **good** aliens: they came to protect us from the **bad** aliens, who want to break into our world
 from the **dark world**. One night a captured alien reaches out with the last of its power, and the
-glow wakes a toy: **you**, an RC car on a kid's bedroom floor. The good aliens wake toys; the bad
-aliens' signal takes them over. So there are **good toys and bad toys**. To free the aliens and
+glow wakes a toy: **you**, an RC car on a kid's bedroom floor. **Both kinds of alien bring toys to
+life** (owner, 31 Oct): the good aliens wake toys as themselves, with their own personalities, and
+the bad aliens animate toys to be their bad guys, faceless soldiers with no one inside (which is
+why those just break). The bad aliens' signal can also bewitch a named toy for a while, and those
+are the bosses you free. So there are **good toys and bad toys**. To free the aliens and
 stop the break-in, you cross the base, climb **the mountain** where the river begins, and pass
 through its old gate into the dark world. The creatures of the mountain help a toy that carries the
 good aliens' light.
@@ -260,7 +263,7 @@ side, the way a western does, with nothing real at stake:
   drones) have no name and no lines; stomped or punched, they burst into springs, cogs and bits of
   tin. Anything with a name and a personality (the sheriff, the gang's boss, the Rat King, a freed
   alien) is never broken: it's won over, freed or befriended, on either side.
-- **It's only ever toys.** Bad means siding with the bad aliens' taken-over toys, never hurting
+- **It's only ever toys.** Bad means siding with the bad aliens' toys, never hurting
   people (there are none to hurt) and never the land's creatures and spirits: the tortoise elder and
   the spring help whoever is kind to them, either side. No real crimes beyond toy-box mischief, and
   no permanent lock-out: switch sides on a later visit, and both endings get you home.
@@ -283,7 +286,7 @@ present; bury a chest in the past and dig it up with the claw today.
 
 **What we don't do here.** No "cowboys and Indians" toys and no Native enemies or props. This is
 Southern Paiute land in both times (see the setting rules below), and the past makes that matter
-more. The outlaws are the bad aliens' taken-over toys. The frontier is drawn from real settler
+more. The outlaws are toys the bad aliens brought to life to be their gang. The frontier is drawn from real settler
 history (mining towns, stage roads, the railway), and the real history in it is checked before it
 goes in.
 
@@ -385,7 +388,7 @@ Drones bring the base to life and give it its first-act threat:
 - **Big drones** (MQ-9 style) circling overhead and taxiing on the runway, as set dressing and
   as obstacles.
 - Under the corrupted leadership the bots get **meaner**: red lights, faster patrols. In the
-  dark world, the old toys they've taken over are clockwork outlaws with alien glow in their eyes.
+  dark world, the toys they animate are clockwork outlaws with alien glow in their eyes.
 
 ## Difficulty a 6-year-old can win (owner, 30 Oct)
 
