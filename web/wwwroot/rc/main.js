@@ -291,6 +291,26 @@ if (districtError) {
   $('brief')?.append(note);
 }
 const renderer = new T.WebGLRenderer({canvas, antialias: true});
+let lookMode = false,
+  lookYaw = 0,
+  lookPitch = 0,
+  lookIdle = 0,
+  lookDrag = null;
+const lookKeys = new Set();
+// A mouse drag on the view looks around any time; it settles back behind you a moment after.
+canvas.addEventListener('pointerdown', e => {
+  if (e.button === 0 && race.roam) lookDrag = [e.clientX, e.clientY];
+});
+window.addEventListener('pointermove', e => {
+  if (!lookDrag) return;
+  lookYaw += (e.clientX - lookDrag[0]) * 0.008;
+  lookPitch = Math.max(-0.3, Math.min(1.1, lookPitch + (e.clientY - lookDrag[1]) * 0.005));
+  lookDrag = [e.clientX, e.clientY];
+  lookIdle = 1.5;
+});
+window.addEventListener('pointerup', () => {
+  lookDrag = null;
+});
 const adaptive = createAdaptiveResolution({
   max: Math.min(devicePixelRatio, 1.75),
   min: Math.min(devicePixelRatio, 1)
@@ -1058,6 +1078,24 @@ window.addEventListener('keydown', e => {
     }
     return;
   }
+  // Look around (owner: "I should be able to look around ... wasd move and arrows look"): C turns
+  // look mode on and off; in it the arrows swing the camera round you and WASD still moves you.
+  if (e.code === 'KeyC' && !e.repeat && race.roam && !paused) {
+    lookMode = !lookMode;
+    lookKeys.clear();
+    for (const k of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) keys.delete(k);
+    beep(
+      lookMode ? '👀 Look around! [left] [right] [up]' : '👀 Back to driving!',
+      lookMode ? 'wow' : 'happy',
+      2400
+    );
+    return;
+  }
+  if (lookMode && e.code.startsWith('Arrow')) {
+    e.preventDefault();
+    lookKeys.add(e.code);
+    return;
+  }
   if (DRIVE_KEYS.includes(e.code)) {
     if (paused) return;
     e.preventDefault();
@@ -1147,6 +1185,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => {
   keys.delete(e.code);
+  lookKeys.delete(e.code);
   if (e.code === 'KeyE' && golfHold != null) golfRelease();
 });
 window.addEventListener('blur', () => pause(true));
@@ -4629,16 +4668,28 @@ function frame(now) {
     camHeading += d * Math.min(1, dt * (vertArc ? 10 : 4));
     camEasing = !!vertArc || Math.abs(d) > 0.04;
   }
-  const camYaw = camHeading;
+  // Looking around: look mode's arrows (or a mouse drag) swing the camera round you; out of look
+  // mode it eases back behind you.
+  {
+    const held = k => (lookKeys.has(k) ? 1 : 0);
+    if (lookMode) {
+      lookYaw += (held('ArrowRight') - held('ArrowLeft')) * dt * 2.2;
+      lookPitch = Math.max(-0.3, Math.min(1.1, lookPitch + (held('ArrowUp') - held('ArrowDown')) * dt * 1.3));
+    } else if ((lookIdle -= dt) <= 0) {
+      lookYaw *= Math.exp(-dt * 2.5);
+      lookPitch *= Math.exp(-dt * 2.5);
+    }
+  }
+  const camYaw = camHeading + lookYaw;
   // The boss fight pulls back and up so the robot and the whole excavator share the frame.
   // Riding a dinosaur in the dark world (the past) puts the toy up high: the camera pulls back with it.
   const mount = riggedDino?.root.visible ? 2 : toyDino?.visible ? 2.6 : 1,
     back = bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount,
     eye = [r.x, r.y + 0.12 * mount, r.z];
   desired.set(
-    r.x - Math.sin(camYaw) * back,
-    r.y + (bossAt ? 0.95 : mount > 1 ? 0.8 * mount : 0.55),
-    r.z + Math.cos(camYaw) * back
+    r.x - Math.sin(camYaw) * back * Math.cos(lookPitch),
+    r.y + (bossAt ? 0.95 : mount > 1 ? 0.8 * mount : 0.55) + Math.sin(lookPitch) * back,
+    r.z + Math.cos(camYaw) * back * Math.cos(lookPitch)
   );
   const ray = [desired.x - eye[0], desired.y - eye[1], desired.z - eye[2]],
     dist = Math.hypot(...ray),
@@ -4878,7 +4929,10 @@ window.__gunsOnlyRC = {
   }),
   era: () => openWorld?.era?.() ?? 'present',
   toyDino: () => toyDino,
-  sounds: () => ({heard: {...(audio.heard ?? {})}, motor: +(audio.motorLow?.gain.gain.value ?? 0).toFixed(3)}),
+  sounds: () => ({
+    heard: {...(audio.heard ?? {})},
+    motor: +(audio.motorLow?.gain.gain.value ?? 0).toFixed(3)
+  }),
   dex: () => openWorld && {seen: [...dexState().seen], gold: dexState().gold},
   herd: () =>
     herdState && {
