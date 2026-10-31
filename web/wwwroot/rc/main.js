@@ -1114,17 +1114,26 @@ window.addEventListener('keydown', e => {
     !paused &&
     (e.target === canvas || !e.target.closest?.('button,input,select,textarea,a,[tabindex]'))
   ) {
-    if (race.roam && !skate && !adventure?.underground(s.car.pos)) {
+    // In the dark world only a flier flies (the quetzalcoatlus, won at its nest); the rest stay on the ground.
+    const pastRide = openWorld?.era?.() === 'past' && form === 'car',
+      flier = !!DINO_KINDS[herd().herd[herd().mount]?.kind]?.flies;
+    if (pastRide && !flier && !s.flight.mode)
+      callout(`🦖 ${dinoName()} can't fly! The quetzalcoatlus nests high on Spirit Mountain`, 3200);
+    else if (race.roam && !skate && !adventure?.underground(s.car.pos)) {
       const was = s.flight.mode,
         m = toggleFlight(s.flight, s.car, {roam: true});
       if (m !== was) {
         audio.boost();
         callout(
-          m === 'fly'
-            ? mode === 'kid'
-              ? '✈ FLYING · ↓ pull up · ↑ dive · ←→ roll · W power · F afterburner · Enter = parachute'
-              : '✈ AIRBORNE · Enter = parachute'
-            : '🪂 PARACHUTE',
+          winged()
+            ? m === 'fly'
+              ? `🪶 FLYING ${dinoName().toUpperCase()} · ↓ climb · ↑ dive · ←→ turn · W flap · Enter = glide down`
+              : '🪶 GLIDING DOWN'
+            : m === 'fly'
+              ? mode === 'kid'
+                ? '✈ FLYING · ↓ pull up · ↑ dive · ←→ roll · W power · F afterburner · Enter = parachute'
+                : '✈ AIRBORNE · Enter = parachute'
+              : '🪂 PARACHUTE',
           2400
         );
       }
@@ -1390,9 +1399,17 @@ const SPARK = ['#4fc3ff', '#ffa020', '#d84bff'];
 const hud = $('flight-hud'),
   hg = hud.getContext('2d');
 let hudMode = null;
+// Riding a winged dinosaur (the quetzalcoatlus): it flies on the same flight model, but without the
+// jet's HUD, flame, parachute or retro thrusters; it flaps, glides and lands by itself.
+const winged = () => !!(riggedDino?.root.visible && riggedDino.actions.has('glide'));
 function drawFlightHud() {
-  const mode = race.roam && !robot ? s.flight.mode : null;
-  if (mode !== hudMode) {
+  const mode = race.roam && !robot && !winged() ? s.flight.mode : null;
+  if (winged() && !s.flight.mode && hudMode === 'wing') callout('🪶 Landed!');
+  if (winged()) {
+    hudMode = s.flight.mode ? 'wing' : null;
+    hud.hidden = true;
+  }
+  if (mode !== hudMode && !winged()) {
     if (hudMode && !mode) callout('🛬 LANDED · back to driving');
     hudMode = mode;
     hud.hidden = !mode;
@@ -1531,7 +1548,7 @@ function drawFlightHud() {
 let retroJets = null,
   retroWas = false;
 function retroFx(now) {
-  const on = s.flight.mode === 'chute' && !!s.flight.retro && !robot;
+  const on = s.flight.mode === 'chute' && !!s.flight.retro && !robot && !winged();
   if (on && !retroJets) {
     retroJets = new T.Group();
     const m = new T.MeshBasicMaterial({
@@ -1575,7 +1592,7 @@ function drawPickups(now) {
   });
   for (const m of fxPool.values()) m.visible = false;
   // Afterburner flame out of the tail, and the parachute canopy over a floating car.
-  if (burning) {
+  if (burning && !winged()) {
     const f = fxMesh('burner', () => {
       const g = new T.Group(),
         outer = new T.Mesh(
@@ -1606,7 +1623,7 @@ function drawPickups(now) {
     f.translateY(0.03);
     f.scale.set(1, 1, 0.8 + Math.random() * 0.5);
   }
-  if (s.flight.mode === 'chute') {
+  if (s.flight.mode === 'chute' && !winged()) {
     const c = fxMesh('chute', () => {
       const g = new T.Group(),
         canopy = new T.Mesh(
@@ -2688,14 +2705,15 @@ function wildStep(dt, past) {
       d.root.visible = false;
       continue;
     }
-    const near = past && Math.hypot(me[0] - w.home[0], me[2] - w.home[2]) < 160;
+    // The nest's flier is seen from the Lake Town; the others only when you're close.
+    const near = past && Math.hypot(me[0] - w.home[0], me[2] - w.home[2]) < (w.far ? 700 : 160);
     d.root.visible = near;
     if (!near) continue;
     // A lazy wander round its spot: walk a slow circle, stop to look about.
     const a = t * 0.18 + id.length,
-      walk = Math.sin(t * 0.25 + id.length) > -0.2,
-      x = w.home[0] + Math.cos(a) * 2.5,
-      z = w.home[2] + Math.sin(a) * 2.5;
+      walk = !w.still && Math.sin(t * 0.25 + id.length) > -0.2,
+      x = w.home[0] + (w.still ? 0 : Math.cos(a) * 2.5),
+      z = w.home[2] + (w.still ? 0 : Math.sin(a) * 2.5);
     d.root.position.set(x, openWorld.groundAt?.(x, z) ?? 8, z);
     d.root.rotation.y = walk ? -a : d.root.rotation.y;
     d.play(walk ? 'walk' : 'idle');
@@ -2719,6 +2737,16 @@ function wildStep(dt, past) {
       saveHerd();
       audio.finish();
       callout(d ? `🦖 ${d.name} joined your herd! Y + ${d.name} to ride it` : '🦖 Your herd is full!', 4500);
+      // The quetzalcoatlus: straight onto its back, ready to fly.
+      if (d && DINO_KINDS[d.kind]?.flies && robot) {
+        herd().mount = herd().herd.indexOf(d);
+        saveHerd();
+        mountUp();
+        callout(
+          `🪶 You're on ${d.name}'s back! Enter to fly · ↓ pull up · ←→ turn · Enter again to come down`,
+          6000
+        );
+      }
       wildAsking = null;
     });
   }
@@ -4076,7 +4104,7 @@ function frame(now) {
       if (riggedDino) {
         if (toyDino) toyDino.visible = false;
         riggedDino.root.visible = true;
-        poseRiggedDino(riggedDino, s.car, rideHeight(s.car.params), dt);
+        poseRiggedDino(riggedDino, s.car, rideHeight(s.car.params), dt, s.flight.mode);
       } else {
         if (!toyDino) {
           toyDino = makeToyDino();

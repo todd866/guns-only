@@ -217,7 +217,7 @@ export function rideRiggedDino(d) {
 /** Pose and animate from the physics car: idle, walk or run by speed, and a jump when it leaves the
  *  ground. The clips speed up with the car, capped: true no-slide rates at 13 m/s would be a blur
  *  (the run clip covers 1.25 m/s at this scale), so the feet skate a little at full tilt. */
-export function poseRiggedDino(d, car, rideHeight = 0.1, dt = 1 / 60) {
+export function poseRiggedDino(d, car, rideHeight = 0.1, dt = 1 / 60, flight = null) {
   d.root.position.set(...car.pos);
   d.root.quaternion.set(...car.q);
   d.root.translateY(-rideHeight);
@@ -231,6 +231,27 @@ export function poseRiggedDino(d, car, rideHeight = 0.1, dt = 1 / 60) {
     },
     airborne = car.contacts === 0;
   d.air = airborne ? d.air + dt : 0;
+  // A flier in the air (the quetzalcoatlus on the toy jet's flight model): take off, then flap while
+  // climbing or slow and glide otherwise; land when it touches down. Its own clips fold the wings
+  // and hide the legs by bone scale, so nothing here touches bone scales.
+  if (d.actions.has('glide')) {
+    if (flight) {
+      if (!d.flying) {
+        d.flying = true;
+        d.play('takeoff', {then: 'flap', fade: 0.1});
+      } else if (d.clip !== 'takeoff') d.play(car.vel[1] > 0.6 || speed < 9 ? 'flap' : 'glide', {fade: 0.35});
+      d.update(dt);
+      return;
+    }
+    if (d.flying) {
+      d.flying = false;
+      d.play('land', {then: 'idle', fade: 0.1});
+    }
+    if (d.clip === 'land') {
+      d.update(dt);
+      return;
+    }
+  }
   if (d.air > 0.18 && d.clip !== 'jump') d.play('jump', {then: 'run', fade: 0.1});
   else if (!airborne && d.clip !== 'jump') {
     // A gallop clip (no foot slide near 4 m/s at export scale) takes over at speed once the GLB has

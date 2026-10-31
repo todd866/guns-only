@@ -115,7 +115,7 @@ export const DINO_MOUNT = Object.freeze({
   kineticFriction: [1.35, 1.28]
 });
 // One body per kind of ridden dinosaur (open-world/herd.mjs DINO_KINDS): the raptor small and
-// quick, the long-neck big and slow, the triceratops heavy and pushy.
+// quick, the long-neck big and slow, the triceratops heavy and pushy, the quetzalcoatlus a flier.
 export const DINO_MOUNTS = Object.freeze({
   rex: DINO_MOUNT,
   raptor: Object.freeze({...DINO_MOUNT, name: 'Toy raptor', scale: 2.0, topSpeed: 16, driveForce: 24}),
@@ -126,6 +126,14 @@ export const DINO_MOUNTS = Object.freeze({
     scale: 2.6,
     topSpeed: 11,
     driveForce: 25
+  }),
+  // On the ground the quetzalcoatlus waddles; its speed is in the air (physics/flight.mjs).
+  quetzal: Object.freeze({
+    ...DINO_MOUNT,
+    name: 'Toy quetzalcoatlus',
+    scale: 2.0,
+    topSpeed: 10,
+    driveForce: 20
   })
 });
 export const mountParams = (kind = 'rex') => scaledCar(DINO_MOUNTS[kind] ?? DINO_MOUNT);
