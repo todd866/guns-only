@@ -109,3 +109,30 @@ export function makeToyCowboy() {
   return g;
 }
 export const poseToyCowboy = poseRobotBody;
+
+// The rigged dinosaur (open-world/characters.js, docs/rc-characters.md) replaces the parts-built
+// one above once its GLB has loaded: skinned, with idle / walk / run / jump clips. Spawned at
+// RIG_SCALE so it is about 2 m nose to tail, the toy cowboy riding on its Saddle empty and kept
+// toy-sized (the scale is undone on him). The parts-built dinosaur stays the fallback.
+export const RIG_SCALE = 1.5;
+export function rideRiggedDino(d) {
+  d.root.scale.setScalar(RIG_SCALE);
+  const rider = makeToyCowboy(); rider.scale.setScalar(1 / RIG_SCALE); rider.position.y = -.12 / RIG_SCALE;
+  const { legs, arms } = rider.userData; legs[0].rotation.set(-1.2, 0, -.5); legs[1].rotation.set(-1.2, 0, .5); arms[0].rotation.x = arms[1].rotation.x = -1.1;
+  d.saddle()?.add(rider); d.rider = rider; d.air = 0;
+  return d;
+}
+/** Pose and animate from the physics car: idle, walk or run by speed, and a jump when it leaves the
+ *  ground. The clips speed up with the car, capped: true no-slide rates at 13 m/s would be a blur
+ *  (the run clip covers 1.25 m/s at this scale), so the feet skate a little at full tilt. */
+export function poseRiggedDino(d, car, rideHeight = .1, dt = 1 / 60) {
+  d.root.position.set(...car.pos); d.root.quaternion.set(...car.q); d.root.translateY(-rideHeight);
+  const speed = Math.hypot(car.vel[0], car.vel[2]), ground = { walk: .3, run: .833 }, airborne = car.contacts === 0;
+  d.air = airborne ? d.air + dt : 0;
+  if (d.air > .18 && d.clip !== 'jump') d.play('jump', { then: 'run', fade: .1 });
+  else if (!airborne && d.clip !== 'jump') {
+    const clip = speed < .25 ? 'idle' : speed < 2.2 ? 'walk' : 'run';
+    d.play(clip, { timeScale: clip === 'idle' ? 1 : Math.min(3, Math.max(.5, speed / (ground[clip] * RIG_SCALE * (clip === 'run' ? 6 : 4)))) });
+  }
+  d.update(dt);
+}
