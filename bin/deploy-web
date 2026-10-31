@@ -386,6 +386,22 @@ if [ "$framework_files" -lt 20 ]; then
     exit 1
 fi
 
+# Vercel stopped serving executable-bit files from CLI uploads (first seen 2026-11-01, Build 432:
+# the five Blazor runtime files that arrive 0744 from the NuGet cache -- blazor.webassembly.js,
+# dotnet.js, dotnet.native.*.js, dotnet.runtime.*.js, dotnet.native.wasm -- were absent from the
+# deployment while their .br/.gz siblings were served, so the shell 404'd on its bootstrap script and
+# verify_candidate refused the promotion). Nothing in a static publish tree needs an execute bit;
+# normalise every file to 0644 before upload so the artifact's bytes, not its modes, decide what ships.
+executable_files=$(find "$deploy_root" -type f -perm -u+x | wc -l | tr -d ' ')
+if [ "$executable_files" -gt 0 ]; then
+    echo "deploy-web: clearing the execute bit on $executable_files published file(s) before upload"
+    find "$deploy_root" -type f -perm -u+x -exec chmod 644 {} +
+fi
+if [ -n "$(find "$deploy_root" -type f -perm -u+x -print -quit)" ]; then
+    echo "deploy-web: executable files remain in the publish artifact; refusing to upload" >&2
+    exit 1
+fi
+
 mkdir -p "$deploy_root/.vercel"
 cp "$project_link" "$deploy_root/.vercel/project.json"
 
