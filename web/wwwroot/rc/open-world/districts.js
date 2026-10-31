@@ -10,6 +10,7 @@ import {DISTRICT_ZONES,districtOffset} from './district-zones.mjs';
 import {districtApron} from './district-aprons.mjs';
 import {fetchAssetBuffer} from '../asset-buffer.mjs';
 import {introBermOverlays,clipIntroTurf} from './intro-berm-overlay.mjs';
+import {perimeterSkirts} from './park-skirt.mjs';
 
 // Districts listed in `eager` (all of them by default) are prepared before driving. The runtime
 // passes only the starting ones in the browser: the others are 1-2 km away, so they download after attach and join
@@ -26,6 +27,7 @@ export async function prepareDistricts(world,{eager=[...Object.keys(DISTRICT_ZON
   const course=placeDistrictCourse({...native,world:cut},placement);
   for(const t of course.world.tris)world.addTri(t.a,t.b,t.c,t.surface);
   if(id!=='skatepark'){const apron=districtApron(id);world.addQuad(...apron.vertices,apron.surface);}
+  else for(const q of perimeterSkirts(course.world))world.addQuad(...q,'concrete');   // never under the slab (park-skirt.mjs)
   course.world=world;const entry={id,zone,clip,placement,buffer,course};entries.push(entry);courses.set(id,course);return entry;
  };
  for(const d of await Promise.all(ids.filter(id=>eager.includes(id)).map(load)))insert(d);
