@@ -12,19 +12,24 @@ Not wired into the game yet. See "Wiring into runtime.js" below.
 | Kit generator (Blender) | `tools/rc/blender/prop_kit.py` → `assets/rc/kit/props.blend`, `web/wwwroot/rc/assets/kit/props.glb` (+ `.gz`, `kit.provenance.json`) |
 | Placement format | `tools/rc/placements.schema.json`; runtime check `validatePlacements()` |
 | Loader / renderer / collision | `web/wwwroot/rc/open-world/placements.js` (+ `placements.test.mjs`) |
-| Example | `web/wwwroot/rc/assets/placements/example-picnic-area.json` (39 items) |
+| Examples | `web/wwwroot/rc/assets/placements/example-picnic-area.json` (39 items), `example-farmstead.json` (56 items, dark-world valley) |
 | Blender layout → JSON | `tools/rc/blender/export_placements.py` |
 | In-engine review | `web/wwwroot/rc/placements-review.html`, `tools/rc/check-placements.cjs` → `evidence/rc-placements/` |
 
 ## The kit
 
-There are fourteen original toy-style props at **real scale**. The world is real-sized and the car is a 0.42 m RC buggy. The props are: `picnic-table`, `bench`, `bin`, `street-lamp`,
-`chain-link-fence-panel` (3 m, tiles along local x), `bollard`, `traffic-cone`, `jersey-barrier` (3 m),
-`sign-post` (blank board), `hay-bale`, `pumpkin`, `tent`, `water-tower` (8 m) and `fuel-drum`.
+All props are original, toy-style and at **real scale**. The world is real-sized and the car is a 0.42 m RC buggy.
 
-Measured on 31 Oct 2026 (Blender 5.2.0): **4,783 drawn triangles** (5,063 including the 14 collision proxies), **3 materials**, **271,624 bytes**
-(53.6 KB gzipped), 24 drawn primitives. The contract `kit` entry in `tools/rc/asset-contract.json` sets the budget: ≤40k triangles, ≤4 materials,
-≤1.5 MB, ≤64 primitives, and all 28 node names. `validate-assets.mjs` enforces it.
+| Set | Props (node names) |
+|---|---|
+| Base (14) | `picnic-table`, `bench`, `bin`, `street-lamp`, `chain-link-fence-panel` (3 m, tiles along local x), `bollard`, `traffic-cone`, `jersey-barrier` (3 m), `sign-post` (blank board), `hay-bale`, `pumpkin`, `tent`, `water-tower` (8 m), `fuel-drum` |
+| Steam-era farm (10 + 2 nodes) | `steam-tractor` (traction engine, 3.9 m, 3.5 m chimney), `thresher` (5.4 m, feed chute), `windmill` (9 m wooden tower) + `windmill-head` (four-blade rotor, attach-only), `hay-wagon`, `water-pump`, `split-rail-fence` (3 m), `crop-row` (2 m; variant 0 wheat, variant 1 pumpkins via node `crop-row@1`), `scarecrow`, `silo` (7 m, domed) |
+
+The owner asked on 31 Oct for steam harvesting gear and farming in the old-timey dark world, with an almost-Minecraft vibe. The farm set uses blocky crops, chunky spoked wheels and slatted sails. The 1 m ore and dirt blocks were dropped because the dig draws its own blocks.
+
+Measured on 31 Oct 2026 (Blender 5.2.0): **13,283 drawn triangles** (13,699 including 24 collision proxies), **3 materials**, **773,460 bytes**
+(141 KB gzipped) and **52 drawn primitives (76 including proxies)**. The contract `kit` entry in `tools/rc/asset-contract.json` sets the budget: ≤40k triangles, ≤4 materials,
+≤1.5 MB, **≤160 primitives** and a ≤45 × 12 × 80 m review-grid extent. The farm set pushed the primitive count past the earlier 64, so that cap was raised; the other caps did not need to move. The contract also lists all 49 node names, and `validate-assets.mjs` enforces it.
 
 GLB structure, which the loader relies on:
 
@@ -36,16 +41,24 @@ GLB structure, which the loader relies on:
   first primitive of a multi-material mesh. Later primitives came out pure white. A test guards this.
 - One child `COL_<prop>`: an axis-aligned box or vertical cylinder in prop-local space, with glTF extras
   `{"collider": "box"|"cylinder"}`. It is never drawn.
-- Materials: `Kit_Paint` (rough 0.5), `Kit_Metal` (metal 0.85, rough 0.38) and `Kit_Wood` (rough 0.85; also concrete, hay
-  and canvas). Base colour is white; the colour is in `COLOR_0`. It is per-face albedo multiplied by a 12-ray ambient-occlusion
-  term baked per vertex against the prop and a ground plane, using the `bake_hero.py` approach.
+- **Kit variants**: a node named `<prop>@<n>` replaces `<prop>` for items with `variant: n`. Such items are not palette-tinted.
+  `crop-row@1` is the pumpkin row. Kit variants are not placeable names of their own.
+- **Attachments**: a prop's extras `{"attach": {"prop": "windmill-head", "offset": [x, y, z]}}` place the attached node at that
+  prop-local glTF offset whenever the parent is placed. The attached part has the same yaw and scale and no collision. `windmill-head` has its origin
+  **on the axle**, not the ground. It spins about its local Z (the axle, pointing out of the tower's front), and has no `COL_`.
+  The game turns every rotor in a placement with `handle.spin('windmill-head', radians)`, which costs one instance-matrix upload per call;
+  each instance gets a fixed phase. The review page spins it every frame.
+- Materials: `Kit_Paint` (rough 0.5), `Kit_Metal` (metal 0.85, rough 0.38) and `Kit_Wood` (rough 0.85; also concrete, hay,
+  canvas and soil). Base colour is white; the colour is in `COLOR_0`. It is per-face albedo multiplied by a 12-ray ambient-occlusion
+  term baked per vertex against the prop and a ground plane (no ground plane for attach-only parts), using the `bake_hero.py` approach.
 - Front: Blender +Y, which becomes glTF/three **−Z**.
 
 ### Adding a prop
 
 1. In `prop_kit.py`, write `def my_prop(p):` using the `Prop` helpers (`box`, `cyl`, `rod`, `strip`, `sphere`, `prism`,
    `poly`). Use only `PAINT`, `METAL` and `WOOD` with a colour from `C`. Keep z ≥ 0, ground contact at the origin, and front +Y.
-   Return `(kind, centre, size)` for the collider in **Blender axes** (x, y forward, z up).
+   Return `(kind, centre, size)` for the collider in **Blender axes** (x, y forward, z up). Add a 4th element `{'attach': {...}}`
+   for an attached part. Return `None` for an attach-only part, which gets no collider and no ground AO. Name a kit variant `'<prop>@<n>'`.
 2. Append `('my-prop', my_prop)` to `PROPS`, then add `my-prop` and `COL_my-prop` to `required_nodes` of the `kit` contract
    entry. If needed, add a collision surface to `PROP_SURFACES` in `placements.js`; the default is concrete.
 3. Rebuild and check:
@@ -57,7 +70,7 @@ GLB structure, which the loader relies on:
    node --test web/wwwroot/rc/open-world/placements.test.mjs
    ```
 
-   Check that the test asserting fourteen props still matches the new count. Then look at the `kit` view of the review page (below).
+   Update the node-count assertion in `placements.test.mjs` (25 top-level nodes today). Then look at the `kit` view of the review page (below).
 
 ## Placement file format (v1)
 
@@ -100,14 +113,16 @@ Measured in-engine on 31 Oct 2026 on the worker (`remote-run`, ANGLE Metal / App
 
 | Scene | Items | Distinct props | Draw calls added (main pass) | Triangles | rAF p50 / p95 / max |
 |---|---|---|---|---|---|
-| example picnic area | 39 | 9 | **14** | 11,896 | 16.7 / 18.0 / 18.6 ms |
-| stress, example ×8 | 312 | 9 | **14** | 95,168 | 16.7 / 17.9 / 18.6 ms |
-| kit line-up | 14 | 14 | 24 | 4,783 | (not timed) |
+| example picnic area | 39 | 9 | **14** | 11,896 | 16.7 / 18.4 / 18.7 ms |
+| example farmstead (rotor spinning) | 56 (+1 attached rotor) | 11 (13 templates) | **31** | 17,900 | 16.7 / 18.1 / 18.6 ms |
+| stress, example ×8 | 312 | 9 | **14** | 95,168 | 16.7 / 18.1 / 18.7 ms |
+| kit line-up (every ground prop + crop-row@1) | 24 | 23 | 52 | 13,283 | (not timed) |
 
 "Added" is the main pass with and without the placements. three r160 resets `renderer.info` after the shadow pass, so each
 shadow-casting light costs up to the same number of depth draws again. Frame time is vsync-bound at both sizes, so the
-cost at this scale cannot be separated on an M2; it does not grow with item count. Screenshots: `web-review.png`
-(overview), `web-close.png`, `web-kit.png` and `web-stress.png` in `evidence/rc-placements/`.
+cost at this scale cannot be separated on an M2; it does not grow with item count. Screenshots in `evidence/rc-placements/`: `web-review.png` and `web-close.png` (picnic area),
+`web-farmstead.png` and `web-farmstead-close.png`, `web-kit.png` and `web-stress.png`. The farmstead costs 31 draw calls because its props use
+two or three materials each: 11 props, 13 templates and 31 material parts. Merging per material needs a newer three, as above.
 
 ## Collision
 
@@ -155,6 +170,29 @@ Distances from the nearest item, computed on 31 Oct 2026 against `assets/world/r
 The skatepark hub is inside `RESIDENTIAL_BOUNDS`, as is everything near it. No `DISTRICT_ZONES` box (housing, BX,
 school) or catalogue location is within 60 m. Every item uses `y: null`, so it follows the residential terrain once wired.
 
+### The farmstead example: where and why
+
+`example-farmstead.json` (56 items) sits in the **dark-world valley** (`open-world/spirit-mountain.mjs`, east valley, `valleyPoint(along, across)`).
+It covers valley-frame along 560–590 and across −39 to −57, and its world centre is about **(2830.5, −3023.1)**. Items are stored as world metres, converted with
+`valleyPoint` and present on this branch, so `placements.js` needs no valley frame. Yaws are the valley axis (−18.4° aligns a prop's
+length along the valley).
+
+The brief suggested along 440–530 and across ±40–150. On this branch's `mountainHeight` that rectangle is mostly bank, 10–45 m above the
+floor, and up to about 140 m at across 150. The flat floor (within 1.5 m of the lake floor, y = 8) is along ≥ 520 and |across| ≤ 60. The farm
+uses that floor strip on the negative-across side. The surrounding valley features are:
+
+| Feature (valley frame) | Clearance from the farm |
+|---|---|
+| Town boxes (`TOWN`, along 538–618, across ±30) | ≥ 14.5 m |
+| Dark-world corral (along 528, across −26) | outside the farm |
+| Dark-world water tower (along 548, across +32) | outside the farm |
+| Lake gate (along 532, across 0) | outside the farm |
+| Street lamps (across ±8) | outside the farm |
+
+The farm has a split-rail paddock (30 segments with a 6 m gate gap facing the town), a wheat field and a pumpkin field (8 rows each, `collide: false` so
+the car drives through crops), a scarecrow between them, a windmill with its pump, a silo, and a thresher, hay wagon and steam tractor
+in a line, plus two hay bales and a drum. All items use `y: null`; the floor is flat at 8 m across the whole layout.
+
 ## Wiring into runtime.js (for a later agent; not done here)
 
 **Authored venues: one call at attach.** In `runtime.js` `attach(scene)`, after the stream and terrain exist:
@@ -192,7 +230,8 @@ disposed the same way.
 - No LOD and no distance culling beyond per-mesh frustum culling. A whole venue is one bounding sphere per mesh, so a large
   file spread over hundreds of metres is drawn whenever any part is on screen. Split large layouts per tile.
 - The variant tint can only darken or shift toward the palette colour: it is a multiply, not a hue rotation.
-- The collision proxy is one box or cylinder per prop. The water tower's proxy is a solid 3.9 m cylinder, so the car cannot
+- The farmstead adds 31 draw calls (above). A later three can merge them per material.
+- The collision proxy is one box or cylinder per prop. The windmill's proxy is a solid 3 m box, and the water tower's proxy is a solid 3.9 m cylinder, so the car cannot
   drive between its legs. The sign post blocks between its posts.
-- `validate-assets.mjs` counts `COL_` meshes in the triangle total, because it only skips the `COLLISION_` prefix; the cost is 280 triangles.
+- `validate-assets.mjs` counts `COL_` meshes in the triangle total, because it only skips the `COLLISION_` prefix; the cost is 416 triangles.
 - The review page draws the example on a flat plane, so terrain snapping on the real residential ground is untested until wired.

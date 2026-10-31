@@ -139,7 +139,8 @@ export function buildTemplateMap(root) {
   };
   visit(top, false);
   if (!top.name) continue;
-  map.set(top.name, {name: top.name, parts, collider, paint: parts.some(p => /paint/i.test(p.material?.name ?? ''))});
+  const attach = top.userData?.attach?.prop ? {prop: top.userData.attach.prop, offset: [...(top.userData.attach.offset ?? [0, 0, 0])]} : null;
+  map.set(top.name, {name: top.name, parts, collider, attach, paint: parts.some(p => /paint/i.test(p.material?.name ?? ''))});
  }
  return map;
 }
@@ -151,6 +152,10 @@ function union(c, kind, box) {
 }
 function triangleCount(g) { return (g.index ? g.index.count : g.attributes.position.count) / 3; }
 
+// Placeable prop names: '<prop>@<n>' nodes are kit variants of <prop>, not props of their own.
+export const kitProps = templates => [...templates.keys()].filter(k => !k.includes('@'));
+// The template an item draws with: '<prop>@<variant>' when the kit has one (then the palette is not applied).
+export const templateKey = (templates, item) => item.variant && templates.has(`${item.prop}@${item.variant}`) ? `${item.prop}@${item.variant}` : item.prop;
 const kits = new Map();
 // Loads and parses a kit GLB once (path relative to rc/assets). Resolves to {path, templates, props}.
 export function preparePlacementKit(path = 'kit/props.glb') {
@@ -159,12 +164,12 @@ export function preparePlacementKit(path = 'kit/props.glb') {
   const buffer = await fetchAssetBuffer(url);
   const gltf = await new GLTFLoader().parseAsync(buffer, new URL('./', url).href);
   const templates = buildTemplateMap(gltf.scene);
-  return {path, templates, props: [...templates.keys()]};
+  return {path, templates, props: kitProps(templates)};
  })().catch(e => { kits.delete(path); throw e; }));
  return kits.get(path);
 }
 // Tests and preloaders can register an already-built template map.
-export function registerPlacementKit(path, templates) { const kit = {path, templates, props: [...templates.keys()]}; kits.set(path, Promise.resolve(kit)); return kit; }
+export function registerPlacementKit(path, templates) { const kit = {path, templates, props: kitProps(templates)}; kits.set(path, Promise.resolve(kit)); return kit; }
 
 export async function loadPlacements(url, {kit = null} = {}) {
  const response = await fetch(url);
@@ -198,18 +203,23 @@ export function instantiatePlacements(scene, data, {kit, elevationAt = null, wor
  const palette = (checked.palette ?? DEFAULT_PALETTE).map(c => new T.Color(c)), root = new T.Group();
  root.name = `Placements_${checked.name}`;
  const byProp = new Map(), collisionTriangles = [];
+ const add = (key, entry) => { if (!byProp.has(key)) byProp.set(key, []); byProp.get(key).push(entry); };
  for (const item of checked.items) {
-  const template = kit.templates.get(item.prop);
+  const key = templateKey(kit.templates, item), template = kit.templates.get(key);
   if (!template) throw Error(`prop "${item.prop}" is not in kit ${kit.path}`);
   const y = groundHeight(item, {elevationAt, world: ground});
-  if (!byProp.has(item.prop)) byProp.set(item.prop, []);
-  byProp.get(item.prop).push({item, y});
+  add(key, {item, y, kitVariant: key !== item.prop});
+  // Attached parts (the windmill's rotor) ride on the parent's transform; their origin is the attach point.
+  if (template.attach && kit.templates.has(template.attach.prop)) {
+   const [x, ay, z] = transformPoint(template.attach.offset, item, y);
+   add(template.attach.prop, {item: {prop: template.attach.prop, pos: [x, ay, z], yaw: item.yaw, scale: item.scale, variant: 0, collide: false}, y: ay, attached: true});
+  }
  }
  // Collision after every height is resolved, so items never snap onto each other's proxies.
  for (const [prop, list] of byProp) {
   const {collider} = kit.templates.get(prop), surface = PROP_SURFACES[prop] ?? 'concrete';
   if (!collider) continue;
-  for (const {item, y} of list) if (item.collide) for (const tri of colliderTriangles(collider, item, y)) { collisionTriangles.push(tri); world?.addTri?.(tri[0], tri[1], tri[2], surface); }
+  for (const {item, y, attached} of list) if (item.collide && !attached) for (const tri of colliderTriangles(collider, item, y)) { collisionTriangles.push(tri); world?.addTri?.(tri[0], tri[1], tri[2], surface); }
  }
  const meshes = [], m = new T.Matrix4();
  let triangles = 0;
@@ -217,10 +227,11 @@ export function instantiatePlacements(scene, data, {kit, elevationAt = null, wor
   const template = kit.templates.get(prop);
   for (const part of template.parts) {
    const mesh = new T.InstancedMesh(part.geometry, part.material, list.length);
-   mesh.name = `${prop}:${part.material?.name ?? 'material'}`;
+   mesh.name = `${prop}:${part.material?.name ?? 'material'}`; mesh.userData.prop = prop;
    mesh.castShadow = castShadow; mesh.receiveShadow = receiveShadow;
    const tint = template.paint ? /paint/i.test(part.material?.name ?? '') : true;
-   list.forEach(({item, y}, i) => { mesh.setMatrixAt(i, itemMatrix(item, y, m)); if (tint && list.some(e => e.item.variant)) mesh.setColorAt(i, palette[item.variant] ?? palette[0]); });
+   const tinted = list.some(e => e.item.variant && !e.kitVariant);
+   list.forEach(({item, y, kitVariant}, i) => { mesh.setMatrixAt(i, itemMatrix(item, y, m)); if (tint && tinted) mesh.setColorAt(i, kitVariant ? palette[0] : palette[item.variant] ?? palette[0]); });
    mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
    mesh.computeBoundingSphere(); mesh.computeBoundingBox();
    triangles += part.triangles * list.length;
@@ -228,10 +239,21 @@ export function instantiatePlacements(scene, data, {kit, elevationAt = null, wor
   }
  }
  scene.add(root);
- const counts = {items: checked.items.length, props: byProp.size, meshes: meshes.length, drawCalls: meshes.length, triangles,
+ const counts = {items: checked.items.length, props: new Set(checked.items.map(i => i.prop)).size, templates: byProp.size, attached: [...byProp.values()].flat().filter(e => e.attached).length, meshes: meshes.length, drawCalls: meshes.length, triangles,
   colliders: checked.items.filter(it => it.collide && kit.templates.get(it.prop).collider).length, collisionTriangles: collisionTriangles.length};
  let disposed = false;
- return {root, counts, meshes, collisionTriangles, dispose() {
+ // spin(prop, radians): turn every instance of an attach-only prop (windmill-head) about its local Z axle,
+ // each with a fixed phase so a row of windmills does not turn in lockstep. Cost: one matrix upload per call.
+ const spin = (prop, radians) => {
+  const list = byProp.get(prop); if (!list) return 0;
+  const r = new T.Matrix4(), b = new T.Matrix4();
+  for (const mesh of meshes) if (mesh.userData.prop === prop) {
+   list.forEach(({item, y}, i) => mesh.setMatrixAt(i, itemMatrix(item, y, b).multiply(r.makeRotationZ(radians + i * 2.399))));
+   mesh.instanceMatrix.needsUpdate = true;
+  }
+  return list.length;
+ };
+ return {root, counts, meshes, collisionTriangles, spin, dispose() {
   if (disposed) return; disposed = true;
   root.removeFromParent();
   // Geometry and materials belong to the kit and are shared; only the per-instance buffers go.

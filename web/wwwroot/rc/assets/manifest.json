@@ -740,7 +740,7 @@
       "budgets": {
         "max_bytes": 1500000,
         "max_materials": 4,
-        "max_primitives": 64,
+        "max_primitives": 160,
         "max_triangles": 40000
       },
       "id": "kit-props-glb",
@@ -761,8 +761,8 @@
       ],
       "path": "kit/props.glb",
       "provenance": "kit/kit.provenance.json",
-      "sha256": "3049227c840dbff9feae163773d0316fbe9bd1076a6f2d859545aad2bfb006fb",
-      "sizeBytes": 271624
+      "sha256": "7047dbb9c1968de924ca8a7ce71b7a3531ed745968f74475968e2263de3aa7cc",
+      "sizeBytes": 773460
     },
     {
       "derivedFrom": "kit/props.glb",
@@ -777,8 +777,8 @@
       "locked": false,
       "path": "kit/props.glb.gz",
       "provenance": "kit/kit.provenance.json",
-      "sha256": "a869023c3cb2943108f336d6e6165411c93d16a07851ef12ace15ee316eb1cf8",
-      "sizeBytes": 53604
+      "sha256": "985ce6b3443292924e2b54228e30632246b6eec847c35ae7185cd337bad25775",
+      "sizeBytes": 140987
     },
     {
       "id": "materials-park-paint-atlas-png",
@@ -809,6 +809,21 @@
       "provenance": "materials/park-paint-atlas.provenance.json",
       "sha256": "3c9d4b822fb2057114baaace35705e84095e636d343aa4c55e54973dce27c45d",
       "sizeBytes": 186616
+    },
+    {
+      "id": "placements-example-farmstead-json",
+      "kind": "world-data",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "placements/example-farmstead.provenance.json"
+      },
+      "locked": false,
+      "path": "placements/example-farmstead.json",
+      "provenance": "placements/example-farmstead.provenance.json",
+      "sha256": "21ee2b6da46ea91a79bab6cb317be2a38bffe2b2df74fe40122e36bffa5aa1ab",
+      "sizeBytes": 7120
     },
     {
       "id": "placements-example-picnic-area-json",

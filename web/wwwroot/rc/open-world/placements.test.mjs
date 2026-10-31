@@ -70,10 +70,16 @@ test('the example picnic area is valid against the real kit and the JSON schema 
  for (const key of Object.keys(schema.properties.items.items.properties)) assert.ok(EXAMPLE.items.every(it => key in it), `example items omit ${key}`);
 });
 
-test('the kit GLB carries all fourteen props, each with a COL_ proxy', () => {
+const FARM = ['steam-tractor', 'thresher', 'windmill', 'windmill-head', 'hay-wagon', 'water-pump', 'split-rail-fence', 'crop-row', 'crop-row@1', 'scarecrow', 'silo'];
+test('the kit GLB carries the 14 base props and the farm set; every ground prop has a COL_ proxy', () => {
  const doc = parseGLB(fs.readFileSync(new URL('../assets/kit/props.glb', import.meta.url)));
- assert.equal(KIT_NODES.length, 14);
- for (const name of KIT_NODES) {
+ assert.equal(KIT_NODES.length, 25);
+ for (const name of FARM) assert.ok(KIT_NODES.includes(name), name);
+ // the windmill carries its rotor as an attachment: offset on the axle, 8-9 m up, in front of the tower axis
+ const mill = doc.nodes.find(n => n.name === 'windmill');
+ assert.equal(mill.extras?.attach?.prop, 'windmill-head');
+ const [, ay, az] = mill.extras.attach.offset; assert.ok(ay > 8 && ay < 9 && az < 0, `${mill.extras.attach.offset}`);
+ for (const name of KIT_NODES.filter(n => n !== 'windmill-head')) {
   const node = doc.nodes.find(n => n.name === name);
   const cols = (node.children ?? []).map(i => doc.nodes[i]).filter(n => n.name === `COL_${name}`);
   assert.equal(cols.length, 1, `${name} collider`);
@@ -170,7 +176,7 @@ test('instantiate: one InstancedMesh per prop part, variants tint paint only, co
   {prop: 'jersey-barrier', pos: [0, null, 10], yaw: 90}, {prop: 'jersey-barrier', pos: [0, null, 20], collide: false},
  ]);
  const h = instantiatePlacements(scene, data, {kit, world, elevationAt: () => 0});
- assert.deepEqual({...h.counts, triangles: undefined}, {items: 4, props: 2, meshes: 3, drawCalls: 3, triangles: undefined, colliders: 3, collisionTriangles: 2 * 22 + 10});
+ assert.deepEqual({...h.counts, triangles: undefined}, {items: 4, props: 2, templates: 2, attached: 0, meshes: 3, drawCalls: 3, triangles: undefined, colliders: 3, collisionTriangles: 2 * 22 + 10});
  assert.ok(h.meshes.every(m => m.isInstancedMesh && m.castShadow));
  const paint = h.meshes.find(m => m.name === 'fuel-drum:Kit_Paint'), metal = h.meshes.find(m => m.name === 'fuel-drum:Kit_Metal');
  assert.equal(paint.count, 2); assert.ok(paint.instanceColor, 'paint part carries variant colours'); assert.equal(metal.instanceColor, null);
@@ -212,4 +218,29 @@ test('every drawn kit primitive carries real vertex colours (no all-white COLOR_
   for (let i = 0; i < a.count; i++) if (values[i * width] >= max && values[i * width + 1] >= max && values[i * width + 2] >= max) white++;
   assert.ok(white < a.count * .05, `${node.name}: ${white}/${a.count} vertices are pure white`);
  }
+});
+
+test('kit variants and attachments: crop-row variant 1 draws crop-row@1; a windmill brings its rotor, which spins', () => {
+ const mat = name => new T.MeshStandardMaterial({name});
+ const root = new T.Group();
+ const node = (name, extras = {}) => { const g = new T.Group(); g.name = name; Object.assign(g.userData, extras); const m = new T.Mesh(new T.BoxGeometry(1, 1, 1).translate(0, .5, 0), mat('Kit_Wood')); g.add(m);
+  if (name !== 'windmill-head') { const c = new T.Mesh(new T.BoxGeometry(1, 1, 1).translate(0, .5, 0)); c.name = 'COL_' + name; c.userData.collider = 'box'; g.add(c); } root.add(g); return g; };
+ node('crop-row'); node('crop-row@1'); node('windmill', {attach: {prop: 'windmill-head', offset: [0, 8.35, -.62]}}); node('windmill-head');
+ const kit = registerPlacementKit('stub-farm.glb', buildTemplateMap(root));
+ assert.deepEqual(kit.props, ['crop-row', 'windmill', 'windmill-head']);
+ const world = createWorld(4);
+ const h = instantiatePlacements(new T.Scene(), good([
+  {prop: 'crop-row', pos: [0, 0, 0]}, {prop: 'crop-row', pos: [0, 0, 2], variant: 1},
+  {prop: 'windmill', pos: [10, 0, 0], yaw: 90},
+ ]), {kit, world});
+ assert.deepEqual(h.meshes.map(m => [m.userData.prop, m.count]).sort(), [['crop-row', 1], ['crop-row@1', 1], ['windmill', 1], ['windmill-head', 1]]);
+ assert.equal(h.counts.attached, 1); assert.equal(h.counts.colliders, 3);
+ const head = h.meshes.find(m => m.userData.prop === 'windmill-head'), a = new T.Matrix4(), p = new T.Vector3();
+ head.getMatrixAt(0, a); p.setFromMatrixPosition(a);
+ // yaw 90 turns the -0.62 m (forward) offset toward -X
+ assert.ok(Math.abs(p.x - (10 - .62)) < 1e-6 && Math.abs(p.y - 8.35) < 1e-6 && Math.abs(p.z) < 1e-6, p.toArray().join());
+ assert.equal(world.raycast([10, 8.35, -5], [0, 0, 1], 10), null, 'the rotor has no collider');
+ assert.equal(h.spin('windmill-head', 1), 1);
+ const b = new T.Matrix4(); head.getMatrixAt(0, b);
+ assert.ok(!a.equals(b) && new T.Vector3().setFromMatrixPosition(b).distanceTo(p) < 1e-6, 'spins in place about its axle');
 });
