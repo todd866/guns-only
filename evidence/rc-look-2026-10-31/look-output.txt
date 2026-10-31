@@ -1,0 +1,6 @@
+heavy-slot: all 3 slots busy; waiting (heavy-slot status)
+heavy-slot: got slot 1 after 15s
+hub {"gpu":"ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)","frameMs":{"p50":"16.7","p95":"116.7","max":"883.3"},"errs":[],"calls":309}
+housing {"gpu":"ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)","frameMs":{"p50":"16.7","p95":"33.3","max":"82.6"},"errs":[],"calls":943}
+
+[exited with code 0]
