@@ -392,23 +392,6 @@ export const EVENTS = [
     medals: [70, 95, 130]
   },
   {
-    id: 'alley-cat',
-    name: 'Alley Cat',
-    location: 'rec',
-    kind: 'circuit',
-    night: true,
-    surface: 'gymfloor',
-    points: ALLEY_RACE_POINTS,
-    // Indoor turns need a shorter look ahead than the outdoor roads.
-    aiHandling: {topSpeed: 5.5, cornerSpeed: 1.5, reach: 0.6, behind: 1.3, look: 0.7, lookSpeed: 0.18},
-    grid: Array.from({length: 8}, (_, i) => ({
-      pos: [ALLEY_RACE_POINTS[0][0], 0, ALLEY_RACE_POINTS[0][1] + i * 0.75],
-      yaw: 0
-    })),
-    half: 0.8,
-    medals: [20, 28, 40]
-  },
-  {
     id: 'rink-drift',
     name: 'Rink Drift',
     location: 'rec',
@@ -523,6 +506,25 @@ export const EVENTS = [
     ],
     half: 5,
     medals: [42, 57, 80]
+  },
+  // Appended last on purpose: acceptance-balance.test.mjs drives every event in order on one shared
+  // world, and inserting one mid-list shifted Splash Down's reference run into a stall (31 Oct).
+  {
+    id: 'alley-cat',
+    name: 'Alley Cat',
+    location: 'rec',
+    kind: 'circuit',
+    night: true,
+    surface: 'gymfloor',
+    points: ALLEY_RACE_POINTS,
+    // Indoor turns need a shorter look ahead than the outdoor roads.
+    aiHandling: {topSpeed: 5.5, cornerSpeed: 1.5, reach: 0.6, behind: 1.3, look: 0.7, lookSpeed: 0.18},
+    grid: Array.from({length: 8}, (_, i) => ({
+      pos: [ALLEY_RACE_POINTS[0][0], 0, ALLEY_RACE_POINTS[0][1] + i * 0.75],
+      yaw: 0
+    })),
+    half: 0.8,
+    medals: [20, 28, 40]
   }
 ];
 EVENTS.push(
