@@ -726,13 +726,15 @@ export function createWorldUI({
                 ? ['Strike · Play', 'E']
                 : p.game === 'golf'
                   ? ['Car Golf · Play', 'E']
-                  : !canEnter(progress, p)
-                    ? [`◇ ${progress.specimens.length}/${SPECIMENS.length} · Map`, 'Tab']
-                    : p.kind === 'discovery'
-                      ? [`${p.short} · Map`, 'Tab']
-                      : p.id === 'skatepark'
-                        ? ['Race', 'E']
-                        : [`${p.name} · Go in`, 'E'])
+                  : p.game === 'flying-school'
+                    ? ['Flying School · Play', 'E']
+                    : !canEnter(progress, p)
+                      ? [`◇ ${progress.specimens.length}/${SPECIMENS.length} · Map`, 'Tab']
+                      : p.kind === 'discovery'
+                        ? [`${p.short} · Map`, 'Tab']
+                        : p.id === 'skatepark'
+                          ? ['Race', 'E']
+                          : [`${p.name} · Go in`, 'E'])
           );
       }
     },

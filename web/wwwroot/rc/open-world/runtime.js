@@ -52,6 +52,8 @@ import {createPettingZoo} from './petting-zoo.js';
 import {createJetDecks} from './jet-decks.js';
 import {createTrickOrTreatVisual} from './trick-or-treat.js';
 import {createBooster} from './booster.js';
+import {createFlyingSchool} from './flying-school.js';
+import {SCHOOL} from './flying-school.mjs';
 import {buildHighSchool} from './high-school.js';
 import {createHotWheels} from './hot-wheels.js';
 import {createCountryClub} from './country-club.js';
@@ -376,6 +378,7 @@ export async function loadOpenWorld(search) {
     jetDecks,
     trickOrTreat,
     booster,
+    flyingSchool,
     highSchool,
     hotWheels,
     club,
@@ -613,6 +616,7 @@ export async function loadOpenWorld(search) {
       zoo = createPettingZoo(scene, stream.world);
       jetDecks = createJetDecks(scene, stream.world);
       booster = createBooster(scene, (x, z) => elevationAt(elevation, x, z));
+      flyingSchool = createFlyingSchool(scene, (x, z) => elevationAt(elevation, x, z));
       hotWheels = createHotWheels(scene, stream.world);
       // The club in the present, the spring meadow in the past (meadow.js): each one's collision on
       // its own era gate, so neither leaves invisible walls in the other time.
@@ -647,6 +651,15 @@ export async function loadOpenWorld(search) {
       meadow?.step(dt, pos ? [pos[0], pos[2]] : null, timeGates.era() === 'past') ?? [],
     boosterStep: (dt, pos) => booster?.step(dt, pos) ?? [],
     booster: () => booster,
+    school: () => flyingSchool?.state,
+    startSchool(mode) {
+      golf = null;
+      target = null;
+      route = [];
+      return flyingSchool?.start(mode);
+    },
+    stopSchool: () => flyingSchool?.stop(),
+    schoolStep: (dt, pilot) => flyingSchool?.step(dt, pilot) ?? [],
     trickOrTreat: (pos, trick, time, dt) => trickOrTreat?.step(pos, trick, time, dt) ?? [],
     candy: () => trickOrTreat?.state.candy ?? null,
     treatHouses: () => trickOrTreat?.houses ?? [],
@@ -735,7 +748,7 @@ export async function loadOpenWorld(search) {
     },
     near: pos => {
       const p = nearestLocation(pos);
-      return distance(pos, p.pos) < 9 ? p : null;
+      return distance(pos, p.pos) < (p.game === 'flying-school' ? SCHOOL.startRadius : 9) ? p : null;
     },
     async travel(id) {
       // A dark-world place (dark-world.mjs DARK_PLACES): jump there and into the past.
@@ -826,6 +839,7 @@ export async function loadOpenWorld(search) {
       hotWheels?.dispose();
       highSchool?.dispose();
       booster?.dispose();
+      flyingSchool?.dispose();
       trickOrTreat?.dispose();
       zoo?.dispose();
       jetDecks?.dispose();
