@@ -57,7 +57,15 @@ import {createJetDecks} from './jet-decks.js';
 import {createTrickOrTreatVisual} from './trick-or-treat.js';
 import {createBooster} from './booster.js';
 import {createFlyingSchool} from './flying-school.js';
+import {createTennisCourt} from './tennis.js';
+import {createDeliveryVisual} from './deliveries.js';
+import {deliveryStops} from './deliveries.mjs';
+import {createClouds} from './clouds.js';
+import {createCanyonRunVisual} from './canyon-run.js';
+import {canyonArrival} from './canyon-run.mjs';
 import {SCHOOL} from './flying-school.mjs';
+import {buildStuntJumps} from './stunt-jumps.js';
+import {createStuntJumps, stepStuntJumps, stuntTimeScale} from './stunt-jumps.mjs';
 import {buildHighSchool} from './high-school.js';
 import {createHotWheels} from './hot-wheels.js';
 import {createCountryClub} from './country-club.js';
@@ -142,6 +150,7 @@ export async function loadOpenWorld(search) {
     storage = localStorage;
   } catch {}
   const progress = loadProgress(storage),
+    stuntState = createStuntJumps(progress.stuntJumps, (x, z) => elevationAt(elevation, x, z)),
     explicitEntry = q.has('event') || q.has('from') || q.has('at'),
     requested = eventById(q.get('event')),
     requestedPlace = requested && locationById(requested.location),
@@ -327,10 +336,17 @@ export async function loadOpenWorld(search) {
   // retain their requested entrance or race grid behavior.
   if ((!q.has('event') || locked) && at.id === 'skatepark')
     course.start = {pos: [...RESIDENTIAL_START.pos], yaw: RESIDENTIAL_START.yaw};
+  if (!q.has('event') && at.game === 'canyon-run')
+    course.start = canyonArrival((x, z) => elevationAt(elevation, x, z));
   // World challenge coins sit at landmarks, outside the rings. Discovery and coins are distinct.
   const eventBounds = course.outOfBounds;
   course.outOfBounds = pos => (pos[0] > 9000 && pos[1] < -3) || !!eventBounds?.(pos);
-  course.coins = LOCATIONS.map(p => ({name: `WORLD_${p.id}`, x: p.pos[0] + 4, y: 0.15, z: p.pos[2] + 2}));
+  course.coins = LOCATIONS.filter(p => p.game !== 'canyon-run').map(p => ({
+    name: `WORLD_${p.id}`,
+    x: p.pos[0] + 4,
+    y: 0.15,
+    z: p.pos[2] + 2
+  }));
   course.secrets = SPECIMENS;
   let racing = !locked && (selected.battle || ['race', 'furball'].includes(q.get('mode')));
   const canRace = () => golf?.kind !== 'bowling' || golf.done;
@@ -396,6 +412,11 @@ export async function loadOpenWorld(search) {
     trickOrTreat,
     booster,
     flyingSchool,
+    tennis,
+    stuntJumps,
+    deliveries,
+    clouds,
+    canyonRun,
     highSchool,
     bowlingAlley,
     hotWheels,
@@ -625,8 +646,9 @@ export async function loadOpenWorld(search) {
       }
       return event;
     },
-    route: () => route,
-    target: () => target,
+    route: () => (deliveries?.state.active && !deliveries.state.paused ? deliveries.state.route : route),
+    target: () =>
+      deliveries?.state.active && !deliveries.state.paused ? deliveries.state.destination : target,
     loadBackground() {
       districts.loadRest().catch(error => console.warn('RC district unavailable:', error));
     },
@@ -639,8 +661,21 @@ export async function loadOpenWorld(search) {
       schoolyard.attach(scene);
       residentialYards.attach(scene);
       flyovers = createFlyovers(scene);
+      const porches = residentialPorches(residentialData, {terrain: residentialTerrain});
+      deliveries = createDeliveryVisual(
+        scene,
+        deliveryStops(porches, [
+          ...LOCATIONS,
+          // The existing chapel's front door is at (-350, -592), in base-life.js.
+          {id: 'chapel', short: 'Chapel', pos: [-350, 0, -587]}
+        ]),
+        {
+          heightAt: (x, z) =>
+            inResidential([x, 0, z]) ? residentialTerrain.heightAt(x, z) : elevationAt(elevation, x, z),
+          routeTo: routeFor
+        }
+      );
       if (season === 'halloween') {
-        const porches = residentialPorches(residentialData, {terrain: residentialTerrain});
         trickOrTreat = createTrickOrTreatVisual(scene, porches);
         halloween = createHalloween(scene, stream.world, {
           porches,
@@ -695,6 +730,17 @@ export async function loadOpenWorld(search) {
       jetDecks = createJetDecks(scene, stream.world);
       booster = createBooster(scene, (x, z) => elevationAt(elevation, x, z));
       flyingSchool = createFlyingSchool(scene, (x, z) => elevationAt(elevation, x, z));
+      tennis = createTennisCourt(scene, (x, z) => elevationAt(elevation, x, z));
+      stuntJumps = buildStuntJumps(scene, stream.world, stuntState.heightAt);
+      clouds = createClouds(
+        scene,
+        (x, z) =>
+          inResidential([x, 0, z]) ? residentialTerrain.heightAt(x, z) : elevationAt(elevation, x, z),
+        progress.clouds
+      );
+      canyonRun = createCanyonRunVisual(scene, (x, z) => elevationAt(elevation, x, z), {
+        best: progress.canyonBest
+      });
       hotWheels = createHotWheels(scene, stream.world);
       // The club in the present, the spring meadow in the past (meadow.js): each one's collision on
       // its own era gate, so neither leaves invisible walls in the other time.
@@ -729,6 +775,14 @@ export async function loadOpenWorld(search) {
       meadow?.step(dt, pos ? [pos[0], pos[2]] : null, timeGates.era() === 'past') ?? [],
     boosterStep: (dt, pos) => booster?.step(dt, pos) ?? [],
     booster: () => booster,
+    cloudLift: pos => clouds?.lift(pos) ?? 0,
+    cloudStep: (pos, prev, flying) => clouds?.step(pos, prev, flying),
+    skyTourFrame(dt, enabled, mode) {
+      clouds?.frame(dt, enabled);
+      canyonRun?.frame(enabled, mode);
+    },
+    canyonStep: (dt, pilot) => canyonRun?.step(dt, pilot) ?? [],
+    stopCanyon: () => canyonRun?.stop(),
     school: () => flyingSchool?.state,
     startSchool(mode) {
       golf = null;
@@ -738,6 +792,18 @@ export async function loadOpenWorld(search) {
     },
     stopSchool: () => flyingSchool?.stop(),
     schoolStep: (dt, pilot) => flyingSchool?.step(dt, pilot) ?? [],
+    tennis: () => tennis?.state,
+    startTennis: mode => tennis?.start(mode),
+    stopTennis: () => tennis?.stop(),
+    tennisSwing: player => tennis?.swing(player) ?? false,
+    tennisStep: (dt, player) => tennis?.step(dt, player) ?? [],
+    stuntStep: (dt, car, enabled) => stepStuntJumps(stuntState, car, dt, enabled),
+    stuntScale: (car, dt, enabled) => stuntTimeScale(stuntState, car, dt, enabled),
+    deliveries: () => deliveries?.state,
+    startDeliveries: driver => deliveries?.start(driver),
+    stopDeliveries: () => deliveries?.stop() ?? false,
+    deliveryStep: (dt, driver) => deliveries?.step(dt, driver) ?? [],
+    drawDeliveries: (dt, car, options) => deliveries?.draw(dt, car, options),
     trickOrTreat: (pos, trick, time, dt) => trickOrTreat?.step(pos, trick, time, dt) ?? [],
     candy: () => trickOrTreat?.state.candy ?? null,
     treatHouses: () => trickOrTreat?.houses ?? [],
@@ -801,6 +867,7 @@ export async function loadOpenWorld(search) {
       highSchool?.update?.(1 / 60);
       hotWheels?.update(1 / 60);
       club?.update(1 / 60, pos, timeGates.era() !== 'past');
+      tennis?.update(playerPos, timeGates.era() !== 'past');
       activities?.update(time, pos);
       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
       bowlingVisual?.update(golf, racing ? selected.id : null);
@@ -828,6 +895,8 @@ export async function loadOpenWorld(search) {
     },
     near: pos => {
       const p = nearestLocation(pos);
+      // Canyon Run starts in flight; it has no Go in / E action.
+      if (p.game === 'canyon-run') return null;
       return distance(pos, p.pos) < (p.game === 'flying-school' ? SCHOOL.startRadius : 9) ? p : null;
     },
     async travel(id) {
@@ -867,11 +936,13 @@ export async function loadOpenWorld(search) {
           ? RESIDENTIAL_START
           : p.id === 'gate'
             ? ARRIVAL_START
-            : p.track && districts.courses.has(p.track)
-              ? districts.courses.get(p.track).start
-              : p.event && p.id !== 'lab'
-                ? eventCourse(eventById(p.event), stream.world).start
-                : {pos: [p.pos[0], p.pos[1], p.pos[2] + 6], yaw: 0};
+            : p.game === 'canyon-run'
+              ? canyonArrival((x, z) => elevationAt(elevation, x, z))
+              : p.track && districts.courses.has(p.track)
+                ? districts.courses.get(p.track).start
+                : p.event && p.id !== 'lab'
+                  ? eventCourse(eventById(p.event), stream.world).start
+                  : {pos: [p.pos[0], p.pos[1], p.pos[2] + 6], yaw: 0};
       const pos = [...start.pos];
       if (!(await stream.prepare(pos))) return null;
       await stream.update(pos);
@@ -923,6 +994,11 @@ export async function loadOpenWorld(search) {
       highSchool?.dispose();
       booster?.dispose();
       flyingSchool?.dispose();
+      tennis?.dispose();
+      stuntJumps?.dispose();
+      deliveries?.dispose();
+      clouds?.dispose();
+      canyonRun?.dispose();
       trickOrTreat?.dispose();
       zoo?.dispose();
       jetDecks?.dispose();

@@ -321,3 +321,33 @@ test('the landing approach clears Kid ground avoidance and the parachute lands i
     assert.equal(st.card.at(-1)?.stars, 3, mode);
   }
 });
+
+test('a fly-in touchdown inside the landing box counts at flying speed', () => {
+  const st = createSchool();
+  startSchool(st, {mode: 'kid'});
+  st.lesson = 2;
+  st.pending = 0;
+  st.landingReady = true;
+  const c = SCHOOL.landing.center,
+    above = [c[0], 3, c[2]],
+    down = [c[0], 0.2, c[2]];
+  stepSchool(st, {pos: above, prevPos: above, flightMode: 'fly', speed: 18}, 1 / 120);
+  const airFrame = stepSchool(
+    st,
+    {pos: down, prevPos: above, flightMode: null, speed: 12.6, onGround: false},
+    1 / 120
+  );
+  assert.equal(
+    airFrame.some(e => e.schoolDone),
+    false
+  );
+  const events = stepSchool(
+    st,
+    {pos: down, prevPos: down, flightMode: null, speed: 12.4, onGround: true},
+    1 / 120
+  );
+  assert.ok(
+    events.some(e => e.schoolDone),
+    'touchdown at 12 m/s inside the box ends the course'
+  );
+});

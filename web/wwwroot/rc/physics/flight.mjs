@@ -209,6 +209,9 @@ export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
     car.vel = [drift[0] + (car.vel[0] - drift[0]) * drag, vy, drift[1] + (car.vel[2] - drift[1]) * drag];
     if (f.retro) f.retros = (f.retros ?? 0) + dt;
   }
+  // World rising air joins the velocity before collision and the existing ceiling clamp.
+  // Only flight accepts it: parachutes and road/race movement keep their normal behaviour.
+  if (f.mode === 'fly' && Number.isFinite(ctl.lift)) car.vel[1] += Math.max(0, Math.min(3, ctl.lift));
   car.ang = [0, 0, 0];
   // Move, stopping at anything in the way.
   const step = scale(car.vel, dt),

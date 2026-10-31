@@ -31,7 +31,7 @@ export const SKY_RINGS = Object.freeze([
 ]);
 export const SKY_PAD_RADIUS = 6;
 export const SKY_HINT = '🪂 Sky jump! [E] go';
-export const SKY_STEER_HINT = '🪂 Steer with [left] [right] · land on the gold';
+export const SKY_STEER_HINT = '🪂 Turn with [left] [right] · land on the gold';
 // Look down past the car so the rings remain in view even from the plane's 600 m drop.
 export function skyDiveCamera(pos, yaw) {
   return {

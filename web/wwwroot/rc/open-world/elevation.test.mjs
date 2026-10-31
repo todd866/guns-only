@@ -10,7 +10,9 @@ const data = JSON.parse(fs.readFileSync(new URL('../assets/world/playable-terrai
 test('source contours are nonflat but runtime grading protects every venue and race gate', () => {
   assert.ok(data.values.some(v => v > 10));
   assert.ok(data.values.some(v => v < -5));
-  for (const p of LOCATIONS) assert.equal(elevationAt(data, p.pos[0], p.pos[2], MARSEILLE_TERRAIN), 0, p.id);
+  // The Canyon Run is down in the carved canyon on purpose; every other place is graded flat.
+  for (const p of LOCATIONS.filter(p => p.game !== 'canyon-run'))
+    assert.equal(elevationAt(data, p.pos[0], p.pos[2], MARSEILLE_TERRAIN), 0, p.id);
   for (const e of EVENTS)
     for (const p of e.points) assert.equal(elevationAt(data, p[0], p[1], MARSEILLE_TERRAIN), 0, e.id);
 });

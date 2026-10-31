@@ -410,6 +410,10 @@ export function buildLandmarks(scene, world, progress = loadProgress(), roads = 
     }
     spray.instanceMatrix.needsUpdate = true;
   });
+  // Bridge the short basin dip between the east shore (x = -493) and the ramp toe.
+  // At low swell a car otherwise noses below the toe, hits its hull and tumbles
+  // onto the climb. Keep the full 2 m crest and both slopes; only fill the run-in.
+  slope(-496, -492, 0, 0, 3340, 6, '#d5ac72');
   ramp(-510, 3340, 6, 28, 2, Math.PI / 2);
   ramp(-580, 3310, 6, 24, 1.5, 0);
   label('SUNRISE SPLASH', -545, 4, 3395, 18, '#a0e7ed');
@@ -458,6 +462,8 @@ export function buildLandmarks(scene, world, progress = loadProgress(), roads = 
   // Event rings have separate pulse materials. Labels stay in world space; proximity UI has
   // the unambiguous action and keyboard shortcut.
   for (const p of LOCATIONS) {
+    // The canyon's gold flight gates are its marker, at the actual valley height.
+    if (p.game === 'canyon-run') continue;
     const allowed = canEnter(progress, p),
       g = new T.Group();
     g.position.set(...p.pos);

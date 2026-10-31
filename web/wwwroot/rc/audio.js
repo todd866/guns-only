@@ -436,6 +436,10 @@ export class SoundKit {
     this.burst({type: 'bandpass', freq: 280, sweep: 1300, dur: 0.55, level: 0.2, q: 1.2, attack: 0.08});
     this.tone(110, 0, 0.5, {type: 'triangle', level: 0.05, glide: 220, attack: 0.08});
   }
+  cloud() {
+    if (!this.ready('cloud', 1.5)) return;
+    this.burst({type: 'lowpass', freq: 900, sweep: 350, dur: 0.8, level: 0.08, attack: 0.2});
+  }
   // A radio call: a soft two-note chime, at most once a second and a half (it marks many callouts).
   radio() {
     if (!this.ready('radio', 1.5)) return;
