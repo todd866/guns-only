@@ -27,7 +27,8 @@ import {DISTRICT_ZONES, districtBounds} from './district-zones.mjs';
 import {createTerrain} from './terrain.js';
 import {BOUNDS} from './catalog.mjs';
 import {prepareDistricts} from './districts.js';
-import {createBowling, stepBowling, nextDelivery, BOWLING_TEE} from './bowling.mjs';
+import {createBowling, stepBowling, nextDelivery, bowlingTee} from './bowling.mjs';
+import {buildBowlingAlley} from './bowling-alley.js';
 import {createBowlingVisual} from './bowling.js';
 import {createGolf, stepGolf, resetGolf, golfTee} from './golf.mjs';
 import {createGolfVisual} from './golf.js';
@@ -385,6 +386,7 @@ export async function loadOpenWorld(search) {
     booster,
     flyingSchool,
     highSchool,
+    bowlingAlley,
     hotWheels,
     club,
     meadow,
@@ -535,15 +537,19 @@ export async function loadOpenWorld(search) {
       }
       return null;
     },
-    startActivity(kind) {
-      golf = kind === 'bowling' ? createBowling() : createGolf();
-      return kind === 'bowling' ? BOWLING_TEE : golfTee(golf);
+    startActivity(kind, options = {}) {
+      golf = kind === 'bowling' ? createBowling(options) : createGolf();
+      return kind === 'bowling' ? bowlingTee(golf.lane) : golfTee(golf);
+    },
+    cancelActivity() {
+      golf = null;
     },
     resetActivity() {
       if (!golf) return null;
       const tee = golf.kind === 'bowling' ? nextDelivery(golf) : resetGolf(golf);
       if (golf.kind === 'bowling' && golf.done) {
-        progress.bowlingBest = Math.max(progress.bowlingBest, golf.score);
+        progress.bowlingBest = Math.max(progress.bowlingBest ?? 0, golf.score);
+        progress.bowlingVersion = 2;
         saveProgress(storage, progress);
       }
       return tee;
@@ -556,8 +562,10 @@ export async function loadOpenWorld(search) {
         return event;
       }
       if (event?.finished) {
-        if (golf.kind === 'bowling') progress.bowlingBest = Math.max(progress.bowlingBest, event.score);
-        else progress.golfBest = Math.min(progress.golfBest ?? Infinity, event.total);
+        if (golf.kind === 'bowling') {
+          progress.bowlingBest = Math.max(progress.bowlingBest ?? 0, event.score);
+          progress.bowlingVersion = 2;
+        } else progress.golfBest = Math.min(progress.golfBest ?? Infinity, event.total);
         saveProgress(storage, progress);
       }
       return event;
@@ -603,6 +611,7 @@ export async function loadOpenWorld(search) {
       } catch (e) {
         console.warn('placements unavailable', e);
       }
+      bowlingAlley = buildBowlingAlley(scene, stream.world);
       bowlingVisual = createBowlingVisual(scene);
       golfVisual = createGolfVisual(scene);
       render = createTileRenderer(scene, elevation, residentialTerrain, MARSEILLE_TERRAIN);
@@ -708,7 +717,7 @@ export async function loadOpenWorld(search) {
     skySounds() {
       return flyovers?.sounds() ?? [];
     },
-    update(time, pos, camera, onDiscover) {
+    update(time, pos, camera, onDiscover, playerPos = pos) {
       halloween?.update(time);
       darkWorld?.update(
         Math.max(0, Math.min(0.1, time - (darkClock ?? time))),
@@ -737,6 +746,7 @@ export async function loadOpenWorld(search) {
       activities?.update(time, pos);
       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
       bowlingVisual?.update(golf);
+      bowlingAlley?.update(golf?.kind === 'bowling' ? golf : null, playerPos);
       const key = pos.map((v, i) => (i === 1 ? 0 : Math.floor(v / 64))).join(',');
       if (key !== lastTile || stream.errors.size) {
         lastTile = key;
@@ -873,6 +883,7 @@ export async function loadOpenWorld(search) {
       landmarks?.dispose();
       golfVisual?.dispose();
       bowlingVisual?.dispose();
+      bowlingAlley?.dispose();
     }
   };
   return api;

@@ -6,7 +6,7 @@ import {createSurfaceMaps} from './materials.js';
 import {groundTriangles, elevationAt, terrainStep} from './elevation.mjs';
 import {inMountain, roadNear, MOUNTAIN, LAKE} from './spirit-mountain.mjs';
 import {canyonDepth, canyonStrata} from './canyon.mjs';
-import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
+import {SCENERY_BOUNDS as DISTRICT_BOUNDS, TERRAIN_BOUNDS} from './district-zones.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import * as T from '../../vendor/three.module.js';
 import {buildingInfo, roadWidth} from './geometry.mjs';
@@ -161,15 +161,17 @@ export function createTileRenderer(scene, elevation = null, residentialTerrain =
       if (!buckets.has(k)) buckets.set(k, {v: [], c: [], uv: []});
       return buckets.get(k);
     };
-    function tri(k, a, b, c, shade = 1, clipResidential = false) {
+    function tri(k, a, b, c, shade = 1, clipResidential = false, ground = false) {
       let triangles = [[a, b, c]];
       const clipBounds = clipResidential
         ? [
-            ...DISTRICT_BOUNDS,
+            ...(ground ? TERRAIN_BOUNDS : DISTRICT_BOUNDS),
             ...(residentialBounds ? [residentialBounds] : []),
             ...(siteHole ? [siteHole] : [])
           ]
-        : DISTRICT_BOUNDS;
+        : ground
+          ? TERRAIN_BOUNDS
+          : DISTRICT_BOUNDS;
       for (const d of clipBounds) {
         if (
           Math.min(a[0], b[0], c[0]) > d[2] ||
@@ -206,7 +208,7 @@ export function createTileRenderer(scene, elevation = null, residentialTerrain =
       tri(k, a, b, c, shade);
       tri(k, a, c, d, shade);
     }
-    function poly(k, ring, y, shade = 1, clipResidential = false) {
+    function poly(k, ring, y, shade = 1, clipResidential = false, ground = false) {
       const pts = clip(ring, b);
       if (pts.length < 3) return;
       const v = pts.map(p => new T.Vector2(...p)),
@@ -215,7 +217,7 @@ export function createTileRenderer(scene, elevation = null, residentialTerrain =
         const p = [pts[a], pts[c], pts[d]],
           cross = (p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0]);
         if (cross > 0) p.reverse();
-        tri(k, ...p.map(q => [q[0], y, q[1]]), shade, clipResidential);
+        tri(k, ...p.map(q => [q[0], y, q[1]]), shade, clipResidential, ground);
       }
     }
     function ribbon(k, a, c, w, y) {
@@ -285,6 +287,7 @@ export function createTileRenderer(scene, elevation = null, residentialTerrain =
         ],
         -0.025,
         1,
+        true,
         true
       );
     for (const f of tile.features) {
@@ -629,6 +632,7 @@ export function createTileRenderer(scene, elevation = null, residentialTerrain =
       g.computeVertexNormals();
       g.computeBoundingSphere();
       const m = new T.Mesh(g, mats.get(k));
+      m.name = `Tile-${k}`;
       m.castShadow = ['wall', 'roof'].includes(k);
       m.receiveShadow = true;
       root.add(m);

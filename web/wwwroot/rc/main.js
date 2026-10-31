@@ -23,6 +23,7 @@ import {
   parTo
 } from './open-world/country-club.mjs';
 import {swingPowerOf} from './open-world/golf-swing.mjs';
+import {approachLane, rollBowling, scoreFrames, frameMarks} from './open-world/bowling.mjs';
 import {
   HOT_WHEELS,
   boost as hwBoost,
@@ -899,6 +900,7 @@ function pause(value) {
   document.body.classList.toggle('paused', value);
   if (!value) audio.start();
   keys.clear();
+  bowlingHold = null;
   touchControls?.reset();
   fireQueued = false;
   $('pause').textContent = paused ? '▶' : '⏸';
@@ -1077,7 +1079,9 @@ window.addEventListener('keydown', e => {
     if (!e.repeat) {
       const lad = !paused && adventure?.ladder(robot ? robot.pos : s.car.pos);
       if (lad) climbLadder(lad);
-      else if (robot && golfCanSwing()) golfHold = 0;
+      else if (robot && bowlingPress()) {
+        /* holding to roll */
+      } else if (robot && golfCanSwing()) golfHold = 0;
       else if (robot) useQueued = true;
       else if (!(form === 'board' && boardTricks.air > 0)) enterLocation();
     }
@@ -1192,6 +1196,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => {
   keys.delete(e.code);
   lookKeys.delete(e.code);
+  if (e.code === 'KeyE' && bowlingHold != null) bowlingRelease();
   if (e.code === 'KeyE' && golfHold != null) golfRelease();
 });
 window.addEventListener('blur', () => pause(true));
@@ -3584,6 +3589,113 @@ function hopInCart() {
   telemetry.discover('golf-cart', 'item');
   callout('🛺 The golf cart is yours! Change cars in the Garage', 4000);
 }
+// Bowling shares golf's triangular hold/release meter; each lane approach starts robot play.
+let bowlingHold = null,
+  bowlingHudKey = '';
+function bowlingCanRoll() {
+  const g = openWorld?.activity();
+  return !!(
+    robot &&
+    !paused &&
+    !ui.panel() &&
+    race.roam &&
+    g?.kind === 'bowling' &&
+    g.control === 'robot' &&
+    !g.done &&
+    !g.launched &&
+    approachLane(robot.pos)?.id === g.lane
+  );
+}
+function bowlingPress() {
+  if (!robot || paused || ui.panel() || !race.roam || !openWorld || openWorld.era?.() === 'past')
+    return false;
+  const lane = approachLane(robot.pos);
+  let g = openWorld.activity();
+  if (!lane) return false;
+  if (!g || g.kind !== 'bowling' || g.done) {
+    openWorld.startActivity('bowling', {lane: lane.id, control: 'robot', mode});
+    g = openWorld.activity();
+    robot.yaw = 0;
+    telemetry.activityStart('bowling');
+  }
+  if (bowlingCanRoll()) bowlingHold = 0;
+  return g?.kind === 'bowling';
+}
+function bowlingRelease() {
+  const held = bowlingHold;
+  bowlingHold = null;
+  if (held == null || !bowlingCanRoll()) return;
+  if (rollBowling(openWorld.activity(), {power: swingPowerOf(held), aim: robot.yaw, mode})) audio.impact(2);
+}
+function bowlingPrepare(dt) {
+  let g = openWorld.activity();
+  if (g?.kind === 'bowling' && ((g.control === 'robot') !== !!robot || openWorld.era?.() === 'past')) {
+    openWorld.cancelActivity();
+    bowlingHold = null;
+    g = null;
+  }
+  if (robot && !g && openWorld.era?.() !== 'past') {
+    const lane = approachLane(robot.pos);
+    if (lane) {
+      openWorld.startActivity('bowling', {lane: lane.id, control: 'robot', mode});
+      robot.yaw = 0;
+      telemetry.activityStart('bowling');
+      callout('🎳 Bowling! Walk to a lane · hold [E], let go to roll', 4500);
+      g = openWorld.activity();
+    }
+  }
+  if (bowlingHold != null) {
+    if (bowlingCanRoll()) bowlingHold += dt;
+    else bowlingHold = null;
+  }
+  if (g?.kind === 'bowling' && !g.launched) {
+    g.bumpers = mode === 'kid';
+    const a = robot ? Math.atan2(Math.sin(robot.yaw), Math.cos(robot.yaw)) : 0;
+    g.aim = mode === 'kid' && Math.abs(a) <= 0.3 ? 0 : Math.max(-0.5, Math.min(0.5, a));
+  }
+}
+function bowlingHud() {
+  const g = openWorld?.activity(),
+    el = $('bowling-hud');
+  el.hidden = g?.kind !== 'bowling' || !race.roam;
+  if (el.hidden) {
+    bowlingHold = null;
+    return;
+  }
+  const key = JSON.stringify([g.frames, g.frame, g.done, g.bumpers, g.control, g.lane]);
+  if (key !== bowlingHudKey) {
+    bowlingHudKey = key;
+    const totals = scoreFrames(g.frames);
+    $('bowling-frames').replaceChildren(
+      ...g.frames.map((rolls, i) => {
+        const frame = document.createElement('span'),
+          marks = document.createElement('span'),
+          total = document.createElement('strong');
+        frame.className = 'bowling-frame';
+        frame.classList.toggle('current', !g.done && i === g.frame);
+        frame.setAttribute(
+          'aria-label',
+          `Frame ${i + 1}: ${frameMarks(rolls, i) || '–'}, score ${totals[i] ?? '–'}`
+        );
+        frame.title = `Frame ${i + 1}`;
+        marks.textContent = frameMarks(rolls, i) || String(i + 1);
+        total.textContent = totals[i] ?? '·';
+        frame.append(marks, total);
+        return frame;
+      })
+    );
+    $('bowling-lane').textContent = g.control === 'car' ? '🚗 1' : `🎳 ${g.lane}`;
+    $('bowling-lane').title =
+      g.control === 'car' ? 'Car Bowling' : `Lane ${g.lane} · ${g.bumpers ? 'Bumpers up' : 'No bumpers'}`;
+  }
+  const meter = $('bowling-meter');
+  meter.hidden = bowlingHold == null;
+  if (bowlingHold != null) {
+    const power = swingPowerOf(bowlingHold);
+    meter.style.setProperty('--p', power.toFixed(3));
+    meter.setAttribute('aria-valuenow', String(Math.round(power * 100)));
+  }
+}
 // Robot golf at the country club (open-world/country-club.mjs). As the robot, walk onto the 1st
 // tee and a round starts. Stand at the ball, turn to aim (kid mode snaps to the pin when you're
 // close), hold E: the meter swings up and down; let go to hit. The club is picked for you. When
@@ -4094,6 +4206,7 @@ function enterLocation() {
     if (event) schoolEvent(event);
     return;
   }
+  if (robot && (approachLane(robot.pos) || openWorld.activity()?.kind === 'bowling')) return;
   if (cartNear()) {
     hopInCart();
     return;
@@ -4107,7 +4220,7 @@ function enterLocation() {
     if (tee) placeCar(s.car, [tee.pos[0], rideHeight(s.car.params) + 0.02, tee.pos[2]], tee.yaw);
     else if (openWorld.activity()?.done) {
       audio.finish();
-      callout(`BOWLING · ${openWorld.activity().score}/10`);
+      callout(`🎳 Game over · ${openWorld.activity().score}`);
     }
     return;
   }
@@ -4115,10 +4228,10 @@ function enterLocation() {
   if (!p) return;
   if (p.game === 'flying-school') return;
   if (p.game) {
-    const tee = openWorld.startActivity(p.game);
+    const tee = openWorld.startActivity(p.game, {mode});
     telemetry.activityStart(p.game);
     placeCar(s.car, [tee.pos[0], rideHeight(s.car.params) + 0.02, tee.pos[2]], tee.yaw);
-    callout(p.game === 'golf' ? 'CAR GOLF · 3 HOLES' : 'STRIKE · 2 DELIVERIES');
+    callout(p.game === 'golf' ? 'CAR GOLF · 3 HOLES' : '🎳 Car Bowling · drive at the pins!');
     return;
   }
   if (p.kind === 'discovery' || !canEnter(openWorld.progress, p)) ui.open('map');
@@ -4152,7 +4265,7 @@ function statRows() {
     ['⭐', 'Flying School best', pr.flyingStars ? `${pr.flyingStars}/9` : '–'],
     ['⛳', 'Best golf round', pr.golfRoundBest ? `${pr.golfRoundBest}` : '–'],
     ['🤠', 'Fastest roundup', pr.roundupBest ? `${pr.roundupBest} s` : '–'],
-    ['🎳', 'Bowling best', pr.bowlingBest ? `${pr.bowlingBest}/10` : '–'],
+    ['🎳', 'Bowling best', pr.bowlingBest != null ? `${pr.bowlingBest}/300` : '–'],
     ['⛳', 'Golf best', pr.golfBest ? `${pr.golfBest} hits` : '–'],
     ...(adventure
       ? [
@@ -4178,8 +4291,9 @@ const ui = createWorldUI({
     },
   world: openWorld,
   getState: () => ({
-    pos: s.car.pos,
-    yaw: readout(s).yaw,
+    pos: robot?.pos ?? s.car.pos,
+    yaw: robot?.yaw ?? readout(s).yaw,
+    robot: !!robot,
     paused,
     roam: race.roam,
     started,
@@ -4196,6 +4310,18 @@ const ui = createWorldUI({
   onOpen: which => {
     if (which === 'map') telemetry.mapOpen(s.car.pos);
   }
+});
+$('interact').addEventListener('pointerdown', e => {
+  if (robot && bowlingPress()) {
+    e.preventDefault();
+    $('interact').setPointerCapture(e.pointerId);
+  }
+});
+$('interact').addEventListener('pointerup', () => {
+  if (bowlingHold != null) bowlingRelease();
+});
+$('interact').addEventListener('pointercancel', () => {
+  bowlingHold = null;
 });
 let cupStorage;
 try {
@@ -4372,7 +4498,11 @@ function frame(now) {
       if (robot && !openWorld?.digging?.()) {
         stepRobot(
           robot,
-          intro.active ? {} : {throttle: drive.throttle, steer: drive.steer, jump: keys.has('Space')},
+          intro.active
+            ? {}
+            : bowlingHold != null
+              ? {throttle: 0, steer: drive.steer * 0.13}
+              : {throttle: drive.throttle, steer: drive.steer, jump: keys.has('Space')},
           course.world,
           1 / 120
         );
@@ -4402,7 +4532,22 @@ function frame(now) {
         for (const session of [s, ...race.rivals.map(r => r.session)]) openWorld.step(session.car, 1 / 120);
       if (schoolPrev) schoolStep(schoolPrev, 1 / 120);
       if (openWorld && race.roam) {
-        const activity = openWorld.stepActivity(1 / 120, s.car);
+        bowlingPrepare(1 / 120);
+        const activity = openWorld.stepActivity(
+          1 / 120,
+          openWorld.activity()?.control === 'robot' ? robot : s.car
+        );
+        if (activity?.cancelled) bowlingHold = null;
+        if (activity?.gutter) callout('Gutter ball…');
+        if (activity?.rolled && !activity.finished) {
+          if (activity.strike) {
+            audio.finish();
+            callout('🎳 STRIKE!');
+          } else if (activity.spare) {
+            audio.coin();
+            callout('🎳 Spare!');
+          }
+        }
         if (activity?.tee)
           placeCar(
             s.car,
@@ -4422,7 +4567,7 @@ function frame(now) {
           audio.finish();
           callout(
             activity.score != null
-              ? `${activity.strike ? 'STRIKE!' : 'BOWLING'} · ${activity.score}/10`
+              ? `🎳 Game over · ${activity.score}`
               : `CAR GOLF · ${activity.total} HITS · BEST ${openWorld.progress.golfBest}`
           );
         }
@@ -4789,10 +4934,16 @@ function frame(now) {
         for (const f of collected.found) telemetry.discover(f.id, 'specimen');
       }
     }
-    openWorld.update(now / 1000, c.pos, camera, p => {
-      telemetry.discover(p.id, 'place');
-      callout(p.short + ' discovered');
-    });
+    openWorld.update(
+      now / 1000,
+      c.pos,
+      camera,
+      p => {
+        telemetry.discover(p.id, 'place');
+        callout(p.short + ' discovered');
+      },
+      robot?.pos ?? c.pos
+    );
     for (const jet of openWorld.skySounds()) audio.jet(jet);
     if (race.roam && !paused && !gateTravelling && openWorld.timeGate) {
       gateTravelling = true;
@@ -4825,6 +4976,7 @@ function frame(now) {
     if (waiting) acc = 0;
   }
   ui.update(now);
+  bowlingHud();
   contactSun.position.set(
     r.x - 4,
     r.y + (artReview && Math.abs(r.x - 38) < 9 && Math.abs(r.z + 8) < 11 ? 4 : 8),

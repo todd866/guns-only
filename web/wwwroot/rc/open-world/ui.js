@@ -1,3 +1,5 @@
+import {renderHint} from '../key-hints.js';
+import {approachLane} from './bowling.mjs';
 import {VEHICLE_NAMES} from '../vehicle-bodies.js';
 import {BASE_BOUNDARY} from './boundary.mjs';
 import {
@@ -722,8 +724,8 @@ export function createWorldUI({
       const event = EVENTS.find(e => e.location === p.id),
         best = progress.raceWins?.[event?.id];
       choose.querySelector('small').textContent =
-        p.id === 'rec' && progress.bowlingBest
-          ? `${progress.bowlingBest}/10`
+        p.id === 'rec' && progress.bowlingBest != null
+          ? `${progress.bowlingBest}/300`
           : p.id === 'golf' && progress.golfBest
             ? `${progress.golfBest} hits`
             : p.id === 'lab'
@@ -774,10 +776,13 @@ export function createWorldUI({
   function interactLabel(text, key) {
     if (interactText === text + key) return;
     interactText = text + key;
-    const b = $('interact'),
-      k = document.createElement('kbd');
-    k.textContent = key;
-    b.replaceChildren(text + ' ', k);
+    const button = $('interact');
+    if (text.startsWith('🎳')) renderHint(button, key ? `${text} [${key}]` : text);
+    else {
+      const cap = document.createElement('kbd');
+      cap.textContent = key;
+      button.replaceChildren(text + ' ', cap);
+    }
   }
   return {
     progress,
@@ -822,11 +827,22 @@ export function createWorldUI({
           golf = world.activity();
         $('interact').hidden =
           (!p && !s.skate && (!golf || golf.done)) || !s.roam || s.paused || s.skating || s.flying;
-        if (s.skate) interactLabel('🛹 Skate', 'E');
+        if (s.robot && (p?.game === 'bowling' || golf?.kind === 'bowling')) {
+          const ready = approachLane(s.pos);
+          $('interact').hidden ||= !!golf?.launched;
+          interactLabel(
+            ready
+              ? golf?.done
+                ? '🎳 Play again · hold [E]'
+                : '🎳 Hold [E] · [left] [right] aim · let go'
+              : '🎳 Bowling! Walk to a lane · hold [E], let go to roll',
+            ''
+          );
+        } else if (s.skate) interactLabel('🛹 Skate', 'E');
         else if (golf && !golf.done)
           interactLabel(
             golf.kind === 'bowling'
-              ? `Bowling ${golf.delivery}/2 · ${golf.score}/10 · ${golf.delivery === 2 ? 'Finish' : 'Next'}`
+              ? `🎳 Car Bowling · ${golf.frame + 1}/10 · Next roll`
               : `Golf ${golf.hole + 1}/3 · ${golf.strokes} hits · Reset`,
             'E'
           );
@@ -835,7 +851,7 @@ export function createWorldUI({
             ...(p.skate
               ? ['🛹 Skate', 'E']
               : p.game === 'bowling'
-                ? ['Strike · Play', 'E']
+                ? ['🎳 Car Bowling · Play', 'E']
                 : p.game === 'golf'
                   ? ['Car Golf · Play', 'E']
                   : p.game === 'flying-school'
