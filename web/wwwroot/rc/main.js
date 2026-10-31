@@ -499,7 +499,7 @@ let outlawWarned=false;function outlawStep(dt){if(!openWorld?.outlaws||!race.roa
  if(inTown&&!outlawWarned){outlawWarned=true;audio.radio();callout(riding?'🤠 OUTLAWS IN TOWN! Run them down with your dinosaur':'🤠 OUTLAWS IN TOWN! Q to punch · Shift to lock on',4200);}if(openWorld.era()!=='past')outlawWarned=false;
  for(const e of ev){if(e.stomp){audio.impact(6);callout(`💥 STOMP! ${g.enemies.filter(x=>x.alive).length} outlaws left`,1600);}else if(e.popped){audio.impact(5);}else if(e.hurt){audio.impact(3);callout(`💥 Ouch! 🔋 ${e.batteries}`,1200);}
   if(e.home&&robot){robot.pos=[...e.home];robot.vel=[0,0,0];callout('💫 Knocked out · back to the top of the street');}
-  if(e.cleared){audio.finish();callout('⭐ THE LAKE TOWN IS FREE! The outlaws are just toys again',5000);}}}
+  if(e.cleared){audio.finish();callout(e.reward?'⭐ THE LAKE TOWN IS FREE! New in the Garage: the SHERIFF STAR':'⭐ THE LAKE TOWN IS FREE! The outlaws are just toys again',5500);}}}
 // The car form's physics: in the dark world (the past) it is the ridden dinosaur's bigger body.
 function roamCarParams(){if(openWorld?.era?.()==='past')return mountParams();return urlMode==='legend'?legendCarParams(LEGEND_CARS[adventure?.inventory.car]?adventure.inventory.car:'starter'):vehicleParams(bodyKind==='jet'||!bodyKind?'buggy':bodyKind);}
 // The dark world is the past (open-world/dark-world.mjs): a time gate swaps the era and moves the toy.

@@ -78,7 +78,7 @@ export async function loadOpenWorld(search){const q=new URLSearchParams(search),
   // the Lake Town alive) and returns where to put the toy. The first crossing wakes the others.
   era:()=>timeGates.era(),
   // The Lake Town's outlaw gang (outlaws.mjs): o = { pos, riding, speed, robot, input, mode, dt }.
-  outlaws(o){const groundAt=(x,z)=>elevationAt(elevation,x,z),ev=stepGang(gang,{...o,era:timeGates.era(),groundAt});for(const e of ev)if(e.home)e.home[1]=groundAt(e.home[0],e.home[2])+.05;outlawClock+=o.dt;const past=timeGates.era()==='past';if(outlawView){outlawView.root.visible=past;if(past)outlawView.sync(gang.enemies,outlawClock,o.dt,groundAt);}return ev;},
+  outlaws(o){const groundAt=(x,z)=>elevationAt(elevation,x,z),ev=stepGang(gang,{...o,era:timeGates.era(),groundAt});if(ev.some(e=>e.cleared)&&!progress.lakeTownFreed){progress.lakeTownFreed=true;saveProgress(storage,progress);for(const e of ev)if(e.cleared)e.reward='sheriff';}for(const e of ev)if(e.home)e.home[1]=groundAt(e.home[0],e.home[2])+.05;outlawClock+=o.dt;const past=timeGates.era()==='past';if(outlawView){outlawView.root.visible=past;if(past)outlawView.sync(gang.enemies,outlawClock,o.dt,groundAt);}return ev;},
   gang:()=>gang,
   async timeGate(pos,time){if(gateBusy)return null;const trip=timeGates.step(pos,{crossed:!!progress.timeCrossed,now:time,groundAt:(x,z)=>elevationAt(elevation,x,z)});if(!trip)return null;gateBusy=true;
    try{setEra(trip.to);if(trip.to==='past'&&!progress.timeCrossed){progress.timeCrossed=true;saveProgress(storage,progress);}

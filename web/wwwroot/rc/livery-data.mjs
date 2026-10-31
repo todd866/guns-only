@@ -7,9 +7,11 @@ export const LIVERIES = Object.freeze([
   // Earned by splatting pumpkins (owner, 31 Oct: "a reward for splatting lots of pumpkins"; and
   // the kid loves the six-seven meme, so 67 is the big one).
   { id: 'sixseven', name: 'Six seven', pumpkins: 67 },
+  // Earned in the dark world (open-world/outlaws.mjs): free the Lake Town from its outlaw gang.
+  { id: 'sheriff', name: 'Sheriff star', earned: 'lakeTown' },
 ]);
 /** Is this livery open to a player with `progress` (pumpkins splatted, all time)? */
-export const liveryUnlocked = (l, progress) => !l?.pumpkins || (progress?.pumpkins ?? 0) >= l.pumpkins;
+export const liveryUnlocked = (l, progress) => l?.earned === 'lakeTown' ? !!progress?.lakeTownFreed : !l?.pumpkins || (progress?.pumpkins ?? 0) >= l.pumpkins;
 // The other pumpkin reward is a whole car: a jack-o'-lantern on wheels (vehicle-bodies.js).
 export const PUMPKIN_CAR = Object.freeze({ id: 'pumpkin', name: 'Pumpkin car', pumpkins: 20, body: true });
 /** Pumpkin milestones crossed going from `before` to `after` splats: what was just earned. */

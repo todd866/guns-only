@@ -27,3 +27,10 @@ test('the pumpkin record starts at 113 and keeps a better one', async () => {
   storage.setItem('guns-only.rc.world.v1', JSON.stringify({ pumpkinBest: 140 })); assert.equal(loadProgress(storage).pumpkinBest, 140);
   storage.setItem('guns-only.rc.world.v1', JSON.stringify({ pumpkinBest: 12 })); assert.equal(loadProgress(storage).pumpkinBest, 113);
 });
+
+test('the sheriff star is earned by freeing the Lake Town, not by pumpkins', () => {
+  const l = LIVERIES.find(v => v.id === 'sheriff');
+  assert.ok(l);
+  assert.equal(liveryUnlocked(l, { pumpkins: 999 }), false);
+  assert.equal(liveryUnlocked(l, { lakeTownFreed: true }), true);
+});
