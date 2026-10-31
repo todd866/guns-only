@@ -89,6 +89,25 @@ break-in begins.
 | Ocarina songs (warp, puzzles) | **Signal tunes**: the alien light hums a few notes that open doors and call you home |
 | Epona | Car mode itself is your horse: the fast way across the map |
 
+## Typing short messages (owner, 31 Oct)
+
+Owner: "the other thing that would really be age-appropriate for him is game interactions that
+require typing short messages." A 6-year-old learning to read and spell types a word or two, and
+the world answers.
+
+- **Talking toys and freed aliens ask short questions** ("What's my name?", "Which way is home?")
+  and he types a word or two back. Matching ignores case and tolerates spelling, every answer gets
+  a friendly reply, and it is never a gate he can get stuck on: a wrong or silly answer still moves
+  things along.
+- **Name your car and your dinosaur**, shown on a tag and said back to you.
+- **Signs he can write on**: a blank board at a camp or a door takes a short word that stays there.
+- **A typed whistle word** calls the dinosaur from anywhere in the dark world.
+- **Typed radio replies** to the aggressor callsigns ("BANDIT 2: you can't catch me!" and he types
+  back).
+
+The save-file names are the first instance already built. Keep each prompt one line, the box big,
+and the keyboard always optional to finish (Enter on an empty box is fine).
+
 ## Keyboard only (owner, 30 Oct)
 
 The whole game plays on a keyboard alone: no mouse, no pad needed. Each key keeps **one meaning
