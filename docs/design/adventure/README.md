@@ -129,13 +129,15 @@ Owner: "obviously the whole thing is just made up, but it's gotta have an intern
 world." Every new piece has to fit these; if one doesn't, change the piece, not the rule.
 - **Every toy that moves on its own was brought to life**, either by the good aliens (a toy
   that wakes as itself, with a personality) or by the bad aliens (a toy made to be a soldier, with
-  no one inside). Everything else alive is an animal (the land's creatures, the dinosaurs) or a
-  spirit of the land, older than both.
-- **The dinosaurs are in between** (owner: "they're alive but they're dumb lizards"). They are
-  animals of the dark world: alive, not machines, but with no inner life to speak of. They eat,
-  sleep, sun themselves, spook at loud noises and follow whoever feeds them. Neither side owns
-  them: the outlaws ride them too. You win one over and name it, the way you'd name a pet, and it
-  comes when called. They never break and are never hurt; a frightened one runs off and comes back.
+  no one inside). The toy animals sit in between (below), and the land's creatures and spirits are
+  the land's own, older than both.
+- **Toy animals are in between** (owner: dinosaurs are "kinda in-between, they're alive but they're
+  dumb lizards ... but they're toy dinosaurs, it's all a bit Lego Movie"). Toy dinosaurs, cows and
+  horses are alive the way animals are: instincts, no inner life. They eat, sleep, spook and follow
+  whoever feeds them, and the **cows and horses are scared of dinosaurs** (ride up and the herd
+  scatters, which is how you herd them). Neither side owns them; the outlaws ride dinosaurs too. You
+  win a dinosaur over and name it like a pet. Toy animals never break and are never hurt: a
+  frightened one runs off and comes back.
 - **The dark world is the same valley long ago.** You get there only through the spirit gates and
   the glowing portal layer underground, and what you change there shows up in the present.
 - **People are giants in the background**: they never talk to toys, and no one real is ever hurt.
