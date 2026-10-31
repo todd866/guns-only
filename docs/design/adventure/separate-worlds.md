@@ -113,15 +113,18 @@ crafting, and portals that appear at random.
 
 - **The cavern layout is deterministic and permanent.** It's generated from a fixed seed per world
   and region, so the same caves, seams and caverns are always there.
-- **Excavations are per session.** Blocks you remove live in session state and aren't saved: dig a
-  hole that wrecks the base, and next time it may be back.
-- **Reinforced shafts persist** (later): reinforcing a shaft writes it to the per-world save.
+- **Digs disappear; builds persist** (owner: "I want digs to disappear but builds to be
+  persistent"). Removal, meaning every hole and excavation, lives in session state and resets
+  next session, even a hole that wrecks the base. Placement, meaning every block placed and
+  anything built (including a shaft's reinforcing lining), is saved per world and is there next
+  time. A placed block sitting in a hole that has since refilled stays where it was placed.
+- **Reinforced shafts persist** because reinforcing places a lining, which counts as a build.
 - **The portal layer is the floor of every underground.** Digging through it is an identity
   crossing into the other world's underground ceiling, emerging at the surface above, so every
   x,z has somewhere to come out.
 - **Random portals** are session-seeded, so they appear in different places each visit.
-- Persistence follows directly from the world model: deterministic layout (recipe), session
-  mutations (session state), and persistent reinforcements (per-world save).
+- Persistence follows directly from the world model: deterministic layout (recipe), removals
+  (session state), and placements and builds (per-world save).
 
 ## Migration order
 
