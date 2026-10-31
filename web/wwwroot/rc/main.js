@@ -33,7 +33,8 @@ import {
 } from './open-world/hot-wheels.mjs';
 import {createRetreat, stepRetreat, RETREAT} from './physics/retreat.mjs';
 import {DRIVE_KEYS, drivingInput, flightInput, trickInput} from './driving-input.mjs';
-import {toggleFlight, FLIGHT} from './physics/flight.mjs';
+import {createFlight, toggleFlight, FLIGHT} from './physics/flight.mjs';
+import {SCHOOL} from './open-world/flying-school.mjs';
 import {applyLivery} from './livery.js';
 import {batchCarParts, unbatchCarParts} from './car-batch.js';
 import {createRobot, stepRobot} from './physics/robot.mjs';
@@ -2846,6 +2847,8 @@ async function travelTo(id) {
   lastThrottle = 0;
   const p = await openWorld?.travel(id);
   if (!p) return false;
+  openWorld.stopSchool();
+  hideSchoolCard();
   const {pos, yaw} = p.arrival;
   document.body.classList.toggle('era-past', openWorld.era?.() === 'past');
   if (robot) {
@@ -3195,6 +3198,120 @@ function boosterEvent(e) {
     openWorld.save();
     callout('🚀 The rocket landed!', 3000);
   }
+}
+// Flying School is a place in free drive. The rules and ring meshes live with the world;
+// placement, keyboard callouts and the small report card stay with the player here.
+let schoolNear = false,
+  schoolPlacement = null,
+  schoolReport = false;
+function hideSchoolCard() {
+  schoolReport = false;
+  $('school-hud').hidden = true;
+}
+$('school-close').onclick = () => {
+  hideSchoolCard();
+  canvas.focus();
+};
+function schoolEvent(e) {
+  if (e.lessonStart) {
+    hideSchoolCard();
+    placeCar(s.car, e.start.pos, e.start.yaw);
+    s.car.speed = s.car.forwardSpeed = 0;
+    s.car.grounded = false;
+    s.car.contacts = 0;
+    Object.assign(s.flight, createFlight());
+    toggleFlight(s.flight, s.car, {roam: true});
+    s.flight.speed = FLIGHT.minSpeed + FLIGHT.startPower * (FLIGHT.maxSpeed - FLIGHT.minSpeed);
+    // Lessons start level in the air; the normal ground takeoff climb would miss ring one.
+    s.flight.climb = 0;
+    s.flight.gcas = 0;
+    s.flight.heading = null;
+    boostOn = false;
+    schoolPlacement = s.car.placement;
+    cameraCar = null;
+    audio.boost();
+    callout(
+      e.lessonStart === 1
+        ? '✈ Fly through the gold rings! [E] stop'
+        : e.lessonStart === 2
+          ? '✈ Loop! Hold [down] to go round'
+          : '🛬 Fly down through the rings! [return] land',
+      4500
+    );
+  } else if (e.schoolDone) {
+    const rows = $('school-rows');
+    rows.replaceChildren();
+    for (const row of e.card) {
+      const tr = document.createElement('tr');
+      for (const [i, text] of [
+        row.name,
+        '⭐'.repeat(row.stars),
+        `${row.passed}/${row.total}`,
+        `${Math.round(row.time)}s`
+      ].entries()) {
+        const cell = document.createElement(i === 0 ? 'th' : 'td');
+        cell.textContent = text;
+        if (i === 0) cell.scope = 'row';
+        if (i === 1) cell.setAttribute('aria-label', `${row.stars} stars`);
+        if (i === 2) cell.title = 'Rings';
+        if (i === 3) cell.title = 'Time';
+        tr.append(cell);
+      }
+      rows.append(tr);
+    }
+    const pr = openWorld.progress;
+    pr.flyingSchool = (pr.flyingSchool ?? 0) + 1;
+    pr.flyingStars = Math.max(
+      pr.flyingStars ?? 0,
+      e.card.reduce((n, row) => n + row.stars, 0)
+    );
+    openWorld.save();
+    schoolReport = true;
+    $('school-hud').hidden = false;
+    audio.finish();
+    callout('⭐ Great flying!', 3000);
+  } else if (e.lessonDone) {
+    audio.gate();
+    callout(`${'⭐'.repeat(e.stars)} Great flying!`, 2200);
+  } else if (e.landing) {
+    callout('🛬 Now land on the runway · [return]', 5000);
+  } else if (e.ring) {
+    audio.coin();
+    callout(`⭕ ${e.ring} of ${e.of}`, 1300);
+  }
+}
+function schoolStep(prevPos, dt) {
+  const school = openWorld?.school();
+  if (!school?.active) return;
+  // Recovery and map jumps are placements, not ring-crossing flight segments.
+  if (!race.roam || robot || skate || openWorld.era() === 'past' || s.car.placement !== schoolPlacement) {
+    openWorld.stopSchool();
+    return;
+  }
+  for (const e of openWorld.schoolStep(dt, {
+    pos: s.car.pos,
+    prevPos,
+    flightMode: s.flight.mode,
+    speed: Math.hypot(...s.car.vel),
+    onGround: s.car.grounded
+  }))
+    schoolEvent(e);
+}
+function schoolFrame() {
+  const eligible = race.roam && !robot && !skate && openWorld.era() !== 'past';
+  if (!eligible) openWorld.stopSchool();
+  const distance = Math.hypot(s.car.pos[0] - SCHOOL.at[0], s.car.pos[2] - SCHOOL.at[2]);
+  if (!eligible || distance > SCHOOL.leaveRadius) hideSchoolCard();
+  $('school-hud').hidden = !schoolReport || paused;
+  const near =
+    eligible &&
+    started &&
+    !paused &&
+    !s.flight.mode &&
+    !openWorld.school()?.active &&
+    distance <= SCHOOL.startRadius;
+  if (near && !schoolNear) callout('✈ Flying School! [E] start', 3500);
+  schoolNear = near;
 }
 // The Hot Wheels track (open-world/hot-wheels.mjs): boosters shove, the channel steers, and the loop
 // is a ride once you arrive at it fast enough.
@@ -3782,6 +3899,23 @@ function skateStep(input) {
 }
 function enterLocation() {
   if (!openWorld || paused || !race.roam) return;
+  if (openWorld.school()?.active) {
+    openWorld.stopSchool();
+    hideSchoolCard();
+    callout('', 0);
+    return;
+  }
+  if (
+    !robot &&
+    !skate &&
+    !s.flight.mode &&
+    openWorld.era() !== 'past' &&
+    Math.hypot(s.car.pos[0] - SCHOOL.at[0], s.car.pos[2] - SCHOOL.at[2]) <= SCHOOL.startRadius
+  ) {
+    const event = openWorld.startSchool(mode);
+    if (event) schoolEvent(event);
+    return;
+  }
   if (cartNear()) {
     hopInCart();
     return;
@@ -3801,6 +3935,7 @@ function enterLocation() {
   }
   const p = openWorld.near(s.car.pos);
   if (!p) return;
+  if (p.game === 'flying-school') return;
   if (p.game) {
     const tee = openWorld.startActivity(p.game);
     telemetry.activityStart(p.game);
@@ -3835,6 +3970,8 @@ function statRows() {
     ['✈️', 'Splash ones', num(aceKills)],
     ['🫡', 'Perfect retreats & reveilles', num(pr.retreats)],
     ['🚀', 'Booster landings seen', num(pr.boosters)],
+    ['✈', 'Flying School trips', num(pr.flyingSchool)],
+    ['⭐', 'Flying School best', pr.flyingStars ? `${pr.flyingStars}/9` : '–'],
     ['⛳', 'Best golf round', pr.golfRoundBest ? `${pr.golfRoundBest}` : '–'],
     ['🤠', 'Fastest roundup', pr.roundupBest ? `${pr.roundupBest} s` : '–'],
     ['🎳', 'Bowling best', pr.bowlingBest ? `${pr.bowlingBest}/10` : '–'],
@@ -4055,6 +4192,7 @@ function frame(now) {
         );
       }
       hotWheelsPre();
+      const schoolPrev = openWorld?.school()?.active ? [...s.car.pos] : null;
       stepRace(
         race,
         robot
@@ -4076,6 +4214,7 @@ function frame(now) {
       boardStep(skateInput);
       if (openWorld)
         for (const session of [s, ...race.rivals.map(r => r.session)]) openWorld.step(session.car, 1 / 120);
+      if (schoolPrev) schoolStep(schoolPrev, 1 / 120);
       if (openWorld && race.roam) {
         const activity = openWorld.stepActivity(1 / 120, s.car);
         if (activity?.tee)
@@ -4417,6 +4556,7 @@ function frame(now) {
       cartStep();
       retreatStep(dt);
       if (!paused) for (const e of openWorld.boosterStep(dt, c.pos)) boosterEvent(e);
+      schoolFrame();
       for (const f of openWorld.zooStep(robot ? robot.pos : c.pos, dt)) {
         audio.radio();
         callout(f.zoo === 'sign' ? `🐾 ${f.text}` : `✈️ ${f.name} · ${f.text}`, 5500);

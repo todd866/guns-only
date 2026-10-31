@@ -1,4 +1,5 @@
 import {NY} from './under-bridge.mjs';
+import {SCHOOL} from './flying-school.mjs';
 import {LIVERIES, TRIMS} from '../livery-data.mjs';
 import {plazaWorld, PLAZA_PARK} from './town-plaza.mjs';
 import {playgroundWorld, PLAYGROUND_PARK} from './playground.mjs';
@@ -92,6 +93,16 @@ export const LOCATIONS = [
     icon: '🏁',
     kind: 'race',
     event: 'runway-drag'
+  },
+  {
+    id: 'flying-school',
+    name: 'Flying School',
+    short: 'Flying',
+    pos: SCHOOL.at,
+    color: '#ffd064',
+    icon: '✈',
+    kind: 'activity',
+    game: 'flying-school'
   },
   {
     id: 'wic',
@@ -734,6 +745,9 @@ export function loadProgress(storage) {
     pattern: LIVERIES.some(l => l.id === v?.pattern) ? v.pattern : 'solid',
     pumpkins: Number.isInteger(v?.pumpkins) && v.pumpkins > 0 ? v.pumpkins : 0,
     boosters: Number.isInteger(v?.boosters) && v.boosters > 0 ? v.boosters : 0,
+    flyingSchool: Number.isInteger(v?.flyingSchool) && v.flyingSchool > 0 ? v.flyingSchool : 0,
+    flyingStars:
+      Number.isInteger(v?.flyingStars) && v.flyingStars >= 3 && v.flyingStars <= 9 ? v.flyingStars : 0,
     retreats: Number.isInteger(v?.retreats) && v.retreats > 0 ? v.retreats : 0,
     candyBest: Number.isInteger(v?.candyBest) && v.candyBest > 0 ? v.candyBest : 0,
     pumpkinBest:
