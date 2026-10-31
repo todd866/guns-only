@@ -1,9 +1,10 @@
 // Package web/wwwroot/rc/ as a self-contained static site for the Saucer Springs Vercel project.
 // guns-only.com rewrites /rc/* to that project, so the page must never reach outside /rc/ for
 // code: the three.js files RC imports are copied to rc/vendor/ and RC's imports re-pointed.
-//   node tools/rc/package-rc.mjs [--out DIR]   (default .rc-dist at the repo root)
+//   node tools/rc/package-rc.mjs [--out DIR] [--bundle]   (default .rc-dist at the repo root)
+// --bundle: esbuild bundles the JS into rc/main.js + rc/chunks/*.js (no rc/vendor, no rc/shared).
 import {compressModels} from './compress-models.mjs';
-import fs from 'node:fs'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
+import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { spawnSync } from 'node:child_process'; import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const WWW = path.join(ROOT, 'web/wwwroot'), RC = path.join(WWW, 'rc'), VENDOR = path.join(WWW, 'vendor');
@@ -108,8 +109,93 @@ export function packageRc(out = path.join(ROOT, '.rc-dist')) {
   return { out, files, vendor: vendor.size, bytes };
 }
 
+// ---- opt-in bundle mode -------------------------------------------------------------------------
+export function findEsbuild() {
+  const candidates = [process.env.ESBUILD];
+  const projects = path.join(os.homedir(), 'Projects');
+  if (fs.existsSync(projects)) for (const d of fs.readdirSync(projects).sort()) candidates.push(path.join(projects, d, 'node_modules/.bin/esbuild'));
+  return candidates.find(c => c && fs.existsSync(c)) ?? null;
+}
+// Three sources resolve art with new URL('../assets/..', import.meta.url). Bundled, import.meta.url is
+// no longer inside open-world/, so point them at the page base (<base href="/rc/">) instead.
+const META_URL = /new URL\((['"`])\.\.\/assets\/([^)]*?)import\.meta\.url\)/g;
+export function rewriteMetaUrl(src) {
+  let n = 0;
+  const out = src.replace(META_URL, (_m, q, rest) => { n++; return `new URL(${q}assets/${rest}document.baseURI)`; });
+  return { src: out, rewrites: n, found: (src.match(/import\.meta\.url/g) ?? []).length };
+}
+// Every output reachable from the entry by static imports (what the browser must fetch to start).
+export function staticChunks(metafile, entryOutput) {
+  const seen = new Set(), queue = [entryOutput];
+  while (queue.length) {
+    const o = queue.shift(); if (seen.has(o)) continue; seen.add(o);
+    for (const imp of metafile.outputs[o]?.imports ?? []) if (imp.kind === 'import-statement' && !imp.external) queue.push(imp.path);
+  }
+  return [...seen];
+}
+function writeSiteConfig(out) {
+  fs.writeFileSync(path.join(out, 'vercel.json'), JSON.stringify({
+    redirects: [{ source: '/', destination: '/rc/', permanent: false }],
+    headers: [{ source: '/rc/assets/(.*)', headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' }] }],
+  }, null, 2) + '\n');
+  fs.writeFileSync(path.join(out, MARKER), 'written by tools/rc/package-rc.mjs\n');
+}
+export function packageRcBundle(out = path.join(ROOT, '.rc-dist')) {
+  const esbuild = findEsbuild();
+  if (!esbuild) throw Error('esbuild not found (set ESBUILD or install it under ~/Projects/*/node_modules/.bin)');
+  if (fs.existsSync(out) && fs.readdirSync(out).length && !fs.existsSync(path.join(out, MARKER)))
+    throw Error(`${out} is not empty and has no ${MARKER}; refusing to overwrite it`);
+  fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, MARKER), 'written by tools/rc/package-rc.mjs\n');   // first, so a failed run stays re-runnable
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-bundle-'));
+  try {
+    // Same depth as the real tree so ../vendor and ../render/telemetry resolve identically.
+    const tWww = path.join(tmp, 'web/wwwroot'), tRc = path.join(tWww, 'rc'), tVendor = path.join(tWww, 'vendor'), tShared = path.join(tWww, 'render/telemetry');
+    fs.cpSync(VENDOR, tVendor, { recursive: true });
+    fs.mkdirSync(tShared, { recursive: true });
+    for (const f of SHARED_FILES) fs.copyFileSync(path.join(SHARED, f), path.join(tShared, f));
+    let bytes = 0, files = 0, rewrites = 0, found = 0; const guard = [];
+    const copyOut = file => { const dest = path.join(out, 'rc', path.relative(RC, file)); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(file, dest); bytes += fs.statSync(dest).size; files++; };
+    for (const file of walk(RC)) {
+      if (!CODE.test(file) || path.relative(RC, file) === 'index.html') { copyOut(file); continue; }
+      const dest = path.join(tRc, path.relative(RC, file)); fs.mkdirSync(path.dirname(dest), { recursive: true });
+      const r = rewriteMetaUrl(fs.readFileSync(file, 'utf8')); rewrites += r.rewrites; found += r.found;
+      fs.writeFileSync(dest, r.src); guard.push([file, dest, r.src]);
+    }
+    for (const [file, dest, src] of guard) {
+      for (const spec of new Set(relativeImports(src))) {   // same "import leaves rc/" guard as the default mode
+        const target = path.resolve(path.dirname(dest), spec.split(/[?#]/)[0]);
+        if (!fs.existsSync(target)) throw Error(`${posix(path.relative(ROOT, file))}: import '${spec}' does not exist`);
+        const ok = inside(target, tRc) || inside(target, tVendor) || (inside(target, tShared) && SHARED_FILES.has(path.relative(tShared, target)));
+        if (!ok) throw Error(`${posix(path.relative(ROOT, file))}: import '${spec}' leaves rc/ and approved shared dependencies`);
+      }
+    }
+    if (rewrites !== found) throw Error(`import.meta.url: ${found} occurrences but ${rewrites} rewritten; teach rewriteMetaUrl the new pattern`);
+    const outRc = path.join(out, 'rc'), metaFile = path.join(tmp, 'meta.json');
+    const r = spawnSync(esbuild, ['main.js', '--bundle', '--splitting', '--format=esm', '--minify', '--target=es2022', `--outdir=${outRc}`,
+      '--entry-names=[name]', '--chunk-names=chunks/[name]-[hash]', `--metafile=${metaFile}`, '--log-level=warning', '--legal-comments=none'],
+      { cwd: tRc, encoding: 'utf8' });
+    if (r.status !== 0) throw Error(`esbuild failed: ${r.stderr || r.stdout}`);
+    const metafile = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+    const outputFor = ep => Object.keys(metafile.outputs).find(o => metafile.outputs[o].entryPoint === ep);
+    const entryOut = outputFor('main.js'), loaderOut = outputFor('assets.js');   // the default mode also hints the asset loader main.js imports at once
+    if (!entryOut || !loaderOut) throw Error('esbuild metafile lacks the main.js or assets.js output');
+    const jsOutputs = Object.keys(metafile.outputs).filter(o => o.endsWith('.js'));
+    for (const o of jsOutputs) { bytes += metafile.outputs[o].bytes; files++; }
+    const compressed = compressModels(path.join(out, 'rc/assets')); files += compressed.length; bytes += compressed.reduce((n, c) => n + c.bytes, 0);
+    const hrefs = [...new Set([...staticChunks(metafile, entryOut), ...staticChunks(metafile, loaderOut)])].map(o => posix(path.relative(outRc, path.resolve(tRc, o))));
+    const index = path.join(outRc, 'index.html'), html = fs.readFileSync(index, 'utf8');
+    for (const [, f] of START_ASSETS) if (!fs.existsSync(path.join(outRc, f))) throw Error(`preload ${f} is missing`);
+    if (!html.includes('</head>')) throw Error('rc/index.html has no </head>');
+    const tags = [...hrefs.map(f => `<link rel="modulepreload" href="${f}">`), ...START_ASSETS.map(([as, f]) => `<link rel="preload" as="${as}" href="${f}" crossorigin>`)].join('');
+    fs.writeFileSync(index, html.replace('</head>', tags + '</head>'));
+    writeSiteConfig(out);
+    return { out, files, vendor: 0, bytes, chunks: jsOutputs.length - 1, preloaded: hrefs };
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const i = process.argv.indexOf('--out'), out = i > 0 ? path.resolve(process.argv[i + 1]) : undefined;
-  try { const r = packageRc(out); console.log(`package-rc: ${r.files} rc files + ${r.vendor} vendor files, ${(r.bytes / 1048576).toFixed(1)} MiB -> ${r.out}`); }
+  try { const r = (process.argv.includes('--bundle') ? packageRcBundle : packageRc)(out); console.log(`package-rc: ${r.files} rc files + ${r.vendor} vendor files, ${(r.bytes / 1048576).toFixed(1)} MiB -> ${r.out}`); }
   catch (e) { console.error(`package-rc: ${e.message}`); process.exit(1); }
 }
