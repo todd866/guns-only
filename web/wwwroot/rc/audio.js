@@ -131,6 +131,10 @@ export class SoundKit {
       if (!this.ready('wing', 0.25)) return;
       this.playSample('wing_flap', 0.22 + strength * 0.25, 1.05) ||
         this.burst({freq: 300, dur: 0.18, level: 0.15});
+    } else if (what === 'cluck') {
+      // A hen's squawk: the small creature's chirp, pitched right up and short.
+      if (!this.ready('cluck', 0.25)) return;
+      this.playSample('dino_chirp', 0.14, 1.9 + Math.random() * 0.3);
     } else if (what === 'snort') {
       if (!this.ready('snort', 1.5)) return;
       this.playSample('dino_snort', 0.22, 1.1 * deep);

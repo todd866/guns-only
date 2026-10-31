@@ -34,3 +34,14 @@ test('anything at all gets a friendly reply, and nothing typed is an error', () 
     assert.ok(say(t, {era: 'past'}).reply, t);
   assert.equal(say('', {}).reply, null);
 });
+
+test('a little Spanish works too, accents or not, and "si" is not mistaken for "hi"', () => {
+  assert.equal(say('Hola', {era: 'past'}).reply, '🤠 ¡Hola, amigo!');
+  assert.equal(say('holla', {era: 'past'}).reply, '🤠 ¡Hola, amigo!', 'one slip');
+  assert.equal(say('gracias').reply, '🤠 ¡De nada!');
+  assert.equal(say('adiós').reply, '👋 ¡Adiós, amigo!');
+  assert.equal(say('adios').reply, '👋 ¡Adiós, amigo!');
+  assert.equal(say('sí').reply, '👍 ¡Sí!');
+  assert.equal(say('hi', {era: 'past'}).reply, '🤠 ¡Hola! Howdy!');
+  assert.equal(say('hello').reply, '👋 Hello!');
+});

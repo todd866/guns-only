@@ -43,6 +43,8 @@ import {createTileRenderer} from './render.js';
 import {createMountainView, createFarGround} from './spirit-mountain.js';
 import {createCanyonView, canyonFarGround} from './canyon.js';
 import {createDarkWorld} from './dark-world.js';
+import {createFlock, stepFlock, YARD} from './chickens.mjs';
+import {createChickens} from './chickens.js';
 import {createBadToys} from './bad-toys.js';
 import {createGang, stepGang} from './outlaws.mjs';
 import {createDig, stepDig, digFloor} from './dig.mjs';
@@ -342,8 +344,10 @@ export async function loadOpenWorld(search) {
     gateBusy = false;
   let darkClock = null,
     outlawView = null,
+    chickenView = null,
     outlawClock = 0;
-  const gang = createGang(),
+  const flock = createFlock(),
+    gang = createGang(),
     dig = createDig();
   let digView = null,
     farm = null,
@@ -456,6 +460,19 @@ export async function loadOpenWorld(search) {
       return ev;
     },
     gang: () => gang,
+    // The steam farm's chickens (chickens.mjs): o = { pos, riding, dt }; a ridden dinosaur scatters them.
+    chickens(o) {
+      const past = timeGates.era() === 'past',
+        near = past && Math.hypot(o.pos[0] - YARD.centre[0], o.pos[2] - YARD.centre[1]) < 300;
+      if (!near) {
+        chickenView?.update(flock, o.dt, false);
+        return [];
+      }
+      const ev = stepFlock(flock, o.dt, o.riding ? [o.pos[0], o.pos[2]] : null);
+      chickenView?.update(flock, o.dt, true, (x, z) => elevationAt(elevation, x, z));
+      return ev;
+    },
+    flock: () => flock,
     groundAt: (x, z) => elevationAt(elevation, x, z),
     // Dig down to the light world (dig.mjs): o = { pos, holding, climb, dt, time }. Breaking the portal
     // layer flips to the present; the through event carries where to come out of the ground.
@@ -663,6 +680,7 @@ export async function loadOpenWorld(search) {
       );
       darkWorld = createDarkWorld(scene, (x, z) => elevationAt(elevation, x, z));
       outlawView = createBadToys(scene, {look: 'outlaw'});
+      chickenView = createChickens(scene);
       digView = createDigView(scene);
       farmScene = scene;
       stream.world.openGate('era-farm');

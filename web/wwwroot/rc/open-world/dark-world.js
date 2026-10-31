@@ -171,9 +171,12 @@ export function createDarkWorld(scene, ground = () => 0) {
     x.lineWidth = 8;
     x.strokeRect(4, 4, 504, 88);
     x.fillStyle = '#5a2a18';
-    x.font = 'bold 58px Georgia, serif';
     x.textAlign = 'center';
     x.textBaseline = 'middle';
+    // Shrink long words to fit rather than clip them (PANADERÍA with its picture).
+    let size = 58;
+    do x.font = `bold ${size}px Georgia, serif`;
+    while (x.measureText(text).width > 480 && (size -= 2) > 24);
     x.fillText(text, 256, 52);
     const t = new T.CanvasTexture(c);
     t.colorSpace = T.SRGBColorSpace;
@@ -188,7 +191,18 @@ export function createDarkWorld(scene, ground = () => 0) {
     lamp = mat('#ffe2a0', {emissive: '#ffb347', emissiveIntensity: 2}),
     canvas = mat('#f1ead6'),
     window = mat('#ffd98a', {emissive: '#e8a040', emissiveIntensity: 0.9});
-  const names = ['SALOON', 'HOTEL', 'BANK', 'BARBER', 'SHERIFF', 'BAKERY', 'TOYS', 'POST OFFICE'];
+  // The old Southwest spoke Spanish first (design doc: a first taste of Spanish), so the town's
+  // signs do too: one word each, with a picture beside it so a six-year-old can read it.
+  const names = [
+    '🥤 CANTINA',
+    '🛏️ HOTEL',
+    '💰 BANCO',
+    '💈 BARBERÍA',
+    '⭐ SHERIFF',
+    '🍞 PANADERÍA',
+    '🧸 JUGUETES',
+    '✉️ CORREOS'
+  ];
   TOWN.forEach(([a0, a1, c0, c1, h], i) => {
     if (h > 10) return; // the steeple
     const store = i === 8,
@@ -212,7 +226,7 @@ export function createDarkWorld(scene, ground = () => 0) {
       al,
       street - s * 0.38,
       floor + front - 0.75,
-      sign(store ? 'GENERAL STORE' : names[i % names.length])
+      sign(store ? '🛒 TIENDA' : names[i % names.length])
     );
     for (let x = a0 + 1.6; x < a1 - 1; x += 3)
       if (Math.abs(x - al) > 1.2) piece(1, 1, 0.05, x, street - s * 0.37, floor + 1.7, window);
@@ -244,6 +258,7 @@ export function createDarkWorld(scene, ground = () => 0) {
       piece(0.25, 6, 0.25, al + da, ac + dc, y + 3, darkWood);
     piece(0, 0, 0, al, ac, y + 7.3, wood, new T.CylinderGeometry(2.3, 2.3, 2.8, 16));
     piece(0, 0, 0, al, ac, y + 9.1, darkWood, new T.ConeGeometry(2.6, 1, 16));
+    piece(3.4, 0.64, 0.05, al, ac - 2.4, y + 7.7, sign('💧 AGUA')); // facing the street
   }
   {
     const al = 566,
@@ -308,6 +323,14 @@ export function createDarkWorld(scene, ground = () => 0) {
       ])
         piece(0.14, 0.45, 0.14, al + da + x, ac + dc + z, floor + 0.22, darkWood);
     }
+  }
+  // One-word signs on posts by the cattle corral and the chicken yard.
+  for (const [text, al, ac] of [
+    ['🐄 VACAS', 528, -19.5],
+    ['🐔 GALLINAS', 552, -24.5]
+  ]) {
+    for (const d of [-0.85, 0.85]) piece(0.12, 1.7, 0.12, al + d, ac, floor + 0.85, darkWood);
+    piece(1.9, 0.36, 0.05, al, ac, floor + 1.55, sign(text));
   }
   // Merge nothing yet: about 200 small meshes, only drawn while you are in the past by the lake.
 
