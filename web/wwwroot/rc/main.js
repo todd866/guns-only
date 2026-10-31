@@ -2832,7 +2832,8 @@ function wildStep(dt, past) {
 }
 // The ridden dinosaur's sounds (audio.creature): a footfall at each foot-down of its walk, run or
 // gallop clip, a wingbeat at each flap, and a snort when it has stood still a while.
-let dinoPhase = null,
+let dinoSaving = false,
+  dinoPhase = null,
   dinoStill = 0;
 function dinoSounds(dt) {
   const d = riggedDino;
@@ -2840,6 +2841,15 @@ function dinoSounds(dt) {
     dinoPhase = null;
     return;
   }
+  // A flier's save is the animal's own will (owner, 31 Oct: "you can ask your quetz to do anything,
+  // but it doesn't wanna crash and it generally won't"): when it pulls you up, it squawks and beats
+  // its wings hard, so the save reads as the creature, not an autopilot.
+  const saving = s.flight.mode === 'fly' && s.flight.gcas > 0 && d.actions.has('flap');
+  if (saving && !dinoSaving) {
+    audio.creature(herd().herd[herd().mount]?.kind ?? 'quetzal', 'call');
+    d.play('flap', {fade: 0.08, timeScale: 1.8});
+  }
+  dinoSaving = saving;
   const kind = herd().herd[herd().mount]?.kind ?? 'rex',
     a = d.actions.get(d.clip),
     dur = a?.getClip().duration || 1,

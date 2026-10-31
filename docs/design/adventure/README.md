@@ -334,6 +334,10 @@ up the switchbacks. Reach the nest and it's yours: E to climb on, then fly the w
 the toy jet's flight model with the kid-mode easy flyer and Auto-GCAS (flap to climb, glide to
 swoop, land anywhere flat). Once befriended it joins the herd, and its name calls it from anywhere.
 Accuracy is not the point: it's a big friendly flying dinosaur.
+**It has a will of its own** (owner: "you can ask your quetz to do anything, but it doesn't wanna
+crash and it generally won't"). No autopilot and no levelling: it goes where you ask, banked,
+diving and skimming the ground, and only at the last moment, when it would hit, it flinches up,
+squawking with a hard wingbeat. Built as the proximity assist in `physics/flight.mjs`.
 The climb is the fun way up, never a wall (owner: "you can just use the map selector to jump
 there"). The nest is a place on the map's place list like any other, and so are the Lake Town and
 the farm. Picking a dark-world place jumps you there and into the past.
