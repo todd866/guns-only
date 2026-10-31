@@ -361,8 +361,8 @@
       ],
       "path": "districts/bx.glb",
       "provenance": "districts/bx.provenance.json",
-      "sha256": "d97e5f22b989072b8355792dbcaacc5cbf513c3e5fd11a668707d0ffad0c228b",
-      "sizeBytes": 7150844
+      "sha256": "11c051d509c7980acb9d279713bf56f6dbe5dee00ecb36de20dacdf5e0059cb2",
+      "sizeBytes": 7105660
     },
     {
       "derivedFrom": "districts/bx.glb",
@@ -377,8 +377,8 @@
       "locked": false,
       "path": "districts/bx.glb.gz",
       "provenance": "districts/bx.provenance.json",
-      "sha256": "95267c7e9bedc35ed613eff12e0e99e0a56dd7ca5b56aa31243209a33f2e0bfe",
-      "sizeBytes": 1233544
+      "sha256": "48d472e8c5d99f1a0d8ab9c30919d1b4c80d01ae548c0461379572b576f7a123",
+      "sizeBytes": 1218666
     },
     {
       "id": "districts-housing-glb",
@@ -399,8 +399,8 @@
       ],
       "path": "districts/housing.glb",
       "provenance": "districts/housing.provenance.json",
-      "sha256": "8e20d4db949f73a9743f1e49cb4d097107cf66c6473f6665a1fd4b10f43b1dd2",
-      "sizeBytes": 7683020
+      "sha256": "047b15d5806ef398f8dfaec16d6dae89ca28077464a08fdf20ac9373aba725c3",
+      "sizeBytes": 7230508
     },
     {
       "derivedFrom": "districts/housing.glb",
@@ -415,8 +415,8 @@
       "locked": false,
       "path": "districts/housing.glb.gz",
       "provenance": "districts/housing.provenance.json",
-      "sha256": "3f5d77ea1ae4311311537bfc3d277aeac969e84a26a7ad5e4e3073b73c04fb64",
-      "sizeBytes": 1467304
+      "sha256": "f20fe37f5868b9ede47b21f5f1a9ad58338172a6e3631310aba41d6d9d5a5e72",
+      "sizeBytes": 1429253
     },
     {
       "id": "districts-school-glb",
@@ -437,8 +437,8 @@
       ],
       "path": "districts/school.glb",
       "provenance": "districts/school.provenance.json",
-      "sha256": "97b7ca03d0d98026b5b2bb9b63492e886b415a7e9ca0b25c2a30ab3cfec594bb",
-      "sizeBytes": 5507540
+      "sha256": "d5cab177b9d2bc9c72f124b1e54b02c1766f49181372bcd32cd6be7ae8d44f45",
+      "sizeBytes": 5478804
     },
     {
       "derivedFrom": "districts/school.glb",
@@ -453,8 +453,8 @@
       "locked": false,
       "path": "districts/school.glb.gz",
       "provenance": "districts/school.provenance.json",
-      "sha256": "0a4650e25ed94bac331a946b0b86b0f86ed6f8ff66604d63488fc38d9c242902",
-      "sizeBytes": 939908
+      "sha256": "f22f94e3ed7240e15404a68e58ef99755cc2120c904eab8ae2093599cef3e90a",
+      "sizeBytes": 921171
     },
     {
       "id": "districts-skatepark-glb",
@@ -475,8 +475,8 @@
       ],
       "path": "districts/skatepark.glb",
       "provenance": "districts/skatepark.provenance.json",
-      "sha256": "d524f726a7d8a7d703f8114b9370202b54dbe38e1b6dc2aac760bd9e97da737b",
-      "sizeBytes": 2733936
+      "sha256": "f61b4b7eb2c2be80496aa455c9d9414b029f4b6595a1afcb5264773c645cdd1c",
+      "sizeBytes": 2673968
     },
     {
       "derivedFrom": "districts/skatepark.glb",
@@ -491,8 +491,8 @@
       "locked": false,
       "path": "districts/skatepark.glb.gz",
       "provenance": "districts/skatepark.provenance.json",
-      "sha256": "3cf12dca1876d518b4fe1cecf348b2c5f2a029fb3597039485a7afd043dcb7eb",
-      "sizeBytes": 721378
+      "sha256": "ec3dc80d4adcc5a9fba36d5cbe733dd6ffea4b779e2a9d89ecbdb96ce46c697a",
+      "sizeBytes": 715221
     },
     {
       "id": "env-goegap-1k-hdr",

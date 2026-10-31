@@ -27,5 +27,21 @@
     "samples": 24
   },
   "vertex_ao_method": "Cycles AO bake to per-corner BYTE_COLOR attribute \"AO\", exported as COLOR_0; remapped to floor..1. Real bake, no painted shading. Decals, ceilings and the far backdrop are left at 1.0 (not baked).",
-  "glb_bytes": 5507540
+  "glb_bytes": 5478804,
+  "vertex_contact_ao": {
+    "method": "per-corner hemisphere rays (bake_hero.py pattern) against district geometry plus a ground plane; cosine- and distance-weighted; min() with the Cycles AO",
+    "rays": 16,
+    "reach_m": 0.9,
+    "strength": 1.1,
+    "clamp": [
+      0.55,
+      1.0
+    ],
+    "ground_z_m": 0.0,
+    "min_multiplier": 0.55,
+    "mean_multiplier": 0.7578,
+    "corners": 123689,
+    "corners_darkened": 31544,
+    "seconds": 5.0
+  }
 }

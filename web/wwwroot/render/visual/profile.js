@@ -1,3 +1,4 @@
+// Tone mapping / fog / sun helpers for non-flight hosts (RC) live in shared/{tone,atmosphere,sun}.js; this normaliser is unchanged.
 const DEFAULT_PROFILE_URL = "../../content/packs/korea-1950s/visual-profile.json";
 
 const TONE_MAPPINGS = new Set([
