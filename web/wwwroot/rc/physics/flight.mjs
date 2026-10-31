@@ -49,6 +49,11 @@ export const FLIGHT = Object.freeze({
   // Kid mode flies the real controls with an Auto-GCAS, like the real F-16's: if the path ahead
   // meets the ground, it rolls the wings level and pulls up until it's safe, then hands back.
   gcas: Object.freeze({look: [0.35, 0.8, 1.4], floor: 4, hold: 0.5, roll: 4}),
+  // A winged mount (the quetzalcoatlus) flies close to the ground on purpose (owner, 31 Oct: "some
+  // degree of assist around ground avoidance but levelling is no fun"): the save comes late and
+  // small, pulls through the bank you're in instead of rolling you level (unless you're nearly
+  // upside down), and hands-off the wings stay where you put them.
+  proximity: Object.freeze({look: [0.25, 0.5, 0.8], floor: 1.2, hold: 0.25, maxBank: 1.05}),
   ollie: 3.2,
   hop: 2.4, // Space: the skateboard's ollie and the car's hop, m/s up (main.js)
   // The easy flyer (kid mode): steer banks and turns, up climbs, down descends, speed looks after
@@ -147,7 +152,8 @@ export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
     }
     car.vel = [h[0] * across, vy, h[1] * across];
   } else if (f.mode === 'fly') {
-    if (ctl.assist) ctl = gcas(f, car, ctl, world, dt);
+    if (ctl.assist)
+      ctl = ctl.proximity ? proximityAssist(f, car, ctl, world, dt) : gcas(f, car, ctl, world, dt);
     f.power = Math.max(0, Math.min(1, f.power + (ctl.power || 0) * FLIGHT.powerRate * dt));
     const target = ctl.burner
       ? FLIGHT.burner
@@ -165,7 +171,7 @@ export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
     // Banking turns the car (right wing down turns right); hands off, the wings drift level.
     const bank = rotate(q, [1, 0, 0])[1];
     q = quatMul(quatAxisAngle([0, 1, 0], bank * FLIGHT.bankTurn * dt), q);
-    if (!ctl.roll) q = quatMul(q, quatAxisAngle([0, 0, 1], bank * FLIGHT.levelRoll * dt));
+    if (!ctl.roll && !ctl.proximity) q = quatMul(q, quatAxisAngle([0, 0, 1], bank * FLIGHT.levelRoll * dt));
     car.q = quatNorm(q);
     const nose = rotate(car.q, [0, 0, -1]);
     f.climb = Math.max(0, f.climb - dt);
@@ -249,5 +255,30 @@ function gcas(f, car, ctl, world, dt) {
     up = rotate(car.q, [0, 1, 0]);
   const roll = up[1] < 0.2 ? (right[1] >= 0 ? 1 : -1) : Math.max(-1, Math.min(1, right[1] * G.roll));
   return {...ctl, roll, yaw: 0, pitch: up[1] > 0 && Math.abs(right[1]) < 0.35 ? 1 : 0, power: 1};
+}
+// The winged mount's ground avoidance (FLIGHT.proximity): look a short way along the flight path;
+// if it meets the ground plus a small floor, pull through the current bank (the lift vector) with
+// full power, rolling only enough to bring a near-vertical or inverted bank back to maxBank. It
+// never levels the wings and lets go as soon as the path is clear.
+function proximityAssist(f, car, ctl, world, dt) {
+  const P = FLIGHT.proximity,
+    vel = car.vel,
+    sp = Math.hypot(...vel) || f.speed;
+  if (
+    f.climb <= 0 &&
+    P.look.some(t => {
+      const p = madd(car.pos, vel, t),
+        g = groundAt(world, p[0], car.pos[1], p[2]);
+      return g != null && p[1] < g + P.floor * Math.min(1.5, sp / 12);
+    })
+  )
+    f.gcas = P.hold;
+  if (!(f.gcas > 0)) return ctl;
+  f.gcas -= dt;
+  const right = rotate(car.q, [1, 0, 0]),
+    up = rotate(car.q, [0, 1, 0]),
+    bank = Math.asin(Math.max(-1, Math.min(1, right[1]))),
+    over = Math.abs(bank) > P.maxBank || up[1] < 0.15;
+  return {...ctl, roll: over ? (right[1] >= 0 ? 1 : -1) : ctl.roll, pitch: 1, power: 1};
 }
 const dot4 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];

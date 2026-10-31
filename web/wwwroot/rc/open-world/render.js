@@ -632,6 +632,12 @@ export function createTileRenderer(scene, elevation = null, residentialTerrain =
     load,
     drop,
     fixtures: () => [...tileLights.values()].flat(),
+    /** The dark world is ranch land, not desert (owner, 31 Oct): long ago the bare sand and gravel
+     *  read as grazed pasture, a green-gold tint over the same ground. */
+    setPast(on) {
+      mats.get('sand')?.color.set(on ? '#93c763' : '#ffffff');
+      mats.get('gravel')?.color.set(on ? '#a9c97c' : '#ffffff');
+    },
     update(day) {
       mats.get('windowLight').emissiveIntensity = (1 - day) * 0.65;
       poolMaterial.uniforms.night.value = 1 - day;

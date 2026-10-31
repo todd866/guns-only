@@ -45,7 +45,9 @@ export function createRoundup(seed = 7) {
       pos: [sx + Math.cos(a) * d, sz + Math.sin(a) * d],
       yaw: r() * Math.PI * 2,
       wander: r() * 6,
-      penned: false
+      penned: false,
+      stunned: 0,
+      stunLooted: false
     };
   });
   return {steers, penned: 0, started: null, done: false, time: 0, best: null};
@@ -68,11 +70,13 @@ function fence(s, next) {
 /** One step. player = [x, z] of your dinosaur, or null if you're not here. Returns events. */
 export function stepRoundup(st, player, dt) {
   const ev = [];
+  for (const s of st.steers) s.stunned = Math.max(0, (s.stunned ?? 0) - dt);
   if (st.done) return ev;
   st.time += dt;
   const [sx, sz] = MEADOW.spring.at,
     box = MEADOW.corral.box;
   for (const s of st.steers) {
+    if (s.stunned > 0) continue;
     let want = null,
       speed = STEER.graze;
     if (s.penned) {
@@ -119,6 +123,7 @@ export function stepRoundup(st, player, dt) {
   for (const a of st.steers)
     for (const b of st.steers) {
       if (a.id >= b.id) continue;
+      if (a.stunned > 0 || b.stunned > 0) continue;
       const dx = b.pos[0] - a.pos[0],
         dz = b.pos[1] - a.pos[1],
         d = Math.hypot(dx, dz),
@@ -130,4 +135,12 @@ export function stepRoundup(st, player, dt) {
       }
     }
   return ev;
+}
+
+/** Stun a steer for a short spell. Returns false for a missing target. */
+export function stunSteer(steer, seconds = 4) {
+  if (!steer) return false;
+  if ((steer.stunned ?? 0) <= 0) steer.stunLooted = false;
+  steer.stunned = Math.max(0, Number(seconds) || 0);
+  return true;
 }

@@ -75,6 +75,126 @@
       "sizeBytes": 9394
     },
     {
+      "id": "audio-dino-chirp-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "qubodup (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/qubodup/sounds/744795/"
+      },
+      "locked": false,
+      "path": "audio/dino_chirp.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "fda2f8409d5027db6899f7509ea48bda63b9d7b0029ec1388a787aadff8708db",
+      "sizeBytes": 6313
+    },
+    {
+      "id": "audio-dino-chirp-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "qubodup (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/qubodup/sounds/744795/"
+      },
+      "locked": false,
+      "path": "audio/dino_chirp.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "b89ae09db134a680bd49f6cad5badc19fb701ff57d205a67c8557b160f92e3aa",
+      "sizeBytes": 8212
+    },
+    {
+      "id": "audio-dino-roar-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "Logicogonist (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/Logicogonist/sounds/810951/"
+      },
+      "locked": false,
+      "path": "audio/dino_roar.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "701983070c05b65de684f708daf83ba0dea3c3a8f92756d52820d3dd7eff91aa",
+      "sizeBytes": 39332
+    },
+    {
+      "id": "audio-dino-roar-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "Logicogonist (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/Logicogonist/sounds/810951/"
+      },
+      "locked": false,
+      "path": "audio/dino_roar.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "d9b328da150603946362ea921a68b1613ab46bcf275880fcf20b628a7e2aaca8",
+      "sizeBytes": 33565
+    },
+    {
+      "id": "audio-dino-snort-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "o_ciz (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/o_ciz/sounds/475483/"
+      },
+      "locked": false,
+      "path": "audio/dino_snort.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "324349177b6a4e689bf2efab7e03e489b3ffa151dbb78bfdf35156af12a203d0",
+      "sizeBytes": 9657
+    },
+    {
+      "id": "audio-dino-snort-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "o_ciz (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/o_ciz/sounds/475483/"
+      },
+      "locked": false,
+      "path": "audio/dino_snort.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "e7759b6657d7d80424261326e43fbd909e93b6ee62d1a0b86fbd147db2045b2b",
+      "sizeBytes": 14260
+    },
+    {
+      "id": "audio-dino-step-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "stewadosan (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/stewadosan/sounds/841139/"
+      },
+      "locked": false,
+      "path": "audio/dino_step.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "d47b76908e26034c493c9286f16ba5fa62512afafbc9882b0b1760b71ef0bddd",
+      "sizeBytes": 5477
+    },
+    {
+      "id": "audio-dino-step-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "stewadosan (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/stewadosan/sounds/841139/"
+      },
+      "locked": false,
+      "path": "audio/dino_step.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "4cb71885194b5115eacd82467ed03b860c08dc083515075370964e3f6c2d5037",
+      "sizeBytes": 6207
+    },
+    {
       "id": "audio-gravel-loop-mp3",
       "kind": "audio",
       "license": {
@@ -253,6 +373,36 @@
       "provenance": "audio/SOURCES.md",
       "sha256": "26d736dae0f8ec686d0872486e8b137647fd2de712df4a9bd8f31ae0631cfe05",
       "sizeBytes": 60078
+    },
+    {
+      "id": "audio-wing-flap-mp3",
+      "kind": "audio",
+      "license": {
+        "attribution": "2create (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/2create/sounds/670509/"
+      },
+      "locked": false,
+      "path": "audio/wing_flap.mp3",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "93c4c2796f9cadd47c848fe288e23de1ec5dcc1fd1534a88bf17a423d728c2c6",
+      "sizeBytes": 10075
+    },
+    {
+      "id": "audio-wing-flap-ogg",
+      "kind": "audio",
+      "license": {
+        "attribution": "2create (CC0, no attribution required)",
+        "id": "CC0-1.0",
+        "redistributable": true,
+        "source": "https://freesound.org/people/2create/sounds/670509/"
+      },
+      "locked": false,
+      "path": "audio/wing_flap.ogg",
+      "provenance": "audio/SOURCES.md",
+      "sha256": "ad79e217d274e1801df0031473878d9f2bffe9425a4ed30c43f572b10becb929",
+      "sizeBytes": 9571
     },
     {
       "budgets": {

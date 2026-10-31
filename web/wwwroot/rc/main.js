@@ -59,7 +59,11 @@ import {
   DINO_KINDS
 } from './open-world/herd.mjs';
 import {prepareCharacters, spawnCharacter, hasCharacter} from './open-world/characters.js';
-import {loadDex, see, pages, earn, GOLD, SEE_RANGE} from './open-world/dex.mjs';
+import {loadDex, see, pages, earn, addLoot, GOLD, SEE_RANGE} from './open-world/dex.mjs';
+import {createArrows, loose, stepArrows} from './open-world/arrows.mjs';
+import {createArrowView} from './open-world/arrows.js';
+import {stunOutlaw, OUTLAWS} from './open-world/outlaws.mjs';
+import {stunSteer} from './open-world/meadow.mjs';
 import {createPortraits} from './open-world/portraits.js';
 import {ask, typing} from './open-world/type-prompt.js';
 import {renderHint} from './key-hints.js';
@@ -292,6 +296,26 @@ if (districtError) {
   $('brief')?.append(note);
 }
 const renderer = new T.WebGLRenderer({canvas, antialias: true});
+let lookMode = false,
+  lookYaw = 0,
+  lookPitch = 0,
+  lookIdle = 0,
+  lookDrag = null;
+const lookKeys = new Set();
+// A mouse drag on the view looks around any time; it settles back behind you a moment after.
+canvas.addEventListener('pointerdown', e => {
+  if (e.button === 0 && race.roam) lookDrag = [e.clientX, e.clientY];
+});
+window.addEventListener('pointermove', e => {
+  if (!lookDrag) return;
+  lookYaw += (e.clientX - lookDrag[0]) * 0.008;
+  lookPitch = Math.max(-0.3, Math.min(1.1, lookPitch + (e.clientY - lookDrag[1]) * 0.005));
+  lookDrag = [e.clientX, e.clientY];
+  lookIdle = 1.5;
+});
+window.addEventListener('pointerup', () => {
+  lookDrag = null;
+});
 const adaptive = createAdaptiveResolution({
   max: Math.min(devicePixelRatio, 1.75),
   min: Math.min(devicePixelRatio, 1)
@@ -1059,6 +1083,24 @@ window.addEventListener('keydown', e => {
     }
     return;
   }
+  // Look around (owner: "I should be able to look around ... wasd move and arrows look"): C turns
+  // look mode on and off; in it the arrows swing the camera round you and WASD still moves you.
+  if (e.code === 'KeyC' && !e.repeat && race.roam && !paused) {
+    lookMode = !lookMode;
+    lookKeys.clear();
+    for (const k of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) keys.delete(k);
+    beep(
+      lookMode ? '👀 Look around! [left] [right] [up]' : '👀 Back to driving!',
+      lookMode ? 'wow' : 'happy',
+      2400
+    );
+    return;
+  }
+  if (lookMode && e.code.startsWith('Arrow')) {
+    e.preventDefault();
+    lookKeys.add(e.code);
+    return;
+  }
   if (DRIVE_KEYS.includes(e.code)) {
     if (paused) return;
     e.preventDefault();
@@ -1107,7 +1149,8 @@ window.addEventListener('keydown', e => {
     recover(s);
   }
   if (e.code === 'KeyQ' && !paused) {
-    if (form === 'board' && boardTricks.air > 0) flipQueued = dirOf(stick());
+    if (bowRiding()) bowLoose();
+    else if (form === 'board' && boardTricks.air > 0) flipQueued = dirOf(stick());
     else {
       fireQueued = true;
       punchQueued = true;
@@ -1148,6 +1191,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => {
   keys.delete(e.code);
+  lookKeys.delete(e.code);
   if (e.code === 'KeyE' && golfHold != null) golfRelease();
 });
 window.addEventListener('blur', () => pause(true));
@@ -2474,6 +2518,96 @@ let portalTravelling = false,
   riggedLoad = null,
   rigs = new Map(),
   rigsLoading = new Set();
+const bowState = createArrows(),
+  bowView = createArrowView(scene),
+  bowOrigin = new T.Vector3();
+const bowRiding = () => openWorld?.era() === 'past' && !!(toyDino?.visible || riggedDino?.root.visible);
+
+function bowTargets() {
+  const targets = (openWorld?.gang?.()?.enemies ?? []).map(enemy => ({
+    id: enemy.id,
+    pos: [
+      enemy.pos[0],
+      (openWorld.groundAt?.(enemy.pos[0], enemy.pos[2]) ?? enemy.pos[1]) + 0.15,
+      enemy.pos[2]
+    ],
+    alive: enemy.alive,
+    toy: enemy,
+    stun: stunOutlaw,
+    // The gang's stomp contact is a little wider than the nose's loot reach. Grab first.
+    reach: OUTLAWS.stompRadius
+  }));
+  for (const [i, steer] of (openWorld?.meadow?.()?.round?.steers ?? []).entries()) {
+    steer.id ??= i;
+    targets.push({
+      id: `steer-${steer.id}`,
+      pos: [steer.pos[0], (openWorld.groundAt?.(steer.pos[0], steer.pos[1]) ?? 0) + 1.1, steer.pos[1]],
+      alive: steer.alive !== false,
+      toy: steer,
+      stun: stunSteer,
+      reach: 1.6
+    });
+  }
+  return targets;
+}
+
+function bowLoose() {
+  if (!bowRiding() || paused || !race.roam) return;
+  const rider = riggedDino?.root.visible ? riggedDino.rider : toyDino?.userData.rider;
+  if (rider) rider.getWorldPosition(bowOrigin);
+  else bowOrigin.fromArray(s.car.pos).y += 1.1;
+  bowOrigin.y += 0.35;
+  if (loose(bowState, {from: bowOrigin.toArray(), heading: readout(s).yaw, targets: bowTargets()})) {
+    audio.zap();
+    beep('⚡ Zap!', 'happy', 1000);
+  }
+}
+
+function bowStep(dt) {
+  if (paused) return;
+  const past = openWorld?.era() === 'past',
+    targets = past && race.roam ? bowTargets() : [];
+  if (!bowRiding() || !race.roam) bowState.arrows.length = 0;
+  for (const event of stepArrows(bowState, dt, targets)) {
+    if (event.hit == null) continue;
+    const target = targets.find(t => t.id === event.hit);
+    if (target?.stun(target.toy)) {
+      audio.zap();
+      beep('⚡ Zap!', 'happy', 1000);
+    }
+  }
+  if (bowRiding() && race.roam) {
+    let batteries = 0,
+      parts = 0;
+    for (const target of targets) {
+      if (!target.alive || !(target.toy.stunned > 0) || target.toy.stunLooted) continue;
+      if (Math.hypot(target.pos[0] - s.car.pos[0], target.pos[2] - s.car.pos[2]) > target.reach) continue;
+      // Don't collect from the ground while flying overhead on a winged mount.
+      const feet = s.car.pos[1] - rideHeight(s.car.params),
+        ground = openWorld.groundAt?.(target.pos[0], target.pos[2]) ?? target.pos[1] - 1;
+      if (Math.abs(feet - ground) > 1.6) continue;
+      target.toy.stunLooted = true;
+      batteries++;
+      parts += 1 + Math.floor(Math.random() * 2);
+    }
+    if (batteries) {
+      addLoot(dexState(), {batteries, parts});
+      saveDex();
+      audio.creature(herd().herd[herd().mount]?.kind ?? 'rex', 'call');
+      beep(
+        `🔋 Got ${batteries === 1 ? 'a battery' : `${batteries} batteries`}! ⚙️ Got ${parts} ${parts === 1 ? 'part' : 'parts'}!`,
+        'proud',
+        2600
+      );
+    }
+  }
+  bowView.update(
+    bowState,
+    targets.filter(t => t.alive && t.toy.stunned > 0),
+    dt
+  );
+}
+
 // The Lake Town's outlaws (open-world/outlaws.mjs): ride the dinosaur through them, or fight on foot.
 let outlawWarned = false;
 function outlawStep(dt) {
@@ -2511,6 +2645,7 @@ function outlawStep(dt) {
     if (e.stomp) {
       audio.impact(6);
       beep(`💥 Stomp! ${g.enemies.filter(x => x.alive).length} left`, 'happy', 1600);
+      audio.creature(herd().herd[herd().mount]?.kind ?? 'rex', 'call');
     } else if (e.popped) {
       audio.impact(5);
     } else if (e.hurt) {
@@ -2637,6 +2772,8 @@ function saveDex() {
     pr = openWorld.progress;
   pr.dexSeen = [...d.seen];
   pr.gold = d.gold;
+  pr.batteries = d.batteries;
+  pr.parts = d.parts;
   openWorld.save();
 }
 // A new page: any wild one (or one of yours) close enough to see, checked a few times a second.
@@ -2678,6 +2815,7 @@ function sayAloud() {
       if (robot) {
         mountUp();
         beep(`🦖 ${who.dino.name} is here!`, 'happy');
+        audio.creature(who.dino.kind, 'call');
       } else if (swap) {
         // A different dinosaur under you: its own body and pace (physics/vehicles.mjs DINO_MOUNTS).
         const p = roamCarParams(),
@@ -2685,7 +2823,7 @@ function sayAloud() {
         pos[1] += rideHeight(p) - rideHeight(s.car.params) + 0.05;
         Object.assign(s.car, createCar(p, pos, readout(s).yaw));
         beep(`🦖 ${who.dino.name} is here!`, 'happy');
-        audio.pickup();
+        audio.creature(who.dino.kind, 'call');
       } else beep(`🦖 You are on ${who.dino.name}!`, 'ask');
       return;
     }
@@ -2778,6 +2916,7 @@ function wildStep(dt, past) {
       saveHerd();
       audio.finish();
       beep(d ? `🦖 ${d.name} is your friend!` : '🦖 Too many dinos!', d ? 'happy' : 'sad', 3500);
+      if (d) audio.creature(d.kind, 'call');
       // The quetzalcoatlus: straight onto its back, ready to fly.
       if (d && DINO_KINDS[d.kind]?.flies && robot) {
         herd().mount = herd().herd.indexOf(d);
@@ -2787,6 +2926,45 @@ function wildStep(dt, past) {
       }
       wildAsking = null;
     });
+  }
+}
+// The ridden dinosaur's sounds (audio.creature): a footfall at each foot-down of its walk, run or
+// gallop clip, a wingbeat at each flap, and a snort when it has stood still a while.
+let dinoSaving = false,
+  dinoPhase = null,
+  dinoStill = 0;
+function dinoSounds(dt) {
+  const d = riggedDino;
+  if (!d?.root.visible || paused) {
+    dinoPhase = null;
+    return;
+  }
+  // A flier's save is the animal's own will (owner, 31 Oct: "you can ask your quetz to do anything,
+  // but it doesn't wanna crash and it generally won't"): when it pulls you up, it squawks and beats
+  // its wings hard, so the save reads as the creature, not an autopilot.
+  const saving = s.flight.mode === 'fly' && s.flight.gcas > 0 && d.actions.has('flap');
+  if (saving && !dinoSaving) {
+    audio.creature(herd().herd[herd().mount]?.kind ?? 'quetzal', 'call');
+    d.play('flap', {fade: 0.08, timeScale: 1.8});
+  }
+  dinoSaving = saving;
+  const kind = herd().herd[herd().mount]?.kind ?? 'rex',
+    a = d.actions.get(d.clip),
+    dur = a?.getClip().duration || 1,
+    ph = a ? (a.time / dur) % 1 : 0,
+    speed = Math.hypot(s.car.vel[0], s.car.vel[2]);
+  if (dinoPhase !== null && dinoPhase !== ph) {
+    const crossed = at => (dinoPhase < at && ph >= at) || (dinoPhase > ph && (at >= dinoPhase || ph >= at));
+    if (['walk', 'run', 'gallop'].includes(d.clip) && (crossed(0) || crossed(0.5)))
+      audio.creature(kind, 'step', Math.min(1, speed / 10));
+    if (d.clip === 'flap' && crossed(0.2)) audio.creature(kind, 'flap', 0.8);
+    if (d.clip === 'takeoff' && crossed(0.3)) audio.creature(kind, 'flap', 1);
+  }
+  dinoPhase = ph;
+  dinoStill = speed < 0.3 ? dinoStill + dt : 0;
+  if (dinoStill > 6) {
+    dinoStill = -Math.random() * 4;
+    audio.creature(kind, 'snort');
   }
 }
 // The car form's physics: in the dark world (the past) it is the ridden dinosaur's bigger body.
@@ -3989,7 +4167,13 @@ const ui = createWorldUI({
   dex: () =>
     openWorld && {
       pages: pages(dexState(), herd().herd),
+      herdNames: kind =>
+        herd()
+          .herd.filter(d => d.kind === kind)
+          .map(d => d.name),
       gold: dexState().gold,
+      batteries: dexState().batteries,
+      parts: dexState().parts,
       portrait: (model, ready) => (portraits ??= createPortraits(renderer)).get(model, ready)
     },
   world: openWorld,
@@ -4070,6 +4254,7 @@ $('return-world').onclick = () => {
   );
 };
 window.addEventListener('pagehide', () => {
+  bowView.dispose();
   openWorld?.dispose();
   worldSky?.dispose();
 });
@@ -4176,7 +4361,8 @@ function frame(now) {
       const skateInput = skate
         ? {...drive, drift: drive.drift || skateTouchGrab || performance.now() < skateGrabUntil}
         : drive;
-      const fl = {...flightInput(keys), assist: mode === 'kid'};
+      // A winged dinosaur flies with the proximity assist in every mode (no levelling, a late save).
+      const fl = {...flightInput(keys), assist: mode === 'kid' || winged(), proximity: winged()};
       fl.burner = boostOn && race.roam && !skate;
       {
         const was = burning;
@@ -4274,7 +4460,7 @@ function frame(now) {
   if (robot && robotBody) poseRobotBody(robotBody, robot);
   {
     const past = openWorld?.era?.() === 'past';
-    polish?.setOld?.(past ? 0.65 : 0); // The ridden dinosaur: the rigged one (open-world/characters.js) once loaded, the parts-built one until then.
+    polish?.setOld?.(past ? 0.35 : 0); // The ridden dinosaur: the rigged one (open-world/characters.js) once loaded, the parts-built one until then.
     // One rig per kind (open-world/herd.mjs DINO_KINDS), loaded the first time that kind is ridden;
     // until it's ready the last rig (or the parts-built dinosaur) stands in.
     if (past) {
@@ -4420,6 +4606,7 @@ function frame(now) {
           telemetry.playmate({dest: t.dest.id, result: t.ignored ? 'ignored' : 'timeout', closed: t.closed});
         }
       }
+      bowStep(dt);
       outlawStep(dt);
       digStep(dt, now);
       wildStep(dt, openWorld?.era?.() === 'past');
@@ -4655,8 +4842,17 @@ function frame(now) {
     throttle: lastThrottle,
     slip: c.wheels.filter(w => w.slip).length / 4,
     surface: c.wheels.find(w => w.surface)?.surface,
-    paused: paused || countdown > 0
+    paused: paused || countdown > 0,
+    body:
+      toyDino?.visible || riggedDino?.root.visible
+        ? 'dino'
+        : robot
+          ? 'robot'
+          : form === 'board'
+            ? 'board'
+            : 'car'
   });
+  dinoSounds(dt);
   if (track) followSun(sun, car.position);
   if (worldSky) {
     if (!paused) worldElapsed += dt;
@@ -4728,16 +4924,28 @@ function frame(now) {
     camHeading += d * Math.min(1, dt * (vertArc ? 10 : 4));
     camEasing = !!vertArc || Math.abs(d) > 0.04;
   }
-  const camYaw = camHeading;
+  // Looking around: look mode's arrows (or a mouse drag) swing the camera round you; out of look
+  // mode it eases back behind you.
+  {
+    const held = k => (lookKeys.has(k) ? 1 : 0);
+    if (lookMode) {
+      lookYaw += (held('ArrowRight') - held('ArrowLeft')) * dt * 2.2;
+      lookPitch = Math.max(-0.3, Math.min(1.1, lookPitch + (held('ArrowUp') - held('ArrowDown')) * dt * 1.3));
+    } else if ((lookIdle -= dt) <= 0) {
+      lookYaw *= Math.exp(-dt * 2.5);
+      lookPitch *= Math.exp(-dt * 2.5);
+    }
+  }
+  const camYaw = camHeading + lookYaw;
   // The boss fight pulls back and up so the robot and the whole excavator share the frame.
   // Riding a dinosaur in the dark world (the past) puts the toy up high: the camera pulls back with it.
   const mount = riggedDino?.root.visible ? 2 : toyDino?.visible ? 2.6 : 1,
     back = bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount,
     eye = [r.x, r.y + 0.12 * mount, r.z];
   desired.set(
-    r.x - Math.sin(camYaw) * back,
-    r.y + (bossAt ? 0.95 : mount > 1 ? 0.8 * mount : 0.55),
-    r.z + Math.cos(camYaw) * back
+    r.x - Math.sin(camYaw) * back * Math.cos(lookPitch),
+    r.y + (bossAt ? 0.95 : mount > 1 ? 0.8 * mount : 0.55) + Math.sin(lookPitch) * back,
+    r.z + Math.cos(camYaw) * back * Math.cos(lookPitch)
   );
   const ray = [desired.x - eye[0], desired.y - eye[1], desired.z - eye[2]],
     dist = Math.hypot(...ray),
@@ -4960,6 +5168,13 @@ function frame(now) {
 }
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
 window.__gunsOnlyRC = {
+  bow: () => ({
+    arrows: bowState.arrows.length,
+    stunned: bowTargets()
+      .filter(t => t.alive && t.toy.stunned > 0)
+      .map(t => t.id),
+    loot: {batteries: dexState().batteries, parts: dexState().parts}
+  }),
   form: () => form,
   qaEra: era => openWorld?.qaEra?.(era),
   roundup: () =>
@@ -4977,6 +5192,10 @@ window.__gunsOnlyRC = {
   }),
   era: () => openWorld?.era?.() ?? 'present',
   toyDino: () => toyDino,
+  sounds: () => ({
+    heard: {...(audio.heard ?? {})},
+    motor: +(audio.motorLow?.gain.gain.value ?? 0).toFixed(3)
+  }),
   dex: () => openWorld && {seen: [...dexState().seen], gold: dexState().gold},
   herd: () =>
     herdState && {

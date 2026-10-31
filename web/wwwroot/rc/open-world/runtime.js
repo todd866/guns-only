@@ -347,6 +347,7 @@ export async function loadOpenWorld(search) {
       stream.world.openGate('era-meadow');
     }
     mountainView?.setPast(past);
+    render?.setPast(past);
     if (past) stream.world.openGate('era-dam');
     else stream.world.closeGate('era-dam');
     // The steam-era farmstead (prop kit, placements/example-farmstead.json): the past only. Loaded the first time you go back; its

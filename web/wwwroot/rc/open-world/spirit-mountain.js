@@ -458,6 +458,9 @@ export function createMountainView(scene, ground = mountainHeight) {
      *  floor instead of the lake. */
     setPast(on) {
       this.setDam(!on);
+      // Long ago the road up the mountain is a dirt wagon track: no tarmac, no painted line.
+      roadMat.color.set(on ? '#8f6e47' : '#3e4448');
+      dashes.visible = !on;
       townMat.color.set(on ? '#d8b98c' : presentTown);
       holeMat.color.set(on ? '#6b4a2e' : presentHoles);
       spray.forEach(m => {
