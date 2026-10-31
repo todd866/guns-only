@@ -85,6 +85,15 @@ Gates, digging, the place list and save restoration all use one coordinator:
   that arrives (the dinosaur is bigger than the cowboy), water (surface or bottom, said
   explicitly), and an allowed vertical adjustment. Digging never slides sideways silently; the
   destination world guarantees an emergence surface at every x,z (see the underground below).
+- **The vehicle crosses as it is** (owner: "if you're driving a big fast rc car with street tyres,
+  then it should break if you try and use it on a dirt track in the dark world, but you should be
+  allowed to try"; "we need a damage model eventually too"). The coordinator carries the body you
+  are in, and its condition, into the other world. It never swaps or refuses the vehicle at the
+  portal, and nothing is gated by vehicle or world. Wear and damage come later (parts break with
+  use, limp home, the Garage repairs). **This changes what's built:** today the car turns into the
+  ridden dinosaur automatically in the past (`roamCarParams` / the rig swap in `main.js`). In the
+  separate world your car stays your car, and riding a dinosaur is a choice: summon one by name
+  (Y) or climb onto one. Step 4 makes that change.
 - **Physics handover starts stopped.** Keep the heading; reset linear and angular velocity, and
   clear flight, grind, contact, recovery, interpolation and the camera's previous position. Moving
   between a car and a dinosaur body changes the vehicle parameters, so copying velocity blind is
@@ -127,7 +136,8 @@ crafting, and portals that appear at random.
    layer), the place list and loading.
 4. **A sparse dark world over the full shared extent.** Correct ground, collision, water, bounds,
    and one crossing; no modern district holes, no dam, no mountain-edge fade. Test ordinary points
-   and the outer bounds, then bring in today's content as dark-world modules: the Lake Town, the
+   and the outer bounds; the vehicle crosses as it is (the car no longer becomes a dinosaur by
+   itself). Then bring in today's content as dark-world modules: the Lake Town, the
    farm, outlaws, herds, the nest, and the rc-adventure meadow
    (feature/rc-odyssey-next 46ce70de).
 5. **Persistence and bounded residency before content grows** (the save split above; suspend and
