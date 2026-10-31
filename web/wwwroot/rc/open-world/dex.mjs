@@ -55,6 +55,17 @@ export function addLoot(dex, {batteries = 0, parts = 0} = {}) {
   dex.parts = Math.min(Number.MAX_SAFE_INTEGER, cleanLoot(dex.parts) + p);
   return {batteries: b, parts: p};
 }
+
+/** Take loot back out of the book (gifts to friends). */
+export function takeLoot(dex, {batteries = 0, parts = 0} = {}) {
+  const wantB = cleanLoot(batteries),
+    wantP = cleanLoot(parts);
+  const b = Math.min(cleanLoot(dex.batteries), wantB),
+    p = Math.min(cleanLoot(dex.parts), wantP);
+  if (b) dex.batteries -= b;
+  if (p) dex.parts -= p;
+  return {batteries: b, parts: p};
+}
 export function spend(dex, amount) {
   const n = Math.max(0, Math.round(amount) || 0);
   if (dex.gold < n) return false;

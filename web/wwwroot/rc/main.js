@@ -66,7 +66,8 @@ import {
   DINO_KINDS
 } from './open-world/herd.mjs';
 import {prepareCharacters, spawnCharacter, hasCharacter} from './open-world/characters.js';
-import {loadDex, see, pages, earn, addLoot, GOLD, SEE_RANGE} from './open-world/dex.mjs';
+import {loadDex, see, pages, earn, addLoot, takeLoot, GOLD, SEE_RANGE} from './open-world/dex.mjs';
+import {loadCamp, saveCamp, visit, give, returnGift, CAMP, FIRE_RANGE} from './open-world/paiute-camp.mjs';
 import {createArrows, loose, stepArrows} from './open-world/arrows.mjs';
 import {createArrowView} from './open-world/arrows.js';
 import {stunOutlaw, OUTLAWS} from './open-world/outlaws.mjs';
@@ -1102,7 +1103,9 @@ window.addEventListener('keydown', e => {
       else if (robot && bowlingPress()) {
         /* holding to roll */
       } else if (robot && golfCanSwing()) golfHold = 0;
-      else if (robot) useQueued = true;
+      else if (robot && paiuteCampPress()) {
+        /* greeted or shared a gift */
+      } else if (robot) useQueued = true;
       else if (!(form === 'board' && boardTricks.air > 0)) enterLocation();
     }
     return;
@@ -2804,6 +2807,67 @@ function saveDex() {
   pr.batteries = d.batteries;
   pr.parts = d.parts;
   openWorld.save();
+}
+// Southern Paiute camp (paiute-camp.mjs): friends share; visit the fire, gifts come later.
+let campState_ = null,
+  campAtFire = false,
+  campPresses = 0,
+  campGave = false;
+const campState = () => (campState_ ??= loadCamp(openWorld?.progress ?? {}));
+function saveCampState() {
+  saveCamp(openWorld.progress, campState());
+  openWorld.save();
+}
+function nearCampFire(pos) {
+  const [fx, fz] = CAMP.fire;
+  return openWorld?.era?.() === 'past' && Math.hypot(pos[0] - fx, pos[2] - fz) < FIRE_RANGE;
+}
+function applyCampGift(kind) {
+  if (kind === 'pinon') {
+    const g = openWorld?.gang?.();
+    if (g?.fighter) g.fighter.batteries = g.fighter.max;
+  }
+}
+function paiuteCampPress() {
+  if (!robot || paused || !race.roam || !nearCampFire(robot.pos)) return false;
+  campPresses += 1;
+  const st = campState();
+  if (campPresses === 1) {
+    const line = visit(st);
+    const gift = returnGift(st, Math.random);
+    saveCampState();
+    beep(`🔥 ${line}`, 'happy', 3200);
+    if (gift?.line) {
+      applyCampGift(gift.kind);
+      setTimeout(() => beep(`🧺 ${gift.line}`, 'happy', 3200), 900);
+    } else if (dexState().batteries > 0) setTimeout(() => callout('🔋 [E] share a battery'), 1400);
+  } else if (!campGave && dexState().batteries > 0) {
+    // One gift a visit, so a held or hammered E never empties his pockets.
+    campGave = true;
+    const line = give(st, 'battery');
+    if (line) {
+      takeLoot(dexState(), {batteries: 1});
+      saveDex();
+      saveCampState();
+      beep(`🔥 ${line}`, 'happy', 2800);
+    }
+  }
+  return true;
+}
+function campStep(_dt, past) {
+  if (!past) {
+    campAtFire = false;
+    campPresses = 0;
+    return;
+  }
+  const here = robot ? robot.pos : s.car.pos;
+  const near = nearCampFire(here);
+  if (near !== campAtFire) {
+    campPresses = 0;
+    campGave = false;
+    if (near && robot) callout('🔥 [E] say hi');
+  }
+  campAtFire = near;
 }
 // A new page: any wild one (or one of yours) close enough to see, checked a few times a second.
 function dexStep(dt, past) {
@@ -5122,6 +5186,7 @@ function frame(now) {
       outlawStep(dt);
       digStep(dt, now);
       wildStep(dt, openWorld?.era?.() === 'past');
+      campStep(dt, openWorld?.era?.() === 'past');
       dexStep(dt, openWorld?.era?.() === 'past');
       edgeHint(now);
       legendStart();
@@ -5380,6 +5445,11 @@ function frame(now) {
       dt
     }))
       if (e.scatter) audio.creature('hen', 'cluck');
+  if (openWorld?.paiuteCamp && !paused)
+    openWorld.paiuteCamp({
+      pos: robot ? robot.pos : s.car.pos,
+      dt
+    });
   if (track) followSun(sun, car.position);
   if (worldSky) {
     if (!paused) worldElapsed += dt;
