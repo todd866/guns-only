@@ -394,7 +394,10 @@ Kept current by the agent actioning this audit. Commits are on `feature/rc-pipel
 | 2026-10-31 | rc-adventure landed meanwhile: `f409e9b8` high-school interior, `def19c37` sound pass, `0a405db3` real `discover` telemetry event, `2dbcf460` minimap, `1f834b65` park skirts | `feature/rc-adventure` | done |
 | 2026-10-31 | 3.4.5 sky/air profile, 3.9.3 seasons as data | dark-world agent declined (its instruction from Ian is the dark world); needs a hand-off from Ian or a window on main.js | open |
 | 2026-10-31 | dark-world: dinosaur physics body 2.4× car, Lake Town outlaw gang; rigid-part T. rex is a placeholder for the rigged dino | `22415f71` on `feature/rc-dark-world` | done |
-| 2026-10-31 | 3.8 finer 3DEP sample for real relief; 3.9.1 prop kit + placement JSON | subagents running (terrain on the M2 Air) | in progress |
+| 2026-10-31 | 3.8 terrain: a 1025×1025 3DEP pull (31 m) changes the 16 m grid's relief stddev only 6.09→6.11 m; the limiter is `build-playable-terrain.mjs` (pads at zero, 400 m blend, 10 %-of-distance cap). Tools made size-agnostic, candidate kept as evidence, data unchanged; experiment (cap ~25 %, blend 200 m) handed to rc-adventure | `48e788a4`, `docs/rc-terrain-relief.md` | done (finding) |
+| 2026-10-31 | 3.9.1 prop kit (14 props, 3 materials, baked AO, COL_ proxies) + JSON placements drawn as InstancedMesh (39 items = 14 calls; ×8 = 14); example picnic area; Blender empties exporter | `1d05efcd`, `docs/rc-placements.md`; wiring = rc-adventure | done |
+| 2026-10-31 | Dinosaur gallop clip (foot-true at 5.9 m/s at mount scale), all clips at 60 fps; mount live in the dark world with gallop | `d30e108d`; `e46e1c72`/`3ea17720` on `feature/rc-dark-world` | done |
+| 2026-10-31 | rc-adventure also landed `d51e0523` Hot Wheels track at Loop Lake | `feature/rc-adventure` | done |
 | 2026-10-31 | Owner: dark-world mounts are dinosaurs (toy rider, sub-real-size but much bigger mount) | `cd86b488` on `feature/rc-dark-world` | done |
 | 2026-10-31 | 3.2 Prettier reformat | dropped: dense one-line JS is deliberate house style; Ian's call | decision |
 | 2026-10-31 | 3.1 trunk: fast-forward `main` to the RC branch and push | needs Ian; note `feature/rc-adventure` is ahead of `feature/rc-next` and is what deploys | decision |
