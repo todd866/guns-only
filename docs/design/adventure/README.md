@@ -13,7 +13,7 @@ years. But it should feel like there's an infinity of things to do in this world
 - Never show the edges: no completion %, no checklists. The map shows only what you've found.
 - Something small within ~30 s of driving anywhere: pumpkins, rails, ramps, cells, talking toys.
 - Visible long before reachable: the mountain, the high rail, the door in the dam.
-- The world changes, so old places are new: seasons, day/night, weather, the upside-down.
+- The world changes, so old places are new: seasons, day/night, weather, the dark world.
 - Layers on the same ground: each form and item reveals a different game in the same streets.
 - Rumours, not quest markers. Ten minutes of pottering about is a whole session.
 - Measure it: distinct places and time between discoveries per session (telemetry).
@@ -22,11 +22,11 @@ years. But it should feel like there's an infinity of things to do in this world
 
 The Air Force has captured some aliens and is holding them in a hangar on Nellis. They are the
 **good** aliens: they came to protect us from the **bad** aliens, who want to break into our world
-from the **upside-down**. One night a captured alien reaches out with the last of its power, and the
+from the **dark world**. One night a captured alien reaches out with the last of its power, and the
 glow wakes a toy: **you**, an RC car on a kid's bedroom floor. The good aliens wake toys; the bad
 aliens' signal takes them over. So there are **good toys and bad toys**. To free the aliens and
 stop the break-in, you cross the base, climb **the mountain** where the river begins, and pass
-through its old gate into the upside-down. The creatures of the mountain help a toy that carries the
+through its old gate into the dark world. The creatures of the mountain help a toy that carries the
 good aliens' light.
 
 ## The shape of the game (owner, 30 Oct)
@@ -41,11 +41,15 @@ the Old Silver Mine.
 **The turn: the mountain.** When you have enough power-ups you climb the big mountain: drive up its
 roads, or fly to the top and parachute down. At the top is the **big spirit cave**.
 
-**Second half: the upside-down.** Through the spirit cave you come out in the upside-down, the bad
-aliens' twisted mirror of the same map, for the second set of dungeons and the finale. Unlike the
-first half's mostly peaceful overworld (enemies live in the dungeons), **the upside-down is full of
+**Second half: the dark world, which is the past** (owner, 31 Oct). The spirit cave is a portal,
+as in SNES Zelda, but it takes you **back in time**: the same map a hundred-odd years ago, before the
+base, the dam and the lake. **You turn into an old-fashioned toy**: the RC car becomes a **toy horse**
+and the robot becomes a **toy cowboy**. The second set of dungeons and the finale are there. Unlike the
+first half's mostly peaceful overworld (enemies live in the dungeons), **the dark world is full of
 enemies out in the open**, the way ALttP's Dark World is far more hostile than the Light World: bad
-toys patrol the streets, drones hunt you, and every road is contested.
+toys ride the trails, outlaw gangs hold the passes, and every road is contested. The bad aliens'
+signal reaches back in time too. That's why the old toys there have gone bad, and it's where the
+break-in begins.
 
 ## How it maps onto Zelda
 
@@ -56,7 +60,8 @@ toys patrol the streets, drones hunt you, and every road is contested.
 | Hyrule Castle as first dungeon / Zelda in the castle | The hangar where the aliens are held: the first act's goal |
 | 3 pendants, then the Master Sword | 3 first dungeons, each freeing one alien and giving one **form** |
 | Death Mountain; first Dark World portal on top | **The mountain**: drive up it, fly its valleys; the gate is at the top |
-| Dark World = same map, transformed | **The upside-down**: the same base and mountain, swallowed by bad-alien machinery |
+| Dark World = same map, transformed | **The dark world is the past**: the same valley and mountain, before the base and the dam, as a toy western |
+| Link turns into a bunny in the Dark World | You turn into an old toy: car → toy horse, robot → toy cowboy (below) |
 | Magic Mirror (one-way back to the Light World) | A gift from the mountain's guardians that lets you slip back at the same spot |
 | Items as keys (Power Glove, Flippers, Hookshot) | Your **forms** and a few toy gadgets (below) |
 | **Agahnim**, the wizard who took over the castle by bewitching the king | **The base leadership, corrupted by the bad aliens.** The commander's orders turn strange; the base helps the invasion without knowing it. The Agahnim fight is the end of act one |
@@ -123,7 +128,7 @@ you will recognise later (cracked rock, a gap, a dark room). The world also hide
 | 🌀 Wind-Up Spring | dungeon 2 | high ledges |
 | 🏮 Spirit Lamp | dungeon 3 | dark rooms, hidden spirit marks |
 | 🪀 Grapple Yo-Yo | dungeon 4 | gaps between posts |
-| 🪞 Moon Mirror | Spirit Mountain | the upside-down |
+| 🪞 Moon Mirror | Spirit Mountain | the dark world (the past) and back |
 
 **Digging, Minecraft-style, only in one area.** The claw breaks marked cracked rock anywhere (a
 Zelda bombable wall). Free block-by-block digging is confined to **one dedicated place**, so it
@@ -139,8 +144,65 @@ Not built yet: today the only water is the wave pool and the horizon mountains a
 - **The dam**: the river ends in a dam and a deep reservoir (Hoover Dam and Lake Mead). You can
   **dive underwater**, and on the bottom is the **drowned town** (Lake Mead really drowned St.
   Thomas, Nevada, which resurfaced when the water dropped).
-- **In the upside-down there is no dam**: the river runs wild down the old valley and the drowned
-  town stands on dry land as a walk-in dungeon. Same place, two ways in (ALttP's Light/Dark World).
+- **In the dark world the dam is gone, because it hasn't been built yet.** The lake drains away
+  and the river runs down the old valley. Where the reservoir was there is **a living frontier
+  town**: the same streets you dived over, dry, with lamps lit and a train at the station. Same
+  place, two ways in (ALttP's Light/Dark World), and the time travel explains it. Things you change
+  in the past show up in the present: a bell you ring in the old town tower rings underwater in the
+  drowned one, and a door you unbar in the past is open when you dive.
+
+## The dark world: back in time, as a toy western (owner, 31 Oct)
+
+Owner: "in the dark world you go back in time and it turns into a toy horse and cowboy kinda thing.
+And the dam disappears and there's a town down there under where the lake is. It's SNES zelda."
+
+This is our own toy western, not a copy of any game: original toys, town and story.
+
+**Every form has an old-time twin**, as Link becomes a bunny in the Dark World. The keys don't
+change (the keyboard rule above), only the toy:
+
+| Present | Past | What only it can do in the past |
+|---|---|---|
+| RC car | **Toy horse** (wind-up, painted) | Gallop the open range, jump fences and gulches, outrun a stagecoach. Whistle (E) and it comes |
+| Walking robot | **Toy cowboy** (tin figure, jointed arms) | Climb, crawl and push, as the robot does; lasso posts and steers; cork-gun duels |
+| Skateboard | **Mine-rail handcar** | Ride the rails through the mountain and the mine, both ways in time |
+| Flying suit | **Paper kite / toy balloon** | Glide off the mesas on the canyon winds |
+
+**What's different in the past.** Same map, so everything old has a new place:
+- **No base**: open desert, a stage road where the runway will be, a fort-like stockade where the
+  hangar will stand. Landmarks you know from the present (the mountain, the mine, the river bend,
+  the rock arch) are your compass.
+- **No dam, no lake**: the river valley is green and wild, and the **Lake Town** stands on its floor.
+- **The Old Silver Mine is working**: carts, a stamp mill, lamps lit. Its deep levels, sealed in the
+  present, are open in the past.
+- **A steam train** runs the valley line where the present-day train bridge stands.
+
+**Western set pieces, all toy-sized and no one gets hurt:** a train robbery you foil by galloping
+alongside and jumping aboard; a stampede of plastic cattle down the main street; a high-noon cork-gun
+duel (hit the outlaw toy's hat and he pops apart, as all bad toys do); lassoing a runaway stagecoach;
+a sheriff's star as the small-key equivalent in the Lake Town.
+
+**Portals all over the map** (owner, 31 Oct). The spirit cave is the first crossing, not the only
+one. Once you've been through it, portals around the world wake up, and each links two places
+rather than the same spot in the other time. Example: **a portal in the base town drops you at the
+bottom of the dam lake**, which in the past is the Lake Town's main street, dry. Rules:
+- Each portal is **visible long before it works**: a shimmer in a back alley, a ring of stones, an
+  old doorway in the BX basement. It wakes when you've crossed once, or when you have the item it
+  needs (the Spirit Lamp shows the hidden ones).
+- Some are **quick ways home**, some are **one-way surprises**: the town portal lands you in the
+  middle of an outlaw gang, the skatepark bowl drops you into the old mine.
+- They make the world feel bigger, not smaller: they never replace driving or galloping there, and
+  the map marks a portal only after you've used it.
+
+**Back and forth.** The Moon Mirror takes you home at the same spot, and the spirit cave takes you
+back. The two times feed each other: plant a seed in the past and there's a tree to climb in the
+present; bury a chest in the past and dig it up with the claw today.
+
+**What we don't do here.** No "cowboys and Indians" toys and no Native enemies or props. This is
+Southern Paiute land in both times (see the setting rules below), and the past makes that matter
+more. The outlaws are the bad aliens' taken-over toys. The frontier is drawn from real settler
+history (mining towns, stage roads, the railway), and the real history in it is checked before it
+goes in.
 
 ## Dungeons: real-ish places
 
@@ -161,12 +223,15 @@ boss with it → take it out into the world, where it opens new routes.
    giant possessed kite. You free alien 3. With three aliens free, the guardians open the gate at
    the summit.
 
-**Upside-down** (the world flips, as in ALttP after the pendants): the same base and mountain, taken
-over by bad-alien machinery. 5–7 dungeons (Zelda used 7; start with 3 and grow):
+**Dark world** (the world flips, as in ALttP after the pendants): the same valley and mountain in the
+past, a toy western where the bad aliens' signal has taken the old toys. 5–7 dungeons (Zelda used 7;
+start with 3 and grow):
 - **The Fossil Cave** (Gypsum Cave inspired): ground-sloth bones and fossil dung (a 6-year-old's
   favourite fact), crystal formations; a scorpions-under-blacklight puzzle.
-- **The Drowned Town** (inspired by the Lost City under Lake Mead): flip the reservoir level, the one
-  big puzzle-box dungeon, made with instant form switching so it isn't a Water Temple.
+- **The Lake Town** (inspired by St. Thomas, the town Lake Mead drowned): in the past it's alive and
+  dry, overrun by an outlaw toy gang. It's the big puzzle-box dungeon of the game, played across both
+  times: what you do in the past changes the drowned town in the present (ALttP's paired-world
+  puzzles). Instant form switching keeps it from becoming a Water Temple.
 - **The Flooded Arroyo / Rouge River**: boats, currents, the train bridge as a boss arena.
 - **The BX Basement and the Hangar Complex**: bad-alien factory turning toys bad; the final rescue.
 - **The Final Tower**: the bad aliens' machine forcing the gate open.
@@ -193,7 +258,7 @@ Hookshot turns a post into a bridge.
 
 What it opens afterwards: the dam's crest parapet as a 200 m grind; the Spirit Mountain
 switchback guardrails as a downhill grind line with a secret at the bottom; the drowned town's
-rooftop line in the upside-down. The Wind-Up Spring (dungeon 3) raises the ollie, so rails you
+rooftop line in the dark world. The Wind-Up Spring (dungeon 3) raises the ollie, so rails you
 could always see but never reach become the next "I can get up there now" moment.
 
 Telemetry note: the owner's son skips races but plays freely, so "get there in style" puzzles
@@ -237,7 +302,7 @@ Drones bring the base to life and give it its first-act threat:
 - **Big drones** (MQ-9 style) circling overhead and taxiing on the runway, as set dressing and
   as obstacles.
 - Under the corrupted leadership the bots get **meaner**: red lights, faster patrols. In the
-  upside-down, some are fused with bad-alien tech.
+  dark world, the old toys they've taken over are clockwork outlaws with alien glow in their eyes.
 
 ## Difficulty a 6-year-old can win (owner, 30 Oct)
 
@@ -272,8 +337,8 @@ Hard but not impossible, and the game adjusts by itself so he never hits a wall:
 
 Spooky-fun, never horror. Stranger Things' bikes-and-flashlights, kids-against-the-uncanny feeling,
 and IT's small town with something wrong underneath, at a level that wouldn't make a 6-year-old cry
-(Re-Volt did). No gore, no clowns. The upside-down is weird and wrong (static, inverted colours,
-toys that move jerkily), not gruesome.
+(Re-Volt did). No gore, no clowns. The dark world is the past gone a bit wrong: sepia dusk,
+a red sky over the mesas, old toys that move jerkily, wind and tumbleweed. Strange, never gruesome.
 
 ## The setting: real land, invented spirits
 
@@ -288,7 +353,7 @@ This is where the research matters most. The land is real; the magic is invented
 - Abandoned mines, ghost towns, mine carts; Area 51 kitsch, the Extraterrestrial Highway, atomic-age
   Las Vegas, Nellis and the Thunderbirds.
 
-**Invented** (the "fiction layer"): the aliens, the toys, the upside-down, and the **spirit world**.
+**Invented** (the "fiction layer"): the aliens, the toys, the dark world's time travel, and the **spirit world**.
 The mountain's guardians are the desert's creatures and elements, an original fantasy: a tortoise
 elder, a raven, the wind in the slot canyon, the spring where the river begins. Because you're a
 tiny toy, you talk with these non-human beings, not with people, and that is how you cross over.
