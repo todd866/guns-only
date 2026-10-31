@@ -475,8 +475,8 @@
       ],
       "path": "districts/skatepark.glb",
       "provenance": "districts/skatepark.provenance.json",
-      "sha256": "0cc55bb3d4d21603dda0bf9792ecee6873d097872fb4cd38e17f2c8828363c58",
-      "sizeBytes": 2758528
+      "sha256": "d524f726a7d8a7d703f8114b9370202b54dbe38e1b6dc2aac760bd9e97da737b",
+      "sizeBytes": 2733936
     },
     {
       "derivedFrom": "districts/skatepark.glb",
@@ -491,8 +491,8 @@
       "locked": false,
       "path": "districts/skatepark.glb.gz",
       "provenance": "districts/skatepark.provenance.json",
-      "sha256": "732f93690989764e48d193801aa120ef4835e294201c6bd23516f4acfab66fc8",
-      "sizeBytes": 724158
+      "sha256": "3cf12dca1876d518b4fe1cecf348b2c5f2a029fb3597039485a7afd043dcb7eb",
+      "sizeBytes": 721378
     },
     {
       "id": "env-goegap-1k-hdr",

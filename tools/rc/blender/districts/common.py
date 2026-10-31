@@ -659,21 +659,70 @@ def bake_ao(objs, distance=1.6, samples=24, floor=.38):
     return {'raw_min': round(lo, 3), 'raw_max': round(hi, 3), 'floor': floor, 'distance_m': distance, 'samples': samples}
 
 
+def _vis_meshes():
+    return [o for o in ROOT.children if o.type == 'MESH' and o.name.startswith('VIS_')]
+
+
 def join_visuals_by_material():
+    """One visual mesh per material (one draw call each). Returns (objects_before, objects_after).
+
+    A Blender 5.2 rebake was reported (2026-10-31) to take the hub from 467 to 1,059 draw calls,
+    suspected to be a silent un-join. A diagnosis bake on 5.2.0 LTS found this join working
+    (skatepark 25 -> 10 objects; GLB primitives identical to the committed bake), so the cause
+    was not reproduced. The join now passes an explicit context override (5.x operators read
+    active_object/selected_editable_objects from the context) and verifies its own result, so
+    an un-join fails the bake rather than shipping.
+    """
     groups = {}
-    for o in list(ROOT.children):
-        if o.type == 'MESH' and o.name.startswith('VIS_'):
-            groups.setdefault(o.data.materials[0].name, []).append(o)
+    for o in _vis_meshes():
+        groups.setdefault(o.data.materials[0].name, []).append(o)
+    before = sum(len(objs) for objs in groups.values())
+    if bpy.context.view_layer.objects.active and bpy.context.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
     for mat, objs in groups.items():
-        bpy.ops.object.select_all(action='DESELECT')
-        for o in objs:
-            o.select_set(True)
-        bpy.context.view_layer.objects.active = objs[0]
+        target = objs[0]
         if len(objs) > 1:
-            bpy.ops.object.join()
-        j = bpy.context.view_layer.objects.active
-        j.name = f'VIS_{mat}'
-        j.data.name = f'VIS_{mat}'
+            for o in bpy.context.view_layer.objects:
+                o.select_set(False)
+            for o in objs:
+                o.hide_set(False)
+                o.hide_viewport = False
+                o.hide_select = False
+                o.select_set(True)
+            bpy.context.view_layer.objects.active = target
+            with bpy.context.temp_override(active_object=target, object=target,
+                                           selected_objects=objs, selected_editable_objects=objs):
+                result = bpy.ops.object.join()
+            if 'FINISHED' not in result:
+                raise SystemExit(f'join {mat}: {result}')
+        target.name = f'VIS_{mat}'
+        target.data.name = f'VIS_{mat}'
+    after = len(_vis_meshes())
+    print(f'JOIN visual meshes {before} -> {after} ({len(groups)} materials)')
+    if after != len(groups):
+        # SystemExit, not RuntimeError: Blender -b --python exits 0 on an uncaught exception
+        # unless --python-exit-code is passed, and a silent un-join must fail the bake.
+        raise SystemExit(f'join left {after} visual meshes for {len(groups)} materials')
+    return before, after
+
+
+def glb_primitives(path):
+    """(visual primitives, collision primitives) in an exported GLB: what the game will draw."""
+    import struct
+    data = Path(path).read_bytes()
+    length, = struct.unpack_from('<I', data, 12)
+    doc = json.loads(data[20:20 + length])
+    meshes = doc.get('meshes', [])
+    vis = col = 0
+    for node in doc.get('nodes', []):
+        if 'mesh' not in node:
+            continue
+        n = len(meshes[node['mesh']]['primitives'])
+        if node.get('name', '').startswith('VIS_'):
+            vis += n
+        else:
+            col += n
+    return vis, col
 
 
 def export_glb(path):

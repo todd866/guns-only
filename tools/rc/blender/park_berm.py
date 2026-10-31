@@ -40,6 +40,13 @@ DECKS = [
 ]
 # The bowl hollow between its decks rides at floor level.
 BOWL = rect(7.8, 15.4, 6.7, 13.8)
+# Exposed deck faces: walls seen from the plaza or from drivable lawn, not deck backs to bury.
+# The lawn in front of these is held at plaza-floor height and climbs away on the same short
+# slope as beside the plaza edge, so no grass rises against (or, via a grid triangle spanning
+# the wall, through) the face. The long east quarter's south end wall runs from the foot of its
+# transition (u=6.2) across the upper deck's end (u=13.25); the deck's own grid vertices near it
+# are held low too, out of sight inside the deck, so no lawn triangle leans out across the wall.
+EXPOSED = [(xf(6.2, -3.4), xf(13.25, -3.4))]
 
 
 def inside(p, poly):
@@ -102,14 +109,41 @@ def _floor_edge():
 FLOOR_EDGE = _floor_edge()
 
 
+def exposed_distance(p):
+    return min(edge_distance(p, [a, b]) for a, b in EXPOSED)
+
+
+def _edge_cap(d):
+    # Hold vertices within one and a half cells of an exposed edge below it, so no lawn triangle
+    # rises across that edge; beyond that the lawn climbs at EDGE per metre.
+    return EDGE * max(0., d - 1.5 * CELL) - (.08 if d < 1.5 * CELL else 0)
+
+
+# Offsets reaching one and a half cells from a grid vertex: any lawn a berm triangle could join.
+REACH = [(r * math.cos(k * math.pi / 8), r * math.sin(k * math.pi / 8)) for r in (.5 * CELL, CELL, 1.5 * CELL) for k in range(16)]
+
+
 def height(p):
     """Lawn height above plaza datum 0; negative means tucked under the plaza or grade."""
+    exposed = exposed_distance(p)
     if on_deck(p):
-        return TOP - .04
+        # A deck vertex sits inside the deck, out of sight, but every berm triangle it shares
+        # leans out across the deck's face. Raise it to coping height only where all the lawn
+        # beside it is up there too (a buried deck back); where any of that lawn is held low
+        # (plaza floor, an exposed end wall, lawn capped beside the plaza edge) drop it to
+        # that level, so the triangle rises inside the deck instead of as a grass wedge
+        # standing proud of the wall.
+        beside = [_lawn(q) for q in ((p[0] + dx, p[1] + dy) for dx, dy in REACH) if not on_deck(q)]
+        return min([TOP - .04, _edge_cap(exposed)] + beside)
+    return _lawn(p, exposed)
+
+
+def _lawn(p, exposed=None):
+    exposed = exposed_distance(p) if exposed is None else exposed
     if on_floor(p):
         return -.08
     deck = min(0 if inside(p, d) else edge_distance(p, d) for d in DECKS)
-    floor = min(math.hypot(p[0] - x, p[1] - y) for x, y in FLOOR_EDGE)
+    floor = min(min(math.hypot(p[0] - x, p[1] - y) for x, y in FLOOR_EDGE), exposed)
     # Hold vertices within one and a half cells of the plaza below it, so no lawn triangle
     # rises across the floor's edge; the rolled apron and grade cover the tuck.
     beside = EDGE * max(0., floor - 1.5 * CELL)
