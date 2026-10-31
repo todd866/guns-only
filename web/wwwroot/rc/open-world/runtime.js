@@ -40,6 +40,7 @@ import {YARD_PAD, POOL_HOLE} from './schoolyard.mjs';
 import {prepareSchoolyard} from './schoolyard.js';
 import {createTileRenderer} from './render.js';
 import {createMountainView, createFarGround} from './spirit-mountain.js';
+import {createCanyonView, canyonFarGround} from './canyon.js';
 import {createDarkWorld} from './dark-world.js';
 import {createBadToys} from './bad-toys.js';
 import {createGang, stepGang} from './outlaws.mjs';
@@ -182,13 +183,16 @@ export async function loadOpenWorld(search) {
     onLoad: (key, t) => {
       render?.load(key, t);
       mountainView?.tileLoaded(key, true);
+      canyonView?.tileLoaded(key, true);
     },
     onDrop: key => {
       render?.drop(key);
       mountainView?.tileLoaded(key, false);
+      canyonView?.tileLoaded(key, false);
     }
   });
   let mountainView = null,
+    canyonView = null,
     farGround = null;
   const schoolyard = prepareSchoolyard(stream.world, residentialTerrain),
     residentialPark = prepareResidentialPark(stream.world, residentialData, {terrain: residentialTerrain}),
@@ -396,6 +400,7 @@ export async function loadOpenWorld(search) {
     lighting(day, pos) {
       terrain?.update(day, pos[0] > 9000);
       mountainView?.update(day);
+      canyonView?.update(day);
       farGround?.update(day);
       render?.update(day);
       corridor?.update(day, pos, day < 0.99 ? (render?.fixtures() ?? []) : []);
@@ -599,7 +604,12 @@ export async function loadOpenWorld(search) {
       golfVisual = createGolfVisual(scene);
       render = createTileRenderer(scene, elevation, residentialTerrain, MARSEILLE_TERRAIN);
       mountainView = createMountainView(scene, (x, z) => elevationAt(elevation, x, z));
-      farGround = createFarGround(scene, (x, z) => elevationAt(elevation, x, z), BOUNDS);
+      canyonView = createCanyonView(scene, (x, z) => elevationAt(elevation, x, z));
+      farGround = createFarGround(
+        scene,
+        (x, z) => canyonFarGround((a, b) => elevationAt(elevation, a, b), x, z),
+        BOUNDS
+      );
       darkWorld = createDarkWorld(scene, (x, z) => elevationAt(elevation, x, z));
       outlawView = createBadToys(scene, {look: 'outlaw'});
       digView = createDigView(scene);
@@ -608,6 +618,7 @@ export async function loadOpenWorld(search) {
       for (const [k, t] of stream.loaded) {
         render.load(k, t);
         mountainView.tileLoaded(k, true);
+        canyonView.tileLoaded(k, true);
       }
       activities = buildActivities(scene, stream.world, {alienUnlocked: () => alienWorldUnlocked(progress)});
       landmarks = buildLandmarks(scene, stream.world, progress, overview.roads, heroTemplate('landmarks'));
@@ -819,6 +830,7 @@ export async function loadOpenWorld(search) {
       );
     },
     dispose() {
+      canyonView?.dispose();
       venue?.dispose();
       venue = null;
       halloween?.dispose();
