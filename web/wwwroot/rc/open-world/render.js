@@ -124,9 +124,14 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null,
    if(inMountain(x,z)&&(roadNear(x,z).some(n=>n.d<MOUNTAIN.shelf+3)||LAKE.contains(x,z)))continue;   // never on Spirit Mountain's road or under its lake
    const y=elevationAt(elevation,x,z,terrainSite)-.025,turn=(x*.37+z*.11)%Math.PI;
    if(stone){const r=s*.55,top=[x,y+r*.45,z];for(let j=0;j<5;j++){const a=turn+j*Math.PI*2/5,c=turn+(j+1)*Math.PI*2/5;tri('gravel',top,[x+Math.cos(c)*r,y+.005,z+Math.sin(c)*r*.8],[x+Math.cos(a)*r,y+.005,z+Math.sin(a)*r*.8],.72+j*.05);}continue;}
-   for(let j=0;j<3;j++){const angle=turn+j*2.094,dx=Math.cos(angle)*s,dz=Math.sin(angle)*s,h=s*(.7+j*.12),tone=.68+j*.09;
-    quad('scrub',[x-dx,y+.015,z-dz],[x+dx,y+.015,z+dz],[x+dx*.35,y+h,z+dz*.35],[x-dx*.35,y+h,z-dz*.35],tone);
-    quad('scrub',[x-dx*.35,y+h,z-dz*.35],[x+dx*.35,y+h,z+dz*.35],[x+dx,y+.015,z+dz],[x-dx,y+.015,z-dz],tone);}
+   // A creosote clump is a spray of thin stems leaning out from the root, not a solid tent: 5-7
+   // stems of different heights, each clump its own size and tone (pipeline review, 31 Oct: rows
+   // of identical dark-green tents from the car's eye). Same batch, so no extra draws.
+   {const h0=(x*12.9898+z*78.233)%1,hash=h0<0?h0+1:h0,size=s*(.75+hash*.6),tone=.95+((hash*7.31)%1)*.3,n=5+Math.floor(hash*3);
+    for(let j=0;j<n;j++){const angle=turn+j*Math.PI*2/n+hash,lean=.35+((j*.37+hash)%1)*.35,h=size*(.65+((j*.53+hash*3.1)%1)*.6),w=size*.09;
+     const bx=Math.cos(angle),bz=Math.sin(angle),px=-bz*w,pz=bx*w,tx=x+bx*h*lean,tz=z+bz*h*lean,shade=tone*(.9+((j*.29)%1)*.2);
+     quad('scrub',[x-px,y+.015,z-pz],[x+px,y+.015,z+pz],[tx+px*.25,y+h,tz+pz*.25],[tx-px*.25,y+h,tz-pz*.25],shade);
+     quad('scrub',[tx-px*.25,y+h,tz-pz*.25],[tx+px*.25,y+h,tz+pz*.25],[x+px,y+.015,z+pz],[x-px,y+.015,z-pz],shade);}}
   }
   for(const [k,v]of buckets){if(!v.v.length)continue;const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(v.v,3));g.setAttribute('color',new T.Float32BufferAttribute(v.c,3));g.setAttribute('uv',new T.Float32BufferAttribute(v.uv,2));g.computeVertexNormals();g.computeBoundingSphere();const m=new T.Mesh(g,mats.get(k));m.castShadow=['wall','roof'].includes(k);m.receiveShadow=true;root.add(m);}groups.set(key,root);scene.add(root);
  }
