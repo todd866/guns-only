@@ -47,7 +47,7 @@ visual-profile and gate machinery the flight game already has.
   `evidence/rc-open-world/verified-world-tour/road-to-housing.png` (23 Oct), and the flight
   look-gate corpus `tools/terrain-look/shots/steppe-low.png` (July). I did **not** render a
   fresh F-22 frame; flight observations below are from code and the July corpus only.
-- Repo state: 246 branches, 41 worktrees (six `codex-improve-*` all detached at `47207df5`),
+- Repo state: 97 local branches (246 including remote refs), 41 worktrees (six `codex-improve-*` all detached at `47207df5`),
   27 stashes, 164 untracked paths in the main checkout including ~0.9 GB of `.rc-*-review`
   render dirs that `.gitignore` does not cover (only `.rc-dist/` is), 13 GB `recordings/`,
   315 MB `evidence/`, 132 MB `reference/`, and `content/packs` (456 MB) duplicated into
@@ -301,7 +301,7 @@ That volume does not fit "one agent writes 20 KB of geometry per venue". Action:
   `AGENTS.md` asks agents to use.
 - Prune the six detached `codex-improve-*` worktrees at `47207df5` and the prunable Codex
   worktree; run a salvage-first branch audit (per-file supersession check, as done for the
-  July in-flight branches in `docs/2026-07-31-*` handoffs) against the 246 branches before
+  July in-flight branches in `docs/2026-07-31-*` handoffs) against the unmerged branches (see the 31 Oct branch salvage audit) before
   deleting anything.
 - `recordings/` is 13 GB in the working tree. It is gitignored, so it is safe for git, but it
   sits in a tree that `worktree-prep` and `remote-run` mirror by file walk; move it to
