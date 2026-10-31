@@ -12,7 +12,7 @@ const DEBUG_SCALE = Number(new URLSearchParams(globalThis.location?.search ?? ''
 // Grass tufts per square metre by distance ring: thick at the bumper, a sprinkle at the edge.
 export const NEAR_DETAIL = {cell: 4, radius: 22, rings: [[6, 40], [10, 14]], sparse: 2, cellsPerFrame: 6};
 const INDOOR = ['bx'].map(districtBounds);
-const SKIP = new Set(['bowl', 'hip', 'quarter', 'kerb', 'trim', 'wood', 'gymfloor', 'carpet', 'metal', 'water', 'ice']);
+const SKIP = new Set(['turf', 'bowl', 'hip', 'quarter', 'kerb', 'trim', 'wood', 'gymfloor', 'carpet', 'metal', 'water', 'ice']);
 const HARD = new Set(['asphalt', 'concrete', 'path', 'court']);
 const LOOSE = new Set(['dirt', 'sand', 'gravel']);
 
