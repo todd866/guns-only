@@ -1,5 +1,5 @@
 import {renderHint} from '../key-hints.js';
-import {approachLane} from './bowling.mjs';
+import {approachLane, canSwitchBowlingLane} from './bowling.mjs';
 import {VEHICLE_NAMES} from '../vehicle-bodies.js';
 import {BASE_BOUNDARY} from './boundary.mjs';
 import {
@@ -844,12 +844,17 @@ export function createWorldUI({
         else if (s.robot && (p?.game === 'bowling' || golf?.kind === 'bowling')) {
           const ready = approachLane(s.pos);
           $('interact').hidden ||= !!golf?.launched;
+          const wrongLane = ready && golf?.kind === 'bowling' && !golf.done && ready.id !== golf.lane;
           interactLabel(
-            ready
-              ? golf?.done
-                ? '🎳 Play again · hold [E]'
-                : '🎳 Hold [E] · [left] [right] aim · let go'
-              : '🎳 Bowling! Walk to a lane · hold [E], let go to roll',
+            wrongLane
+              ? canSwitchBowlingLane(golf)
+                ? '🎳 Hold [E] · [left] [right] aim · let go'
+                : `🎳 Your lane is number ${golf.lane}`
+              : ready
+                ? golf?.done
+                  ? '🎳 Play again · hold [E]'
+                  : '🎳 Hold [E] · [left] [right] aim · let go'
+                : '🎳 Bowling! Walk to a lane · hold [E], let go to roll',
             ''
           );
         } else if (s.skate) interactLabel('🛹 Skate', 'E');
