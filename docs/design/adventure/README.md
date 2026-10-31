@@ -191,6 +191,25 @@ alongside on your dinosaur and jumping aboard; a stampede of plastic cattle (and
 duel (hit the outlaw toy's hat and he pops apart, as all bad toys do); lassoing a runaway stagecoach;
 a sheriff's star as the small-key equivalent in the Lake Town.
 
+**A Minecraft vibe: steam farming and digging** (owner, 31 Oct): "if we're doing old timey with
+dinosaurs maybe we can have some old steam harvesting equipment and farming and stuff like that.
+Make it almost a minecraft vibe in this game world. Maybe also you can always mine-craft mine down
+to the portal level and spawn in the light world, that would be funny, literally the upside down
+then."
+- **Dig down anywhere in the past** (built: open-world/dig.mjs). On foot, hold E: the cowboy digs
+  a shaft of chunky 0.5 m pixel blocks through grass, dirt, clay, stone and a gold seam. Under them
+  all is the glowing portal layer; break it and you pop out of the ground in the light world at the
+  same spot, the camera upside down for a beat. Dig in the Lake Town and you come out at the bottom
+  of the lake. Space climbs back out. This is the free-digging exception to "digging only in one
+  dedicated area": straight down, in the past only, and always a way home.
+- **Steam-era farms to potter in**: a farmstead on the dry valley floor upstream of the Lake Town
+  with a steam traction engine, a thresher, a windmill and water pump, hay wagons, split-rail
+  fences, crop rows, a scarecrow and a silo (models from the prop kit, placed from data). Farm jobs
+  are small, wordless and repeatable: plant, water, harvest with the steam thresher, herd the toy
+  cattle with your dinosaur. Planting in the past grows a tree in the present.
+- **Blocky and buildable** comes next: the dug blocks are the start of a block set the cowboy can
+  place to build a little hut, a bridge or a ramp.
+
 **Portals all over the map** (owner, 31 Oct). The spirit cave is the first crossing, not the only
 one. Once you've been through it, portals around the world wake up, and each links two places
 rather than the same spot in the other time. Example: **a portal in the base town drops you at the
