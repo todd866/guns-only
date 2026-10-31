@@ -383,11 +383,19 @@ Kept current by the agent actioning this audit. Commits are on `feature/rc-pipel
 | 2026-10-31 | 3.3.4 hero GLB provenance recorded (MIT, from the export scripts); gate runs the strict check, no unknown licences | `e1294ae3` | done |
 | 2026-10-31 | 3.1 `bin/deploy-rc` writes the "RC live" revision line into `docs/STATUS.md` on production deploys | `fd5edb7a` | done |
 | 2026-10-31 | 3.9.4 feel-infinite metrics in `analytics-report.mjs` (places/session, gaps, quiet stretch; proxy = first `visit` per place because `discover()` emits no event) | `5f935ea8` | done; add a real `discover` event in the game (rc-adventure agent) |
-| 2026-10-31 | 3.4.8 RC look gate: fixed views, perceptual diff, reference stills | subagent, queued behind foreign heavy-slot holders | in progress |
+| 2026-10-31 | 3.4.8 RC look gate: six fixed views via `__gunsOnlyRC.place`, flight look-gate metrics + pixel MAD + edge ratio, thresholds at 5–10× same-build noise (warn), reference stills blessed | `26411441` | done |
+| 2026-10-31 | 3.11 branch salvage audit; 37 fully merged local branches deleted (97→60); nothing unmerged touched | `5c6b4456`, main checkout | done |
+| 2026-10-31 | 3.6 native scene-sync boundary written: what must exist before any Metal lighting ships | `af892086` | done (design) |
+| 2026-10-31 | Character pipeline spike: rigged toy dinosaur (17 bones, idle/walk/run/jump), `open-world/characters.js` loader with cross-fades and Saddle socket, Blender + in-engine review renders (M2 Air check) | `f4b04586` | done; wiring = dark-world agent |
 | 2026-10-31 | 3.11 six detached `codex-improve-*` worktrees removed (commit in `main`, nothing uncommitted) | main checkout | done |
-| 2026-10-31 | 3.4.1–3.4.7 shadows, AO, vegetation, smoke, draw calls, bowl-wall wedge | rc-adventure agent (`feature/rc-adventure`), accepted; wedge first; `1f834b65` added park skirts | queued behind the owner's own queue |
-| 2026-10-31 | 3.4.5 sky/air profile, 3.9.3 seasons as data | dark-world agent declined pending Ian | open |
+| 2026-10-31 | 3.4.1 wedge: NOT terrain; it is the skatepark GLB's own turf berm (park_berm.py caps lawn only at FLOOR_EDGE; the quarter's wing wall is treated as a deck back). Also: a Blender 5.2 rebake doubles hub draw calls (467→1,059, join_visuals_by_material no longer joins) | rc-adventure finding; fix in the Blender lane (subagent running) | in progress |
+| 2026-10-31 | 3.4.2 shadows: my diagnosis was wrong; the blocky shapes in housing-turn.png were skid-mark stamps turned to body yaw. Fix: continuous per-wheel tyre ribbons, pooled Points smoke, sun texel-snapped in light space (ported from `shadow_stabilizer.js`). No cascades (no evidence they are needed; a second pass costs). housing p95 16.8 ms, 453 calls | `55d7da26` on `feature/rc-adventure` (also closes 3.4.6) | done |
+| 2026-10-31 | 3.4.3 contact darkening/AO, 3.4.4 vegetation (note: creosote clumps read as rows of green tents in desert-mountain ref), 3.4.7 BatchedMesh | rc-adventure agent, interleaved with the owner's queue | queued |
+| 2026-10-31 | rc-adventure landed meanwhile: `f409e9b8` high-school interior, `def19c37` sound pass, `0a405db3` real `discover` telemetry event, `2dbcf460` minimap, `1f834b65` park skirts | `feature/rc-adventure` | done |
+| 2026-10-31 | 3.4.5 sky/air profile, 3.9.3 seasons as data | dark-world agent declined (its instruction from Ian is the dark world); needs a hand-off from Ian or a window on main.js | open |
+| 2026-10-31 | dark-world: dinosaur physics body 2.4× car, Lake Town outlaw gang; rigid-part T. rex is a placeholder for the rigged dino | `22415f71` on `feature/rc-dark-world` | done |
+| 2026-10-31 | 3.8 finer 3DEP sample for real relief; 3.9.1 prop kit + placement JSON | subagents running (terrain on the M2 Air) | in progress |
 | 2026-10-31 | Owner: dark-world mounts are dinosaurs (toy rider, sub-real-size but much bigger mount) | `cd86b488` on `feature/rc-dark-world` | done |
 | 2026-10-31 | 3.2 Prettier reformat | dropped: dense one-line JS is deliberate house style; Ian's call | decision |
 | 2026-10-31 | 3.1 trunk: fast-forward `main` to the RC branch and push | needs Ian; note `feature/rc-adventure` is ahead of `feature/rc-next` and is what deploys | decision |
-| — | 3.5 shared visual profile, 3.6 native scene sync, 3.8 finer DEM, 3.9.1 prop kit + placement JSON, 3.10 flight look-gate corpus refresh | not started | open |
+| — | 3.5 shared visual profile (needs a main.js window), 3.10 flight look-gate corpus refresh | not started | open |
