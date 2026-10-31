@@ -1,8 +1,11 @@
+import {CANYON} from './open-world/canyon.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BASE_BOUNDARY, boundarySegmentsWithin, insideBase} from './open-world/boundary.mjs';
 import {inResidential} from './open-world/residential-frame.mjs';
 import {LOCATIONS} from './open-world/catalog.mjs';
+const inCanyon = ([x, , z]) =>
+  x >= CANYON.bounds[0] && x <= CANYON.bounds[2] && z >= CANYON.bounds[1] && z <= CANYON.bounds[3];
 
 test('boundary source preserves exact OSM IDs and destinations', () => {
   assert.deepEqual(BASE_BOUNDARY.ids, {
@@ -15,6 +18,11 @@ test('boundary source preserves exact OSM IDs and destinations', () => {
   assert.equal(BASE_BOUNDARY.rings.areaIII.length, 91);
   assert.equal(BASE_BOUNDARY.elevationDatumM, 569.1);
   for (const p of LOCATIONS.filter(p => !p.alien)) {
+    // The Canyon Run sits in the authored canyon (canyon.mjs), outside the OSM base by design.
+    if (p.game === 'canyon-run') {
+      assert.ok(inCanyon(p.pos), `${p.id} lies in the authored canyon`);
+      continue;
+    }
     if (p.id === 'skatepark' || p.id === 'schoolyard') {
       assert.ok(inResidential(p.pos), `${p.id} lies in the authored residential extension`);
       continue;

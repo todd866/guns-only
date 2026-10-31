@@ -1,6 +1,9 @@
 import {FRONT_DOOR_POS, ALLEY_RACE_POINTS} from './bowling-alley.mjs';
 import {NY} from './under-bridge.mjs';
 import {SCHOOL} from './flying-school.mjs';
+import {STUNT_JUMPS} from './stunt-jumps.mjs';
+import {CLOUDS} from './clouds.mjs';
+import {CANYON_RUN} from './canyon-run.mjs';
 import {LIVERIES, TRIMS} from '../livery-data.mjs';
 import {plazaWorld, PLAZA_PARK} from './town-plaza.mjs';
 import {playgroundWorld, PLAYGROUND_PARK} from './playground.mjs';
@@ -116,6 +119,7 @@ export const LOCATIONS = [
     kind: 'activity',
     game: 'flying-school'
   },
+  CANYON_RUN.location,
   {
     id: 'wic',
     name: 'WIC PlayPlace',
@@ -761,6 +765,7 @@ export function loadProgress(storage) {
     specimens: ids(v?.specimens, SPECIMENS),
     skyJumps: Number.isSafeInteger(v?.skyJumps) && v.skyJumps >= 0 ? v.skyJumps : 0,
     bestLanding: Number.isFinite(v?.bestLanding) && v.bestLanding >= 0 ? v.bestLanding : null,
+    stuntJumps: ids(v?.stuntJumps, STUNT_JUMPS),
     golfRoundBest: Number.isInteger(v?.golfRoundBest) && v.golfRoundBest > 0 ? v.golfRoundBest : null,
     roundupBest: Number.isInteger(v?.roundupBest) && v.roundupBest > 0 ? v.roundupBest : null,
     // Version 1 stored one frame (0–10), never a ten-frame record. Even a new zero is a record.
@@ -787,7 +792,15 @@ export function loadProgress(storage) {
     pattern: LIVERIES.some(l => l.id === v?.pattern) ? v.pattern : 'solid',
     pumpkins: Number.isInteger(v?.pumpkins) && v.pumpkins > 0 ? v.pumpkins : 0,
     boosters: Number.isInteger(v?.boosters) && v.boosters > 0 ? v.boosters : 0,
+    clouds: ids(v?.clouds, CLOUDS),
+    canyonBest:
+      typeof v?.canyonBest === 'number' && Number.isFinite(v.canyonBest) && v.canyonBest > 0
+        ? v.canyonBest
+        : null,
     flyingSchool: Number.isInteger(v?.flyingSchool) && v.flyingSchool > 0 ? v.flyingSchool : 0,
+    tennisWins: Number.isSafeInteger(v?.tennisWins) && v.tennisWins >= 0 ? v.tennisWins : 0,
+    parcelsDelivered:
+      Number.isSafeInteger(v?.parcelsDelivered) && v.parcelsDelivered > 0 ? v.parcelsDelivered : 0,
     flyingStars:
       Number.isInteger(v?.flyingStars) && v.flyingStars >= 3 && v.flyingStars <= 9 ? v.flyingStars : 0,
     retreats: Number.isInteger(v?.retreats) && v.retreats > 0 ? v.retreats : 0,
