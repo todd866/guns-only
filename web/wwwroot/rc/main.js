@@ -3923,6 +3923,10 @@ const ui = createWorldUI({
   dex: () =>
     openWorld && {
       pages: pages(dexState(), herd().herd),
+      herdNames: kind =>
+        herd()
+          .herd.filter(d => d.kind === kind)
+          .map(d => d.name),
       gold: dexState().gold,
       portrait: (model, ready) => (portraits ??= createPortraits(renderer)).get(model, ready)
     },
