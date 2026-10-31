@@ -36,6 +36,8 @@ import {createRetreat, stepRetreat, RETREAT} from './physics/retreat.mjs';
 import {DRIVE_KEYS, drivingInput, flightInput, trickInput} from './driving-input.mjs';
 import {createFlight, toggleFlight, FLIGHT} from './physics/flight.mjs';
 import {SCHOOL} from './open-world/flying-school.mjs';
+import {SKY_STEER_HINT, skyLandingText, skyDiveCamera} from './open-world/sky-dive.mjs';
+import {createSkyDiveReport} from './open-world/sky-dive.js';
 import {applyLivery} from './livery.js';
 import {batchCarParts, unbatchCarParts} from './car-batch.js';
 import {createRobot, stepRobot} from './physics/robot.mjs';
@@ -941,10 +943,20 @@ $('resume').onclick = () => {
   pause(false);
   canvas.focus();
 };
+function raceReady() {
+  if (!openWorld || openWorld.canRace()) return true;
+  callout('🎳 Finish bowling first');
+  return false;
+}
+function visitRace(place, kind = 'race') {
+  const url = openWorld.eventURL(place, kind);
+  if (url) location.href = url;
+}
 $('menu-race').onclick = () => {
+  if (!raceReady()) return;
   if (openWorld && race.roam) {
     const p = nearestLocation(s.car.pos);
-    location.href = openWorld.eventURL(p.event || p.track ? p : locationById('ramp'));
+    visitRace(p.event || p.track ? p : locationById('ramp'));
     return;
   }
   telemetry.firstInput('button');
@@ -983,8 +995,9 @@ function legendStart() {
   }
 }
 $('menu-furball').onclick = () => {
+  if (!raceReady()) return;
   if (openWorld) {
-    location.href = openWorld.eventURL(locationById('ramp'), 'furball');
+    visitRace(locationById('ramp'), 'furball');
     return;
   }
   telemetry.firstInput('button');
@@ -1462,7 +1475,7 @@ function drawFlightHud() {
     hud.hidden = true;
   }
   if (mode !== hudMode && !winged()) {
-    if (hudMode && !mode) callout('🛬 Landed!');
+    if (hudMode && !mode && performance.now() > skyLandingUntil) callout('🛬 Landed!');
     hudMode = mode;
     hud.hidden = !mode;
   }
@@ -2218,6 +2231,7 @@ function drawLives(now, dt) {
   });
 }
 function startRace() {
+  if (!raceReady() || openWorld?.setRacing(true) === false) return;
   race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures});
   s = race.player;
   reported = false;
@@ -2343,6 +2357,7 @@ let reported = false;
 let countdown = -1,
   lastBeep = 0;
 function startCountdown() {
+  if (openWorld?.selected.id === 'alley-cat') callout('🎳 Alley Cat! Race through the bowling alley', 4500);
   telemetry.raceStart({kind: race.furball ? 'furball' : 'race', track: telemetryTrack, mode});
   countdown = 2.999;
   lastBeep = 4;
@@ -2972,6 +2987,31 @@ function dinoSounds(dt) {
     audio.creature(kind, 'snort');
   }
 }
+// The walking robot / past-era cowboy (audio.footstep): a footfall at each foot-down of the walk.
+let footPhase = null;
+function footSounds() {
+  if (!robot || paused || robot.climb) {
+    footPhase = null;
+    return;
+  }
+  const era = openWorld?.era?.() ?? 'present';
+  if (era !== 'present' && era !== 'past') {
+    footPhase = null;
+    return;
+  }
+  const speed = Math.hypot(robot.vel[0], robot.vel[2]);
+  if (!robot.grounded || speed < 0.1) {
+    footPhase = null;
+    return;
+  }
+  const ph = (robot.walkPhase / (Math.PI * 2)) % 1;
+  if (footPhase !== null && footPhase !== ph) {
+    const crossed = at => (footPhase < at && ph >= at) || (footPhase > ph && (at >= footPhase || ph >= at));
+    if (crossed(0) || crossed(0.5))
+      audio.footstep(era === 'past' ? 'cowboy' : 'robot', Math.min(1, speed / 3));
+  }
+  footPhase = ph;
+}
 // The car form's physics: in the dark world (the past) it is the ridden dinosaur's bigger body.
 function roamCarParams() {
   if (openWorld?.era?.() === 'past') return mountParams(herd().herd[herd().mount]?.kind ?? 'rex');
@@ -3033,11 +3073,18 @@ async function travelTo(id) {
   openWorld.stopSchool();
   hideSchoolCard();
   const {pos, yaw} = p.arrival;
+  openWorld.cancelSkyJump();
+  skyReport?.hide();
+  s.flight.mode = null;
   document.body.classList.toggle('era-past', openWorld.era?.() === 'past');
   if (robot) {
     robot.pos = [pos[0], pos[1] + 0.05, pos[2]];
     robot.vel = [0, 0, 0];
     robot.yaw = yaw;
+    // The parked car comes too: the world streams (and the sim waits) around s.car, so leaving it
+    // behind froze a jump made on foot at "Road downloading..." for good.
+    s.car.pos = [pos[0], pos[1] + rideHeight(s.car.params) + 0.02, pos[2]];
+    s.car.vel = [0, 0, 0];
   } else {
     const cp = roamCarParams();
     Object.assign(s.car, createCar(cp, [pos[0], pos[1] + rideHeight(cp) + 0.02, pos[2]], yaw));
@@ -3199,7 +3246,7 @@ function skateCard(id, run = null) {
   pause(true);
   if (race)
     $('skate-race').onclick = () => {
-      location.href = openWorld.eventURL(race);
+      visitRace(race);
     };
   $('skate-go').onclick = () => {
     if (run) telemetry.choice('skate_again');
@@ -4187,12 +4234,38 @@ function skateStep(input) {
     }
   }
 }
+let skyReport = null,
+  skyLandingUntil = 0;
+function skyJumpStep() {
+  if (!openWorld || !race.roam) return;
+  const report = openWorld.stepSkyJump(s.car, s.flight);
+  if (!report) return;
+  skyLandingUntil = performance.now() + 7000;
+  (skyReport ??= createSkyDiveReport()).show(report);
+  audio.finish();
+  callout(skyLandingText(report), 5000);
+}
 function enterLocation() {
   if (!openWorld || paused || !race.roam) return;
   if (openWorld.school()?.active) {
     openWorld.stopSchool();
     hideSchoolCard();
     callout('', 0);
+    return;
+  }
+  if (s.flight.mode || openWorld.skyDive().active) return;
+  if (!robot && form === 'car' && !skate && openWorld.skyJumpNear(s.car.pos)) {
+    if (openWorld.startSkyJump(s.car, s.flight)) {
+      skyReport?.hide();
+      boostOn = false;
+      keys.clear();
+      touchControls?.reset();
+      fireQueued = hopQueued = false;
+      acc = 0;
+      cameraCar = null;
+      audio.radio();
+      callout(SKY_STEER_HINT, 6500);
+    }
     return;
   }
   if (
@@ -4227,15 +4300,17 @@ function enterLocation() {
   const p = openWorld.near(s.car.pos);
   if (!p) return;
   if (p.game === 'flying-school') return;
+  if (p.game === 'sky-dive') return;
   if (p.game) {
     const tee = openWorld.startActivity(p.game, {mode});
+    if (!tee) return;
     telemetry.activityStart(p.game);
     placeCar(s.car, [tee.pos[0], rideHeight(s.car.params) + 0.02, tee.pos[2]], tee.yaw);
     callout(p.game === 'golf' ? 'CAR GOLF · 3 HOLES' : '🎳 Car Bowling · drive at the pins!');
     return;
   }
   if (p.kind === 'discovery' || !canEnter(openWorld.progress, p)) ui.open('map');
-  else location.href = openWorld.eventURL(p);
+  else visitRace(p);
 }
 // The stats page (owner, 31 Oct: "kinda need a stats page"): records and counts, never a
 // completion total (the world should feel endless). Rows: [icon, label, value].
@@ -4263,6 +4338,8 @@ function statRows() {
     ['🚀', 'Booster landings seen', num(pr.boosters)],
     ['✈', 'Flying School trips', num(pr.flyingSchool)],
     ['⭐', 'Flying School best', pr.flyingStars ? `${pr.flyingStars}/9` : '–'],
+    ['🪂', 'Sky jumps', num(pr.skyJumps)],
+    ['🎯', 'Best landing', pr.bestLanding == null ? '–' : `${pr.bestLanding.toFixed(1)} m`],
     ['⛳', 'Best golf round', pr.golfRoundBest ? `${pr.golfRoundBest}` : '–'],
     ['🤠', 'Fastest roundup', pr.roundupBest ? `${pr.roundupBest} s` : '–'],
     ['🎳', 'Bowling best', pr.bowlingBest != null ? `${pr.bowlingBest}/300` : '–'],
@@ -4298,6 +4375,7 @@ const ui = createWorldUI({
     roam: race.roam,
     started,
     flying: !!s.flight.mode,
+    skyJump: !robot && form === 'car' && !skate ? openWorld?.skyJumpNear(s.car.pos)?.id : null,
     skate: !!skateParkAt() && !skate,
     skating: !!skate
   }),
@@ -4349,6 +4427,7 @@ const raceMenu = createRaceMenu({
   progress: () => ui.progress,
   search: location.search,
   onStartCup: index => {
+    if (!raceReady()) return;
     const c = CUP_COURSES[index];
     cup = createCup(
       String(index),
@@ -4360,6 +4439,7 @@ const raceMenu = createRaceMenu({
   }
 });
 $('choose-course').onclick = () => {
+  if (!raceReady()) return;
   pause(true);
   raceMenu.open();
 };
@@ -4489,6 +4569,7 @@ function frame(now) {
         : drive;
       // A winged dinosaur flies with the proximity assist in every mode (no levelling, a late save).
       const fl = {...flightInput(keys), assist: mode === 'kid' || winged(), proximity: winged()};
+      if (s.flight.mode === 'chute') fl.steer = drive.steer;
       fl.burner = boostOn && race.roam && !skate;
       {
         const was = burning;
@@ -4526,6 +4607,7 @@ function frame(now) {
         1 / 120
       );
       hotWheelsPost();
+      skyJumpStep();
       skateStep(skateInput);
       boardStep(skateInput);
       if (openWorld)
@@ -5005,6 +5087,14 @@ function frame(now) {
             : 'car'
   });
   dinoSounds(dt);
+  footSounds();
+  if (openWorld?.chickens && !paused)
+    for (const e of openWorld.chickens({
+      pos: robot ? robot.pos : s.car.pos,
+      riding: !!(toyDino?.visible || riggedDino?.root.visible),
+      dt
+    }))
+      if (e.scatter) audio.creature('hen', 'cluck');
   if (track) followSun(sun, car.position);
   if (worldSky) {
     if (!paused) worldElapsed += dt;
@@ -5091,7 +5181,9 @@ function frame(now) {
   const camYaw = camHeading + lookYaw;
   // The boss fight pulls back and up so the robot and the whole excavator share the frame.
   // Riding a dinosaur in the dark world (the past) puts the toy up high: the camera pulls back with it.
-  const mount = riggedDino?.root.visible ? 2 : toyDino?.visible ? 2.6 : 1,
+  const jumpCamera =
+      s.flight.mode === 'chute' && openWorld?.skyDive().active ? skyDiveCamera(c.pos, camYaw) : null,
+    mount = riggedDino?.root.visible ? 2 : toyDino?.visible ? 2.6 : 1,
     back = bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount,
     eye = [r.x, r.y + 0.12 * mount, r.z];
   desired.set(
@@ -5099,6 +5191,7 @@ function frame(now) {
     r.y + (bossAt ? 0.95 : mount > 1 ? 0.8 * mount : 0.55) + Math.sin(lookPitch) * back,
     r.z + Math.cos(camYaw) * back * Math.cos(lookPitch)
   );
+  if (jumpCamera) desired.fromArray(jumpCamera.eye);
   const ray = [desired.x - eye[0], desired.y - eye[1], desired.z - eye[2]],
     dist = Math.hypot(...ray),
     hit = course.world.raycast(
@@ -5129,7 +5222,8 @@ function frame(now) {
   }
   const portrait = camera.aspect < 0.8,
     portraitAim = -0.3 - Math.max(0, 740 - innerHeight) * 0.003;
-  if (vertArc) target.set(r.x, r.y + 0.1, r.z);
+  if (jumpCamera) target.fromArray(jumpCamera.look);
+  else if (vertArc) target.set(r.x, r.y + 0.1, r.z);
   else
     target.set(
       r.x + Math.sin(camYaw) * 1.05,
@@ -5344,6 +5438,8 @@ window.__gunsOnlyRC = {
   }),
   era: () => openWorld?.era?.() ?? 'present',
   toyDino: () => toyDino,
+  flock: () =>
+    openWorld?.flock?.()?.hens.map(h => ({state: h.state, x: +h.x.toFixed(1), z: +h.z.toFixed(1)})),
   sounds: () => ({
     heard: {...(audio.heard ?? {})},
     motor: +(audio.motorLow?.gain.gain.value ?? 0).toFixed(3)

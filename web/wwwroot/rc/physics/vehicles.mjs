@@ -119,7 +119,13 @@ export const DINO_MOUNT = Object.freeze({
 export const DINO_MOUNTS = Object.freeze({
   rex: DINO_MOUNT,
   raptor: Object.freeze({...DINO_MOUNT, name: 'Toy raptor', scale: 2.0, topSpeed: 16, driveForce: 24}),
-  longneck: Object.freeze({...DINO_MOUNT, name: 'Toy long-neck', scale: 3.0, topSpeed: 9, driveForce: 17}),
+  longneck: Object.freeze({
+    ...DINO_MOUNT,
+    name: 'Toy Argentinosaurus',
+    scale: 3.0,
+    topSpeed: 9,
+    driveForce: 17
+  }),
   triceratops: Object.freeze({
     ...DINO_MOUNT,
     name: 'Toy triceratops',

@@ -1,6 +1,6 @@
 import * as T from '../../vendor/three.module.js';
 import {pinRack, BALL_RADIUS} from './bowling.mjs';
-import {LANES, ALLEY_FLOOR_Y} from './bowling-alley.mjs';
+import {LANES, ALLEY_FLOOR_Y, RACE_LANES} from './bowling-alley.mjs';
 export function createBowlingVisual(scene) {
   const root = new T.Group(),
     points = [
@@ -57,14 +57,14 @@ export function createBowlingVisual(scene) {
   stripe.position.set(0, 0.56, 0);
   stripe.updateMatrix();
   const api = {
-    update(game) {
+    update(game, raceId = null) {
       const g = game?.kind === 'bowling' ? game : null;
       LANES.forEach((lane, laneIndex) => {
         const pins = g?.lane === lane.id ? g.pins : racks[laneIndex];
         pins.forEach((p, i) => {
           o.position.set(p.pos[0], ALLEY_FLOOR_Y + 0.003, p.pos[1]);
           o.rotation.set(-(p.fall ?? 0) * 1.45, 0, 0);
-          o.scale.setScalar(p.removed ? 0 : 0.5);
+          o.scale.setScalar(p.removed || (raceId === 'alley-cat' && RACE_LANES.includes(lane.id)) ? 0 : 0.5);
           o.updateMatrix();
           body.setMatrixAt(laneIndex * 10 + i, o.matrix);
           stripes.setMatrixAt(laneIndex * 10 + i, matrix.multiplyMatrices(o.matrix, stripe.matrix));
