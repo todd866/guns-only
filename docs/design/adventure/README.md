@@ -504,6 +504,19 @@ original toy western.
 - **While it's stunned, the dinosaur can nose in and take its batteries and spare parts** (springs,
   cogs, a wind-up key). The battery box pops open with a "boing"; the loot is the economy's raw
   stuff, for crafting, upkeep and the store.
+- **The dark world's arsenal** (owner, 31 Oct: "the dark world has pistols and single shot long
+  rifles and single shot shotguns and arrows, and electric arrows are the most powerful thing if
+  you hit stuff"). All of them are toys, as everything here is: a cork **pistol** (quick, short
+  range, several shots), a single-shot **long rifle** (a cork that flies far and straight, slow to
+  reload), a single-shot **shotgun** (a spray of dried peas, close range, knocks things back), plain
+  **arrows**, and **electric arrows**, the strongest of all when they hit: they stun anything and
+  open its battery box. Ammo is bought at the general store or crafted (corks from the farm,
+  arrows from the forge). The same rules hold: faceless bad toys break into springs, animals and
+  characters never do.
+- **The quetzalcoatlus's autopilot** (owner: "it should have an autopilot mode where it'll fly so
+  you can shoot arrows at stuff"). One key hands it the flying: it circles where you are, wide and
+  steady, banking round the spot (or follows the valley it's in), so you can lean out and shoot.
+  Steer again and you're flying it.
 - **Rustling**: taking from the ranch's toy cattle is the outlaws' side of the game (the good-guy /
   bad-guy choice above); outlaws' own batteries are fair game on either side.
 
