@@ -172,6 +172,25 @@ world." Every new piece has to fit these; if one doesn't, change the piece, not 
 | Ocarina songs (warp, puzzles) | **Signal tunes**: the alien light hums a few notes that open doors and call you home |
 | Epona | Car mode itself is your horse: the fast way across the map |
 
+## The hero beeps; the words are for reading (owner, 31 Oct)
+
+Owner: "in terms of pedagogical value for Jake, his character only talks in robot noises and then it
+shows what's happening with text, noting that it's gotta be pretty simple for a six year old."
+
+- **The hero never speaks words.** Beeps, chirps, whirs and a happy trill or a sad droop: a robot
+  voice made from a few synth sounds, its pitch and rhythm carrying the feeling.
+- **A short line of text says what happened**, under the beep: "Rexy is here!", "You found gold!",
+  "Too deep! Go up." That makes the reading worth doing, because it tells him what his toy meant.
+- **Six-year-old reading level** for everything he has to read in play: short common words, two
+  to five words where possible, one idea per line, no symbols standing in for words (no "·", "→"
+  or "≥"), numbers as digits. Key hints are a picture of the key, not a sentence: [E] dig.
+- **Other characters may talk**, in the same simple text; the good toys' lines carry their
+  personalities. The hero stays a beeping robot.
+- **Telemetry:** check which lines he waits to read and which he skips, and shorten the skipped
+  ones.
+- **To do:** sweep today's callouts (many are long, packed with symbols and written for adults)
+  into this voice, and add the robot voice to `audio.js`.
+
 ## Typing short messages (owner, 31 Oct)
 
 Owner: "the other thing that would really be age-appropriate for him is game interactions that
