@@ -40,6 +40,7 @@ import {SKY_STEER_HINT, skyLandingText, skyDiveCamera} from './open-world/sky-di
 import {createSkyDiveReport} from './open-world/sky-dive.js';
 import {TENNIS, onTennisCourt, tennisStart, tennisAssist} from './open-world/tennis.mjs';
 import {STUNT_JUMPS} from './open-world/stunt-jumps.mjs';
+import {DELIVERY} from './open-world/deliveries.mjs';
 import {applyLivery} from './livery.js';
 import {batchCarParts, unbatchCarParts} from './car-batch.js';
 import {createRobot, stepRobot} from './physics/robot.mjs';
@@ -3721,6 +3722,73 @@ function hopInCart() {
   telemetry.discover('golf-cart', 'item');
   callout('🛺 The golf cart is yours! Change cars in the Garage', 4000);
 }
+// A job found beside the BX. Its timer only advances in the driving physics step.
+let deliveryHinted = false,
+  deliveryReportUntil = 0,
+  deliveryHudKey = '';
+function deliveryDriver() {
+  return {
+    pos: s.car.pos,
+    placement: s.car.placement,
+    body: bodyKind,
+    driving: !!(
+      race.roam &&
+      form === 'car' &&
+      !robot &&
+      !skate &&
+      !s.flight.mode &&
+      openWorld?.era() !== 'past'
+    ),
+    impact: s.car.impact
+  };
+}
+function deliveryNear() {
+  const driver = deliveryDriver();
+  return (
+    driver.driving &&
+    driver.body === 'golf' &&
+    !openWorld?.deliveries()?.active &&
+    Math.hypot(driver.pos[0] - DELIVERY.pickup[0], driver.pos[2] - DELIVERY.pickup[2]) <= DELIVERY.startRadius
+  );
+}
+function deliveryStep(dt) {
+  for (const e of openWorld.deliveryStep(dt, deliveryDriver())) {
+    if (e.delivered) {
+      openWorld.progress.parcelsDelivered = (openWorld.progress.parcelsDelivered ?? 0) + 1;
+      openWorld.save();
+      callout('📦 Delivered! +1', 2400);
+      if (e.done) {
+        deliveryReportUntil = performance.now() + 8000;
+        audio.finish();
+      } else audio.coin();
+    } else if (e.careful) {
+      callout(e.squashed ? '📦 A bit squashed!' : '📦 Careful!', 1800);
+    }
+  }
+}
+function deliveryFrame(dt, now) {
+  const state = openWorld.deliveries(),
+    driver = deliveryDriver(),
+    near = started && !paused && !ui.panel() && deliveryNear();
+  if (near && !deliveryHinted) callout('📦 Deliveries! [E] start', 3500);
+  deliveryHinted = near;
+  const hud = $('delivery-hud');
+  hud.hidden = paused || !!ui.panel() || !(state?.active || now < deliveryReportUntil);
+  if (state) {
+    const key = `${state.delivered}/${state.stars}/${state.paused}`;
+    if (key !== deliveryHudKey) {
+      deliveryHudKey = key;
+      $('delivery-count').textContent =
+        `${state.paused ? '⏸' : '📦'} Parcels ${state.delivered}/${DELIVERY.runLength}`;
+      $('delivery-stars').textContent = `⭐ ${state.stars}`;
+      $('delivery-stars').setAttribute('aria-label', `${state.stars} stars`);
+    }
+  }
+  openWorld.drawDeliveries(paused ? 0 : dt, car, {
+    present: openWorld.era() !== 'past',
+    driving: driver.driving && driver.body === 'golf'
+  });
+}
 // Bowling shares golf's triangular hold/release meter; each lane approach starts robot play.
 let bowlingHold = null,
   bowlingHudKey = '';
@@ -4348,6 +4416,12 @@ function skyJumpStep() {
 }
 function enterLocation() {
   if (!openWorld || paused || !race.roam) return;
+  if (deliveryNear() && openWorld.startDeliveries(deliveryDriver())) {
+    deliveryReportUntil = 0;
+    audio.pickup();
+    callout('📦 Follow the line!', 3000);
+    return;
+  }
   if (openWorld.school()?.active) {
     openWorld.stopSchool();
     hideSchoolCard();
@@ -4439,6 +4513,7 @@ function statRows() {
     ['🫡', 'Perfect retreats & reveilles', num(pr.retreats)],
     ['🚀', 'Booster landings seen', num(pr.boosters)],
     ['✈', 'Flying School trips', num(pr.flyingSchool)],
+    ['📦', 'Parcels delivered', num(pr.parcelsDelivered)],
     ['⭐', 'Flying School best', pr.flyingStars ? `${pr.flyingStars}/9` : '–'],
     ['🪂', 'Sky jumps', num(pr.skyJumps)],
     ['🎯', 'Best landing', pr.bestLanding == null ? '–' : `${pr.bestLanding.toFixed(1)} m`],
@@ -4720,6 +4795,7 @@ function frame(now) {
         for (const session of [s, ...race.rivals.map(r => r.session)]) openWorld.step(session.car, 1 / 120);
       if (schoolPrev) schoolStep(schoolPrev, 1 / 120);
       stuntStep(1 / 120);
+      if (openWorld) deliveryStep(1 / 120);
       if (openWorld && race.roam) {
         bowlingPrepare(1 / 120);
         const activity = openWorld.stepActivity(
@@ -5242,6 +5318,7 @@ function frame(now) {
   }
   fx.update(dt);
   poseCar(car, wheels, c);
+  if (openWorld) deliveryFrame(dt, now);
   syncRivals();
   race.rivals.forEach((rv, i) => {
     poseCar(rivalVis[i].group, rivalVis[i].wheels, rv.session.car);

@@ -791,6 +791,8 @@ export function loadProgress(storage) {
     boosters: Number.isInteger(v?.boosters) && v.boosters > 0 ? v.boosters : 0,
     flyingSchool: Number.isInteger(v?.flyingSchool) && v.flyingSchool > 0 ? v.flyingSchool : 0,
     tennisWins: Number.isSafeInteger(v?.tennisWins) && v.tennisWins >= 0 ? v.tennisWins : 0,
+    parcelsDelivered:
+      Number.isSafeInteger(v?.parcelsDelivered) && v.parcelsDelivered > 0 ? v.parcelsDelivered : 0,
     flyingStars:
       Number.isInteger(v?.flyingStars) && v.flyingStars >= 3 && v.flyingStars <= 9 ? v.flyingStars : 0,
     retreats: Number.isInteger(v?.retreats) && v.retreats > 0 ? v.retreats : 0,
