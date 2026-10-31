@@ -298,8 +298,18 @@ mount with one thing only it can do, so they double as the dark world's items:
 | **Triceratops** | heavy | charge through gates, barricades and rockfalls |
 | **Raptor** | quickest, twitchy | leap gulches, race the clockwork train |
 | **Ankylosaur** | low, armoured | smash cracked rock with its tail club, shrug off outlaw fire |
-| **Pterosaur** | glides | soar off the mesas on the canyon winds |
+| **Quetzalcoatlus** | flies | the sky route home (below) |
 | **Stegosaur** | plodding | carry a load: hay to the farm, a stray calf home |
+
+**The quetzalcoatlus: the sky route home** (owner, 31 Oct): "we'll need a quetzalcoatlus that you
+can fly. Noting that this whole game doesn't need to be perfectly accurate or anything. It should be
+that you have to climb to a quetzalcoatlus nest then you can go for a ride." A giant toy pterosaur
+nests high on Spirit Mountain in the past, its nest visible from the valley floor, wings over the
+crag. Getting there is the challenge: a climb as the cowboy (ledges, handholds) and dinosaur jumps
+up the switchbacks. Reach the nest and it's yours: E to climb on, then fly the whole dark world on
+the toy jet's flight model with the kid-mode easy flyer and Auto-GCAS (flap to climb, glide to
+swoop, land anywhere flat). Once befriended it joins the herd, and its name calls it from anywhere.
+Accuracy is not the point: it's a big friendly flying dinosaur.
 
 Which scares whom follows size: cows and horses mix with the plant-eaters but scatter from a
 T. rex; the smaller dinosaurs give a T. rex a wide berth too. Win one over by feeding or herding
