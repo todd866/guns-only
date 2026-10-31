@@ -7,24 +7,37 @@
       "bin",
       "bollard",
       "chain-link-fence-panel",
+      "crop-row",
       "fuel-drum",
       "hay-bale",
+      "hay-wagon",
       "jersey-barrier",
       "picnic-table",
       "pumpkin",
+      "scarecrow",
       "sign-post",
+      "silo",
+      "split-rail-fence",
+      "steam-tractor",
       "street-lamp",
       "tent",
+      "thresher",
       "traffic-cone",
-      "water-tower"
+      "water-pump",
+      "water-tower",
+      "windmill",
+      "windmill-head"
     ],
-    "items": 39
+    "items": 39,
+    "farmItems": 56
   },
   "example": {
     "screenshot": "evidence/rc-placements/web-review.png",
     "counts": {
       "items": 39,
       "props": 9,
+      "templates": 9,
+      "attached": 0,
       "meshes": 14,
       "drawCalls": 14,
       "triangles": 11896,
@@ -39,7 +52,7 @@
     "triangles": 11910,
     "frameMs": {
       "p50": 16.7,
-      "p95": 18.2,
+      "p95": 18.4,
       "max": 18.7
     }
   },
@@ -48,6 +61,8 @@
     "counts": {
       "items": 39,
       "props": 9,
+      "templates": 9,
+      "attached": 0,
       "meshes": 14,
       "drawCalls": 14,
       "triangles": 11896,
@@ -61,29 +76,78 @@
     },
     "triangles": 11206
   },
+  "farm": {
+    "screenshot": "evidence/rc-placements/web-farmstead.png",
+    "counts": {
+      "items": 56,
+      "props": 11,
+      "templates": 13,
+      "attached": 1,
+      "meshes": 31,
+      "drawCalls": 31,
+      "triangles": 17900,
+      "colliders": 40,
+      "collisionTriangles": 430
+    },
+    "drawCalls": {
+      "total": 33,
+      "withoutPlacements": 2,
+      "placements": 31
+    },
+    "triangles": 17914,
+    "frameMs": {
+      "p50": 16.7,
+      "p95": 18.1,
+      "max": 18.6
+    }
+  },
+  "farmClose": {
+    "screenshot": "evidence/rc-placements/web-farmstead-close.png",
+    "counts": {
+      "items": 56,
+      "props": 11,
+      "templates": 13,
+      "attached": 1,
+      "meshes": 31,
+      "drawCalls": 31,
+      "triangles": 17900,
+      "colliders": 40,
+      "collisionTriangles": 430
+    },
+    "drawCalls": {
+      "total": 33,
+      "withoutPlacements": 2,
+      "placements": 31
+    },
+    "triangles": 17914
+  },
   "kit": {
     "screenshot": "evidence/rc-placements/web-kit.png",
     "counts": {
-      "items": 14,
-      "props": 14,
-      "meshes": 24,
-      "drawCalls": 24,
-      "triangles": 4783,
+      "items": 24,
+      "props": 23,
+      "templates": 25,
+      "attached": 1,
+      "meshes": 52,
+      "drawCalls": 52,
+      "triangles": 13283,
       "colliders": 0,
       "collisionTriangles": 0
     },
     "drawCalls": {
-      "total": 26,
+      "total": 54,
       "withoutPlacements": 2,
-      "placements": 24
+      "placements": 52
     },
-    "triangles": 4797
+    "triangles": 13297
   },
   "stress": {
     "screenshot": "evidence/rc-placements/web-stress.png",
     "counts": {
       "items": 312,
       "props": 9,
+      "templates": 9,
+      "attached": 0,
       "meshes": 14,
       "drawCalls": 14,
       "triangles": 95168,
@@ -98,7 +162,7 @@
     "triangles": 95182,
     "frameMs": {
       "p50": 16.7,
-      "p95": 18,
+      "p95": 18.1,
       "max": 18.7
     }
   },

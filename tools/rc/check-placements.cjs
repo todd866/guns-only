@@ -1,5 +1,5 @@
 // In-engine placements check: serve web/wwwroot, open rc/placements-review.html (real three.js + placements.js),
-// screenshot the example picnic area (overview + close) and the kit line-up, then report main-pass draw calls (with and
+// screenshot the example picnic area and the farmstead (overview + close each) and the kit line-up (windmill rotor spinning), then report main-pass draw calls (with and
 // without the placements; renderer.info resets after the shadow passes, which cost the same again per shadow light) and rAF p50/p95 over 300 frames, for the example and for a
 // 312-item stress copy. node tools/rc/check-placements.cjs [outdir=evidence/rc-placements]
 // env: PLAYWRIGHT_MODULE, CHROMIUM_PATH, ALLOW_SOFTWARE_GL=1. Headless full Chromium; run under heavy-slot or remote-run.
@@ -15,14 +15,16 @@ const gpu=await p.evaluate(()=>window.__placementsReview.gpu());const software=/
 if(software&&!process.env.ALLOW_SOFTWARE_GL)throw Error('Placements review requires a hardware GPU: '+gpu);
 const R=(fn,...a)=>p.evaluate(([fn,a])=>window.__placementsReview[fn](...a),[fn,a]);
 const views={};
-for(const [name,file] of [['example','web-review.png'],['close','web-close.png'],['kit','web-kit.png']]){
+for(const [name,file] of [['example','web-review.png'],['close','web-close.png'],['farm','web-farmstead.png'],['farm-close','web-farmstead-close.png'],['kit','web-kit.png']]){
  const counts=await R('show',name);await p.waitForTimeout(600);const f=path.join(out,file);await p.screenshot({path:f});
  views[name]={screenshot:path.relative(process.cwd(),f),counts,drawCalls:await R('placementCalls'),triangles:await R('triangles')};}
 await R('show','example');await p.waitForTimeout(300);
 const exampleFrameMs=await R('frameTimes',300);
+await R('show','farm');await p.waitForTimeout(300);
+const farmFrameMs=await R('frameTimes',300);
 const stressCounts=await R('stress',8);await p.waitForTimeout(600);const sf=path.join(out,'web-stress.png');await p.screenshot({path:sf});
 const stress={screenshot:path.relative(process.cwd(),sf),counts:stressCounts,drawCalls:await R('placementCalls'),triangles:await R('triangles'),frameMs:await R('frameTimes',300)};
-const report={gpu,software,loaded,example:{...views.example,frameMs:exampleFrameMs},close:views.close,kit:views.kit,stress,errs};
+const report={gpu,software,loaded,example:{...views.example,frameMs:exampleFrameMs},close:views.close,farm:{...views.farm,frameMs:farmFrameMs},farmClose:views['farm-close'],kit:views.kit,stress,errs};
 fs.writeFileSync(path.join(out,'web-check.json'),JSON.stringify(report,null,2)+'\n');console.log('placements-check',JSON.stringify(report));
 if(errs.length)throw Error(errs.join('\n'));
 }finally{await b?.close();srv.close();}})().catch(e=>{console.error(e);process.exitCode=1});
