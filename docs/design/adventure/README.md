@@ -215,6 +215,10 @@ English, so Spanish belongs in it naturally, and he picks it up by playing, neve
   English is right there the first few times, then just the Spanish once he's seen it.
 - **Typing in either language works**: say "hola" with Y and the toys answer; the forgiving matcher
   accepts Spanish answers too.
+- **Built (31 Oct)**: the Lake Town's signs are Spanish with a picture: 🛒 TIENDA, 🥤 CANTINA,
+  🛏️ HOTEL, 💰 BANCO, 💈 BARBERÍA, ⭐ SHERIFF, 🍞 PANADERÍA, 🧸 JUGUETES, ✉️ CORREOS; 💧 AGUA on the
+  water tower, 🐄 VACAS by the corral, 🐔 GALLINAS at the chicken yard. Typing (Y) "hola", "gracias",
+  "adiós" or "sí" gets a Spanish answer, and "hi" in the past gets "¡Hola! Howdy!".
 - **Small and repeated**: a handful of words that come back often, over many sessions, the way
   "Rexy is here!" does. Spanish words are checked by a fluent speaker before they ship.
 
@@ -345,12 +349,19 @@ mount with one thing only it can do, so they double as the dark world's items:
 | Dinosaur | Rides like | Only it can |
 |---|---|---|
 | **T. rex** (built: the first one) | fast, bouncy | scare anything: herds scatter, outlaws pop |
-| **Long-neck** | slow, steady | reach high ledges and windows, wade the river |
+| **Argentinosaurus** (the long-neck) | slow, steady | reach high ledges and windows, wade the river |
 | **Triceratops** | heavy | charge through gates, barricades and rockfalls |
 | **Raptor** | quickest, twitchy | leap gulches, race the clockwork train |
 | **Ankylosaur** | low, armoured | smash cracked rock with its tail club, shrug off outlaw fire |
 | **Quetzalcoatlus** | flies | the sky route home (below) |
 | **Stegosaur** | plodding | carry a load: hay to the farm, a stray calf home |
+
+**Perth's dinosaurs are in it** (owner, 31 Oct: "look up what dinosaurs are currently at perth zoo
+and ensure representation"). Perth Zoo's Zoorassic Park names two: an 18 m Argentinosaurus and a
+15 m T. rex (perthzoo.wa.gov.au, checked 31 Oct 2026; more were promised but none named). Both ride
+here: the long-neck is the Argentinosaurus, whose name is Spanish too ("Argentina's lizard"). The WA
+Museum's *Dinosaurs Uncovered* (from 21 Nov 2026) has a full-size Quetzalcoatlus (ours flies) and a
+Plotosaurus, a sea reptile with no water to live in yet: a candidate for the river.
 
 **The quetzalcoatlus: the sky route home** (owner, 31 Oct): "we'll need a quetzalcoatlus that you
 can fly. Noting that this whole game doesn't need to be perfectly accurate or anything. It should be
