@@ -2996,6 +2996,31 @@ function dinoSounds(dt) {
     audio.creature(kind, 'snort');
   }
 }
+// The walking robot / past-era cowboy (audio.footstep): a footfall at each foot-down of the walk.
+let footPhase = null;
+function footSounds() {
+  if (!robot || paused || robot.climb) {
+    footPhase = null;
+    return;
+  }
+  const era = openWorld?.era?.() ?? 'present';
+  if (era !== 'present' && era !== 'past') {
+    footPhase = null;
+    return;
+  }
+  const speed = Math.hypot(robot.vel[0], robot.vel[2]);
+  if (!robot.grounded || speed < 0.1) {
+    footPhase = null;
+    return;
+  }
+  const ph = (robot.walkPhase / (Math.PI * 2)) % 1;
+  if (footPhase !== null && footPhase !== ph) {
+    const crossed = at => (footPhase < at && ph >= at) || (footPhase > ph && (at >= footPhase || ph >= at));
+    if (crossed(0) || crossed(0.5))
+      audio.footstep(era === 'past' ? 'cowboy' : 'robot', Math.min(1, speed / 3));
+  }
+  footPhase = ph;
+}
 // The car form's physics: in the dark world (the past) it is the ridden dinosaur's bigger body.
 function roamCarParams() {
   if (openWorld?.era?.() === 'past') return mountParams(herd().herd[herd().mount]?.kind ?? 'rex');
@@ -3067,6 +3092,10 @@ async function travelTo(id) {
     robot.pos = [pos[0], pos[1] + 0.05, pos[2]];
     robot.vel = [0, 0, 0];
     robot.yaw = yaw;
+    // The parked car comes too: the world streams (and the sim waits) around s.car, so leaving it
+    // behind froze a jump made on foot at "Road downloading..." for good.
+    s.car.pos = [pos[0], pos[1] + rideHeight(s.car.params) + 0.02, pos[2]];
+    s.car.vel = [0, 0, 0];
   } else {
     const cp = roamCarParams();
     Object.assign(s.car, createCar(cp, [pos[0], pos[1] + rideHeight(cp) + 0.02, pos[2]], yaw));
@@ -5339,6 +5368,14 @@ function frame(now) {
             : 'car'
   });
   dinoSounds(dt);
+  footSounds();
+  if (openWorld?.chickens && !paused)
+    for (const e of openWorld.chickens({
+      pos: robot ? robot.pos : s.car.pos,
+      riding: !!(toyDino?.visible || riggedDino?.root.visible),
+      dt
+    }))
+      if (e.scatter) audio.creature('hen', 'cluck');
   if (track) followSun(sun, car.position);
   if (worldSky) {
     if (!paused) worldElapsed += dt;
@@ -5693,6 +5730,8 @@ window.__gunsOnlyRC = {
   }),
   era: () => openWorld?.era?.() ?? 'present',
   toyDino: () => toyDino,
+  flock: () =>
+    openWorld?.flock?.()?.hens.map(h => ({state: h.state, x: +h.x.toFixed(1), z: +h.z.toFixed(1)})),
   sounds: () => ({
     heard: {...(audio.heard ?? {})},
     motor: +(audio.motorLow?.gain.gain.value ?? 0).toFixed(3)
