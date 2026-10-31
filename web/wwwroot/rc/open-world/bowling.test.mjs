@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  canSwitchBowlingLane,
   createBowling,
   frameMarks,
   recordDelivery,
   rollBowling,
   scoreFrames,
-  stepBowling
+  stepBowling,
+  switchBowlingLane
 } from './bowling.mjs';
 import {ALLEY_FLOOR_Y, LANES} from './bowling-alley.mjs';
 import {loadProgress} from './catalog.mjs';
@@ -14,6 +16,27 @@ import {loadProgress} from './catalog.mjs';
 const actor = (x = LANES[0].x, z = LANES[0].approachZ, vx = 0, vz = 0) => ({
   pos: [x, ALLEY_FLOOR_Y, z],
   vel: [vx, 0, vz]
+});
+
+test('robot may move lanes before the first roll of a frame, not mid-frame', () => {
+  const g = createBowling({control: 'robot', lane: 1});
+  recordDelivery(g, 3);
+  recordDelivery(g, 4);
+  assert.equal(g.frame, 1);
+  assert.equal(g.score, 7);
+  assert.ok(canSwitchBowlingLane(g));
+  assert.equal(switchBowlingLane(g, 4), true);
+  assert.equal(g.lane, 4);
+  assert.equal(g.frame, 1);
+  assert.equal(g.score, 7);
+  assert.equal(g.pins[0].pos[0], LANES[3].x);
+  recordDelivery(g, 2);
+  assert.ok(!canSwitchBowlingLane(g));
+  assert.equal(switchBowlingLane(g, 2), false);
+  assert.equal(g.lane, 4);
+  rollBowling(g, {power: 0.5, aim: 0, mode: 'kid'});
+  assert.ok(!canSwitchBowlingLane(g));
+  assert.equal(switchBowlingLane(g, 1), false);
 });
 
 test('standard scoring handles a perfect 300, all spares, and twenty misses', () => {
