@@ -320,6 +320,11 @@ export class SoundKit {
   spread(f) {
     return f * (0.97 + Math.random() * 0.06);
   }
+  zap() {
+    if (!this.ready('zap', 0.1)) return;
+    this.burst({type: 'bandpass', freq: 3800, sweep: 700, dur: 0.13, level: 0.12, q: 2, wet: 0.15});
+    this.tone(950, 0, 0.1, {type: 'sawtooth', glide: 180, level: 0.045, cutoff: 2400, attack: 0.003});
+  }
   impact(strength) {
     if (!this.ready('impact', 0.06)) return;
     const s = Math.min(1, strength / 6);

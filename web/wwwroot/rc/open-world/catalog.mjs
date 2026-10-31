@@ -743,6 +743,8 @@ export function loadProgress(storage) {
     // The Dino Book's pages seen and the gold dug up (dex.mjs cleans them).
     dexSeen: Array.isArray(v?.dexSeen) ? v.dexSeen.filter(k => typeof k === 'string').slice(0, 32) : [],
     gold: Number.isInteger(v?.gold) && v.gold > 0 ? v.gold : 0,
+    batteries: Number.isSafeInteger(v?.batteries) && v.batteries > 0 ? v.batteries : 0,
+    parts: Number.isSafeInteger(v?.parts) && v.parts > 0 ? v.parts : 0,
     dinoName: typeof v?.dinoName === 'string' ? v.dinoName.slice(0, 12) : null,
     herd: Array.isArray(v?.herd) ? v.herd.slice(0, 12) : [],
     mount: Number.isInteger(v?.mount) ? v.mount : 0,

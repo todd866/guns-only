@@ -12,13 +12,19 @@ export const DEX = Object.freeze(
 );
 export const SEE_RANGE = 45; // metres: close enough to count as seen
 export const GOLD = Object.freeze({seam: 3, max: 9999});
+const cleanLoot = value => (Number.isSafeInteger(value) && value > 0 ? value : 0);
 
 /** The saved book and purse, cleaned. */
 export function loadDex(progress = {}) {
   const kinds = new Set(DEX.map(d => d.kind));
   const seen = Array.isArray(progress.dexSeen) ? progress.dexSeen.filter(k => kinds.has(k)) : [];
   const gold = Number.isInteger(progress.gold) && progress.gold > 0 ? Math.min(GOLD.max, progress.gold) : 0;
-  return {seen: [...new Set(seen)], gold};
+  return {
+    seen: [...new Set(seen)],
+    gold,
+    batteries: cleanLoot(progress.batteries),
+    parts: cleanLoot(progress.parts)
+  };
 }
 
 /** Mark a kind seen; returns true the first time (a new page in the book). */
@@ -40,6 +46,14 @@ export function earn(dex, amount) {
   const n = Math.max(0, Math.round(amount) || 0);
   dex.gold = Math.min(GOLD.max, dex.gold + n);
   return n;
+}
+
+export function addLoot(dex, {batteries = 0, parts = 0} = {}) {
+  const b = cleanLoot(batteries),
+    p = cleanLoot(parts);
+  dex.batteries = Math.min(Number.MAX_SAFE_INTEGER, cleanLoot(dex.batteries) + b);
+  dex.parts = Math.min(Number.MAX_SAFE_INTEGER, cleanLoot(dex.parts) + p);
+  return {batteries: b, parts: p};
 }
 export function spend(dex, amount) {
   const n = Math.max(0, Math.round(amount) || 0);

@@ -433,8 +433,8 @@ export function createWorldUI({
     const d = dex?.();
     if (!d) return;
     $('dex-count').textContent =
-      `${d.pages.filter(p => p.seen).length}/${d.pages.length} seen · 💰 ${d.gold}`;
-    $('dex-count').title = 'Kinds seen out of every kind in the book · gold dug up';
+      `${d.pages.filter(p => p.seen).length}/${d.pages.length} seen · 💰 ${d.gold} · 🔋 ${d.batteries ?? 0} · ⚙️ ${d.parts ?? 0}`;
+    $('dex-count').title = 'Kinds seen out of every kind in the book · gold, batteries, and parts';
     const focusedKind = document.activeElement?.closest('#dex-rows .dex-row')?.dataset.kind;
     $('dex-rows').innerHTML = d.pages
       .map(p => {
