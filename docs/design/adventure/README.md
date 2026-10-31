@@ -517,6 +517,11 @@ original toy western.
   reload), a single-shot **shotgun** (a spray of dried peas, close range, knocks things back), plain
   **arrows**, and **electric arrows**, the strongest of all when they hit. Ammo is bought at the
   general store or crafted (corks from the farm, arrows from the forge).
+- **A sword, swashbuckler style** (owner: "maybe we can have swords, but it's zorro style being the
+  southwest"). A toy rapier for the toy cowboy on foot, fenced the old Spanish-Southwest way:
+  quick flicks, a lunge, a parry that turns a cork or an outlaw's swing aside, a flourish on a
+  win. It's Zelda's sword in the setting's clothes: the main on-foot weapon, and it stuns like
+  everything else. The genre, not the character: no Z marks, no black mask and cape.
 - **Your enemies are toys, so you stun them and take their batteries** (owner: "your enemies are
   toys so you can stun them and steal their batteries"). Every weapon knocks a toy down for a
   moment (a cork or a pea for a second or two, an arrow a little longer); an electric arrow stuns
