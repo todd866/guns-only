@@ -108,6 +108,30 @@ export function timeGateStep(
   };
 }
 
+/**
+ * Cross a time gate safely (docs/design/adventure/separate-worlds.md, the crossing coordinator's
+ * first rule): the destination is prepared before the era changes; if preparation fails nothing
+ * changes and no trip comes back. prepare(position) resolves true when the destination's ground
+ * is loaded. Returns { ...trip, position } or null.
+ */
+export async function crossTimeGate(
+  gates,
+  pos,
+  {crossed = false, now = 0, groundAt = null, prepare = async () => true} = {}
+) {
+  const proposal = gates.propose(pos, {crossed, now, groundAt});
+  if (!proposal) return null;
+  const {trip} = proposal,
+    [x, z] = trip.at,
+    position = [x, groundAt ? groundAt(x, z) : 0, z];
+  // Fading home from the past's edge stays where you are, whose ground is already loaded.
+  if (trip.gate !== 'fade' && !(await prepare(position))) {
+    proposal.reject();
+    return null;
+  }
+  proposal.commit();
+  return {...trip, position};
+}
 export function createTimeGates(initial = {}) {
   let state = {era: 'present', ...initial};
   return Object.freeze({
@@ -115,6 +139,24 @@ export function createTimeGates(initial = {}) {
       const r = timeGateStep(state, pos, options);
       state = r.state;
       return r.trip;
+    },
+    /** A trip without taking it: commit() switches the era, reject() stays put and cools down. */
+    propose(pos, options = {}) {
+      const r = timeGateStep(state, pos, options);
+      if (!r.trip) {
+        state = r.state; // latch and cooldown bookkeeping only; the era is unchanged
+        return null;
+      }
+      const before = state;
+      return {
+        trip: r.trip,
+        commit: () => {
+          state = r.state;
+        },
+        reject: () => {
+          state = {...before, latch: null, until: (options.now ?? 0) + 1.2}; // retry after the cooldown
+        }
+      };
     },
     era: () => state.era,
     /** Jump straight to an era (digging through to the light world: dig.mjs). */

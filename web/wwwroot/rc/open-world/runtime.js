@@ -46,7 +46,7 @@ import {createGang, stepGang} from './outlaws.mjs';
 import {createDig, stepDig, digFloor} from './dig.mjs';
 import {createDigView} from './dig.js';
 import {preparePlacementKit, loadPlacements, instantiatePlacements} from './placements.js';
-import {createTimeGates, darkPlaceById, pastHolds} from './dark-world.mjs';
+import {createTimeGates, crossTimeGate, darkPlaceById, pastHolds} from './dark-world.mjs';
 import {buildLandmarks} from './landmarks.js';
 import {createPettingZoo} from './petting-zoo.js';
 import {createJetDecks} from './jet-decks.js';
@@ -456,28 +456,29 @@ export async function loadOpenWorld(search) {
     digging: () => dig.active,
     digFloor: () => digFloor(dig),
     digCamera: () => digView?.camera(dig) ?? null,
+    // A time gate (dark-world.mjs crossTimeGate): the destination loads first; the era, the
+    // first-crossing flag and the world switch only change once it has.
     async timeGate(pos, time) {
       if (gateBusy) return null;
-      const trip = timeGates.step(pos, {
-        crossed: !!progress.timeCrossed,
-        now: time,
-        groundAt: (x, z) => elevationAt(elevation, x, z)
-      });
-      if (!trip) return null;
       gateBusy = true;
       try {
+        const trip = await crossTimeGate(timeGates, pos, {
+          crossed: !!progress.timeCrossed,
+          now: time,
+          groundAt: (x, z) => elevationAt(elevation, x, z),
+          prepare: async position => {
+            if (!(await stream.prepare(position))) return false;
+            await stream.update(position);
+            return stream.ready(position);
+          }
+        });
+        if (!trip) return null;
         setEra(trip.to);
         if (trip.to === 'past' && !progress.timeCrossed) {
           progress.timeCrossed = true;
           saveProgress(storage, progress);
         }
-        const [x, z] = trip.at,
-          position = [x, elevationAt(elevation, x, z), z];
-        if (trip.gate !== 'fade') {
-          if (!(await stream.prepare(position))) return {...trip, position};
-          await stream.update(position);
-        }
-        return {...trip, position};
+        return trip;
       } finally {
         gateBusy = false;
       }
