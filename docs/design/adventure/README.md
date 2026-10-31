@@ -334,6 +334,10 @@ up the switchbacks. Reach the nest and it's yours: E to climb on, then fly the w
 the toy jet's flight model with the kid-mode easy flyer and Auto-GCAS (flap to climb, glide to
 swoop, land anywhere flat). Once befriended it joins the herd, and its name calls it from anywhere.
 Accuracy is not the point: it's a big friendly flying dinosaur.
+**It has a will of its own** (owner: "you can ask your quetz to do anything, but it doesn't wanna
+crash and it generally won't"). No autopilot and no levelling: it goes where you ask, banked,
+diving and skimming the ground, and only at the last moment, when it would hit, it flinches up,
+squawking with a hard wingbeat. Built as the proximity assist in `physics/flight.mjs`.
 The climb is the fun way up, never a wall (owner: "you can just use the map selector to jump
 there"). The nest is a place on the map's place list like any other, and so are the Lake Town and
 the farm. Picking a dark-world place jumps you there and into the past.
@@ -487,6 +491,38 @@ transformer in the dark world. Fish outta water."
 - **Fish out of water**: in the dark world you're the only toy who can transform and fly. Toys and
   animals there have never seen an RC car; they stare, follow and gossip, and the outlaws want what
   you are.
+
+**A bow from the saddle: electric arrows** (owner, 31 Oct): "I wanna be able to shoot a bow and
+arrow while I'm riding on my dinosaur. Electric arrows to stun toy cattle and stuff. Then my dino can
+steal batteries from those toys. And parts." His shorthand: "RDR toy story edition"; ours is an
+original toy western.
+- **Riding, Q looses an electric arrow** ahead of the dinosaur, with full aim help (it curves to the
+  nearest target in front), the way every aim in this game helps a six-year-old.
+- **A hit stuns, never breaks**: the toy fizzes with blue sparks, its key stops turning, and it sits
+  dazed for a few seconds, then winds back up and wanders off. Outlaws, bad toys and toy cattle all
+  stun. Living rules still hold: animals are never hurt and characters never break.
+- **While it's stunned, the dinosaur can nose in and take its batteries and spare parts** (springs,
+  cogs, a wind-up key). The battery box pops open with a "boing"; the loot is the economy's raw
+  stuff, for crafting, upkeep and the store.
+- **The dark world's arsenal** (owner, 31 Oct: "the dark world has pistols and single shot long
+  rifles and single shot shotguns and arrows, and electric arrows are the most powerful thing if
+  you hit stuff"). All of them are toys, as everything here is: a cork **pistol** (quick, short
+  range, several shots), a single-shot **long rifle** (a cork that flies far and straight, slow to
+  reload), a single-shot **shotgun** (a spray of dried peas, close range, knocks things back), plain
+  **arrows**, and **electric arrows**, the strongest of all when they hit. Ammo is bought at the
+  general store or crafted (corks from the farm, arrows from the forge).
+- **Your enemies are toys, so you stun them and take their batteries** (owner: "your enemies are
+  toys so you can stun them and steal their batteries"). Every weapon knocks a toy down for a
+  moment (a cork or a pea for a second or two, an arrow a little longer); an electric arrow stuns
+  longest and pops the battery box open. While it's down, ride or walk up and take its batteries
+  and parts. That's the fight's reward and the economy's main supply. A downed toy winds back up
+  later, minus what you took.
+- **The quetzalcoatlus's autopilot** (owner: "it should have an autopilot mode where it'll fly so
+  you can shoot arrows at stuff"). One key hands it the flying: it circles where you are, wide and
+  steady, banking round the spot (or follows the valley it's in), so you can lean out and shoot.
+  Steer again and you're flying it.
+- **Rustling**: taking from the ranch's toy cattle is the outlaws' side of the game (the good-guy /
+  bad-guy choice above); outlaws' own batteries are fair game on either side.
 
 **Portals all over the map** (owner, 31 Oct). The spirit cave is the first crossing, not the only
 one. Once you've been through it, portals around the world wake up, and each links two places

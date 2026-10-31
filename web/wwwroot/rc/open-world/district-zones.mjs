@@ -1,3 +1,4 @@
+import {ALLEY_SCENERY_BOUNDS} from './bowling-alley.mjs';
 import {RESIDENTIAL_BOUNDS} from './residential-frame.mjs';
 // Existing authored district meshes keep native metre scale. The public entrance anchors
 // match catalog.mjs; a six-metre forecourt keeps the perimeter off public roads.
@@ -14,6 +15,9 @@ export const districtBounds = id => {
   return [b[0] + x, b[1] + z, b[2] + x, b[3] + z];
 };
 export const DISTRICT_BOUNDS = Object.keys(DISTRICT_ZONES).map(districtBounds);
-export const SCENERY_BOUNDS = [...DISTRICT_BOUNDS, RESIDENTIAL_BOUNDS];
+export const TERRAIN_BOUNDS = [...DISTRICT_BOUNDS, RESIDENTIAL_BOUNDS];
+// Strike reuses its mapped shell. Suppress the generic tile copy and all scenery,
+// including the roads crossing it, but leave the ground under its entrances.
+export const SCENERY_BOUNDS = [...TERRAIN_BOUNDS, ALLEY_SCENERY_BOUNDS];
 export const overlapsDistrict = b =>
   SCENERY_BOUNDS.some(d => b[0] <= d[2] && b[2] >= d[0] && b[1] <= d[3] && b[3] >= d[1]);

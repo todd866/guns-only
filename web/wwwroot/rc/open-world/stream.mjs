@@ -1,10 +1,11 @@
-import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
+import {TERRAIN_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
 import {WATER_BODIES, basinTriangles} from '../physics/water.mjs';
 import {MINE_BOUNDS, mineWorldTris} from './mine.mjs';
 import {sewerWorldTris} from './sewer.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import {groundTriangles, terrainStep} from './elevation.mjs';
 import {inMountain, mountainSurface, damTris, townTris} from './spirit-mountain.mjs';
+import {inCanyon, canyonSurface} from './canyon.mjs';
 import {createWorld} from '../physics/world.mjs';
 import {BOUNDS, eventSurface} from './catalog.mjs';
 import {buildingInfo, addBuildingCollision, surfaceAt} from './geometry.mjs';
@@ -45,6 +46,7 @@ export function createStream({
     disposed = false;
   cacheLimit = Math.max(25, Math.floor(cacheLimit) || 64);
   const ground = (x, z) =>
+    (inCanyon(x, z) ? canyonSurface(x, z) : null) ??
     (inMountain(x, z) ? mountainSurface(x, z) : null) ??
     eventSurface(x, z) ??
     (inResidentialTerrain(x, z) ? 'grass' : surfaceAt(x, z, loaded.get(tileKey(x, z))?.features ?? []));

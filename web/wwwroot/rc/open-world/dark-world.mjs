@@ -4,6 +4,7 @@
 // Gates link two places rather than the same spot in the other time. Pure: the runtime resolves
 // ground heights, swaps the world and saves; this file only decides who goes where.
 import {SUMMIT, valleyPoint, inMountain, ROAD} from './spirit-mountain.mjs';
+import {inCanyon, canyonPoint} from './canyon.mjs';
 import {NEST} from './herd.mjs';
 import {PLAZA} from './town-plaza.mjs';
 
@@ -58,8 +59,8 @@ export const TIME_GATES = Object.freeze(
 /** Is this gate awake? The first crossing is always open; the rest wake once you've been through. */
 export const gateAwake = (gate, crossed = false) => !!gate.first || !!crossed;
 
-/** The past only reaches as far as the mountain and its valley: leave it and time pulls you home. */
-export const pastHolds = (x, z) => inMountain(x, z);
+/** The mountain, its valley and the great canyon hold the past; elsewhere time pulls you home. */
+export const pastHolds = (x, z) => inMountain(x, z) || inCanyon(x, z);
 
 /**
  * One step of the time gates. state { era, latch, until } (latch: the gate you are standing in,
@@ -190,6 +191,15 @@ const NEST_ROAD = (() => {
   return [p.x, 0, p.z];
 })();
 export const DARK_PLACES = Object.freeze([
+  place(
+    'past-canyon',
+    'The great canyon, long ago',
+    'Canyon',
+    [canyonPoint(1200, 248).x, 0, canyonPoint(1200, 248).z],
+    // Looking out over the canyon and down along it, not along the rim.
+    [canyonPoint(1350, 0).x, 0, canyonPoint(1350, 0).z],
+    '#cc9667'
+  ),
   place(
     'past-lake-town',
     'The Lake Town, long ago',

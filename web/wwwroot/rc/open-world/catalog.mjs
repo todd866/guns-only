@@ -1,4 +1,6 @@
+import {FRONT_DOOR_POS} from './bowling-alley.mjs';
 import {NY} from './under-bridge.mjs';
+import {SCHOOL} from './flying-school.mjs';
 import {LIVERIES, TRIMS} from '../livery-data.mjs';
 import {plazaWorld, PLAZA_PARK} from './town-plaza.mjs';
 import {playgroundWorld, PLAYGROUND_PARK} from './playground.mjs';
@@ -94,6 +96,16 @@ export const LOCATIONS = [
     event: 'runway-drag'
   },
   {
+    id: 'flying-school',
+    name: 'Flying School',
+    short: 'Flying',
+    pos: SCHOOL.at,
+    color: '#ffd064',
+    icon: '✈',
+    kind: 'activity',
+    game: 'flying-school'
+  },
+  {
     id: 'wic',
     name: 'WIC PlayPlace',
     short: 'Big Skatepark',
@@ -156,7 +168,7 @@ export const LOCATIONS = [
     id: 'rec',
     name: 'Strike Recreation',
     short: 'Bowling',
-    pos: [-1020, 0, 1260],
+    pos: FRONT_DOOR_POS,
     color: '#e4ad89',
     icon: '◇',
     kind: 'activity',
@@ -717,8 +729,15 @@ export function loadProgress(storage) {
     specimens: ids(v?.specimens, SPECIMENS),
     golfRoundBest: Number.isInteger(v?.golfRoundBest) && v.golfRoundBest > 0 ? v.golfRoundBest : null,
     roundupBest: Number.isInteger(v?.roundupBest) && v.roundupBest > 0 ? v.roundupBest : null,
+    // Version 1 stored one frame (0–10), never a ten-frame record. Even a new zero is a record.
+    bowlingVersion: 2,
     bowlingBest:
-      Number.isInteger(v?.bowlingBest) && v.bowlingBest >= 0 && v.bowlingBest <= 10 ? v.bowlingBest : 0,
+      v?.bowlingVersion === 2 &&
+      Number.isInteger(v?.bowlingBest) &&
+      v.bowlingBest >= 0 &&
+      v.bowlingBest <= 300
+        ? v.bowlingBest
+        : null,
     golfBest: Number.isInteger(v?.golfBest) && v.golfBest > 0 ? v.golfBest : null,
     wins,
     raceWins,
@@ -734,6 +753,9 @@ export function loadProgress(storage) {
     pattern: LIVERIES.some(l => l.id === v?.pattern) ? v.pattern : 'solid',
     pumpkins: Number.isInteger(v?.pumpkins) && v.pumpkins > 0 ? v.pumpkins : 0,
     boosters: Number.isInteger(v?.boosters) && v.boosters > 0 ? v.boosters : 0,
+    flyingSchool: Number.isInteger(v?.flyingSchool) && v.flyingSchool > 0 ? v.flyingSchool : 0,
+    flyingStars:
+      Number.isInteger(v?.flyingStars) && v.flyingStars >= 3 && v.flyingStars <= 9 ? v.flyingStars : 0,
     retreats: Number.isInteger(v?.retreats) && v.retreats > 0 ? v.retreats : 0,
     candyBest: Number.isInteger(v?.candyBest) && v.candyBest > 0 ? v.candyBest : 0,
     pumpkinBest:
@@ -743,6 +765,8 @@ export function loadProgress(storage) {
     // The Dino Book's pages seen and the gold dug up (dex.mjs cleans them).
     dexSeen: Array.isArray(v?.dexSeen) ? v.dexSeen.filter(k => typeof k === 'string').slice(0, 32) : [],
     gold: Number.isInteger(v?.gold) && v.gold > 0 ? v.gold : 0,
+    batteries: Number.isSafeInteger(v?.batteries) && v.batteries > 0 ? v.batteries : 0,
+    parts: Number.isSafeInteger(v?.parts) && v.parts > 0 ? v.parts : 0,
     dinoName: typeof v?.dinoName === 'string' ? v.dinoName.slice(0, 12) : null,
     herd: Array.isArray(v?.herd) ? v.herd.slice(0, 12) : [],
     mount: Number.isInteger(v?.mount) ? v.mount : 0,

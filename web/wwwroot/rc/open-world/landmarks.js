@@ -315,12 +315,6 @@ export function buildLandmarks(scene, world, progress = loadProgress(), roads = 
     root.add(new T.Mesh(g, mat('#cdae7f')));
   }
   for (let i = 0; i < 7; i++) ramp(1750 + i * 16, 1400, 5, 12, 0.2 + (i % 3) * 0.06, Math.PI / 2);
-  // Original recreation pavilion: open front, wood lane and safe run-out behind the pins.
-  box(-1020, 0.015, 1245, 10, 0.025, 34, '#c9a46f');
-  for (const side of [-1, 1]) box(-1020 + side * 6, 3, 1244, 0.4, 6, 40, '#bda48c', true);
-  box(-1020, 3, 1224, 12, 6, 0.4, '#bda48c', true);
-  label('STRIKE', -1020, 4.5, 1264, 9);
-  for (const x of [-1021.5, -1018.5]) box(x, 0.035, 1245, 0.15, 0.04, 32, '#805e48');
   // Authored rink beside recreation: open entry, polished lane, rental booth and mirror ball.
   for (const x of [-967, -913]) box(x, 0.6, 1245, 0.2, 1.2, 36, '#8b739e', true);
   box(-940, 0.6, 1227, 54, 1.2, 0.2, '#8b739e', true);

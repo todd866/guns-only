@@ -1,3 +1,5 @@
+import {renderHint} from '../key-hints.js';
+import {approachLane} from './bowling.mjs';
 import {VEHICLE_NAMES} from '../vehicle-bodies.js';
 import {BASE_BOUNDARY} from './boundary.mjs';
 import {
@@ -20,6 +22,7 @@ import {
 import {JET_KINDS, JET_NAMES} from '../jets.js';
 import {LIVERIES, TRIMS, liveryUnlocked, PUMPKIN_CAR} from '../livery-data.mjs';
 import {DARK_PLACES} from './dark-world.mjs';
+import {createDinoInspect} from './inspect.js';
 const $ = id => document.getElementById(id);
 // One map, one destination. Controls remain ordinary labelled buttons on touch and keyboard.
 export function createWorldUI({
@@ -43,7 +46,9 @@ export function createWorldUI({
     travelling = false,
     travelError = null,
     isolated = [],
-    storage;
+    storage,
+    inspectPage = null,
+    inspector = null;
   try {
     storage = localStorage;
   } catch {}
@@ -250,6 +255,7 @@ export function createWorldUI({
   for (const b of $('paint').children)
     b.setAttribute('aria-pressed', String(b.dataset.paint === progress.paint));
   function open(which) {
+    stopInspect();
     onOpen?.(which);
     if (!panel) {
       wasPaused = getState().paused;
@@ -304,6 +310,7 @@ export function createWorldUI({
   }
   function close() {
     if (travelling) return;
+    stopInspect();
     for (const [el, value] of isolated) el.inert = value;
     isolated = [];
     modal.hidden =
@@ -328,19 +335,124 @@ export function createWorldUI({
   $('keys').onclick = () => open('keys');
   $('menu-stats').onclick = () => open('stats');
   $('menu-dex').onclick = () => open('dex');
+  function stopInspect() {
+    inspector?.dispose();
+    inspector = null;
+    inspectPage = null;
+    $('dex-inspect').hidden = true;
+    $('dex-back').hidden = true;
+    $('dex-count').hidden = false;
+    $('dex-rows').hidden = false;
+    $('dex-title').textContent = 'DINO BOOK';
+  }
+  function startInspect() {
+    inspector?.dispose();
+    const page = inspectPage;
+    if (!page) return;
+    // A forced-lost WebGL context belongs to its canvas. Every open/retry needs a new canvas too.
+    const oldCanvas = $('dex-canvas'),
+      canvas = oldCanvas.cloneNode(false);
+    oldCanvas.replaceWith(canvas);
+    $('dex-retry').hidden = true;
+    $('dex-wait').hidden = false;
+    canvas.setAttribute('aria-busy', 'true');
+    for (const b of $('dex-clips').children) {
+      b.disabled = true;
+      b.setAttribute('aria-pressed', 'false');
+    }
+    inspector = createDinoInspect({
+      canvas,
+      model: page.model,
+      onReady() {
+        $('dex-wait').hidden = true;
+        canvas.setAttribute('aria-busy', 'false');
+        for (const b of $('dex-clips').children) b.disabled = false;
+      },
+      onClip(clip) {
+        for (const b of $('dex-clips').children)
+          b.setAttribute(
+            'aria-pressed',
+            String(b.dataset.clip === clip || (b.dataset.clip === 'flap' && clip === 'glide'))
+          );
+      },
+      onError() {
+        $('dex-wait').hidden = true;
+        $('dex-retry').hidden = false;
+        canvas.setAttribute('aria-busy', 'false');
+        for (const b of $('dex-clips').children) b.disabled = true;
+        if (document.activeElement === canvas) $('dex-retry').focus();
+      }
+    });
+    canvas.focus();
+  }
+  function openInspect(page, data) {
+    if (!page.seen) return;
+    stopInspect();
+    inspectPage = page;
+    $('dex-rows').hidden = true;
+    $('dex-count').hidden = true;
+    $('dex-back').hidden = false;
+    $('dex-inspect').hidden = false;
+    $('dex-title').textContent = page.name;
+    const names = data.herdNames?.(page.kind) ?? [];
+    if (names.length) {
+      const herd = document.createElement('small');
+      herd.textContent = names.join(', ');
+      $('dex-title').append(herd);
+    }
+    $('dex-canvas').setAttribute(
+      'aria-label',
+      `${page.name}: drag or use arrow keys to turn; + and - to zoom`
+    );
+    $('dex-clips').replaceChildren();
+    for (const [label, clip] of [
+      ['Idle', 'idle'],
+      ['Walk', 'walk'],
+      ['Run', 'run'],
+      ['Jump', 'jump'],
+      ...(page.kind === 'quetzal' ? [['Fly', 'flap']] : [])
+    ]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.dataset.clip = clip;
+      if (clip === 'flap') b.title = 'Fly / glide';
+      b.onclick = () => inspector?.play(clip);
+      $('dex-clips').append(b);
+    }
+    startInspect();
+  }
+  $('dex-back').onclick = () => {
+    const kind = inspectPage?.kind;
+    stopInspect();
+    drawDex();
+    [...$('dex-rows').children].find(row => row.dataset.kind === kind)?.focus();
+  };
+  $('dex-retry').onclick = startInspect;
   // The Dino Book (dex.mjs): one row per kind, [portrait] [name] [★ befriended]; a silhouette and ??? until seen.
   function drawDex() {
+    if (inspectPage) return; // A late portrait must not replace the open viewer or steal its focus.
     const d = dex?.();
     if (!d) return;
     $('dex-count').textContent =
-      `${d.pages.filter(p => p.seen).length}/${d.pages.length} seen · 💰 ${d.gold}`;
-    $('dex-count').title = 'Kinds seen out of every kind in the book · gold dug up';
+      `${d.pages.filter(p => p.seen).length}/${d.pages.length} seen · 💰 ${d.gold} · 🔋 ${d.batteries ?? 0} · ⚙️ ${d.parts ?? 0}`;
+    $('dex-count').title = 'Kinds seen out of every kind in the book · gold, batteries, and parts';
+    const focusedKind = document.activeElement?.closest('#dex-rows .dex-row')?.dataset.kind;
     $('dex-rows').innerHTML = d.pages
       .map(p => {
         const pic = d.portrait(p.model, () => panel === 'dex' && drawDex());
-        return `<div class="dex-row${p.seen ? '' : ' unseen'}" title="${p.seen ? p.name : 'Not seen yet: explore the dark world'}"><span class="dex-pic">${pic ? `<img src="${pic}" alt="">` : ''}</span><span class="dex-name">${p.seen ? p.name : '???'}</span><span class="dex-mark" title="${p.friends ? `${p.friends} in your herd` : p.seen ? 'Seen, not yet a friend' : 'Not seen yet'}">${p.friends ? '★'.repeat(Math.min(3, p.friends)) + (p.friends > 3 ? `×${p.friends}` : '') : p.seen ? '·' : ''}</span></div>`;
+        const tag = p.seen ? 'button' : 'div';
+        return `<${tag}${p.seen ? ' type="button"' : ''} data-kind="${p.kind}" class="dex-row${p.seen ? '' : ' unseen'}" title="${p.seen ? p.name : 'Not seen yet: explore the dark world'}"><span class="dex-pic">${pic ? `<img src="${pic}" alt="">` : ''}</span><span class="dex-name">${p.seen ? p.name : '???'}</span><span class="dex-mark" title="${p.friends ? `${p.friends} in your herd` : p.seen ? 'Seen, not yet a friend' : 'Not seen yet'}">${p.friends ? '★'.repeat(Math.min(3, p.friends)) + (p.friends > 3 ? `×${p.friends}` : '') : p.seen ? '·' : ''}</span></${tag}>`;
       })
       .join('');
+    for (const row of $('dex-rows').querySelectorAll('button')) {
+      row.onclick = () =>
+        openInspect(
+          d.pages.find(p => p.kind === row.dataset.kind),
+          d
+        );
+      if (row.dataset.kind === focusedKind) row.focus();
+    }
   }
   $('garage').onclick = $('menu-garage').onclick = () => open('garage');
   $('atlas').onclick = $('menu-map').onclick = () => {
@@ -374,7 +486,9 @@ export function createWorldUI({
               : panel === 'dex'
                 ? $('dex-panel')
                 : $('keys-panel'),
-      items = [...root.querySelectorAll('button:not(:disabled),select:not(:disabled),a[href]')];
+      items = [
+        ...root.querySelectorAll('button:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]')
+      ].filter(el => !el.closest('[hidden]'));
     if (!items.length) return;
     e.preventDefault();
     const i = items.indexOf(document.activeElement);
@@ -610,8 +724,8 @@ export function createWorldUI({
       const event = EVENTS.find(e => e.location === p.id),
         best = progress.raceWins?.[event?.id];
       choose.querySelector('small').textContent =
-        p.id === 'rec' && progress.bowlingBest
-          ? `${progress.bowlingBest}/10`
+        p.id === 'rec' && progress.bowlingBest != null
+          ? `${progress.bowlingBest}/300`
           : p.id === 'golf' && progress.golfBest
             ? `${progress.golfBest} hits`
             : p.id === 'lab'
@@ -662,10 +776,13 @@ export function createWorldUI({
   function interactLabel(text, key) {
     if (interactText === text + key) return;
     interactText = text + key;
-    const b = $('interact'),
-      k = document.createElement('kbd');
-    k.textContent = key;
-    b.replaceChildren(text + ' ', k);
+    const button = $('interact');
+    if (text.startsWith('🎳')) renderHint(button, key ? `${text} [${key}]` : text);
+    else {
+      const cap = document.createElement('kbd');
+      cap.textContent = key;
+      button.replaceChildren(text + ' ', cap);
+    }
   }
   return {
     progress,
@@ -710,11 +827,22 @@ export function createWorldUI({
           golf = world.activity();
         $('interact').hidden =
           (!p && !s.skate && (!golf || golf.done)) || !s.roam || s.paused || s.skating || s.flying;
-        if (s.skate) interactLabel('🛹 Skate', 'E');
+        if (s.robot && (p?.game === 'bowling' || golf?.kind === 'bowling')) {
+          const ready = approachLane(s.pos);
+          $('interact').hidden ||= !!golf?.launched;
+          interactLabel(
+            ready
+              ? golf?.done
+                ? '🎳 Play again · hold [E]'
+                : '🎳 Hold [E] · [left] [right] aim · let go'
+              : '🎳 Bowling! Walk to a lane · hold [E], let go to roll',
+            ''
+          );
+        } else if (s.skate) interactLabel('🛹 Skate', 'E');
         else if (golf && !golf.done)
           interactLabel(
             golf.kind === 'bowling'
-              ? `Bowling ${golf.delivery}/2 · ${golf.score}/10 · ${golf.delivery === 2 ? 'Finish' : 'Next'}`
+              ? `🎳 Car Bowling · ${golf.frame + 1}/10 · Next roll`
               : `Golf ${golf.hole + 1}/3 · ${golf.strokes} hits · Reset`,
             'E'
           );
@@ -723,16 +851,18 @@ export function createWorldUI({
             ...(p.skate
               ? ['🛹 Skate', 'E']
               : p.game === 'bowling'
-                ? ['Strike · Play', 'E']
+                ? ['🎳 Car Bowling · Play', 'E']
                 : p.game === 'golf'
                   ? ['Car Golf · Play', 'E']
-                  : !canEnter(progress, p)
-                    ? [`◇ ${progress.specimens.length}/${SPECIMENS.length} · Map`, 'Tab']
-                    : p.kind === 'discovery'
-                      ? [`${p.short} · Map`, 'Tab']
-                      : p.id === 'skatepark'
-                        ? ['Race', 'E']
-                        : [`${p.name} · Go in`, 'E'])
+                  : p.game === 'flying-school'
+                    ? ['Flying School · Play', 'E']
+                    : !canEnter(progress, p)
+                      ? [`◇ ${progress.specimens.length}/${SPECIMENS.length} · Map`, 'Tab']
+                      : p.kind === 'discovery'
+                        ? [`${p.short} · Map`, 'Tab']
+                        : p.id === 'skatepark'
+                          ? ['Race', 'E']
+                          : [`${p.name} · Go in`, 'E'])
           );
       }
     },

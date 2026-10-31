@@ -27,7 +27,8 @@ import {DISTRICT_ZONES, districtBounds} from './district-zones.mjs';
 import {createTerrain} from './terrain.js';
 import {BOUNDS} from './catalog.mjs';
 import {prepareDistricts} from './districts.js';
-import {createBowling, stepBowling, nextDelivery, BOWLING_TEE} from './bowling.mjs';
+import {createBowling, stepBowling, nextDelivery, bowlingTee} from './bowling.mjs';
+import {buildBowlingAlley} from './bowling-alley.js';
 import {createBowlingVisual} from './bowling.js';
 import {createGolf, stepGolf, resetGolf, golfTee} from './golf.mjs';
 import {createGolfVisual} from './golf.js';
@@ -40,6 +41,7 @@ import {YARD_PAD, POOL_HOLE} from './schoolyard.mjs';
 import {prepareSchoolyard} from './schoolyard.js';
 import {createTileRenderer} from './render.js';
 import {createMountainView, createFarGround} from './spirit-mountain.js';
+import {createCanyonView, canyonFarGround} from './canyon.js';
 import {createDarkWorld} from './dark-world.js';
 import {createBadToys} from './bad-toys.js';
 import {createGang, stepGang} from './outlaws.mjs';
@@ -52,6 +54,8 @@ import {createPettingZoo} from './petting-zoo.js';
 import {createJetDecks} from './jet-decks.js';
 import {createTrickOrTreatVisual} from './trick-or-treat.js';
 import {createBooster} from './booster.js';
+import {createFlyingSchool} from './flying-school.js';
+import {SCHOOL} from './flying-school.mjs';
 import {buildHighSchool} from './high-school.js';
 import {createHotWheels} from './hot-wheels.js';
 import {createCountryClub} from './country-club.js';
@@ -182,13 +186,16 @@ export async function loadOpenWorld(search) {
     onLoad: (key, t) => {
       render?.load(key, t);
       mountainView?.tileLoaded(key, true);
+      canyonView?.tileLoaded(key, true);
     },
     onDrop: key => {
       render?.drop(key);
       mountainView?.tileLoaded(key, false);
+      canyonView?.tileLoaded(key, false);
     }
   });
   let mountainView = null,
+    canyonView = null,
     farGround = null;
   const schoolyard = prepareSchoolyard(stream.world, residentialTerrain),
     residentialPark = prepareResidentialPark(stream.world, residentialData, {terrain: residentialTerrain}),
@@ -345,6 +352,7 @@ export async function loadOpenWorld(search) {
       stream.world.openGate('era-meadow');
     }
     mountainView?.setPast(past);
+    render?.setPast(past);
     if (past) stream.world.openGate('era-dam');
     else stream.world.closeGate('era-dam');
     // The steam-era farmstead (prop kit, placements/example-farmstead.json): the past only. Loaded the first time you go back; its
@@ -376,7 +384,9 @@ export async function loadOpenWorld(search) {
     jetDecks,
     trickOrTreat,
     booster,
+    flyingSchool,
     highSchool,
+    bowlingAlley,
     hotWheels,
     club,
     meadow,
@@ -395,6 +405,7 @@ export async function loadOpenWorld(search) {
     lighting(day, pos) {
       terrain?.update(day, pos[0] > 9000);
       mountainView?.update(day);
+      canyonView?.update(day);
       farGround?.update(day);
       render?.update(day);
       corridor?.update(day, pos, day < 0.99 ? (render?.fixtures() ?? []) : []);
@@ -526,15 +537,19 @@ export async function loadOpenWorld(search) {
       }
       return null;
     },
-    startActivity(kind) {
-      golf = kind === 'bowling' ? createBowling() : createGolf();
-      return kind === 'bowling' ? BOWLING_TEE : golfTee(golf);
+    startActivity(kind, options = {}) {
+      golf = kind === 'bowling' ? createBowling(options) : createGolf();
+      return kind === 'bowling' ? bowlingTee(golf.lane) : golfTee(golf);
+    },
+    cancelActivity() {
+      golf = null;
     },
     resetActivity() {
       if (!golf) return null;
       const tee = golf.kind === 'bowling' ? nextDelivery(golf) : resetGolf(golf);
       if (golf.kind === 'bowling' && golf.done) {
-        progress.bowlingBest = Math.max(progress.bowlingBest, golf.score);
+        progress.bowlingBest = Math.max(progress.bowlingBest ?? 0, golf.score);
+        progress.bowlingVersion = 2;
         saveProgress(storage, progress);
       }
       return tee;
@@ -547,8 +562,10 @@ export async function loadOpenWorld(search) {
         return event;
       }
       if (event?.finished) {
-        if (golf.kind === 'bowling') progress.bowlingBest = Math.max(progress.bowlingBest, event.score);
-        else progress.golfBest = Math.min(progress.golfBest ?? Infinity, event.total);
+        if (golf.kind === 'bowling') {
+          progress.bowlingBest = Math.max(progress.bowlingBest ?? 0, event.score);
+          progress.bowlingVersion = 2;
+        } else progress.golfBest = Math.min(progress.golfBest ?? Infinity, event.total);
         saveProgress(storage, progress);
       }
       return event;
@@ -594,11 +611,17 @@ export async function loadOpenWorld(search) {
       } catch (e) {
         console.warn('placements unavailable', e);
       }
+      bowlingAlley = buildBowlingAlley(scene, stream.world);
       bowlingVisual = createBowlingVisual(scene);
       golfVisual = createGolfVisual(scene);
       render = createTileRenderer(scene, elevation, residentialTerrain, MARSEILLE_TERRAIN);
       mountainView = createMountainView(scene, (x, z) => elevationAt(elevation, x, z));
-      farGround = createFarGround(scene, (x, z) => elevationAt(elevation, x, z), BOUNDS);
+      canyonView = createCanyonView(scene, (x, z) => elevationAt(elevation, x, z));
+      farGround = createFarGround(
+        scene,
+        (x, z) => canyonFarGround((a, b) => elevationAt(elevation, a, b), x, z),
+        BOUNDS
+      );
       darkWorld = createDarkWorld(scene, (x, z) => elevationAt(elevation, x, z));
       outlawView = createBadToys(scene, {look: 'outlaw'});
       digView = createDigView(scene);
@@ -607,12 +630,14 @@ export async function loadOpenWorld(search) {
       for (const [k, t] of stream.loaded) {
         render.load(k, t);
         mountainView.tileLoaded(k, true);
+        canyonView.tileLoaded(k, true);
       }
       activities = buildActivities(scene, stream.world, {alienUnlocked: () => alienWorldUnlocked(progress)});
       landmarks = buildLandmarks(scene, stream.world, progress, overview.roads, heroTemplate('landmarks'));
       zoo = createPettingZoo(scene, stream.world);
       jetDecks = createJetDecks(scene, stream.world);
       booster = createBooster(scene, (x, z) => elevationAt(elevation, x, z));
+      flyingSchool = createFlyingSchool(scene, (x, z) => elevationAt(elevation, x, z));
       hotWheels = createHotWheels(scene, stream.world);
       // The club in the present, the spring meadow in the past (meadow.js): each one's collision on
       // its own era gate, so neither leaves invisible walls in the other time.
@@ -647,6 +672,15 @@ export async function loadOpenWorld(search) {
       meadow?.step(dt, pos ? [pos[0], pos[2]] : null, timeGates.era() === 'past') ?? [],
     boosterStep: (dt, pos) => booster?.step(dt, pos) ?? [],
     booster: () => booster,
+    school: () => flyingSchool?.state,
+    startSchool(mode) {
+      golf = null;
+      target = null;
+      route = [];
+      return flyingSchool?.start(mode);
+    },
+    stopSchool: () => flyingSchool?.stop(),
+    schoolStep: (dt, pilot) => flyingSchool?.step(dt, pilot) ?? [],
     trickOrTreat: (pos, trick, time, dt) => trickOrTreat?.step(pos, trick, time, dt) ?? [],
     candy: () => trickOrTreat?.state.candy ?? null,
     treatHouses: () => trickOrTreat?.houses ?? [],
@@ -683,7 +717,7 @@ export async function loadOpenWorld(search) {
     skySounds() {
       return flyovers?.sounds() ?? [];
     },
-    update(time, pos, camera, onDiscover) {
+    update(time, pos, camera, onDiscover, playerPos = pos) {
       halloween?.update(time);
       darkWorld?.update(
         Math.max(0, Math.min(0.1, time - (darkClock ?? time))),
@@ -712,6 +746,7 @@ export async function loadOpenWorld(search) {
       activities?.update(time, pos);
       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
       bowlingVisual?.update(golf);
+      bowlingAlley?.update(golf?.kind === 'bowling' ? golf : null, playerPos);
       const key = pos.map((v, i) => (i === 1 ? 0 : Math.floor(v / 64))).join(',');
       if (key !== lastTile || stream.errors.size) {
         lastTile = key;
@@ -735,7 +770,7 @@ export async function loadOpenWorld(search) {
     },
     near: pos => {
       const p = nearestLocation(pos);
-      return distance(pos, p.pos) < 9 ? p : null;
+      return distance(pos, p.pos) < (p.game === 'flying-school' ? SCHOOL.startRadius : 9) ? p : null;
     },
     async travel(id) {
       // A dark-world place (dark-world.mjs DARK_PLACES): jump there and into the past.
@@ -818,6 +853,7 @@ export async function loadOpenWorld(search) {
       );
     },
     dispose() {
+      canyonView?.dispose();
       venue?.dispose();
       venue = null;
       halloween?.dispose();
@@ -826,6 +862,7 @@ export async function loadOpenWorld(search) {
       hotWheels?.dispose();
       highSchool?.dispose();
       booster?.dispose();
+      flyingSchool?.dispose();
       trickOrTreat?.dispose();
       zoo?.dispose();
       jetDecks?.dispose();
@@ -846,6 +883,7 @@ export async function loadOpenWorld(search) {
       landmarks?.dispose();
       golfVisual?.dispose();
       bowlingVisual?.dispose();
+      bowlingAlley?.dispose();
     }
   };
   return api;
