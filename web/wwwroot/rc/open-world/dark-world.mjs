@@ -125,3 +125,52 @@ export function createTimeGates(initial = {}) {
     }
   });
 }
+
+// The place list's dark-world tab (owner, 31 Oct: "the place list can be organized into light
+// world / dark world"; "you can just use the map selector to jump there"). Picking one jumps you
+// there and into the past. Positions on flat ground; yaw as the car's (0 faces -z).
+const place = (id, name, short, p, look, color) =>
+  Object.freeze({
+    id,
+    name,
+    short,
+    at: [p[0], p[2]],
+    yaw: facing([p[0], p[2]], [look[0], look[2]]),
+    color,
+    past: true
+  });
+export const DARK_PLACES = Object.freeze([
+  place(
+    'past-lake-town',
+    'The Lake Town, long ago',
+    'Lake Town',
+    valleyPoint(546, 0),
+    valleyPoint(600, 0),
+    '#d8a85a'
+  ),
+  place(
+    'past-farm',
+    'The steam farm, long ago',
+    'Steam farm',
+    valleyPoint(560, -28),
+    valleyPoint(575, -48),
+    '#9fbf5a'
+  ),
+  place(
+    'past-wild',
+    'Wild dinosaurs',
+    'Wild dinosaurs',
+    valleyPoint(560, 30),
+    valleyPoint(575, 50),
+    '#5fa8d8'
+  ),
+  place(
+    'past-summit',
+    'Spirit Mountain summit, long ago',
+    'Summit',
+    [SUMMIT_OUT[0], 0, SUMMIT_OUT[1]],
+    [SUMMIT_OUT[0] - 10, 0, SUMMIT_OUT[1]],
+    '#b89ae0'
+  )
+]);
+export const darkPlaceById = id => DARK_PLACES.find(p => p.id === id) ?? null;

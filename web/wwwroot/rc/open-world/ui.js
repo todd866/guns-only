@@ -19,6 +19,7 @@ import {
 } from './catalog.mjs';
 import {JET_KINDS, JET_NAMES} from '../jets.js';
 import {LIVERIES, TRIMS, liveryUnlocked, PUMPKIN_CAR} from '../livery-data.mjs';
+import {DARK_PLACES} from './dark-world.mjs';
 const $ = id => document.getElementById(id);
 // One map, one destination. Controls remain ordinary labelled buttons on touch and keyboard.
 export function createWorldUI({
@@ -33,7 +34,8 @@ export function createWorldUI({
   onGarage,
   stats
 }) {
-  let panel = null,
+  let placeWorld = null,
+    panel = null,
     wasPaused = true,
     briefHidden = true,
     returnFocus = null,
@@ -279,7 +281,10 @@ export function createWorldUI({
             : $('keys-panel');
     isolated = [...document.body.children].filter(el => el !== active).map(el => [el, el.inert]);
     for (const [el] of isolated) el.inert = true;
-    if (which === 'map') drawFull();
+    if (which === 'map') {
+      placeWorld = world?.era?.() === 'past' ? 'dark' : 'light';
+      drawFull();
+    }
     $(
       which === 'map'
         ? 'map-close'
@@ -372,9 +377,50 @@ export function createWorldUI({
       if (canEnterEvent(progress, e)) location.href = world.eventURL({...p, track: null, event: e.id});
     };
     $('destinations').replaceChildren();
+    // Two tabs (owner: the place list organised into light world / dark world); the dark world's places jump you into the past.
+    const tabs = document.createElement('div');
+    tabs.className = 'place-tabs';
+    tabs.setAttribute('role', 'tablist');
+    tabs.innerHTML =
+      '<button role="tab" data-world="light" title="Places in the light world (now)">☀️ Light world</button><button role="tab" data-world="dark" title="Places in the dark world (long ago)">🌑 Dark world</button>';
+    $('destinations').append(tabs);
+    for (const b of tabs.children)
+      b.onclick = () => {
+        placeWorld = b.dataset.world;
+        drawFull();
+      };
+    for (const p of DARK_PLACES) {
+      const row = document.createElement('div');
+      row.className = 'destination';
+      row.dataset.world = 'dark';
+      row.innerHTML = `<button class="destination-name" style="--zone:${p.color}" title="${p.name}"><span class="zone-dot"></span><span>${p.short}</span></button><button class="travel" aria-label="Jump to ${p.name}" title="Jump there, into the past">Jump</button>`;
+      const [choose, go] = row.querySelectorAll('button');
+      choose.onclick = () => go.click();
+      go.onclick = async () => {
+        if (travelling) return;
+        travelling = true;
+        travelError = null;
+        drawFull();
+        try {
+          const ok = await travel(p.id);
+          if (ok) {
+            travelling = false;
+            close();
+          } else travelError = p.id;
+        } catch {
+          travelError = p.id;
+        } finally {
+          travelling = false;
+          drawFull();
+        }
+      };
+      $('destinations').append(row);
+      rows.set(p.id, {row, choose, go, dark: p});
+    }
     for (const p of LOCATIONS) {
       const row = document.createElement('div');
       row.className = 'destination';
+      row.dataset.world = 'light';
       row.hidden = !canVisit(progress, p);
       row.innerHTML = `<button class="destination-name" style="--zone:${p.color}" title="Set route to ${p.name}"><span class="zone-dot"></span><span>${p.short}</span><small></small></button><button class="travel" aria-label="Jump to ${p.name}" title="Jump to this location">Jump</button>`;
       const [choose, go] = row.querySelectorAll('button');
@@ -472,6 +518,15 @@ export function createWorldUI({
   }
   function drawFull() {
     if (!world) return;
+    placeWorld ??= world.era?.() === 'past' ? 'dark' : 'light';
+    for (const b of document.querySelectorAll('.place-tabs button'))
+      b.setAttribute('aria-selected', String(b.dataset.world === placeWorld));
+    for (const {row, go, dark} of rows.values())
+      if (dark) {
+        row.hidden = placeWorld !== 'dark';
+        go.disabled = travelling || !getState().roam;
+        go.title = travelError === dark.id ? 'That jump failed; click to retry' : 'Jump there, into the past';
+      }
     const chosen = eventById($('world-event').value),
       unlocked = canEnterEvent(progress, chosen);
     $('world-race').disabled = travelling || !unlocked;
@@ -513,7 +568,7 @@ export function createWorldUI({
         g.stroke();
       }
       const {row, choose, go} = rows.get(p.id);
-      row.hidden = !canVisit(progress, p);
+      row.hidden = !canVisit(progress, p) || placeWorld !== 'light';
       go.disabled = travelling || !s.roam || !canVisit(progress, p);
       go.title =
         travelError === p.id

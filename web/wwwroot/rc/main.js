@@ -2760,7 +2760,15 @@ async function travelTo(id) {
   const p = await openWorld?.travel(id);
   if (!p) return false;
   const {pos, yaw} = p.arrival;
-  placeCar(s.car, [pos[0], pos[1] + rideHeight(s.car.params) + 0.02, pos[2]], yaw);
+  document.body.classList.toggle('era-past', openWorld.era?.() === 'past');
+  if (robot) {
+    robot.pos = [pos[0], pos[1] + 0.05, pos[2]];
+    robot.vel = [0, 0, 0];
+    robot.yaw = yaw;
+  } else {
+    const cp = roamCarParams();
+    Object.assign(s.car, createCar(cp, [pos[0], pos[1] + rideHeight(cp) + 0.02, pos[2]], yaw));
+  }
   acc = 0;
   cameraCar = null;
   camera.position.set(pos[0] - Math.sin(yaw) * 2, pos[1] + 0.8, pos[2] + Math.cos(yaw) * 2);

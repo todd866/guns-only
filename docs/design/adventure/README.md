@@ -310,6 +310,9 @@ up the switchbacks. Reach the nest and it's yours: E to climb on, then fly the w
 the toy jet's flight model with the kid-mode easy flyer and Auto-GCAS (flap to climb, glide to
 swoop, land anywhere flat). Once befriended it joins the herd, and its name calls it from anywhere.
 Accuracy is not the point: it's a big friendly flying dinosaur.
+The climb is the fun way up, never a wall (owner: "you can just use the map selector to jump
+there"). The nest is a place on the map's place list like any other, and so are the Lake Town and
+the farm. Picking a dark-world place jumps you there and into the past.
 
 Which scares whom follows size: cows and horses mix with the plant-eaters but scatter from a
 T. rex; the smaller dinosaurs give a T. rex a wide berth too. Win one over by feeding or herding
