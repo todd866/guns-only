@@ -3233,7 +3233,7 @@ function cartStep() {
   if (!cartProp) return;
   const p = s.car.pos,
     d = Math.hypot(p[0] - CART_AT[0], p[2] - CART_AT[1]);
-  cartProp.visible = openWorld.progress.body !== 'golf' && d < 300;
+  cartProp.visible = openWorld.progress.body !== 'golf' && d < 300 && openWorld.era?.() !== 'past';
   if (cartProp.visible && cartProp.position.y < -50) {
     const hit = course.world.raycast([CART_AT[0], 60, CART_AT[1]], [0, -1, 0], 120);
     if (hit) cartProp.position.y = hit.point[1] + 0.16;
@@ -3335,8 +3335,35 @@ function golfScoreName(n, par) {
         n - par
       ] ?? `${n} strokes`);
 }
+// The roundup at the spring meadow, the club's twin in the past (open-world/meadow.mjs): the cattle
+// shy away from your dinosaur; herd them through the corral gate. Callouts and a best time.
+function roundupStep(dt) {
+  if (!openWorld?.meadowStep || !race.roam) return;
+  for (const e of openWorld.meadowStep(dt, robot ? robot.pos : s.car.pos)) {
+    if (e.start) {
+      audio.radio();
+      callout('🐄 A ROUNDUP! Herd the cattle into the corral (the gate is on the meadow side)', 4500);
+    } else if (e.penned && e.penned < e.of) {
+      audio.coin();
+      callout(`🐄 ${e.penned} of ${e.of} in the corral`, 1800);
+    } else if (e.done) {
+      audio.finish();
+      const pr = openWorld.progress,
+        best = pr.roundupBest ?? null,
+        t = Math.round(e.time);
+      if (best == null || t < best) {
+        pr.roundupBest = t;
+        openWorld.save();
+      }
+      callout(
+        `🤠 ROUNDUP DONE! All the cattle penned in ${t} s${best == null || t < best ? ' · NEW BEST' : ''}`,
+        6000
+      );
+    }
+  }
+}
 function golfStep(dt) {
-  if (!openWorld || !race.roam) {
+  if (!openWorld || !race.roam || openWorld.era?.() === 'past') {
     return;
   }
   if (!golfRound) {
@@ -3778,6 +3805,7 @@ function statRows() {
     ['🫡', 'Perfect retreats & reveilles', num(pr.retreats)],
     ['🚀', 'Booster landings seen', num(pr.boosters)],
     ['⛳', 'Best golf round', pr.golfRoundBest ? `${pr.golfRoundBest}` : '–'],
+    ['🤠', 'Fastest roundup', pr.roundupBest ? `${pr.roundupBest} s` : '–'],
     ['🎳', 'Bowling best', pr.bowlingBest ? `${pr.bowlingBest}/10` : '–'],
     ['⛳', 'Golf best', pr.golfBest ? `${pr.golfBest} hits` : '–'],
     ...(adventure
@@ -4352,6 +4380,7 @@ function frame(now) {
       }
       trickOrTreatStep(robot ? robot.pos : c.pos, dt, now);
       golfStep(dt);
+      roundupStep(dt);
       cartStep();
       retreatStep(dt);
       if (!paused) for (const e of openWorld.boosterStep(dt, c.pos)) boosterEvent(e);
@@ -4759,6 +4788,12 @@ function frame(now) {
 // Read-only diagnostics for QA. Simulation tests use the same public step function.
 window.__gunsOnlyRC = {
   form: () => form,
+  qaEra: era => openWorld?.qaEra?.(era),
+  roundup: () =>
+    openWorld?.meadow?.()?.round && {
+      penned: openWorld.meadow().round.penned,
+      steers: openWorld.meadow().round.steers.map(s => s.pos.map(v => +v.toFixed(1)))
+    },
   golf: () => ({
     hole: golfRound?.hole,
     strokes: golfRound?.strokes,

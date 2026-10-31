@@ -324,9 +324,9 @@ export function createCountryClub(scene, world, heightAt = () => 0) {
   const centre = [-280, 2800];
   return {
     root,
-    update(dt, pos) {
+    update(dt, pos, show = true) {
       sails.rotation.z += dt * 1.2;
-      root.visible = !pos || Math.hypot(pos[0] - centre[0], pos[2] - centre[1]) < 900;
+      root.visible = show && (!pos || Math.hypot(pos[0] - centre[0], pos[2] - centre[1]) < 900); // not in the past (meadow.js)
     },
     dispose() {
       root.removeFromParent();

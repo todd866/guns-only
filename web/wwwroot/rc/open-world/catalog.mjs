@@ -716,6 +716,7 @@ export function loadProgress(storage) {
     discovered: ['gate', ...ids(v?.discovered, LOCATIONS).filter(id => id !== 'gate')],
     specimens: ids(v?.specimens, SPECIMENS),
     golfRoundBest: Number.isInteger(v?.golfRoundBest) && v.golfRoundBest > 0 ? v.golfRoundBest : null,
+    roundupBest: Number.isInteger(v?.roundupBest) && v.roundupBest > 0 ? v.roundupBest : null,
     bowlingBest:
       Number.isInteger(v?.bowlingBest) && v.bowlingBest >= 0 && v.bowlingBest <= 10 ? v.bowlingBest : 0,
     golfBest: Number.isInteger(v?.golfBest) && v.golfBest > 0 ? v.golfBest : null,
