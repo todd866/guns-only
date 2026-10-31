@@ -3884,6 +3884,10 @@ const ui = createWorldUI({
   dex: () =>
     openWorld && {
       pages: pages(dexState(), herd().herd),
+      herdNames: kind =>
+        herd()
+          .herd.filter(d => d.kind === kind)
+          .map(d => d.name),
       gold: dexState().gold,
       portrait: (model, ready) => (portraits ??= createPortraits(renderer)).get(model, ready)
     },
@@ -4878,7 +4882,10 @@ window.__gunsOnlyRC = {
   }),
   era: () => openWorld?.era?.() ?? 'present',
   toyDino: () => toyDino,
-  sounds: () => ({heard: {...(audio.heard ?? {})}, motor: +(audio.motorLow?.gain.gain.value ?? 0).toFixed(3)}),
+  sounds: () => ({
+    heard: {...(audio.heard ?? {})},
+    motor: +(audio.motorLow?.gain.gain.value ?? 0).toFixed(3)
+  }),
   dex: () => openWorld && {seen: [...dexState().seen], gold: dexState().gold},
   herd: () =>
     herdState && {
