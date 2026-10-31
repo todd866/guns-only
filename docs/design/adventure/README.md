@@ -63,6 +63,22 @@ story thesis."
   King, the Lake Town, the mountain gate), helpers and gifts along the way, and one home to reach:
   the bedroom floor where the toy woke up.
 
+**The theme under the plot** (owner, 31 Oct): "given the setting, 1900s SW USA, essentially the bad
+toys represent the march of industrial civilization, and the good toys represent nature and the old
+ways."
+- **Bad toys are the machine that doesn't care**: identical clockwork soldiers, the mine that eats
+  the mountain, the factory in the BX basement, and in the end the dam itself. In the present the
+  march has won: the valley is a reservoir and the town lies drowned under it. The dark world is the
+  time before, when it could still go either way.
+- **Good toys are nature and the old ways**: the land's creatures and spirits, the river and the
+  spring, and homestead craft (the hand pump, the windmill, the farm, things mended rather than
+  replaced).
+- **The line is soul, not machinery.** You are an RC car, and the steam tractor someone named and
+  looks after is a good toy. What makes a toy bad is being made without anyone inside it.
+- **"The old ways" is the land's, not a people's.** Per the setting rules below, no Native imagery,
+  stories or figures stand in for nature or the past; the old ways are the desert's creatures,
+  water and weather, and the homesteaders' hand-made life.
+
 **The rule: a 6-year-old never sees it.** No Homer names and no explaining. It is a spine for
 choosing what to build: when a new dungeon, boss or gift is needed, pick the Odyssey beat it can
 rhyme with, then hide the rhyme. A one-eyed digger, a song that lures you off the road, a long
