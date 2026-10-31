@@ -1312,7 +1312,7 @@ function syncRivals() {
 // Pickup presentation: gift crates, balloons, oil puddles, bubble shields.
 let fireQueued = false;
 const ICON = {
-  zoom: '🔥 Afterburner',
+  zoom: '🔥 Zoom',
   balloon: '💧 Water balloon',
   oil: '🛢 Hydraulic leak',
   bubble: '✨ Chaff',
@@ -1598,17 +1598,17 @@ function drawFlightHud() {
     hg.strokeRect(px, py, 88, 10);
     hg.fillRect(px, py, 88 * s.flight.power, 10);
     hg.fillText('PWR', px, py + 24);
-    // Afterburner: a lit AB box when it's on, an outlined F AB when it's off (F turns it on).
-    hg.strokeRect(px + 96, py - 6, 46, 22);
+    // Zoom (the afterburner): a lit ZOOM box when it's on, an outlined F ZOOM when it's off (F turns it on).
+    hg.strokeRect(px + 96, py - 6, 64, 22);
     if (burning || boostOn) {
-      hg.fillRect(px + 96, py - 6, 46, 22);
+      hg.fillRect(px + 96, py - 6, 64, 22);
       hg.fillStyle = '#03240c';
       hg.textAlign = 'center';
-      hg.fillText('AB', px + 119, py + 5);
+      hg.fillText('ZOOM', px + 128, py + 5);
       hg.fillStyle = G;
     } else {
       hg.textAlign = 'center';
-      hg.fillText('F AB', px + 119, py + 5);
+      hg.fillText('F ZOOM', px + 128, py + 5);
     }
     hg.textAlign = 'left';
   } else hg.fillText('🪂 CHUTE', px, py + 12);
@@ -3359,10 +3359,10 @@ function toggleBoost() {
   callout(
     boostOn
       ? s.flight.mode
-        ? '🔥 Afterburner on · [F] off'
+        ? '🔥 Zoom on · [F] off'
         : '🔥 Boost on · [F] off'
       : s.flight.mode
-        ? 'Afterburner off'
+        ? 'Zoom off'
         : 'Boost off',
     900
   );
@@ -3786,7 +3786,7 @@ function deliveryFrame(dt, now) {
     if (key !== deliveryHudKey) {
       deliveryHudKey = key;
       $('delivery-count').textContent =
-        `${state.paused ? '⏸' : '📦'} Parcels ${state.delivered}/${DELIVERY.runLength}`;
+        `${state.paused ? '⏸' : '📦'} Boxes ${state.delivered}/${DELIVERY.runLength}`;
       $('delivery-stars').textContent = `⭐ ${state.stars}`;
       $('delivery-stars').setAttribute('aria-label', `${state.stars} stars`);
     }
@@ -4527,7 +4527,7 @@ function statRows() {
     ['🫡', 'Perfect retreats & reveilles', num(pr.retreats)],
     ['🚀', 'Booster landings seen', num(pr.boosters)],
     ['✈', 'Flying School trips', num(pr.flyingSchool)],
-    ['📦', 'Parcels delivered', num(pr.parcelsDelivered)],
+    ['📦', 'Boxes delivered', num(pr.parcelsDelivered)],
     ['⭐', 'Flying School best', pr.flyingStars ? `${pr.flyingStars}/9` : '–'],
     ['🪂', 'Sky jumps', num(pr.skyJumps)],
     ['🎯', 'Best landing', pr.bestLanding == null ? '–' : `${pr.bestLanding.toFixed(1)} m`],
@@ -4704,7 +4704,7 @@ function frame(now) {
     if (b.hidden === on) {
       b.hidden = !on;
     }
-    if (on) b.textContent = s.flight.mode ? '🔥 AB · F' : '🔥 BOOST · F';
+    if (on) b.textContent = s.flight.mode ? '🔥 ZOOM · F' : '🔥 BOOST · F';
   }
   if (!started && !$('start').disabled) {
     started = true;
