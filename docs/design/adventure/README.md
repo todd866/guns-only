@@ -134,8 +134,9 @@ world." Every new piece has to fit these; if one doesn't, change the piece, not 
 - **Toy animals are in between** (owner: dinosaurs are "kinda in-between, they're alive but they're
   dumb lizards ... but they're toy dinosaurs, it's all a bit Lego Movie"). Toy dinosaurs, cows and
   horses are alive the way animals are: instincts, no inner life. They eat, sleep, spook and follow
-  whoever feeds them, and the **cows and horses are scared of dinosaurs** (ride up and the herd
-  scatters, which is how you herd them). Neither side owns them; the outlaws ride dinosaurs too. You
+  whoever feeds them. **Cows, horses and the plant-eating dinosaurs mix happily, but everyone is
+  scared of a T. rex** (owner); yours is one, so ride up and the herd scatters, which is how you
+  herd them. Neither side owns them; the outlaws ride dinosaurs too. You
   win a dinosaur over and name it like a pet. Toy animals never break and are never hurt: a
   frightened one runs off and comes back.
 - **The dark world is the same valley long ago.** You get there only through the spirit gates and
