@@ -64,6 +64,8 @@ export function createTimeGates(initial = {}) {
   return Object.freeze({
     step(pos, options) { const r = timeGateStep(state, pos, options); state = r.state; return r.trip; },
     era: () => state.era,
+    /** Jump straight to an era (digging through to the light world: dig.mjs). */
+    goTo(era, now = 0) { state = { era, latch: null, until: now + 1.2 }; },
     reset() { state = { era: 'present' }; },
   });
 }
