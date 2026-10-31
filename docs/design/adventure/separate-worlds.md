@@ -129,7 +129,16 @@ crafting, and portals that appear at random.
   either money or labor"). Money is gold at the store; labour is the work of crafting, a little
   job each time (fire the kiln and pull the bricks out, saw the log, hammer the nails). There is
   never a free way to make something last.
-- **Reinforced shafts persist** because their lining is a building material, crafted or bought.
+- **Builds need upkeep, or they eventually disappear** (owner: "it should have an upkeep
+  requirement or else it eventually disappears"). Each build has a condition that wears down; upkeep
+  restores it, paid like building in money (gold for paint, nails, a new board) or labour (a
+  small fix-it job: patch the roof, re-hammer the fence). Kind to a six-year-old:
+  - wear counts **play time, not time away**, so a week off never wipes out his ranch;
+  - wear is **visible long before loss**: faded paint, a sagging board, a weed through the roof,
+    then a gap; a forgotten build crumbles over many sessions, never all at once;
+  - a crumbled build leaves its outline and some of its materials, so rebuilding is quicker.
+- **Reinforced shafts persist** because their lining is a building material, crafted or bought,
+  and they need upkeep like any build.
 - That ties building to the economy: digging finds raw stuff and gold, crafting and the store turn
   them into materials, and materials make the ranch, pens and barn that last.
 - **The portal layer is the floor of every underground.** Digging through it is an identity
