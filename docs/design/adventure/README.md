@@ -397,6 +397,26 @@ side, the way a western does, with nothing real at stake:
   the spring help whoever is kind to them, either side. No real crimes beyond toy-box mischief, and
   no permanent lock-out: switch sides on a later visit, and both endings get you home.
 
+**Collect, earn, build a ranch** (owner, 31 Oct): "this is where the whole thing can be a bit
+pokemon, like, have a pokedex style thing of different dinosaurs and creatures, hell maybe the
+player can buy a dinosaur ranch from enough mining y'know? build an economy into it, make them buy
+supplies in town, play some veterinarian medicine, etc etc. But they're the only flying RC car /
+transformer in the dark world. Fish outta water."
+- **The Dino Book** (our own, not a copy of any game's): one page per kind of toy animal and
+  creature, a silhouette until you've seen one, its picture once seen, a star once befriended. It
+  fills as you explore, which is the "visible before reachable" rule as a collection.
+- **An economy small enough for a 6-year-old**: gold from digging (the gold seam) and from jobs
+  (herding, harvesting, rounding up strays) is the one currency. The general store sells supplies:
+  feed to win over shy dinosaurs, medicine, seed, a lasso. Prices are small whole numbers.
+- **The ranch**: save up and buy the dinosaur ranch outside the Lake Town; your herd lives there,
+  you build pens and a barn with the blocks you dig, and it grows as you do.
+- **Vet medicine**: a hurt or sick toy animal (a thorn in a paw, a cold, a lost key-wind) needs the
+  right supplies and a little care game (choose the bandage, warm the blanket, wind the key). Animals
+  you've nursed are friends for good.
+- **Fish out of water**: in the dark world you're the only toy who can transform and fly. Toys and
+  animals there have never seen an RC car; they stare, follow and gossip, and the outlaws want what
+  you are.
+
 **Portals all over the map** (owner, 31 Oct). The spirit cave is the first crossing, not the only
 one. Once you've been through it, portals around the world wake up, and each links two places
 rather than the same spot in the other time. Example: **a portal in the base town drops you at the
