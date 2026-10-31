@@ -103,3 +103,7 @@ analysis/owner-pilot-rows.jsonl
 # show in git status, which AGENTS.md uses as the collision check.
 .rc-dist/
 .rc-*/
+
+# A node_modules SYMLINK (agents link the main checkout's install into a worktree) is a file,
+# which the **/node_modules/ directory rule above does not match.
+node_modules
