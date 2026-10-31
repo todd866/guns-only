@@ -31,7 +31,21 @@ are the bosses you free. So there are **good toys and bad toys**.
 Owner: "'bad' toys basically don't have a soul, they're just mindless machines, whereas the 'good'
 toys have a personality." **Show it, never say it:** bad toys are identical, tick and whir, march
 in step, have glowing dots for eyes and no voice; good toys are each different, have faces that
-react, little idle habits and voices (and names you can type). To free the aliens and
+react, little idle habits and voices (and names you can type).
+
+Owner: "there's some bad toys that are as much as dumb-LLM-smart, they can talk and stuff, but
+they're NPCs. Whereas the good toy characters have feelings and an inner life." So talking isn't
+the line; an inner life is.
+- **Talking bad toys are NPCs**: the outlaw boss, a shopkeeper bot, a gate guard that asks for a
+  password. They chat like a cheerful chatbot: polite, eager, a bit repetitive, sure of themselves
+  when wrong, and they don't remember you from last time. Their lines are written, not generated
+  live: they're meant to sound hollow, not to be unpredictable.
+- **Good toys have an inner life**: they remember you and what you did, have moods, wants and
+  fears, change over the game, and sometimes say something you didn't expect. The freed aliens
+  and your crew are the ones you care about.
+- **When a talking bad toy loses, it winds down**: the key stops turning and it slumps mid-sentence
+  ("Thank you for your patien…"). It doesn't shatter, and it can be wound up again; only the silent
+  ones burst into springs. To free the aliens and
 stop the break-in, you cross the base, climb **the mountain** where the river begins, and pass
 through its old gate into the dark world. The creatures of the mountain help a toy that carries the
 good aliens' light.
