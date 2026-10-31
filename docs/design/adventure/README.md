@@ -509,10 +509,14 @@ original toy western.
   you hit stuff"). All of them are toys, as everything here is: a cork **pistol** (quick, short
   range, several shots), a single-shot **long rifle** (a cork that flies far and straight, slow to
   reload), a single-shot **shotgun** (a spray of dried peas, close range, knocks things back), plain
-  **arrows**, and **electric arrows**, the strongest of all when they hit: they stun anything and
-  open its battery box. Ammo is bought at the general store or crafted (corks from the farm,
-  arrows from the forge). The same rules hold: faceless bad toys break into springs, animals and
-  characters never do.
+  **arrows**, and **electric arrows**, the strongest of all when they hit. Ammo is bought at the
+  general store or crafted (corks from the farm, arrows from the forge).
+- **Your enemies are toys, so you stun them and take their batteries** (owner: "your enemies are
+  toys so you can stun them and steal their batteries"). Every weapon knocks a toy down for a
+  moment (a cork or a pea for a second or two, an arrow a little longer); an electric arrow stuns
+  longest and pops the battery box open. While it's down, ride or walk up and take its batteries
+  and parts. That's the fight's reward and the economy's main supply. A downed toy winds back up
+  later, minus what you took.
 - **The quetzalcoatlus's autopilot** (owner: "it should have an autopilot mode where it'll fly so
   you can shoot arrows at stuff"). One key hands it the flying: it circles where you are, wide and
   steady, banking round the spot (or follows the valley it's in), so you can lean out and shoot.
