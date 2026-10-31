@@ -66,3 +66,16 @@ HEAVY_SLOT_LABEL=guns-only-rc-mobile run_job heavy-slot -- node tools/rc/check-m
 if [ -n "$target" ]; then
   curl -fsS -o /dev/null -w "deploy-rc: guns-only.com/rc/ %{http_code}\n" https://guns-only.com/rc/
 fi
+# Ledger: docs/STATUS.md carries one "RC live" line naming the exact revision and deployment that
+# serve guns-only.com/rc, written by the deploy itself (audit 3.1: the ledger drifted by branch).
+# The deploying agent commits docs/STATUS.md with its release notes.
+if [ -n "$target" ] && [ -f docs/STATUS.md ] && rev=$(git rev-parse HEAD 2>/dev/null); then
+  stamp=$(date -u +%Y-%m-%dT%H:%MZ)
+  line="RC live (guns-only.com/rc): revision \`$rev\` from branch $(git rev-parse --abbrev-ref HEAD), deployed $stamp as $url."
+  if grep -q '^RC live (guns-only.com/rc):' docs/STATUS.md; then
+    awk -v l="$line" '/^RC live \(guns-only.com\/rc\):/{print l; next} {print}' docs/STATUS.md > "$tmp/STATUS.md" && cp "$tmp/STATUS.md" docs/STATUS.md
+  else
+    awk -v l="$line" 'done!=1 && /^Production:/{print; print l; done=1; next} {print}' docs/STATUS.md > "$tmp/STATUS.md" && cp "$tmp/STATUS.md" docs/STATUS.md
+  fi
+  echo "deploy-rc: docs/STATUS.md RC live line updated (commit it with the release notes)"
+fi

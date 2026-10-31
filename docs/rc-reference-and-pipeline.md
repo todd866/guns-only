@@ -244,7 +244,7 @@ Commands (`node tools/rc/asset-manifest.mjs ...`):
 
 - `update` walks the served tree, adds missing files (licence MIT when the sibling provenance JSON says so, otherwise `unknown`), refreshes `sizeBytes`/`sha256` of unlocked entries, drops entries whose file is gone, keeps every other field, and writes key-sorted JSON. Run it after regenerating or adding assets and commit the result.
 - `check` fails on: a served file missing from the manifest; a manifest path that does not exist; an `unknown` licence or `redistributable: false`; a `locked` entry whose hash drifted; a model over its budget (contract validation for files the contract covers, `budgets.max_bytes` otherwise); an authoring source (`.blend`, `.fbx`, ...) in the served tree; a manifest not byte-identical to what `update` writes. A changed hash on an unlocked entry is printed as information only, so routine Blender regeneration (for example `districts/school.glb`) never blocks a deploy.
-- `--allow-unknown-license` makes `check` tolerate `unknown` licences, with a loud warning that lists them. `bin/deploy-rc` runs `check --allow-unknown-license` after the tests and before packaging. The flag goes away once the list is empty.
+- `--allow-unknown-license` makes `check` tolerate `unknown` licences, with a loud warning that lists them. `bin/deploy-rc` runs the strict `check` after the tests and before packaging (every entry has been licensed since 2026-10-31); the flag remains for diagnosis only.
 
 Lock: set `"locked": true` on an entry to pin its bytes (a release-critical asset, or one with a hand-negotiated licence). `update` leaves locked hashes alone and `check` fails until a human unlocks or re-baselines it. Nothing is locked by default.
 
