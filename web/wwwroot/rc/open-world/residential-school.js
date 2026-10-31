@@ -1,5 +1,6 @@
 import * as T from '../../vendor/three.module.js';
 import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
+import {doorSpans,solidPieces,HS} from './high-school.mjs';
 
 // Anonymous, metre-scale architecture. The caller retains the mapped footprint,
 // courtyard and collision shell at 3.4m; these overlays supply the upper wings
@@ -46,12 +47,15 @@ export function buildResidentialSchool(scene, data = {}, options = {}) {
     const out=[];for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],ia=greater?a[axis]>=limit:a[axis]<=limit,ib=greater?b[axis]>=limit:b[axis]<=limit;if(ia)out.push(a);if(ia!==ib){const t=(limit-a[axis])/(b[axis]-a[axis]);out.push(a.map((v,k)=>v+(b[k]-v)*t));}}return out;
   }
   const zone=(bounds)=>{let p=ring;for(const [axis,v,greater]of[[0,bounds[0]+dx,true],[0,bounds[2]+dx,false],[1,bounds[1]+dz,true],[1,bounds[3]+dz,false]])p=clip(p,axis,v,greater);return p;};
-  function walls(poly,lo,hi,offset=.025){
+  function walls(poly,lo,hi,offset=.025,spans=null){
     const area=poly.reduce((s,p,i)=>{const q=poly[(i+1)%poly.length];return s+p[0]*q[1]-q[0]*p[1]},0),sign=Math.sign(area)||1;
     for(let i=0;i<poly.length;i++){
       const a=poly[i],b=poly[(i+1)%poly.length],len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len<.04)continue;
       const nx=sign*(b[1]-a[1])/len,nz=-sign*(b[0]-a[0])/len;
-      quad('brick',[a[0]+nx*offset,lo,a[1]+nz*offset],[b[0]+nx*offset,lo,b[1]+nz*offset],[b[0]+nx*offset,hi,b[1]+nz*offset],[a[0]+nx*offset,hi,a[1]+nz*offset]);
+      // Door openings (high-school.mjs): the wall stops either side and a lintel spans the top.
+      const P=(t,y)=>[a[0]+(b[0]-a[0])*t+nx*offset,y,a[1]+(b[1]-a[1])*t+nz*offset];
+      for(const [t0,t1]of solidPieces(spans?.[i]))quad('brick',P(t0,lo),P(t1,lo),P(t1,hi),P(t0,hi));
+      for(const [t0,t1]of spans?.[i]??[])quad('brick',P(t0,HS.doorTop),P(t1,HS.doorTop),P(t1,hi),P(t0,hi));
       const mx=(a[0]+b[0])/2,mz=(a[1]+b[1])/2,covered=(mz>-696+dz&&mx<-3197+dx)||(mx>-3240+dx&&mz<-754+dz);
       const yaw=-Math.atan2(b[1]-a[1],b[0]-a[0]);if(hi>3.5||!covered)box('frame',(a[0]+b[0])/2,hi+.035,(a[1]+b[1])/2,len+.04,.10,.16,yaw);
     }
@@ -62,8 +66,9 @@ export function buildResidentialSchool(scene, data = {}, options = {}) {
     for(const f of triangles)for(const i of f)pos.push(poly[i][0],height,poly[i][1]);
     const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('uv',new T.Float32BufferAttribute(pos.flatMap((_,i)=>i%3===0?[pos[i]*.2,pos[i+2]*.2]:[]),2));g.computeVertexNormals();add('roof',g);
   }
-  walls(ring,.04,3.4);
-  for(const hole of building.holes||[])walls(clean(hole),.04,3.4,-.025);
+  const doors=doorSpans([ring,...(building.holes||[]).map(clean)]);
+  walls(ring,.04,3.4,.025,doors[0]);
+  for(const hole of building.holes||[])walls(clean(hole),.04,3.4,-.025,doors[1]);
   upper(zone([-3240,-805,-3145,-754]),6.7);
   upper(zone([-3320,-696,-3197,-663]),8.6);
 
@@ -92,13 +97,8 @@ export function buildResidentialSchool(scene, data = {}, options = {}) {
   // Recessed blue paired doors at the small eastern entrance jog. The dark
   // surround and projecting asymmetric fascia reproduce the low entry silhouette.
   const entry=facade(at(-3174.717,-757.505),at(-3173.273,-754.929));
-  entry.plane('frame',.5,2.75,.02,2.7,.075);
-  for(const u of [.27,.73]){
-    entry.plane('blue',u,1.20,.06,2.38,.10);
-    entry.plane('glass',u,.76,1.04,.92,.13);
-    entry.plane('glass',u,.76,.28,.47,.13);
-    entry.plane('stone',u+.11,.035,.85,.52,.15);
-  }
+  // The blue doors stand open (you can drive in): each leaf swung out square to the wall.
+  for(const u of [.04,.96]){const h=entry.p(u,1.25,.6),yaw=Math.atan2(-entry.nz,entry.nx);box('blue',h[0],1.25,h[2],1.2,2.38,.06,yaw);}
   const centre=entry.p(.5,3.05,.80),yaw=-Math.atan2(2.576,1.444);
   box('stone',centre[0],3.05,centre[2],7.4,.62,2.0,yaw);
   box('frame',centre[0],3.39,centre[2],7.55,.10,2.12,yaw);
