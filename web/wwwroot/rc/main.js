@@ -2972,6 +2972,31 @@ function dinoSounds(dt) {
     audio.creature(kind, 'snort');
   }
 }
+// The walking robot / past-era cowboy (audio.footstep): a footfall at each foot-down of the walk.
+let footPhase = null;
+function footSounds() {
+  if (!robot || paused || robot.climb) {
+    footPhase = null;
+    return;
+  }
+  const era = openWorld?.era?.() ?? 'present';
+  if (era !== 'present' && era !== 'past') {
+    footPhase = null;
+    return;
+  }
+  const speed = Math.hypot(robot.vel[0], robot.vel[2]);
+  if (!robot.grounded || speed < 0.1) {
+    footPhase = null;
+    return;
+  }
+  const ph = (robot.walkPhase / (Math.PI * 2)) % 1;
+  if (footPhase !== null && footPhase !== ph) {
+    const crossed = at => (footPhase < at && ph >= at) || (footPhase > ph && (at >= footPhase || ph >= at));
+    if (crossed(0) || crossed(0.5))
+      audio.footstep(era === 'past' ? 'cowboy' : 'robot', Math.min(1, speed / 3));
+  }
+  footPhase = ph;
+}
 // The car form's physics: in the dark world (the past) it is the ridden dinosaur's bigger body.
 function roamCarParams() {
   if (openWorld?.era?.() === 'past') return mountParams(herd().herd[herd().mount]?.kind ?? 'rex');
@@ -5005,6 +5030,7 @@ function frame(now) {
             : 'car'
   });
   dinoSounds(dt);
+  footSounds();
   if (openWorld?.chickens && !paused)
     for (const e of openWorld.chickens({
       pos: robot ? robot.pos : s.car.pos,
