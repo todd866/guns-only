@@ -7,6 +7,8 @@ export const SKY_JUMPS = Object.freeze([
   {
     id: 'mountain-jump',
     name: 'Mountain Jump',
+    // Found by climbing, not listed in Places: Places sit on the flat base (see catalog's trailhead).
+    place: false,
     pad: SUMMIT.at,
     launch: [SUMMIT.at[0] + 250, SUMMIT.at[1]],
     height: 3,

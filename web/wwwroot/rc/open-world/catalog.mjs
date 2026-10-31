@@ -14,7 +14,7 @@ import {SKY_JUMPS} from './sky-dive.mjs';
 // Gameplay courses and landmark art are fiction; OSM supplies roads and footprints.
 export const BOUNDS = [-3800, -4600, 3600, 4050]; // north and east grown for Spirit Mountain (spirit-mountain.mjs)
 export const LOCATIONS = [
-  ...SKY_JUMPS.map(j => ({
+  ...SKY_JUMPS.filter(j => j.place !== false).map(j => ({
     id: j.id,
     name: j.name,
     short: j.name,

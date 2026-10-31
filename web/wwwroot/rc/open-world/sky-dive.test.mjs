@@ -180,7 +180,9 @@ test('places are always available and saved stats validate and round-trip', () =
     }
   };
   const progress = loadProgress(storage);
-  for (const jump of SKY_JUMPS) {
+  // The summit pad is found by climbing, so it is the one jump not listed in Places.
+  assert.equal(locationById('mountain-jump'), undefined);
+  for (const jump of SKY_JUMPS.filter(j => j.place !== false)) {
     const p = locationById(jump.id);
     assert.equal(p.kind, 'activity');
     assert.equal(p.game, 'sky-dive');
