@@ -488,6 +488,21 @@ transformer in the dark world. Fish outta water."
   animals there have never seen an RC car; they stare, follow and gossip, and the outlaws want what
   you are.
 
+**A bow from the saddle: electric arrows** (owner, 31 Oct): "I wanna be able to shoot a bow and
+arrow while I'm riding on my dinosaur. Electric arrows to stun toy cattle and stuff. Then my dino can
+steal batteries from those toys. And parts." His shorthand: "RDR toy story edition"; ours is an
+original toy western.
+- **Riding, Q looses an electric arrow** ahead of the dinosaur, with full aim help (it curves to the
+  nearest target in front), the way every aim in this game helps a six-year-old.
+- **A hit stuns, never breaks**: the toy fizzes with blue sparks, its key stops turning, and it sits
+  dazed for a few seconds, then winds back up and wanders off. Outlaws, bad toys and toy cattle all
+  stun. Living rules still hold: animals are never hurt and characters never break.
+- **While it's stunned, the dinosaur can nose in and take its batteries and spare parts** (springs,
+  cogs, a wind-up key). The battery box pops open with a "boing"; the loot is the economy's raw
+  stuff, for crafting, upkeep and the store.
+- **Rustling**: taking from the ranch's toy cattle is the outlaws' side of the game (the good-guy /
+  bad-guy choice above); outlaws' own batteries are fair game on either side.
+
 **Portals all over the map** (owner, 31 Oct). The spirit cave is the first crossing, not the only
 one. Once you've been through it, portals around the world wake up, and each links two places
 rather than the same spot in the other time. Example: **a portal in the base town drops you at the
