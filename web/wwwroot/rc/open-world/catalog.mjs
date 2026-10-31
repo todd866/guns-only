@@ -1,6 +1,8 @@
 import {FRONT_DOOR_POS} from './bowling-alley.mjs';
 import {NY} from './under-bridge.mjs';
 import {SCHOOL} from './flying-school.mjs';
+import {CLOUDS} from './clouds.mjs';
+import {CANYON_RUN} from './canyon-run.mjs';
 import {LIVERIES, TRIMS} from '../livery-data.mjs';
 import {plazaWorld, PLAZA_PARK} from './town-plaza.mjs';
 import {playgroundWorld, PLAYGROUND_PARK} from './playground.mjs';
@@ -105,6 +107,7 @@ export const LOCATIONS = [
     kind: 'activity',
     game: 'flying-school'
   },
+  CANYON_RUN.location,
   {
     id: 'wic',
     name: 'WIC PlayPlace',
@@ -753,6 +756,11 @@ export function loadProgress(storage) {
     pattern: LIVERIES.some(l => l.id === v?.pattern) ? v.pattern : 'solid',
     pumpkins: Number.isInteger(v?.pumpkins) && v.pumpkins > 0 ? v.pumpkins : 0,
     boosters: Number.isInteger(v?.boosters) && v.boosters > 0 ? v.boosters : 0,
+    clouds: ids(v?.clouds, CLOUDS),
+    canyonBest:
+      typeof v?.canyonBest === 'number' && Number.isFinite(v.canyonBest) && v.canyonBest > 0
+        ? v.canyonBest
+        : null,
     flyingSchool: Number.isInteger(v?.flyingSchool) && v.flyingSchool > 0 ? v.flyingSchool : 0,
     flyingStars:
       Number.isInteger(v?.flyingStars) && v.flyingStars >= 3 && v.flyingStars <= 9 ? v.flyingStars : 0,

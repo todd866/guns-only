@@ -36,6 +36,7 @@ import {createRetreat, stepRetreat, RETREAT} from './physics/retreat.mjs';
 import {DRIVE_KEYS, drivingInput, flightInput, trickInput} from './driving-input.mjs';
 import {createFlight, toggleFlight, FLIGHT} from './physics/flight.mjs';
 import {SCHOOL} from './open-world/flying-school.mjs';
+import {CLOUDS} from './open-world/clouds.mjs';
 import {applyLivery} from './livery.js';
 import {batchCarParts, unbatchCarParts} from './car-batch.js';
 import {createRobot, stepRobot} from './physics/robot.mjs';
@@ -3382,6 +3383,50 @@ function boosterEvent(e) {
     callout('🚀 The rocket landed!', 3000);
   }
 }
+// Sky Tour uses the same fixed flight segments as Flying School. A map jump or recovery
+// is never a cloud collection or a gate crossing. Reuse the pilot and previous point each tick.
+const skyPrev = [0, 0, 0],
+  skyPilot = {pos: null, prevPos: skyPrev, flightMode: null};
+let skyLastPlacement = null;
+const skyEligible = () => !!openWorld && race.roam && !robot && !skate;
+function skyTourStep(placement, dt) {
+  if (!skyEligible()) return;
+  const moved =
+    s.car.placement !== placement || (skyLastPlacement !== null && s.car.placement !== skyLastPlacement);
+  skyLastPlacement = s.car.placement;
+  if (moved) openWorld.stopCanyon();
+  const clouds = openWorld.cloudStep(
+    s.car.pos,
+    moved ? s.car.pos : skyPrev,
+    !moved && s.flight.mode === 'fly'
+  );
+  if (clouds?.whoosh) audio.cloud();
+  if (clouds?.rising) callout('⤴ Rising air!', 2000);
+  if (clouds?.collectedMask) {
+    for (let i = 0; i < CLOUDS.length; i++)
+      if (clouds.collectedMask & (1 << i)) openWorld.progress.clouds.push(CLOUDS[i].id);
+    openWorld.save();
+    callout(`☁️ Cloud ${openWorld.progress.clouds.length} of ${CLOUDS.length}!`, 2500);
+    audio.coin();
+  }
+  if (moved) return;
+  skyPilot.pos = s.car.pos;
+  skyPilot.flightMode = s.flight.mode;
+  for (const e of openWorld.canyonStep(dt, skyPilot)) {
+    if (e.prepare) callout('🏜️ Canyon Run! [return] fly', 3500);
+    else if (e.start) callout('🏜️ Canyon Run! Fly through the gold gates', 3500);
+    else if (e.done) {
+      openWorld.progress.canyonBest = e.best;
+      openWorld.save();
+      const medal = e.medal === 'gold' ? '🥇 Gold' : e.medal === 'silver' ? '🥈 Silver' : '🥉 Bronze';
+      callout(`🏜️ ${e.time.toFixed(1)}s · ${medal}!`, 5000);
+      audio.finish();
+    } else if (e.gate) {
+      callout(`🏜️ ${e.gate} of ${e.of}`, 1500);
+      audio.gate();
+    }
+  }
+}
 // Flying School is a place in free drive. The rules and ring meshes live with the world;
 // placement, keyboard callouts and the small report card stay with the player here.
 let schoolNear = false,
@@ -4226,7 +4271,7 @@ function enterLocation() {
   }
   const p = openWorld.near(s.car.pos);
   if (!p) return;
-  if (p.game === 'flying-school') return;
+  if (p.game === 'flying-school' || p.game === 'canyon-run') return;
   if (p.game) {
     const tee = openWorld.startActivity(p.game, {mode});
     telemetry.activityStart(p.game);
@@ -4261,6 +4306,8 @@ function statRows() {
     ['✈️', 'Splash ones', num(aceKills)],
     ['🫡', 'Perfect retreats & reveilles', num(pr.retreats)],
     ['🚀', 'Booster landings seen', num(pr.boosters)],
+    ['☁️', 'Clouds', `${pr.clouds?.length ?? 0} of ${CLOUDS.length}`],
+    ['🏜️', 'Canyon Run best', pr.canyonBest ? `${pr.canyonBest.toFixed(1)}s` : '–'],
     ['✈', 'Flying School trips', num(pr.flyingSchool)],
     ['⭐', 'Flying School best', pr.flyingStars ? `${pr.flyingStars}/9` : '–'],
     ['⛳', 'Best golf round', pr.golfRoundBest ? `${pr.golfRoundBest}` : '–'],
@@ -4441,6 +4488,7 @@ function frame(now) {
     if (!race.roam) startCountdown();
   }
   const dt = frameSeconds(now, last);
+  openWorld?.skyTourFrame(paused || ui.panel() ? 0 : dt, skyEligible(), mode);
   telemetry.observeFrame(Math.max(0, now - last), !paused && countdown <= 0 && !document.hidden);
   frameMs.push(Math.max(0, now - last));
   if (frameMs.length > 600) frameMs.shift();
@@ -4490,6 +4538,7 @@ function frame(now) {
       // A winged dinosaur flies with the proximity assist in every mode (no levelling, a late save).
       const fl = {...flightInput(keys), assist: mode === 'kid' || winged(), proximity: winged()};
       fl.burner = boostOn && race.roam && !skate;
+      fl.lift = skyEligible() && s.flight.mode === 'fly' ? openWorld.cloudLift(s.car.pos) : 0;
       {
         const was = burning;
         burning = fl.burner && (!!s.flight.mode || throttleIn > 0);
@@ -4509,6 +4558,10 @@ function frame(now) {
       }
       hotWheelsPre();
       const schoolPrev = openWorld?.school()?.active ? [...s.car.pos] : null;
+      const skyPlacement = s.car.placement;
+      skyPrev[0] = s.car.pos[0];
+      skyPrev[1] = s.car.pos[1];
+      skyPrev[2] = s.car.pos[2];
       stepRace(
         race,
         robot
@@ -4530,6 +4583,7 @@ function frame(now) {
       boardStep(skateInput);
       if (openWorld)
         for (const session of [s, ...race.rivals.map(r => r.session)]) openWorld.step(session.car, 1 / 120);
+      skyTourStep(skyPlacement, 1 / 120);
       if (schoolPrev) schoolStep(schoolPrev, 1 / 120);
       if (openWorld && race.roam) {
         bowlingPrepare(1 / 120);
