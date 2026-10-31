@@ -35,11 +35,9 @@ test('Alley Cat headlines recreation; both races remain public secondary-menu ch
   assert.equal(event.surface, 'gymfloor');
   assert.deepEqual(event.medals, [20, 28, 40]);
   const choices = EVENTS.filter(e => e.location === 'rec' && raceIsAvailable(loadProgress(), e));
-  assert.deepEqual(
-    choices.map(e => e.id),
-    ['alley-cat', 'rink-drift']
-  );
-  const rink = choices[1];
+  // Order-free: Alley Cat sits last in EVENTS (see catalog.mjs), not beside Rink Drift.
+  assert.deepEqual(choices.map(e => e.id).sort(), ['alley-cat', 'rink-drift']);
+  const rink = choices.find(e => e.id === 'rink-drift');
   assert.deepEqual(rink.points[0], [-940, 1260]);
   assert.equal(rink.half, 4);
   assert.deepEqual(rink.medals, [20, 28, 40]);
