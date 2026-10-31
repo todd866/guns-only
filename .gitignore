@@ -98,5 +98,8 @@ tmp/
 analysis/owner-pilot-frames.jsonl
 analysis/owner-pilot-rows.jsonl
 
-# Area 51½ package for its own Vercel project (bin/deploy-rc)
+# Area 51½ package for its own Vercel project (bin/deploy-rc), and the agents' local RC
+# review/dist renders (.rc-build-review, .rc-feel-review, …): hundreds of MB that must not
+# show in git status, which AGENTS.md uses as the collision check.
 .rc-dist/
+.rc-*/
