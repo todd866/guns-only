@@ -4,6 +4,7 @@ import {createWorld} from './world.mjs';
 import {createSession, stepSession} from './session.mjs';
 import {carForward, carYaw} from './car.mjs';
 import {toggleFlight, FLIGHT} from './flight.mjs';
+import {rotate} from './math.mjs';
 
 function field() {
   const world = createWorld();
@@ -184,4 +185,32 @@ test('the parachute comes down fast, and the retros fire at the last moment for 
   assert.ok(y0 / t > 3.5, `came down fast: ${(y0 / t).toFixed(1)} m/s from ${y0.toFixed(0)} m`);
   assert.ok(fired != null && fired < 3, `retros lit low: ${fired?.toFixed(2)} m`);
   assert.ok(last > -1, `soft touchdown: ${last.toFixed(2)} m/s`);
+});
+
+test('a winged mount keeps the bank you put in, hands off (no levelling)', () => {
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 3, {flight: {power: 1, assist: true, proximity: true}});
+  run(s, 0.5, {flight: {roll: 1, assist: true, proximity: true}});
+  const bankOf = () => Math.asin(Math.max(-1, Math.min(1, rotate(s.car.q, [1, 0, 0])[1])));
+  const before = Math.abs(bankOf());
+  run(s, 1.5, {flight: {assist: true, proximity: true}});
+  assert.ok(before > 0.4, `banked ${before.toFixed(2)}`);
+  assert.ok(Math.abs(bankOf()) > before * 0.85, `bank held: ${before.toFixed(2)} → ${Math.abs(bankOf()).toFixed(2)}`);
+});
+
+test('a winged mount diving at the ground is saved late, through its bank, and never hits', () => {
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 4, {flight: {power: 1, pitch: -1, assist: true, proximity: true}}); // climb away
+  let low = Infinity, hit = false, assistedAt = null;
+  run(s, 8, t => {
+    if (s.car.pos[1] < 0.35 && s.flight.mode === 'fly') hit = true;
+    if (s.flight.gcas > 0 && assistedAt === null) assistedAt = s.car.pos[1];
+    low = Math.min(low, s.car.pos[1]);
+    return {flight: {pitch: 1, roll: t < 0.3 ? 1 : 0, assist: true, proximity: true}}; // dive, banked
+  });
+  assert.ok(!hit, 'never touched the ground');
+  assert.ok(assistedAt !== null && assistedAt < 25, `the save started low: ${assistedAt?.toFixed(1)} m`);
+  assert.ok(low < 8, `it let you get close: lowest ${low.toFixed(1)} m`);
 });

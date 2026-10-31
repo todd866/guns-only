@@ -4114,7 +4114,8 @@ function frame(now) {
       const skateInput = skate
         ? {...drive, drift: drive.drift || skateTouchGrab || performance.now() < skateGrabUntil}
         : drive;
-      const fl = {...flightInput(keys), assist: mode === 'kid'};
+      // A winged dinosaur flies with the proximity assist in every mode (no levelling, a late save).
+      const fl = {...flightInput(keys), assist: mode === 'kid' || winged(), proximity: winged()};
       fl.burner = boostOn && race.roam && !skate;
       {
         const was = burning;
