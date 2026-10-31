@@ -717,8 +717,15 @@ export function loadProgress(storage) {
     specimens: ids(v?.specimens, SPECIMENS),
     golfRoundBest: Number.isInteger(v?.golfRoundBest) && v.golfRoundBest > 0 ? v.golfRoundBest : null,
     roundupBest: Number.isInteger(v?.roundupBest) && v.roundupBest > 0 ? v.roundupBest : null,
+    // Version 1 stored one frame (0–10), never a ten-frame record. Even a new zero is a record.
+    bowlingVersion: 2,
     bowlingBest:
-      Number.isInteger(v?.bowlingBest) && v.bowlingBest >= 0 && v.bowlingBest <= 10 ? v.bowlingBest : 0,
+      v?.bowlingVersion === 2 &&
+      Number.isInteger(v?.bowlingBest) &&
+      v.bowlingBest >= 0 &&
+      v.bowlingBest <= 300
+        ? v.bowlingBest
+        : null,
     golfBest: Number.isInteger(v?.golfBest) && v.golfBest > 0 ? v.golfBest : null,
     wins,
     raceWins,
