@@ -31,6 +31,14 @@ export const LEGEND_CARS = Object.freeze({
 export const LEGEND_LADDER = Object.freeze(['starter', 'trail', ['road', 'rally']]);
 export function legendCarParams(tier = 'starter') {
   const t = LEGEND_CARS[tier]; if (!t) throw new RangeError(`unknown Legend car: ${tier}`);
+  return scaledCar(t);
+}
+// The dark world's mount (docs/design/adventure: the past is a toy western where you ride
+// dinosaurs). A toy dinosaur about four times the cowboy, so its body is the car grown 2.4x:
+// big enough not to poke through walls, steady, and a little quicker than the starter car.
+export const DINO_MOUNT = Object.freeze({ name: 'Toy dinosaur', scale: 2.4, topSpeed: 13, driveForce: 22, staticFriction: [1.75, 1.65], kineticFriction: [1.35, 1.28] });
+export const mountParams = () => scaledCar(DINO_MOUNT);
+function scaledCar(t) {
   const { name, scale: k, ...tune } = t, p = clone(BUGGY), m = k * k;
   Object.assign(p, { scale: k, size: p.size.map(v => v * k), wheelRadius: p.wheelRadius * k, wheelWidth: p.wheelWidth * k, restLength: p.restLength * k,
     wheels: p.wheels.map(w => ({ ...w, at: w.at.map(v => v * k) })), hull: p.hull.map(h => ({ ...h, at: h.at.map(v => v * k), r: h.r * k })),

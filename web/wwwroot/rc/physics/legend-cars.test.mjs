@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld } from './world.mjs';
 import { createCar, stepCar } from './car.mjs';
-import { legendCarParams, LEGEND_CARS } from './vehicles.mjs';
+import { legendCarParams, LEGEND_CARS, mountParams } from './vehicles.mjs';
 
 const flat = () => { const w = createWorld(); w.addQuad([-400, 0, -400], [-400, 0, 400], [400, 0, 400], [400, 0, -400], 'asphalt'); return w; };
 const run = (tier, steps, input) => { const w = flat(), p = legendCarParams(tier), c = createCar(p, [0, .3, 0], 0); let top = 0, upright = true;
@@ -30,4 +30,13 @@ test('every tier rides at a sensible height on its scaled springs', () => {
 test('the starter car holds a full-throttle hairpin without spinning out', () => {
   const { upright } = run('starter', 120 * 8, i => ({ throttle: 1, steer: i > 240 ? 1 : 0 }));
   assert.ok(upright, 'stays on its wheels');
+});
+
+test('the dark world\'s dinosaur mount drives upright, rides on its springs and keeps a kid pace', () => {
+  const w = flat(), p = mountParams(), c = createCar(p, [0, .8, 0], 0); let top = 0, upright = true;
+  for (let i = 0; i < 120 * 10; i++) { stepCar(c, { throttle: 1, steer: i > 600 ? .5 : 0 }, w, 1 / 120); top = Math.max(top, Math.hypot(c.vel[0], c.vel[2])); if (1 - 2 * (c.q[0] * c.q[0] + c.q[2] * c.q[2]) < .3) upright = false; }
+  assert.ok(upright, 'stays upright through a full-throttle turn');
+  assert.ok(top > 10 && top < 14, `top ${top.toFixed(1)} m/s`);
+  assert.ok(p.mass * 9.81 / 4 / p.spring < p.restLength * .8, 'sag within travel');
+  assert.ok(p.size[2] > legendCarParams('starter').size[2] * 2.2, 'about twice and a half the car');
 });
