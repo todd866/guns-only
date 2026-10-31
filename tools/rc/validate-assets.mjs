@@ -24,6 +24,10 @@ export function validateDocument(doc,contract,bytes){
  if(positions.RC_Root){for(const [name,x,z] of [['FL',-.29,-.25],['FR',.29,-.25],['RL',-.29,.25],['RR',.29,.25]]){const p=positions['Steer_'+name];assert.ok(p.every((v,i)=>Math.abs(v-[x,-.08,z][i])<.001),`bad wheel pivot ${name}: ${p}`);}}
  return {triangles,primitives,materials:(doc.materials??[]).length,bytes,extent,positions};
 }
+// Authoring sources never belong in the served tree: Blender files, backups and scratch exports
+// were shipped beside the GLBs until 2026-10-31 (audit 3.3). Sources live under assets/rc/.
+export const SOURCE_FILE=/\.(blend\d*|blend@|fbx|obj|psd|kra|xcf|afdesign)$/i;
+export function servedTreeSources(dir){const out=[];const walk=d=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const f=path.join(d,e.name);if(e.isDirectory())walk(f);else if(SOURCE_FILE.test(e.name))out.push(path.relative(dir,f));}};walk(dir);return out.sort();}
 if(process.argv[1]===fileURLToPath(import.meta.url)){
- const dir=process.argv[2];assert.ok(dir,'usage: node tools/rc/validate-assets.mjs ASSET_DIRECTORY');const contract=JSON.parse(fs.readFileSync(new URL('./asset-contract.json',import.meta.url)));const report={};for(const name of Object.keys(contract).filter(key=>contract[key]?.file)){const spec=contract[name],bytes=fs.readFileSync(path.join(dir,spec.file));report[name]=validateDocument(parseGLB(bytes),spec,bytes.length);}console.log(JSON.stringify(report,null,2));
+ const dir=process.argv[2];assert.ok(dir,'usage: node tools/rc/validate-assets.mjs ASSET_DIRECTORY');const sources=servedTreeSources(dir);assert.equal(sources.length,0,`authoring sources in the served tree (move to assets/rc/): ${sources.join(', ')}`);const contract=JSON.parse(fs.readFileSync(new URL('./asset-contract.json',import.meta.url)));const report={};for(const name of Object.keys(contract).filter(key=>contract[key]?.file)){const spec=contract[name],bytes=fs.readFileSync(path.join(dir,spec.file));report[name]=validateDocument(parseGLB(bytes),spec,bytes.length);}console.log(JSON.stringify(report,null,2));
 }

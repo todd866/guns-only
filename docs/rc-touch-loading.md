@@ -14,6 +14,8 @@ The paint and foliage WebPs are delivery derivatives of the original PNGs, prese
 
 A cold Chromium test at 5 Mbps and 100 ms latency measured 70.6 seconds / 40.8 MB before this change and 22.2 seconds / 11.6 MB afterward, to the first grounded drivable frame. This is an emulated network measurement on the development Mac, not a promise for every phone. Browsers without native gzip decompression retain the larger model downloads.
 
+Release packaging uses `node tools/rc/package-rc.mjs --bundle`: esbuild folds the ~200 ES modules and vendored three.js into `rc/main.js` plus 5 split chunks (203 to 7 JS files, 2.8 MB to 1.6 MB), cutting requests to the first drivable frame from 224 to 29 on a local server; release, new-player and mobile gates pass on the bundled site. Omit `--bundle` for the unbundled debug package.
+
 ## Verification
 
 - `node --test web/wwwroot/rc/touch-controls.test.mjs web/wwwroot/rc/quarter-return.test.mjs web/wwwroot/rc/skatepark-transfer.test.mjs`

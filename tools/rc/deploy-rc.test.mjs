@@ -31,6 +31,7 @@ test('release script fails closed for deploy exit, missing URL, parity, and rewr
 });
 test('release script runs both hardware gates on success', async t => {
   const r = await run(t, 'success'); assert.equal(r.code, 0, r.out); assert.equal((r.calls.match(/check-release\.cjs/g) || []).length, 2);
+  assert.match(r.calls, /package-rc\.mjs --bundle --out /, 'releases ship the esbuild bundle');
   assert.match(r.calls, /verify-dist\.mjs .*https:\/\/guns-only-rc.vercel.app/);
 });
 test('preview checks its exact URL and succeeds without a production rewrite request', async t => {

@@ -1,0 +1,106 @@
+{
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+  "software": false,
+  "loaded": {
+    "props": [
+      "bench",
+      "bin",
+      "bollard",
+      "chain-link-fence-panel",
+      "fuel-drum",
+      "hay-bale",
+      "jersey-barrier",
+      "picnic-table",
+      "pumpkin",
+      "sign-post",
+      "street-lamp",
+      "tent",
+      "traffic-cone",
+      "water-tower"
+    ],
+    "items": 39
+  },
+  "example": {
+    "screenshot": "evidence/rc-placements/web-review.png",
+    "counts": {
+      "items": 39,
+      "props": 9,
+      "meshes": 14,
+      "drawCalls": 14,
+      "triangles": 11896,
+      "colliders": 39,
+      "collisionTriangles": 714
+    },
+    "drawCalls": {
+      "total": 16,
+      "withoutPlacements": 2,
+      "placements": 14
+    },
+    "triangles": 11910,
+    "frameMs": {
+      "p50": 16.7,
+      "p95": 18.2,
+      "max": 18.7
+    }
+  },
+  "close": {
+    "screenshot": "evidence/rc-placements/web-close.png",
+    "counts": {
+      "items": 39,
+      "props": 9,
+      "meshes": 14,
+      "drawCalls": 14,
+      "triangles": 11896,
+      "colliders": 39,
+      "collisionTriangles": 714
+    },
+    "drawCalls": {
+      "total": 12,
+      "withoutPlacements": 2,
+      "placements": 10
+    },
+    "triangles": 11206
+  },
+  "kit": {
+    "screenshot": "evidence/rc-placements/web-kit.png",
+    "counts": {
+      "items": 14,
+      "props": 14,
+      "meshes": 24,
+      "drawCalls": 24,
+      "triangles": 4783,
+      "colliders": 0,
+      "collisionTriangles": 0
+    },
+    "drawCalls": {
+      "total": 26,
+      "withoutPlacements": 2,
+      "placements": 24
+    },
+    "triangles": 4797
+  },
+  "stress": {
+    "screenshot": "evidence/rc-placements/web-stress.png",
+    "counts": {
+      "items": 312,
+      "props": 9,
+      "meshes": 14,
+      "drawCalls": 14,
+      "triangles": 95168,
+      "colliders": 312,
+      "collisionTriangles": 5712
+    },
+    "drawCalls": {
+      "total": 16,
+      "withoutPlacements": 2,
+      "placements": 14
+    },
+    "triangles": 95182,
+    "frameMs": {
+      "p50": 16.7,
+      "p95": 18,
+      "max": 18.7
+    }
+  },
+  "errs": []
+}
