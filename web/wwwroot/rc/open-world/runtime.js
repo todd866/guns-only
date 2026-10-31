@@ -55,6 +55,7 @@ import {createJetDecks} from './jet-decks.js';
 import {createTrickOrTreatVisual} from './trick-or-treat.js';
 import {createBooster} from './booster.js';
 import {createFlyingSchool} from './flying-school.js';
+import {createTennisCourt} from './tennis.js';
 import {SCHOOL} from './flying-school.mjs';
 import {buildHighSchool} from './high-school.js';
 import {createHotWheels} from './hot-wheels.js';
@@ -392,6 +393,7 @@ export async function loadOpenWorld(search) {
     trickOrTreat,
     booster,
     flyingSchool,
+    tennis,
     highSchool,
     bowlingAlley,
     hotWheels,
@@ -677,6 +679,7 @@ export async function loadOpenWorld(search) {
       jetDecks = createJetDecks(scene, stream.world);
       booster = createBooster(scene, (x, z) => elevationAt(elevation, x, z));
       flyingSchool = createFlyingSchool(scene, (x, z) => elevationAt(elevation, x, z));
+      tennis = createTennisCourt(scene, (x, z) => elevationAt(elevation, x, z));
       hotWheels = createHotWheels(scene, stream.world);
       // The club in the present, the spring meadow in the past (meadow.js): each one's collision on
       // its own era gate, so neither leaves invisible walls in the other time.
@@ -720,6 +723,11 @@ export async function loadOpenWorld(search) {
     },
     stopSchool: () => flyingSchool?.stop(),
     schoolStep: (dt, pilot) => flyingSchool?.step(dt, pilot) ?? [],
+    tennis: () => tennis?.state,
+    startTennis: mode => tennis?.start(mode),
+    stopTennis: () => tennis?.stop(),
+    tennisSwing: player => tennis?.swing(player) ?? false,
+    tennisStep: (dt, player) => tennis?.step(dt, player) ?? [],
     trickOrTreat: (pos, trick, time, dt) => trickOrTreat?.step(pos, trick, time, dt) ?? [],
     candy: () => trickOrTreat?.state.candy ?? null,
     treatHouses: () => trickOrTreat?.houses ?? [],
@@ -783,6 +791,7 @@ export async function loadOpenWorld(search) {
       highSchool?.update?.(1 / 60);
       hotWheels?.update(1 / 60);
       club?.update(1 / 60, pos, timeGates.era() !== 'past');
+      tennis?.update(playerPos, timeGates.era() !== 'past');
       activities?.update(time, pos);
       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
       bowlingVisual?.update(golf, racing ? selected.id : null);
@@ -905,6 +914,7 @@ export async function loadOpenWorld(search) {
       highSchool?.dispose();
       booster?.dispose();
       flyingSchool?.dispose();
+      tennis?.dispose();
       trickOrTreat?.dispose();
       zoo?.dispose();
       jetDecks?.dispose();
