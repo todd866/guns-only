@@ -27,13 +27,14 @@ cd "$repo_dir"
 
 lane=all
 mode=warn
+mode_given=0
 skip_capture=0
 shots=""
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --lane) lane=${2:-}; shift 2 ;;
-        --mode) mode=${2:-}; shift 2 ;;
+        --mode) mode=${2:-}; mode_given=1; shift 2 ;;
         --shots) shots=${2:-}; shift 2 ;;
         --skip-capture) skip_capture=1; shift ;;
         -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -60,7 +61,7 @@ run_terrain() {
     if [ "$skip_capture" -eq 0 ]; then
         if [ -n "$shots" ]; then
             record terrain capture skipped "--shots given; scoring what is there"
-        elif ! TERRAIN_LOOK_DIR="$dir" node tools/terrain-look/shot.mjs >/dev/null 2>&1; then
+        elif ! TERRAIN_LOOK_CHANNEL="${TERRAIN_LOOK_CHANNEL:-chromium}" TERRAIN_LOOK_DIR="$dir" node tools/terrain-look/shot.mjs >/dev/null 2>&1; then
             record terrain capture NOT_RUN "shot.mjs failed -- try: cd web/smoke && npx playwright install chromium"
             return
         else
@@ -81,7 +82,12 @@ run_terrain() {
         record terrain substance FAIL "$thin view(s) too empty to carry proof"
     fi
 
-    if out=$(node tools/look-gate/compare.mjs --shots "$dir" --corpus soft-world --mode "$mode" 2>&1); then
+    # Without an explicit --mode the terrain lane obeys tools/look-gate/thresholds.json ("mode"),
+    # so the committed calibration decides warn versus fail (it used to be forced to warn here).
+    terrain_mode_args=""
+    [ "$mode_given" -eq 1 ] && terrain_mode_args="--mode $mode"
+    # shellcheck disable=SC2086
+    if out=$(node tools/look-gate/compare.mjs --shots "$dir" --corpus soft-world $terrain_mode_args 2>&1); then
         warns=$(printf '%s\n' "$out" | awk '/warn/ { n += 1 } END { print n + 0 }')
         record terrain look-gate pass "palette + structure within thresholds ($warns warn line(s))"
     else

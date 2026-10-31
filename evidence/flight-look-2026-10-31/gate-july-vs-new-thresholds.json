@@ -1,0 +1,158 @@
+{
+  "mode": "fail",
+  "corpus": "soft-world",
+  "shotsDir": "/Users/iantodd/Projects/guns-only/.worktrees/rc-pipeline/tools/terrain-look/shots/2026-07-29",
+  "missingCorpus": [],
+  "viewport": [
+    1440,
+    900
+  ],
+  "rows": [
+    {
+      "name": "corridor-mid",
+      "file": "corridor-mid.png",
+      "size": 346268,
+      "provenance": {
+        "qualityTier": "desktop",
+        "governorLevel": 0,
+        "softWorld": true,
+        "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+        "diagnostics": {
+          "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+          "qualityTier": "desktop",
+          "sceneryEra": "ukraine-modern",
+          "ambientSceneryEnabled": true,
+          "placementEastM": 0,
+          "placementNorthM": 0,
+          "pages": 16,
+          "residentPages": 4,
+          "residentChunks": 69,
+          "sceneryChunks": 14,
+          "localResidentChunks": 54,
+          "localSceneryChunks": 11,
+          "activePageLoads": 0,
+          "queuedPageLoads": 0,
+          "loadedPageManifests": 4,
+          "networkRequests": 104,
+          "networkBytes": 5437648,
+          "errors": 0,
+          "disposed": false
+        }
+      },
+      "degradedCapture": false,
+      "degradeReasons": [],
+      "refId": "no-mans-land-mood-v1",
+      "paletteDistance": 1.8480410307284068,
+      "structureDistance": 0.7196216653453562,
+      "groundEdgeEnergy": 14.799758000830025,
+      "thresholds": {
+        "maxPaletteDistance": 0.7,
+        "maxStructureDistance": 2.5,
+        "minGroundEdgeEnergy": 9.57
+      },
+      "issues": [
+        "palette 1.848 > 0.7"
+      ],
+      "status": "fail"
+    },
+    {
+      "name": "high-oblique",
+      "file": "high-oblique.png",
+      "size": 221101,
+      "provenance": {
+        "qualityTier": "desktop",
+        "governorLevel": 0,
+        "softWorld": true,
+        "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+        "diagnostics": {
+          "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+          "qualityTier": "desktop",
+          "sceneryEra": "ukraine-modern",
+          "ambientSceneryEnabled": true,
+          "placementEastM": 0,
+          "placementNorthM": 0,
+          "pages": 16,
+          "residentPages": 4,
+          "residentChunks": 73,
+          "sceneryChunks": 3,
+          "localResidentChunks": 53,
+          "localSceneryChunks": 0,
+          "activePageLoads": 0,
+          "queuedPageLoads": 0,
+          "loadedPageManifests": 4,
+          "networkRequests": 131,
+          "networkBytes": 6336262,
+          "errors": 0,
+          "disposed": false
+        }
+      },
+      "degradedCapture": false,
+      "degradeReasons": [],
+      "refId": "no-mans-land-mood-v1",
+      "paletteDistance": 1.450037309580369,
+      "structureDistance": 3.128333935876176,
+      "groundEdgeEnergy": 2.768839193345769,
+      "thresholds": {
+        "maxPaletteDistance": 0.62,
+        "maxStructureDistance": 2.79,
+        "minGroundEdgeEnergy": 7.01
+      },
+      "issues": [
+        "palette 1.450 > 0.62",
+        "structure 3.128 > 2.79",
+        "groundEdgeEnergy 2.77 < 7.01"
+      ],
+      "status": "fail"
+    },
+    {
+      "name": "steppe-low",
+      "file": "steppe-low.png",
+      "size": 281802,
+      "provenance": {
+        "qualityTier": "desktop",
+        "governorLevel": 0,
+        "softWorld": true,
+        "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+        "diagnostics": {
+          "terrainId": "terrain.ukraine.rapier-range.atlas.v1",
+          "qualityTier": "desktop",
+          "sceneryEra": "ukraine-modern",
+          "ambientSceneryEnabled": true,
+          "placementEastM": 0,
+          "placementNorthM": 0,
+          "pages": 16,
+          "residentPages": 4,
+          "residentChunks": 66,
+          "sceneryChunks": 12,
+          "localResidentChunks": 51,
+          "localSceneryChunks": 12,
+          "activePageLoads": 0,
+          "queuedPageLoads": 0,
+          "loadedPageManifests": 4,
+          "networkRequests": 83,
+          "networkBytes": 3948198,
+          "errors": 0,
+          "disposed": false
+        }
+      },
+      "degradedCapture": false,
+      "degradeReasons": [],
+      "refId": "no-mans-land-mood-v1",
+      "paletteDistance": 3.355622398806412,
+      "structureDistance": 0.744912258170219,
+      "groundEdgeEnergy": 12.196028062210543,
+      "thresholds": {
+        "maxPaletteDistance": 0.98,
+        "maxStructureDistance": 1.13,
+        "minGroundEdgeEnergy": 16.98
+      },
+      "issues": [
+        "palette 3.356 > 0.98",
+        "groundEdgeEnergy 12.20 < 16.98"
+      ],
+      "status": "fail"
+    }
+  ],
+  "warnCount": 0,
+  "hardFail": true
+}
