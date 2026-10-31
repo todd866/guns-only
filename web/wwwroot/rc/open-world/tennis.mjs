@@ -16,7 +16,7 @@ const [cx, cz] = TENNIS.center;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const other = who => (who === 'you' ? 'bot' : 'you');
 const sideOf = pos => (pos[2] >= cz ? 'you' : 'bot');
-export const tennisReach = mode => (mode === 'bigKid' ? 0.8 : 1.2);
+export const tennisReach = mode => (mode === 'bigKid' ? 0.8 : 1.35);
 export const onTennisCourt = (pos, margin = 0) =>
   !!pos &&
   Math.abs(pos[0] - cx) <= TENNIS.halfWidth + margin + 1e-7 &&
@@ -83,7 +83,7 @@ function lob(st, from, who, targetX, targetZ) {
     bounces: 0
   };
   st.hits++;
-  if (who === 'you') st.botMiss = st.random() < (st.mode === 'bigKid' ? 1 / 5 : 1 / 3);
+  if (who === 'you') st.botMiss = st.random() < (st.mode === 'bigKid' ? 1 / 5 : 0.42);
 }
 
 export function canHitTennis(st, pos, who = 'you') {
@@ -122,7 +122,7 @@ export function tennisAssist(st, pos, dt) {
     scale = Math.min(
       1,
       Math.max(0, distance - 0.25) / Math.max(distance, 1e-8),
-      (2 * dt) / Math.max(distance, 1e-8)
+      (2.75 * dt) / Math.max(distance, 1e-8)
     );
   return [dx * scale, 0, dz * scale];
 }

@@ -111,8 +111,8 @@ test('both sides win at five points, once, and a restart clears the score', () =
   }
 });
 
-test('release must be close: Kid reach is 1.2m and Big Kid is 0.8m', () => {
-  assert.equal(tennisReach('kid'), 1.2);
+test('release must be close: Kid reach is 1.35m and Big Kid is 0.8m', () => {
+  assert.equal(tennisReach('kid'), 1.35);
   assert.equal(tennisReach('bigKid'), 0.8);
   for (const mode of ['kid', 'bigKid']) {
     const st = game(mode);
@@ -132,7 +132,7 @@ test('Kid walks toward the incoming ball; Big Kid and outgoing balls never auto-
   ball(st, {pos: [x + 3, 0.8, z + 7], vel: [0, -1, 0]});
   const step = tennisAssist(st, player().pos, 0.1);
   assert.ok(step[0] > 0 && step[2] < 0);
-  assert.ok(Math.hypot(...step) <= 0.200001);
+  assert.ok(Math.hypot(...step) <= 0.275001);
   st.mode = 'bigKid';
   assert.deepEqual(tennisAssist(st, player().pos, 0.1), [0, 0, 0]);
   st.mode = 'kid';
@@ -181,9 +181,9 @@ test('scripted rally includes at least six returns using real flight and bot mov
   }
 });
 
-test('bot miss decisions are one in three in Kid and one in five in Big Kid', () => {
+test('bot miss decisions are 42% in Kid and one in five in Big Kid', () => {
   for (const [mode, expected] of [
-    ['kid', 100],
+    ['kid', 126],
     ['bigKid', 60]
   ]) {
     let misses = 0;
