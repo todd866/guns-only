@@ -462,6 +462,8 @@ export function buildLandmarks(scene, world, progress = loadProgress(), roads = 
   // Event rings have separate pulse materials. Labels stay in world space; proximity UI has
   // the unambiguous action and keyboard shortcut.
   for (const p of LOCATIONS) {
+    // The canyon's gold flight gates are its marker, at the actual valley height.
+    if (p.game === 'canyon-run') continue;
     const allowed = canEnter(progress, p),
       g = new T.Group();
     g.position.set(...p.pos);
