@@ -1043,8 +1043,8 @@
       ],
       "path": "heroes/landmarks.glb",
       "provenance": "heroes/provenance.json",
-      "sha256": "437c3708bfff42469f0e4bcb4c91a587939fc334a5a6fe588a7e8af075faa858",
-      "sizeBytes": 6309948
+      "sha256": "636baa51f8071e9990d70cade81a9af61531d8d900877cde233b306fff9e3de6",
+      "sizeBytes": 8751260
     },
     {
       "derivedFrom": "heroes/landmarks.glb",
@@ -1059,8 +1059,8 @@
       "locked": false,
       "path": "heroes/landmarks.glb.gz",
       "provenance": "heroes/provenance.json",
-      "sha256": "9068bdb15c95761b0df688c9d8edcd3eb81ca76a1c19600416ddda1a858fd7fd",
-      "sizeBytes": 881821
+      "sha256": "c396127efa5446cb2b263454c2f60ca6e3a238ae36ef8997c59978876163b8d3",
+      "sizeBytes": 1421326
     },
     {
       "budgets": {
