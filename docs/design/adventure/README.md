@@ -88,9 +88,9 @@ ways."
   replaced).
 - **The line is soul, not machinery.** You are an RC car, and the steam tractor someone named and
   looks after is a good toy. What makes a toy bad is being made without anyone inside it.
-- **"The old ways" is the land's, not a people's.** Per the setting rules below, no Native imagery,
-  stories or figures stand in for nature or the past; the old ways are the desert's creatures,
-  water and weather, and the homesteaders' hand-made life.
+- **"The old ways" are the land's and its people's.** The desert's creatures, water and weather,
+  the Paiute families who have always lived here, and the homesteaders' hand-made life. Paiute
+  toys are people with their own lives (farming, trading, building), never a stand-in for nature.
 
 **The theme under the plot** (owner, 31 Oct): "given the setting, 1900s SW USA, essentially the bad
 toys represent the march of industrial civilization, and the good toys represent nature and the old
@@ -105,9 +105,9 @@ ways."
 - **The line is soul, not machinery.** The hero is a transforming toy (sometimes an RC car,
   sometimes a robot, a skateboarder, a cowboy on a dinosaur), and the steam tractor someone named
   and looks after is a good toy. What makes a toy bad is being made without anyone inside it.
-- **"The old ways" is the land's, not a people's.** Per the setting rules below, no Native imagery,
-  stories or figures stand in for nature or the past; the old ways are the desert's creatures,
-  water and weather, and the homesteaders' hand-made life.
+- **"The old ways" are the land's and its people's.** The desert's creatures, water and weather,
+  the Paiute families who have always lived here, and the homesteaders' hand-made life. Paiute
+  toys are people with their own lives (farming, trading, building), never a stand-in for nature.
 
 **The rule: a 6-year-old never sees it.** No Homer names and no explaining. It is a spine for
 choosing what to build: when a new dungeon, boss or gift is needed, pick the Odyssey beat it can
@@ -220,12 +220,18 @@ English, so Spanish belongs in it naturally, and he picks it up by playing, neve
   water tower, 🐄 VACAS by the corral, 🐔 GALLINAS at the chicken yard. Typing (Y) "hola", "gracias",
   "adiós" or "sí" gets a Spanish answer, and "hi" in the past gets "¡Hola! Howdy!".
 - **Small and repeated**: a handful of words that come back often, over many sessions, the way
-  "Rexy is here!" does. Spanish words are checked by a fluent speaker before they ship.
+  "Rexy is here!" does.
+  We write the Spanish ourselves (owner, 31 Oct: "you know spanish"); no outside check.
 
-**Native American content** follows the setting rules above: the land is Southern Paiute land, and
-real Paiute language, stories or art come in only through the partnership those rules describe (the
-Las Vegas Paiute Tribe and the Moapa Band, a paid Southern Paiute adviser), never invented or
-borrowed imagery.
+**Native American content: we make it ourselves** (owner, 31 Oct: "the native americans would rather
+representation by LLM than not at all, stop being pedantic"). The land is Southern Paiute (Nuwuvi)
+land, so Paiute toys live in the dark world as good toys and neighbours with their own lives:
+willow-brush houses (*kahn*), coiled willow baskets, agave roasting pits, piñon gathering in the
+hills, the rabbit-net drive, gardens of corn and squash by the springs and the Moapa river. Use what
+`research-setting.md` found, real names and words where they're well attested, and the same plain
+six-year-old voice as everyone else. Two lines stay because they're accuracy, not caution: no
+pan-Indian props (tipis, feather headdresses, dreamcatchers, totem poles: none of them Paiute), and
+Native toys are never enemies or the outlaws' victims-as-props.
 
 ## Typing short messages (owner, 31 Oct)
 
@@ -757,8 +763,8 @@ partnership) and the tribes' own words:
   headdresses, dreamcatchers).
 - **An optional respectful acknowledgement** on the title or credits screen ("This is Nuwuvi land:
   the Southern Paiute have lived here since time immemorial"), linking to the tribes' own sites.
-- **If we ever want real Paiute culture in the game, we do it as a partnership:** contact the Las Vegas
-  Paiute Tribe and the Moapa Band, and pay a Southern Paiute adviser or artist.
+- **Paiute culture in the game: we write it ourselves** (owner, 31 Oct, superseding the
+  partnership-first rule): see "A first taste of Spanish" above for what goes in.
 
 ## The first slice to build
 
