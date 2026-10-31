@@ -247,6 +247,19 @@ then."
 - **Blocky and buildable** comes next: the dug blocks are the start of a block set the cowboy can
   place to build a little hut, a bridge or a ramp.
 
+**Good guy or bad guy** (owner, 31 Oct): "you can be a good guy or a bad guy in the upside down,
+except that it's all just toys and aliens and spirits and stuff." The dark world lets you pick a
+side, the way a western does, with nothing real at stake:
+- **The sheriff's side** (built: stomp the outlaw gang, free the Lake Town, the Sheriff star).
+- **The outlaws' side**: the gang's boss asks you to ride with them (a typed yes or no). Say yes and
+  they're your gang: mischief jobs instead of fights (rob the toy bank of chocolate coins, rustle the
+  plastic cattle, hold up the clockwork train), the sheriff's posse of good toys chases you, and the
+  rewards are outlaw ones (a bandana livery, a black hat for the cowboy).
+- **It's only ever toys.** Bad means siding with the bad aliens' taken-over toys, never hurting
+  people (there are none to hurt) and never the land's creatures and spirits: the tortoise elder and
+  the spring help whoever is kind to them, either side. No real crimes beyond toy-box mischief, and
+  no permanent lock-out: switch sides on a later visit, and both endings get you home.
+
 **Portals all over the map** (owner, 31 Oct). The spirit cave is the first crossing, not the only
 one. Once you've been through it, portals around the world wake up, and each links two places
 rather than the same spot in the other time. Example: **a portal in the base town drops you at the
