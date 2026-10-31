@@ -90,6 +90,7 @@ export async function loadOpenWorld(search){const q=new URLSearchParams(search),
   // The Lake Town's outlaw gang (outlaws.mjs): o = { pos, riding, speed, robot, input, mode, dt }.
   outlaws(o){const groundAt=(x,z)=>elevationAt(elevation,x,z),ev=stepGang(gang,{...o,era:timeGates.era(),groundAt});if(ev.some(e=>e.cleared)&&!progress.lakeTownFreed){progress.lakeTownFreed=true;saveProgress(storage,progress);for(const e of ev)if(e.cleared)e.reward='sheriff';}for(const e of ev)if(e.home)e.home[1]=groundAt(e.home[0],e.home[2])+.05;outlawClock+=o.dt;const past=timeGates.era()==='past';if(outlawView){outlawView.root.visible=past;if(past)outlawView.sync(gang.enemies,outlawClock,o.dt,groundAt);}return ev;},
   gang:()=>gang,
+  groundAt:(x,z)=>elevationAt(elevation,x,z),
   // Dig down to the light world (dig.mjs): o = { pos, holding, climb, dt, time }. Breaking the portal
   // layer flips to the present; the through event carries where to come out of the ground.
   dig(o){const ground=elevationAt(elevation,o.pos[0],o.pos[2]),ev=stepDig(dig,{...o,era:timeGates.era(),ground});

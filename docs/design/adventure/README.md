@@ -1,5 +1,12 @@
 # Saucer Springs: the adventure layer
 
+**The pitch** (owner, 31 Oct): "essentially the game is dinosaur-western-minecraft vs
+near-future-scifi drone-game with aliens." Above, the light world is near-future sci-fi on the
+base: the transforming toy, toy jets and drones, the captured good aliens, security bots (the siege
+half). Below, the dark world is a dinosaur western with steam farms, outlaws and diggable blocky
+ground (the long-way-home half). New light-world content leans toward drones and sci-fi rather than
+more base realism.
+
 Design draft, 30 Oct 2026. The primary reference is **A Link to the Past (SNES)** and **Ocarina of
 Time (N64)**. Everything else is flavour on that structure: Toy Story, Stranger Things and IT's
 small-town uncanny, the desert south-west, and an original fantasy spirit world. The player is the
