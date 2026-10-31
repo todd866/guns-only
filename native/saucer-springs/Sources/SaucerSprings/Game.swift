@@ -47,7 +47,7 @@ final class GameWindow: NSObject, WKUIDelegate {
     window = NSWindow(contentRect: frame, styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
     super.init()
     web.uiDelegate = self
-    window.title = "Saucer Springs"; window.titlebarAppearsTransparent = true; window.contentView = web
+    window.title = "RC Odyssey"; window.titlebarAppearsTransparent = true; window.contentView = web
     web.load(URLRequest(url: URL(string: offscreen ? "rcgame://local/rc/index.html?audioQa=silent" : "rcgame://local/rc/index.html")!))
     if offscreen {
       // QA: a real window far off-screen, never activated, so nothing pops up or takes focus.
