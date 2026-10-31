@@ -323,8 +323,8 @@
       ],
       "path": "characters/dino.glb",
       "provenance": "characters/dino.provenance.json",
-      "sha256": "87fabe490853834c47b34c6e417b2eae8ccb5e6863286e01ed50689704bceff1",
-      "sizeBytes": 355044
+      "sha256": "663d8a292307297c00c8622def70c2106f0f9efe9a84755b2650f68453564788",
+      "sizeBytes": 407764
     },
     {
       "derivedFrom": "characters/dino.glb",
@@ -339,8 +339,8 @@
       "locked": false,
       "path": "characters/dino.glb.gz",
       "provenance": "characters/dino.provenance.json",
-      "sha256": "0222788c330bab393e7384459e8967b928b8fa9945d83f1950b934c210633378",
-      "sizeBytes": 191867
+      "sha256": "13a919de7f3e5f3c40786610f8850a56b162a3800a13b9399a8bc7176a9f1d60",
+      "sizeBytes": 220853
     },
     {
       "id": "districts-bx-glb",

@@ -32,7 +32,7 @@ HEAVY_SLOT_LABEL=rc-dino heavy-slot -- /Applications/Blender.app/Contents/MacOS/
 
 The soft body is a union of ellipsoids and sphere-chain tubes. It is voxel-remeshed (6.5 mm) into one manifold skin of about 74k triangles, then decimated to about 6k. Each face takes its colour from the nearest source primitive. Blender's automatic (heat) weights skin it; on this mesh they weighted every vertex, and the script reports any vertex it had to weight by nearest bone segment (0 this time). Then influences are limited to 4 and normalised. Hard parts are rigid: 100% to one bone, so they never smear. These are the googly eyes and pupils, the jaw and tongue, the buck teeth, the claws and the western saddle (seat, cantle, horn, flaps, straps and stirrups). Everything is joined into one skinned mesh, with one primitive per material.
 
-Clips are authored analytically in Python and keyed on every frame at 30 fps. The gaits are sine-based. A sagittal two-bone leg IK, with the knee forward, keeps stance feet planted while the pelvis bobs, rolls and pitches.
+Clips are authored analytically in Python and keyed on every frame at 60 fps. At 30 fps, slerp between keys sank the gallop's stance foot 2 cm, because the foot sweeps 13 cm per 1/30 s; at 60 fps the sink is under 7 mm. The gaits are sine-based. A sagittal two-bone leg IK, with the knee forward, keeps stance feet planted while the pelvis bobs, rolls and pitches.
 
 ## Rig and clip contract
 
@@ -50,9 +50,10 @@ Axes and units: metres at game scale. Blender is +Z up and +Y forward; the glTF 
 | `idle` | 2.0 s | yes | 0 | breathing, tail sway, head looks around, arm twiddle |
 | `walk` | 1.0 s | yes | 0.30 m/s | 0.6 duty factor (double support), hip roll/yaw, tail counter-sway |
 | `run` | 0.6 s | yes | 0.83 m/s | bounding: 0.4 duty with two flight phases, body pitched forward, mouth open, arms flailing |
-| `jump` | 0.8 s | **no** | 0 | crouch (f0–5), launch (f7), apex with mouth wide and arms up (f12), land and absorb (f18–20), recover |
+| `jump` | 0.8 s | **no** | 0 | crouch (0–0.17 s), launch (0.23 s), apex with mouth wide and arms up (0.4 s), land and absorb (0.6–0.67 s), recover |
+| `gallop` | 0.5 s | yes | 4.0 m/s (measured 3.94) | mount speeds: exaggerated bound with both feet down together for 23% of the loop (L leads R by 0.04 s) and a 76% flight phase; pelvis rises 0.12 m, head bobs, tail streams level behind, arms tucked back, mouth open |
 
-Clips play in place; nothing is baked as root motion. The game moves `root` and scales `timeScale` to match its speed. Glide speed ÷ the clip's ground speed is the right `timeScale`. The jump lifts the pelvis by up to 0.22 m inside the clip; a physical jump arc is the caller's choice. glTF has no loop flag, so loop flags live in `CHARACTERS.dino.clips` in `characters.js` and in the provenance stats.
+Clips play in place; nothing is baked as root motion. Ground speeds are at 1.0× export scale; multiply them by the spawn scale (the dark-world mount spawns at 1.5×, so the gallop is foot-true at 6 m/s and `timeScale` 2 covers 12 m/s). `characters.test.mjs` measures the stance-foot speed from the exported GLB. The walk measures 0.33 m/s against a nominal 0.30, because the leg IK ignores hip yaw. The game moves `root` and scales `timeScale` to match its speed. Glide speed ÷ the clip's ground speed is the right `timeScale`. The jump lifts the pelvis by up to 0.22 m inside the clip; a physical jump arc is the caller's choice. glTF has no loop flag, so loop flags live in `CHARACTERS.dino.clips` in `characters.js` and in the provenance stats.
 
 ## Runtime API (`web/wwwroot/rc/open-world/characters.js`)
 
@@ -67,10 +68,10 @@ Clips play in place; nothing is baked as root motion. The game moves `root` and 
 |---|---|---|
 | Triangles | ≤ 10,000 | 9,152 |
 | Materials / primitives | ≤ 6 / ≤ 6 | 5 / 5 (green, cream, orange, saddle brown, eye black; roughness 0.42–0.55) |
-| Bytes | ≤ 600,000 | 355,044 (gz 191,867) |
+| Bytes | ≤ 600,000 | 407,764 (gz 220,853) with five clips at 60 fps keys |
 | Extent (x, y, z) | ≤ 0.6 × 0.9 × 1.5 m | 0.39 × 0.65 × 1.31 m (3.1 buggy lengths; saddle at 2.2× the ~0.2 m car roof) |
 
-The in-engine check is `tools/rc/check-character.cjs`. It serves `web/wwwroot`, opens `rc/character-review.html` with the real three r160 build, `characters.js`, the main.js renderer constants and the open-world `LIGHTING.outdoor` preset. It plays each clip for 1.5 s and screenshots it to `evidence/rc-characters/web-*.png`, then measures 300 rAF frames during `run`. It refuses software GL. On 31 Oct 2026 it ran on the worker (`remote-run`, ANGLE Metal on an Apple M2) at 8 draw calls for the whole review scene. That scene has 5 dino primitives, the ground and 2 proxy boxes. rAF was p50 16.7 ms, p95 18.4 ms and max 18.7 ms, which is vsync-bound, so the dinosaur's cost is not separable at this scale. Receipt: `evidence/rc-characters/web-check.json`. The worker's cached Playwright has only Chromium 1193, so pass `CHROMIUM_PATH=…/chromium-1193/chrome-mac/Chromium.app/Contents/MacOS/Chromium`.
+The in-engine check is `tools/rc/check-character.cjs`. It serves `web/wwwroot`, opens `rc/character-review.html` with the real three r160 build, `characters.js`, the main.js renderer constants and the open-world `LIGHTING.outdoor` preset. It plays each clip for 1.5 s (`node tools/rc/check-character.cjs DIR gallop` runs a subset) and screenshots it to `evidence/rc-characters/web-*.png`, then measures 300 rAF frames during `run`. It refuses software GL. On 31 Oct 2026 it ran on the worker (`remote-run`, ANGLE Metal on an Apple M2) at 8 draw calls for the whole review scene. That scene has 5 dino primitives, the ground and 2 proxy boxes. rAF was p50 16.7 ms, p95 18.4 ms and max 18.7 ms, which is vsync-bound, so the dinosaur's cost is not separable at this scale. Receipt: `evidence/rc-characters/web-check.json`. The worker's cached Playwright has only Chromium 1193, so pass `CHROMIUM_PATH=…/chromium-1193/chrome-mac/Chromium.app/Contents/MacOS/Chromium`.
 
 ## Known limits
 
@@ -80,7 +81,7 @@ The in-engine check is `tools/rc/check-character.cjs`. It serves `web/wwwroot`, 
 
 ## Next step: mount mode
 
-1. **Rider attach.** Parent the player's car or robot to `dino.saddle()`, base on the seat, facing −Z. Run the car physics with the dinosaur as the body: input drives the root's yaw and speed. Pick `idle` below 0.05 m/s, `walk` below 0.5 m/s and `run` above that, with `timeScale = speed / groundSpeedMps`. The jump button calls `play('jump', {then: <gait>})`.
+1. **Rider attach.** Parent the player's car or robot to `dino.saddle()`, base on the seat, facing −Z. Run the car physics with the dinosaur as the body: input drives the root's yaw and speed. The dark-world mount now picks `idle`, `walk` and `run`, then `gallop` for high speed, with `timeScale = speed / groundSpeedMps`. The jump button calls `play('jump', {then: <gait>})`.
 2. **Gait drives the camera.** Read the `Saddle` world height each frame and feed a damped fraction of it into the chase camera. This gives the bounding bob in `run` and the lurch on jump landings without inventing a second animation.
 3. **AI dinosaurs** reuse the same template and clips (`spawnCharacter` per herd member; geometry is shared, so instancing can come later). Stagger clip time so a herd doesn't march in lockstep.
 4. **The next creature** copies `character_dino.py` (primitives → remesh → heat weights → rigid parts → analytic clips). It keeps the clip names and gets its own `CHARACTERS` entry and contract entry.
