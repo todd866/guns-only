@@ -337,6 +337,15 @@ pterosaur kite. In the slice the dinosaur still uses the car's physics underneat
   present, are open in the past.
 - **A steam train** runs the valley line where the present-day train bridge stands.
 
+**Two separate worlds, the same playable space** (owner, 31 Oct): "light world and dark world should
+both have the same playable spaces. If that extends past the base, no problem, just make a bigger
+world." And: "dark and light worlds *are* separate." So the dark world is its own world, not the
+light world with things hidden and swapped: you are in one or the other, crossing by the portals
+(time gates, digging down). It has the same extent and lie of the land, so wherever you can drive in
+one you can drive in the other, and the twins table below says what stands at each place in each
+world. Wherever the world grows, both grow. (The slice held the past only round the mountain and
+valley and faded you home outside it, dark-world.mjs pastHolds; that limit goes.)
+
 **Why people are here, then and now** (owner, 31 Oct: "certain places attract people... we'll
 need to think about this stuff, always"). The rule: every place in the present exists for a reason
 the land gave it, and the past shows that reason raw. In a desert valley the reason is nearly always
