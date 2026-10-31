@@ -2,7 +2,7 @@
 
 Updated: 2026-10-26.
 Production: Build 402, revision `55285d61445ae81b8ed99d2531a508332c87e860` (main flight site).
-RC live (guns-only.com/rc): revision `be69f74d` from branch main, deployed 2026-10-31T06:27Z as https://guns-only-eejlg1dqv-ian-todds-projects.vercel.app (Build 421: RC Odyssey; verify-dist 460/460 on both hosts after propagation; live smoke, hardware release gate and phone journey passed).
+RC live (guns-only.com/rc): revision `ba3a7d577f7380a6203f6b1f7f820e0c817ef068` from branch main, deployed 2026-10-31T14:21Z as https://guns-only-e66b2244g-ian-todds-projects.vercel.app. (Build 431: bowling lane switch mid-game; verify-dist, live smoke, hardware release gate and phone journey passed. Earlier today: Builds 428 `13ad95b4`, 429 `6a1e467e`, 430 `63512bfd`, all with the same live gates green.)
 Next candidate: Build 432 — not deployed. On top of Build 431: a Paiute family camp on the east valley floor in the past, with its own place, a fire you can sit at, and camp loot in the dex.
 Shipped 2026-10-22: Build 394 — Area 51½: HD look, toy jet shells, Furball (weather-balloon lives, nose art), toy missiles with 3-packs and Winchester, munitions trailer, Escape menu and mute; the picker hides Rapier Intercept, Top Gun and Fire Boss (deep links kept).
 Shipped 2026-10-22: Build 390 — Area 51½: free drive by default with a RACE ring (Forza Horizon style), a Forza-style driving line, Re-Volt skill shortcuts on every track (harder, faster, fall off onto the slow road), a third track (Little Nellie Elementary: slippery gym, cafeteria tables, the playground slide), challenge coins, aggressor callsigns, real CC0/CC-BY RC recordings, 3-2-1-GO, inflatable arches, car-following shadows, dust and skid marks.
