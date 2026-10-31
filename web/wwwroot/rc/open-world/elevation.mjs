@@ -1,18 +1,16 @@
 // Same diagonal and interpolation for the rendered floor and wheel collision.
 import {mountainHeight, MOUNTAIN_BOUNDS} from './spirit-mountain.mjs';
+import {canyonHeight, CANYON} from './canyon.mjs';
 const smoothstep = t => t * t * (3 - 2 * t);
-// Spirit Mountain is added on top of the playable terrain, inside the grid or beyond it.
+// Shared geography in both eras: Spirit Mountain rises above the grid; the canyon cuts into it.
 export function elevationAt(data, x, z, site = null) {
   if (!data) return 0;
-  return gridAt(data, x, z, site) + mountainHeight(x, z);
+  return gridAt(data, x, z, site) + mountainHeight(x, z) + canyonHeight(x, z);
 }
-// Mountain tiles are sampled every 4 m so the road's shelf and hairpins are crisp; 16 m elsewhere.
+// Mountain and canyon tiles use 4 m samples for shelves, hairpins and cliffs; 16 m elsewhere.
 // The finer grid lies exactly on the coarse one's triangles, so the seams between them never crack.
 export const terrainStep = b =>
-  b[0] < MOUNTAIN_BOUNDS[2] &&
-  b[2] > MOUNTAIN_BOUNDS[0] &&
-  b[1] < MOUNTAIN_BOUNDS[3] &&
-  b[3] > MOUNTAIN_BOUNDS[1]
+  [MOUNTAIN_BOUNDS, CANYON.bounds].some(a => b[0] <= a[2] && b[2] >= a[0] && b[1] <= a[3] && b[3] >= a[1])
     ? 4
     : 16;
 function gridAt(data, x, z, site) {
