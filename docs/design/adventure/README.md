@@ -356,6 +356,11 @@ dark world, but you should be allowed to try." And: "we need a damage model even
   shredding on rock, low suspension bottoming out on a dirt track, a hard landing bending an arm),
   and the car shows it and drives like it (a wobble, a pull to one side, a lost wheel), limping, not
   dying, then fixed in the Garage. Kid mode is gentler, never off.
+- The point is the trade-off, not punishment (owner: "if you break your car you can just load up
+  another one, but it means that driving a really big fast powerful car has consequences, meanwhile
+  a small tough rally car or monster truck can do basically anything"). A broken car costs a trip to
+  the Garage, nothing more. Fast street cars rule the tarmac and suffer off it; the rally car and
+  the monster truck are slower but go anywhere. Choosing the car for the place becomes a decision.
 
 **The underground is Minecraft** (owner, 31 Oct): "we want the underground to be like minecraft,
 with stuff you can dig up, crafting, and these portals that randomly appear. The only difference tho
