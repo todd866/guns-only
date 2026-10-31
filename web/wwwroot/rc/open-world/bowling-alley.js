@@ -1,7 +1,17 @@
 import * as T from '../../vendor/three.module.js';
 import {createSurfaceMaps} from './materials.js';
 import {scoreFrames, frameMarks} from './bowling.mjs';
-import {ALLEY_FLOOR_Y, BOWLING_ALLEY, COLLISION_WALLS, DOORS, LANES, insideAlley} from './bowling-alley.mjs';
+import {
+  ALLEY_FLOOR_Y,
+  BOWLING_ALLEY,
+  COLLISION_WALLS,
+  DOORS,
+  LANES,
+  insideAlley,
+  PINSETTER_Z,
+  BALL_RETURN_Z,
+  SNACK_COUNTER
+} from './bowling-alley.mjs';
 
 const WALL_HEIGHT = BOWLING_ALLEY.height;
 
@@ -107,12 +117,12 @@ export function buildBowlingAlley(scene, world) {
     materials.push(m.material);
     return m;
   };
-  const {minX, maxZ} = BOWLING_ALLEY.bounds,
+  const {maxZ} = BOWLING_ALLEY.bounds,
     outline = BOWLING_ALLEY.outline,
     front = DOORS[0],
     side = DOORS[1],
     firstLane = LANES[0],
-    returnZ = firstLane.startZ + 1.1;
+    returnZ = BALL_RETURN_Z;
   const face = (a, b, c, d, material, name, parent = root) => {
     const g = new T.BufferGeometry(),
       points = [a, b, c, a, c, d];
@@ -212,7 +222,8 @@ export function buildBowlingAlley(scene, world) {
         trimMat,
         `LaneMark${lane.id}-${z}`
       );
-    box(lane.x, 0.4, lane.endZ - 0.8, lane.width + 0.2, 0.7, 0.22, wallMat, `Pinsetter${lane.id}`);
+    // RC-height openings beneath the outer panels lead into the corridor.
+    box(lane.x, 0.75, PINSETTER_Z, 1.55, 1.7, 0.22, wallMat, `Pinsetter${lane.id}`, true);
     const screen = sign(
       `Lane ${lane.id}`,
       lane.x,
@@ -241,6 +252,10 @@ export function buildBowlingAlley(scene, world) {
       bumpers.push(bumper);
     }
   }
+  const laneMidX = (firstLane.x + LANES.at(-1).x) / 2;
+  box(laneMidX, ALLEY_FLOOR_Y, PINSETTER_Z, 6.2, 0.71, 0.22, wallMat, 'PinsetterWall', true);
+  box(laneMidX, ALLEY_FLOOR_Y, PINSETTER_Z - 5.5, 11.75, 2.4, 0.22, wallMat, 'MaintenanceWall', true);
+  box(laneMidX, 2.5, PINSETTER_Z - 3.5, 7.75, 0.04, 0.08, warmMat, 'MaintenanceLight');
   for (let i = 0; i < LANES.length - 1; i++) {
     const x = (LANES[i].x + LANES[i + 1].x) / 2,
       hump = mesh(new T.SphereGeometry(0.22, 12, 8), gutterMat, `BallReturn${i + 1}`, [
@@ -310,8 +325,8 @@ export function buildBowlingAlley(scene, world) {
       warmMat,
       `CeilingStrip${x}`
     );
-  const snackX = minX + 3,
-    snackZ = firstLane.startZ - 3,
+  const snackX = SNACK_COUNTER.x,
+    snackZ = SNACK_COUNTER.z,
     shoeX = side.center[0] - 2.5,
     shoeZ = firstLane.startZ - 1;
   box(snackX, 0.12, snackZ, 1.0, 0.8, 0.5, trimMat, 'SnackCounter', true);

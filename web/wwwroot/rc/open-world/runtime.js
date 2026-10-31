@@ -43,6 +43,8 @@ import {createTileRenderer} from './render.js';
 import {createMountainView, createFarGround} from './spirit-mountain.js';
 import {createCanyonView, canyonFarGround} from './canyon.js';
 import {createDarkWorld} from './dark-world.js';
+import {createFlock, stepFlock, YARD} from './chickens.mjs';
+import {createChickens} from './chickens.js';
 import {createBadToys} from './bad-toys.js';
 import {createGang, stepGang} from './outlaws.mjs';
 import {createDig, stepDig, digFloor} from './dig.mjs';
@@ -60,6 +62,8 @@ import {buildHighSchool} from './high-school.js';
 import {createHotWheels} from './hot-wheels.js';
 import {createCountryClub} from './country-club.js';
 import {createMeadow} from './meadow.js';
+import {createSkyDiveVisual} from './sky-dive.js';
+import {createSkyDive, skyJumpNear, startSkyDive, stepSkyDive, recordSkyDive} from './sky-dive.mjs';
 import {
   LOCATIONS,
   EVENTS,
@@ -196,7 +200,10 @@ export async function loadOpenWorld(search) {
   });
   let mountainView = null,
     canyonView = null,
-    farGround = null;
+    farGround = null,
+    skyDiveVisual = null;
+  const skyDive = createSkyDive(),
+    skyHeight = (x, z) => elevationAt(elevation, x, z);
   const schoolyard = prepareSchoolyard(stream.world, residentialTerrain),
     residentialPark = prepareResidentialPark(stream.world, residentialData, {terrain: residentialTerrain}),
     residentialYards = prepareResidentialYards(stream.world, residentialData, {terrain: residentialTerrain});
@@ -325,6 +332,8 @@ export async function loadOpenWorld(search) {
   course.outOfBounds = pos => (pos[0] > 9000 && pos[1] < -3) || !!eventBounds?.(pos);
   course.coins = LOCATIONS.map(p => ({name: `WORLD_${p.id}`, x: p.pos[0] + 4, y: 0.15, z: p.pos[2] + 2}));
   course.secrets = SPECIMENS;
+  let racing = !locked && (selected.battle || ['race', 'furball'].includes(q.get('mode')));
+  const canRace = () => golf?.kind !== 'bowling' || golf.done;
   let golf = null,
     golfVisual = null,
     bowlingVisual = null;
@@ -335,8 +344,10 @@ export async function loadOpenWorld(search) {
     gateBusy = false;
   let darkClock = null,
     outlawView = null,
+    chickenView = null,
     outlawClock = 0;
-  const gang = createGang(),
+  const flock = createFlock(),
+    gang = createGang(),
     dig = createDig();
   let digView = null,
     farm = null,
@@ -449,6 +460,19 @@ export async function loadOpenWorld(search) {
       return ev;
     },
     gang: () => gang,
+    // The steam farm's chickens (chickens.mjs): o = { pos, riding, dt }; a ridden dinosaur scatters them.
+    chickens(o) {
+      const past = timeGates.era() === 'past',
+        near = past && Math.hypot(o.pos[0] - YARD.centre[0], o.pos[2] - YARD.centre[1]) < 300;
+      if (!near) {
+        chickenView?.update(flock, o.dt, false);
+        return [];
+      }
+      const ev = stepFlock(flock, o.dt, o.riding ? [o.pos[0], o.pos[2]] : null);
+      chickenView?.update(flock, o.dt, true, (x, z) => elevationAt(elevation, x, z));
+      return ev;
+    },
+    flock: () => flock,
     groundAt: (x, z) => elevationAt(elevation, x, z),
     // Dig down to the light world (dig.mjs): o = { pos, holding, climb, dt, time }. Breaking the portal
     // layer flips to the present; the through event carries where to come out of the ground.
@@ -507,6 +531,8 @@ export async function loadOpenWorld(search) {
       activities?.step(car, dt);
     },
     traffic(race) {
+      racing = !race.roam;
+      if (racing) golf = null;
       landmarks?.setRacing(!race.roam);
       if (
         !race.roam ||
@@ -527,6 +553,12 @@ export async function loadOpenWorld(search) {
     at,
     search,
     activity: () => golf,
+    canRace,
+    setRacing(value) {
+      if (value && !canRace()) return false;
+      racing = value;
+      return true;
+    },
     districtAt(pos) {
       if (Math.hypot(pos[0] - RESIDENTIAL_PARK.anchor[0], pos[2] - RESIDENTIAL_PARK.anchor[2]) < 40)
         return {id: 'skatepark', course: districts.courses.get('skatepark')};
@@ -538,11 +570,34 @@ export async function loadOpenWorld(search) {
       return null;
     },
     startActivity(kind, options = {}) {
+      if (racing) return null;
       golf = kind === 'bowling' ? createBowling(options) : createGolf();
       return kind === 'bowling' ? bowlingTee(golf.lane) : golfTee(golf);
     },
     cancelActivity() {
       golf = null;
+    },
+    skyDive: () => skyDive,
+    skyJumpNear: pos => skyJumpNear(pos, skyHeight),
+    startSkyJump(car, flight) {
+      const jump = skyJumpNear(car.pos, skyHeight);
+      if (!jump || !stream.ready([jump.launch[0], 0, jump.launch[1]])) return false;
+      if (!startSkyDive(skyDive, jump, flight, car, skyHeight)) return false;
+      golf = null;
+      target = null;
+      route = [];
+      return true;
+    },
+    stepSkyJump(car, flight) {
+      const report = stepSkyDive(skyDive, flight, car);
+      if (report) {
+        recordSkyDive(progress, report);
+        saveProgress(storage, progress);
+      }
+      return report;
+    },
+    cancelSkyJump() {
+      skyDive.active = null;
     },
     resetActivity() {
       if (!golf) return null;
@@ -616,6 +671,7 @@ export async function loadOpenWorld(search) {
       golfVisual = createGolfVisual(scene);
       render = createTileRenderer(scene, elevation, residentialTerrain, MARSEILLE_TERRAIN);
       mountainView = createMountainView(scene, (x, z) => elevationAt(elevation, x, z));
+      skyDiveVisual = createSkyDiveVisual(scene, stream.world, skyHeight);
       canyonView = createCanyonView(scene, (x, z) => elevationAt(elevation, x, z));
       farGround = createFarGround(
         scene,
@@ -624,6 +680,7 @@ export async function loadOpenWorld(search) {
       );
       darkWorld = createDarkWorld(scene, (x, z) => elevationAt(elevation, x, z));
       outlawView = createBadToys(scene, {look: 'outlaw'});
+      chickenView = createChickens(scene);
       digView = createDigView(scene);
       farmScene = scene;
       stream.world.openGate('era-farm');
@@ -718,6 +775,7 @@ export async function loadOpenWorld(search) {
       return flyovers?.sounds() ?? [];
     },
     update(time, pos, camera, onDiscover, playerPos = pos) {
+      skyDiveVisual?.update(time);
       halloween?.update(time);
       darkWorld?.update(
         Math.max(0, Math.min(0.1, time - (darkClock ?? time))),
@@ -745,7 +803,7 @@ export async function loadOpenWorld(search) {
       club?.update(1 / 60, pos, timeGates.era() !== 'past');
       activities?.update(time, pos);
       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
-      bowlingVisual?.update(golf);
+      bowlingVisual?.update(golf, racing ? selected.id : null);
       bowlingAlley?.update(golf?.kind === 'bowling' ? golf : null, playerPos);
       const key = pos.map((v, i) => (i === 1 ? 0 : Math.floor(v / 64))).join(',');
       if (key !== lastTile || stream.errors.size) {
@@ -846,6 +904,7 @@ export async function loadOpenWorld(search) {
       saveProgress(storage, progress);
     },
     eventURL(p, kind = 'race') {
+      if (!canRace()) return null;
       if (!canEnter(progress, p)) return rcLink({track: 'hub', at: p.id}, search);
       return rcLink(
         {track: 'hub', event: p.event ?? (p.track ? 'district-' + p.track : 'ramp-rat'), mode: kind},
@@ -854,6 +913,7 @@ export async function loadOpenWorld(search) {
     },
     dispose() {
       canyonView?.dispose();
+      skyDiveVisual?.dispose();
       venue?.dispose();
       venue = null;
       halloween?.dispose();

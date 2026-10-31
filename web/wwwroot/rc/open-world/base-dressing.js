@@ -103,19 +103,10 @@ export function buildDressing(scene, world) {
     box(x, 0.65, 900, 1.5, 1.3, 0.12, '#d0b57c');
     box(x, 0.95, 900, 1.1, 0.5, 0.08, '#476d73');
   }
-  // Picnic tables and bowling return sit beside, not on, their activity lanes.
+  // Picnic tables sit beside, not on, their activity lanes. (The outdoor bowling return that stood here
+  // went when Strike moved indoors: it stood in the new front door; the alley has its own returns.)
   box(-1080, 0.5, 1265, 3, 0.15, 1.2, '#ad8059');
   for (const dx of [-1, 1]) box(-1080 + dx, 0.25, 1265, 0.15, 0.5, 0.15, '#73513d');
-  box(-1008, 0.8, 1245, 1.2, 1.6, 0.8, '#8b9a9a');
-  const hood = new T.Mesh(new T.SphereGeometry(0.6, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat('#8b9a9a'));
-  hood.position.set(-1008, 1.55, 1245);
-  root.add(hood);
-  for (const dx of [-0.35, 0.35]) box(-1008 + dx, 0.75, 1246.1, 0.08, 0.08, 1.8, '#aeb7b4');
-  for (let i = 0; i < 3; i++) {
-    const ball = new T.Mesh(new T.SphereGeometry(0.25, 12, 8), mat(['#d6a94f', '#687bac', '#a66864'][i]));
-    ball.position.set(-1008, 0.95, 1245.5 + i * 0.55);
-    root.add(ball);
-  }
   // Baseball dugouts behind the diamond; mailboxes face the nearby housing loop.
   for (const x of [-1360, -1294]) {
     box(x, 1.1, 1469, 12, 2.2, 0.15, '#a78b6f');

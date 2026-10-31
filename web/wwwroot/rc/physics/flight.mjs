@@ -40,6 +40,8 @@ export const FLIGHT = Object.freeze({
   chuteSink: 6,
   chuteDrag: 1.6,
   chuteLevel: 3,
+  chuteTurn: 0.6,
+  chuteDrift: 3,
   ceiling: 140,
   land: 0.32,
   burnerBoost: 1.8,
@@ -72,7 +74,7 @@ export const FLIGHT = Object.freeze({
 });
 
 export function createFlight() {
-  return {mode: null, speed: 0, power: FLIGHT.startPower, climb: 0, flights: 0, chutes: 0};
+  return {mode: null, speed: 0, power: FLIGHT.startPower, climb: 0, flights: 0, chutes: 0, landings: 0};
 }
 
 const levelQuat = car => quatAxisAngle([0, 1, 0], -yawOf(car.q));
@@ -104,6 +106,7 @@ export function toggleFlight(f, car, {roam = true} = {}) {
 
 function touchdown(f, car) {
   f.mode = null;
+  f.landings = (f.landings ?? 0) + 1;
   f.speed = 0;
   car.q = levelQuat(car);
   car.ang = [0, 0, 0];
@@ -182,10 +185,14 @@ export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
         : nose[1] * f.speed;
     car.vel = [nose[0] * f.speed, vertical, nose[2] * f.speed];
   } else {
-    // Parachute: wings level, forward speed bleeds off, a steady gentle sink.
+    // Parachute: level the canopy, gently turn it, and drift forward so children can aim.
     const level = levelQuat(car),
       k = Math.min(1, FLIGHT.chuteLevel * dt);
     car.q = quatNorm(car.q.map((v, i) => v + (level[i] * Math.sign(dot4(car.q, level) || 1) - v) * k));
+    const steer = Math.max(-1, Math.min(1, ctl.steer ?? (ctl.roll || ctl.yaw || 0)));
+    car.q = quatNorm(quatMul(quatAxisAngle([0, 1, 0], -steer * FLIGHT.chuteTurn * dt), car.q));
+    const heading = -yawOf(car.q),
+      drift = [-Math.sin(heading) * FLIGHT.chuteDrift, -Math.cos(heading) * FLIGHT.chuteDrift];
     const drag = Math.exp(-FLIGHT.chuteDrag * dt),
       below = groundBelow(world, car.pos, 80);
     // Retro burn: once the ground is as close as the braking distance, the thrusters take over from
@@ -196,7 +203,10 @@ export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
     const vy = f.retro
       ? Math.min(-FLIGHT.retroLand, car.vel[1] + FLIGHT.retroAccel * dt)
       : car.vel[1] + (-FLIGHT.chuteSink - car.vel[1]) * Math.min(1, 3 * dt);
-    car.vel = [car.vel[0] * drag, vy, car.vel[2] * drag];
+    // Bleed off drift for touchdown too: otherwise a downhill slope recedes faster than the
+    // retro's soft sink, leaving the car gliding above the ground indefinitely.
+    if (f.retro) drift.fill(0);
+    car.vel = [drift[0] + (car.vel[0] - drift[0]) * drag, vy, drift[1] + (car.vel[2] - drift[1]) * drag];
     if (f.retro) f.retros = (f.retros ?? 0) + dt;
   }
   car.ang = [0, 0, 0];
