@@ -233,6 +233,64 @@ six-year-old voice as everyone else. Two lines stay because they're accuracy, no
 pan-Indian props (tipis, feather headdresses, dreamcatchers, totem poles: none of them Paiute), and
 Native toys are never enemies or the outlaws' victims-as-props.
 
+## How people live together in the past (owner, 31 Oct: "go full David Graeber")
+
+The dark world has three ways of getting along, side by side, and the game's quarrel is between
+them. A six-year-old never reads any of this. He feels it as **sharing**, **taking turns**, **owing**
+and **"that's not fair"**, which are the ideas he already argues about every day.
+
+**1. Friends share: the Paiute camp.** Graeber's "baseline communism": among friends nobody keeps
+count. Pass the camp hungry and you're fed; help with the piñon harvest and you're one of the people
+who helps. The camp never shows a price or a gold number. What it gives you is a relationship:
+toys wave, your name comes up in their talk, a child toy saves you a seat by the fire. You can give
+gifts (a battery, a fish, a hen's egg), and what comes back comes later and in its own shape. That's
+a gift, not a payment, and the game never totals it. The family is busy with its own life: they
+farm by the spring, trade with the town, argue, and laugh at the town's habits ("Why do you write
+down who owes what? Just share!", the Kandiaronk move, kid-sized). They're never there to be noble.
+
+**Seasons change the rules** (Graeber and Wengrow, *The Dawn of Everything*). Great Basin families
+spread out for most of the year and come together in autumn for the piñon harvest and the rabbit
+drive. In the game the camp grows at piñon time: more toys, more fires, a real festival. The drive
+has a **rabbit boss** who gives the orders, and when the drive ends he's an ordinary toy again.
+Authority that switches off by itself is the most Graeber thing we can show a child. This follows
+the real season (the game already has seasons; Halloween is autumn).
+
+**2. Neighbours take turns and keep a slate: the Spanish town.** Water runs in the *acequia*, the
+shared ditch. Each farm opens its gate on its turn, and the *mayordomo* who keeps the turns is
+chosen each year from among the neighbours (the real New Mexico custom). Opening your gate on your
+turn waters your garden; jumping the turn floods your neighbour and the town frowns. The **TIENDA**
+gives credit the old frontier way: take what you need now and the storekeeper chalks a mark on the
+slate, paid off later in gold or in work, as builds are (see "money or labour" in
+separate-worlds.md). Credit came before coins (Graeber, *Debt*): the slate is trust written down.
+Once a year at the **fiesta** the storekeeper wipes every slate clean, a jubilee, and everyone
+cheers. The kid gets "you don't owe anything any more!" straight away.
+
+**3. The company counts everything: the bad toys.** The bad aliens' outfit runs on what Graeber
+calls the military-coinage complex: coins stamped with the boss's face, made to pay the clockwork
+soldiers, then demanded back from everyone else. The mine pays its toys in **scrip**, tin tokens that
+only the company store takes, so nobody can leave (real company-town history). The outlaws "collect"
+for the company. Its factory has a toy who stamps papers all day that nobody reads, and when you ask
+what it's for he doesn't know (*Bullshit Jobs*, played for laughs). **The dam is the company's last
+move**: it takes the water off the acequia and the camp's spring and sells it back. That's
+enclosure, the reason the town drowns, and the whole game's quarrel in one object.
+
+**The soul line, explained.** Good toys have the three freedoms *The Dawn of Everything* names:
+they can **leave**, they can **say no**, and they can **change the rules together**. Clockwork
+can't do any of them, and that's what "made without anyone inside it" means. So **stealing a
+battery frees a toy.** An outlaw you stun and loot loses the company's wind-up. When it wakes it's
+just a toy, and it might wander off and turn up later, mending fences at the farm or sitting by the
+camp fire. The bow and the looting become liberation, not robbery, with no lecture needed.
+
+**What this means for building:**
+- The camp: no prices, no gold UI, a friendship that grows from things done (helped, gave, visited),
+  shown as toys acting differently, never as a meter.
+- The town: the acequia turn (a gate he opens when it's his turn), the TIENDA slate (marks, paid in
+  gold or labour), the fiesta that clears it.
+- The company: scrip, the company store, the paper-stamping toy, outlaws as collectors; freed toys
+  reappearing in the town and the camp.
+- Never preach. Every one of these is a thing to do or see, and a six-year-old reads it as fair or
+  unfair by himself.
+
 ## Typing short messages (owner, 31 Oct)
 
 Owner: "the other thing that would really be age-appropriate for him is game interactions that
