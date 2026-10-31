@@ -71,3 +71,8 @@ pauses, and re-shoots until two consecutive paused stills agree (MAD < 0.05 at 1
 `stableTries` in `capture.json`). The two skatepark views never reach that bar (something there keeps
 animating while paused), so they use all 20 tries; their same-build noise is still small (pixel MAD up to 1.6).
 Not the cause: skid ribbons and smoke (they are not on screen in a teleported view).
+
+The desert sand shoulder and gravel verge are coplanar at y=0.014. Residual FOV easing is a candidate
+trigger for the run-to-run depth-order flip; the old settle check watched position alone.
+Capture now requires position, yaw, pitch and FOV changes below 1e-10 for 30 frames before pausing,
+and fails after 30 seconds without convergence; seeded scatter is unchanged.
