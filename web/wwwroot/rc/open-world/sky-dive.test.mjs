@@ -151,14 +151,20 @@ for (const jump of SKY_JUMPS) {
       assert.ok(flight.retros > 0, 'retro thrusters softened the landing');
       assert.equal(stepSkyDive(state, flight, car), null);
       console.log(`${jump.name}: ${report.metres.toFixed(2)} m, ${report.stars} stars`);
-      // A child who leaves the keys alone still gets a fair landing, including on a downhill slope.
-      assert.ok(startSkyDive(state, jump, flight, car, heightAt));
-      let handsOff;
-      for (let i = 0; i < 120 * 120 && !handsOff; i++) {
-        stepFlight(flight, car, {}, stream.world, 1 / 120);
-        handsOff = stepSkyDive(state, flight, car);
+      // A child who leaves the keys alone still lands in the rings (a star), never the gold: steering
+      // is the game. Both sides of the alternating off-line start.
+      for (let n = 0; n < 2; n++) {
+        assert.ok(startSkyDive(state, jump, flight, car, heightAt));
+        let handsOff;
+        for (let i = 0; i < 120 * 120 && !handsOff; i++) {
+          stepFlight(flight, car, {}, stream.world, 1 / 120);
+          handsOff = stepSkyDive(state, flight, car);
+        }
+        assert.ok(
+          handsOff && handsOff.metres > 4 && handsOff.metres <= 20,
+          `hands off: ${handsOff?.metres ?? 'no landing'} m`
+        );
       }
-      assert.ok(handsOff && handsOff.metres <= 10, `hands off: ${handsOff?.metres ?? 'no landing'} m`);
     } finally {
       visual.dispose();
       stream.dispose();

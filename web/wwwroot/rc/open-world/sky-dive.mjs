@@ -48,12 +48,20 @@ export function skyJumpNear(pos, heightAt) {
     ) ?? null
   );
 }
+export const SKY_OFF_LINE = 15; // m beside the middle: the blue ring
 export const createSkyDive = () => ({active: null, report: null});
 
 export function startSkyDive(state, jump, flight, car, heightAt, {roam = true} = {}) {
   if (!roam || state.active || flight.mode || !SKY_JUMPS.includes(jump)) return false;
+  // Drift aims SKY_OFF_LINE metres beside the middle (alternating sides): hands off still lands in the
+  // blue ring for a star, and one steer finds the gold for three.
   const [x, z] = jump.launch,
-    yaw = Math.atan2(jump.target[0] - x, -(jump.target[1] - z));
+    side = flight.chutes % 2 ? 1 : -1,
+    dx = jump.target[0] - x,
+    dz = jump.target[1] - z,
+    d = Math.hypot(dx, dz) || 1,
+    aim = [jump.target[0] + (-dz / d) * SKY_OFF_LINE * side, jump.target[1] + (dx / d) * SKY_OFF_LINE * side],
+    yaw = Math.atan2(aim[0] - x, -(aim[1] - z));
   // The mountain pad sends us off the ridge at summit height, clear of the slope below.
   placeCar(car, [x, heightAt(...jump.pad) + jump.height, z], yaw);
   car.vel = [Math.sin(yaw) * FLIGHT.chuteDrift, -FLIGHT.chuteSink, -Math.cos(yaw) * FLIGHT.chuteDrift];
