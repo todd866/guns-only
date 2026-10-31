@@ -10,11 +10,11 @@ A fictional DoDEA-style on-base elementary school with Nellis-desert flavour: ta
 painted block inside, waxed vinyl tile in the halls, a polished maple gym, shade sails over a
 rubber-mulch playground. Every name and mark is invented; section B of
 docs/research/area51-usaf-nellis-vegas-references.md is respected (no DoDEA, USAF or unit marks,
-no real brands). "Month of the Military Child" (April, purple) is a real, generic tradition.
+no real brands).
 
 Layout (Blender metres, +Z up, X east, Y north; real scale; toy car 0.42 m long):
   lobby + front office  x   4 .. 26, y  0 .. 14     start/finish, trophy case
-  north hallway         x 9.8 .. 14.2, y 14 .. 70.2  lockers, kid art, PCS GOODBYE card wall
+  north hallway         x 9.8 .. 14.2, y 14 .. 70.2  lockers, kid art, the art wall, the TO THE STARS mural
   science room          x 14.2 .. 26, y 36 .. 48     drive-through pocket, DESERT PLANTS exhibit (specimen)
   library               x -10 .. 9.8, y 30 .. 65.8   shortcut: diagonal under a hanging model F-16
   west hallway          x -10 .. 9.8, y 65.8 .. 70.2
@@ -60,7 +60,7 @@ C.PALETTE.update({
     'white': ('#F6F4EE', 0, .6), 'black': ('#1E1E22', 0, .55), 'steel': ('#B8BCC0', .7, .32),
     'wood': ('#B07A45', 0, .6), 'rubber': ('#9A4636', 0, .95), 'sand': ('#E3CF9E', 0, .97),
     'concrete': ('#B3AA98', 0, .9), 'glass': ('#A9D3E6', .1, .12), 'orange': ('#F07A2A', 0, .5),
-    'navy': ('#1C2A52', 0, .5), 'teal': ('#2AA6A0', 0, .5), 'grey': ('#6E6E70', 0, .7),
+    'navy': ('#1C2A52', 0, .5), 'sky': ('#8FD3F4', 0, .8), 'dusk': ('#B98AD8', 0, .8), 'teal': ('#2AA6A0', 0, .5), 'grey': ('#6E6E70', 0, .7),
 })
 
 # Interior lighting as in bx.py: the game sun is shadowed by the ceilings, so materials carry a
@@ -359,6 +359,14 @@ def shell():
     vis('walls', 'steel').add(aabb(4, 26, -.24, -.06, 2.9, 3.0))
     vis('walls', 'wall').add(aabb(4, 26, -t, 0, 3.0, 4.4))
     panel('walls', 'stucco', (15, -t), 270, 22, 1.4, 3.0, out=.004)
+    # The school's face: its name big over the doors between a blue and a yellow band, and the
+    # mascot over the cafeteria, so it reads as a school from the gate.
+    panel('walls', 'blue', (15, -t), 270, 22, .22, 4.12, out=.008)
+    panel('walls', 'yellow', (15, -t), 270, 22, .1, 3.02, out=.008)
+    words('navy', 'SAUCER SPRINGS ELEMENTARY', .42, (15, -t, 3.38), 270, max_w=20.5, out=.012)
+    words('red', 'HOME OF THE ROCKETS', .5, (-38.5, -t, 3.3), 270, max_w=14, out=.012)
+    rocket_shape('walls', -46.8, -t - .002, 3.25, 1.2, facing=270)
+    panel('walls', 'blue', (-23, -t), 270, 54.6, .22, 4.12, out=.008)
     for xd in (FRONT_GAP[0] + .05, FRONT_GAP[1] - .05):      # door frames (doors propped open, inside)
         vis('walls', 'steel').add(aabb(xd - .06, xd + .06, -t, 0, 0, 2.9))
     wall_y('facade_w', -50.3, -50, 0, 74.3, 7.4, outside=(180, -50.3))
@@ -511,10 +519,10 @@ def door_closed(cx, cy, facing, label, h=2.2):
 def hallways():
     # North hallway, west side (x = 9.8 face, doors face east).
     lockers('lk_nw_0', 15.0, 21.5, 9.8, 0)
-    bulletin_board(9.81, 25.0, 0, 3.0, 'OUR HEROES FLY JETS!', 1)
+    bulletin_board(9.81, 25.0, 0, 3.0, 'HOW DO JETS FLY? WINGS LIFT!', 1)
     door_closed(9.81, 28.6, 0, 'ROOM 3 · 1ST GRADE')
     lockers('lk_nw_1', 36.2, 46.0, 9.8, 0)
-    bulletin_board(9.81, 48.8, 0, 3.2, 'WHERE HAVE YOU LIVED?', 2, jets=False)
+    bulletin_board(9.81, 48.8, 0, 3.2, 'WHAT LIVES IN THE DESERT?', 2, jets=False)
     lockers('lk_nw_2', 51.0, 59.5, 9.8, 0, colour='red')
     # East side (x = 14.2 face, doors face west).
     lockers('lk_ne_0', 15.0, 23.0, 14.2, 180)
@@ -531,11 +539,11 @@ def hallways():
         f = 180 if xw > 12 else 0
         for y in (a, b):
             vis('doors', 'grey').add(aabb(xw - .08 if f == 180 else xw - .02, xw + .02 if f == 180 else xw + .08, y - .06, y + .06, 0, DOOR_H))
-    # PCS GOODBYE card wall: a paper banner and a grid of cards and envelopes.
+    # The art wall: a paper banner and a grid of the kids' drawings.
     cx, f = 14.19, 180
     rng = random.Random(9)
     panel('cards', 'white', (cx, 55.5), f, 7.8, 1.35, .9, out=.006)
-    words('white', 'PCS GOODBYE · WE WILL MISS YOU!', .17, (cx, 55.5, 2.48), f, max_w=7.6, out=.012)
+    words('white', 'OUR ART WALL · ROOMS 3 AND 4', .17, (cx, 55.5, 2.48), f, max_w=7.6, out=.012)
     panel('cards', 'purple', (cx, 55.5), f, 7.8, .34, 2.31, out=.006)
     for k in range(18):
         for j in range(3):
@@ -546,8 +554,9 @@ def hallways():
             if rng.random() < .4:
                 panel('cards', 'navy', (cx, y), f, .2, .015, z + .2, out=.012)
                 panel('cards', 'navy', (cx, y), f, .16, .015, z + .14, out=.012)
-    for text, y, z in (('BYE MAX! GERMANY ROCKS', 53.6, 2.2), ('SEE YOU AT THE NEXT BASE', 57.6, 2.2), ('GOOD LUCK IN JAPAN, AVA', 55.5, .78)):
+    for text, y, z in (('MY DOG RUSTY', 53.6, 2.2), ('I SAW A JET!', 57.6, 2.2), ('ROCKET TO MARS BY AVA', 55.5, .78)):
         words('navy', text, .06, (cx, y, z), f, max_w=2.2, out=.012)
+    mural()
     # West hallway lockers (north side faces south; library side faces north).
     lockers('lk_w_n0', -9.2, -1.2, 70.2, 270, axis='x')
     lockers('lk_w_n1', 1.6, 8.6, 70.2, 270, axis='x', colour='red')
@@ -559,8 +568,8 @@ def hallways():
     words('navy', 'LIBRARY ↓', .12, (-4.3, 65.8, 2.75), 90, max_w=2, out=.004)
     words('navy', 'LIBRARY', .2, (9.8, 33.7, 2.85), 0, max_w=2.6, out=.004)
     # Banners across the halls (overhead).
-    hanging_banner(12, 14.6, 270, 4.0, .5, 2.35, [('WELCOME BACK MILITARY KIDS!', .17, 'white', 0)], 'blue', ceiling=3.0)
-    hanging_banner(12, 44.0, 270, 4.0, .55, 2.3, [('MONTH OF THE MILITARY CHILD', .14, 'white', .1), ('APRIL · PURPLE UP!', .1, 'yellow', -.13)],
+    hanging_banner(12, 14.6, 270, 4.0, .5, 2.35, [('WELCOME, RACERS!', .2, 'white', 0)], 'blue', ceiling=3.0)
+    hanging_banner(12, 44.0, 270, 4.0, .55, 2.3, [('SCIENCE FAIR FRIDAY!', .15, 'white', .1), ('VOLCANOES · ROBOTS · ROCKETS', .09, 'yellow', -.13)],
                    'purple', ceiling=3.0)
     hanging_banner(-24, 68.0, 0, 4.0, .55, 4.6, [('HOME OF THE ROCKETS', .2, 'white', 0)], 'navy', ceiling=7.0)
     # Water fountain and an extinguisher cabinet (wall-mounted, above toy height: decor only).
@@ -631,6 +640,28 @@ def lobby():
     words('navy', 'BE SEEN · BE SAFE', .06, (hx, hy - .03, .9), 270, max_w=.9, out=.003)
     # School name over the hallway entrance (inside) and a "WELCOME" mat-side sign.
     words('navy', 'SAUCER SPRINGS ELEMENTARY', .2, (12, 14.0, 3.25), 270, max_w=4.2, out=.004)
+
+
+def wall_poly(group, mat, pts, centre, facing, out=.008):
+    verts, faces = place_flat(pts, [tuple(range(len(pts)))], centre, facing, out=out)
+    vis(group, mat).add((verts, faces), kind='flag')
+
+
+def mural():
+    """The north hallway ends in a painted wall: a desert dawn with a rocket going up, so the
+    long straight runs at something, not a blank wall."""
+    c, f, w = (12.0, 70.2), 270, 4.4
+    panel('mural', 'sky', c, f, w, 1.6, 1.4, out=.006)
+    panel('mural', 'dusk', c, f, w, .8, .6, out=.006)
+    panel('mural', 'sand', c, f, w, .6, 0, out=.006)
+    # Coordinates on the wall: x across (centre 0), y up from the floor.
+    wall_poly('mural', 'yellow', [(1.1 + .42 * math.cos(a), 2.3 + .42 * math.sin(a)) for a in [k * math.pi / 12 for k in range(24)]], (c[0], c[1], 0), f, out=.008)
+    wall_poly('mural', 'purple', [(-2.2, .6), (-1.3, 1.75), (-.6, 1.1), (.2, 2.0), (1.3, 1.0), (2.2, 1.5), (2.2, .6)][::-1], (c[0], c[1], 0), f, out=.009)
+    wall_poly('mural', 'orange', [(-2.2, .2), (-1.0, .95), (.1, .45), (1.0, .9), (2.2, .35), (2.2, .2)][::-1], (c[0], c[1], 0), f, out=.01)
+    for k in range(5):
+        panel('mural', 'white', (c[0] + .9 - k * .32, c[1]), f, .14, .06, .9 + k * .28, out=.011)
+    rocket_shape('mural', c[0] - .9, c[1] - .012, 2.1, .9, facing=f)
+    words('navy', 'TO THE STARS!', .22, (c[0], c[1], 2.72), f, max_w=3.6, out=.012)
 
 
 def rocket_shape(group, cx, cy, z, s, up=False, facing=270, mat=('red', 'white', 'yellow')):
@@ -1575,8 +1606,8 @@ def main():
             'ai_spacing_m': info['ai_spacing_m'], 'shortcut_nodes': info['shortcut_nodes'], **stats,
             'lettering': "mesh text from Blender's bundled UI font (no textures)",
             'cultural_references': 'fictional, kid-safe; docs/research/area51-usaf-nellis-vegas-references.md section A; '
-                                   'section B avoided (no DoDEA/USAF/unit marks, no real brands); Month of the Military '
-                                   'Child (April, purple) is a generic tradition',
+                                   'section B avoided (no DoDEA/USAF/unit marks, no real brands)'
+                                   '',
             'interior_lighting': 'materials carry emission = albedo x 0.5 (warm), ceiling 0.78, troffers 1.0; outdoor-only '
                                  'materials (stucco, rubber, sand, concrete) 0.12-0.15, since the game sun is shadowed indoors',
             'vertex_ao': bake or 'not baked (--no-bake)',

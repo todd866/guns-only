@@ -1,5 +1,5 @@
 import * as T from '../vendor/three.module.js';
-export const VEHICLE_NAMES=Object.freeze({buggy:'Buggy',monster:'Monster',rally:'Rally',pickup:'Pickup',golf:'Golf cart'});
+export const VEHICLE_NAMES=Object.freeze({buggy:'Buggy',monster:'Monster',rally:'Rally',pickup:'Pickup',golf:'Golf cart',pumpkin:'Pumpkin 🎃'});
 // Original toy shells around the shared wheel pivots; dimensions and styling are fiction.
 export function makeVehicleBody(kind='buggy',color='#db6d2f'){
  if(!VEHICLE_NAMES[kind])throw new RangeError(`unknown vehicle body: ${kind}`);
@@ -8,7 +8,8 @@ export function makeVehicleBody(kind='buggy',color='#db6d2f'){
  const add=(geo,m,x=0,y=0,z=0,name='')=>{const o=new T.Mesh(geo,m);o.position.set(x,y,z);o.name=name;o.castShadow=o.receiveShadow=true;g.add(o);return o;};
  const box=(w,h,d,x,y,z,m=paint,name='')=>add(new T.BoxGeometry(w,h,d),m,x,y,z,name);
  const profile=(points,width,m,name)=>{const s=new T.Shape();points.forEach(([z,y],i)=>i?s.lineTo(-z,y):s.moveTo(-z,y));s.closePath();const geo=new T.ExtrudeGeometry(s,{depth:width-.02,steps:1,bevelEnabled:true,bevelSegments:2,bevelSize:.01,bevelThickness:.01});geo.rotateY(Math.PI/2);geo.translate(-width/2+.01,0,0);return add(geo,m,0,0,0,name);};
- const raised=kind==='monster'?.07:0,w=kind==='monster'?.49:.43;
+ if(kind==='pumpkin')return pumpkinBody(g,add,lamp);
+ const raised=kind==='monster'?.025:0,w=kind==='monster'?.49:.43;
  profile([[-.34,.11+raised],[-.31,.2+raised],[-.12,.23+raised],[.3,.2+raised],[.34,.11+raised]],w,paint,'sculpted-shell');
  if(kind==='golf'){
   box(.34,.045,.42,0,.2,.02,rubber,'floor');for(const x of [-.16,.16])for(const z of [-.16,.16])box(.018,.3,.018,x,.36,z,chrome,'roof-post');
@@ -24,6 +25,25 @@ export function makeVehicleBody(kind='buggy',color='#db6d2f'){
  }
  for(const side of [-1,1]){box(.065,.045,.025,side*w*.32,.17+raised,-.333,lamp,'headlight');box(.05,.025,.025,side*w*.32,.17+raised,.335,rubber,'tail-light');}
  box(w*.45,.045,.025,0,.13+raised,-.34,rubber,'grille');
- if(kind==='monster')for(const x of [-.275,.275])for(const z of [-.25,.25]){const a=add(new T.TorusGeometry(.17,.025,6,18,Math.PI),paint,x,.1,z,'wheel-arch');a.rotation.y=Math.PI/2;}
+ for(const o of g.children){o.scale.y=.65;o.position.y=o.position.y*.65-.1;}
+ if(kind==='monster')for(const x of [-.275,.275])for(const z of [-.25,.25]){const a=add(new T.TorusGeometry(.135,.005,6,18,Math.PI),paint,x,-.085,z,'wheel-arch');a.rotation.y=Math.PI/2;}
  return g;
 }
+
+// The pumpkin car (20 pumpkins splatted): a ribbed jack-o'-lantern on the wheels, its carved face
+// glowing from inside (the bloom picks it up), a crooked stem and a leaf on top.
+function pumpkinBody(g,add,lamp){
+ const skin=new T.MeshStandardMaterial({color:'#f07a14',roughness:.55}),stemMat=new T.MeshStandardMaterial({color:'#5c7a2a',roughness:.8}),glow=new T.MeshStandardMaterial({color:'#ffd35a',emissive:'#ffb42a',emissiveIntensity:2.2});
+ // Fits the same footprint as the other shells: inside the track, under 0.44 m long and 0.26 m tall.
+ const R=.175,cy=.118,geo=new T.SphereGeometry(R,40,20),p=geo.attributes.position,v=new T.Vector3();
+ for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i);const a=Math.atan2(v.x,v.z),k=1-.08*Math.pow(Math.abs(Math.cos(a*4)),3);p.setXYZ(i,v.x*k,v.y,v.z*k);}
+ geo.computeVertexNormals();const body=add(geo,skin,0,cy,0,'sculpted-shell');body.scale.set(1,.66,1.2);
+ const stem=add(new T.CylinderGeometry(.014,.022,.04,8),stemMat,.006,cy+R*.66+.008,.02,'stem');stem.rotation.z=.35;
+ const leaf=add(new T.SphereGeometry(.032,10,6),stemMat,-.032,cy+R*.66-.004,.04,'leaf');leaf.scale.set(1,.2,.6);
+ // The face, carved on the nose (-z), just proud of the skin, glowing from inside.
+ const front=-R*1.2-.002,flat=(pts,y,name)=>{const s=new T.Shape(pts.map(([x,z])=>new T.Vector2(x*.7,z*.7)));const m=add(new T.ShapeGeometry(s),glow,0,0,0,name);m.position.set(0,y,front);m.rotation.y=Math.PI;return m;};
+ for(const sx of [-1,1])flat([[sx*.05,0],[sx*.13,0],[sx*.09,.06]],cy+.02,'eye');
+ flat([[-.02,0],[.02,0],[0,.035]],cy-.005,'nose');
+ flat([[-.14,.03],[-.09,0],[-.05,.02],[0,-.01],[.05,.02],[.09,0],[.14,.03],[.1,-.04],[0,-.06],[-.1,-.04]],cy-.04,'mouth');
+ for(const sx of [-1,1])add(new T.SphereGeometry(.014,8,6),lamp,sx*.065,cy+.025,front+.004,'headlight');
+ return g;}

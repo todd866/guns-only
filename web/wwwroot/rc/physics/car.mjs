@@ -3,52 +3,61 @@
 // units; car-local axes are +X right, +Y up, −Z forward. Re-Volt informed the *form* of the
 // model (see docs/area-51-build-plan.md); none of its code or data is used.
 import { add, sub, scale, madd, dot, cross, len, norm, rotate, unrotate, quatIntegrate, quatIdentity, quatAxisAngle, yawOf } from './math.mjs';
-import { SURFACES } from './world.mjs';
+import { SURFACES, TRANSITION_SURFACES } from './world.mjs';
 
 // 1:10 electric buggy. Values are fiction, chosen for toy-scale feel and checked by tests.
 export const BUGGY = {
   mass: 1.8,
-  size: [0.24, 0.1, 0.42],            // body box for inertia, metres
+  size: [0.18, 0.08, 0.42],            // body box for inertia, metres
   inertiaScale: 1.0,
-  // Wheel layout matches the Blender buggy (assets/rc/models/buggy.blend) drawn at VISUAL_SCALE.
+  wheelMassFraction: .15,
+  // Provisional 1:10 envelope: 420 mm long, 280 mm outside wheels, 116 mm tyres.
   wheels: [                           // attach points relative to the centre of mass
-    { at: [-0.1625, 0, -0.14], front: true }, { at: [0.1625, 0, -0.14], front: true },
-    { at: [-0.1625, 0, 0.14], front: false }, { at: [0.1625, 0, 0.14], front: false },
+    { at: [-0.115, 0, -0.14], front: true }, { at: [0.115, 0, -0.14], front: true },
+    { at: [-0.115, 0, 0.14], front: false }, { at: [0.115, 0, 0.14], front: false },
   ],
-  wheelRadius: 0.084,
-  restLength: 0.055,                  // attach point to wheel centre at full droop
-  spring: 450, damper: 9,             // per wheel, N/m and N·s/m
-  bumpAt: 0.036, bumpSpring: 4000, bumpDamper: 40, // bump rubber: absorbs before the hull touches
+  wheelRadius: 0.058, wheelWidth: 0.05,
+  restLength: 0.05,                  // attach point to wheel centre at full droop
+  spring: 450, damper: 12,             // per wheel, N/m and N·s/m
+  bumpAt: 0.032, bumpSpring: 4000, bumpDamper: 40, // bump rubber: absorbs before the hull touches
   staticFriction: [1.6, 1.52],        // front, rear (rear a little lower: it lets go first)
   kineticFriction: [1.2, 1.12],
   lateralStiffness: 0.5,              // fraction of the per-wheel lateral slip removed per substep
-  rollCentre: 0.6,                    // tyre forces act this fraction of the way up to the CoM
+  rollCentre: 0.72,                    // tyre forces act this fraction of the way up to the CoM
   driveForce: 26, topSpeed: 14, reverseSpeed: 5, brakeForce: 30,
   maxSteer: 0.5, steerRate: 5,
   downforce: 0.04,                    // N per (m/s)²
   linearDrag: 0.012, angularDrag: 0.4,
   // Hull: body corners act as bump stops when the suspension bottoms out, plus roof and nose.
   hull: [
-    { at: [-0.1, -0.045, -0.15], r: 0.04 }, { at: [0.1, -0.045, -0.15], r: 0.04 },
-    { at: [-0.1, -0.045, 0.15], r: 0.04 }, { at: [0.1, -0.045, 0.15], r: 0.04 },
-    { at: [0, 0.03, -0.19], r: 0.04 }, { at: [0, 0.03, 0.19], r: 0.04 },
-    { at: [0, 0.07, 0], r: 0.05 }, { at: [-0.08, 0.05, 0], r: 0.04 }, { at: [0.08, 0.05, 0], r: 0.04 },
+    { at: [-0.072, -0.028, -0.15], r: 0.028 }, { at: [0.072, -0.028, -0.15], r: 0.028 },
+    { at: [-0.072, -0.028, 0.15], r: 0.028 }, { at: [0.072, -0.028, 0.15], r: 0.028 },
+    { at: [0, 0.022, -0.18], r: 0.03 }, { at: [0, 0.022, 0.18], r: 0.03 },
+    { at: [0, 0.055, 0], r: 0.04 }, { at: [-0.06, 0.035, 0], r: 0.03 }, { at: [0.06, 0.035, 0], r: 0.03 },
   ],
   restitution: 0.25, hullFriction: 0.45,
 };
 
 const G = 9.81, SUBSTEPS = 4;
-// Authoring coordinates use a 0.75 m body and 0.15 m wheel radius; this factor
-// matches the rendered car to the physics dimensions above.
+// Model units to metres; wheel and shell fitting lives in vehicle-pose.mjs.
 export const VISUAL_SCALE = 0.56;
 
 export function createCar(params = BUGGY, pos = [0, 0.1, 0], yaw = 0) {
   const [w, h, l] = params.size, m = params.mass, k = params.inertiaScale;
-  const inertia = [m / 12 * (h * h + l * l) * k, m / 12 * (w * w + l * l) * k, m / 12 * (w * w + h * h) * k];
+  const wheelMass = m * (params.wheelMassFraction ?? 0) / params.wheels.length, bodyMass = m - wheelMass * params.wheels.length;
+  const inertia = [h * h + l * l, w * w + l * l, w * w + h * h].map(v => bodyMass * v / 12);
+  // The outboard wheels carry mass too; a narrow body box alone understates roll inertia.
+  for (const wheel of params.wheels) {
+    const [x, atY, z] = wheel.at, y = atY - params.restLength + m * G / 4 / params.spring;
+    const r2 = params.wheelRadius ** 2, radial = (3 * r2 + (params.wheelWidth ?? 0) ** 2) / 12;
+    inertia[0] += wheelMass * (y * y + z * z + r2 / 2);
+    inertia[1] += wheelMass * (x * x + z * z + radial);
+    inertia[2] += wheelMass * (x * x + y * y + radial);
+  }
   return {
-    params, invInertia: inertia.map(i => 1 / i),
+    params, invInertia: inertia.map(i => 1 / (i * k)),
     pos: [...pos], q: quatAxisAngle([0, 1, 0], -yaw), vel: [0, 0, 0], ang: [0, 0, 0],
-    steer: 0, wheels: params.wheels.map(() => ({ compression: 0, contact: false, spin: 0, slip: 0, surface: null })),
+    steer: 0, wheels: params.wheels.map(() => ({ compression: params.mass * G / 4 / params.spring, contact: false, spin: 0, slip: 0, surface: null })),
     grounded: false, contacts: 0, impact: 0, speed: 0, forwardSpeed: 0, placement: 0,
   };
 }
@@ -65,8 +74,8 @@ export function placeCar(car, pos, yaw) {
 }
 
 const applyInvInertia = (car, v) => rotate(car.q, unrotate(car.q, v).map((x, i) => x * car.invInertia[i]));
-function pointVelocity(car, p) { return add(car.vel, cross(car.ang, sub(p, car.pos))); }
-function applyImpulse(car, j, at) {
+export function pointVelocity(car, p) { return add(car.vel, cross(car.ang, sub(p, car.pos))); }
+export function applyImpulse(car, j, at) {
   car.vel = madd(car.vel, j, 1 / car.params.mass);
   car.ang = add(car.ang, applyInvInertia(car, cross(sub(at, car.pos), j)));
 }
@@ -173,7 +182,7 @@ function solveHull(car, world) {
     ct.bias = vn < -0.5 ? -p.restitution * vn : 0; ct.jn = 0; ct.jt = [0, 0, 0];
     car.impact = Math.max(car.impact, -vn);
     // Riding an upward-facing quarter transition is intentional, even near vertical.
-    if (Math.abs(ct.normal[1]) < 0.5 && !(ct.surface === 'quarter' && ct.normal[1] > .05)) car.wallImpact = Math.max(car.wallImpact, -vn);
+    if (Math.abs(ct.normal[1]) < 0.5 && !(TRANSITION_SURFACES.has(ct.surface) && ct.normal[1] > .05)) car.wallImpact = Math.max(car.wallImpact, -vn);
   }
   for (let it = 0; it < 6; it++) for (const ct of contacts) {
     const vRel = pointVelocity(car, ct.point), vn = dot(vRel, ct.normal);

@@ -33,3 +33,9 @@ test('CPU cache stays bounded across the base and disposal ignores late response
  assert.ok(stream.stats().cached<=32);assert.ok(stream.loaded.size<=25);stream.dispose();assert.equal(stream.stats().cached,0);
  let release;const late=createStream({manifest:{tiles:[[0,0]]},fetchTile:()=>new Promise(r=>release=r)});const pending=late.prepare(home);late.dispose();release(tile('0,0'));assert.equal(await pending,false);assert.equal(late.stats().cached,0);assert.equal(late.loaded.size,0);
 });
+
+test('a failed far tile stops keeping the stream busy once the car no longer needs it',async()=>{
+ const stream=createStream({manifest,fetchTile:async key=>{if(key==='8,0')throw Error('offline');return tile(key);}});
+ await stream.update(home);assert.equal(await stream.prepare(away),false);assert.ok(stream.errors.size>0);
+ await stream.update(home);assert.equal(stream.errors.size,0,'stale errors would re-run the stream every frame');stream.dispose();
+});

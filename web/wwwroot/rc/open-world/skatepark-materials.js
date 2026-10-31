@@ -1,8 +1,18 @@
 import * as T from '../../vendor/three.module.js';
+import { residentialGrass } from './residential-ground.js';
 
 // Keep the painted features’ authored UVs. Unpainted cast concrete uses a
 // three-metre tile projected onto each face, keeping its aggregate RC-sized.
+let lawn=null;
 export function finishSkateparkSurface(geometry, material, paintTexture = null) {
+  // The berm and deck-top turf wear the neighbourhood lawn, so the grade reads as one field.
+  if(material.name==='turf'){
+    const p=geometry.attributes.position,uv=[];
+    for(let i=0;i<p.count;i++)uv.push(p.getX(i)/2,p.getZ(i)/2);
+    geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+    lawn??=residentialGrass();
+    Object.assign(material,{map:lawn.map,bumpMap:lawn.bumpMap,bumpScale:.008,roughness:.88,metalness:0});material.color.set('#ffffff');material.needsUpdate=true;return;
+  }
   if(material.name==='paint'){
     if(!paintTexture)throw new Error('Skatepark paint texture was not prepared');
     if(geometry.attributes.uv){
@@ -44,7 +54,7 @@ export function finishSkateparkSurface(geometry, material, paintTexture = null) 
   const base={floor:[173,170,163],concrete:[151,157,159],edge:[190,182,165],path:[142,149,145]}[material.name];
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const i=(y*size+x)*4,n=noise(x,y),grain=(n-.5)*14;
-    const edge=Math.min(x,y,size-1-x,size-1-y),seam=joint&&edge<1?22:joint&&edge<3?6:0;
+    const edge=Math.min(x,y,size-1-x,size-1-y),seam=joint&&edge<2?40:joint&&edge<4?10:0;
     const mottling=3*Math.sin(x*.028)*Math.sin(y*.033)+2*Math.sin((x+y)*.071);
     // Sparse dark pinholes and subtle aggregate, rather than high-contrast gravel.
     const pore=n<.025?12:0,v=grain+mottling-seam-pore;

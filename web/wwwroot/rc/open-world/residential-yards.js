@@ -89,6 +89,21 @@ export function computeResidentialYardPlacement({building, bounds, centre, road}
 }
 
 const makeMaterial = (color, roughness = .9) => new T.MeshStandardMaterial({color, roughness});
+const PALETTE = {gardenBed: '#5d4635', hedge: '#416a43', shrub: '#6f9650', shrubLight: '#a1b95b', mailPost: '#6f5948', mailbox: '#4c7480'};
+
+/** Front-step spots for seasonal props, one per dressed yard: on the walk just in front of the house. */
+export function residentialPorches(data = {}, options = {}) {
+  const heightAt = options.terrain?.heightAt ?? (() => 0);
+  const yardLimit = Number.isFinite(options.maxYards) ? Math.min(300, Math.max(1, options.maxYards)) : 280;
+  return selectResidentialYards(data.buildings || [], data.roads || [], yardLimit).map(({building, bounds, centre, road, index}) => {
+    const placement = computeResidentialYardPlacement({building, bounds, centre, road});
+    if (!placement) return null;
+    const {front, tangent, width, yardOrigin, yardDepth} = placement;
+    const at = (along, across) => [centre[0] + front[0] * (yardOrigin + along) + tangent[0] * across, centre[1] + front[1] * (yardOrigin + along) + tangent[1] * across];
+    const step = at(.35, width * .14), lawn = at(Math.min(yardDepth * .45, 1.8), -width * .3);
+    return {index, x: step[0], z: step[1], y: heightAt(step[0], step[1]), yaw: Math.atan2(front[0], front[1]), lawn: {x: lawn[0], z: lawn[1], y: heightAt(lawn[0], lawn[1])}};
+  }).filter(Boolean);
+}
 
 export function prepareResidentialYards(world, data = {}, options = {}) {
   const terrain = options.terrain;
@@ -110,13 +125,17 @@ export function prepareResidentialYards(world, data = {}, options = {}) {
     // can be frustum-culled instead of living in one always-visible mesh.
     const parts = new Map();
     const addPart = (key, geometry, position, yaw = 0, scale = [1, 1, 1]) => {
-      const copy = geometry.clone();
+      let copy = geometry.clone(); copy.deleteAttribute('uv');
       copy.applyMatrix4(new T.Matrix4().compose(
         new T.Vector3(...position),
         new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), yaw),
         new T.Vector3(...scale),
       ));
-      const chunkKey = `${key}:${Math.floor(position[0] / 128)}:${Math.floor(position[2] / 128)}`;
+      // One vertex-coloured mesh per 256 m area for every yard part (WebKit pays ~2x per draw call).
+      const shadows = key === 'shrub' || key === 'shrubLight', chunkKey = `${shadows ? 'plants' : 'yard'}:${Math.floor(position[0] / 256)}:${Math.floor(position[2] / 256)}`;
+      const colour = new T.Color(PALETTE[key] ?? PALETTE.gardenBed), n = copy.attributes.position.count, rgb = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) rgb.set([colour.r, colour.g, colour.b], i * 3);
+      copy.setAttribute('color', new T.BufferAttribute(rgb, 3)); if (copy.index) { const flat = copy.toNonIndexed(); copy.dispose(); copy = flat; }
       if (!parts.has(chunkKey)) parts.set(chunkKey, []);
       parts.get(chunkKey).push(copy);
     };
@@ -155,11 +174,8 @@ export function prepareResidentialYards(world, data = {}, options = {}) {
     });
 
     box.dispose(); post.dispose(); shrub.dispose();
-    const palette = {
-      gardenBed: makeMaterial('#5d4635'),
-      hedge: makeMaterial('#416a43'), shrub: makeMaterial('#6f9650'), shrubLight: makeMaterial('#a1b95b'),
-      mailPost: makeMaterial('#6f5948'), mailbox: makeMaterial('#4c7480'),
-    };
+    const yardMaterial = () => { const m = makeMaterial('#ffffff'); m.vertexColors = true; return m; };
+    const palette = { yard: yardMaterial(), plants: yardMaterial() };
     for (const [chunkKey, geometriesForKey] of parts) {
       const key = chunkKey.split(':', 1)[0];
       const merged = geometriesForKey.length === 1 ? geometriesForKey[0] : mergeGeometries(geometriesForKey, false);
@@ -167,7 +183,7 @@ export function prepareResidentialYards(world, data = {}, options = {}) {
       if (!merged) continue;
       merged.computeVertexNormals(); merged.computeBoundingSphere(); geometries.push(merged);
       const material = palette[key] || palette.gardenBed; materials.push(material);
-      const mesh = new T.Mesh(merged, material); mesh.name = `ResidentialYard_${chunkKey}`; mesh.castShadow = key === 'shrub' || key === 'shrubLight'; mesh.receiveShadow = true;
+      const mesh = new T.Mesh(merged, material); mesh.name = `ResidentialYard_${chunkKey}`; mesh.castShadow = key === 'plants'; mesh.receiveShadow = true;
       root.add(mesh); meshes.push(mesh);
     }
     scene.add(root); return root;

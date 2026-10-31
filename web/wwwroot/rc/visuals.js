@@ -23,12 +23,16 @@ export function applyLighting({ renderer, hemi, sun, contactSun }, preset) {
   renderer.toneMappingExposure = preset.exposure;
 }
 
-// Keep the sun's shadow box centred on the car, snapped to whole texels so shadows don't shimmer.
+// Keep the sun's shadow box centred on the car, snapped to whole shadow texels in LIGHT space, so
+// moving doesn't make shadow edges swim (ported from render/visual/shadow_stabilizer.js in the
+// flight game; snapping world x/z, as before, still swims whenever the sun is not overhead).
 export function followSun(sun, at) {
-  const texel = (sun.shadow.camera.right-sun.shadow.camera.left) / sun.shadow.mapSize.x, snap = v => Math.round(v / texel) * texel;
-  const cx = snap(at.x), cz = snap(at.z), d = sun.userData.dir;
-  sun.target.position.set(cx, at.y, cz);
-  sun.position.set(cx + d.x * 60, at.y + d.y * 60, cz + d.z * 60);
+  const cam = sun.shadow.camera, texel = (cam.right - cam.left) / sun.shadow.mapSize.x, d = sun.userData.dir;
+  const dir = new T.Vector3(-d.x, -d.y, -d.z).normalize(), right = new T.Vector3().crossVectors(dir, new T.Vector3(0, 1, 0)).normalize(), up = new T.Vector3().crossVectors(right, dir).normalize();
+  const focus = new T.Vector3(at.x, at.y, at.z), lx = focus.dot(right), ly = focus.dot(up);
+  focus.addScaledVector(right, Math.round(lx / texel) * texel - lx).addScaledVector(up, Math.round(ly / texel) * texel - ly);
+  sun.target.position.copy(focus);
+  sun.position.set(focus.x + d.x * 60, focus.y + d.y * 60, focus.z + d.z * 60);
   sun.target.updateMatrixWorld();
 }
 
@@ -62,36 +66,55 @@ export function studioEnvironment(renderer) {
 // Tyre dust and splashes: one pooled Points cloud, CPU-updated (a few hundred particles).
 // Skid marks: a ring buffer of flat quads in one InstancedMesh, fading as they age.
 export function createEffects(scene) {
-  const MAX = 600, pos = new Float32Array(MAX * 3), col = new Float32Array(MAX * 3), life = new Float32Array(MAX), vel = new Float32Array(MAX * 3);
+  // Smoke and dust (audit 2026-10-31, 3.4 item 5): soft round sprites that swell and fade as they
+  // rise, instead of flat same-size grey discs. One pooled Points draw.
+  const MAX = 600, pos = new Float32Array(MAX * 3), col = new Float32Array(MAX * 3), life = new Float32Array(MAX), span = new Float32Array(MAX).fill(1), vel = new Float32Array(MAX * 3);
+  const size = new Float32Array(MAX), base = new Float32Array(MAX), alpha = new Float32Array(MAX);
   const geo = new T.BufferGeometry();
   geo.setAttribute('position', new T.BufferAttribute(pos, 3)); geo.setAttribute('color', new T.BufferAttribute(col, 3));
-  // Soft round puff: a radial-gradient sprite, so particles read as dust rather than squares.
+  geo.setAttribute('aSize', new T.BufferAttribute(size, 1)); geo.setAttribute('aAlpha', new T.BufferAttribute(alpha, 1));
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d'), grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(255,255,255,0.9)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.35)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  grad.addColorStop(0, 'rgba(255,255,255,0.85)'); grad.addColorStop(0.45, 'rgba(255,255,255,0.4)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
-  const points = new T.Points(geo, new T.PointsMaterial({ size: 0.12, map: new T.CanvasTexture(c), vertexColors: true, transparent: true, opacity: 0.7, depthWrite: false }));
+  const puffMat = new T.ShaderMaterial({
+    uniforms: { map: { value: new T.CanvasTexture(c) }, scale: { value: 420 } }, transparent: true, depthWrite: false, vertexColors: true,
+    vertexShader: 'attribute float aSize;attribute float aAlpha;varying float vAlpha;varying vec3 vColor;uniform float scale;void main(){vColor=color;vAlpha=aAlpha;vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=aSize*scale/max(.1,-mv.z);gl_Position=projectionMatrix*mv;}',
+    fragmentShader: 'uniform sampler2D map;varying float vAlpha;varying vec3 vColor;void main(){vec4 t=texture2D(map,gl_PointCoord);gl_FragColor=vec4(vColor,t.a*vAlpha);if(gl_FragColor.a<.01)discard;}',
+  });
+  const points = new T.Points(geo, puffMat);
   points.frustumCulled = false; scene.add(points);
   let next = 0;
-  function emit(p, v, colour, n = 1, spread = 0.6) {
+  function emit(p, v, colour, n = 1, spread = 0.6, grow = .12) {
     const c = new T.Color(colour);
     for (let k = 0; k < n; k++) {
       const i = next; next = (next + 1) % MAX;
       pos.set([p[0] + (Math.random() - .5) * .05, p[1], p[2] + (Math.random() - .5) * .05], i * 3);
       vel.set([v[0] * .2 + (Math.random() - .5) * spread, .3 + Math.random() * spread, v[2] * .2 + (Math.random() - .5) * spread], i * 3);
-      col.set([c.r, c.g, c.b], i * 3); life[i] = 0.5 + Math.random() * 0.5;
+      col.set([c.r, c.g, c.b], i * 3); life[i] = span[i] = 0.6 + Math.random() * 0.6; base[i] = grow * (.8 + Math.random() * .4);
     }
   }
-  const SKIDS = 400, skidGeo = new T.PlaneGeometry(0.05, 0.09); skidGeo.rotateX(-Math.PI / 2);
-  const skids = new T.InstancedMesh(skidGeo, new T.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.22, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), SKIDS);
-  skids.frustumCulled = false; skids.count = 0; scene.add(skids);
-  let skidNext = 0; const m4 = new T.Matrix4(), q = new T.Quaternion(), up = new T.Vector3(0, 1, 0), s1 = new T.Vector3(1, 1, 1);
-  // Each mark is stretched to the distance the wheel moved this frame, so trails are continuous.
-  function skid(p, yaw, length) {
-    // `yaw` is the body's own rotation about +Y (from its quaternion), so apply it unchanged.
-    q.setFromAxisAngle(up, yaw); s1.set(1, 1, Math.max(0.3, length / 0.09)); m4.compose(new T.Vector3(p[0], p[1] + 0.004, p[2]), q, s1);
-    skids.setMatrixAt(skidNext, m4); skidNext = (skidNext + 1) % SKIDS; skids.count = Math.min(SKIDS, skids.count + 1);
-    skids.instanceMatrix.needsUpdate = true;
+  // Tyre marks: one continuous ribbon per wheel along the path it actually took, fading with age,
+  // instead of stamps turned to the body (which fanned into stacked squares in a drift).
+  const QUADS = 1200, rp = new Float32Array(QUADS * 6 * 3), ra = new Float32Array(QUADS * 6), born = new Float32Array(QUADS).fill(-1e9);
+  const ribbon = new T.BufferGeometry(); ribbon.setAttribute('position', new T.BufferAttribute(rp, 3)); ribbon.setAttribute('aAlpha', new T.BufferAttribute(ra, 1));
+  const markMat = new T.ShaderMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+    vertexShader: 'attribute float aAlpha;varying float vA;void main(){vA=aAlpha;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader: 'varying float vA;void main(){gl_FragColor=vec4(.07,.07,.07,vA);}' });
+  const marks = new T.Mesh(ribbon, markMat); marks.frustumCulled = false; scene.add(marks);
+  const tracks = new Map(); let quadNext = 0, clock = 0;
+  const MARK = { width: .045, alpha: .32, fade: 30, gap: .5 };
+  function skid(key, p) {
+    const last = tracks.get(key); tracks.set(key, [p[0], p[1] + .004, p[2]]);
+    if (!last) return;
+    const dx = p[0] - last[0], dz = p[2] - last[2], len = Math.hypot(dx, dz);
+    if (len < .02) { tracks.set(key, last); return; }
+    if (len > MARK.gap) return;   // a jump in position: start a new strip
+    const nx = -dz / len * MARK.width / 2, nz = dx / len * MARK.width / 2, y = p[1] + .004;
+    const v = [[last[0] + nx, last[1], last[2] + nz], [last[0] - nx, last[1], last[2] - nz], [p[0] - nx, y, p[2] - nz], [p[0] + nx, y, p[2] + nz]];
+    const i = quadNext; quadNext = (quadNext + 1) % QUADS;
+    [0, 1, 2, 0, 2, 3].forEach((k, j) => rp.set(v[k], (i * 6 + j) * 3));
+    born[i] = clock; ribbon.attributes.position.needsUpdate = true;
   }
   const DUSTY = { dirt: '#c8a878', gravel: '#b59a78', grass: '#9fb071', rubber: '#7a5a4a' }, SKIDDY = new Set(['asphalt', 'concrete', 'tile', 'gymfloor', 'wood']);
   return {
@@ -99,27 +122,34 @@ export function createEffects(scene) {
     carFeedback(car, dt) {
       const th = 2 * Math.atan2(car.q[1], car.q[3]), right = [Math.cos(th), 0, -Math.sin(th)];
       const lateral = car.vel[0] * right[0] + car.vel[2] * right[2];
-      const speed = car.speed, yaw = Math.atan2(2 * (car.q[3] * car.q[1] + car.q[0] * car.q[2]), 1 - 2 * (car.q[1] ** 2 + car.q[2] ** 2));
+      const speed = car.speed;
       car.wheels.forEach((w, i) => {
-        if (!w.contact || !w.contactPoint) return;
+        const key = car.wheels.length * (car.__fxId ??= Math.random()) + i;
+        if (!w.contact || !w.contactPoint) { tracks.delete(key); return; }
         const dusty = DUSTY[w.surface];
-        if (dusty && speed > 2 && Math.random() < dt * 30) emit(w.contactPoint, car.vel, dusty, 1);
+        if (dusty && speed > 2 && Math.random() < dt * 30) emit(w.contactPoint, car.vel, dusty, 1, .6, .16);
         if (w.slip && speed > 3 && Math.abs(lateral) > 1.2) {
-          if (SKIDDY.has(w.surface)) skid(w.contactPoint, yaw, speed * dt);
-          if (Math.random() < dt * 20) emit(w.contactPoint, car.vel, '#d9d4cc', 1, 0.3);
-        }
+          if (SKIDDY.has(w.surface)) skid(key, w.contactPoint); else tracks.delete(key);
+          if (Math.random() < dt * 20) emit(w.contactPoint, car.vel, '#d9d4cc', 1, 0.3, .2);
+        } else tracks.delete(key);
       });
     },
     puff(p) { emit(p, [0, 0, 0], '#e8e4dc', 1, 0.12); },
-    boom(p) { emit([p[0], p[1] + 0.1, p[2]], [0, 0, 0], '#ffb347', 30, 1.4); },
-    splash(p) { emit([p[0], p[1] + 0.1, p[2]], [0, 0, 0], '#7fd4ff', 40, 1.6); },
+    boom(p) { emit([p[0], p[1] + 0.1, p[2]], [0, 0, 0], '#ffb347', 30, 1.4, .3); },
+    splash(p) { emit([p[0], p[1] + 0.1, p[2]], [0, 0, 0], '#7fd4ff', 40, 1.6, .18); },
     update(dt) {
+      clock += dt;
       for (let i = 0; i < MAX; i++) {
-        if (life[i] <= 0) { pos[i * 3 + 1] = -999; continue; }
-        life[i] -= dt; vel[i * 3 + 1] -= 3 * dt;
+        if (life[i] <= 0) { pos[i * 3 + 1] = -999; alpha[i] = 0; continue; }
+        life[i] -= dt; vel[i * 3 + 1] -= 1.2 * dt;
+        for (let k = 0; k < 3; k++) vel[i * 3 + k] *= 1 - 1.5 * dt;   // air drag: puffs slow and hang
         pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
+        const age = 1 - Math.max(0, life[i]) / span[i];
+        size[i] = base[i] * (1 + age * 2.5); alpha[i] = .55 * Math.pow(1 - age, 1.5) * Math.min(1, age * 8 + .2);
       }
-      geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
+      geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true; geo.attributes.aSize.needsUpdate = true; geo.attributes.aAlpha.needsUpdate = true;
+      for (let i = 0; i < QUADS; i++) { const a = MARK.alpha * Math.max(0, 1 - (clock - born[i]) / MARK.fade); for (let j = 0; j < 6; j++) ra[i * 6 + j] = a; }
+      ribbon.attributes.aAlpha.needsUpdate = true;
     },
   };
 }
@@ -209,6 +239,22 @@ import { GTAOPass } from '../vendor/three/addons/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from '../vendor/three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from '../vendor/three/addons/postprocessing/ShaderPass.js';
+
+// The look (owner, 30 Oct: "graphics look great, why doesn't mine look like that"): a grade after
+// tone mapping. A touch more contrast and colour, warm highlights and cool shadows (the
+// golden-afternoon split), and a soft vignette that pulls the eye to the car.
+export const GRADE = Object.freeze({ saturation: 1.14, contrast: 1.07, warm: [.02, .008, -.014], cool: [-.012, .0, .016], vignette: .24 });
+export const gradeShader = (g = GRADE) => ({
+  uniforms: { tDiffuse: { value: null }, sat: { value: g.saturation }, contrast: { value: g.contrast }, warm: { value: new T.Vector3(...g.warm) }, cool: { value: new T.Vector3(...g.cool) }, vig: { value: g.vignette }, old: { value: 0 } },
+  vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+  fragmentShader: `uniform sampler2D tDiffuse;uniform float sat,contrast,vig,old;uniform vec3 warm,cool;varying vec2 vUv;
+    void main(){vec4 c=texture2D(tDiffuse,vUv);vec3 x=c.rgb;float l=dot(x,vec3(.2126,.7152,.0722));
+      x=mix(vec3(l),x,sat);x=(x-.5)*contrast+.5;x+=mix(cool,warm,smoothstep(.15,.85,l));
+      x*=1.-vig*smoothstep(.42,.9,distance(vUv,vec2(.5)));
+      // old: the dark world is the past, graded like an old hand-tinted photograph.
+      x=mix(x,vec3(dot(x,vec3(.393,.769,.189)),dot(x,vec3(.349,.686,.168)),dot(x,vec3(.272,.534,.131))),old);gl_FragColor=vec4(clamp(x,0.,1.),c.a);}`,
+});
 
 export async function setupPolish({ renderer, scene, camera, indoor, world = false }) {
   const hdr = await new RGBELoader().setDataType(T.FloatType).loadAsync('./assets/env/goegap_1k.hdr');
@@ -227,6 +273,7 @@ export async function setupPolish({ renderer, scene, camera, indoor, world = fal
   if (ao) { ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.2, samples: 8 }); composer.addPass(ao); }
   composer.addPass(new UnrealBloomPass(new T.Vector2(w, h), indoor ? .22 : .10, .35, indoor ? .92 : 1.6));
   composer.addPass(new OutputPass());
+  const grade = indoor ? null : new ShaderPass(gradeShader()); if (grade) composer.addPass(grade);
   composer.addPass(new SMAAPass(w * renderer.getPixelRatio(), h * renderer.getPixelRatio()));
-  return { render: () => composer.render(), resize: (W, H) => { composer.setSize(W, H); ao?.setSize(W / 2, H / 2); } };
+  return { render: () => composer.render(), resize: (W, H) => { composer.setSize(W, H); ao?.setSize(W / 2, H / 2); }, setPixelRatio: r => composer.setPixelRatio(r), setOld: v => { if (grade) grade.uniforms.old.value = v; } };
 }

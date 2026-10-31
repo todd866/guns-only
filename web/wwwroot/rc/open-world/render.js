@@ -1,9 +1,10 @@
 import {roofProfile,roadLamps,litWindow} from './world-finish.mjs';
 import {buildingFrontage,exteriorRing,frontageWindowMask} from './building-frontages.mjs';
 import {roadVerges} from './road-verges.mjs';
-import {roadsideDetail} from './roadside-detail.mjs';
+import {roadsideDetail,desertScatter} from './roadside-detail.mjs';
 import {createSurfaceMaps} from './materials.js';
-import {groundTriangles,elevationAt} from './elevation.mjs';
+import {groundTriangles,elevationAt,terrainStep} from './elevation.mjs';
+import {inMountain,roadNear,MOUNTAIN,LAKE} from './spirit-mountain.mjs';
 import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import * as T from '../../vendor/three.module.js';
@@ -14,23 +15,36 @@ const PALETTE={sand:'#bfaa86',asphalt:'#515b61',concrete:'#aeb2aa',grass:'#8c9b6
 // Clip each draw to its tile. Long OSM roads/aprons occur in multiple source tiles, but never
 // render twice on the same pixel. Collision keeps original footprints, including at seams.
 function clip(poly,b){for(const [axis,value,sign]of [[0,b[0],1],[0,b[2],-1],[1,b[1],1],[1,b[3],-1]]){const result=[];for(let i=0;i<poly.length;i++){const a=poly[i],c=poly[(i+1)%poly.length],ia=(a[axis]-value)*sign>=0,ic=(c[axis]-value)*sign>=0;if(ia)result.push(a);if(ia!==ic){const t=(value-a[axis])/(c[axis]-a[axis]);result.push([a[0]+t*(c[0]-a[0]),a[1]+t*(c[1]-a[1])]);}}poly=result;if(poly.length<3)return [];}return poly;}
-export function createTileRenderer(scene,elevation=null,residentialTerrain=null){const maps=new Map(['gravel','sand','asphalt','concrete','stucco','roof'].map(k=>[k,createSurfaceMaps(k)])),mats=new Map(),groups=new Map(),tileLights=new Map();const residentialBounds=residentialTerrain?.bounds??null;for(const [k,c]of Object.entries(PALETTE)){const textures=maps.get(k==='wall'?'stucco':k);mats.set(k,new T.MeshStandardMaterial({color:textures?'#ffffff':c,emissive:k==='windowLight'?'#edc792':k==='light'?'#e6efc2':k==='reflector'?'#e3ba70':'#000000',emissiveIntensity:k==='light'?1:k==='reflector'?.4:0,roughness:textures?1:['glass','windowLight'].includes(k)?.25:.92,metalness:['glass','windowLight'].includes(k)?.3:0,vertexColors:true,...(textures?{map:textures.map,roughnessMap:textures.roughnessMap,normalMap:textures.normalMap,normalScale:new T.Vector2(k==='asphalt'?.035:.18,k==='asphalt'?.035:.18)}:{})}));}
+// Large-scale desert variation so the 6 m sand detail never reads as a checkerboard: pale
+// desert pavement, warmer drifts and darker gravel washes on 20-90 m patches, per vertex.
+const noiseHash=(x,z)=>{let h=Math.imul(x|0,374761393)^Math.imul(z|0,668265263);h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967296;};
+const valueNoise=(x,z)=>{const i=Math.floor(x),j=Math.floor(z),u=x-i,v=z-j,a=noiseHash(i,j),b=noiseHash(i+1,j),c=noiseHash(i,j+1),d=noiseHash(i+1,j+1),su=u*u*(3-2*u),sv=v*v*(3-2*v);return a+(b-a)*su+(c-a)*sv+(a-b-c+d)*su*sv;};
+export function sandTone(x,z){const broad=valueNoise(x/90,z/90),fine=valueNoise(x/23+40,z/23-17),wash=Math.max(0,valueNoise(x/140-9,z/60+5)-.6)*2.5,n=broad*.6+fine*.4;
+ const pale=Math.max(0,.55-n)*2,warm=Math.max(0,n-.5)*2,dark=Math.min(.32,wash*.7);
+ // pale = grey desert pavement, warm = drifted sand, dark = gravel wash
+ return [(1-.16*pale+.05*warm)*(1-dark),(1-.12*pale+.01*warm)*(1-dark*.96),(1-.02*pale-.07*warm)*(1-dark*.9)];}
+export function createTileRenderer(scene,elevation=null,residentialTerrain=null,terrainSite=null){const maps=new Map(['gravel','sand','asphalt','concrete','stucco','roof'].map(k=>[k,createSurfaceMaps(k)])),mats=new Map(),groups=new Map(),tileLights=new Map();const residentialBounds=residentialTerrain?.bounds??null,siteHole=terrainSite?.hole??null,sitePad=terrainSite?.pad?.bounds??null;for(const [k,c]of Object.entries(PALETTE)){const textures=maps.get(k==='wall'?'stucco':k);mats.set(k,new T.MeshStandardMaterial({color:textures?'#ffffff':c,emissive:k==='windowLight'?'#edc792':k==='light'?'#e6efc2':k==='reflector'?'#e3ba70':'#000000',emissiveIntensity:k==='light'?1:k==='reflector'?.4:0,roughness:textures?1:['glass','windowLight'].includes(k)?.25:.92,metalness:['glass','windowLight'].includes(k)?.3:0,vertexColors:true,...(textures?{map:textures.map,roughnessMap:textures.roughnessMap,normalMap:textures.normalMap,normalScale:new T.Vector2(k==='asphalt'?.035:.18,k==='asphalt'?.035:.18)}:{})}));}
  const poolMaterial=new T.ShaderMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,uniforms:{night:{value:0}},vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying vec2 vUv;uniform float night;void main(){float r=length((vUv-.5)*2.);float a=pow(max(0.,1.-r),2.)*.55*night;gl_FragColor=vec4(1.,.77,.43,a);}'});
  const inResidential=(x,z)=>!!residentialBounds&&x>=residentialBounds[0]&&x<=residentialBounds[2]&&z>=residentialBounds[1]&&z<=residentialBounds[3];
  function load(key,tile){const b=[tile.tile[0]*SIZE,tile.tile[1]*SIZE,(tile.tile[0]+1)*SIZE,(tile.tile[1]+1)*SIZE],buckets=new Map(),root=new T.Group();root.name=`WorldTile_${key}`;
   const bucket=k=>{if(!buckets.has(k))buckets.set(k,{v:[],c:[],uv:[]});return buckets.get(k);};
- function tri(k,a,b,c,shade=1,clipResidential=false){let triangles=[[a,b,c]];const clipBounds=clipResidential&&residentialBounds?[...DISTRICT_BOUNDS,residentialBounds]:DISTRICT_BOUNDS;for(const d of clipBounds){if(Math.min(a[0],b[0],c[0])>d[2]||Math.max(a[0],b[0],c[0])<d[0]||Math.min(a[2],b[2],c[2])>d[3]||Math.max(a[2],b[2],c[2])<d[1])continue;triangles=triangles.flatMap(v=>subtractBox(v,[d[0],-100,d[1],d[2],1000,d[3]]));}const t=bucket(k);for(const triangle of triangles){t.v.push(...triangle.flat());
+ function tri(k,a,b,c,shade=1,clipResidential=false){let triangles=[[a,b,c]];const clipBounds=clipResidential?[...DISTRICT_BOUNDS,...(residentialBounds?[residentialBounds]:[]),...(siteHole?[siteHole]:[])]:DISTRICT_BOUNDS;for(const d of clipBounds){if(Math.min(a[0],b[0],c[0])>d[2]||Math.max(a[0],b[0],c[0])<d[0]||Math.min(a[2],b[2],c[2])>d[3]||Math.max(a[2],b[2],c[2])<d[1])continue;triangles=triangles.flatMap(v=>subtractBox(v,[d[0],-100,d[1],d[2],1000,d[3]]));}const t=bucket(k);for(const triangle of triangles){t.v.push(...triangle.flat());
     // Horizontal surfaces use X/Z; vertical facades use their dominant wall axis/Y.
     // The old mixed X/Y and Z/Y projection skewed window bands diagonally on walls.
     const dx=Math.abs(triangle[1][0]-triangle[0][0])+Math.abs(triangle[2][0]-triangle[0][0]);
     const dz=Math.abs(triangle[1][2]-triangle[0][2])+Math.abs(triangle[2][2]-triangle[0][2]);
     const vertical=Math.abs(triangle[1][1]-triangle[0][1])+Math.abs(triangle[2][1]-triangle[0][1])>.1;
-    const scale=k==='asphalt'?1.2:.16;for(const p of triangle){t.c.push(shade,shade,shade);t.uv.push(vertical?(dx>=dz?p[0]:p[2])*.24:p[0]*scale,(vertical?p[1]:p[2])*scale);}
+    const scale=k==='asphalt'?1.2:.16;for(const p of triangle){if(k==='sand'&&!vertical){const [r,g,bl]=sandTone(p[0],p[2]);t.c.push(shade*r,shade*g,shade*bl);}else t.c.push(shade,shade,shade);t.uv.push(vertical?(dx>=dz?p[0]:p[2])*.24:p[0]*scale,(vertical?p[1]:p[2])*scale);}
   }}
   function quad(k,a,b,c,d,shade=1){tri(k,a,b,c,shade);tri(k,a,c,d,shade);}
   function poly(k,ring,y,shade=1,clipResidential=false){const pts=clip(ring,b);if(pts.length<3)return;const v=pts.map(p=>new T.Vector2(...p)),faces=T.ShapeUtils.triangulateShape(v,[]);for(const [a,c,d]of faces){const p=[pts[a],pts[c],pts[d]],cross=(p[1][0]-p[0][0])*(p[2][1]-p[0][1])-(p[1][1]-p[0][1])*(p[2][0]-p[0][0]);if(cross>0)p.reverse();tri(k,...p.map(q=>[q[0],y,q[1]]),shade,clipResidential);}}
   function ribbon(k,a,c,w,y){const len=Math.hypot(c[0]-a[0],c[1]-a[1]);if(len<.01)return;const x=-(c[1]-a[1])/len*w/2,z=(c[0]-a[0])/len*w/2;poly(k,[[a[0]+x,a[1]+z],[c[0]+x,c[1]+z],[c[0]-x,c[1]-z],[a[0]-x,a[1]-z]],y,1,true);}
-  if(elevation){for(const points of groundTriangles(elevation,b))tri('sand',...points.map(p=>[p[0],p[1]-.025,p[2]]),1,true);}else poly('sand',[[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]],-.025,1,true);
+  // Spirit Mountain paints its own ground: the road as asphalt, gravel shoulders, darker rock on steep faces.
+  const mountainPaint=(p)=>{const cx=(p[0][0]+p[1][0]+p[2][0])/3,cz=(p[0][2]+p[1][2]+p[2][2])/3;if(!inMountain(cx,cz))return null;const near=roadNear(cx,cz),d=near.length?Math.min(...near.map(n=>n.d)):Infinity;
+   if(d<=MOUNTAIN.shelf)return ['gravel',1];   // the asphalt itself is the smooth ribbon (spirit-mountain.js)
+   const ux=p[1][0]-p[0][0],uy=p[1][1]-p[0][1],uz=p[1][2]-p[0][2],vx=p[2][0]-p[0][0],vy=p[2][1]-p[0][1],vz=p[2][2]-p[0][2],nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,up=Math.abs(ny)/Math.hypot(nx,ny,nz);
+   return ['sand',up<.85?.72:up<.95?.86:1];};
+  if(elevation){for(const points of groundTriangles(elevation,b,terrainStep(b),terrainSite)){const paint=mountainPaint(points)??['sand',1];tri(paint[0],...points.map(q=>[q[0],q[1]-.025,q[2]]),paint[1],true);}}else poly('sand',[[b[0],b[1]],[b[2],b[1]],[b[2],b[3]],[b[0],b[3]]],-.025,1,true);
   for(const f of tile.features){const p=f.properties,g=f.geometry;
    if(p.building&&g.type==='Polygon'){const info=buildingInfo(f);if(!info)continue;const {h,area}=info,ring=exteriorRing(info.ring),shade=.88+(Number(f.id.replace(/\D/g,''))%11)*.014;poly('roof',ring,h,shade);const maskWindow=frontageWindowMask(f,tile.features);
     for(let i=1;i<ring.length;i++){const a=ring[i-1],c=ring[i],len=Math.hypot(c[0]-a[0],c[1]-a[1]);if(!len)continue;
@@ -85,24 +99,39 @@ export function createTileRenderer(scene,elevation=null,residentialTerrain=null)
    quad(kind,[x0,y0,z1],[x0,y1,z1],[x0,y1,z0],[x0,y0,z0],shade);quad(kind,[x1,y0,z0],[x1,y1,z0],[x1,y1,z1],[x1,y0,z1],shade);
    quad(kind,[x0,y1,z0],[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],shade);
   };
-  const lamps=roadLamps(tile,b,residentialBounds);tileLights.set(key,lamps.map(({x,z})=>({pos:new T.Vector3(x,elevationAt(elevation,x,z)+4.25,z)})));
+  const lamps=roadLamps(tile,b,residentialBounds);tileLights.set(key,lamps.map(({x,z})=>({pos:new T.Vector3(x,elevationAt(elevation,x,z,terrainSite)+4.25,z)})));
   const poolVertices=[],poolUvs=[];
-  for(const {x,z} of lamps){const y=elevationAt(elevation,x,z);box('glass',x,y,z,.10,4.2,.10,.7);box('trim',x,y+4.18,z,.72,.12,.38,.85);box('light',x,y+4.16,z,.60,.035,.29);
-   const r=19;for(const [u,v] of [[0,0],[0,1],[1,1],[0,0],[1,1],[1,0]]){const px=x+(u-.5)*r*2,pz=z+(v-.5)*r*2;poolVertices.push(px,elevationAt(elevation,px,pz)+.055,pz);poolUvs.push(u,v);}
+  for(const {x,z} of lamps){const y=elevationAt(elevation,x,z,terrainSite);box('glass',x,y,z,.10,4.2,.10,.7);box('trim',x,y+4.18,z,.72,.12,.38,.85);box('light',x,y+4.16,z,.60,.035,.29);
+   const r=19;for(const [u,v] of [[0,0],[0,1],[1,1],[0,0],[1,1],[1,0]]){const px=x+(u-.5)*r*2,pz=z+(v-.5)*r*2;poolVertices.push(px,elevationAt(elevation,px,pz,terrainSite)+.055,pz);poolUvs.push(u,v);}
   }
   if(poolVertices.length){const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(poolVertices,3));g.setAttribute('uv',new T.Float32BufferAttribute(poolUvs,2));const mesh=new T.Mesh(g,poolMaterial);mesh.name='RoadLightPools';root.add(mesh);}
-  for(const {x,z} of verges.markers){const y=elevationAt(elevation,x,z);box('trim',x,y,z,.12,.72,.12,.75);box('reflector',x,y+.52,z,.145,.14,.145);}
-  for(const {x,z} of verges.services){const y=elevationAt(elevation,x,z);poly('concrete',[[x-1.4,z-1],[x+1.4,z-1],[x+1.4,z+1],[x-1.4,z+1]],y+.025,.82,true);box('glass',x,y+.03,z,1.15,1.35,.65,.8);box('trim',x,y+1.38,z,1.25,.08,.75,.75);for(let h=.35;h<1.2;h+=.15)box('trim',x,y+h,z+.34,.8,.025,.025,.6);box('reflector',x-.4,y+1.12,z+.345,.1,.1,.03);}
+  for(const {x,z} of verges.markers){const y=elevationAt(elevation,x,z,terrainSite);box('trim',x,y,z,.12,.72,.12,.75);box('reflector',x,y+.52,z,.145,.14,.145);}
+  for(const {x,z} of verges.services){const y=elevationAt(elevation,x,z,terrainSite);poly('concrete',[[x-1.4,z-1],[x+1.4,z-1],[x+1.4,z+1],[x-1.4,z+1]],y+.025,.82,true);box('glass',x,y+.03,z,1.15,1.35,.65,.8);box('trim',x,y+1.38,z,1.25,.08,.75,.75);for(let h=.35;h<1.2;h+=.15)box('trim',x,y+h,z+.34,.8,.025,.025,.6);box('reflector',x-.4,y+1.12,z+.345,.1,.1,.03);}
   // Low, non-colliding scrub and stones sit beyond the drivable shoulder.
   // At most 48 clusters per streamed tile; two shared batches, no per-prop objects.
-  for(const {x,z,size:s} of roadsideDetail(tile,b,residentialBounds)){
-   const y=elevationAt(elevation,x,z)-.025;
+  for(const {x,z,size:s} of roadsideDetail(tile,b,residentialBounds,sitePad)){
+   const y=elevationAt(elevation,x,z,terrainSite)-.025;
    for(let j=0;j<3;j++){const angle=j*2.094,dx=Math.cos(angle)*s,dz=Math.sin(angle)*s;
     quad('scrub',[x-dx,y+.015,z-dz],[x+dx,y+.015,z+dz],[x+dx*.3,y+s*.8,z+dz*.3],[x-dx*.3,y+s*.8,z-dz*.3],.85+j*.08);
     quad('scrub',[x-dx*.3,y+s*.8,z-dz*.3],[x+dx*.3,y+s*.8,z+dz*.3],[x+dx,y+.015,z+dz],[x-dx,y+.015,z-dz],.85+j*.08);
    }
    const cx=x+.8,cz=z+.3,r=s*.45,top=[cx,y+.12,cz];
    for(let j=0;j<5;j++){const a=j*Math.PI*2/5,c=(j+1)*Math.PI*2/5;tri('gravel',top,[cx+Math.cos(c)*r,y+.005,cz+Math.sin(c)*r],[cx+Math.cos(a)*r,y+.005,cz+Math.sin(a)*r],.85+j*.035);}
+  }
+  // Open desert: creosote-like clumps (three crossed cards, slightly varied height and tone)
+  // or a low stone, on bare sand only. Same two batches as the verge planting.
+  if(elevation)for(const {x,z,size:s,stone} of desertScatter(tile,b,residentialBounds,460,sitePad)){
+   if(inMountain(x,z)&&(roadNear(x,z).some(n=>n.d<MOUNTAIN.shelf+3)||LAKE.contains(x,z)))continue;   // never on Spirit Mountain's road or under its lake
+   const y=elevationAt(elevation,x,z,terrainSite)-.025,turn=(x*.37+z*.11)%Math.PI;
+   if(stone){const r=s*.55,top=[x,y+r*.45,z];for(let j=0;j<5;j++){const a=turn+j*Math.PI*2/5,c=turn+(j+1)*Math.PI*2/5;tri('gravel',top,[x+Math.cos(c)*r,y+.005,z+Math.sin(c)*r*.8],[x+Math.cos(a)*r,y+.005,z+Math.sin(a)*r*.8],.72+j*.05);}continue;}
+   // A creosote clump is a spray of thin stems leaning out from the root, not a solid tent: 5-7
+   // stems of different heights, each clump its own size and tone (pipeline review, 31 Oct: rows
+   // of identical dark-green tents from the car's eye). Same batch, so no extra draws.
+   {const h0=(x*12.9898+z*78.233)%1,hash=h0<0?h0+1:h0,size=s*(.75+hash*.6),tone=.95+((hash*7.31)%1)*.3,n=5+Math.floor(hash*3);
+    for(let j=0;j<n;j++){const angle=turn+j*Math.PI*2/n+hash,lean=.35+((j*.37+hash)%1)*.35,h=size*(.65+((j*.53+hash*3.1)%1)*.6),w=size*.09;
+     const bx=Math.cos(angle),bz=Math.sin(angle),px=-bz*w,pz=bx*w,tx=x+bx*h*lean,tz=z+bz*h*lean,shade=tone*(.9+((j*.29)%1)*.2);
+     quad('scrub',[x-px,y+.015,z-pz],[x+px,y+.015,z+pz],[tx+px*.25,y+h,tz+pz*.25],[tx-px*.25,y+h,tz-pz*.25],shade);
+     quad('scrub',[tx-px*.25,y+h,tz-pz*.25],[tx+px*.25,y+h,tz+pz*.25],[x+px,y+.015,z+pz],[x-px,y+.015,z-pz],shade);}}
   }
   for(const [k,v]of buckets){if(!v.v.length)continue;const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(v.v,3));g.setAttribute('color',new T.Float32BufferAttribute(v.c,3));g.setAttribute('uv',new T.Float32BufferAttribute(v.uv,2));g.computeVertexNormals();g.computeBoundingSphere();const m=new T.Mesh(g,mats.get(k));m.castShadow=['wall','roof'].includes(k);m.receiveShadow=true;root.add(m);}groups.set(key,root);scene.add(root);
  }

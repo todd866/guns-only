@@ -1,3 +1,6 @@
+import {NY} from './under-bridge.mjs';
+import {LIVERIES,TRIMS} from '../livery-data.mjs';
+import {plazaWorld,PLAZA_PARK} from './town-plaza.mjs';import {playgroundWorld,PLAYGROUND_PARK} from './playground.mjs';
 import {RESIDENTIAL_START} from './residential-frame.mjs';
 import {ALIEN_EVENTS,ALIEN_LOCATIONS} from './alien-world.mjs';
 import {BATTLE_EVENTS} from './battle-arenas.mjs';
@@ -7,7 +10,7 @@ import {PORTAL_EVENT,portalHeight} from './portal-course.mjs';
 import {ROAD_EVENTS} from './road-events.mjs';
 // Authored activities in the real Nellis local metre frame. +x east, +z south.
 // Gameplay courses and landmark art are fiction; OSM supplies roads and footprints.
-export const BOUNDS = [-3800, -2300, 3250, 4050];
+export const BOUNDS = [-3800, -4600, 3600, 4050];   // north and east grown for Spirit Mountain (spirit-mountain.mjs)
 export const LOCATIONS = [
   {id:'gate',name:'Main Gate',short:'Main Gate',pos:[-607,0,-29],color:'#f8c35d',icon:'⌂',kind:'race',event:'gate-guard'},
   {id:'skatepark',name:'Neighbourhood Skatepark',short:'Skatepark',pos:RESIDENTIAL_START.pos,color:'#59cec4',icon:'↗',kind:'interior',track:'skatepark'},
@@ -21,11 +24,24 @@ export const LOCATIONS = [
   {id:'dirt',name:'Desert Whoops',short:'Whoops',pos:[1800,0,1450],color:'#e2a16d',icon:'🏁',kind:'race',event:'whoops'},
   {id:'golf',name:'Sunrise Vista',short:'Golf',pos:[-330,0,2776],color:'#a8d485',icon:'◇',kind:'activity',game:'golf',event:'fairway-rally'},
   {id:'zoo',name:'Petting Zoo',short:'Petting Zoo',pos:[-1361,0,2074],color:'#78d2d0',icon:'◇',kind:'discovery'},
+  {id:'loop-lake',name:'Loop Lake',short:'Loop Lake',pos:[1890,0,-812],color:'#ff6a00',icon:'🏁',kind:'discovery'},
+  // The foot of Spirit Mountain's road (spirit-mountain.mjs): the owner's son kept driving for the horizon mountains.
+  {id:'mountain',name:'Spirit Mountain',short:'Spirit Mtn',pos:[2480,0,-1700],   // the trailhead on flat ground, 350 m short of the road's foot
+  color:'#d9b47a',icon:'▲',kind:'discovery'},
   {id:'rec',name:'Strike Recreation',short:'Bowling',pos:[-1020,0,1260],color:'#e4ad89',icon:'◇',kind:'activity',game:'bowling',event:'rink-drift'},
   {id:'diamond',name:'Baseball Diamond',short:'Baseball',pos:[-1327,0,1490],color:'#e5c68d',icon:'🏁',kind:'race',event:'round-bases'},
   {id:'boneyard',name:'Desert Boneyard',short:'Boneyard',pos:[2350,0,1600],color:'#c6b99c',icon:'🏁',kind:'race',event:'wing-walker'},
   {id:'waterpark',name:'Sunrise Splash',short:'Waterpark',pos:[-545,0,3388],color:'#79d9e2',icon:'🏁',kind:'race',event:'splash-down'},
   {id:'lab',name:'Dreamland',short:'Dreamland',pos:[2500,0,-1200],color:'#9fe2a8',icon:'◇',kind:'race',event:'dreamland'},
+  // THPS2-style skate park on the flight line: E inside opens the skate goal card.
+  {id:'schoolyard',name:'Schoolyard',short:'Schoolyard',pos:[-3373,0,-778],color:'#f2b705',icon:'🛹',kind:'activity',skate:'school'},
+  {id:'town-plaza',name:'Town Plaza',short:'Town Plaza',pos:plazaWorld([PLAZA_PARK.start.at[0],0,PLAZA_PARK.start.at[1]]),color:'#77c9c0',icon:'🛹',kind:'activity',skate:'philly'},
+  {id:'skatestreet',name:'Skatestreet',short:'Skatestreet',pos:[560,0,1030],color:'#59cec4',icon:'🛹',kind:'activity',skate:'skatestreet'},
+  {id:'marseille',name:'The Bowls',short:'The Bowls',pos:[2164,0,2458],color:'#65b9b6',icon:'🛹',kind:'activity',skate:'marseille'},
+  {id:'ny',name:'Under the Bridge',short:'The Bridge',pos:[NY.center[0]-24,.04,NY.center[2]-7],color:'#bd7355',icon:'🛹',kind:'activity',skate:'ny'},
+  {id:'venice',name:'Venice Boardwalk',short:'Venice',pos:[-694,1.64,3421],color:'#edb879',icon:'🛹',kind:'activity',skate:'venice'},
+  {id:'playground',name:'Adventure Playground',short:'Playground',pos:playgroundWorld([PLAYGROUND_PARK.start.at[0],0,PLAYGROUND_PARK.start.at[1]]),color:'#f3c623',icon:'🛝',kind:'activity',skate:'playground'},
+  {id:'skate-hangar',name:'Skate Hangar',short:'Skate Hangar',pos:[581.9,0,877.7],color:'#edbd6a',icon:'🛹',kind:'activity',skate:'hangar'},
 ];
 LOCATIONS.push(...VENUE_LOCATIONS,...CLASSIC_LOCATIONS,...ALIEN_LOCATIONS,{id:'night-wave',name:'Night Wave',short:'Night Wave',pos:[11200,0,200],color:'#a99cf2',icon:'◇',kind:'race',event:'night-wave',alien:true});
 const loop = (cx,cz,w,d) => [[cx,cz],[cx+w*.4,cz],[cx+w*.5,cz-d*.18],[cx+w*.5,cz-d*.82],[cx+w*.35,cz-d],[cx-w*.35,cz-d],[cx-w*.5,cz-d*.82],[cx-w*.5,cz-d*.18],[cx-w*.4,cz],[cx,cz]];
@@ -79,13 +95,25 @@ export const canVisit=(state,p)=>!!p&&(!p.alien||alienWorldUnlocked(state));
 export const canEnterEvent=(state,event)=>event?.alien?alienWorldUnlocked(state):canEnter(state,locationById(event?.location));
 export function collectSpecimens(state,seen){const found=[];for(const i of seen){const p=SPECIMENS[i];if(p&&!state.specimens.includes(p.id)){state.specimens.push(p.id);found.push(p);}}return found;}
 export function expedition(state){return {found:state.specimens.length,total:SPECIMENS.length,unlocked:dreamlandUnlocked(state),complete:dreamlandUnlocked(state)&&(['dreamland','night-wave'].some(id=>[state.raceWins?.[id],state.wins?.[id]].some(t=>Number.isFinite(t)&&t>0)))};}
+// The pumpkin record to beat: the owner's son's 113 in one session on Halloween morning, 2026
+// (owner: make that the all-time high; each session starts again from zero).
+export const PUMPKIN_RECORD=113;
 export function loadProgress(storage){let v;try{v=JSON.parse(storage?.getItem('guns-only.rc.world.v1'));}catch{}
  const ids=(value,valid)=>[...new Set(Array.isArray(value)?value.filter(id=>valid.some(p=>p.id===id)):[])];
  const raceWins={};for(const e of RACE_EVENTS){const t=v?.raceWins?.[e.id];if(typeof t==='number'&&Number.isFinite(t)&&t>0)raceWins[e.id]=t;}
  const wins={};for(const e of RACE_EVENTS){const t=v?.wins?.[e.id];if(typeof t==='number'&&Number.isFinite(t)&&t>0)wins[e.id]=t;}
- return {discovered:['gate',...ids(v?.discovered,LOCATIONS).filter(id=>id!=='gate')],specimens:ids(v?.specimens,SPECIMENS),bowlingBest:Number.isInteger(v?.bowlingBest)&&v.bowlingBest>=0&&v.bowlingBest<=10?v.bowlingBest:0,golfBest:Number.isInteger(v?.golfBest)&&v.golfBest>0?v.golfBest:null,wins,raceWins,body:['buggy','monster','rally','pickup','golf'].includes(v?.body)&&(v.body!=='golf'||v?.discovered?.includes('golf'))?v.body:'jet',shell:['viper','eagle','hog','raptor','flanker'].includes(v?.shell)?v.shell:'viper',paint:PAINTS.some(p=>p.color===v?.paint)?v.paint:PAINTS[0].color};}
+ return {discovered:['gate',...ids(v?.discovered,LOCATIONS).filter(id=>id!=='gate')],specimens:ids(v?.specimens,SPECIMENS),bowlingBest:Number.isInteger(v?.bowlingBest)&&v.bowlingBest>=0&&v.bowlingBest<=10?v.bowlingBest:0,golfBest:Number.isInteger(v?.golfBest)&&v.golfBest>0?v.golfBest:null,wins,raceWins,body:['buggy','monster','rally','pickup','golf','pumpkin'].includes(v?.body)&&(v.body!=='golf'||v?.discovered?.includes('golf'))&&(v.body!=='pumpkin'||v?.pumpkins>=20)?v.body:'jet',shell:['viper','eagle','hog','raptor','flanker'].includes(v?.shell)?v.shell:'viper',paint:PAINTS.some(p=>p.color===v?.paint)?v.paint:PAINTS[0].color,trim:TRIMS.some(p=>p.color===v?.trim)?v.trim:TRIMS[0].color,pattern:LIVERIES.some(l=>l.id===v?.pattern)?v.pattern:'solid',pumpkins:Number.isInteger(v?.pumpkins)&&v.pumpkins>0?v.pumpkins:0,boosters:Number.isInteger(v?.boosters)&&v.boosters>0?v.boosters:0,retreats:Number.isInteger(v?.retreats)&&v.retreats>0?v.retreats:0,candyBest:Number.isInteger(v?.candyBest)&&v.candyBest>0?v.candyBest:0,pumpkinBest:Number.isInteger(v?.pumpkinBest)&&v.pumpkinBest>PUMPKIN_RECORD?v.pumpkinBest:PUMPKIN_RECORD,timeCrossed:v?.timeCrossed===true,lakeTownFreed:v?.lakeTownFreed===true};}
 export function saveProgress(storage,state){try{storage?.setItem('guns-only.rc.world.v1',JSON.stringify(state));}catch{}}
 export function discover(state,pos){const found=[];for(const p of LOCATIONS)if(canEnter(state,p)&&distance(pos,p.pos)<45&&!state.discovered.includes(p.id)){state.discovered.push(p.id);found.push(p);}return found;}
 export function recordFinish(state,id,time){const event=eventById(id);if(!event||!Number.isFinite(time)||time<=0||!canEnterEvent(state,event))return;state.raceWins??={};state.raceWins[id]=Math.min(Number(state.raceWins[id])||Infinity,time);state.wins[id]=Math.min(Number(state.wins[id])||Infinity,time);}
-export function medal(event,time){const factor=event.kind==='sprint'?1:3;return time<=event.medals[0]*factor?'Gold':time<=event.medals[1]*factor?'Silver':time<=event.medals[2]*factor?'Bronze':'Finished';}
+// Laps per race: a sprint is one run; a circuit gets 1-3 laps so the race is about RACE_TARGET_M
+// (~2.5 min at the measured 7.6 m/s kid pace, 2026-10-29 sweep). Three laps of a 2.3 km road
+// route was a 15-minute race for a six-year-old. Courses without authored points keep 3.
+export const RACE_TARGET_M=1150;
+export function eventLaps(event){
+ if(event?.laps)return event.laps;if(event?.kind==='sprint')return 1;const p=event?.points;if(!p?.length)return 3;
+ const metres=p.slice(1).reduce((sum,q,i)=>sum+Math.hypot(q[0]-p[i][0],q[1]-p[i][1]),0);
+ return Math.max(1,Math.min(3,Math.round(RACE_TARGET_M/Math.max(1,metres))));
+}
+export function medal(event,time){const factor=eventLaps(event);return time<=event.medals[0]*factor?'Gold':time<=event.medals[1]*factor?'Silver':time<=event.medals[2]*factor?'Bronze':'Finished';}
 export function rcLink(params,search=''){const p=new URLSearchParams(search);for(const k of ['track','from','event','mode','at'])p.delete(k);for(const [k,v]of Object.entries(params))if(v!=null)p.set(k,v);return `?${p}`;}

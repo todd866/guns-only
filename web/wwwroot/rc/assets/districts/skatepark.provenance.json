@@ -46,6 +46,11 @@
     "profile": "smoothstep",
     "purpose": "forgiving gameplay edge outside digitized slab"
   },
+  "berm": {
+    "top_m": 1.54,
+    "fall_m": 9.0,
+    "purpose": "lawn meets the coping; the plaza is cut into a slope"
+  },
   "lap_length_m": 45.5163160569498,
   "vertex_ao": {
     "raw_min": 0.0,
@@ -54,8 +59,24 @@
     "distance_m": 1.4,
     "samples": 20
   },
-  "visual_triangles": 26047,
-  "collision_triangles": 16122,
-  "collision_meshes": 30,
-  "materials": 6
+  "vertex_contact_ao": {
+    "method": "per-corner hemisphere rays (bake_hero.py pattern) against district geometry plus a ground plane; cosine- and distance-weighted; min() with the Cycles AO",
+    "rays": 16,
+    "reach_m": 0.9,
+    "strength": 1.1,
+    "clamp": [
+      0.55,
+      1.0
+    ],
+    "ground_z_m": 0.0,
+    "min_multiplier": 0.55,
+    "mean_multiplier": 0.8668,
+    "corners": 70615,
+    "corners_darkened": 15757,
+    "seconds": 1.9
+  },
+  "visual_triangles": 31210,
+  "collision_triangles": 21550,
+  "collision_meshes": 31,
+  "materials": 10
 }

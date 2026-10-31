@@ -2,6 +2,8 @@
 // bumping. Opponents follow the AI_* racing line (or the gates on courses without one) with a
 // pure-pursuit steer and a curvature speed limit. Both modes keep a bounded nearby pack.
 import { createSession, stepSession, readout, recover } from './session.mjs';
+import { followInput } from './playmate.mjs';
+import { WATER } from './water.mjs';
 import { add, sub, scale, dot, len, rotate } from './math.mjs';
 import { createPickups, stepPickups, modifiers, use, rivalWants, MISSILES, boostCar } from './pickups.mjs';
 import { padHit } from './features.mjs';
@@ -26,7 +28,7 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false, 
   const line = racingLine(course);
   const rivals = (roam ? slots.slice(1) : slots.slice(0, -1)).map((slot, i) => ({
     session: Object.assign(createSession({ ...course, start: slot }, { mode: 'bigKid' }), { autoUnstick: true }),
-    skill: [SKILL.cruise, SKILL.ace, 0.86][i % 3], node: 0, colour: i, callsign: CALLSIGNS[i % CALLSIGNS.length],
+    skill: [SKILL.cruise, SKILL.ace, 0.82][i % 3], node: 0, colour: i, callsign: CALLSIGNS[i % CALLSIGNS.length],
   }));
   // In-race ceremony applies to every driver. Timing is provisional; rarity and
   // presentation remain a later play-balancing task.
@@ -38,6 +40,7 @@ export function createRace(course, { mode = 'kid', opponents = 3, roam = false, 
   // to keep weapon pressure readable and preserve overtaking counterplay.
   const personalPickups = opponents > 0 && !roam;
   const race = { course, mode, roam, player, rivals, line, features, alts: altRoutes(course, line), pickups: createPickups(pickupCourse, 1, { perCar: personalPickups, rivalPersonal: mode === 'kid', rivalRespawn: mode === 'kid' ? 4 : 8, hitGrace: mode === 'bigKid' ? 1.1 : 0 }), events: [], clock: 0, t: 0, pace: 6, drivingTime: 0, finishOrder: [], retreat: { at: furball ? Infinity : 18, length: 5 } };
+  race.pickups.superFor = mode === 'kid' ? 'player' : 'all';
   if (furball) race.furball = createFurball(race);
   return race;
 }
@@ -70,7 +73,8 @@ export function progress(s) {
   return s.finished ? s.laps * cps.length + 1 : (s.lap - 1) * cps.length + g + Math.max(0, 1 - left / seg);
 }
 
-export const retreatActive = race => race.clock >= race.retreat.at && race.clock < race.retreat.at + race.retreat.length;
+// Free drive has its own retreat game (physics/retreat.mjs); this forced stop is for races.
+export const retreatActive = race => !race.roam && race.clock >= race.retreat.at && race.clock < race.retreat.at + race.retreat.length;
 
 // 1-based place: finished cars by finish order, then everyone else by lap progress.
 export function placeOf(race, s) {
@@ -119,9 +123,12 @@ export function driveInput(race, rival) {
     // Only leaders ease off; there is no free speed or teleport for trailing opponents.
     if (race.drivingTime > 2 && raceDistance(s) - raceDistance(race.player) > 5)
       vmax = Math.min(vmax, Math.max(2.5, race.pace) * 1.04);
+    if (kidFinale(race) && raceDistance(s) > raceDistance(race.player)) vmax = Math.min(vmax, Math.max(2.5, race.pace) * 0.93);
   }
   const steer = Math.max(-1, Math.min(1, err * 2.2));
   if (vmax < 0.5 || retreatActive(race)) return { throttle: 0, brake: true, steer };
+  // In the kid finale the cap must hold: 0.2 throttle within 1.5 m/s coasts straight past it.
+  if (s !== race.player && kidFinale(race)) return { throttle: r.forwardSpeed < vmax ? 1 : r.forwardSpeed > vmax + .3 ? -0.5 : 0, steer };
   return { throttle: r.forwardSpeed < vmax ? 1 : r.forwardSpeed > vmax + 1.5 ? -0.6 : 0.2, steer };
 }
 
@@ -144,6 +151,24 @@ export function raceDistance(s) {
 }
 // Keep the pack contestable in physical space as well as lap progress. A trailing rival may
 // spend a few seconds above its normal pace to rejoin; a leader still gets room to pull away.
+// Kid mode's final act (owner: "kid mode should mean you usually win after a long battle"): over the
+// last KID_HIT.finale of the race nobody can hit the player, and rivals ahead ease to just under the
+// player's pace, so a kid still in the fight catches them. Rivals behind keep racing.
+export function kidFinale(race) {
+  if (race.mode !== 'kid' || race.roam || race.furball || !race.player.running) return false;
+  const cps = race.course.checkpoints, laps = race.player.laps ?? race.course.laps ?? 1;
+  if (race.courseLength === undefined) { let length = 0; for (let i = 1; i < cps.length; i++) length += Math.hypot(cps[i][0] - cps[i - 1][0], cps[i][1] - cps[i - 1][1]); race.courseLength = length; }
+  return race.courseLength > 0 && raceDistance(race.player) > laps * race.courseLength * (1 - KID_HIT.finale);
+}
+// Kid-mode exposure: the player can be hit once the race has settled, with a breather after each hit,
+// and is never kicked while already in last place.
+export const KID_HIT = { after: 8, gap: 16, finale: .3 };
+export function kidOpen(race) {
+  if (race.mode !== 'kid' || race.roam || race.furball) return race.mode !== 'kid';
+  if (!race.player.running || race.player.finished || race.clock < KID_HIT.after || kidFinale(race)) return false;
+  if (race.clock - (race.playerHitAt ?? -Infinity) < KID_HIT.gap) return false;
+  return race.rivals.length > 0 && placeOf(race, race.player) < race.rivals.length + 1;
+}
 export const PACK = { slots: [3,0,-3], floor:.16, ceiling:1.18, ease:.06, push:.04 };
 export function packFactor(race,rival) {
  const gap=raceDistance(rival.session)-raceDistance(race.player),d=gap-PACK.slots[rival.colour%PACK.slots.length];
@@ -159,12 +184,28 @@ export function packFactor(race,rival) {
 // Effects (zoom, oil, a balloon spin) ride on the step input; a spinning car's controls are dead.
 function withEffects(race, car, input) {
   const m = modifiers(race.pickups, car);
-  return m.spinning ? { boost: 1, gripScale: 0.5 } : { ...input, boost: m.boost, gripScale: m.gripScale };
+  // The free-drive afterburner (input.boost) stacks with pickups; a spin keeps flight controls.
+  return m.spinning ? { boost: 1, gripScale: 0.5, flight: input.flight } : { ...input, boost: m.boost * (input.boost ?? 1), gripScale: m.gripScale };
+}
+
+// Racing-line node of each gate, searched forward in route order so a gate that shares its spot
+// with an earlier one (an out-and-back) maps to the later pass.
+function gateNodes(race) {
+  if (race.gateNodes) return race.gateNodes;
+  const line = race.line, out = [];let from = 0;
+  for (const c of race.course.checkpoints) {
+    let best = from;for (let k = from; k < line.length; k++) if (Math.hypot(line[k][0] - c[0], line[k][1] - c[1]) < Math.hypot(line[best][0] - c[0], line[best][1] - c[1])) best = k;
+    // Only look as far as the first local minimum within reach, so a later pass is not taken early.
+    for (let k = from; k < line.length; k++) { const d = Math.hypot(line[k][0] - c[0], line[k][1] - c[1]); if (d < (c[3] ?? 2.4) + 2) { best = k; while (k + 1 < line.length && Math.hypot(line[k + 1][0] - c[0], line[k + 1][1] - c[1]) <= Math.hypot(line[k][0] - c[0], line[k][1] - c[1])) best = ++k; break; } }
+    out.push(best);from = best;
+  }
+  return race.gateNodes = out;
 }
 
 export function stepRace(race, playerInput, dt = 1 / 120) {
   const pk = race.pickups, fb = race.furball;
   if (fb?.over) return;
+  WATER.time += dt;
   // Shot-down Furball cars leave the fight: no physics, no bumping, no targeting.
   const cars = [race.player.car, ...race.rivals.map(r => r.session.car)].filter(c => !fb?.out.has(c));
   if (race.player.running) race.clock += dt;
@@ -188,19 +229,26 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
       const [x, , z] = rival.session.car.pos;
       rival.node = race.line.reduce((b, p, i) => Math.hypot(p[0] - x, p[1] - z) < Math.hypot(race.line[b][0] - x, race.line[b][1] - z) ? i : b, 0);
     }
-    // Kid mode: in a race rivals never aim balloons or oil at the player, only at each other.
-    // Furball is the exception: being hunted is the game (see furball.mjs for the kid's cushions).
-    const targets = race.mode === 'kid' && !fb ? cars.slice(1) : cars;
+    // Kid mode: the player can be hit, Mario Kart style (owner, 2026-10-29: "you get hit a few
+    // times, find yourself at the back, then battle to the front"), but only through kidOpen():
+    // never in the opening seconds, at most once per KID_HIT.gap, and never while already last.
+    // Furball keeps its own rules (furball.mjs).
+    const targets = race.mode === 'kid' && !fb && !kidOpen(race) ? cars.slice(1) : cars;
     if ((!fb || mayFire(race, rival)) && rivalWants(pk, rival.session.car, targets)) use(pk, rival.session.car);
-    const input = fb ? furballInput(race, rival, () => driveInput(race, rival)) : driveInput(race, rival);
+    const input = rival.follow ? followInput(rival.session, rival.follow) : fb ? furballInput(race, rival, () => driveInput(race, rival)) : driveInput(race, rival);
     stepSession(rival.session, withEffects(race, rival.session.car, input), dt);
     // A rival that clips a steerpoint (airborne over it, or wide) is credited once it is clearly on
     // its way to the next one; otherwise it races on beside you scored as gates behind and never
     // finishes. Rivals only: the player's gates stay strict.
+    // The rival must also have driven past that gate's point on the racing line: on a route that
+    // doubles back (Base Traffic's out-and-back) the next gate can sit beside an earlier one, and
+    // proximity alone credited the whole 474 m U-turn leg, leaving the pack crawling under the
+    // leader brake while the player won alone.
     { const rs = rival.session, cps = race.course.checkpoints, g = rs.gate;
       if (!rs.roam && !rs.finished && g + 1 < cps.length) {
         const a = cps[g], b = cps[g + 1], seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        if (Math.hypot(b[0] - rs.car.pos[0], b[1] - rs.car.pos[2]) < seg * 0.5) rs.gate++;
+        const reached = !race.line.length || rival.alt || (rival.node % race.line.length) >= gateNodes(race)[g] - 2;
+        if (reached && Math.hypot(b[0] - rs.car.pos[0], b[1] - rs.car.pos[2]) < seg * 0.5) rs.gate++;
       } }
     // A rival on its roof gets the same R a kid would press.
     if (rotate(rival.session.car.q, [0, 1, 0])[1] < 0.2 && rival.session.car.speed < 0.5) { rival.stuck = (rival.stuck || 0) + dt; if (rival.stuck > 1.5) { rival.stuck = 0; recover(rival.session); } }
@@ -210,21 +258,23 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   // Boost pads: a short Afterburner for whoever crosses one (rivals too).
   if (race.features) for (const c of cars) if (padHit(race.features, c)) boostCar(pk, c, 0.9);
   bump(cars);
-  const events = stepPickups(pk, cars, race.course.world, dt, fb ? fb.out : race.mode === 'kid' ? race.player.car : null);
+  const events = stepPickups(pk, cars, race.course.world, dt, fb ? fb.out : race.mode === 'kid' && !kidOpen(race) ? race.player.car : null);
+  if (events.some(e => e.car === race.player.car)) race.playerHitAt = race.clock;
   if (fb) events.push(...stepFurball(race, events, dt));
   race.events.push(...events);
 }
 
 // Car-to-car: body spheres against body spheres, equal-mass impulses with a little bounce.
-const BODY = [[0, 0.02, -0.14], [0, 0.02, 0], [0, 0.02, 0.14]], R = 0.12;
+const bodySpheres = car => { const r = car.params.size[0] / 2, z = car.params.size[2] / 2 - r; return { r, at: [[0, .02, -z], [0, .02, 0], [0, .02, z]] }; };
 export function bump(cars) {
   for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) {
     const a = cars[i], b = cars[j];
     if (len(sub(a.pos, b.pos)) > 0.8) continue;
-    for (const pa of BODY) for (const pb of BODY) {
+    const ba = bodySpheres(a), bb = bodySpheres(b), reach = ba.r + bb.r;
+    for (const pa of ba.at) for (const pb of bb.at) {
       const ca = add(a.pos, rotate(a.q, pa)), cb = add(b.pos, rotate(b.q, pb)), d = sub(ca, cb), dl = len(d);
-      if (dl >= 2 * R || dl < 1e-6) continue;
-      const n = scale(d, 1 / dl), depth = 2 * R - dl;
+      if (dl >= reach || dl < 1e-6) continue;
+      const n = scale(d, 1 / dl), depth = reach - dl;
       a.pos = add(a.pos, scale(n, depth / 2)); b.pos = sub(b.pos, scale(n, depth / 2));
       const vn = dot(sub(a.vel, b.vel), n);
       if (vn < 0) { const j = -(1 + 0.3) * vn / 2; a.vel = add(a.vel, scale(n, j)); b.vel = sub(b.vel, scale(n, j)); a.impact = Math.max(a.impact, -vn); b.impact = Math.max(b.impact, -vn); }

@@ -63,6 +63,16 @@ export function createResidentialTerrain(grid, options = {}) {
     return [x, graded(x, z), z];
   });
   const at = (x, z) => vertices[z * (cols + 1) + x];
+  // Holes: whole mesh cells left open for an authored sunken surface (the schoolyard pool)
+  // that fills them itself. Rectangles snap outward to cell edges.
+  const holeCells = new Set(), holes = [];
+  for (const [x0, z0, x1, z1] of options.holes || []) {
+    const c0 = Math.max(0, Math.floor((x0 - bounds[0]) / sx)), c1 = Math.min(cols - 1, Math.ceil((x1 - bounds[0]) / sx) - 1);
+    const r0 = Math.max(0, Math.floor((z0 - bounds[1]) / sz)), r1 = Math.min(rows - 1, Math.ceil((z1 - bounds[1]) / sz) - 1);
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) holeCells.add(r * cols + c);
+    holes.push([bounds[0] + c0 * sx, bounds[1] + r0 * sz, bounds[0] + (c1 + 1) * sx, bounds[1] + (r1 + 1) * sz]);
+  }
+  const holed = (col, row) => holeCells.has(row * cols + col);
   const heightAt = (x, z) => {
     if (!finite(x) || !finite(z) || x < bounds[0] || x > bounds[2] || z < bounds[1] || z > bounds[3]) return 0;
     const gx = (x - bounds[0]) / sx, gz = (z - bounds[1]) / sz;
@@ -118,7 +128,9 @@ export function createResidentialTerrain(grid, options = {}) {
         out.push(tri);
       }
     };
+    let skipped = false;
     for (let row = minZ; row <= maxZ; row++) for (let col = minX; col <= maxX; col++) {
+      if (holed(col, row)) { skipped = true; continue; }
       const x = bounds[0] + col * sx, z = bounds[1] + row * sz;
       for (const cell of [[[x, z], [x + sx, z], [x + sx, z + sz]], [[x, z], [x + sx, z + sz], [x, z + sz]]]) {
         let polygon = cell;
@@ -126,15 +138,17 @@ export function createResidentialTerrain(grid, options = {}) {
         if (polygon.length >= 3) add(polygon);
       }
     }
+    if (!out.length && skipped) return [];
     return out.length ? out : [[[a[0], a[1] + heightAt(a[0], a[2]), a[2]], [b[0], b[1] + heightAt(b[0], b[2]), b[2]], [c[0], c[1] + heightAt(c[0], c[2]), c[2]]]];
   };
   const triangles = () => {
     const out = [];
     for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
+      if (holed(col, row)) continue;
       const a = at(col, row), b = at(col + 1, row), c = at(col + 1, row + 1), d = at(col, row + 1);
       out.push([a, c, b], [a, d, c]);
     }
     return out;
   };
-  return Object.freeze({ sourceBounds, bounds, pads, heightAt, rawHeightAt: raw, triangles, conformTriangle });
+  return Object.freeze({ sourceBounds, bounds, pads, holes, heightAt, rawHeightAt: raw, triangles, conformTriangle });
 }

@@ -15,6 +15,27 @@ const SPEC = { foxtwo: { v: 13, turn: 3.5, life: 4 }, pitbull: { v: 12.5, turn: 
 // the player.
 const RESPAWN = 4, GRAB = 0.6;
 
+// Mario Kart's item roulette by place: the leader draws defence (oil, bubble, balloon), the back of
+// the pack draws catch-up (Zoom, the homing Pitbull). `pk.order` is the race's place order, set
+// each step; without it (free drive, Furball) and for courses with a fixed item list, draws stay uniform.
+// The superweapon (owner, 2026-10-29): fall to the back and you may draw a laser turret: an alien gunner
+// climbs out of the roof, the car gets extra speed, and the turret zaps the nearest car ahead every
+// half second. Back-of-pack only. `pk.superFor` is 'player' in Kid mode (it is the kid's comeback,
+// never a weapon used on the kid) and 'all' otherwise.
+export const SUPER = 'laser';
+export const LASER = { seconds: 7, boost: 1.35, every: .5, range: 18, back: .85, chance: .4 };
+export const PLACE_WEIGHTS = { zoom: [.5, 3], balloon: [1.5, 1], oil: [2.5, .3], bubble: [2, .6], foxtwo: [.6, 1.5], pitbull: [.2, 2.5], foxone: [.7, 1.2], zuni: [.8, 1] };
+export function pickItem(pk, car, isPlayer = false) {
+  const pool = pk.items ?? ITEMS, at = pk.order?.indexOf(car) ?? -1, n = pk.order?.length ?? 0;
+  if (at < 0 || n < 2 || pool.length !== ITEMS.length) return pool[Math.floor(pk.rng() * pool.length)];
+  const back = at / (n - 1);
+  if (back >= LASER.back && (isPlayer || pk.superFor !== 'player') && pk.rng() < LASER.chance) return SUPER;
+  const w = pool.map(item => PLACE_WEIGHTS[item][0] * (1 - back) + PLACE_WEIGHTS[item][1] * back);
+  let r = pk.rng() * w.reduce((a, b) => a + b);
+  for (let i = 0; i < pool.length; i++) if ((r -= w[i]) <= 0) return pool[i];
+  return pool.at(-1);
+}
+
 export function createPickups(course, seed = 1, options = {}) {
   const perCar = !!options.perCar || !!course.personalPickups;
   const rivalPersonal = options.rivalPersonal !== false;
@@ -23,12 +44,12 @@ export function createPickups(course, seed = 1, options = {}) {
   return { items:requested?.length?requested:ITEMS, spots, perCar, rivalPersonal, rivalRespawn: options.rivalRespawn ?? null, hitGrace: options.hitGrace ?? 1.1, held: new Map(), ammo: new Map(), announce: [], effects: new Map(), balloons: [], slicks: [], missiles: [], dangle: new Set(), rng: lcg(seed) };
 }
 const lcg = seed => () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
-const fx = (pk, car) => { let e = pk.effects.get(car); if (!e) pk.effects.set(car, e = { zoom: 0, bubble: 0, spin: 0, slick: 0, hitGrace: 0 }); return e; };
+const fx = (pk, car) => { let e = pk.effects.get(car); if (!e) pk.effects.set(car, e = { zoom: 0, bubble: 0, spin: 0, slick: 0, hitGrace: 0, laser: 0, zap: 0 }); return e; };
 
 // Input modifiers this car's effects impose; merged into its step input.
 export function modifiers(pk, car) {
   const e = fx(pk, car);
-  return { boost: e.zoom > 0 ? 1.6 : 1, gripScale: e.slick > 0 ? 0.35 : 1, spinning: e.spin > 0, shielded: e.bubble > 0 };
+  return { boost: e.zoom > 0 ? 1.6 : e.laser > 0 ? LASER.boost : 1, gripScale: e.slick > 0 ? 0.35 : 1, spinning: e.spin > 0, shielded: e.bubble > 0, lasering: e.laser > 0, laserLeft: e.laser };
 }
 
 export function use(pk, car) {
@@ -39,6 +60,7 @@ export function use(pk, car) {
   const e = fx(pk, car), fwd = rotate(car.q, [0, 0, -1]);
   if (item === 'zoom') e.zoom = 1.4;
   if (item === 'bubble') e.bubble = 5;
+  if (item === SUPER) { e.laser = LASER.seconds; e.zap = .35; }
   if (item === 'oil') pk.slicks.push({ pos: add(car.pos, scale(fwd, -0.5)), life: 12, owner: car });
   if (MISSILES.has(item)) pk.missiles.push({ kind: item, pos: add(car.pos, add(scale(fwd, 0.4), [0, 0.05, 0])), dir: [fwd[0], 0, fwd[2]], owner: car, target: null, life: SPEC[item].life, bounces: 3, retarget: 0 });
   if (item === 'balloon') pk.balloons.push({ pos: add(car.pos, add(scale(fwd, 0.35), [0, 0.15, 0])), vel: add(car.vel, add(scale(fwd, 10), [0, 1.6, 0])), owner: car, life: 3 });
@@ -72,7 +94,7 @@ export function stepPickups(pk, cars, world, dt, immune = null) {
       && (!pk.perCar || i === 0 || pk.rivalPersonal || spot.rivalReady <= 0)
       && len(sub(c.pos, spot.pos)) < GRAB);
     if (car) {
-      const pool=pk.items??ITEMS, item = pool[Math.floor(pk.rng() * pool.length)]; pk.held.set(car, item);
+      const item = pickItem(pk, car, car === cars[0]); pk.held.set(car, item);
       if (pk.perCar) { const cooldown = car === cars[0] ? (pk.respawn ?? RESPAWN) : (pk.rivalRespawn ?? pk.respawn ?? RESPAWN); spot.cooldowns.set(car, cooldown); if (car === cars[0]) spot.ready = pk.respawn ?? RESPAWN; else if (!pk.rivalPersonal) spot.rivalReady = cooldown; }
       else spot.ready = pk.respawn ?? RESPAWN;
       // Missiles sometimes come as a 3-pack; firing the last of a pack calls "Winchester".
@@ -101,7 +123,29 @@ export function stepPickups(pk, cars, world, dt, immune = null) {
     if (s.life < 11) s.owner = null;   // after a second, the dropper can slide on it too
   }
   pk.slicks = pk.slicks.filter(s => s.life > 0);
+  stepLasers(pk, cars, dt, isImmune, events);
   return events;
+}
+
+// Turret: every LASER.every seconds, zap the nearest car ahead of the gunner within range. Beams are
+// kept briefly in pk.zaps for the renderer; a hit is an ordinary spin (a bubble pops instead).
+function stepLasers(pk, cars, dt, isImmune, events) {
+  pk.zaps = (pk.zaps ?? []).filter(z => (z.life -= dt) > 0);
+  for (const car of cars) {
+    const e = pk.effects.get(car);
+    if (!e || e.laser <= 0 || e.zap > 0) continue;
+    const f = rotate(car.q, [0, 0, -1]);
+    let best = null, bestD = LASER.range;
+    for (const o of cars) {
+      if (o === car || isImmune(o)) continue;
+      const d = sub(o.pos, car.pos), l = len(d);
+      if (l < bestD && l > .2 && dot(d, f) / l > .3) { best = o; bestD = l; }
+    }
+    if (!best) continue;
+    e.zap = LASER.every;
+    pk.zaps.push({ from: add(car.pos, [0, .2, 0]), to: best.pos.slice(), owner: car, life: .2 });
+    if (hit(pk, best)) events.push({ type: 'laser', car: best, by: car });
+  }
 }
 
 function stepMissiles(pk, cars, world, dt, isImmune, events, trailerHit) {
@@ -159,7 +203,7 @@ export const dangleSpot = car => add(car.pos, scale(rotate(car.q, [0, 0, -1]), -
 // Rival use: fire a balloon at a car ahead, drop oil with someone close behind, zoom/bubble at once.
 export function rivalWants(pk, car, cars) {
   const item = pk.held.get(car); if (!item) return false;
-  if (item === 'zoom' || item === 'bubble') return true;
+  if (item === 'zoom' || item === 'bubble' || item === SUPER) return true;
   if (MISSILES.has(item)) {
     const f = rotate(car.q, [0, 0, -1]);
     return cars.some(o => { if (o === car) return false; const d = sub(o.pos, car.pos), l = len(d);

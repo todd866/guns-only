@@ -9,7 +9,7 @@ const page=await browser.newPage({viewport:{width:1280,height:800}});const error
 const q=process.env.Q||'';// Classic renderer for the bot: physics are identical, and the HD composer's GPU load delays CDP
 // round-trips enough to make this polling driver overshoot (players' key-to-steer is unaffected).
 await page.goto(`http://127.0.0.1:${PORT}/rc/${q}${q?'&':'?'}mode=race${q.includes('gfx=')?'':'&gfx=classic'}`);await page.waitForFunction(()=>['blender','failed'].includes(window.__gunsOnlyRC?.snapshot().assets),null,{timeout:30000});
-await page.locator('#start').click();const held=new Set();// Follow the racing line (AI nodes on districts, gates on the prototype) with a 3 m lookahead.
+if(await page.locator('#start').isVisible())await page.locator('#start').click();const held=new Set();// Follow the racing line (AI nodes on districts, gates on the prototype) with a 3 m lookahead.
 const pts=await page.evaluate(()=>window.__gunsOnlyRC.line());let node=0;
 let st,shots=new Set(),t0=Date.now(),frames=[];
 while(Date.now()-t0<90000){st=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());
@@ -19,7 +19,7 @@ while(Date.now()-t0<90000){st=await page.evaluate(()=>window.__gunsOnlyRC.snapsh
  const p=pts[(node+2)%pts.length];const a=Math.atan2(p[0]-st.x,-(p[1]-st.z));const e=Math.atan2(Math.sin(a-st.yaw),Math.cos(a-st.yaw));
  const want=new Set();if(st.speed<(Math.abs(e)>.5?3:7))want.add('KeyW');if(e>.08)want.add('KeyD');if(e<-.08)want.add('KeyA');
  for(const k of held)if(!want.has(k)){await page.keyboard.up(k);held.delete(k);}for(const k of want)if(!held.has(k)){await page.keyboard.down(k);held.add(k);}
- if(process.env.FIRE&&st.item)await page.keyboard.press('KeyF');
+ if(process.env.FIRE&&st.item)await page.keyboard.press('KeyQ');
  await page.waitForTimeout(60);}
 for(const k of held)await page.keyboard.up(k);await page.screenshot({path:`${OUT}/end.png`});
 const gpu=await page.evaluate(()=>{const gl=document.createElement('canvas').getContext('webgl2'),e=gl.getExtension('WEBGL_debug_renderer_info');return e?gl.getParameter(e.UNMASKED_RENDERER_WEBGL):'?';});

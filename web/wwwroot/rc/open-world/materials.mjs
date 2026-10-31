@@ -10,7 +10,7 @@ function base(kind,x,y){
  const h=heightAt(kind,x,y),n=noise(x,y,9),d=detail(x,y,kind.length),u=periodic(x)/127,v=periodic(y)/127;
  // Deliberately saturated, toy-scale colours: each base material must remain legible
  // at a distance, while the small variation keeps large tiles from reading as flat fills.
- const palette={gravel:[.48,.43,.34],sand:[.64,.49,.31],asphalt:[.16,.18,.19],concrete:[.56,.58,.56],stucco:[.72,.63,.49],roof:[.37,.22,.16]}[kind];
+ const palette={gravel:[.48,.43,.34],sand:[.65,.53,.38],asphalt:[.16,.18,.19],concrete:[.56,.58,.56],stucco:[.72,.63,.49],roof:[.37,.22,.16]}[kind];
  let variation=(n-.5)*.10+(d-.5)*.055+(h-.5)*.05;
  if(kind==='gravel')variation=(n-.5)*.08+(d-.5)*.06+(noise(Math.floor(x/3)*3,Math.floor(y/3)*3,14)-.5)*.1;
  if(kind==='asphalt'){
@@ -27,7 +27,7 @@ function base(kind,x,y){
    if(x<1||y<1)variation-=.11;
    else if(x<3||y<3)variation-=.018;
  }
- if(kind==='sand')variation=(n-.5)*.075+(d-.5)*.035+.025*Math.sin(TAU*u)*Math.sin(TAU*v);
+ if(kind==='sand')variation=(n-.5)*.075+(d-.5)*.035;
  if(kind==='roof')variation+=(Math.sin(TAU*u*8)>.25?.035:-.035);
  return palette.map(channel=>clamp(channel+variation));
 }

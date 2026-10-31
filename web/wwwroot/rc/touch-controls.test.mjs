@@ -21,9 +21,9 @@ function fixture(run){
  const originals={window:globalThis.window,document:globalThis.document},elements={};
  for(const id of ['stick','throttle-lever','stick-puck','throttle-puck','brake','fire'])elements[id]=new Element();
  const root=new Element();root.querySelector=s=>elements[s.replace('#touch-','')];
- globalThis.window=new Element();globalThis.document=new Element();let state,fire=0,enabled=true;
- const controls=bindRCTouchControls({root,onChange:s=>state=s,onFire:()=>fire++,enabled:()=>enabled});
- try{run({root,elements,controls,get state(){return state},get fire(){return fire},disable(){enabled=false}});}
+ globalThis.window=new Element();globalThis.document=new Element();let state,fire=0,grab=false,enabled=true;
+ const controls=bindRCTouchControls({root,onChange:s=>state=s,onFire:()=>fire++,onGrab:value=>grab=value,enabled:()=>enabled});
+ try{run({root,elements,controls,get state(){return state},get fire(){return fire},get grab(){return grab},disable(){enabled=false}});}
  finally{controls.destroy();for(const [key,value]of Object.entries(originals)){if(value===undefined)delete globalThis[key];else globalThis[key]=value;}}
 }
 test('two thumbs steer and modulate spring-return power; brake and fire remain independent',()=>fixture(f=>{
@@ -65,4 +65,14 @@ test('selection and context-menu prevention is scoped to the touch controls',()=
   let prevented=false;f.root.dispatch(type,{target:f.elements.stick,preventDefault(){prevented=true;}});assert.equal(prevented,true,type);
   prevented=false;f.root.dispatch(type,{target:{closest:()=>null},preventDefault(){prevented=true;}});assert.equal(prevented,false,`${type} leaves normal text alone`);
  }
+}));
+
+test('holding Fire holds the skate grab, releases on cancellation and still fires only once',()=>fixture(f=>{
+ for(const reason of ['pointerup','pointercancel','lostpointercapture']){
+  const before=f.fire;f.elements.fire.dispatch('pointerdown',{pointerId:4});
+  assert.equal(f.grab,true);f.elements.fire.dispatch('pointermove',{pointerId:4});assert.equal(f.fire,before+1);
+  f.elements.fire.dispatch(reason,{pointerId:4});assert.equal(f.grab,false);
+ }
+ f.elements.fire.dispatch('pointerdown',{pointerId:4});f.controls.reset();assert.equal(f.grab,false);
+ f.elements.fire.dispatch('pointerdown',{pointerId:4});window.dispatch('blur');assert.equal(f.grab,false);
 }));

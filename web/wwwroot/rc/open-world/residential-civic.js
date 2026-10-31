@@ -1,6 +1,19 @@
 import * as T from '../../vendor/three.module.js';
 import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
 
+// Painted concrete block: four 0.2 m courses of 0.4 m blocks per 0.8 m repeat.
+function blockTexture() {
+  const size = 128, pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const course = Math.floor(y / 32), mortar = y % 32 < 2 || (x + (course % 2) * 32) % 64 < 2;
+    const noise = ((x * 37 + y * 71) % 23) / 23 - .5, shade = mortar ? .8 : .96 + noise * .05, i = (y * size + x) * 4;
+    pixels[i] = pixels[i + 1] = pixels[i + 2] = 255 * shade; pixels[i + 3] = 255;
+  }
+  const texture = new T.DataTexture(pixels, size, size, T.RGBAFormat); texture.colorSpace = T.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = T.RepeatWrapping; texture.generateMipmaps = true; texture.minFilter = T.LinearMipmapLinearFilter; texture.anisotropy = 4; texture.needsUpdate = true;
+  return texture;
+}
+
 // Distinctive civic facade dressing for the first mapped public footprint. It
 // deliberately carries no source names, logos, addresses, or coordinates.
 export function prepareResidentialCivic(world, data = {}, options = {}) {
@@ -8,7 +21,7 @@ export function prepareResidentialCivic(world, data = {}, options = {}) {
   let root = null; const meshes = []; const materials = new Map();
   const heightAt = options.terrain?.heightAt ?? (() => 0);
   const colours = {wall: '#c5bfa9', red: '#bd4f48', fanRoof: '#b9433e', roofSeam: '#eee2bb', rearWall: '#d7d2c0', roof: '#3a4446', glass: '#5a6d70', concrete: '#aaa99d', blue: '#315b79', trim: '#d6cfb4'};
-  const material = (key) => { if (!materials.has(key)) materials.set(key, new T.MeshStandardMaterial({color: colours[key], roughness: key === 'glass' ? .35 : .86, metalness: key === 'roof' ? .12 : 0})); return materials.get(key); };
+  const material = (key) => { if (!materials.has(key)) { const m = new T.MeshStandardMaterial({color: colours[key], roughness: key === 'glass' ? .35 : .86, metalness: key === 'roof' ? .12 : 0}); if (key === 'rearWall') m.map = blockTexture(); materials.set(key, m); } return materials.get(key); };
   const addBox = (list, key, w, h, d, x, y, z, rot = 0) => { const g = new T.BoxGeometry(w, h, d); g.applyMatrix4(new T.Matrix4().makeRotationY(rot)); g.applyMatrix4(new T.Matrix4().makeTranslation(x, y, z)); list(key).push(g); };
   const addCylinder = (list, key, r, h, x, y, z, rot = 0) => { const g = new T.CylinderGeometry(r, r * 1.03, h, 16); g.applyMatrix4(new T.Matrix4().makeRotationY(rot)); g.applyMatrix4(new T.Matrix4().makeTranslation(x, y, z)); list(key).push(g); };
 
@@ -32,7 +45,7 @@ export function prepareResidentialCivic(world, data = {}, options = {}) {
     const frontAngle = Math.atan2(-tz, tx), frontNormalAngle = Math.atan2(nx, nz);
     const onFront = (along, outward = 0, y = 0) => [frontMid[0] + tx * along + nx * outward, y, frontMid[1] + tz * along + nz * outward];
     const h = 5.0;
-    const quad = (key, a, b, c, d) => { const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute([...a, ...b, ...c, ...a, ...c, ...d], 3)); g.computeVertexNormals(); list(key).push(g); };
+    const quad = (key, a, b, c, d) => { const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute([...a, ...b, ...c, ...a, ...c, ...d], 3)); const u = Math.hypot(b[0] - a[0], b[2] - a[2]) / .8, v0 = a[1] / .8, v1 = c[1] / .8; g.setAttribute('uv', new T.Float32BufferAttribute([0, v0, u, v0, u, v1, 0, v0, u, v1, 0, v1], 2)); g.computeVertexNormals(); list(key).push(g); };
     const triangle = (key, a, b, c) => { const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute([...a, ...b, ...c], 3)); g.computeVertexNormals(); list(key).push(g); };
     // Low concrete forecourt follows the footprint's street-facing south edge.
     addBox(list, 'concrete', front.len * .72, .03, 8, frontMid[0] + nx * 4, .018, frontMid[1] + nz * 4, frontAngle);
@@ -89,6 +102,13 @@ export function prepareResidentialCivic(world, data = {}, options = {}) {
       const ax = edge.a[0] + outwardX * .06, az = edge.a[1] + outwardZ * .06;
       const bx = edge.b[0] + outwardX * .06, bz = edge.b[1] + outwardZ * .06;
       const panel=[[ax, .12, az], [bx, .12, bz], [bx, h, bz], [ax, h, az]];if(signedArea>0)panel.reverse();quad('rearWall',...panel);
+      // These sides face the starting skatepark. Like the real building they
+      // are windowless: plinth, dark fascia band and vertical panel seams.
+      const tx = (edge.b[0] - edge.a[0]) / edge.len, tz = (edge.b[1] - edge.a[1]) / edge.len, angle = Math.atan2(-tz, tx);
+      addBox(list, 'concrete', edge.len, .62, .08, mx + outwardX * .07, .43, mz + outwardZ * .07, angle);
+      addBox(list, 'roof', edge.len + .1, .28, .3, mx + outwardX * .1, h - .06, mz + outwardZ * .1, angle);
+      addBox(list, 'roof', edge.len + .04, .7, .06, mx + outwardX * .04, h - .55, mz + outwardZ * .04, angle);
+      for (let t = -edge.len / 2 + 3; t < edge.len / 2 - 1; t += 3) addBox(list, 'roof', .07, h - .9, .04, mx + tx * t + outwardX * .03, .12 + (h - .9) / 2, mz + tz * t + outwardZ * .03, angle);
     }
     // Long recessed red window band below the dark roof lip.
     addBox(list, 'red', front.len * .55, 1.35, .08, frontMid[0] + nx * .08, 1.65, frontMid[1] + nz * .08, frontAngle);
@@ -119,12 +139,13 @@ export function prepareResidentialCivic(world, data = {}, options = {}) {
     addBox(list, 'blue', 2.35, 1.65, .16, signX, 4.35, signZ);
     addBox(list, 'trim', 1.95, .12, .05, signX, 4.8, signZ - .1);
     for (const [key, parts] of buckets) {
-      const normalized = parts.map((g) => { const flat = g.index ? g.toNonIndexed() : g; const out = new T.BufferGeometry(); out.setAttribute('position', flat.getAttribute('position').clone()); flat.dispose(); return out; });
+      const uvs = parts.every((g) => g.getAttribute('uv'));
+      const normalized = parts.map((g) => { const flat = g.index ? g.toNonIndexed() : g; const out = new T.BufferGeometry(); out.setAttribute('position', flat.getAttribute('position').clone()); if (uvs) out.setAttribute('uv', flat.getAttribute('uv').clone()); flat.dispose(); return out; });
       const geometry = mergeGeometries(normalized, false); normalized.forEach((g) => g.dispose()); parts.forEach((g) => g.dispose()); geometry.computeVertexNormals();
       const mesh = new T.Mesh(geometry, material(key)); mesh.name = `ResidentialCivic_${key}`; mesh.castShadow = mesh.receiveShadow = true; root.add(mesh); meshes.push(mesh);
     }
     root.updateMatrixWorld(true); scene.add(root); return root;
   };
-  const dispose = () => { if (root) root.removeFromParent(); meshes.forEach((m) => m.geometry.dispose()); meshes.length = 0; materials.forEach((m) => m.dispose()); materials.clear(); root = null; };
+  const dispose = () => { if (root) root.removeFromParent(); meshes.forEach((m) => m.geometry.dispose()); meshes.length = 0; materials.forEach((m) => { m.map?.dispose(); m.dispose(); }); materials.clear(); root = null; };
   return {attach, dispose};
 }

@@ -109,7 +109,8 @@ export function buildCorridorArt(scene){
  // light count avoids shader recompilation as the driver crosses venue boundaries.
  const lights=[0,1].map(()=>{const l=new T.PointLight('#ffe3a8',0,22,2);scene.add(l);return l;});
  return {root,fixtures,lights,pools,update(day,pos,roadFixtures=[]){const night=Math.max(0,Math.min(1,1-day));warm.emissiveIntensity=night*1.3;poolMaterial.uniforms.night.value=night;
-  const near=[...fixtures,...roadFixtures].map(f=>({f,d:Math.hypot(f.pos.x-pos[0],f.pos.z-pos[2])})).sort((a,b)=>a.d-b.d);
+  // Daylight needs no lamp search; skip the per-frame allocation and sort.
+  const near=night>.01?[...fixtures,...roadFixtures].map(f=>({f,d:Math.hypot(f.pos.x-pos[0],f.pos.z-pos[2])})).sort((a,b)=>a.d-b.d):[];
   for(let i=0;i<lights.length;i++){const f=near[i];lights[i].intensity=f&&f.d<30?night*42:0;if(f)lights[i].position.copy(f.f.pos);}
   driver.set(...pos);for(const {region,box} of bounds)region.visible=box.distanceToPoint(driver)<550;
   pools.visible=night>.01;

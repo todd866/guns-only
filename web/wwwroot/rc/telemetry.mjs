@@ -12,11 +12,18 @@ export const RC_TELEMETRY_BUFFER_LIMIT = 240;
 const EVENT_CODES = new Set([
   "session_start", "first_input", "race_start", "race_finish", "race_quit",
   "furball_outcome", "choice", "item_use", "mute", "frame_p95", "session_end",
+  "skate_start", "skate_end", "pumpkin", "garage", "playmate",
+  "boot", "error", "visit", "activity_start", "activity_end", "map_open", "recover", "heartbeat",
+  "form", "flight", "discover",
 ]);
-const ITEMS = new Set(["zoom", "balloon", "oil", "bubble", "foxtwo", "pitbull", "foxone", "zuni"]);
+const ERROR_LIMIT = 8;
+const short = (value, n = 40) => String(value ?? "unknown").slice(0, n);
+const ITEMS = new Set(["zoom", "balloon", "oil", "bubble", "foxtwo", "pitbull", "foxone", "zuni", "laser"]);
 
+// Anonymous gameplay events are on for every player; only an explicit "disabled" from the
+// site's Settings toggle (or ?telemetry=off) stops them.
 function readConsent(storage) {
-  try { return storage?.getItem?.(RC_TELEMETRY_CONSENT_KEY) === "enabled"; } catch { return false; }
+  try { return storage?.getItem?.(RC_TELEMETRY_CONSENT_KEY) !== "disabled"; } catch { return true; }
 }
 
 function canonicalHost(locationObject) {
@@ -41,7 +48,7 @@ function finite(value, fallback = null) {
 }
 
 /**
- * Small, opt-in RC event recorder. It intentionally has no user agent, IP, URL, account,
+ * Small, default-on RC event recorder. It intentionally has no user agent, IP, URL, account,
  * fingerprint, or raw simulation state. The shared batch builder and IndexedDB outbox provide
  * bounded immutable requests and retry; this module owns only the RC event vocabulary.
  */
@@ -104,10 +111,10 @@ export function createRCTelemetry({
     active = { id: `${eventSession}-r${++raceSequence}`, kind, startedAt: now(), track: String(track ?? "unknown").slice(0, 40), mode: mode === "bigKid" ? "bigKid" : "kid" };
     record("race_start", { race_id: active.id, kind: kind === "furball" ? "furball" : "race", track: active.track, mode: active.mode });
   }
-  function raceFinish({ place, time, gap, recoveries, altTaken } = {}) {
+  function raceFinish({ place, time, gap, recoveries, altTaken, turbos } = {}) {
     if (!active) return;
     record(active.kind === "furball" ? "furball_outcome" : "race_finish", active.kind === "furball"
-      ? {} : { track: active.track, mode: active.mode, place: finite(place), time: finite(time), gap: finite(gap), recoveries: finite(recoveries, 0), alt_taken: altTaken === null || altTaken === undefined ? null : Boolean(altTaken) });
+      ? {} : { track: active.track, mode: active.mode, place: finite(place), time: finite(time), gap: finite(gap), recoveries: finite(recoveries, 0), turbos: finite(turbos, 0), alt_taken: altTaken === null || altTaken === undefined ? null : Boolean(altTaken) });
     lastResult = { race_id: active.id, track: active.track, mode: active.mode };
     active = null;
   }
@@ -123,12 +130,53 @@ export function createRCTelemetry({
     active = null;
   }
   function choice(choiceName) {
-    if (choiceName === "again" || choiceName === "drive") record("choice", { ...lastResult, choice: choiceName });
+    if (choiceName === "again" || choiceName === "drive" || choiceName === "skate_again" || choiceName === "skate_free") record("choice", { ...lastResult, choice: choiceName });
   }
   function setMode(value) {
     if (active && value !== active.mode) active.mode = "mixed";
   }
+  let skateRun = null;
+  function skateStart(park) {
+    if (skateRun) skateEnd({ reason: "replaced" });
+    skateRun = { park: String(park ?? "unknown").slice(0, 24), startedAt: now() };
+    record("skate_start", { park: skateRun.park });
+  }
+  function skateEnd({ reason = "time", score, bestCombo, gaps, goals, newGoals, letters } = {}) {
+    if (!skateRun) return;
+    record("skate_end", { park: skateRun.park, reason: String(reason).slice(0, 24), duration: Math.max(0, Math.round(now() - skateRun.startedAt)),
+      score: finite(score, 0), best_combo: finite(bestCombo, 0), gaps: finite(gaps, 0), goals: finite(goals, 0), new_goals: finite(newGoals, 0), letters: finite(letters, 0) });
+    lastResult = { park: skateRun.park };
+    skateRun = null;
+  }
+  // "Does it work": time to drivable, asset failures, script errors (URLs stripped, capped).
+  function boot({ assets, ms } = {}) { record("boot", { assets: short(assets, 16), ms: finite(ms) === null ? null : Math.round(finite(ms)) }); }
+  let errors = 0;
+  function error(kind, message) {
+    if (++errors > ERROR_LIMIT) return;
+    record("error", { kind: short(kind, 16), message: String(message ?? "").replace(/\b(?:https?|blob|data):\S*/g, "<url>").slice(0, 200) });
+  }
+  // "What are they doing": places reached, side games, map use, resets and a once-a-minute status.
+  let lastPlace = null;
+  function visit(place) { if (!place || place === lastPlace) return; lastPlace = place; record("visit", { place: short(place) }); }
+  function activityStart(game) { record("activity_start", { game: short(game, 16) }); }
+  function activityEnd({ game, score, total } = {}) { record("activity_end", { game: short(game, 16), score: finite(score), total: finite(total) }); }
+  // Where, coarsely: the car's world x and z rounded to 10 m (anonymous; enough to find the spot a
+  // player got stuck or lost, nothing finer). Optional on map_open, recover and heartbeat.
+  const where = at => Array.isArray(at) && Number.isFinite(at[0]) && Number.isFinite(at[2]) ? { x: Math.round(at[0] / 10) * 10, z: Math.round(at[2] / 10) * 10 } : {};
+  function mapOpen(at) { record("map_open", { ...where(at) }); }
+  function recover(how, at) { record("recover", { how: ["key", "button", "auto"].includes(how) ? how : "unknown", ...where(at) }); }
+  function heartbeat({ doing, place, metres, recoveries, at } = {}) { record("heartbeat", { doing: short(doing, 16), place: place ? short(place) : null, metres: Math.round(finite(metres, 0)), recoveries: finite(recoveries, 0), ...where(at) }); }
   function itemUse(item) { if (ITEMS.has(item)) record("item_use", { item }); }
+  // Halloween pumpkins: every smash up to 30, then every tenth, so a smashing spree stays small.
+  // The moment something is found for the first time (a place, a desert find, an adventure item),
+  // so places-per-session and time-between-discoveries are exact (tools/rc/analytics-report.mjs).
+  function discover(id, kind) { if (id) record("discover", { id: short(String(id)), kind: short(String(kind ?? 'place'), 12) }); }
+  function pumpkin(total) { const n = Math.round(finite(total, 0)); if (n > 0 && (n <= 30 || n % 10 === 0)) record("pumpkin", { total: n }); }
+  function garage({ body, shell, paint, pattern } = {}) { record("garage", { body: short(body, 16), shell: short(shell, 16), paint: short(paint, 24), pattern: short(pattern, 16) }); }
+  // The toy's form (car / robot / board) and free-drive flight: fly, chute, land (from = previous mode).
+  function form(name) { record("form", { form: short(name, 12) }); }
+  function flight({ mode, from, assist, at } = {}) { record("flight", { mode: short(mode, 8), from: short(from, 8), assist: !!assist, ...where(at) }); }
+  function playmate({ dest, result, closed } = {}) { record("playmate", { dest: short(dest, 24), result: short(result, 12), ...(Number.isFinite(closed) ? { closed: Math.round(closed) } : {}) }); }
   function mute(value) { record("mute", { muted: Boolean(value) }); }
   function observeFrame(deltaMs, activeFrame = true) {
     const eligible = activeFrame && previousActiveFrame;
@@ -190,6 +238,6 @@ export function createRCTelemetry({
   const initialTrack = String(track ?? query.get("track") ?? "housing").slice(0, 40);
   const initialMode = mode === "bigKid" ? "bigKid" : "kid";
   record("session_start", { track: initialTrack, mode: initialMode, device: deviceClass(navigatorObject), day: new Date().toISOString().slice(0, 10) });
-  function endSession() { if (sessionEnded) return; sessionEnded = true; record("session_end", { duration: Math.max(0, Math.round(now() - startedAt)) }); }
-  return Object.freeze({ session, enabled: uploadAllowed, firstInput, raceStart, raceFinish, raceQuit, furballOutcome, choice, setMode, itemUse, mute, observeFrame, flush, endSession, diagnostics: () => ({ bufferedRows: rows.length, active: Boolean(active), frameSamples: frames.length, p95: p95() }) });
+  function endSession() { if (sessionEnded) return; sessionEnded = true; skateEnd({ reason: "pagehide" }); record("session_end", { duration: Math.max(0, Math.round(now() - startedAt)) }); }
+  return Object.freeze({ session, enabled: uploadAllowed, firstInput, raceStart, raceFinish, raceQuit, furballOutcome, skateStart, skateEnd, boot, error, visit, discover, activityStart, activityEnd, mapOpen, recover, heartbeat, choice, setMode, itemUse, pumpkin, garage, playmate, form, flight, mute, observeFrame, flush, endSession, diagnostics: () => ({ bufferedRows: rows.length, active: Boolean(active), frameSamples: frames.length, p95: p95() }) });
 }

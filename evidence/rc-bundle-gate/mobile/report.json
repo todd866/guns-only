@@ -1,0 +1,283 @@
+{
+  "viewports": [
+    {
+      "label": "portrait",
+      "geometry": [
+        {
+          "selector": "#touch-fire",
+          "x": 210,
+          "y": 708,
+          "width": 80,
+          "height": 56,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-brake",
+          "x": 210,
+          "y": 772,
+          "width": 80,
+          "height": 56,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-throttle-lever",
+          "x": 298,
+          "y": 708,
+          "width": 80,
+          "height": 128,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-stick",
+          "x": 12,
+          "y": 708,
+          "width": 128,
+          "height": 128,
+          "visible": true,
+          "scroll": false
+        }
+      ]
+    },
+    {
+      "label": "small-phone",
+      "geometry": [
+        {
+          "selector": "#touch-fire",
+          "x": 180,
+          "y": 504,
+          "width": 80,
+          "height": 56,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-brake",
+          "x": 180,
+          "y": 568,
+          "width": 80,
+          "height": 56,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-throttle-lever",
+          "x": 268,
+          "y": 504,
+          "width": 80,
+          "height": 128,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-stick",
+          "x": 12,
+          "y": 504,
+          "width": 128,
+          "height": 128,
+          "visible": true,
+          "scroll": false
+        }
+      ]
+    },
+    {
+      "label": "landscape",
+      "geometry": [
+        {
+          "selector": "#touch-fire",
+          "x": 664,
+          "y": 254,
+          "width": 80,
+          "height": 56,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-brake",
+          "x": 664,
+          "y": 318,
+          "width": 80,
+          "height": 56,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-throttle-lever",
+          "x": 752,
+          "y": 254,
+          "width": 80,
+          "height": 128,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-stick",
+          "x": 12,
+          "y": 254,
+          "width": 128,
+          "height": 128,
+          "visible": true,
+          "scroll": false
+        }
+      ]
+    },
+    {
+      "label": "portrait-double-text",
+      "geometry": [
+        {
+          "selector": "#touch-fire",
+          "x": 210,
+          "y": 708,
+          "width": 80,
+          "height": 56,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-brake",
+          "x": 210,
+          "y": 772,
+          "width": 80,
+          "height": 56,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-throttle-lever",
+          "x": 298,
+          "y": 708,
+          "width": 80,
+          "height": 128,
+          "visible": true,
+          "scroll": false
+        },
+        {
+          "selector": "#touch-stick",
+          "x": 12,
+          "y": 708,
+          "width": 128,
+          "height": 128,
+          "visible": true,
+          "scroll": false
+        }
+      ]
+    }
+  ],
+  "braking": {
+    "x": -3021.1677712288792,
+    "y": 0.23818999995170825,
+    "z": -778.085980688787,
+    "yaw": 1.465340795885278,
+    "speed": 6.360742636835408e-8,
+    "forwardSpeed": -4.0159856316091246e-8,
+    "steer": 0,
+    "grounded": true,
+    "contacts": 4,
+    "rivals": [
+      {
+        "name": "GHOST",
+        "x": -3015.1161028512042,
+        "z": -815.1877461524257,
+        "finished": false
+      },
+      {
+        "name": "SANDY",
+        "x": -3014.2477709736677,
+        "z": -815.7316458586157,
+        "finished": false
+      },
+      {
+        "name": "SPLINTER",
+        "x": -3015.480101284122,
+        "z": -814.9794730755567,
+        "finished": false
+      },
+      {
+        "name": "FLANKER",
+        "x": -3017.6378567822617,
+        "z": -813.7117452719672,
+        "finished": false
+      },
+      {
+        "name": "FROSTY",
+        "x": -3015.841377764811,
+        "z": -814.7652804211771,
+        "finished": false
+      },
+      {
+        "name": "VIPER",
+        "x": -3018.2318651393794,
+        "z": -813.3608146102237,
+        "finished": false
+      },
+      {
+        "name": "BANDIT",
+        "x": -3018.9553174095563,
+        "z": -812.925984211629,
+        "finished": false
+      }
+    ],
+    "drifting": false,
+    "time": 0,
+    "lap": 1,
+    "laps": 3,
+    "lapTimes": [],
+    "gate": 0,
+    "running": false,
+    "finished": false,
+    "hits": 0,
+    "found": 0,
+    "seen": [],
+    "travel": 3.6684323085824087,
+    "recoveries": 0,
+    "mode": "kid",
+    "paused": false,
+    "guide": "skatepark",
+    "assets": "blender",
+    "item": null,
+    "place": 1,
+    "track": "hub",
+    "world": {
+      "tiles": 25,
+      "cached": 25,
+      "pending": 0,
+      "failed": 0,
+      "features": 2,
+      "ready": true,
+      "discovered": [
+        "gate",
+        "skatepark"
+      ],
+      "event": "district-skatepark",
+      "locked": false,
+      "golf": null,
+      "golfBest": null,
+      "bowlingBest": 0,
+      "specimens": [],
+      "expedition": {
+        "found": 0,
+        "total": 15,
+        "unlocked": false,
+        "complete": false
+      }
+    },
+    "vehicle": {
+      "topSpeed": 14,
+      "wheelRadius": 0.058,
+      "mass": 1.8
+    },
+    "body": "jet",
+    "shell": "viper",
+    "paint": "#ed9145",
+    "audioSilent": true
+  },
+  "protections": {
+    "selectstart": true,
+    "contextmenu": true,
+    "dragstart": true,
+    "css": true
+  },
+  "errors": []
+}

@@ -2,6 +2,8 @@ import * as T from '../../vendor/three.module.js';
 import { addBox } from '../physics/world.mjs';
 import { WAVEPOOL_BEACH, WAVEPOOL_SURFACES } from './wavepool-course.mjs';
 import { addWorldUv, attachSurfaceDetails } from './surface-detail.js';
+import { createWaterSurface } from './water-surface.js';
+import { WATER_BODIES, WATER, basinTriangles } from '../physics/water.mjs';
 
 const route = WAVEPOOL_BEACH.route;
 
@@ -78,8 +80,12 @@ export function buildWavepoolBeach(scene, world) {
 
   // Broad pool and a dry route collar make the intended line readable from the air and from
   // the RC camera. The old event route remains the authoritative checkpoint path.
-  const waterSurface = new T.BoxGeometry(104, .08, 64); addWorldUv(waterSurface);
-  addMesh(waterSurface, water, [-545, .02, 3365], 'WavepoolWater');
+  // A real pool: a beach-entry basin under a swelling surface the cars float on (physics/water.mjs).
+  const body = WATER_BODIES.find(b => b.id === 'wavepool'), [bx0, bz0, bx1, bz1] = body.rect;
+  const basinGeo = new T.BufferGeometry(); basinGeo.setAttribute('position', new T.Float32BufferAttribute(basinTriangles(body, 4).flat(2), 3)); basinGeo.computeVertexNormals();
+  addMesh(basinGeo, mat('basin', '#d9c9a0', { roughness: .9 }), null, 'WavepoolBasin');
+  const swell = createWaterSurface({ size: [bx1 - bx0, bz1 - bz0], segments: [Math.round((bx1 - bx0) * .6), Math.round((bz1 - bz0) * .6)], position: [(bx0 + bx1) / 2, body.level, (bz0 + bz1) / 2], swell: body.swell });
+  swell.mesh.name = 'WavepoolWater'; root.add(swell.mesh); meshes.push(swell.mesh);
   const sandSurface = new T.BoxGeometry(118, .12, 78); addWorldUv(sandSurface);
   addMesh(sandSurface, sand, [-545, -.03, 3365], 'WavepoolSandCollar');
   ribbon(route, 6.2, .1, routeMat, 'WavepoolRouteRibbon');
@@ -155,6 +161,7 @@ export function buildWavepoolBeach(scene, world) {
     root,
     course: WAVEPOOL_BEACH,
     update(time = 0) {
+      swell.update(WATER.time);   // the physics clock: cars ride the waves the player sees
       for (const wave of waves) {
         const pulse = .86 + Math.sin(time * 2.1 + wave.phase) * .18;
         wave.mesh.scale.set(pulse, pulse, pulse);
@@ -165,7 +172,7 @@ export function buildWavepoolBeach(scene, world) {
     dispose() {
       root.removeFromParent();
       root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
-      foamLine.dispose();
+      foamLine.dispose(); swell.dispose();
       surfaceDetails.dispose();
       for (const material of materials.values()) material.dispose();
     },

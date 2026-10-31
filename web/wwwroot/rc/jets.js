@@ -1,8 +1,8 @@
 // Toy jet body shells for the RC buggy: a real 1:10 chassis wearing a lexan shell shaped like a
 // real jet (owner, 2026-10-22: "RC cars with toy plane bodies that resemble real jets").
-// Car-local units, nose toward -Z, before VISUAL_SCALE. Wheels sit at x ±0.29, z ±0.25, top y ≈ 0.08,
-// so wings ride at y ≈ 0.15 over the tyres like an oversized body shell.
+// Car-local units, nose toward -Z. Fit each shell to the same 1:10 envelope.
 import * as T from '../vendor/three.module.js';
+import {VISUAL_SCALE} from './physics/car.mjs';
 
 export const JET_KINDS = ['viper', 'eagle', 'hog', 'raptor', 'flanker'];
 export const JET_NAMES = { viper: 'F-16 Viper', eagle: 'F-15 Eagle', hog: 'A-10 Warthog', raptor: 'F-22 Raptor', flanker: 'Su-27 Flanker' };
@@ -88,6 +88,7 @@ export function makeJetShell(kind, color) {
   const plateMesh = new T.Mesh(new T.BoxGeometry(.4, .03, .82), dark()); plateMesh.position.set(0, .03, -.04); g.add(plateMesh);
   const aerial = new T.Mesh(new T.CylinderGeometry(.004, .004, .42, 6), dark()); aerial.position.set(.13, .38, .14); g.add(aerial);
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  const size=new T.Box3().setFromObject(g).getSize(new T.Vector3());g.scale.set(.32/(size.x*VISUAL_SCALE),.8,.42/(size.z*VISUAL_SCALE));
   return g;
 }
 

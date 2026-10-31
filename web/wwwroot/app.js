@@ -3263,6 +3263,9 @@ function snapshotFeedbackReport(now, presentedState) {
 let autoLaunchPending = false;
 let firstRunAutostartPending = false;
 let firstRunValleyDismissed = false;
+// A Fly pressed while the runtime is still booting. The cover returns until the first frame,
+// which then performs the launch the player already asked for.
+let bootLaunchPending = false;
 let terrainLaunchWarmupPromise = null;
 let terrainLaunchWarmupOwner = null;
 let terrainLaunchWarmupGeneration = 0;
@@ -3977,7 +3980,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   }),
   "area-51": Object.freeze({
     kicker: "Off duty · base housing",
-    title: "Saucer Springs AFB",
+    title: "RC Odyssey",
     sortie: "Explore · race · battle",
     configuration: "1:10 toy buggy · rigid-body four-wheel physics · kid mode on (B toggles Big Kid)",
     brief: "Start at the neighbourhood skatepark, explore the base, and join nearby races.",
@@ -6347,6 +6350,15 @@ function activateReadyAction() {
   if (pauseReasons.has("combat-result")
     && !pauseReasons.has("settings") && !pauseReasons.has("notebook")) return againFromCombatResult();
   if (buildIdentityBlocksSortie()) return false;
+  if (!bridge) {
+    // Dedicated routes (Saucer Springs) need no simulator runtime: leave the page now.
+    const standalone = experienceById(selectedProgramNodeId);
+    if (!selectedPracticeExercise && standalone?.mission == null && standalone?.route
+      && pauseReasons.has("ready")) return launchMission(selectedBeat);
+    bootLaunchPending = true;
+    bootScreen?.classList.remove("picker-live");
+    return false;
+  }
   if (pauseReasons.has("finished")) {
     if (selectedPracticeExercise) return restartMissionNow();
     if (!isMultiplayerLane()) {
@@ -12752,6 +12764,10 @@ async function boot() {
         bootScreen.classList.add("ready");
         markShellMilestone("ready");
       }
+      if (bootLaunchPending) {
+        bootLaunchPending = false;
+        queueMicrotask(activateReadyAction);
+      }
       if (state?.session_phase === "ACTIVE") markShellMilestone("active");
       if (state?.session_phase === "READY") markShellMilestone("ready");
       requestAnimationFrame(tick);
@@ -12845,4 +12861,10 @@ if ("serviceWorker" in navigator) {
   else window.addEventListener("load", registerOfflineSupport, { once: true });
 }
 
+// The picker is static markup with module-level handlers, so it is usable before the simulator
+// runtime arrives (about 20 MB). Lift the cover now unless this load flies straight into the
+// first-run valley; the gauge stays visible until the first frame.
+try {
+  if (!shouldAutoStartFirstRunValley(firstRunValleyQueryContext())) bootScreen?.classList.add("picker-live");
+} catch { /* Storage may be unavailable; keep the cover. */ }
 boot().catch(showFatal);

@@ -9,7 +9,7 @@ try{
  await page.addInitScript(()=>{window.__rcFrameTimes=[];let previous;function sample(t){if(previous!==undefined)window.__rcFrameTimes.push(t-previous);previous=t;requestAnimationFrame(sample);}requestAnimationFrame(sample);});
  await page.goto(process.env.RC_URL||'http://127.0.0.1:8878/rc/?assets=blender');await page.locator('#start').click();
  const checkpoints=[];
- for(const phase of [{name:'acceleration',keys:['KeyW'],ms:1000},{name:'brake',keys:['Space'],ms:1000},{name:'reverse',keys:['KeyS'],ms:1000}]){
+ for(const phase of [{name:'acceleration',keys:['KeyW'],ms:1000},{name:'brake',keys:['KeyZ'],ms:1000},{name:'reverse',keys:['KeyS'],ms:1000}]){
   for(const key of phase.keys)await page.keyboard.down(key);await page.waitForTimeout(phase.ms);for(const key of phase.keys)await page.keyboard.up(key);
   checkpoints.push({phase:phase.name,state:await page.evaluate(()=>window.__gunsOnlyRC.snapshot())});
  }

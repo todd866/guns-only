@@ -53,8 +53,11 @@ export function walkNodes(glb, fn) {
 }
 
 export function surfaceOf(name) {
-  // Only the authored straight quarters: the adjacent hip remains a free transfer.
+  // Transitions with an arcade response (quarter-return.mjs): straight quarters, the bowl
+  // walls and corners, and the convex hip between the east quarter and the bowl.
   if (/^COL_concrete_(east|west)_quarter(?:\.\d+)?$/.test(name)) return 'quarter';
+  if (/^COL_concrete_bowl_(south|north|east|corner_-?1)(?:\.\d+)?$/.test(name)) return 'bowl';
+  if (/^COL_concrete_bowl_quarter_hip(?:\.\d+)?$/.test(name)) return 'hip';
   const s = name.slice(4).split(/[_.]/)[0].toLowerCase();
   if (!SURFACES[s]) throw Error(`Unknown collision surface in ${name}`);
   return s;

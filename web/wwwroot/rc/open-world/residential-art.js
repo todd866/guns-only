@@ -1,3 +1,4 @@
+import {doorSpans,solidPieces} from './high-school.mjs';
 import * as T from '../../vendor/three.module.js';
 import {residentialGrass} from './residential-ground.js';
 import {createSurfaceMaps} from './materials.js';
@@ -33,19 +34,23 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     }
     const map=new T.DataTexture(pixels,size,size,T.RGBAFormat);map.colorSpace=T.SRGBColorSpace;map.wrapS=map.wrapT=T.RepeatWrapping;map.minFilter=T.LinearMipmapLinearFilter;map.generateMipmaps=true;map.anisotropy=4;map.needsUpdate=true;return {map};
   };
+  const paints = new Map(), paint = key => { if (!paints.has(key)) paints.set(key, new T.Color(colours[key])); return paints.get(key); };
   const mat = (key) => {
     if (!materials.has(key)) {
-      const family=key.replace(/\d+$/,'');
+      // 'stucco#v' is every stucco paint variant at once: the paint rides in vertex colours, so one
+      // material and one draw call per area covers all the houses' colours (WebKit pays ~2x Chrome
+      // per draw call; the Mac app runs on WebKit).
+      const shared=key.endsWith('#v'),family=key.replace(/#v$/,'').replace(/\d+$/,'');
       const texture = ['asphalt','concrete','stucco','roof'].includes(family) ? createSurfaceMaps(family) : family==='brick'?brickMaps():key==='grass'?residentialGrass():null;
       // A neutral material tile carries grain; the house palette carries paint.
       // Multiplying a warm coloured tile by another colour made every house brown.
-      if (/\d$/.test(key) && texture?.map?.image?.data) {
+      if ((shared || /\d$/.test(key)) && texture?.map?.image?.data) {
         const pixels=texture.map.image.data, base={stucco:.72,brick:.48,roof:.37}[family];
         for(let i=0;i<pixels.length;i+=4){const grey=Math.max(0,Math.min(255,230+(pixels[i]-base*255)));pixels[i]=pixels[i+1]=pixels[i+2]=grey;}
         texture.map.needsUpdate=true;
       }
       materials.set(key, new T.MeshStandardMaterial({
-        color: /\d$/.test(key) ? colours[key] : texture ? '#ffffff' : colours[key] || key,
+        color: shared ? '#ffffff' : /\d$/.test(key) ? colours[key] : texture ? '#ffffff' : colours[key] || key, vertexColors: shared,
         roughness: key === 'glass' ? .3 : .88,
         // Ground layers are centimetres apart across a kilometre-scale view.
         // Bias paved overlays in depth, without lifting their wheel surfaces.
@@ -60,12 +65,15 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     if (!a || !b || !c) return;
     const chunked = /^(stucco|brick|roof|glass|trim|schoolDoor|door)[0-9]*$/.test(key);
     const cx = (a[0] + b[0] + c[0]) / 3, cz = (a[2] + b[2] + c[2]) / 3;
-    const bucketKey = chunked ? `${key}:${Math.floor(cx / 128)}:${Math.floor(cz / 128)}` : key;
-    if (!buckets.has(bucketKey)) buckets.set(bucketKey, { positions: [], uv: [] });
+    const variant = /\d$/.test(key) && /^(stucco|brick|roof)/.test(key), matKey = variant ? key.replace(/\d+$/, '') + '#v' : key;
+    const bucketKey = chunked ? `${matKey}:${Math.floor(cx / 256)}:${Math.floor(cz / 256)}` : matKey;
+    if (!buckets.has(bucketKey)) buckets.set(bucketKey, { positions: [], uv: [], colour: variant ? [] : null });
     const bucket = buckets.get(bucketKey);
+    const before = bucket.positions.length;
     const ab=b.map((v,i)=>v-a[i]),ac=c.map((v,i)=>v-a[i]),nx=ab[1]*ac[2]-ab[2]*ac[1],nz=ab[0]*ac[1]-ab[1]*ac[0],vertical=Math.abs(nx)+Math.abs(nz)>Math.abs(ab[2]*ac[0]-ab[0]*ac[2]);
     const triangles = conform && currentBaseY == null && terrain?.conformTriangle ? terrain.conformTriangle(a, b, c) : [[a, b, c]];
     for (const triangle of triangles) for(const p of triangle){const q=conform && currentBaseY == null && terrain?.conformTriangle ? p : project(p);bucket.positions.push(...q);if(vertical){const u=Math.abs(nx)>Math.abs(nz)?p[2]:p[0];bucket.uv.push(u/(key.startsWith('brick')?1.76:2),p[1]/(key.startsWith('brick')?.6:2));}else bucket.uv.push(p[0]*.5,p[2]*.5);}
+    if (bucket.colour) { const c = paint(key); for (let k = before; k < bucket.positions.length; k += 3) bucket.colour.push(c.r, c.g, c.b); }
   };
   const quad = (key, a, b, c, d) => { push(key, a, b, c); push(key, a, c, d); };
   const upTri=(key,a,b,c)=>{if((b[2]-a[2])*(c[0]-a[0])-(b[0]-a[0])*(c[2]-a[2])<0)[b,c]=[c,b];push(key,a,b,c);};
@@ -109,6 +117,7 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     const foundationLo=Math.min(...outer.map(p=>heightAt(p[0],p[1])));
     const faces=T.ShapeUtils.triangulateShape(outer.map(p=>new T.Vector2(...p)),holes.map(r=>r.map(p=>new T.Vector2(...p))));
     const wallKey=house?(index%3===0?'stucco'+(index%2+1):'brick'+(index%2+1)):kind==='school'?'brick':'stucco';
+    const doors=heroSchool?doorSpans(rings):null;   // the high school's door openings (high-school.mjs)
     const roofKey=house?'roof'+(index%3+1):'roof',profile=house?roofProfile(outer,h,index):null;
     let front=null;
     for(const [ringIndex,ring]of rings.entries()){
@@ -117,7 +126,8 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
         const a=ring[i],b=ring[(i+1)%ring.length],dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);if(len<.02)continue;
         const nx=sign*dz/len,nz=-sign*dx/len,p=(u,y,off=.04)=>[a[0]+dx*u+nx*off,y===0?foundationLo-currentBaseY:y,a[1]+dz*u+nz*off];
         const face=(key,u0,u1,y0,y1,off=.04)=>{const q=[p(u0,y0,off),p(u1,y0,off),p(u1,y1,off),p(u0,y1,off)];if(sign>0)q.reverse();quad(key,...q);};
-        const q=[p(0,0,0),p(1,0,0),p(1,h,0),p(0,h,0)];if(sign>0)q.reverse();if(!heroSchool)quad(wallKey,...q);collideQuad(...q,'concrete');
+        const q=[p(0,0,0),p(1,0,0),p(1,h,0),p(0,h,0)];if(sign>0)q.reverse();if(!heroSchool)quad(wallKey,...q);
+        for(const [t0,t1]of doors?solidPieces(doors[ringIndex]?.[i]):[[0,1]]){const c=[p(t0,0,0),p(t1,0,0),p(t1,h,0),p(t0,h,0)];if(sign>0)c.reverse();collideQuad(...c,'concrete');}
         // Human-sized window bays and doors establish the small car's scale.
         const bays=(heroSchool||heroCivic)?0:Math.floor(len/(house?3.6:3)),levels=Math.max(1,Math.round(h/3.1));
         for(let floor=0;floor<levels;floor++)for(let j=0;j<bays;j++){
@@ -162,7 +172,7 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
   for (const [bucketKey, values] of buckets) {
     if (!values.positions.length) continue;
     const key = bucketKey.split(':', 1)[0];
-    const geometry = new T.BufferGeometry(); geometry.setAttribute('position', new T.Float32BufferAttribute(values.positions, 3)); geometry.setAttribute('uv', new T.Float32BufferAttribute(values.uv, 2)); geometry.computeVertexNormals(); geometry.computeBoundingSphere();
+    const geometry = new T.BufferGeometry(); geometry.setAttribute('position', new T.Float32BufferAttribute(values.positions, 3)); geometry.setAttribute('uv', new T.Float32BufferAttribute(values.uv, 2)); if (values.colour) geometry.setAttribute('color', new T.Float32BufferAttribute(values.colour, 3)); geometry.computeVertexNormals(); geometry.computeBoundingSphere();
     const mesh = new T.Mesh(geometry, mat(key)); mesh.name = `Residential_${bucketKey}`; mesh.castShadow = /^(stucco|brick|roof)/.test(key); mesh.receiveShadow = true; root.add(mesh);
   }
   root.updateMatrixWorld(true); scene.add(root);

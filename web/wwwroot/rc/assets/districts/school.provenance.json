@@ -12,12 +12,12 @@
   "ai_nodes": 52,
   "ai_spacing_m": 6.25,
   "shortcut_nodes": 19,
-  "visual_triangles": 89017,
+  "visual_triangles": 89611,
   "collision_triangles": 3186,
   "collision_meshes": 230,
-  "materials": 24,
+  "materials": 26,
   "lettering": "mesh text from Blender's bundled UI font (no textures)",
-  "cultural_references": "fictional, kid-safe; docs/research/area51-usaf-nellis-vegas-references.md section A; section B avoided (no DoDEA/USAF/unit marks, no real brands); Month of the Military Child (April, purple) is a generic tradition",
+  "cultural_references": "fictional, kid-safe; docs/research/area51-usaf-nellis-vegas-references.md section A; section B avoided (no DoDEA/USAF/unit marks, no real brands)",
   "interior_lighting": "materials carry emission = albedo x 0.5 (warm), ceiling 0.78, troffers 1.0; outdoor-only materials (stucco, rubber, sand, concrete) 0.12-0.15, since the game sun is shadowed indoors",
   "vertex_ao": {
     "raw_min": 0.0,
@@ -27,5 +27,21 @@
     "samples": 24
   },
   "vertex_ao_method": "Cycles AO bake to per-corner BYTE_COLOR attribute \"AO\", exported as COLOR_0; remapped to floor..1. Real bake, no painted shading. Decals, ceilings and the far backdrop are left at 1.0 (not baked).",
-  "glb_bytes": 5481780
+  "glb_bytes": 5478804,
+  "vertex_contact_ao": {
+    "method": "per-corner hemisphere rays (bake_hero.py pattern) against district geometry plus a ground plane; cosine- and distance-weighted; min() with the Cycles AO",
+    "rays": 16,
+    "reach_m": 0.9,
+    "strength": 1.1,
+    "clamp": [
+      0.55,
+      1.0
+    ],
+    "ground_z_m": 0.0,
+    "min_multiplier": 0.55,
+    "mean_multiplier": 0.7578,
+    "corners": 123689,
+    "corners_darkened": 31544,
+    "seconds": 5.0
+  }
 }

@@ -1,3 +1,4 @@
+import {MODEL_WHEEL_WIDTH,MODEL_HUB_WIDTH} from './vehicle-pose.mjs';
 import {fetchAssetBuffer} from './asset-buffer.mjs';
 import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
 import {Box3} from '../vendor/three.module.js';
@@ -7,8 +8,11 @@ export async function loadBuggyAsset(url){
  const wheels=['FL','FR','RL','RR'].map(name=>{
   const pivot=car.getObjectByName('Steer_'+name),wheel=car.getObjectByName('Wheel_'+name);
   if(!pivot||!wheel)throw Error(`Invalid RC asset: missing ${name} wheel pivots`);
+  // The authored hubs span beyond both sidewalls. Fit them inside the tyre before posing.
+  wheel.traverse(node=>{if(!node.isMesh||node.name.endsWith('_rubber'))return;node.updateMatrix();node.geometry=node.geometry.clone();node.geometry.applyMatrix4(node.matrix);const p=node.geometry.attributes.position;for(let i=0;i<p.count;i++)p.setX(i,p.getX(i)*MODEL_WHEEL_WIDTH/MODEL_HUB_WIDTH);node.geometry.computeVertexNormals();node.geometry.computeBoundingBox();node.geometry.computeBoundingSphere();node.position.set(0,0,0);node.quaternion.identity();node.scale.setScalar(1);});
   return {pivot,wheel,front:name.startsWith('F')};
  });
+ const body=car.getObjectByName('Body');if(body){for(const node of body.children){if(['Mesh_Body_shell','Mesh_Body_ivory','Mesh_Body_graphite','RakedCanopy'].includes(node.name)){node.scale.z*=.81;node.position.z*=.81;}}}
  const collision=[];car.updateMatrixWorld(true);
  car.traverse(node=>{if(node.name.startsWith('COLLISION_')||node.userData.collision_proxy){collision.push({name:node.name,bounds:new Box3().setFromObject(node)});node.visible=false;}else if(node.isMesh){node.castShadow=true;node.receiveShadow=true;}});
  return {car,wheels,collision};

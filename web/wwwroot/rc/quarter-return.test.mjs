@@ -66,3 +66,10 @@ test('quarter return works in the complete connected residential world',async()=
  try{world=await loadOpenWorld('');const result=driveQuarter({connected:world.course,placement:RESIDENTIAL_PARK,throttle:1});assert.ok(result.landing.position[0]<7.6&&result.landing.up>.75);}
  finally{world?.dispose();globalThis.fetch=fetchBefore;}
 });
+
+// The skateboard form (docs/design/adventure) must ride the same quarter: slow exits, fast returns.
+test('board kid: speed selects deck exit or return', () => {
+  const slow = driveQuarter({ kind: 'board', mode: 'kid', throttle: .3 }), fast = driveQuarter({ kind: 'board', mode: 'kid', throttle: 1 });
+  assert.ok(Math.abs(wrap(slow.landing.yaw - slow.yaw)) < .4 && slow.landing.position[0] > 8.3, 'slow exits forward');
+  assert.ok(Math.abs(wrap(fast.landing.yaw - fast.yaw - Math.PI)) < .4 && fast.landing.position[0] < 7.6, 'fast returns');
+});
