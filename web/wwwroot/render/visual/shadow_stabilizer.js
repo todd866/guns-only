@@ -1,3 +1,4 @@
+// Shared, pure copy of the shadow texel-snap maths: see shared/sun.js (snapLightToTexels). Keep the two in step.
 // NO THREE IMPORT. This module only ever reads and writes .x/.y/.z on objects the caller already
 // owns, so importing Vector3 bought nothing and cost real bytes. Three's canonical browser module
 // identity is the unsuffixed vendor URL on every shell; any query-string variant is a DIFFERENT

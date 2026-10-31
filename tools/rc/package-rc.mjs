@@ -8,14 +8,25 @@ import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const WWW = path.join(ROOT, 'web/wwwroot'), RC = path.join(WWW, 'rc'), VENDOR = path.join(WWW, 'vendor');
-const SHARED = path.join(WWW, 'render/telemetry');
-const SHARED_FILES = new Set(['telemetry_batch.js', 'telemetry_outbox.js']);
+// The only render/ code rc/ may import, copied to rc/shared/<name>/. `files` is an exact allowlist;
+// `any` allows every .js directly inside the directory (not tests/ or subdirectories).
+const SHARED_DIRS = [
+  { name: 'telemetry', dir: path.join(WWW, 'render/telemetry'), files: new Set(['telemetry_batch.js', 'telemetry_outbox.js']) },
+  { name: 'visual', dir: path.join(WWW, 'render/visual/shared'), any: true },
+];
+const sharedDirOf = (target, roots = SHARED_DIRS.map(d => d.dir)) => {
+  const i = roots.findIndex(r => inside(target, r)); if (i < 0) return null;
+  const rel = path.relative(roots[i], target), d = SHARED_DIRS[i];
+  return (d.any ? /^[^/\\]+\.js$/.test(rel) && !/\.test\.js$/.test(rel) : d.files.has(rel)) ? { d, rel } : null;
+};
 const MARKER = '.rc-dist-marker', CODE = /\.(m?js|html)$/;
 const SKIP = name => /\.test\.m?js$|\.blend1?$/.test(name) || name === 'tests' || name === '__fixtures__' || name.startsWith('.') || name.endsWith('.glb.gz');
 
 // Real relative imports only: comments are blanked first (vendor files carry example code in them).
 const stripComments = src => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' ')).replace(/(^|[^:'"\\])\/\/[^\n]*/g, '$1');
 const IMPORT = /(\bimport\s*\(\s*|\b(?:import|export)\b[^'"`;]*?\bfrom\s*|\bimport\s*)(['"])(\.{1,2}\/[^'"]+)\2/g;
+// What rc/ code may import: itself, the vendored three, and the allowlisted shared render modules.
+export const importApproved = target => inside(target, RC) || inside(target, VENDOR) || !!sharedDirOf(target);
 export function relativeImports(src) { return [...stripComments(src).matchAll(IMPORT)].map(m => m[3]); }
 
 function walk(dir, out = []) {
@@ -65,14 +76,15 @@ export function packageRc(out = path.join(ROOT, '.rc-dist')) {
     throw Error(`${out} is not empty and has no ${MARKER}; refusing to overwrite it`);
   fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out, { recursive: true });
   const vendor = new Set(), queue = [];
-  const shared = target => inside(target, SHARED) && SHARED_FILES.has(path.relative(SHARED, target));
-  const bundledPath = target => inside(target, VENDOR)
-    ? path.join(out, 'rc/vendor', path.relative(VENDOR, target))
-    : path.join(out, 'rc/shared/telemetry', path.relative(SHARED, target));
+  const shared = target => !!sharedDirOf(target);
+  const bundledPath = target => {
+    if (inside(target, VENDOR)) return path.join(out, 'rc/vendor', path.relative(VENDOR, target));
+    const { d, rel } = sharedDirOf(target); return path.join(out, 'rc/shared', d.name, rel);
+  };
   const resolve = (file, spec) => {
     const target = path.resolve(path.dirname(file), spec.split(/[?#]/)[0]);
     if (!fs.existsSync(target)) throw Error(`${posix(path.relative(ROOT, file))}: import '${spec}' does not exist`);
-    if (!inside(target, RC) && !inside(target, VENDOR) && !shared(target)) throw Error(`${posix(path.relative(ROOT, file))}: import '${spec}' leaves rc/ and approved shared dependencies`);
+    if (!importApproved(target)) throw Error(`${posix(path.relative(ROOT, file))}: import '${spec}' leaves rc/ and approved shared dependencies`);
     if ((inside(target, VENDOR) || shared(target)) && !vendor.has(target)) { vendor.add(target); queue.push(target); }
     return target;
   };
@@ -150,10 +162,13 @@ export function packageRcBundle(out = path.join(ROOT, '.rc-dist')) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-bundle-'));
   try {
     // Same depth as the real tree so ../vendor and ../render/telemetry resolve identically.
-    const tWww = path.join(tmp, 'web/wwwroot'), tRc = path.join(tWww, 'rc'), tVendor = path.join(tWww, 'vendor'), tShared = path.join(tWww, 'render/telemetry');
+    const tWww = path.join(tmp, 'web/wwwroot'), tRc = path.join(tWww, 'rc'), tVendor = path.join(tWww, 'vendor'), tRoots = SHARED_DIRS.map(d => path.join(tWww, path.relative(WWW, d.dir)));
     fs.cpSync(VENDOR, tVendor, { recursive: true });
-    fs.mkdirSync(tShared, { recursive: true });
-    for (const f of SHARED_FILES) fs.copyFileSync(path.join(SHARED, f), path.join(tShared, f));
+    SHARED_DIRS.forEach((d, i) => {
+      fs.mkdirSync(tRoots[i], { recursive: true });
+      for (const e of fs.readdirSync(d.dir, { withFileTypes: true }))
+        if (e.isFile() && (d.any ? /\.js$/.test(e.name) : d.files.has(e.name))) fs.copyFileSync(path.join(d.dir, e.name), path.join(tRoots[i], e.name));
+    });
     let bytes = 0, files = 0, rewrites = 0, found = 0; const guard = [];
     const copyOut = file => { const dest = path.join(out, 'rc', path.relative(RC, file)); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(file, dest); bytes += fs.statSync(dest).size; files++; };
     for (const file of walk(RC)) {
@@ -166,7 +181,7 @@ export function packageRcBundle(out = path.join(ROOT, '.rc-dist')) {
       for (const spec of new Set(relativeImports(src))) {   // same "import leaves rc/" guard as the default mode
         const target = path.resolve(path.dirname(dest), spec.split(/[?#]/)[0]);
         if (!fs.existsSync(target)) throw Error(`${posix(path.relative(ROOT, file))}: import '${spec}' does not exist`);
-        const ok = inside(target, tRc) || inside(target, tVendor) || (inside(target, tShared) && SHARED_FILES.has(path.relative(tShared, target)));
+        const ok = inside(target, tRc) || inside(target, tVendor) || !!sharedDirOf(target, tRoots);
         if (!ok) throw Error(`${posix(path.relative(ROOT, file))}: import '${spec}' leaves rc/ and approved shared dependencies`);
       }
     }

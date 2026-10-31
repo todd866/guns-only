@@ -1,7 +1,7 @@
 import {gunzipSync} from 'node:zlib';
 import test from 'node:test'; import assert from 'node:assert/strict';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
-import { packageRc, packageRcBundle, findEsbuild, rewriteMetaUrl, relativeImports } from './package-rc.mjs';
+import { packageRc, packageRcBundle, findEsbuild, rewriteMetaUrl, relativeImports, importApproved } from './package-rc.mjs';
 
 const files = (dir, out = []) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name); e.isDirectory() ? files(p, out) : out.push(p); } return out; };
 
@@ -73,4 +73,28 @@ test('bundle mode: one entry, split chunks, no vendor, no import.meta.url', { sk
   for (const model of all.filter(f => f.endsWith('.glb'))) assert.deepEqual(gunzipSync(fs.readFileSync(model + '.gz')), fs.readFileSync(model));
   assert.ok(fs.existsSync(path.join(out, 'vercel.json')));
   packageRcBundle(out);   // re-running over its own output is allowed
+});
+
+const WWW = new URL('../../web/wwwroot/', import.meta.url).pathname;
+test('rc/ may import render/visual/shared/*.js and nothing else under render/', () => {
+  for (const ok of ['render/visual/shared/tone.js', 'render/visual/shared/adaptive.js', 'render/telemetry/telemetry_batch.js', 'vendor/three.module.js', 'rc/main.js'])
+    assert.ok(importApproved(path.join(WWW, ok)), ok);
+  for (const bad of ['render/visual/profile.js', 'render/visual/shadow_stabilizer.js', 'render/visual/index.js', 'render/visual/shared/tests/tone.test.mjs',
+    'render/visual/shared/sub/x.js', 'render/telemetry/other.js', 'render/index.js', 'content/x.js', 'open-world/runtime.js'])
+    assert.ok(!importApproved(path.join(WWW, bad)), bad);
+});
+
+test('a dummy rc module importing the shared visual modules packages correctly (default and bundle)', () => {
+  const probe = path.join(WWW, 'rc', `zz-shared-probe-${process.pid}.js`);
+  fs.writeFileSync(probe, "import { applyTone } from '../render/visual/shared/tone.js';\nimport { createAdaptivePolicy } from '../render/visual/shared/adaptive.js';\nexport default [applyTone, createAdaptivePolicy];\n");
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-shared-'));
+  try {
+    const out = path.join(scratch, 'dist');
+    packageRc(out);
+    const shipped = fs.readFileSync(path.join(out, 'rc', path.basename(probe)), 'utf8');
+    assert.match(shipped, /'\.\/shared\/visual\/tone\.js'/); assert.doesNotMatch(shipped, /\.\.\/render\//);
+    for (const n of ['tone.js', 'adaptive.js']) assert.equal(fs.readFileSync(path.join(out, 'rc/shared/visual', n), 'utf8'), fs.readFileSync(path.join(WWW, 'render/visual/shared', n), 'utf8'), `${n} copied verbatim`);
+    assert.ok(!fs.existsSync(path.join(out, 'rc/shared/visual/tests')) && !fs.existsSync(path.join(out, 'rc/shared/visual/sun.js')), 'shared tests and unimported modules are not shipped');
+    if (findEsbuild()) packageRcBundle(path.join(scratch, 'bundle'));   // the bundle guard accepts the same imports
+  } finally { fs.renameSync(probe, path.join(scratch, 'probe.js')); }   // moved out of rc/, never left behind
 });
