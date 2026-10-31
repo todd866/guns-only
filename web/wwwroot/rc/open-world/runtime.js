@@ -56,6 +56,8 @@ import {buildHighSchool} from './high-school.js';
 import {createHotWheels} from './hot-wheels.js';
 import {createCountryClub} from './country-club.js';
 import {createMeadow} from './meadow.js';
+import {createSkyDiveVisual} from './sky-dive.js';
+import {createSkyDive, skyJumpNear, startSkyDive, stepSkyDive, recordSkyDive} from './sky-dive.mjs';
 import {
   LOCATIONS,
   EVENTS,
@@ -189,7 +191,10 @@ export async function loadOpenWorld(search) {
     }
   });
   let mountainView = null,
-    farGround = null;
+    farGround = null,
+    skyDiveVisual = null;
+  const skyDive = createSkyDive(),
+    skyHeight = (x, z) => elevationAt(elevation, x, z);
   const schoolyard = prepareSchoolyard(stream.world, residentialTerrain),
     residentialPark = prepareResidentialPark(stream.world, residentialData, {terrain: residentialTerrain}),
     residentialYards = prepareResidentialYards(stream.world, residentialData, {terrain: residentialTerrain});
@@ -530,6 +535,28 @@ export async function loadOpenWorld(search) {
       golf = kind === 'bowling' ? createBowling() : createGolf();
       return kind === 'bowling' ? BOWLING_TEE : golfTee(golf);
     },
+    skyDive: () => skyDive,
+    skyJumpNear: pos => skyJumpNear(pos, skyHeight),
+    startSkyJump(car, flight) {
+      const jump = skyJumpNear(car.pos, skyHeight);
+      if (!jump || !stream.ready([jump.launch[0], 0, jump.launch[1]])) return false;
+      if (!startSkyDive(skyDive, jump, flight, car, skyHeight)) return false;
+      golf = null;
+      target = null;
+      route = [];
+      return true;
+    },
+    stepSkyJump(car, flight) {
+      const report = stepSkyDive(skyDive, flight, car);
+      if (report) {
+        recordSkyDive(progress, report);
+        saveProgress(storage, progress);
+      }
+      return report;
+    },
+    cancelSkyJump() {
+      skyDive.active = null;
+    },
     resetActivity() {
       if (!golf) return null;
       const tee = golf.kind === 'bowling' ? nextDelivery(golf) : resetGolf(golf);
@@ -598,6 +625,7 @@ export async function loadOpenWorld(search) {
       golfVisual = createGolfVisual(scene);
       render = createTileRenderer(scene, elevation, residentialTerrain, MARSEILLE_TERRAIN);
       mountainView = createMountainView(scene, (x, z) => elevationAt(elevation, x, z));
+      skyDiveVisual = createSkyDiveVisual(scene, stream.world, skyHeight);
       farGround = createFarGround(scene, (x, z) => elevationAt(elevation, x, z), BOUNDS);
       darkWorld = createDarkWorld(scene, (x, z) => elevationAt(elevation, x, z));
       outlawView = createBadToys(scene, {look: 'outlaw'});
@@ -684,6 +712,7 @@ export async function loadOpenWorld(search) {
       return flyovers?.sounds() ?? [];
     },
     update(time, pos, camera, onDiscover) {
+      skyDiveVisual?.update(time);
       halloween?.update(time);
       darkWorld?.update(
         Math.max(0, Math.min(0.1, time - (darkClock ?? time))),
@@ -818,6 +847,7 @@ export async function loadOpenWorld(search) {
       );
     },
     dispose() {
+      skyDiveVisual?.dispose();
       venue?.dispose();
       venue = null;
       halloween?.dispose();

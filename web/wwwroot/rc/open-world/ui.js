@@ -20,6 +20,8 @@ import {
 import {JET_KINDS, JET_NAMES} from '../jets.js';
 import {LIVERIES, TRIMS, liveryUnlocked, PUMPKIN_CAR} from '../livery-data.mjs';
 import {DARK_PLACES} from './dark-world.mjs';
+import {renderHint} from '../key-hints.js';
+import {SKY_HINT} from './sky-dive.mjs';
 const $ = id => document.getElementById(id);
 // One map, one destination. Controls remain ordinary labelled buttons on touch and keyboard.
 export function createWorldUI({
@@ -664,6 +666,10 @@ export function createWorldUI({
     interactText = text + key;
     const b = $('interact'),
       k = document.createElement('kbd');
+    if (key == null) {
+      renderHint(b, text);
+      return;
+    }
     k.textContent = key;
     b.replaceChildren(text + ' ', k);
   }
@@ -709,8 +715,14 @@ export function createWorldUI({
         const p = world.near(s.pos),
           golf = world.activity();
         $('interact').hidden =
-          (!p && !s.skate && (!golf || golf.done)) || !s.roam || s.paused || s.skating || s.flying;
-        if (s.skate) interactLabel('🛹 Skate', 'E');
+          (!p && !s.skate && (!golf || golf.done)) ||
+          !s.roam ||
+          s.paused ||
+          s.skating ||
+          s.flying ||
+          (p?.game === 'sky-dive' && !s.skyJump);
+        if (s.skyJump) interactLabel(SKY_HINT, null);
+        else if (s.skate) interactLabel('🛹 Skate', 'E');
         else if (golf && !golf.done)
           interactLabel(
             golf.kind === 'bowling'
@@ -724,15 +736,17 @@ export function createWorldUI({
               ? ['🛹 Skate', 'E']
               : p.game === 'bowling'
                 ? ['Strike · Play', 'E']
-                : p.game === 'golf'
-                  ? ['Car Golf · Play', 'E']
-                  : !canEnter(progress, p)
-                    ? [`◇ ${progress.specimens.length}/${SPECIMENS.length} · Map`, 'Tab']
-                    : p.kind === 'discovery'
-                      ? [`${p.short} · Map`, 'Tab']
-                      : p.id === 'skatepark'
-                        ? ['Race', 'E']
-                        : [`${p.name} · Go in`, 'E'])
+                : p.game === 'sky-dive'
+                  ? [SKY_HINT, null]
+                  : p.game === 'golf'
+                    ? ['Car Golf · Play', 'E']
+                    : !canEnter(progress, p)
+                      ? [`◇ ${progress.specimens.length}/${SPECIMENS.length} · Map`, 'Tab']
+                      : p.kind === 'discovery'
+                        ? [`${p.short} · Map`, 'Tab']
+                        : p.id === 'skatepark'
+                          ? ['Race', 'E']
+                          : [`${p.name} · Go in`, 'E'])
           );
       }
     },
