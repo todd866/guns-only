@@ -454,7 +454,7 @@ export function createWorldUI({
       row.className = 'destination';
       row.dataset.world = 'light';
       row.hidden = !canVisit(progress, p);
-      row.innerHTML = `<button class="destination-name" style="--zone:${p.color}" title="Set route to ${p.name}"><span class="zone-dot"></span><span>${p.id === 'rec' ? 'Strike · Play' : p.short}</span><small></small></button><button class="travel" aria-label="Jump to ${p.name}" title="Jump to this location">Jump</button>`;
+      row.innerHTML = `<button class="destination-name" style="--zone:${p.color}" title="Set route to ${p.name}"><span class="zone-dot"></span><span>${p.short}</span><small></small></button><button class="travel" aria-label="Jump to ${p.name}" title="Jump to this location">Jump</button>`;
       const [choose, go] = row.querySelectorAll('button');
       choose.onclick = () => {
         world.navigate(p.id, getState().pos);
