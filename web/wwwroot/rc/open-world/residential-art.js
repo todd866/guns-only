@@ -1,3 +1,4 @@
+import {doorSpans,solidPieces} from './high-school.mjs';
 import * as T from '../../vendor/three.module.js';
 import {residentialGrass} from './residential-ground.js';
 import {createSurfaceMaps} from './materials.js';
@@ -116,6 +117,7 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     const foundationLo=Math.min(...outer.map(p=>heightAt(p[0],p[1])));
     const faces=T.ShapeUtils.triangulateShape(outer.map(p=>new T.Vector2(...p)),holes.map(r=>r.map(p=>new T.Vector2(...p))));
     const wallKey=house?(index%3===0?'stucco'+(index%2+1):'brick'+(index%2+1)):kind==='school'?'brick':'stucco';
+    const doors=heroSchool?doorSpans(rings):null;   // the high school's door openings (high-school.mjs)
     const roofKey=house?'roof'+(index%3+1):'roof',profile=house?roofProfile(outer,h,index):null;
     let front=null;
     for(const [ringIndex,ring]of rings.entries()){
@@ -124,7 +126,8 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
         const a=ring[i],b=ring[(i+1)%ring.length],dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);if(len<.02)continue;
         const nx=sign*dz/len,nz=-sign*dx/len,p=(u,y,off=.04)=>[a[0]+dx*u+nx*off,y===0?foundationLo-currentBaseY:y,a[1]+dz*u+nz*off];
         const face=(key,u0,u1,y0,y1,off=.04)=>{const q=[p(u0,y0,off),p(u1,y0,off),p(u1,y1,off),p(u0,y1,off)];if(sign>0)q.reverse();quad(key,...q);};
-        const q=[p(0,0,0),p(1,0,0),p(1,h,0),p(0,h,0)];if(sign>0)q.reverse();if(!heroSchool)quad(wallKey,...q);collideQuad(...q,'concrete');
+        const q=[p(0,0,0),p(1,0,0),p(1,h,0),p(0,h,0)];if(sign>0)q.reverse();if(!heroSchool)quad(wallKey,...q);
+        for(const [t0,t1]of doors?solidPieces(doors[ringIndex]?.[i]):[[0,1]]){const c=[p(t0,0,0),p(t1,0,0),p(t1,h,0),p(t0,h,0)];if(sign>0)c.reverse();collideQuad(...c,'concrete');}
         // Human-sized window bays and doors establish the small car's scale.
         const bays=(heroSchool||heroCivic)?0:Math.floor(len/(house?3.6:3)),levels=Math.max(1,Math.round(h/3.1));
         for(let floor=0;floor<levels;floor++)for(let j=0;j<bays;j++){

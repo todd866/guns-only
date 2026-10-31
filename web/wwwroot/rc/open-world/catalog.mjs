@@ -24,6 +24,7 @@ export const LOCATIONS = [
   {id:'dirt',name:'Desert Whoops',short:'Whoops',pos:[1800,0,1450],color:'#e2a16d',icon:'🏁',kind:'race',event:'whoops'},
   {id:'golf',name:'Sunrise Vista',short:'Golf',pos:[-330,0,2776],color:'#a8d485',icon:'◇',kind:'activity',game:'golf',event:'fairway-rally'},
   {id:'zoo',name:'Petting Zoo',short:'Petting Zoo',pos:[-1361,0,2074],color:'#78d2d0',icon:'◇',kind:'discovery'},
+  {id:'loop-lake',name:'Loop Lake',short:'Loop Lake',pos:[1890,0,-812],color:'#ff6a00',icon:'🏁',kind:'discovery'},
   // The foot of Spirit Mountain's road (spirit-mountain.mjs): the owner's son kept driving for the horizon mountains.
   {id:'mountain',name:'Spirit Mountain',short:'Spirit Mtn',pos:[2480,0,-1700],   // the trailhead on flat ground, 350 m short of the road's foot
   color:'#d9b47a',icon:'▲',kind:'discovery'},

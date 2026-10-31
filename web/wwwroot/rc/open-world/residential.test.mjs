@@ -39,9 +39,13 @@ test('school courtyard remains open and both exterior and courtyard walls face d
   scene.updateMatrixWorld(true);const ray=new T.Raycaster(new T.Vector3(center[0],20,center[1]),new T.Vector3(0,-1,0));
   const hits=ray.intersectObjects(scene.children,true);assert.ok(hits.length);assert.ok(hits[0].point.y<.1,'roof must not seal the courtyard');
   for(const [ring,holeSide]of [[school.points,false],[hole,true]]){
-   const a=ring[0],b=ring[1],area=ring.reduce((s,p,i)=>{const q=ring[(i+1)%ring.length];return s+p[0]*q[1]-q[0]*p[1];},0),sign=(area>0?1:-1)*(holeSide?-1:1),dx=b[0]-a[0],dz=b[1]-a[1],l=Math.hypot(dx,dz),nx=sign*dz/l,nz=-sign*dx/l,m=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+   // Edge 1 of each ring is solid; edge 0 of each holds a door into the high school (high-school.mjs), checked below.
+   const a=ring[1],b=ring[2],area=ring.reduce((s,p,i)=>{const q=ring[(i+1)%ring.length];return s+p[0]*q[1]-q[0]*p[1];},0),sign=(area>0?1:-1)*(holeSide?-1:1),dx=b[0]-a[0],dz=b[1]-a[1],l=Math.hypot(dx,dz),nx=sign*dz/l,nz=-sign*dx/l,m=[(a[0]+b[0])/2,(a[1]+b[1])/2];
    assert.ok(world.raycast([m[0]+nx*.3,1,m[1]+nz*.3],[-nx,0,-nz],.5),'wall faces the accessible side');
   }
+  // And the doors are open: drive straight through the middle of the pool door.
+  {const ring=school.points,a=ring[0],b=ring[1],m=[(a[0]+b[0])/2,(a[1]+b[1])/2],dx=b[0]-a[0],dz=b[1]-a[1],l=Math.hypot(dx,dz);
+   for(const s of [1,-1])assert.equal(world.raycast([m[0]+s*dz/l*.4,1,m[1]-s*dx/l*.4],[-s*dz/l,0,s*dx/l],.8),null,'a door is an opening');}
  }finally{details.dispose();art.dispose();}
 });
 

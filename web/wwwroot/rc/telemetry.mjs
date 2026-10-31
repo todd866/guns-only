@@ -14,7 +14,7 @@ const EVENT_CODES = new Set([
   "furball_outcome", "choice", "item_use", "mute", "frame_p95", "session_end",
   "skate_start", "skate_end", "pumpkin", "garage", "playmate",
   "boot", "error", "visit", "activity_start", "activity_end", "map_open", "recover", "heartbeat",
-  "form", "flight",
+  "form", "flight", "discover",
 ]);
 const ERROR_LIMIT = 8;
 const short = (value, n = 40) => String(value ?? "unknown").slice(0, n);
@@ -168,6 +168,9 @@ export function createRCTelemetry({
   function heartbeat({ doing, place, metres, recoveries, at } = {}) { record("heartbeat", { doing: short(doing, 16), place: place ? short(place) : null, metres: Math.round(finite(metres, 0)), recoveries: finite(recoveries, 0), ...where(at) }); }
   function itemUse(item) { if (ITEMS.has(item)) record("item_use", { item }); }
   // Halloween pumpkins: every smash up to 30, then every tenth, so a smashing spree stays small.
+  // The moment something is found for the first time (a place, a desert find, an adventure item),
+  // so places-per-session and time-between-discoveries are exact (tools/rc/analytics-report.mjs).
+  function discover(id, kind) { if (id) record("discover", { id: short(String(id)), kind: short(String(kind ?? 'place'), 12) }); }
   function pumpkin(total) { const n = Math.round(finite(total, 0)); if (n > 0 && (n <= 30 || n % 10 === 0)) record("pumpkin", { total: n }); }
   function garage({ body, shell, paint, pattern } = {}) { record("garage", { body: short(body, 16), shell: short(shell, 16), paint: short(paint, 24), pattern: short(pattern, 16) }); }
   // The toy's form (car / robot / board) and free-drive flight: fly, chute, land (from = previous mode).
@@ -236,5 +239,5 @@ export function createRCTelemetry({
   const initialMode = mode === "bigKid" ? "bigKid" : "kid";
   record("session_start", { track: initialTrack, mode: initialMode, device: deviceClass(navigatorObject), day: new Date().toISOString().slice(0, 10) });
   function endSession() { if (sessionEnded) return; sessionEnded = true; skateEnd({ reason: "pagehide" }); record("session_end", { duration: Math.max(0, Math.round(now() - startedAt)) }); }
-  return Object.freeze({ session, enabled: uploadAllowed, firstInput, raceStart, raceFinish, raceQuit, furballOutcome, skateStart, skateEnd, boot, error, visit, activityStart, activityEnd, mapOpen, recover, heartbeat, choice, setMode, itemUse, pumpkin, garage, playmate, form, flight, mute, observeFrame, flush, endSession, diagnostics: () => ({ bufferedRows: rows.length, active: Boolean(active), frameSamples: frames.length, p95: p95() }) });
+  return Object.freeze({ session, enabled: uploadAllowed, firstInput, raceStart, raceFinish, raceQuit, furballOutcome, skateStart, skateEnd, boot, error, visit, discover, activityStart, activityEnd, mapOpen, recover, heartbeat, choice, setMode, itemUse, pumpkin, garage, playmate, form, flight, mute, observeFrame, flush, endSession, diagnostics: () => ({ bufferedRows: rows.length, active: Boolean(active), frameSamples: frames.length, p95: p95() }) });
 }
