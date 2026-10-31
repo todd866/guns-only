@@ -61,6 +61,7 @@ import {prepareCharacters, spawnCharacter, hasCharacter} from './open-world/char
 import {loadDex, see, pages, earn, GOLD, SEE_RANGE} from './open-world/dex.mjs';
 import {createPortraits} from './open-world/portraits.js';
 import {ask, typing} from './open-world/type-prompt.js';
+import {renderHint} from './key-hints.js';
 import {say, nameFrom} from './open-world/typed.mjs';
 import {createAdventure} from './open-world/adventure.js';
 import {createIntro} from './open-world/intro.js';
@@ -1119,8 +1120,7 @@ window.addEventListener('keydown', e => {
     // In the dark world only a flier flies (the quetzalcoatlus, won at its nest); the rest stay on the ground.
     const pastRide = openWorld?.era?.() === 'past' && form === 'car',
       flier = !!DINO_KINDS[herd().herd[herd().mount]?.kind]?.flies;
-    if (pastRide && !flier && !s.flight.mode)
-      callout(`🦖 ${dinoName()} can't fly! The quetzalcoatlus nests high on Spirit Mountain`, 3200);
+    if (pastRide && !flier && !s.flight.mode) beep(`🦖 ${dinoName()} can't fly!`, 'sad');
     else if (race.roam && !skate && !adventure?.underground(s.car.pos)) {
       const was = s.flight.mode,
         m = toggleFlight(s.flight, s.car, {roam: true});
@@ -1129,8 +1129,8 @@ window.addEventListener('keydown', e => {
         callout(
           winged()
             ? m === 'fly'
-              ? `🪶 FLYING ${dinoName().toUpperCase()} · ↓ climb · ↑ dive · ←→ turn · W flap · Enter = glide down`
-              : '🪶 GLIDING DOWN'
+              ? '🪶 Fly! [return] land'
+              : '🪶 Going down!'
             : m === 'fly'
               ? mode === 'kid'
                 ? '✈ FLYING · ↓ pull up · ↑ dive · ←→ roll · W power · F afterburner · Enter = parachute'
@@ -1406,7 +1406,7 @@ let hudMode = null;
 const winged = () => !!(riggedDino?.root.visible && riggedDino.actions.has('glide'));
 function drawFlightHud() {
   const mode = race.roam && !robot && !winged() ? s.flight.mode : null;
-  if (winged() && !s.flight.mode && hudMode === 'wing') callout('🪶 Landed!');
+  if (winged() && !s.flight.mode && hudMode === 'wing') beep('🪶 Landed!', 'happy');
   if (winged()) {
     hudMode = s.flight.mode ? 'wing' : null;
     hud.hidden = true;
@@ -1959,6 +1959,13 @@ function stuckHint() {
   stuckHinted = true;
   callout(navigator.maxTouchPoints > 0 ? 'Stuck? Tap Recover' : 'Stuck? Press R');
 }
+// The hero only beeps (docs/design/adventure: "The hero beeps; the words are for reading"): a robot
+// sound for the feeling, and one short plain line, readable by a six-year-old, for what happened.
+function beep(text, mood = 'happy', ms = 2600) {
+  callout(text, ms);
+  renderHint($('banner'), '🤖 ' + text); // [return] etc. drawn as his MacBook Air's keys
+  audio.robot(mood);
+}
 function callout(text, ms = 1600) {
   const b = $('banner');
   b.textContent = '📻 ' + text;
@@ -2385,7 +2392,7 @@ function transform() {
     robotBody.visible = false;
     car.visible = true;
     form = 'car';
-    callout(openWorld?.era?.() === 'past' ? `🦖 RIDING ${dinoName().toUpperCase()}` : '🚗 CAR');
+    callout(openWorld?.era?.() === 'past' ? `🦖 ${dinoName()}!` : '🚗 CAR');
   } else if (form === 'robot') {
     const p = vehicleParams('board'),
       pos = [robot.pos[0], robot.pos[1] + rideHeight(p) + 0.02, robot.pos[2]];
@@ -2496,52 +2503,42 @@ function outlawStep(dt) {
   if (inTown && !outlawWarned) {
     outlawWarned = true;
     audio.radio();
-    callout(
-      riding
-        ? '🤠 OUTLAWS IN TOWN! Run them down with your dinosaur'
-        : '🤠 OUTLAWS IN TOWN! Q to punch · Shift to lock on',
-      4200
-    );
+    callout(riding ? '🤠 Bad toys! Run them down!' : '🤠 Bad toys! [Q] punch', 4200);
   }
   if (openWorld.era() !== 'past') outlawWarned = false;
   for (const e of ev) {
     if (e.stomp) {
       audio.impact(6);
-      callout(`💥 ${dinoName()} STOMPS! ${g.enemies.filter(x => x.alive).length} outlaws left`, 1600);
+      beep(`💥 Stomp! ${g.enemies.filter(x => x.alive).length} left`, 'happy', 1600);
     } else if (e.popped) {
       audio.impact(5);
     } else if (e.hurt) {
       audio.impact(3);
-      callout(`💥 Ouch! 🔋 ${e.batteries}`, 1200);
+      beep(`💥 Ouch! 🔋 ${e.batteries}`, 'sad', 1200);
     }
     if (e.home && robot) {
       robot.pos = [...e.home];
       robot.vel = [0, 0, 0];
-      callout('💫 Knocked out · back to the top of the street');
+      beep('💫 Bonk! Try again.', 'sad');
     }
     if (e.cleared) {
       audio.finish();
-      callout(
-        e.reward
-          ? '⭐ THE LAKE TOWN IS FREE! New in the Garage: the SHERIFF STAR'
-          : '⭐ THE LAKE TOWN IS FREE! The outlaws are just toys again',
-        5500
-      );
+      callout(e.reward ? '⭐ The town is free! New paint!' : '⭐ The town is free!', 5500);
       const pr = openWorld.progress;
       if (!pr.playerName)
         setTimeout(
           () =>
-            askTyped('⭐ The sheriff tips his hat: "What\'s your name, deputy?"', {
+            askTyped('⭐ "What is your name?"', {
               placeholder: 'your name',
               max: 12
             }).then(v => {
               pr.playerName = nameFrom(v, 'Partner');
               openWorld.save();
-              callout(`⭐ "Thank you kindly, Deputy ${pr.playerName}!"`, 4500);
+              callout(`⭐ "Thank you, ${pr.playerName}!"`, 4000);
             }),
           2600
         );
-      else callout(`⭐ "Thank you kindly, Deputy ${pr.playerName}!"`, 4500);
+      else callout(`⭐ "Thank you, ${pr.playerName}!"`, 4000);
     }
   }
 }
@@ -2558,12 +2555,12 @@ function digStep(dt, now) {
     time: now / 1000
   });
   for (const e of ev) {
-    if (e.start) callout('⛏️ DIGGING! Hold E to dig down · Space to climb out', 3000);
+    if (e.start) beep('⛏️ Dig down! [space] up', 'happy', 3000);
     else if (e.block === 'gold') {
       audio.coin();
       const n = earn(dexState(), GOLD.seam);
       saveDex();
-      callout(`✨ GOLD! 💰 +${n} · ${dexState().gold}`, 1800);
+      beep(`✨ Gold! +${n}`, 'proud', 1800);
     } else if (e.block === 'portal') {
       audio.radio();
     } else if (e.block) audio.impact(2);
@@ -2577,12 +2574,7 @@ function digStep(dt, now) {
       void document.body.offsetWidth;
       document.body.classList.add('portal-flash');
       document.body.classList.toggle('era-past', e.to === 'past');
-      callout(
-        e.to === 'past'
-          ? '🙃 You dug right through… into the dark world, long ago! Literally the upside down'
-          : '🙃 You dug right through… into the light world! Literally the upside down',
-        4500
-      );
+      callout(e.to === 'past' ? '🙃 Long ago! Upside down!' : '🙃 Back to now! Upside down!', 4500);
     }
   }
   const floor = openWorld.digging() ? openWorld.digFloor() : null;
@@ -2667,12 +2659,12 @@ function dexStep(dt, past) {
     if (see(dexState(), w.kind)) {
       saveDex();
       audio.radio();
-      callout(`📖 New in the Dino Book: ${DINO_KINDS[w.kind].name}!`, 3200);
+      beep(`📖 New page: ${DINO_KINDS[w.kind].name}!`, 'wow', 3200);
     }
   }
 }
 function sayAloud() {
-  askTyped('💬 Say something:', {placeholder: 'hello'}).then(v => {
+  askTyped('💬 Say:', {placeholder: 'hello'}).then(v => {
     if (v == null) return;
     const past = openWorld.era?.() === 'past',
       who = called(herd(), v);
@@ -2684,20 +2676,20 @@ function sayAloud() {
       saveHerd();
       if (robot) {
         mountUp();
-        callout(`🦖 ${who.dino.name} comes running!`, 3200);
+        beep(`🦖 ${who.dino.name} is here!`, 'happy');
       } else if (swap) {
         // A different dinosaur under you: its own body and pace (physics/vehicles.mjs DINO_MOUNTS).
         const p = roamCarParams(),
           pos = [...s.car.pos];
         pos[1] += rideHeight(p) - rideHeight(s.car.params) + 0.05;
         Object.assign(s.car, createCar(p, pos, readout(s).yaw));
-        callout(`🦖 ${who.dino.name} swaps in!`, 3200);
+        beep(`🦖 ${who.dino.name} is here!`, 'happy');
         audio.pickup();
-      } else callout(`🦖 ${who.dino.name} is right here, under you!`, 3200);
+      } else beep(`🦖 You are on ${who.dino.name}!`, 'ask');
       return;
     }
     const r = say(v, {era: past ? 'past' : 'present', mount: who?.dino.name ?? dinoName(), onFoot: !!robot});
-    if (r.reply) callout(r.reply, 3200);
+    if (r.reply) beep(r.reply, 'happy', 3200);
   });
 }
 // Off foot and onto the dinosaur (the T cycle's robot→car step, without the board in between).
@@ -2716,11 +2708,11 @@ let dinoAsked = false;
 function nameDino() {
   if (dinoAsked || herd().herd.length) return;
   dinoAsked = true;
-  askTyped('🦖 Your dinosaur needs a name!', {placeholder: 'Rex', max: 12}).then(v => {
+  askTyped('🦖 Name your dino!', {placeholder: 'Rex', max: 12}).then(v => {
     const d = befriend(herd(), {kind: 'rex', name: nameFrom(v, 'Rex'), colour: 0});
     herd().mount = herd().herd.indexOf(d);
     saveHerd();
-    callout(`🦖 ${d.name}! ROOOAR! · Y and say its name to call it`, 4200);
+    beep(`🦖 ${d.name}! Roar!`, 'wow', 3000);
   });
 }
 // Wild dinosaurs on the lake floor: walk up to one on foot and name it to make friends.
@@ -2771,7 +2763,7 @@ function wildStep(dt, past) {
   const w = past && robot && !wildAsking && !typing() ? wildNear(h, me) : null;
   if (w) {
     wildAsking = w.id;
-    askTyped(`🦖 A wild ${DINO_KINDS[w.kind].name} sniffs you! Give it a name to make friends:`, {
+    askTyped(`🦖 A wild ${DINO_KINDS[w.kind].name}! Name it:`, {
       placeholder: 'Spike',
       max: 12
     }).then(v => {
@@ -2784,16 +2776,13 @@ function wildStep(dt, past) {
       const d = befriend(herd(), {kind: w.kind, name: nameFrom(v, 'Spike'), colour: w.colour, wild: w.id});
       saveHerd();
       audio.finish();
-      callout(d ? `🦖 ${d.name} joined your herd! Y + ${d.name} to ride it` : '🦖 Your herd is full!', 4500);
+      beep(d ? `🦖 ${d.name} is your friend!` : '🦖 Too many dinos!', d ? 'happy' : 'sad', 3500);
       // The quetzalcoatlus: straight onto its back, ready to fly.
       if (d && DINO_KINDS[d.kind]?.flies && robot) {
         herd().mount = herd().herd.indexOf(d);
         saveHerd();
         mountUp();
-        callout(
-          `🪶 You're on ${d.name}'s back! Enter to fly · ↓ pull up · ←→ turn · Enter again to come down`,
-          6000
-        );
+        beep(`🪶 ${d.name}! [return] fly`, 'wow', 4000);
       }
       wildAsking = null;
     });
@@ -2840,12 +2829,12 @@ function timeTrip(trip) {
   audio.pickup();
   callout(
     trip.gate === 'fade'
-      ? '⌛ The past fades… back to now'
+      ? '⌛ Back to now!'
       : past
         ? trip.gate === 'town'
-          ? '⏳ LONG AGO · the town at the bottom of the lake, before the dam'
-          : '⏳ LONG AGO · before the base, before the dam'
-        : '⌛ BACK TO NOW',
+          ? '⏳ Long ago! The old town.'
+          : '⏳ Long ago!'
+        : '⌛ Back to now!',
     4200
   );
 }

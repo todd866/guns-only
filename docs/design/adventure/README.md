@@ -184,6 +184,11 @@ shows what's happening with text, noting that it's gotta be pretty simple for a 
 - **Six-year-old reading level** for everything he has to read in play: short common words, two
   to five words where possible, one idea per line, no symbols standing in for words (no "·", "→"
   or "≥"), numbers as digits. Key hints are a picture of the key, not a sentence: [E] dig.
+- **Keys as they look on his MacBook Air** (owner: "he's looking at a macbook air keyboard, 'enter'
+  doesn't necessarily mean anything"; "we can also show a zoomed in picture of the keyboard").
+  A hint draws the key with its own printed legend: `return`, never "Enter"; the space bar is a
+  blank bar. Beside the line, a zoomed-in picture of that corner of the keyboard shows the key
+  lit, so he finds it by shape and place (built: `key-hints.js`).
 - **Other characters may talk**, in the same simple text; the good toys' lines carry their
   personalities. The hero stays a beeping robot.
 - **Telemetry:** check which lines he waits to read and which he skips, and shorten the skipped

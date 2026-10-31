@@ -57,9 +57,9 @@ export function say(text, {era = 'present', mount = 'Dino', onFoot = false} = {}
   const calling = sounds(t, mount) || ['here', 'whistle', 'come', 'dino', 'dinosaur'].some(w => sounds(t, w));
   if (era === 'past' && calling)
     return onFoot
-      ? {reply: `🦖 ${mount} comes running!`, call: 'mount'}
-      : {reply: `🦖 ${mount} is right here, under you!`, call: null};
-  if (calling) return {reply: `🦖 ${mount} can't hear you from here… it lives long ago`, call: null};
+      ? {reply: `🦖 ${mount} is here!`, call: 'mount'}
+      : {reply: `🦖 You are on ${mount}!`, call: null};
+  if (calling) return {reply: `🦖 ${mount} lives long ago.`, call: null};
   if (['hi', 'hello', 'hey', 'howdy'].some(w => sounds(t, w)))
     return {reply: era === 'past' ? '🤠 Howdy, partner!' : '👋 Hello!', call: null};
   if (sounds(t, 'yeehaw') || sounds(t, 'yee haw')) return {reply: '🤠 YEEHAW!', call: null};
