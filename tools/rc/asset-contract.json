@@ -105,5 +105,41 @@
       7,
       9
     ]
+  },
+  "dino": {
+    "file": "characters/dino.glb",
+    "max_triangles": 10000,
+    "max_materials": 6,
+    "max_bytes": 600000,
+    "max_primitives": 6,
+    "required_nodes": [
+      "Dino",
+      "DinoMesh",
+      "root",
+      "spine_01",
+      "spine_02",
+      "neck",
+      "head",
+      "jaw",
+      "tail_01",
+      "tail_02",
+      "tail_03",
+      "thigh_L",
+      "shin_L",
+      "foot_L",
+      "thigh_R",
+      "shin_R",
+      "foot_R",
+      "arm_L",
+      "arm_R",
+      "Saddle",
+      "Mouth"
+    ],
+    "max_extent_m": [
+      0.6,
+      0.9,
+      1.5
+    ],
+    "origin": "between the feet on level ground; faces -Z; clips play in place (docs/rc-characters.md)"
   }
 }

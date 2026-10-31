@@ -299,6 +299,50 @@
       "sizeBytes": 125699
     },
     {
+      "budgets": {
+        "max_bytes": 600000,
+        "max_materials": 6,
+        "max_primitives": 6,
+        "max_triangles": 10000
+      },
+      "id": "characters-dino-glb",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "characters/dino.provenance.json"
+      },
+      "locked": false,
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": "characters/dino.glb"
+        }
+      ],
+      "path": "characters/dino.glb",
+      "provenance": "characters/dino.provenance.json",
+      "sha256": "87fabe490853834c47b34c6e417b2eae8ccb5e6863286e01ed50689704bceff1",
+      "sizeBytes": 355044
+    },
+    {
+      "derivedFrom": "characters/dino.glb",
+      "id": "characters-dino-glb-gz",
+      "kind": "model",
+      "license": {
+        "attribution": "Saucer Springs AFB authors (repository MIT)",
+        "id": "MIT",
+        "redistributable": true,
+        "source": "characters/dino.provenance.json"
+      },
+      "locked": false,
+      "path": "characters/dino.glb.gz",
+      "provenance": "characters/dino.provenance.json",
+      "sha256": "0222788c330bab393e7384459e8967b928b8fa9945d83f1950b934c210633378",
+      "sizeBytes": 191867
+    },
+    {
       "id": "districts-bx-glb",
       "kind": "model",
       "license": {

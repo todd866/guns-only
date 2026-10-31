@@ -1,0 +1,30 @@
+{
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+  "software": false,
+  "frameMs": {
+    "p50": 16.7,
+    "p95": 18.4,
+    "max": 18.7
+  },
+  "drawCalls": 8,
+  "triangles": 9178,
+  "clips": {
+    "idle": {
+      "screenshot": "evidence/rc-characters/web-idle.png",
+      "calls": 8
+    },
+    "walk": {
+      "screenshot": "evidence/rc-characters/web-walk.png",
+      "calls": 8
+    },
+    "run": {
+      "screenshot": "evidence/rc-characters/web-run.png",
+      "calls": 8
+    },
+    "jump": {
+      "screenshot": "evidence/rc-characters/web-jump.png",
+      "calls": 8
+    }
+  },
+  "errs": []
+}
