@@ -1,3 +1,4 @@
+import {FRONT_DOOR_POS} from './bowling-alley.mjs';
 import {NY} from './under-bridge.mjs';
 import {LIVERIES, TRIMS} from '../livery-data.mjs';
 import {plazaWorld, PLAZA_PARK} from './town-plaza.mjs';
@@ -156,7 +157,7 @@ export const LOCATIONS = [
     id: 'rec',
     name: 'Strike Recreation',
     short: 'Bowling',
-    pos: [-1020, 0, 1260],
+    pos: FRONT_DOOR_POS,
     color: '#e4ad89',
     icon: '◇',
     kind: 'activity',

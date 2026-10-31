@@ -1,9 +1,9 @@
 import * as T from '../../vendor/three.module.js';
+import {createSurfaceMaps} from './materials.js';
 import {scoreFrames, frameMarks} from './bowling.mjs';
-import {ALLEY_FLOOR_Y, BOWLING_ALLEY, COLLISION_WALLS, DOORS, LANES} from './bowling-alley.mjs';
+import {ALLEY_FLOOR_Y, BOWLING_ALLEY, COLLISION_WALLS, DOORS, LANES, insideAlley} from './bowling-alley.mjs';
 
-const WALL_HEIGHT = BOWLING_ALLEY.height - 0.1,
-  WALL_THICKNESS = 0.16;
+const WALL_HEIGHT = BOWLING_ALLEY.height;
 
 export function buildBowlingAlley(scene, world) {
   const root = new T.Group();
@@ -24,11 +24,24 @@ export function buildBowlingAlley(scene, world) {
   const floorMat = mat('#bc7446', {roughness: 0.2}),
     laneMat = mat('#d7a265', {roughness: 0.12}),
     gutterMat = mat('#202937', {roughness: 0.3, metalness: 0.2}),
-    wallMat = mat('#26334b', {roughness: 0.78, emissive: '#44301e', emissiveIntensity: 0.22}),
+    wallMat = mat('#efe0be', {roughness: 0.78, emissive: '#d5ab75', emissiveIntensity: 0.55}),
     trimMat = mat('#f0b548', {roughness: 0.42, metalness: 0.35}),
     warmMat = mat('#ffe1a0', {color: '#fff1c2', emissive: '#ffb74d', emissiveIntensity: 1.8}),
     neonMat = mat('#ff4ea3', {emissive: '#ff1688', emissiveIntensity: 2.5}),
     screenMat = mat('#63e6df', {emissive: '#36cfc9', emissiveIntensity: 1.8});
+  // Same stucco/roof maps and tint as the tile shell, with a warm painted inner
+  // face like the high school. The tile's generic copy is excluded at this site.
+  const surfaceMaps = ['stucco', 'roof'].map(createSurfaceMaps),
+    mappedMaterial = maps =>
+      mat('#ffffff', {
+        map: maps.map,
+        roughnessMap: maps.roughnessMap,
+        normalMap: maps.normalMap,
+        normalScale: new T.Vector2(0.18, 0.18),
+        roughness: 1
+      }),
+    outerWallMat = mappedMaterial(surfaceMaps[0]),
+    roofMat = mappedMaterial(surfaceMaps[1]);
   const mesh = (geometry, material, name, position = [0, 0, 0], parent = root) => {
     const m = new T.Mesh(geometry, material);
     m.name = name;
@@ -94,24 +107,59 @@ export function buildBowlingAlley(scene, world) {
     materials.push(m.material);
     return m;
   };
-  const {minX, maxX, minZ, maxZ} = BOWLING_ALLEY.bounds;
-  box(
-    (minX + maxX) / 2,
-    0,
-    (minZ + maxZ) / 2,
-    maxX - minX,
-    ALLEY_FLOOR_Y,
-    maxZ - minZ,
-    floorMat,
-    'AlleyFloor'
-  );
-  world?.addQuad?.(
-    [minX, ALLEY_FLOOR_Y, minZ],
-    [minX, ALLEY_FLOOR_Y, maxZ],
-    [maxX, ALLEY_FLOOR_Y, maxZ],
-    [maxX, ALLEY_FLOOR_Y, minZ],
-    'gymfloor'
-  );
+  const {minX, maxZ} = BOWLING_ALLEY.bounds,
+    outline = BOWLING_ALLEY.outline,
+    front = DOORS[0],
+    side = DOORS[1],
+    firstLane = LANES[0],
+    returnZ = firstLane.startZ + 1.1;
+  const face = (a, b, c, d, material, name, parent = root) => {
+    const g = new T.BufferGeometry(),
+      points = [a, b, c, a, c, d];
+    g.setAttribute('position', new T.Float32BufferAttribute(points.flat(), 3));
+    const alongX = Math.abs(b[0] - a[0]) >= Math.abs(b[2] - a[2]);
+    g.setAttribute(
+      'uv',
+      new T.Float32BufferAttribute(
+        points.flatMap(p => [(alongX ? p[0] : p[2]) * 0.24, p[1] * 0.16]),
+        2
+      )
+    );
+    g.computeVertexNormals();
+    const m = mesh(g, material, name, [0, 0, 0], parent);
+    m.receiveShadow = true;
+    return m;
+  };
+  const footprint = (y, material, name, parent = root, solid = false, down = false) => {
+    const faces = T.ShapeUtils.triangulateShape(
+        outline.map(p => new T.Vector2(...p)),
+        []
+      ),
+      vertices = [];
+    for (const f of faces) {
+      let pts = f.map(i => outline[i]);
+      const cross =
+        (pts[1][0] - pts[0][0]) * (pts[2][1] - pts[0][1]) - (pts[1][1] - pts[0][1]) * (pts[2][0] - pts[0][0]);
+      if (cross > 0 !== down) pts.reverse();
+      const tri = pts.map(p => [p[0], y, p[1]]);
+      vertices.push(...tri.flat());
+      if (solid) world?.addTri?.(...tri, 'gymfloor');
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(vertices, 3));
+    g.setAttribute(
+      'uv',
+      new T.Float32BufferAttribute(
+        vertices.flatMap((v, i) => (i % 3 === 1 ? [] : [v * 0.16])),
+        2
+      )
+    );
+    g.computeVertexNormals();
+    const m = mesh(g, material, name, [0, 0, 0], parent);
+    m.receiveShadow = true;
+    return m;
+  };
+  footprint(ALLEY_FLOOR_Y, floorMat, 'AlleyFloor', root, true);
   for (const lane of LANES) {
     const length = lane.startZ - lane.endZ;
     box(
@@ -153,7 +201,7 @@ export function buildBowlingAlley(scene, world) {
         `LaneArrow${lane.id}-${edge}`
       );
     }
-    for (const z of [1249, 1244, 1239])
+    for (const z of [lane.startZ - 5, lane.startZ - 10, lane.startZ - 15])
       box(
         lane.x,
         ALLEY_FLOOR_Y + 0.018,
@@ -164,12 +212,12 @@ export function buildBowlingAlley(scene, world) {
         trimMat,
         `LaneMark${lane.id}-${z}`
       );
-    box(lane.x, 0.4, 1233.6, lane.width + 0.2, 0.7, 0.22, wallMat, `Pinsetter${lane.id}`);
+    box(lane.x, 0.4, lane.endZ - 0.8, lane.width + 0.2, 0.7, 0.22, wallMat, `Pinsetter${lane.id}`);
     const screen = sign(
       `Lane ${lane.id}`,
       lane.x,
       2.8,
-      1253.5,
+      lane.startZ - 0.5,
       0.98,
       0.42,
       screenMat,
@@ -198,18 +246,18 @@ export function buildBowlingAlley(scene, world) {
       hump = mesh(new T.SphereGeometry(0.22, 12, 8), gutterMat, `BallReturn${i + 1}`, [
         x,
         ALLEY_FLOOR_Y + 0.09,
-        1255.1
+        returnZ
       ]);
     hump.scale.set(1.35, 0.42, 1.8);
     // Low faceted ramps let tyres climb the rounded returns from either direction.
     const halfX = 0.29,
       halfZ = 0.4,
       top = ALLEY_FLOOR_Y + 0.17;
-    const a = [x - halfX, ALLEY_FLOOR_Y, 1255.1 - halfZ],
-      b = [x + halfX, ALLEY_FLOOR_Y, 1255.1 - halfZ],
-      c = [x + halfX, ALLEY_FLOOR_Y, 1255.1 + halfZ],
-      d = [x - halfX, ALLEY_FLOOR_Y, 1255.1 + halfZ],
-      p = [x, top, 1255.1];
+    const a = [x - halfX, ALLEY_FLOOR_Y, returnZ - halfZ],
+      b = [x + halfX, ALLEY_FLOOR_Y, returnZ - halfZ],
+      c = [x + halfX, ALLEY_FLOOR_Y, returnZ + halfZ],
+      d = [x - halfX, ALLEY_FLOOR_Y, returnZ + halfZ],
+      p = [x, top, returnZ];
     for (const [u, v] of [
       [b, a],
       [c, b],
@@ -218,54 +266,82 @@ export function buildBowlingAlley(scene, world) {
     ])
       world.addTri(u, v, p, 'metal');
   }
-  for (const wall of COLLISION_WALLS) {
-    const [ax, az] = wall.a,
-      [bx, bz] = wall.b;
-    box(
-      (ax + bx) / 2,
-      ALLEY_FLOOR_Y,
-      (az + bz) / 2,
-      Math.abs(bx - ax) + (bz !== az ? WALL_THICKNESS : 0.02),
-      WALL_HEIGHT,
-      Math.abs(bz - az) + (bx !== ax ? WALL_THICKNESS : 0.02),
-      wallMat,
-      `Wall-${wall.id}`,
-      true
-    );
-  }
+  // These faces follow the original clockwise ring, including every small jog.
+  // Door lintels share the same opening geometry as the collision perimeter.
+  const wall = (a, b, bottom, name) => {
+    const top = WALL_HEIGHT,
+      q = [
+        [a[0], bottom, a[1]],
+        [b[0], bottom, b[1]],
+        [b[0], top, b[1]],
+        [a[0], top, a[1]]
+      ],
+      len = Math.hypot(b[0] - a[0], b[1] - a[1]),
+      nx = ((b[1] - a[1]) / len) * 0.07,
+      nz = (-(b[0] - a[0]) / len) * 0.07;
+    const outside = face(...q, outerWallMat, `Wall-${name}`);
+    outside.castShadow = true;
+    const inner = q.map(p => [p[0] + nx, p[1], p[2] + nz]);
+    face(inner[1], inner[0], inner[3], inner[2], wallMat, `InsideWall-${name}`);
+    world?.addQuad?.(...q, 'concrete');
+    world?.addQuad?.(q[1], q[0], q[3], q[2], 'concrete');
+  };
+  for (const part of COLLISION_WALLS) wall(part.a, part.b, 0, part.id);
   for (const door of DOORS) {
-    box(
-      door.center[0],
-      2.8,
-      door.center[1],
-      door.axis === 'x' ? door.width : WALL_THICKNESS,
-      WALL_HEIGHT - 2.8 + ALLEY_FLOOR_Y,
-      door.axis === 'z' ? door.width : WALL_THICKNESS,
-      wallMat,
-      `DoorLintel-${door.id}`,
-      true
-    );
+    const a = outline[door.edge],
+      b = outline[(door.edge + 1) % outline.length],
+      len = Math.hypot(b[0] - a[0], b[1] - a[1]),
+      P = sign => [
+        door.center[0] + (((sign * (b[0] - a[0])) / len) * door.width) / 2,
+        door.center[1] + (((sign * (b[1] - a[1])) / len) * door.width) / 2
+      ];
+    wall(P(-1), P(1), BOWLING_ALLEY.doorTop, `Lintel-${door.id}`);
   }
+  footprint(BOWLING_ALLEY.height, roofMat, 'Roof', roof).castShadow = true;
+  footprint(BOWLING_ALLEY.height - 0.04, wallMat, 'Ceiling', roof, false, true);
+  for (let x = firstLane.x; x <= LANES.at(-1).x + 0.1; x += 2.2)
+    box(
+      x,
+      BOWLING_ALLEY.height - 0.3,
+      (firstLane.startZ + firstLane.endZ) / 2,
+      0.08,
+      0.04,
+      22,
+      warmMat,
+      `CeilingStrip${x}`
+    );
+  const snackX = minX + 3,
+    snackZ = firstLane.startZ - 3,
+    shoeX = side.center[0] - 2.5,
+    shoeZ = firstLane.startZ - 1;
+  box(snackX, 0.12, snackZ, 1.0, 0.8, 0.5, trimMat, 'SnackCounter', true);
+  sign('SNACKS', snackX, 1.05, snackZ + 0.27, 0.9, 0.28, screenMat, 'SnackLabel');
+  box(shoeX, 0.12, shoeZ, 0.9, 0.8, 0.5, trimMat, 'ShoeCounter', true);
+  sign('SHOES', shoeX, 1.05, shoeZ + 0.27, 0.8, 0.28, screenMat, 'ShoeLabel');
+  sign('STRIKE', front.center[0], 3.35, front.center[1] + 0.1, 3.8, 0.52, neonMat, 'STRIKE-Neon');
+  // Warm emissive jambs and a canopy light keep the entrance legible at night
+  // without adding per-frame point lights to the whole outdoor scene.
+  for (const edge of [-1, 1])
+    box(
+      front.center[0] + edge * (front.width / 2 + 0.1),
+      0.1,
+      maxZ + 0.1,
+      0.08,
+      2.6,
+      0.08,
+      warmMat,
+      `EntranceLight${edge}`
+    );
   box(
-    (minX + maxX) / 2,
-    BOWLING_ALLEY.height - 0.08,
-    (minZ + maxZ) / 2,
-    maxX - minX,
-    0.16,
-    maxZ - minZ,
-    wallMat,
-    'Roof',
-    false,
-    'concrete',
-    roof
+    front.center[0],
+    BOWLING_ALLEY.doorTop + 0.02,
+    maxZ + 0.18,
+    front.width + 0.4,
+    0.06,
+    0.4,
+    warmMat,
+    'EntranceLightTop'
   );
-  for (let x = minX + 1; x < maxX; x += 2.2)
-    box(x, BOWLING_ALLEY.height - 0.3, 1249, 0.08, 0.04, 22, warmMat, `CeilingStrip${x}`);
-  box(-1022.9, 0.12, 1248, 1.0, 0.8, 0.5, trimMat, 'SnackCounter', true);
-  sign('SNACKS', -1022.9, 1.05, 1247.72, 0.9, 0.28, screenMat, 'SnackLabel');
-  box(-1010.6, 0.12, 1251.8, 0.9, 0.8, 0.5, trimMat, 'ShoeCounter', true);
-  sign('SHOES', -1010.6, 1.05, 1251.52, 0.8, 0.28, screenMat, 'ShoeLabel');
-  sign('STRIKE', -1020, 3.35, 1265.1, 3.8, 0.52, neonMat, 'STRIKE-Neon');
   root.userData.doors = DOORS;
   root.userData.roof = roof;
   return {
@@ -291,14 +367,7 @@ export function buildBowlingAlley(scene, world) {
         }
         screen.userData.score = active ? total : 0;
       });
-      if (Array.isArray(playerPos)) {
-        const inside =
-          playerPos[0] > minX - 2 &&
-          playerPos[0] < maxX + 2 &&
-          playerPos[2] > minZ - 2 &&
-          playerPos[2] < maxZ + 2;
-        roof.visible = !inside;
-      }
+      if (Array.isArray(playerPos)) roof.visible = !insideAlley(playerPos);
     },
     dispose() {
       for (const m of meshes) {
@@ -307,6 +376,7 @@ export function buildBowlingAlley(scene, world) {
       }
       for (const {texture} of screenTextures.values()) texture.dispose();
       for (const m of materials) m.dispose();
+      for (const maps of surfaceMaps) maps.dispose();
       root.removeFromParent();
     }
   };

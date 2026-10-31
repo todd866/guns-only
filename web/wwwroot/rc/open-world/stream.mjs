@@ -1,4 +1,4 @@
-import {SCENERY_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
+import {TERRAIN_BOUNDS as DISTRICT_BOUNDS} from './district-zones.mjs';
 import {WATER_BODIES, basinTriangles} from '../physics/water.mjs';
 import {MINE_BOUNDS, mineWorldTris} from './mine.mjs';
 import {sewerWorldTris} from './sewer.mjs';

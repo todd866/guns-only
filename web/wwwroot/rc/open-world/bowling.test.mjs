@@ -8,9 +8,13 @@ import {
   scoreFrames,
   stepBowling
 } from './bowling.mjs';
+import {ALLEY_FLOOR_Y, LANES} from './bowling-alley.mjs';
 import {loadProgress} from './catalog.mjs';
 
-const actor = (x = -1020, z = 1258, vx = 0, vz = 0) => ({pos: [x, 0.04, z], vel: [vx, 0, vz]});
+const actor = (x = LANES[0].x, z = LANES[0].approachZ, vx = 0, vz = 0) => ({
+  pos: [x, ALLEY_FLOOR_Y, z],
+  vel: [vx, 0, vz]
+});
 
 test('standard scoring handles a perfect 300, all spares, and twenty misses', () => {
   const perfect = Array.from({length: 9}, () => [10]).concat([[10, 10, 10]]);
@@ -94,8 +98,8 @@ test('idle robot does not consume a delivery, while a missed car returns to its 
   assert.equal(robot.frame, 0);
   const car = createBowling({control: 'car'});
   let result = null;
-  for (let i = 0; i < 30 && !result; i++) result = stepBowling(car, actor(-1020, 1233), 0.2);
-  assert.equal(result?.tee?.pos[0], -1020);
+  for (let i = 0; i < 30 && !result; i++) result = stepBowling(car, actor(LANES[0].x, LANES[0].endZ), 0.2);
+  assert.equal(result?.tee?.pos[0], LANES[0].x);
   assert.equal(car.frame, 0, 'a missed first ball returns the tee for delivery two');
 });
 
@@ -114,11 +118,11 @@ test('progress migration rejects old one-frame records and preserves valid versi
 test('kid bumpers bounce an off-centre ball back inside without a gutter', () => {
   const g = createBowling({control: 'robot'});
   rollBowling(g, {power: 0.7, aim: 0.5, mode: 'kid'});
-  g.ball.pos[0] = -1020 + 0.5;
+  g.ball.pos[0] = LANES[0].x + 0.5;
   g.ball.vel[0] = 2;
   stepBowling(g, actor(), 1 / 120);
   assert.equal(g.ball.gutter, false);
-  assert.ok(g.ball.pos[0] < -1020 + 0.525);
+  assert.ok(g.ball.pos[0] < LANES[0].x + 0.525);
   assert.ok(g.ball.vel[0] < 0);
   const big = createBowling({control: 'robot', mode: 'bigKid'});
   rollBowling(big, {power: 0.7, aim: 0.2, mode: 'bigKid'});
