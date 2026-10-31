@@ -8,7 +8,10 @@ import {SEWER,ROOMS,CHANNELS,OPENINGS,CHESTS,CELLS,SEWER_PARK,LADDERS,MANHOLE,RA
 // (a painted pool with tiles at the lip and steel coping). In the street above: an iron manhole cover. Visual only; collision is in the stream.
 const COL={brick:'#8a4a36',concrete:'#8d887c',sewage:'#24311a',wood:'#8d6038',metal:'#5b6366',pipe:'#a0663f',lamp:'#ffd27a',soot:'#3b2a22'};
 export function createSewer(scene){
- const root=new T.Group();root.name='Sewers';const parts=[],keep=[],W=sewerWorld;
+ const root=new T.Group();root.name='Sewers';
+ // The manhole cover lives in the street; everything else is only drawn while you're down there
+ // (it sat under the skatepark costing ~100 draw calls nobody could see).
+ const street=new T.Group();street.name='SewerManhole';scene.add(street);root.visible=false;const parts=[],keep=[],W=sewerWorld;
  const coloured=(g,c)=>{const col=new T.Color(c),n=g.attributes.position.count,a=new Float32Array(n*3);for(let i=0;i<n;i++)a.set([col.r,col.g,col.b],i*3);g.setAttribute('color',new T.BufferAttribute(a,3));return g;};
  const place=(g,x,y,z,rx=0,ry=0,rz=0)=>{g.applyMatrix4(new T.Matrix4().compose(new T.Vector3(...W([x,y,z])),new T.Quaternion().setFromEuler(new T.Euler(rx,ry,rz)),new T.Vector3(1,1,1)));return g;};
  const box=(w,h,d,x,y,z,c)=>{const g=new T.BoxGeometry(w,h,d).toNonIndexed();g.deleteAttribute('uv');parts.push(coloured(place(g,x,y,z),c));};
@@ -46,7 +49,7 @@ export function createSewer(scene){
  {const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');x.fillStyle='#2f3336';x.beginPath();x.arc(128,128,126,0,7);x.fill();x.strokeStyle='#4a5054';x.lineWidth=10;for(const r of [118,90]){x.beginPath();x.arc(128,128,r,0,7);x.stroke();}
   for(let i=-3;i<=3;i++){x.fillStyle='#454b4f';x.fillRect(40,124+i*14,176,5);}x.fillStyle='#8a9296';x.font='bold 34px system-ui';x.textAlign='center';x.fillText('SEWER',128,60);x.fillText('↓',128,220);
   const tex=new T.CanvasTexture(c);tex.colorSpace=T.SRGBColorSpace;const m=new T.Mesh(new T.CircleGeometry(.36,28),new T.MeshStandardMaterial({map:tex,roughness:.5,metalness:.6,polygonOffset:true,polygonOffsetFactor:-2}));
-  m.rotation.x=-Math.PI/2;m.position.set(MANHOLE.at[0],MANHOLE.at[1]+.012,MANHOLE.at[2]);root.add(m);keep.push(tex,m.geometry,m.material);}
+  m.rotation.x=-Math.PI/2;m.position.set(MANHOLE.at[0],MANHOLE.at[1]+.012,MANHOLE.at[2]);street.add(m);keep.push(tex,m.geometry,m.material);}
  const merged=mergeGeometries(parts.map(g=>{if(!g.attributes.normal)g.computeVertexNormals();return g;}),false);parts.forEach(g=>g.dispose());parts.length=0;merged.computeBoundingSphere();
  const shellMat=new T.MeshStandardMaterial({vertexColors:true,roughness:.9,side:T.DoubleSide});const shell=new T.Mesh(merged,shellMat);shell.castShadow=shell.receiveShadow=true;root.add(shell);keep.push(shellMat);
  // Doors. A: a rusty gate with a padlock. C: the trick shrine, a round grate with its combo count.
@@ -93,6 +96,8 @@ export function createSewer(scene){
   openDoor(id){const g=doors[id];if(g)g.userData.opening=0;},
   openChest(id){const c=chests[id];if(c)c.lid.userData.opening=0;},
   freeRat(){crownMesh.visible=false;fallenCrown.visible=true;fallenCrown.userData.t=0;cage.userData.opening=0;},
+  /** Draw the tunnels only while the player is in them. */
+  show(on){root.visible=on;},
   update(dt,k){time+=dt;slimeTex.offset.x=(time*.05)%1;
    if(k){const y=bowlFloor(k.at[0],k.at[1]),moving=k.state==='roam'||k.state==='charge'||k.state==='back';rat.position.set(...W([k.at[0],y,k.at[1]]));
     if(k.state==='stunned')rat.rotation.y+=dt*7;else{let d=k.heading+Math.PI/2-rat.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));rat.rotation.y+=d*Math.min(1,dt*8);}
@@ -104,5 +109,5 @@ export function createSewer(scene){
    for(const g of Object.values(cells))if(g.visible)g.rotation.y+=dt*2;
    for(const g of Object.values(doors))if(g.userData.opening!==undefined&&g.userData.opening<1){g.userData.opening=Math.min(1,g.userData.opening+dt*.8);g.position.y=W([0,0,0])[1]+SEWER.ceiling*.95*g.userData.opening;}
    for(const c of Object.values(chests))if(c.lid.userData.opening!==undefined&&c.lid.userData.opening<1){c.lid.userData.opening=Math.min(1,c.lid.userData.opening+dt*2.5);c.lid.rotation.x=-1.9*c.lid.userData.opening;}},
-  dispose(){root.removeFromParent();root.traverse(o=>{o.geometry?.dispose();});[...keep].forEach(x=>x.dispose?.());}};
+  dispose(){street.removeFromParent();street.traverse(o=>o.geometry?.dispose());root.removeFromParent();root.traverse(o=>{o.geometry?.dispose();});[...keep].forEach(x=>x.dispose?.());}};
 }
