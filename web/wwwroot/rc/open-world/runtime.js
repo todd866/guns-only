@@ -46,7 +46,7 @@ import {createGang, stepGang} from './outlaws.mjs';
 import {createDig, stepDig, digFloor} from './dig.mjs';
 import {createDigView} from './dig.js';
 import {preparePlacementKit, loadPlacements, instantiatePlacements} from './placements.js';
-import {createTimeGates, darkPlaceById} from './dark-world.mjs';
+import {createTimeGates, darkPlaceById, pastHolds} from './dark-world.mjs';
 import {buildLandmarks} from './landmarks.js';
 import {createPettingZoo} from './petting-zoo.js';
 import {createJetDecks} from './jet-decks.js';
@@ -433,12 +433,20 @@ export async function loadOpenWorld(search) {
     // Dig down to the light world (dig.mjs): o = { pos, holding, climb, dt, time }. Breaking the portal
     // layer flips to the present; the through event carries where to come out of the ground.
     dig(o) {
-      const ground = elevationAt(elevation, o.pos[0], o.pos[2]),
-        ev = stepDig(dig, {...o, era: timeGates.era(), ground});
+      // Until the dark world is its own world the size of the light one (owner ruling, 31 Oct; the
+      // next refactor), digging in the present only goes down where the past exists: the mountain.
+      const era = timeGates.era(),
+        here = era === 'past' || pastHolds(o.pos[0], o.pos[2]),
+        ground = elevationAt(elevation, o.pos[0], o.pos[2]),
+        ev = stepDig(dig, {...o, holding: o.holding && here, era, ground});
       for (const e of ev)
         if (e.through) {
-          timeGates.goTo('present', o.time);
-          setEra('present');
+          timeGates.goTo(e.to, o.time);
+          setEra(e.to);
+          if (e.to === 'past' && !progress.timeCrossed) {
+            progress.timeCrossed = true;
+            saveProgress(storage, progress);
+          }
           e.position = [e.through[0], elevationAt(elevation, e.through[0], e.through[1]), e.through[1]];
         }
       digView?.update(dig, o.dt, ev);
