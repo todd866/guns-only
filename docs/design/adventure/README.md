@@ -202,6 +202,27 @@ shows what's happening with text, noting that it's gotta be pretty simple for a 
 - **To do:** sweep today's callouts (many are long, packed with symbols and written for adults)
   into this voice, and add the robot voice to `audio.js`.
 
+## A first taste of Spanish (owner, 31 Oct)
+
+Owner: "the game can include spanish and native american stuff. But it would be a useful spanish
+language introduction." The dark world is the old Southwest, where Spanish was spoken before
+English, so Spanish belongs in it naturally, and he picks it up by playing, never by being taught.
+- **Words in the world, with the picture beside them**: the store's sign says TIENDA over a picture
+  of the shop, the well says AGUA, the corral CABALLOS, the chicken yard GALLINAS. Signs are one
+  word, always next to the thing.
+- **Greetings and small words from the good toys**: "¡Hola!", "¡Gracias!", "¡Adiós!", "sí", "no",
+  numbers when counting (uno, dos, tres), colours on the Dino Book pages (rojo, verde, azul). The
+  English is right there the first few times, then just the Spanish once he's seen it.
+- **Typing in either language works**: say "hola" with Y and the toys answer; the forgiving matcher
+  accepts Spanish answers too.
+- **Small and repeated**: a handful of words that come back often, over many sessions, the way
+  "Rexy is here!" does. Spanish words are checked by a fluent speaker before they ship.
+
+**Native American content** follows the setting rules above: the land is Southern Paiute land, and
+real Paiute language, stories or art come in only through the partnership those rules describe (the
+Las Vegas Paiute Tribe and the Moapa Band, a paid Southern Paiute adviser), never invented or
+borrowed imagery.
+
 ## Typing short messages (owner, 31 Oct)
 
 Owner: "the other thing that would really be age-appropriate for him is game interactions that
