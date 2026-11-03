@@ -54,7 +54,7 @@ test('feelings get kind, era-aware replies', () => {
   assert.equal(say('mad', {era: 'present'}).reply, '🧯 Cool down, beep!');
   assert.equal(say('mad', {era: 'past'}).reply, '🦕 Deep dino breath!');
   assert.equal(say('scared', {era: 'present'}).reply, '🛡️ You are safe here!');
-  assert.equal(say('scared', {era: 'past'}).reply, '🦕 Dinosaurs protect!');
+  assert.equal(say('scared', {era: 'past'}).reply, '🦕 Dino keeps you safe!');
   assert.equal(say('tired', {era: 'present'}).reply, '🔋 Time to recharge!');
   assert.equal(say('tired', {era: 'past'}).reply, '💤 Dino nap time!');
   assert.equal(say('bored', {era: 'present'}).reply, '🚀 Let us go explore!');
@@ -68,19 +68,19 @@ test('feelings get kind, era-aware replies', () => {
 });
 
 test('social words and reactions get kind, warm replies', () => {
-  assert.equal(say('yes', {era: 'present'}).reply, '👍 Yay! Roger that!');
-  assert.equal(say('yes', {era: 'past'}).reply, '👍 Yeehaw! Yes sir!');
-  assert.equal(say('no', {era: 'present'}).reply, '🛑 ¡No! No problem!');
-  assert.equal(say('no', {era: 'past'}).reply, '🤠 ¡No! No problem, pal!');
+  assert.equal(say('yes', {era: 'present'}).reply, '👍 Yay! Yes!');
+  assert.equal(say('yes', {era: 'past'}).reply, '👍 Yeehaw! Yes!');
+  assert.equal(say('no', {era: 'present'}).reply, '🙂 Okay! No is fine.');
+  assert.equal(say('no', {era: 'past'}).reply, '🤠 Okay, pal!');
   assert.equal(say('ok', {era: 'present'}).reply, '👌 A-okay, beep!');
   assert.equal(say('ok', {era: 'past'}).reply, '👌 Okie dokie!');
-  assert.equal(say('help', {era: 'present'}).reply, '🚨 Rescue drone ready!');
+  assert.equal(say('help', {era: 'present'}).reply, '🤖 I can help! Beep!');
   assert.equal(say('help', {era: 'past'}).reply, '🤠 Dino help is here!');
   assert.equal(say('wow', {era: 'present'}).reply, '✨ Super cool, right?');
-  assert.equal(say('wow', {era: 'past'}).reply, '🌟 Wild and woolly!');
-  assert.equal(say('cool', {era: 'present'}).reply, '😎 Ice cold, beep!');
+  assert.equal(say('wow', {era: 'past'}).reply, '🌟 Wow! Yeehaw!');
+  assert.equal(say('cool', {era: 'present'}).reply, '😎 So cool, beep!');
   assert.equal(say('cool', {era: 'past'}).reply, '😎 Cool as a cactus!');
-  assert.equal(say('lol', {era: 'present'}).reply, '😆 Giggle circuit on!');
+  assert.equal(say('lol', {era: 'present'}).reply, '😆 Beep! So funny!');
   assert.equal(say('lol', {era: 'past'}).reply, '😂 That tickles, dino!');
   assert.equal(say('haha', {era: 'present'}).reply, '😂 Beep beep haha!');
   assert.equal(say('haha', {era: 'past'}).reply, '😂 Dino laughs! Haha!');
@@ -107,9 +107,9 @@ test('animals and dinosaurs get era-differing replies', () => {
   assert.equal(say('t rex', {era: 'past'}).reply, '🦖 ROAR! King of dinos!');
   assert.equal(say('raptor', {era: 'present'}).reply, '⚡ Super fast raptor!');
   assert.equal(say('raptor', {era: 'past'}).reply, '🦕 Speedy raptor pack!');
-  assert.equal(say('triceratops', {era: 'present'}).reply, '🦏 Three laser horns!');
+  assert.equal(say('triceratops', {era: 'present'}).reply, '🦕 Three big horns!');
   assert.equal(say('triceratops', {era: 'past'}).reply, '🦕 Three mighty horns!');
-  assert.equal(say('stegosaurus', {era: 'present'}).reply, '🦕 Solar tail spikes!');
+  assert.equal(say('stegosaurus', {era: 'present'}).reply, '🦕 Spikes on its back!');
   assert.equal(say('stegosaurus', {era: 'past'}).reply, '🦕 Big spiky plates!');
   assert.equal(say('brontosaurus', {era: 'present'}).reply, '🦕 Giant tall neck!');
   assert.equal(say('argentinosaurus', {era: 'past'}).reply, '🦕 Long neck in trees!');
@@ -120,24 +120,24 @@ test('animals and dinosaurs get era-differing replies', () => {
 test('vehicle and game words reply with action', () => {
   assert.equal(say('car', {era: 'present'}).reply, '🚗 Vroom vroom! Zoom!');
   assert.equal(say('car', {era: 'past'}).reply, '🦕 Dino ride is better!');
-  assert.equal(say('fast', {era: 'present'}).reply, '⚡ Maximum speed!');
+  assert.equal(say('fast', {era: 'present'}).reply, '⚡ Zoom! So fast!');
   assert.equal(say('fast', {era: 'past'}).reply, '💨 Fast as the wind!');
-  assert.equal(say('jump', {era: 'present'}).reply, '🦘 Boosters engaged!');
+  assert.equal(say('jump', {era: 'present'}).reply, '🦘 Up, up, jump!');
   assert.equal(say('jump', {era: 'past'}).reply, '🦘 Big bouncy leap!');
   assert.equal(say('race', {era: 'present'}).reply, '🏁 3, 2, 1, GO!');
   assert.equal(say('race', {era: 'past'}).reply, '🏁 Dino derby time!');
   assert.equal(say('win', {era: 'present'}).reply, '🏆 You are number 1!');
   assert.equal(say('win', {era: 'past'}).reply, '🏆 Champion cowboy!');
   assert.equal(say('rocket', {era: 'present'}).reply, '🚀 Blast off to space!');
-  assert.equal(say('rocket', {era: 'past'}).reply, '🚀 A sky firecracker!');
+  assert.equal(say('rocket', {era: 'past'}).reply, '🚀 Whoosh! Up high!');
   assert.equal(say('robot', {era: 'present'}).reply, '🤖 Beep boop, that is me!');
   assert.equal(say('robot', {era: 'past'}).reply, '🤖 A metal cowboy!');
   assert.equal(say('alien', {era: 'present'}).reply, '👽 Friendly space buddy!');
   assert.equal(say('alien', {era: 'past'}).reply, '👽 Star friend visits!');
-  assert.equal(say('ufo', {era: 'present'}).reply, '🛸 Flying saucer glow!');
-  assert.equal(say('ufo', {era: 'past'}).reply, '🛸 Shiny sky wagon!');
+  assert.equal(say('ufo', {era: 'present'}).reply, '🛸 A flying saucer!');
+  assert.equal(say('ufo', {era: 'past'}).reply, '🛸 A sky wagon!');
   assert.equal(say('beep', {era: 'present'}).reply, '🔊 Beep beep boop!');
-  assert.equal(say('beep', {era: 'past'}).reply, '🔊 Beep goes the gizmo!');
+  assert.equal(say('beep', {era: 'past'}).reply, '🔊 Beep beep!');
 });
 
 test('colours reply with matching emoji', () => {
@@ -147,17 +147,17 @@ test('colours reply with matching emoji', () => {
   assert.equal(say('blue', {era: 'past'}).reply, '🔵 Clear blue sky!');
   assert.equal(say('green', {era: 'present'}).reply, '🟢 Glowing green light!');
   assert.equal(say('green', {era: 'past'}).reply, '🟢 Green valley grass!');
-  assert.equal(say('yellow', {era: 'present'}).reply, '🟡 Yellow radar flash!');
+  assert.equal(say('yellow', {era: 'present'}).reply, '🟡 Yellow like a bus!');
   assert.equal(say('yellow', {era: 'past'}).reply, '🟡 Warm yellow sun!');
   assert.equal(say('pink', {era: 'present'}).reply, '🌸 Pretty pink laser!');
   assert.equal(say('pink', {era: 'past'}).reply, '🌸 Sweet pink flower!');
   assert.equal(say('purple', {era: 'present'}).reply, '🟣 Purple space dust!');
   assert.equal(say('purple', {era: 'past'}).reply, '🟣 Purple sunset sky!');
-  assert.equal(say('orange', {era: 'present'}).reply, '🟠 Orange warning light!');
+  assert.equal(say('orange', {era: 'present'}).reply, '🟠 Orange like a cone!');
   assert.equal(say('orange', {era: 'past'}).reply, '🟠 Orange camp fire!');
   assert.equal(say('black', {era: 'present'}).reply, '⚫ Deep space black!');
   assert.equal(say('black', {era: 'past'}).reply, '⚫ Dark starry night!');
-  assert.equal(say('white', {era: 'present'}).reply, '⚪ White lunar glow!');
+  assert.equal(say('white', {era: 'present'}).reply, '⚪ White like the moon!');
   assert.equal(say('white', {era: 'past'}).reply, '⚪ Fluffy white cloud!');
 });
 
@@ -172,13 +172,13 @@ test('numbers 1-10 typed as digits or words cheer and count', () => {
   assert.equal(say('four', {era: 'past'}).reply, '4️⃣ Four stompy feet!');
   assert.equal(say('5').reply, '5️⃣ High five, buddy!');
   assert.equal(say('five', {era: 'past'}).reply, '5️⃣ High five, partner!');
-  assert.equal(say('6').reply, '6️⃣ Six whirring gears!');
+  assert.equal(say('6').reply, '6️⃣ Six wheels! Zoom!');
   assert.equal(say('six', {era: 'past'}).reply, '6️⃣ Six dino eggs!');
   assert.equal(say('7').reply, '7️⃣ Lucky number seven!');
   assert.equal(say('seven', {era: 'past'}).reply, '7️⃣ Seven canyon birds!');
   assert.equal(say('8').reply, '8️⃣ Eight drone blades!');
   assert.equal(say('eight', {era: 'past'}).reply, '8️⃣ Eight canyon paths!');
-  assert.equal(say('9').reply, '9️⃣ Cloud nine, beep!');
+  assert.equal(say('9').reply, '9️⃣ Nine! Beep!');
   assert.equal(say('nine', {era: 'past'}).reply, '9️⃣ Almost ten dinos!');
   assert.equal(say('10').reply, '🔟 Top ten score!');
   assert.equal(say('ten', {era: 'past'}).reply, '🔟 Ten out of ten!');
@@ -218,10 +218,10 @@ test('simple Spanish pairs Spanish with English', () => {
 test('questions get short friendly answers', () => {
   assert.equal(say('who are you', {era: 'present'}).reply, '🤖 I am your robot buddy!');
   assert.equal(say('who are you', {era: 'past'}).reply, '🤠 I am your toy cowboy!');
-  assert.equal(say('what is your name', {era: 'present'}).reply, '🤖 My name is Beep!');
-  assert.equal(say('what is your name', {era: 'past'}).reply, '🤠 I am the Lone Rider!');
-  assert.equal(say('where am i', {era: 'present'}).reply, '🗺️ In the valley base!');
-  assert.equal(say('where am i', {era: 'past'}).reply, '🗺️ In the great canyon!');
+  assert.equal(say('what is your name', {era: 'present'}).reply, '🤖 Beep! I am your robot!');
+  assert.equal(say('what is your name', {era: 'past'}).reply, '🤠 Beep! I am your cowboy!');
+  assert.equal(say('where am i', {era: 'present'}).reply, '🗺️ Saucer Springs!');
+  assert.equal(say('where am i', {era: 'past'}).reply, '🗺️ Long, long ago!');
 });
 
 test('collisions between short and longer words are guarded', () => {
@@ -230,7 +230,7 @@ test('collisions between short and longer words are guarded', () => {
   assert.equal(say('cow').reply, '🐮 Space cow goes moo!');
   assert.notEqual(say('cat').reply, say('car').reply);
   assert.notEqual(say('cow').reply, say('car').reply);
-  assert.equal(say('no').reply, '🛑 ¡No! No problem!');
+  assert.equal(say('no').reply, '🙂 Okay! No is fine.');
   assert.equal(say('so').reply, '💬 "so"', 'no does not steal so');
   assert.equal(say('horse').reply, '🐴 Turbo pony goes zoom!');
   assert.equal(say('house').reply, '💬 "house"', 'horse does not steal house');
@@ -241,7 +241,7 @@ test('collisions between short and longer words are guarded', () => {
   assert.equal(say('sad').reply, '🤗 Beep boop! A hug!');
   assert.notEqual(say('mad').reply, say('sad').reply);
   assert.equal(say('uno').reply, '1️⃣ ¡Uno! One!');
-  assert.equal(say('ufo').reply, '🛸 Flying saucer glow!');
+  assert.equal(say('ufo').reply, '🛸 A flying saucer!');
   assert.equal(say('dos').reply, '2️⃣ ¡Dos! Two!');
   assert.equal(say('dog').reply, '🐶 Robo-pup says woof!');
   assert.equal(say('tres').reply, '3️⃣ ¡Tres! Three!');
@@ -252,10 +252,10 @@ test('multi-word input matches phrases first and handles plurals in sentences', 
   assert.equal(say('i like dogs').reply, '🐶 Robo-pup says woof!');
   assert.equal(say('we love you', {era: 'present'}).reply, '💖 Beep! Love you too!');
   assert.equal(say('look at that car').reply, '🚗 Vroom vroom! Zoom!');
-  assert.equal(say('go really fast').reply, '⚡ Maximum speed!');
+  assert.equal(say('go really fast').reply, '⚡ Zoom! So fast!');
   assert.equal(say('buenas noches amigo').reply, '🌙 ¡Buenas noches! Night!');
   assert.equal(say('tell me who are you', {era: 'present'}).reply, '🤖 I am your robot buddy!');
-  assert.equal(say('where am i today', {era: 'past'}).reply, '🗺️ In the great canyon!');
+  assert.equal(say('where am i today', {era: 'past'}).reply, '🗺️ Long, long ago!');
   // plurals
   assert.equal(say('cars').reply, '🚗 Vroom vroom! Zoom!');
   assert.equal(say('cats').reply, '🐱 Laser cat says purr!');
@@ -266,7 +266,7 @@ test('multi-word input matches phrases first and handles plurals in sentences', 
   assert.equal(say('robots').reply, '🤖 Beep boop, that is me!');
   assert.equal(say('rockets').reply, '🚀 Blast off to space!');
   assert.equal(say('aliens').reply, '👽 Friendly space buddy!');
-  assert.equal(say('ufos').reply, '🛸 Flying saucer glow!');
+  assert.equal(say('ufos').reply, '🛸 A flying saucer!');
   assert.equal(say('perros').reply, '🐶 ¡Perro! Dog!');
   assert.equal(say('gatos').reply, '🐱 ¡Gato! Cat!');
   assert.equal(say('caballos').reply, '🐴 ¡Caballo! Horse!');
@@ -301,4 +301,16 @@ test('no reply or entry contains the forbidden submission word', () => {
       );
     }
   }
+});
+
+test('a dinosaur named like a vocabulary word still comes when called', () => {
+  assert.equal(say('blue', {era: 'past', mount: 'Blue', onFoot: true}).call, 'mount');
+  assert.equal(say('come here sol', {era: 'past', mount: 'Sol', onFoot: true}).call, 'mount');
+  assert.equal(say('blue', {era: 'past', mount: 'Rex', onFoot: true}).call, null, 'just the colour');
+});
+
+test('swapped letters are one slip, and the closest word wins', () => {
+  assert.equal(say('robto').reply, say('robot').reply);
+  assert.equal(say('hrose', {era: 'past'}).reply, say('horse', {era: 'past'}).reply);
+  assert.equal(say('purpel').reply, say('purple').reply);
 });

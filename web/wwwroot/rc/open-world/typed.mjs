@@ -64,16 +64,16 @@ export const DICTIONARY = Object.freeze([
   {words: ['who are you'], present: '🤖 I am your robot buddy!', past: '🤠 I am your toy cowboy!'},
   {
     words: ['what is your name', 'what is ur name', 'whats your name'],
-    present: '🤖 My name is Beep!',
-    past: '🤠 I am the Lone Rider!'
+    present: '🤖 Beep! I am your robot!',
+    past: '🤠 Beep! I am your cowboy!'
   },
-  {words: ['where am i'], present: '🗺️ In the valley base!', past: '🗺️ In the great canyon!'},
+  {words: ['where am i'], present: '🗺️ Saucer Springs!', past: '🗺️ Long, long ago!'},
 
   // Feelings
   {words: ['happy', 'glad'], present: '😊 Big robot smile!', past: '🤠 Happy as a dino!'},
   {words: ['sad'], present: '🤗 Beep boop! A hug!', past: '🤗 Dino hug for you!'},
   {words: ['mad', 'angry'], present: '🧯 Cool down, beep!', past: '🦕 Deep dino breath!'},
-  {words: ['scared', 'afraid'], present: '🛡️ You are safe here!', past: '🦕 Dinosaurs protect!'},
+  {words: ['scared', 'afraid'], present: '🛡️ You are safe here!', past: '🦕 Dino keeps you safe!'},
   {words: ['tired', 'sleepy'], present: '🔋 Time to recharge!', past: '💤 Dino nap time!'},
   {words: ['bored'], present: '🚀 Let us go explore!', past: '🦖 Let us go stomp!'},
   {words: ['i love you', 'love you', 'love'], present: '💖 Beep! Love you too!', past: '❤️ Dino love you too!'},
@@ -81,13 +81,13 @@ export const DICTIONARY = Object.freeze([
   {words: ['thank you', 'thanks'], present: '🤖 You are welcome!', past: '🤠 You bet, partner!'},
 
   // Social words and reactions
-  {words: ['yes', 'yeah', 'yep'], present: '👍 Yay! Roger that!', past: '👍 Yeehaw! Yes sir!'},
-  {words: ['no'], present: '🛑 ¡No! No problem!', past: '🤠 ¡No! No problem, pal!'},
+  {words: ['yes', 'yeah', 'yep'], present: '👍 Yay! Yes!', past: '👍 Yeehaw! Yes!'},
+  {words: ['no'], present: '🙂 Okay! No is fine.', past: '🤠 Okay, pal!'},
   {words: ['ok', 'okay'], present: '👌 A-okay, beep!', past: '👌 Okie dokie!'},
-  {words: ['help'], present: '🚨 Rescue drone ready!', past: '🤠 Dino help is here!'},
-  {words: ['wow'], present: '✨ Super cool, right?', past: '🌟 Wild and woolly!'},
-  {words: ['cool'], present: '😎 Ice cold, beep!', past: '😎 Cool as a cactus!'},
-  {words: ['lol'], present: '😆 Giggle circuit on!', past: '😂 That tickles, dino!'},
+  {words: ['help'], present: '🤖 I can help! Beep!', past: '🤠 Dino help is here!'},
+  {words: ['wow'], present: '✨ Super cool, right?', past: '🌟 Wow! Yeehaw!'},
+  {words: ['cool'], present: '😎 So cool, beep!', past: '😎 Cool as a cactus!'},
+  {words: ['lol'], present: '😆 Beep! So funny!', past: '😂 That tickles, dino!'},
   {words: ['haha', 'ha ha'], present: '😂 Beep beep haha!', past: '😂 Dino laughs! Haha!'},
   {words: ['oops', 'whoops'], present: '🔧 We can fix that!', past: '🤠 Dust yourself off!'},
   {words: ['good night', 'goodnight'], present: '🌙 Sleep tight, beep!', past: '🌙 Sweet dino dreams!'},
@@ -101,33 +101,33 @@ export const DICTIONARY = Object.freeze([
   {words: ['bird', 'birds'], present: '🐦 Drone bird flies high!', past: '🐦 Chirp in the canyon!'},
   {words: ['t rex', 'trex'], exclude: ['tres'], present: '🦖 Tiny arms, big roar!', past: '🦖 ROAR! King of dinos!'},
   {words: ['raptor', 'raptors'], exclude: ['robot'], present: '⚡ Super fast raptor!', past: '🦕 Speedy raptor pack!'},
-  {words: ['triceratops'], present: '🦏 Three laser horns!', past: '🦕 Three mighty horns!' },
-  {words: ['stegosaurus'], present: '🦕 Solar tail spikes!', past: '🦕 Big spiky plates!'},
+  {words: ['triceratops'], present: '🦕 Three big horns!', past: '🦕 Three mighty horns!' },
+  {words: ['stegosaurus'], present: '🦕 Spikes on its back!', past: '🦕 Big spiky plates!'},
   {words: ['brontosaurus', 'argentinosaurus', 'bronto'], present: '🦕 Giant tall neck!', past: '🦕 Long neck in trees!'},
   {words: ['pterodactyl', 'quetzalcoatlus', 'quetzal'], present: '🦅 Gliding in the sky!', past: '🦅 Giant wings soar!'},
 
   // Vehicle and game words
   {words: ['car', 'cars'], present: '🚗 Vroom vroom! Zoom!', past: '🦕 Dino ride is better!'},
-  {words: ['fast'], present: '⚡ Maximum speed!', past: '💨 Fast as the wind!'},
-  {words: ['jump'], present: '🦘 Boosters engaged!', past: '🦘 Big bouncy leap!'},
+  {words: ['fast'], present: '⚡ Zoom! So fast!', past: '💨 Fast as the wind!'},
+  {words: ['jump'], present: '🦘 Up, up, jump!', past: '🦘 Big bouncy leap!'},
   {words: ['race'], present: '🏁 3, 2, 1, GO!', past: '🏁 Dino derby time!'},
   {words: ['win', 'winner'], present: '🏆 You are number 1!', past: '🏆 Champion cowboy!'},
-  {words: ['rocket', 'rockets'], present: '🚀 Blast off to space!', past: '🚀 A sky firecracker!'},
+  {words: ['rocket', 'rockets'], present: '🚀 Blast off to space!', past: '🚀 Whoosh! Up high!'},
   {words: ['robot', 'robots'], exclude: ['raptor'], present: '🤖 Beep boop, that is me!', past: '🤖 A metal cowboy!'},
   {words: ['alien', 'aliens'], present: '👽 Friendly space buddy!', past: '👽 Star friend visits!'},
-  {words: ['ufo', 'ufos'], present: '🛸 Flying saucer glow!', past: '🛸 Shiny sky wagon!'},
-  {words: ['beep'], present: '🔊 Beep beep boop!', past: '🔊 Beep goes the gizmo!'},
+  {words: ['ufo', 'ufos'], present: '🛸 A flying saucer!', past: '🛸 A sky wagon!'},
+  {words: ['beep'], present: '🔊 Beep beep boop!', past: '🔊 Beep beep!'},
 
   // Colours
   {words: ['red'], present: '🔴 Shiny red rover!', past: '🔴 Red canyon rock!'},
   {words: ['blue'], present: '🔵 Bright blue neon!', past: '🔵 Clear blue sky!'},
   {words: ['green'], present: '🟢 Glowing green light!', past: '🟢 Green valley grass!'},
-  {words: ['yellow'], exclude: ['hello'], present: '🟡 Yellow radar flash!', past: '🟡 Warm yellow sun!'},
+  {words: ['yellow'], exclude: ['hello'], present: '🟡 Yellow like a bus!', past: '🟡 Warm yellow sun!'},
   {words: ['pink'], present: '🌸 Pretty pink laser!', past: '🌸 Sweet pink flower!'},
   {words: ['purple'], present: '🟣 Purple space dust!', past: '🟣 Purple sunset sky!'},
-  {words: ['orange'], present: '🟠 Orange warning light!', past: '🟠 Orange camp fire!'},
+  {words: ['orange'], present: '🟠 Orange like a cone!', past: '🟠 Orange camp fire!'},
   {words: ['black'], present: '⚫ Deep space black!', past: '⚫ Dark starry night!'},
-  {words: ['white'], present: '⚪ White lunar glow!', past: '⚪ Fluffy white cloud!'},
+  {words: ['white'], present: '⚪ White like the moon!', past: '⚪ Fluffy white cloud!'},
 
   // Numbers 1-10
   {words: ['1', 'one'], present: '1️⃣ Number one! Zoom!', past: '1️⃣ One little dino!'},
@@ -135,10 +135,10 @@ export const DICTIONARY = Object.freeze([
   {words: ['3', 'three'], present: '3️⃣ Three, two, one!', past: '3️⃣ Three dino horns!'},
   {words: ['4', 'four'], present: '4️⃣ Four sturdy wheels!', past: '4️⃣ Four stompy feet!'},
   {words: ['5', 'five'], present: '5️⃣ High five, buddy!', past: '5️⃣ High five, partner!'},
-  {words: ['6', 'six'], present: '6️⃣ Six whirring gears!', past: '6️⃣ Six dino eggs!'},
+  {words: ['6', 'six'], present: '6️⃣ Six wheels! Zoom!', past: '6️⃣ Six dino eggs!'},
   {words: ['7', 'seven'], present: '7️⃣ Lucky number seven!', past: '7️⃣ Seven canyon birds!'},
   {words: ['8', 'eight'], present: '8️⃣ Eight drone blades!', past: '8️⃣ Eight canyon paths!'},
-  {words: ['9', 'nine'], present: '9️⃣ Cloud nine, beep!', past: '9️⃣ Almost ten dinos!'},
+  {words: ['9', 'nine'], present: '9️⃣ Nine! Beep!', past: '9️⃣ Almost ten dinos!'},
   {words: ['10', 'ten'], present: '🔟 Top ten score!', past: '🔟 Ten out of ten!'},
 
   // Spanish words
@@ -200,23 +200,35 @@ function matchExact(t, era) {
   return null;
 }
 
-/** Find a fuzzy spelling-slip match in the vocabulary table (words <= 3 must match exactly). */
+/** Edit distance where swapping two neighbouring letters is one slip ("robto" → "robot"). */
+function slips(a, b) {
+  const d = Array.from({length: a.length + 1}, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  return d[a.length][b.length];
+}
+
+/** The closest word to a spelling slip in the vocabulary table (words <= 3 letters must match exactly). */
 function matchFuzzy(t, era) {
-  const tokens = t.split(' ').filter(Boolean);
-  for (const token of tokens) {
+  let best = null,
+    bestSlips = Infinity;
+  for (const token of t.split(' ').filter(Boolean)) {
     if (token.length <= 3) continue;
     for (const entry of DICTIONARY) {
       if (entry.exclude?.includes(token)) continue;
       for (const w of entry.words) {
         if (w.includes(' ') || w.length <= 3) continue;
-        const maxDist = w.length <= 5 ? 1 : 2;
-        if (distance(token, w) <= maxDist) {
-          return era === 'past' ? entry.past : entry.present;
-        }
+        const n = slips(token, w);
+        if (n <= (w.length <= 5 ? 1 : 2) && n < bestSlips) (best = entry), (bestSlips = n);
       }
     }
   }
-  return null;
+  return best && (era === 'past' ? best.past : best.present);
 }
 
 /**
@@ -228,6 +240,13 @@ export function say(text, {era = 'present', mount = 'Dino', onFoot = false} = {}
     raw = String(text ?? '').trim();
   if (!raw) return {reply: null, call: null};
   if (!t) return {reply: `💬 ${raw.slice(0, 12)}`, call: null}; // emoji and symbols are an answer too
+
+  // His dinosaur's own name beats the word table: a dino he called "Blue" must still come.
+  const named = clean(mount);
+  if (named && (t === named || t.split(' ').includes(named))) {
+    if (era === 'past') return onFoot ? {reply: `🦖 ${mount} is here!`, call: 'mount'} : {reply: `🦖 You are on ${mount}!`, call: null};
+    return {reply: `🦖 ${mount} lives long ago.`, call: null};
+  }
 
   // Exact dictionary match checked first (protects vocabulary words like "white" from fuzzy collisions with "whistle").
   const exact = matchExact(t, era);
