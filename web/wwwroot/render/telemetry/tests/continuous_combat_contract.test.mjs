@@ -65,11 +65,13 @@ test("authoritative state and events expose every replacement edge", () => {
     "a detached wreck impact must use its recorded event position, not the live target slot");
 });
 
-test("mission brief and splash cue explain the finite sortie's shared resources", () => {
+test("mission brief and splash cue explain escalating waves and landing bonus", () => {
   assert.match(appSource,
     /Two gun engagements · return to the runway[\s\S]*?480 rounds across all fights/);
   assert.match(appSource,
-    /Two engagements share your fuel, ammunition and damage/);
+    /Waves get harder through W5 and raise your score multiplier/);
+  assert.match(appSource,
+    /Landing full stop is optional and adds a \+150 bonus/);
   assert.match(hudSource,
     /opponent_replacement_pending[\s\S]*?engagement_number[\s\S]*?\+ 1[\s\S]*?BANDIT \$\{nextEngagement\} IN/);
 });
