@@ -96,7 +96,20 @@ public sealed class CobraGroundWarRuntime
     public const double WreckRetainSeconds = 28.0;
     /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>
     public const double SmallArmsEventsPerSecond = 2.4;
-    public const double PlayerRoundDamage = 0.55;
+    // Base damage per player round so a 2 s burst (90 rds at 45 rps) converts a 140 HP HardPoint to DAMAGED (<=70 HP) and a second 2 s burst kills it in 175 hits / 3.89 s (Argon review 2026-11-05).
+    public const double PlayerRoundDamage = 0.80;
+    // 20 mm round splash radius in metres damaging every living unit within 2.5 m of impact, scaled by distance (Argon review 2026-11-05).
+    public const double PlayerSplashRadiusM = 2.5;
+    // Minimum distance-scaled splash multiplier at the 2.5 m boundary so a burst on a tight crew group kills the whole group (Argon review 2026-11-05).
+    public const double PlayerSplashEdgeDamageScale = 0.5;
+    // Soft-target vulnerability multiplier for player gunfire so infantry (40 HP) and soft vehicles (90 HP) die in a fraction of a second on target while preserving ground-vs-ground attrition HP (Argon review 2026-11-05).
+    public const double PlayerSoftTargetDamageScale = 4.0;
+    // Hard-point intermediate DAMAGED threshold at 50% of MaxHealth (Argon review 2026-11-05).
+    public const double HardPointDamagedHealthFraction = GroundUnit.HardPointDamagedHealthFraction;
+    // Suppression duration in seconds during which a newly DAMAGED hard point stops firing (Argon review 2026-11-05).
+    public const double HardPointSuppressionSeconds = GroundUnit.HardPointSuppressionSeconds;
+    // Accuracy multiplier for a hard point in the intermediate DAMAGED state (Argon review 2026-11-05).
+    public const double HardPointDamagedAccuracyScale = GroundUnit.HardPointDamagedAccuracyScale;
     /// <summary>20 s to flip an uncontested point. The Cobra never captures — only ground units
     /// occupy — so this is the clock the player's rounds buy time on.</summary>
     public const double CaptureRatePerSecond = 1.0 / 20.0;
@@ -241,6 +254,24 @@ public sealed class CobraGroundWarRuntime
 
     public IEnumerable<GroundUnit> LivingUnits() => _units.Where(unit => unit.IsAlive);
 
+    public IReadOnlyList<GroundUnitSnapshot> SnapshotUnits() =>
+        _units.Select(unit => unit.Snapshot()).ToArray();
+
+    public static double SplashDamageScale(double distanceM)
+    {
+        if (!double.IsFinite(distanceM) || distanceM < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(distanceM));
+        if (distanceM > PlayerSplashRadiusM + 1e-9)
+            return 0.0;
+        double normalized = Math.Clamp(distanceM / PlayerSplashRadiusM, 0.0, 1.0);
+        return 1.0 - (1.0 - PlayerSplashEdgeDamageScale) * normalized;
+    }
+
+    public static double PlayerRoleDamageScale(GroundUnitRole role) => role switch {
+        GroundUnitRole.InfantryClump or GroundUnitRole.SoftVehicle => PlayerSoftTargetDamageScale,
+        _ => 1.0
+    };
+
     /// <summary>Refill the reusable living-unit scratch in the stable ordinal-id order every
     /// combat phase depends on. Allocation-free after the first few steps.</summary>
     List<GroundUnit> RefreshLivingScratch()
@@ -269,6 +300,7 @@ public sealed class CobraGroundWarRuntime
         if (_missionOutcome == HoldTheBridgeOutcome.Pending) {
             AgeWrecks(dtSeconds);
             ResolveMutualCombat(dtSeconds);
+            AdvanceSuppression(dtSeconds);
             MoveUnits(dtSeconds);
             UpdateSiteControl();
             UpdateSiteOwnership(dtSeconds);
@@ -348,7 +380,8 @@ public sealed class CobraGroundWarRuntime
     }
 
     /// <summary>
-    /// Applies authorized gunfire: consumes magazine rounds and damages the selected unit.
+    /// Applies authorized gunfire: consumes magazine rounds and damages the selected unit plus any
+    /// living units within <see cref="PlayerSplashRadiusM"/>, scaled by distance from impact.
     /// Returns true when at least one round was expended.
     /// </summary>
     public bool ApplyAuthorizedFire(string? targetUnitId, double dtSeconds)
@@ -366,14 +399,36 @@ public sealed class CobraGroundWarRuntime
         if (expended <= 0) return false;
         _roundsExpended += expended;
 
-        bool wasAlive = target.IsAlive;
-        target.ApplyDamage(expended * PlayerRoundDamage);
-        PushEvent("gun-hit", target.Id, target.HomeSiteId, target.Faction, target.PositionWorldM);
+        Vec3D impactWorldM = target.PositionWorldM;
+        double baseDamage = expended * PlayerRoundDamage;
+        double splashRadiusSq = PlayerSplashRadiusM * PlayerSplashRadiusM;
+        PushEvent("gun-hit", target.Id, target.HomeSiteId, target.Faction, impactWorldM);
 
-        if (wasAlive && !target.IsAlive) {
-            RegisterPlayerKill(target);
-            _wreckAgeSeconds[target.Id] = 0.0;
-            PushEvent("gun-kill", target.Id, target.HomeSiteId, target.Faction, target.PositionWorldM);
+        List<GroundUnit> living = RefreshLivingScratch();
+        for (int index = 0; index < living.Count; index++) {
+            GroundUnit unit = living[index];
+            double distanceM = 0.0;
+            if (!ReferenceEquals(unit, target)) {
+                double distanceSq = HorizontalDistanceSquared(unit.PositionWorldM, impactWorldM);
+                if (distanceSq > splashRadiusSq + 1e-9) continue;
+                distanceM = Math.Sqrt(distanceSq);
+            }
+            double damage = baseDamage
+                * PlayerRoleDamageScale(unit.Role)
+                * SplashDamageScale(distanceM);
+            if (damage <= 0.0) continue;
+
+            bool wasAlive = unit.IsAlive;
+            bool wasDamaged = unit.IsDamaged;
+            unit.ApplyDamage(damage);
+            if (!wasDamaged && unit.IsDamaged) {
+                PushEvent("unit-damaged", unit.Id, unit.HomeSiteId, unit.Faction, unit.PositionWorldM);
+            }
+            if (wasAlive && !unit.IsAlive) {
+                RegisterPlayerKill(unit);
+                _wreckAgeSeconds[unit.Id] = 0.0;
+                PushEvent("gun-kill", unit.Id, unit.HomeSiteId, unit.Faction, unit.PositionWorldM);
+            }
         }
         return true;
     }
@@ -438,7 +493,7 @@ public sealed class CobraGroundWarRuntime
         double smallArmsChance = Math.Min(1.0, SmallArmsEventsPerSecond * dtSeconds);
         for (int attackerIndex = 0; attackerIndex < living.Count; attackerIndex++) {
             GroundUnit attacker = living[attackerIndex];
-            if (!attacker.ParticipatesInGroundCombat) continue;
+            if (!attacker.CanFire) continue;
             int victimIndex = -1;
             double bestRangeSq = attacker.EngagementRangeM * attacker.EngagementRangeM;
             for (int candidateIndex = 0; candidateIndex < living.Count; candidateIndex++) {
@@ -454,7 +509,7 @@ public sealed class CobraGroundWarRuntime
             }
             if (victimIndex < 0) continue;
             _damageScratch[victimIndex] += attacker.DamagePerSecond * dtSeconds;
-            if (_chatterRng.NextDouble() < smallArmsChance)
+            if (_chatterRng.NextDouble() < smallArmsChance * attacker.Accuracy)
                 PushEvent("small-arms", attacker.Id, attacker.HomeSiteId, attacker.Faction,
                     attacker.PositionWorldM, living[victimIndex].PositionWorldM);
         }
@@ -467,12 +522,25 @@ public sealed class CobraGroundWarRuntime
             // only the turret can break the point open. See GroundUnit.IsFortified.
             if (unit.IsFortified) continue;
             bool wasAlive = unit.IsAlive;
+            bool wasDamaged = unit.IsDamaged;
             unit.ApplyDamage(amount);
+            if (!wasDamaged && unit.IsDamaged) {
+                PushEvent("unit-damaged", unit.Id, unit.HomeSiteId, unit.Faction,
+                    unit.PositionWorldM);
+            }
             if (wasAlive && !unit.IsAlive) {
                 _wreckAgeSeconds[unit.Id] = 0.0;
                 PushEvent("unit-destroyed", unit.Id, unit.HomeSiteId, unit.Faction,
                     unit.PositionWorldM);
             }
+        }
+    }
+
+    void AdvanceSuppression(double dtSeconds)
+    {
+        foreach (GroundUnit unit in _units) {
+            if (!unit.IsAlive) continue;
+            unit.AdvanceSuppression(dtSeconds);
         }
     }
 

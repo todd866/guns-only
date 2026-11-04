@@ -1138,4 +1138,148 @@ public class CobraGroundWarRuntimeTests
         Assert.False(runtime.Diagnostics.MissionFlyable);
         Assert.Equal(frozenGroundWarTick, runtime.GroundWar.AuthorityTick);
     }
+
+    [Fact]
+    public void TwoSecondBurstLeavesFullHardPointDamagedAndSilentAndSecondBurstKillsIt()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        GroundUnit hardPoint = war.LivingUnits().First(unit =>
+            unit.Faction == GroundFaction.Hostile
+            && unit.Role == GroundUnitRole.HardPoint
+            && unit.IsFortified);
+        GroundUnit friendlyTarget = war.LivingUnits().First(unit =>
+            unit.Faction == GroundFaction.Friendly
+            && unit.Role == GroundUnitRole.HardPoint);
+        // Isolate the hostile hard point and one friendly hard point within weapon range (200 m)
+        // so suppression silence and halved post-suppression accuracy are directly measured.
+        Vec3D isolatedPosition = new(1_200.0, 200.4, 1_200.0);
+        hardPoint.SetPosition(isolatedPosition);
+        friendlyTarget.SetPosition(isolatedPosition + new Vec3D(200.0, 0.0, 0.0));
+        foreach (GroundUnit other in war.LivingUnits()
+            .Where(unit => !ReferenceEquals(unit, hardPoint) && !ReferenceEquals(unit, friendlyTarget))
+            .ToArray()) {
+            other.ApplyDamage(other.MaxHealth);
+        }
+
+        Assert.Equal(140.0, hardPoint.MaxHealth, 6);
+        Assert.Equal(140.0, hardPoint.Health, 6);
+        Assert.Equal(GroundUnitDamageState.Intact, hardPoint.DamageState);
+        Assert.False(hardPoint.IsDamaged);
+        Assert.False(hardPoint.IsSuppressed);
+        Assert.True(hardPoint.CanFire);
+        Assert.Equal(1.0, hardPoint.Accuracy, 6);
+        Assert.Equal(hardPoint.BaseDamagePerSecond, hardPoint.DamagePerSecond, 6);
+
+        // First 2 s burst at the runtime's real 45 rps rate (240 fixed 120 Hz steps = 90 rounds).
+        int ticksPerTwoSecondBurst = (int)Math.Round(2.0 * PlayerVehicleContract.FixedStepHz);
+        bool firstBurstHit = false;
+        for (int tick = 0; tick < ticksPerTwoSecondBurst; tick++)
+            firstBurstHit |= war.ApplyAuthorizedFire(hardPoint.Id, PlayerVehicleContract.FixedDeltaSeconds);
+
+        Assert.True(firstBurstHit);
+        Assert.Equal(90, war.Debrief.RoundsExpended);
+        Assert.True(hardPoint.IsAlive, "First 2 s burst must leave the hard point alive in DAMAGED state.");
+        Assert.True(hardPoint.IsDamaged, "First 2 s burst must put the hard point into DAMAGED state (<= 50% HP).");
+        Assert.Equal(GroundUnitDamageState.Damaged, hardPoint.DamageState);
+        Assert.True(hardPoint.Health <= hardPoint.MaxHealth * CobraGroundWarRuntime.HardPointDamagedHealthFraction);
+        Assert.True(hardPoint.IsSuppressed, "Newly DAMAGED hard point must stop firing (suppressed).");
+        Assert.False(hardPoint.CanFire);
+        Assert.Equal(0.0, hardPoint.DamagePerSecond, 6);
+        Assert.Equal(
+            CobraGroundWarRuntime.HardPointDamagedAccuracyScale,
+            hardPoint.Accuracy,
+            6);
+
+        GroundUnitSnapshot snapshot = Assert.Single(
+            war.SnapshotUnits(),
+            candidate => candidate.Id == hardPoint.Id);
+        Assert.True(snapshot.IsDamaged);
+        Assert.True(snapshot.IsSuppressed);
+        Assert.Equal(GroundUnitDamageState.Damaged, snapshot.DamageState);
+        Assert.Equal(0.5, snapshot.Accuracy, 6);
+
+        // While suppressed, the hard point stays silent: deals 0 damage to friendlyTarget and emits no small-arms fire.
+        double friendlyHealthBeforeSuppressionStep = friendlyTarget.Health;
+        war.Advance(1.0);
+        Assert.Equal(friendlyHealthBeforeSuppressionStep, friendlyTarget.Health, 6);
+        Assert.True(hardPoint.IsSuppressed);
+        Assert.False(hardPoint.CanFire);
+        Assert.Equal(0.0, hardPoint.DamagePerSecond, 6);
+        Assert.DoesNotContain(
+            war.RecentEvents,
+            evt => evt.Kind == "small-arms" && evt.UnitId == hardPoint.Id);
+
+        // After the remaining suppression window elapses, the hard point remains DAMAGED and resumes at half accuracy.
+        war.Advance(CobraGroundWarRuntime.HardPointSuppressionSeconds - 1.0);
+        Assert.True(hardPoint.IsAlive);
+        Assert.True(hardPoint.IsDamaged);
+        Assert.False(hardPoint.IsSuppressed);
+        Assert.True(hardPoint.CanFire);
+        Assert.Equal(0.5, hardPoint.Accuracy, 6);
+        Assert.Equal(hardPoint.BaseDamagePerSecond * 0.5, hardPoint.DamagePerSecond, 6);
+
+        double friendlyHealthBeforeResumedStep = friendlyTarget.Health;
+        war.Advance(1.0);
+        Assert.Equal(
+            hardPoint.BaseDamagePerSecond * 0.5,
+            friendlyHealthBeforeResumedStep - friendlyTarget.Health,
+            6);
+
+        // Second 2 s burst kills the hard point (~4 s total gun time).
+        for (int tick = 0; tick < ticksPerTwoSecondBurst && hardPoint.IsAlive; tick++)
+            war.ApplyAuthorizedFire(hardPoint.Id, PlayerVehicleContract.FixedDeltaSeconds);
+
+        Assert.False(hardPoint.IsAlive, "Second 2 s burst must kill the DAMAGED hard point.");
+        Assert.Equal(GroundUnitDamageState.Destroyed, hardPoint.DamageState);
+        Assert.False(hardPoint.IsDamaged);
+        Assert.False(hardPoint.IsSuppressed);
+        Assert.Equal(0.0, hardPoint.Health, 6);
+        Assert.Equal(1, war.Debrief.HostileKillsByPlayer);
+    }
+
+    [Fact]
+    public void BurstIntoThreeManGroupWithinSplashRadiusKillsAllThreeAndSoftUnitsDieInAFractionOfASecond()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        GroundUnit[] group = war.LivingUnits()
+            .Where(unit => unit.Faction == GroundFaction.Hostile
+                && unit.Role == GroundUnitRole.InfantryClump)
+            .Take(3)
+            .ToArray();
+        Assert.Equal(3, group.Length);
+        GroundUnit bystanderOutsideSplash = war.LivingUnits()
+            .First(unit => unit.Faction == GroundFaction.Hostile
+                && unit.Role == GroundUnitRole.InfantryClump
+                && !group.Contains(unit));
+        GroundUnit softVehicle = war.LivingUnits()
+            .First(unit => unit.Faction == GroundFaction.Hostile
+                && unit.Role == GroundUnitRole.SoftVehicle);
+
+        Vec3D centre = new(1_500.0, 200.4, 1_500.0);
+        group[0].SetPosition(centre);
+        group[1].SetPosition(centre + new Vec3D(1.2, 0.0, 0.0));
+        group[2].SetPosition(centre + new Vec3D(0.0, 0.0, 2.4));
+        bystanderOutsideSplash.SetPosition(centre + new Vec3D(4.0, 0.0, 0.0));
+        softVehicle.SetPosition(centre + new Vec3D(20.0, 0.8, 0.0));
+
+        // A brief 0.1 s pulse damages every member inside 2.5 m, scaled by distance from impact.
+        Assert.True(war.ApplyAuthorizedFire(group[0].Id, 0.1));
+        Assert.True(group[0].Health < group[1].Health,
+            "Direct impact at 0 m must deal more damage than splash at 1.2 m.");
+        Assert.True(group[1].Health < group[2].Health,
+            "Splash at 1.2 m must deal more damage than splash at 2.4 m.");
+        Assert.True(group[2].Health < group[2].MaxHealth,
+            "Unit at 2.4 m (within 2.5 m splash radius) must take splash damage.");
+        Assert.Equal(bystanderOutsideSplash.MaxHealth, bystanderOutsideSplash.Health, 6);
+
+        // Complete a sub-second burst (0.6 s total) on the centre target: all three in the 2.5 m group die.
+        Assert.True(war.ApplyAuthorizedFire(group[0].Id, 0.5));
+        Assert.All(group, member => Assert.False(member.IsAlive));
+        Assert.Equal(3, war.Debrief.HostileKillsByPlayer);
+        Assert.True(bystanderOutsideSplash.IsAlive);
+
+        // Soft vehicle also dies in a fraction of a second (< 0.7 s) on target.
+        Assert.True(war.ApplyAuthorizedFire(softVehicle.Id, 0.7));
+        Assert.False(softVehicle.IsAlive);
+    }
 }
