@@ -9,6 +9,7 @@ import "./laptop_recommendation_wiring.test.mjs";
 import "./mission_cloud_entry.test.mjs";
 import "./mission_strip.test.mjs";
 import "./mobile_boot_wiring.test.mjs";
+import "./ready_menu_backdrop.test.mjs";
 import "./shell_themes.test.mjs";
 import "./sortie_grade.test.mjs";
 import "./standalone_audio_preferences.test.mjs";

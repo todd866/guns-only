@@ -5,6 +5,7 @@ import { createReportUi } from "./render/feedback/report_ui.js";
 import { highAlphaRecoveryPresentation } from "./render/hud/high_alpha_recovery.js?v=__RELEASE_BUILD__";
 import { attemptDurationSeconds } from "./render/shell/attempt_duration.js?v=__RELEASE_BUILD__";
 import { beginMissionCloudEntry } from "./render/shell/mission_cloud_entry.js?v=__RELEASE_BUILD__";
+import { mountReadyMenuBackdrop } from "./render/shell/ready_menu_backdrop.js?v=__RELEASE_BUILD__";
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
 import { attemptElapsedSeconds, attemptStartSeconds } from "./render/progression/attempt_clock.js";
 import { paintMissionStrip } from "./render/shell/mission_strip.js";
@@ -255,7 +256,6 @@ import {
 import { createShellHealthBeacon, readLocalShellIncidents } from "./render/telemetry/shell_health.js?v=__RELEASE_BUILD__";
 import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=__RELEASE_BUILD__";
 import { applyShellTheme } from "./render/shell/shell_theme.js?v=__RELEASE_BUILD__";
-import { applyFrontDoor, syncFrontDoor } from "./render/shell/front_door.js?v=__RELEASE_BUILD__";
 import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=__RELEASE_BUILD__";
 import {
   createBootWatchdog,
@@ -4925,7 +4925,6 @@ function renderCampaignProgress() {
   // Release state, not qualification progress, owns launchability. Hidden preview fixtures stay
   // represented for focused development, but a copied URL cannot promote one into production.
   if (readyProgramProgress) readyProgramProgress.textContent = "";
-  syncFrontDoor(document, window.location);
   for (const button of readyProgramButtons) {
     const nodeId = button.dataset.programNode;
     const selected = nodeId === selectedProgramNodeId;
@@ -12985,7 +12984,7 @@ if ("serviceWorker" in navigator) {
 // first-run valley; the gauge stays visible until the first frame.
 try {
   applyShellTheme(document.documentElement, window.location);
-  applyFrontDoor(document.documentElement, window.location);
+  mountReadyMenuBackdrop();
   if (!shouldAutoStartFirstRunValley(firstRunValleyQueryContext())) {
     bootScreen?.classList.add("picker-live");
     renderPauseUi();
