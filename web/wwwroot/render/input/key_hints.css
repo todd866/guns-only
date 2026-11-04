@@ -1,0 +1,100 @@
+/* MacBook Air key caps (render/input/key_hints.js). Shared by the F-22 shell and RC. */
+.keycap {
+  display: inline-block;
+  min-width: 1.7em;
+  padding: 1px 7px;
+  margin: 0 3px;
+  border: 1px solid #c9c2ae;
+  border-bottom-width: 3px;
+  border-radius: 5px;
+  background: #f3efdc;
+  color: #152a30;
+  font: 600 13px system-ui;
+  text-align: center;
+  line-height: 1.3;
+  vertical-align: 1px;
+}
+.keycap.wide { min-width: 2.4em; font-size: 11px; letter-spacing: -0.02em; }
+.keycap.space { min-width: 5em; height: 1.35em; }
+.key-sep {
+  display: inline-block;
+  margin: 0 2px;
+  color: inherit;
+  opacity: 0.45;
+  font-weight: 400;
+  font-size: 0.85em;
+  vertical-align: 1px;
+}
+.key-legend-line { display: inline; }
+.key-legend-dot { margin: 0 0.35em; opacity: 0.5; }
+.key-column { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.key-hint-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.keyzoom {
+  height: 58px;
+  width: auto;
+  vertical-align: middle;
+  margin-right: 10px;
+  display: inline-block;
+}
+.keyzoom rect { fill: #1d3a42; stroke: #4c6b70; }
+.keyzoom rect.lit { fill: #edbd6a; stroke: #fff3cd; }
+.keyzoom text { font: 600 9px system-ui; fill: #9bb3b2; }
+.keyzoom text.lit { fill: #152a30; font: 800 9.5px system-ui; }
+#ready-controls .keycap,
+#ready-hint .keycap,
+.controls-onboarding-group .keycap { font-size: 11px; min-width: 1.55em; padding: 0 5px; }
+#ready-hint .keycap { font-size: 10px; }
+.shell-action-key .keycap { font-size: 10px; min-width: 1.45em; margin: 0; }
+#ready-start.console-primary .shell-action-key { display: inline-flex; align-items: center; }
+:root #ready-screen .console-actions button .shell-action-key {
+  display: flex;
+  justify-content: center;
+  min-height: 14px;
+}
+.pause-desktop.key-hint-row .keycap { font-size: 10px; }
+#hud-control-quicklook .keycap { font-size: 9px; min-width: 1.4em; padding: 0 4px; }
+#hud-control-quicklook .key-legend-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 3px 5px;
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+#hud-control-quicklook .key-legend-label {
+  color: rgba(207, 244, 222, 0.68);
+  font: 500 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+#hud-control-quicklook {
+  position: fixed;
+  z-index: 12;
+  pointer-events: none;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(930px, calc(100vw - 34px));
+  padding: 48px 12px 12px;
+  text-align: center;
+}
+#hud-control-quicklook[hidden] { display: none !important; }
+#hud-legend-chip {
+  position: fixed;
+  z-index: 11;
+  pointer-events: none;
+}
+#hud-legend-chip[hidden] { display: none !important; }
+@media (pointer: coarse), (hover: none) and (pointer: coarse) {
+  .keycap,
+  .keyzoom,
+  .key-sep { display: none !important; }
+}
+html.touch-mode .keycap,
+html.touch-mode .keyzoom,
+html.touch-mode .key-sep { display: none !important; }

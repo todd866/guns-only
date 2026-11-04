@@ -4591,6 +4591,7 @@
   </style>
   <link rel="stylesheet" href="./render/onboarding/pilot_notebook.css">
   <link rel="stylesheet" href="./render/input/touch_fighter_layout.css">
+  <link rel="stylesheet" href="./render/input/key_hints.css">
 </head>
 <body>
   <svg class="shell-symbols" width="0" height="0" aria-hidden="true" focusable="false">
@@ -4669,7 +4670,7 @@
       <button id="feedback-cancel" type="button" data-action="cancel" aria-label="Cancel report" title="Cancel (Esc)"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-close"/></svg></button>
     </form>
   </dialog>
-  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)" title="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">ESC · PAUSE</span><span class="pause-mobile" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-pause"/></svg></span></button>
+  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)" title="Pause sortie (Escape)"><span class="pause-desktop key-hint-row" aria-hidden="true"></span><span class="pause-mobile" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-pause"/></svg></span></button>
   <output id="flight-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></output>
   <section id="rapier-radio" aria-label="Optional radio captions" hidden>
     <output id="rapier-radio-text" role="status" aria-live="polite" aria-atomic="true"></output>
@@ -4717,7 +4718,7 @@
           <option value="DECK">Deck camera</option>
           <option value="COCKPIT">Cockpit camera</option>
         </select>
-        <button id="incident-replay-skip" type="button">Debrief · Esc</button>
+        <button id="incident-replay-skip" type="button" class="key-hint-row"></button>
       </div>
     </div>
   </section>
@@ -5140,7 +5141,7 @@
           <p id="ready-controls" class="ready-controls">Arrows fly · W/S power · F guns · V padlock · Tab target
 Two engagements, then recover · H controls · R restarts</p>
           <div id="ready-route-notice" class="ready-route-notice" role="status" hidden></div>
-          <button id="ready-start" class="console-primary" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-play"/></svg><span class="shell-action-label">Fly First Merge</span></button>
+          <button id="ready-start" class="console-primary" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-play"/></svg><span class="shell-action-label">Fly First Merge</span><span class="shell-action-key" hidden aria-hidden="true"></span></button>
           <button id="ready-replay" type="button" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-replay"/></svg><span class="shell-action-label">Replay incident again</span></button>
           <div class="ready-secondary-actions console-actions">
             <button id="ready-practice" type="button" data-console-modes="program pause debrief intro"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="shell-action-label">Practice</span></button>
@@ -5149,10 +5150,10 @@ Two engagements, then recover · H controls · R restarts</p>
             <button id="ready-return" type="button" data-console-modes="pause debrief intro" title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-jet"/></svg><span class="shell-action-label">Aircraft</span></button>
             <button id="ready-restart" type="button" data-console-modes="pause debrief" title="Restart sortie"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span class="shell-action-label">Restart</span></button>
             <button id="ready-settings" type="button" data-console-modes="program pause debrief intro" title="Build __RELEASE_BUILD__ · verifying"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-gear"/></svg><span class="shell-action-label">Settings</span></button>
-            <button id="ready-report" type="button" data-console-modes="program pause debrief intro" disabled title="Report (F8)"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-flag"/></svg><span class="shell-action-label">Report</span></button>
+            <button id="ready-report" type="button" data-console-modes="program pause debrief intro" disabled title="Report"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-flag"/></svg><span class="shell-action-label">Report</span><span class="shell-action-key" hidden aria-hidden="true"></span></button>
             <button id="ready-handoff" type="button" data-console-modes="pause" disabled title="Call it a day and return to base"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-rtb"/></svg><span class="shell-action-label">RTB</span></button>
           </div>
-          <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
+          <div id="ready-hint" class="key-hint-row" aria-live="polite"></div>
           <!--
             The one line of chrome the pictorial menu keeps, and only on iPhone in a browser tab.
             The bars top and bottom are Safari's, not the game's; the manifest is display:fullscreen
