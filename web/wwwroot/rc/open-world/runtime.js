@@ -69,6 +69,7 @@ import {SCHOOL} from './flying-school.mjs';
 import {buildStuntJumps} from './stunt-jumps.js';
 import {createStuntJumps, stepStuntJumps, stuntTimeScale} from './stunt-jumps.mjs';
 import {buildHighSchool} from './high-school.js';
+import {buildPowerPlant} from './power-plant.js';
 import {createHotWheels} from './hot-wheels.js';
 import {createCountryClub} from './country-club.js';
 import {createMeadow} from './meadow.js';
@@ -380,6 +381,8 @@ export async function loadOpenWorld(search) {
     farmScene = null;
   const setEra = era => {
     const past = era === 'past';
+    if (past) stream.world.openGate('era-plant');
+    else stream.world.closeGate('era-plant');
     if (past) {
       stream.world.openGate('era-club');
       stream.world.closeGate('era-meadow');
@@ -427,6 +430,7 @@ export async function loadOpenWorld(search) {
     clouds,
     canyonRun,
     highSchool,
+    powerPlant,
     bowlingAlley,
     hotWheels,
     club,
@@ -764,6 +768,21 @@ export async function loadOpenWorld(search) {
         best: progress.canyonBest
       });
       hotWheels = createHotWheels(scene, stream.world);
+      // The power plant is the present only: its collision rides the 'era-plant' gate, so the past has
+      // no invisible towers (the same rule as the club below).
+      powerPlant = buildPowerPlant(
+        scene,
+        {
+          addTri: (a, b, c, s) => stream.world.addTri(a, b, c, s, 'era-plant'),
+          addQuad: (a, b, c, d, s) => {
+            stream.world.addTri(a, b, c, s, 'era-plant');
+            stream.world.addTri(a, c, d, s, 'era-plant');
+          },
+          raycast: stream.world.raycast
+        },
+        {heightAt: (x, z) => elevationAt(elevation, x, z)}
+      );
+      if (timeGates.era() === 'past') stream.world.openGate('era-plant');
       // The club in the present, the spring meadow in the past (meadow.js): each one's collision on
       // its own era gate, so neither leaves invisible walls in the other time.
       club = createCountryClub(
@@ -785,6 +804,7 @@ export async function loadOpenWorld(search) {
     },
     season,
     hotWheels: () => hotWheels,
+    powerPlant: () => powerPlant,
     club: () => club,
     meadow: () => meadow,
     /** QA only: jump straight to an era (headless captures can't easily drive through a gate). */
@@ -887,6 +907,7 @@ export async function loadOpenWorld(search) {
       flyoverAt = time;
       landmarks?.update(time, pos, camera);
       highSchool?.update?.(1 / 60);
+      powerPlant?.update?.(1 / 60, pos, timeGates.era() !== 'past');
       hotWheels?.update(1 / 60);
       club?.update(1 / 60, pos, timeGates.era() !== 'past');
       tennis?.update(playerPos, timeGates.era() !== 'past');
@@ -1013,6 +1034,7 @@ export async function loadOpenWorld(search) {
       club?.dispose();
       meadow?.dispose();
       hotWheels?.dispose();
+      powerPlant?.dispose();
       highSchool?.dispose();
       booster?.dispose();
       flyingSchool?.dispose();
