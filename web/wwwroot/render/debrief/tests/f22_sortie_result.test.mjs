@@ -207,10 +207,10 @@ test("kernel-projected recovered victory reads as a complete sortie", async () =
   assert.doesNotMatch(result.correction, /approach|runway|landing/i);
 });
 
-test("kernel-projected early end never grants landing bonus or recovery progression", async () => {
+test("a combat-complete victory is Sortie complete regardless of recovery without inventing a landing credit", async () => {
   const fixture = JSON.parse(await (await import("node:fs/promises")).readFile(
     new URL("./fixtures/f22_combat_complete.json", import.meta.url), "utf8"));
-  const result = f22SortieResult({
+  const endedViaEnd = f22SortieResult({
     ...fixture,
     finished: true,
     sortie_outcome: "VICTORY",
@@ -219,12 +219,46 @@ test("kernel-projected early end never grants landing bonus or recovery progress
     runway_touchdown_contact: false,
     runway_touchdown_survivable: false,
   });
-  assert.equal(result.title, "Sortie ended");
-  assert.match(result.brief, /before landing/);
-  assert.equal(result.recoveryComplete, false);
-  assert.deepEqual(result.facts, ["Targets destroyed 2"]);
-  assert.equal(result.correction, "");
-  assert.equal(result.practiceExercise, "");
+  assert.equal(endedViaEnd.title, "Sortie complete");
+  assert.match(endedViaEnd.brief, /before landing/);
+  assert.equal(endedViaEnd.recoveryComplete, false);
+  assert.deepEqual(endedViaEnd.facts, ["Targets destroyed 2"]);
+  assert.equal(endedViaEnd.correction, "");
+  assert.equal(endedViaEnd.practiceExercise, "");
+
+  const skippedRecovery = f22SortieResult({
+    ...fixture,
+    finished: true,
+    sortie_outcome: "VICTORY",
+    sortie_ended_early: false,
+    runway_recovery_complete: false,
+  });
+  assert.equal(skippedRecovery.title, "Sortie complete");
+  assert.equal(skippedRecovery.recoveryComplete, false);
+  assert.equal(skippedRecovery.correction, "");
+  assert.equal(skippedRecovery.practiceExercise, "");
+
+  const allWavesWon = f22SortieResult(state({
+    sortie_outcome: "VICTORY",
+    combat_complete: false,
+    engagements_won: 2,
+    engagement_cap: 2,
+    runway_recovery_complete: false,
+  }));
+  assert.equal(allWavesWon.title, "Sortie complete");
+  assert.equal(allWavesWon.recoveryComplete, false);
+  assert.equal(allWavesWon.correction, "");
+
+  const endedEarlyBeforeObjective = f22SortieResult(state({
+    sortie_outcome: "DISCONTINUED",
+    finished: true,
+    sortie_ended_early: true,
+    combat_complete: false,
+    engagements_won: 1,
+    engagement_cap: 2,
+  }));
+  assert.equal(endedEarlyBeforeObjective.title, "Sortie ended");
+  assert.equal(endedEarlyBeforeObjective.recoveryComplete, false);
 });
 
 test("an abandoned sortie gets observed facts only, never landing advice", () => {

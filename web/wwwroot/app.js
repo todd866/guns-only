@@ -10,7 +10,7 @@ import { attemptElapsedSeconds, attemptStartSeconds } from "./render/progression
 import { paintMissionStrip } from "./render/shell/mission_strip.js";
 import { isF22Sortie } from "./render/debrief/f22_sortie_result.js";
 import {
-  f22ResultInstrument, paintF22ResultInstrument,
+  createF22ResultKeyHandler, f22ResultInstrument, paintF22ResultInstrument,
 } from "./render/debrief/f22_result_instrument.js";
 import {
   createDirectorPersistence,
@@ -5090,6 +5090,7 @@ function renderF22ResultInstrument(state, { finished, combatResult }) {
     correction: result?.safetyCorrection || result?.correction || "",
     practiceExercise,
     practiceLabel: practiceExercise ? readyPractice?.textContent || "Practice" : "",
+    runKey: `${attemptStartSimSeconds ?? ""}:${state?.player_entity_id ?? ""}:${state?.sortie_seed ?? ""}`,
   }));
 }
 
@@ -12141,6 +12142,26 @@ function activeFlightAxisOwnsKey(event) {
   return reassertableKeyboardAxisGkeys.has(keyMap.get(event.code));
 }
 
+function isF22ResultScreenActive() {
+  return Boolean(readyScreen?.dataset.f22Result)
+    && readyScreen.classList.contains("visible")
+    && !readyScreen.inert
+    && !pauseReasons.has("settings")
+    && !pauseReasons.has("notebook")
+    && !pauseReasons.has("help")
+    && !pauseReasons.has("calibration");
+}
+
+const f22ResultKeyHandler = createF22ResultKeyHandler({
+  isResultActive: isF22ResultScreenActive,
+  onAgain() {
+    primeSelectedMissionAudio();
+    requestMobileFullscreenFromGesture();
+    if (pauseReasons.has("combat-result")) againFromCombatResult();
+    else readyStart.click();
+  },
+});
+
 function installInput(view) {
   // Unlock the shared graph on the first real keyboard/pointer interaction, regardless of which
   // flight control the pilot uses. armFlightAudio verifies browser user activation, so synthetic
@@ -12156,6 +12177,7 @@ function installInput(view) {
   });
 
   window.addEventListener("keydown", (event) => {
+    if (f22ResultKeyHandler.keydown(event)) return;
     // Native controls own Enter, Space and arrow-key semantics while focused. This prevents the
     // dialog's mission buttons from leaking into flight shortcuts or launching the previous card.
     // During live flight, a mapped flight axis takes priority over stale button focus.
@@ -12299,6 +12321,7 @@ function installInput(view) {
   }, { passive: false });
 
   window.addEventListener("keyup", (event) => {
+    if (f22ResultKeyHandler.keyup(event)) return;
     // Release a flight key that this input layer owns even if focus moved to an interactive
     // element after key-down. Ownership belongs to the original edge, not the key-up target.
     if (keyOwners.get(event.code)?.has("keyboard")) {
@@ -12315,6 +12338,7 @@ function installInput(view) {
   }, { passive: false });
 
   window.addEventListener("blur", () => {
+    f22ResultKeyHandler.reset();
     setPauseReason("background", true);
   });
 

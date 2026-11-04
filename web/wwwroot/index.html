@@ -4131,9 +4131,11 @@
       font-weight: 800;
       text-align: center;
     }
-    [data-status="complete"] > .f22-sym, [data-status="recovered"] > .f22-sym { color: var(--flow-accent); }
-    [data-status="lost"] > .f22-sym { color: #ff8a7a; }
-    [data-status="open"] > .f22-sym { color: var(--flow-ink-faint); }
+    [data-status="complete"] > .f22-sym, [data-status="recovered"] > .f22-sym,
+    [data-status="best"] > :is(.f22-sym, #f22-best-delta) { color: var(--flow-accent); }
+    [data-status="lost"] > .f22-sym, [data-status="below"] > :is(.f22-sym, #f22-best-delta) { color: #ff8a7a; }
+    [data-status="open"] > .f22-sym, [data-status="first"] > .f22-sym,
+    [data-status="tie"] > :is(.f22-sym, #f22-best-delta) { color: var(--flow-ink-faint); }
     .f22-result button {
       min-height: 40px;
       padding: 0 12px;
@@ -4226,6 +4228,19 @@
       --console-backdrop: radial-gradient(ellipse at 50% 35%, transparent 20%, rgb(2 5 9 / .52) 100%),
         linear-gradient(rgb(3 7 12 / .18), rgb(3 7 12 / .32));
       --console-radius: 4px;
+    }
+    :root[data-theme="light"] {
+      --console-ink: #141c24;
+      --console-muted: #4b5866;
+      --console-accent: #b87b14;
+      --console-good: #0e7a46;
+      --console-bad: #c43225;
+      --console-line: #b8c2cc;
+      --console-panel: #f4f1ea;
+      --console-raised: #e8e3d9;
+      --console-surface: linear-gradient(180deg, rgba(248, 245, 238, .98), rgba(235, 230, 220, .99));
+      --console-key: linear-gradient(180deg, #ffffff, #ebe6dc 48%, #dcd5c8);
+      --console-shadow: inset 0 1px 0 #ffffff, 0 14px 36px rgb(20 28 36 / .18);
     }
     :is(#ready-screen, #settings-screen, #feedback-report) {
       --flow-font-display: var(--console-font);
@@ -4464,7 +4479,8 @@
     :root #ready-screen[data-f22-result] .f22-value { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
     :root #ready-screen[data-f22-result] #f22-combat { display: flex; align-items: center; gap: 10px; }
     :root #ready-screen[data-f22-result] .f22-sym { margin: 0; width: 28px; height: 28px; }
-    :root #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value) { font-size: 28px; white-space: nowrap; }
+    :root #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value, #f22-best-delta) { font-size: 28px; white-space: nowrap; }
+    :root #ready-screen[data-f22-result] #f22-score { font-size: 24px; white-space: nowrap; }
     :root #ready-screen[data-f22-result] #f22-opponent { font: 600 22px/1.3 var(--console-font); }
     :root #ready-screen[data-f22-result] .f22-correction { color: var(--console-muted); font: 500 18px/1.3 var(--console-font); }
     :root #ready-screen[data-f22-result] .f22-detail { padding: 12px; background: var(--console-panel); color: var(--console-muted); font: 500 16px/1.4 var(--console-font); }
@@ -4472,8 +4488,9 @@
     :root #ready-screen[data-f22-result] .f22-info { min-width: 48px; }
     :root #ready-screen[data-f22-result] .f22-actions { padding-top: 12px; }
     :root #ready-screen[data-f22-result] .f22-actions .console-primary { flex: 1.5 1 0; width: auto; min-height: 72px; font-size: 28px; }
-    :root #ready-screen[data-f22-result] [data-status="lost"] > .f22-sym { color: var(--console-bad); }
-    :root #ready-screen[data-f22-result] [data-status="open"] > .f22-sym { color: var(--console-muted); }
+    :root #ready-screen[data-f22-result] [data-status="best"] > :is(.f22-sym, #f22-best-delta) { color: var(--console-good); }
+    :root #ready-screen[data-f22-result] :is([data-status="lost"], [data-status="below"]) > :is(.f22-sym, #f22-best-delta) { color: var(--console-bad); }
+    :root #ready-screen[data-f22-result] :is([data-status="open"], [data-status="first"], [data-status="tie"]) > :is(.f22-sym, #f22-best-delta) { color: var(--console-muted); }
     /* Keep the result instrument's action ownership; generic actions must never leak through. */
     :root #ready-screen[data-f22-result] :is(#ready-start, .ready-secondary-actions),
     :root #ready-screen :is(.console-actions button[hidden], .f22-result button[hidden], .f22-row[hidden]) { display: none; }
@@ -4517,7 +4534,7 @@
       :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] { height: clamp(230px, 34dvh, 340px); padding: 14px; }
       :root #ready-screen[data-mode="program"] .ready-domain-tabs button { min-height: 48px; font-size: 18px; }
       :root #ready-screen[data-f22-result] .f22-row { grid-template-columns: 2.8rem minmax(0, 1fr) auto; gap: 8px; min-height: 64px; padding: 10px 4px; }
-      :root #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value) { font-size: 20px; }
+      :root #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value, #f22-score, #f22-best-delta) { font-size: 20px; }
       :root #ready-screen[data-f22-result] #f22-row-gun > .f22-datum .shell-icon { width: 20px; }
       :root #ready-screen[data-f22-result] #f22-opponent { font-size: 18px; }
       :root #ready-screen[data-f22-result] .f22-correction { font-size: 16px; }
@@ -5074,13 +5091,18 @@
             <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">Two gun engagements · land and stop</span></div>
             <div class="ready-fact"><small id="ready-config-label">Configuration</small><span id="ready-config">F-22 public-data surrogate · 480 rounds · Auto-GCAS armed</span></div>
           </div>
-          <!-- F-22 result instrument: four rows + one action row (render/debrief/f22_result_instrument.js).
+          <!-- F-22 result instrument: five rows + one action row (render/debrief/f22_result_instrument.js).
                Words live in title/aria-label; the visible tags only say what each number is. -->
           <section id="f22-result" class="f22-result" hidden aria-label="Sortie result">
             <div class="f22-row" id="f22-row-combat">
               <span class="f22-tag" aria-hidden="true">FIGHT</span>
               <span class="f22-value" id="f22-combat" role="img"><svg class="shell-icon f22-sym" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use id="f22-combat-symbol" href="#shell-minus"/></svg><span id="f22-combat-value"></span></span>
               <span class="f22-datum" id="f22-recovery" role="img"><span class="f22-tag" aria-hidden="true">LAND</span><svg class="shell-icon f22-sym" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use id="f22-recovery-symbol" href="#shell-minus"/></svg></span>
+            </div>
+            <div class="f22-row" id="f22-row-score">
+              <span class="f22-tag" aria-hidden="true">SCORE</span>
+              <span class="f22-value" id="f22-score"></span>
+              <span class="f22-datum" id="f22-best" role="img"><span class="f22-tag" aria-hidden="true">PB</span><svg class="shell-icon f22-sym" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use id="f22-best-symbol" href="#shell-minus"/></svg><span id="f22-best-delta"></span></span>
             </div>
             <div class="f22-row" id="f22-row-gun">
               <span class="f22-tag" aria-hidden="true">GUN</span>
@@ -5099,7 +5121,7 @@
               <button class="f22-datum" id="f22-practice" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="shell-action-label">Practice</span></button>
             </div>
             <div class="f22-actions console-actions">
-              <button id="f22-again" class="f22-primary console-primary" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span class="shell-action-label">Again</span></button>
+              <button id="f22-again" class="f22-primary console-primary" type="button" title="Again · Space / ⏎"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span class="shell-action-label">Again</span></button>
               <button id="f22-recover" type="button" hidden title="Continue this aircraft into the runway recovery"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-rtb"/></svg><span class="shell-action-label">Recover</span></button>
               <button id="f22-logbook" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-book"/></svg><span class="shell-action-label">Logbook</span></button>
               <button id="f22-aircraft" type="button" title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-jet"/></svg><span class="shell-action-label">Aircraft</span></button>
