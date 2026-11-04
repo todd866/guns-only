@@ -51,3 +51,38 @@ internal interface IAdaptiveAiPlanner {
     AiWorkloadCounters AiWorkload { get; }
     void ConfigureAiPlanning(AiComputeLevel level, bool incremental);
 }
+
+/// <summary>
+/// Session-scoped per-tick cap on speculative candidate rollouts. When three or more opponents
+/// are live, at most one candidate evaluation may land on an authoritative tick across every
+/// adaptive planner so a four-ship Ace wave cannot stack WASM spikes on one frame.
+/// </summary>
+internal static class AiPlannerTickBudget {
+    const int CrowdedFormationThreshold = 3;
+    static readonly System.Threading.AsyncLocal<int> LiveOpponentCount = new();
+    static readonly System.Threading.AsyncLocal<int> RemainingGlobalCandidateEvaluations =
+        new() { Value = int.MaxValue };
+
+    internal static void BeginAuthoritativeTick(int liveOpponentCount) {
+        LiveOpponentCount.Value = liveOpponentCount;
+        RemainingGlobalCandidateEvaluations.Value = liveOpponentCount >= CrowdedFormationThreshold
+            ? 1
+            : int.MaxValue;
+    }
+
+    internal static int MaximumCandidateEvaluationsPerTick(AiComputeLevel level) {
+        if (LiveOpponentCount.Value >= CrowdedFormationThreshold)
+            return 1;
+        return level == AiComputeLevel.Full ? 2 : 1;
+    }
+
+    internal static int ClampCandidateEvaluations(int requested) {
+        if (LiveOpponentCount.Value < CrowdedFormationThreshold)
+            return requested;
+        requested = System.Math.Min(requested, 1);
+        int granted = System.Math.Min(
+            requested, RemainingGlobalCandidateEvaluations.Value);
+        RemainingGlobalCandidateEvaluations.Value -= granted;
+        return granted;
+    }
+}

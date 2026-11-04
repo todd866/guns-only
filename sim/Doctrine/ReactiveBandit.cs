@@ -381,9 +381,8 @@ public sealed class ReactiveBandit :
         //
         // Staggering the START of the counter changes WHICH tick each aircraft decides on and
         // nothing about how it decides: the rollout, its horizon and its result are untouched. The
-        // multiplier is 5 rather than 1 because the session stages a wingman at engagementNumber + 1
-        // (WingmanSpawnStride), and a one-tick separation still lands both inside a single rendered
-        // frame at 60 fps, where the sim advances about two ticks per frame.
+        // Multiplier 5 matches session ConfigureLookaheadCadence actor-slot lanes when absolute
+        // phase is not configured yet (for example before gun-target IDs are assigned).
         Presenting = presenting;
         _endPresentOnProximity = endPresentOnProximity;
         if (presenting) Tactic = BanditTactic.Present;
@@ -2281,7 +2280,7 @@ public sealed class ReactiveBandit :
             // level completes its nine slots before another twelve-tick boundary can arrive.
             _ = LookaheadDecisionDue(player.SourceTick);
             EvaluatePendingLookahead(
-                MaximumCandidateEvaluationsPerTick(_computeLevel));
+                AiPlannerTickBudget.MaximumCandidateEvaluationsPerTick(_computeLevel));
             return _lookaheadCommand;
         }
 
@@ -2295,7 +2294,7 @@ public sealed class ReactiveBandit :
 
         StartLookaheadPlan(player, lowAttackPlan);
         EvaluatePendingLookahead(_incrementalAiPlanning
-            ? MaximumCandidateEvaluationsPerTick(_computeLevel)
+            ? AiPlannerTickBudget.MaximumCandidateEvaluationsPerTick(_computeLevel)
             : int.MaxValue);
         if (invalidatesBoundContext && _lookaheadPlanPending)
             RecordSingleCandidateDecision(
@@ -2471,6 +2470,9 @@ public sealed class ReactiveBandit :
 
     void EvaluatePendingLookahead(int maximumCandidateEvaluations) {
         if (!_lookaheadPlanPending) return;
+        maximumCandidateEvaluations = AiPlannerTickBudget.ClampCandidateEvaluations(
+            maximumCandidateEvaluations);
+        if (maximumCandidateEvaluations <= 0) return;
 
         int evaluated = 0;
         while (_lookaheadNextCandidateIndex
@@ -2568,9 +2570,6 @@ public sealed class ReactiveBandit :
                 HasScore: _lookaheadCandidateAvailable[8],
                 Available: _lookaheadCandidateAvailable[8]));
     }
-
-    static int MaximumCandidateEvaluationsPerTick(AiComputeLevel level) =>
-        level == AiComputeLevel.Full ? 2 : 1;
 
     static int PredictionSubstepTicks(AiComputeLevel level) => level switch {
         AiComputeLevel.Full => 4,

@@ -935,6 +935,8 @@ public sealed partial class SimulationSession {
     }
 
     void RunFixedTick() {
+        AiPlannerTickBudget.BeginAuthoritativeTick(
+            OpponentPresent ? LiveOpponentCount : 0);
         if (SupportsF22RtbCompression) UpdateTimeCompressionDecision();
         if (_casevacFlight is not null) {
             long sourceTick = checked(_tick + 1L);
@@ -1292,7 +1294,10 @@ public sealed partial class SimulationSession {
                         ? _fightDirector.NextSpawn(1)
                         : new SpawnSpec(
                             _beat.BanditSkill, 0, false, "authored formation",
-                            FormationSize: 2));
+                            FormationSize: System.Math.Clamp(
+                                _beat.ContinuousCombat?.MaximumFormationSize ?? 2,
+                                1,
+                                6)));
                 StageWingmen(wingSpec, 1);
             }
             else if (_beat.ScriptedIntercept is { FormationSize: > 1 } scriptedFormation)

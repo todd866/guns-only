@@ -245,7 +245,6 @@ public sealed partial class SimulationSession {
 
         _returnToBaseReason = reason;
         _combatHandoffPhase = CombatHandoffPhase.Requested;
-        ScheduleRtbBounce();
         bool finiteArenaAlreadyClear = LiveOpponentCount == 0
             && (TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
                 || _beat.FirstRunValley is not null);
@@ -529,9 +528,9 @@ public sealed partial class SimulationSession {
         foreach (Wingman wingman in _wingmen) {
             if (!wingman.StillFighting) continue;
             liveSupportCount++;
-            support ??= wingman;
+            support = wingman;
         }
-        if ((liveSupportCount != 1 && !(EscalatingWavesEnabled && _engagementNumber >= 3 && liveSupportCount > 1))
+        if (liveSupportCount != 1
             || support is null
             || support.Bandit is not IFormationDirectiveSink supportSink) {
             ClearFormationCoordination();
@@ -568,17 +567,6 @@ public sealed partial class SimulationSession {
         supportSink.AcceptFormationDirective(
             _enemyPairCoordinator.DirectiveFor(
                 support.PlayerGunTargetId, _tick));
-        // Additional ships flank the same sampled picture on alternating sides. The existing
-        // bracket-collapse law commits as soon as the player honours somebody else's nose.
-        int flank = 0;
-        foreach (Wingman wingman in _wingmen) {
-            if (!wingman.StillFighting || ReferenceEquals(wingman, support)
-                || wingman.Bandit is not IFormationDirectiveSink sink) continue;
-            var directive = _enemyPairCoordinator.DirectiveFor(support.PlayerGunTargetId, _tick);
-            sink.AcceptFormationDirective(directive with {
-                Role = FormationTacticalRole.Bracket, LateralSign = (++flank % 2 == 0 ? 1 : -1),
-                PartnerId = _primaryOpponentGunTargetId });
-        }
     }
 
     void ClearFormationCoordination() {
@@ -619,24 +607,19 @@ public sealed partial class SimulationSession {
         if (extra == 0) return;
 
         CombatConfig combat = _beat.CombatRules;
-        PilotSkill wingSkill = spec.WingSkill ?? spec.Skill;
-        SpawnSpec wingSpec = spec with { Skill = wingSkill,
-            Mount = spec.WingMount ?? spec.Mount, Boss = false,
-            // Mixed-tier formations cannot inherit a lead-only doctrine index.
-            DoctrineIndex = spec.DoctrineIndex % BanditSkillProfile.For(wingSkill).DoctrineCount };
-        AircraftParams air = _beat.BanditAirForMount(wingSpec.Skill, wingSpec.Mount);
+        AircraftParams air = _beat.BanditAirForMount(spec.Skill, spec.Mount);
         for (int index = 0; index < extra; index++) {
             IBandit wing = _beat.FirstRunValley is not null && _bandit is not null
-                ? CreateFirstRunValleyWingman(wingSpec, air, index)
+                ? CreateFirstRunValleyWingman(spec, air, index)
                 : _beat.CreateNextBandit(
                     _player.State, engagementNumber + WingmanSpawnStride * (index + 1),
-                    _terrainSurface, wingSpec, wingLead: _bandit?.State);
+                    _terrainSurface, spec, wingLead: _bandit?.State);
             wing.Wind = _player.Wind;
             wing.Atmosphere = _player.AtmosphereModel;
             var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
                 combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
             _wingmen.Add(new Wingman(
-                wing, gun, wingSpec.Skill, AllocateOpponentGunTargetId()));
+                wing, gun, spec.Skill, AllocateOpponentGunTargetId()));
         }
     }
 
@@ -687,7 +670,7 @@ public sealed partial class SimulationSession {
     }
 
     void ConfigureFormationLookaheadCadence() {
-        if (_beat.ContinuousCombat is null || _wingmen.Count < 1) return;
+        if (_beat.ContinuousCombat is null || _wingmen.Count == 0) return;
         ConfigureLookaheadCadence(_bandit, _primaryOpponentGunTargetId);
         foreach (Wingman wingman in _wingmen)
             ConfigureLookaheadCadence(wingman.Bandit, wingman.PlayerGunTargetId);
@@ -695,10 +678,10 @@ public sealed partial class SimulationSession {
 
     static void ConfigureLookaheadCadence(IBandit bandit, long actorId) {
         int cadence = ReactiveBandit.LookaheadDecisionCadenceTicks;
-        int actorLane = (int)(actorId % cadence);
-        // Five ticks keeps adjacent formation IDs off the same two-tick render frame while
-        // remaining coprime to the twelve-tick cadence, so every actor ID maps deterministically.
-        int phase = actorLane * 5 % cadence;
+        int actorSlot = (int)(actorId % cadence);
+        // Five ticks per slot keeps adjacent gun-target IDs off the same two-tick render frame
+        // while mapping four concurrent actor slots to distinct cadence lanes (8/1/6/11 mod 12).
+        int phase = actorSlot * 5 % cadence;
         switch (bandit) {
             case NeutralMergeBandit merge:
                 merge.ConfigureLookaheadCadencePhase(phase);
@@ -971,12 +954,6 @@ public sealed partial class SimulationSession {
         // The retiring primary keeps falling as a detached wreck exactly as it would in a duel.
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
         _bandit = next.Bandit;
-        if (LastDirectorSpawn is { } formationSpawn)
-            LastDirectorSpawn = formationSpawn with {
-                Skill = next.Skill, Mount = formationSpawn.WingMount ?? formationSpawn.Mount,
-                DoctrineIndex = formationSpawn.DoctrineIndex % BanditSkillProfile.For(next.Skill).DoctrineCount,
-                Boss = false, Machine = next.Skill == PilotSkill.Machine,
-            };
         // Promotion is an irreversible combat event. A sparring wingman left in presentation
         // mode ignores every tactical command and flies its 15-degree setup turn indefinitely.
         _bandit.EndPresentation();
@@ -1054,7 +1031,7 @@ public sealed partial class SimulationSession {
 
     bool ReplacementBudgetExhausted =>
         _beat.FirstRunValley is not null
-        || (!EscalatingWavesEnabled && _bfmLessonIndex >= 0 && BfmLesson.Get(_bfmLessonIndex).Defensive)
+        || (_bfmLessonIndex >= 0 && BfmLesson.Get(_bfmLessonIndex).Defensive)
         || (_beat.ContinuousCombat is { MaximumEngagements: > 0 } combat
             && _engagementNumber >= combat.MaximumEngagements);
 
@@ -1212,10 +1189,8 @@ public sealed partial class SimulationSession {
 
         int nextEngagement = _engagementNumber + 1;
         CompleteEngagementIfEnded();
-        if (completedTimeMs < _nextOpponentSpawnAtMs) return false;
-        SpawnSpec directorSpawn = _incomingWave is { } wave
-            ? wave.Spawn with { ApproachBearingRad = _incomingWaveBearing, ApproachRangeM = wave.RangeM }
-            : UsesDifficultyRamp(_beat)
+        DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
+        SpawnSpec directorSpawn = UsesDifficultyRamp(_beat)
             ? _fightDirector.BfmEnabled ? _fightDirector.NextSpawn(nextEngagement)
                 : _sortieOpeningSpawn is { } held
                 ? held with { Sparring = false }
@@ -1223,15 +1198,6 @@ public sealed partial class SimulationSession {
             : new SpawnSpec(
                 _beat.BanditSkill, 0, false, "authored successor",
                 FormationSize: 2);
-        if (_incomingWave is { } incoming) _waveScoreMultiplier = incoming.ScoreMultiplier;
-        _incomingWave = null;
-        _incomingWaveBearing = null;
-        StageContinuousOpponent(directorSpawn, nextEngagement);
-        return true;
-    }
-
-    void StageContinuousOpponent(SpawnSpec directorSpawn, int nextEngagement) {
-        DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
         LastDirectorSpawn = directorSpawn;
         _bandit = _beat.CreateNextBandit(
             _player.State, nextEngagement, _terrainSurface, directorSpawn);
@@ -1281,6 +1247,7 @@ public sealed partial class SimulationSession {
         EmitEvent(SessionEventType.OpponentSpawned,
             CombatRole.None, CombatRole.Opponent, count: nextEngagement);
         ShowTransition($"BANDIT {nextEngagement} INBOUND · V PADLOCK", 2600.0);
+        return true;
     }
 
     void StartEngagementCounters(PilotSkill opponentSkill, bool opponentWasBoss) {
@@ -1331,7 +1298,7 @@ public sealed partial class SimulationSession {
             : opponentLost ? SortieOutcome.Victory
             : SortieOutcome.Defeat;
         EngagementReport report = BuildEngagementReport(
-            outcome, _rtbBounceActive ? EngagementEndReason.RtbInterception : EngagementEndReason.CombatResult);
+            outcome, EngagementEndReason.CombatResult);
         _engagementReports.Add(report);
         ObserveBfmResult(in report);
         // Only the F-22 ramp (visual merge and the valley) moves rungs. Other
@@ -1345,7 +1312,6 @@ public sealed partial class SimulationSession {
                     && _beat.Practice == GunsOnly.Sim.Training.PracticeExercise.None,
                 hitsAlreadyCredited: hitsAlreadyCredited);
         _engagementCounters.Active = false;
-        if (outcome == SortieOutcome.Victory) OnWaveWon();
     }
 
     void CompleteInterruptedEngagementForHandoff() {
