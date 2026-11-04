@@ -7,6 +7,7 @@ import {PLAYGROUND_BOUNDS} from './playground.mjs';
 import {SKATESTREET_BOUNDS} from './skatestreet.mjs';
 import {HANGAR, hangarWorld} from './skate-hangar.mjs';
 import {BOARDWALK_BOUNDS} from './boardwalk.mjs';
+import {POWER_PLANT_BOUNDS} from './power-plant.js';
 // The skate hangar's floor: no scrub grows through it. Not a terrain clip (see stream.mjs).
 const HANGAR_BOUNDS = (() => {
   const c = [
@@ -34,6 +35,7 @@ export function roadsideDetail(tile, bounds, residentialBounds = null, extraBoun
       SKATESTREET_BOUNDS,
       BOARDWALK_BOUNDS,
       NY_BOUNDS,
+      POWER_PLANT_BOUNDS,
       ...(residentialBounds ? [residentialBounds] : []),
       ...(extraBounds ? [extraBounds] : [])
     ];
@@ -107,6 +109,7 @@ export function desertScatter(tile, bounds, residentialBounds = null, limit = 46
       HANGAR_BOUNDS,
       BOARDWALK_BOUNDS,
       NY_BOUNDS,
+      POWER_PLANT_BOUNDS,
       ...(residentialBounds ? [residentialBounds] : []),
       ...(extraBounds ? [extraBounds] : [])
     ];
