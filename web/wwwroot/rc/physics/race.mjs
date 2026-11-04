@@ -60,7 +60,7 @@ export function createRace(
       perCar: personalPickups,
       rivalPersonal: mode === 'kid',
       rivalRespawn: mode === 'kid' ? 4 : 8,
-      hitGrace: mode === 'bigKid' ? 1.1 : 0
+      hitGrace: mode === 'kid' ? 3.5 : 1.1
     }),
     events: [],
     clock: 0,
@@ -70,6 +70,7 @@ export function createRace(
     finishOrder: [],
     retreat: {at: furball ? Infinity : 18, length: 5}
   };
+  race.pickups.playerCar = player.car;
   race.pickups.superFor = mode === 'kid' ? 'player' : 'all';
   if (furball) race.furball = createFurball(race);
   return race;
@@ -262,15 +263,16 @@ export function kidFinale(race) {
   }
   return race.courseLength > 0 && raceDistance(race.player) > laps * race.courseLength * (1 - KID_HIT.finale);
 }
-// Kid-mode exposure: the player can be hit once the race has settled, with a breather after each hit,
-// and is never kicked while already in last place.
-export const KID_HIT = {after: 8, gap: 16, finale: 0.3};
-export function kidOpen(race) {
+// Kid-mode exposure: the player is never permanently immune; rivals fire at the player at most once per
+// KID_HIT.gap seconds (and ease off in kidFinale), while hitGrace gives 3.5 s of breathing room after a hit.
+export const KID_HIT = {after: 0, gap: 12, finale: 0.3};
+export function kidOpen(race, rival = null) {
   if (race.mode !== 'kid' || race.roam || race.furball) return race.mode !== 'kid';
-  if (!race.player.running || race.player.finished || race.clock < KID_HIT.after || kidFinale(race))
-    return false;
-  if (race.clock - (race.playerHitAt ?? -Infinity) < KID_HIT.gap) return false;
-  return race.rivals.length > 0 && placeOf(race, race.player) < race.rivals.length + 1;
+  if (race.player.finished || kidFinale(race)) return false;
+  if (race.t - (race.playerHitAt ?? -Infinity) < KID_HIT.gap - 1e-6) return false;
+  if (race.t - (race.playerShotAt ?? -Infinity) < KID_HIT.gap - 1e-6) return false;
+  if (rival && race.t - (rival.shotPlayerAt ?? -Infinity) < KID_HIT.gap - 1e-6) return false;
+  return true;
 }
 export const PACK = {slots: [3, 0, -3], floor: 0.16, ceiling: 1.18, ease: 0.06, push: 0.04};
 export function packFactor(race, rival) {
@@ -285,13 +287,17 @@ export function packFactor(race, rival) {
   return k;
 }
 
-// Effects (zoom, oil, a balloon spin) ride on the step input; a spinning car's controls are dead.
+// Effects (zoom, oil, a balloon spin) ride on the step input; a spinning car's controls are dead,
+// except the player regains steering 0.4 s into the cartoon tumble.
 function withEffects(race, car, input) {
   const m = modifiers(race.pickups, car);
   // The free-drive afterburner (input.boost) stacks with pickups; a spin keeps flight controls.
-  return m.spinning
-    ? {boost: 1, gripScale: 0.5, flight: input.flight}
-    : {...input, boost: m.boost * (input.boost ?? 1), gripScale: m.gripScale};
+  if (m.spinning) {
+    if (car === race.player.car && m.canSteer)
+      return {...input, boost: 1, gripScale: 0.5, flight: input.flight};
+    return {boost: 1, gripScale: 0.5, flight: input.flight};
+  }
+  return {...input, boost: m.boost * (input.boost ?? 1), gripScale: m.gripScale};
 }
 
 // Racing-line node of each gate, searched forward in route order so a gate that shares its spot
@@ -375,13 +381,24 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
         0
       );
     }
-    // Kid mode: the player can be hit, Mario Kart style (owner, 2026-10-29: "you get hit a few
-    // times, find yourself at the back, then battle to the front"), but only through kidOpen():
-    // never in the opening seconds, at most once per KID_HIT.gap, and never while already last.
-    // Furball keeps its own rules (furball.mjs).
-    const targets = race.mode === 'kid' && !fb && !kidOpen(race) ? cars.slice(1) : cars;
-    if ((!fb || mayFire(race, rival)) && rivalWants(pk, rival.session.car, targets))
-      use(pk, rival.session.car);
+    // Kid mode: the player can be hit, Mario Kart style, with rivals firing at the player at most once
+    // per KID_HIT.gap (12 s). Furball keeps its own rules (furball.mjs).
+    const rCar = rival.session.car,
+      held = pk.held.get(rCar),
+      open = fb || race.mode !== 'kid' || kidOpen(race, rival);
+    const aimsAtPlayer =
+      held &&
+      held !== 'zoom' &&
+      held !== 'bubble' &&
+      (rivalWants(pk, rCar, [race.player.car, rCar]) || (held === 'pitbull' && pk.order?.[0] === race.player.car));
+    const targets = open ? cars : cars.slice(1);
+    if ((!fb || mayFire(race, rival)) && rivalWants(pk, rCar, targets) && (open || !aimsAtPlayer)) {
+      if (!fb && race.mode === 'kid' && aimsAtPlayer) {
+        race.playerShotAt = race.t;
+        rival.shotPlayerAt = race.t;
+      }
+      use(pk, rCar);
+    }
     const input = rival.follow
       ? followInput(rival.session, rival.follow)
       : fb
@@ -422,14 +439,11 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   // Boost pads: a short Afterburner for whoever crosses one (rivals too).
   if (race.features) for (const c of cars) if (padHit(race.features, c)) boostCar(pk, c, 0.9);
   bump(cars);
-  const events = stepPickups(
-    pk,
-    cars,
-    race.course.world,
-    dt,
-    fb ? fb.out : race.mode === 'kid' && !kidOpen(race) ? race.player.car : null
-  );
-  if (events.some(e => e.car === race.player.car)) race.playerHitAt = race.clock;
+  const events = stepPickups(pk, cars, race.course.world, dt, fb ? fb.out : null);
+  if (events.some(e => e.car === race.player.car)) {
+    race.playerHitAt = race.t;
+    race.playerShotAt = race.t;
+  }
   if (fb) events.push(...stepFurball(race, events, dt));
   race.events.push(...events);
 }

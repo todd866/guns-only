@@ -29,16 +29,22 @@ const RESPAWN = 4,
 // half second. Back-of-pack only. `pk.superFor` is 'player' in Kid mode (it is the kid's comeback,
 // never a weapon used on the kid) and 'all' otherwise.
 export const SUPER = 'laser';
-export const LASER = {seconds: 7, boost: 1.35, every: 0.5, range: 18, back: 0.85, chance: 0.4};
+export const LASER = {seconds: 7, boost: 1.35, every: 0.5, range: 18, back: 0.85, chance: 0.35};
+export const COMEBACK_ITEMS = new Set(['zoom', 'pitbull', 'foxtwo', SUPER]);
 export const PLACE_WEIGHTS = {
-  zoom: [0.5, 3],
-  balloon: [1.5, 1],
-  oil: [2.5, 0.3],
-  bubble: [2, 0.6],
-  foxtwo: [0.6, 1.5],
-  pitbull: [0.2, 2.5],
-  foxone: [0.7, 1.2],
-  zuni: [0.8, 1]
+  zoom: [0, 4.5],
+  balloon: [2, 0.2],
+  oil: [2.5, 0.2],
+  bubble: [2, 0.2],
+  foxtwo: [0, 1.5],
+  pitbull: [0, 4.5],
+  foxone: [0, 0.2],
+  zuni: [1, 0.2]
+};
+const inBackThird = (pk, car) => {
+  const at = pk.order?.indexOf(car) ?? -1,
+    n = pk.order?.length ?? 0;
+  return at >= 0 && n >= 2 && at / (n - 1) >= 2 / 3;
 };
 export function pickItem(pk, car, isPlayer = false) {
   const pool = pk.items ?? ITEMS,
@@ -46,11 +52,19 @@ export function pickItem(pk, car, isPlayer = false) {
     n = pk.order?.length ?? 0;
   if (at < 0 || n < 2 || pool.length !== ITEMS.length) return pool[Math.floor(pk.rng() * pool.length)];
   const back = at / (n - 1);
-  if (back >= LASER.back && (isPlayer || pk.superFor !== 'player') && pk.rng() < LASER.chance) return SUPER;
-  const w = pool.map(item => PLACE_WEIGHTS[item][0] * (1 - back) + PLACE_WEIGHTS[item][1] * back);
-  let r = pk.rng() * w.reduce((a, b) => a + b);
-  for (let i = 0; i < pool.length; i++) if ((r -= w[i]) <= 0) return pool[i];
-  return pool.at(-1);
+  if (at > 0 && back < 2 / 3) return pool[Math.floor(pk.rng() * pool.length)];
+  if (back >= LASER.back && (isPlayer || pk.superFor === 'all') && pk.rng() < LASER.chance) return SUPER;
+  const tier = at === 0 ? 0 : 1,
+    w = pool.map(item => PLACE_WEIGHTS[item][tier]);
+  let r = pk.rng() * w.reduce((a, b) => a + b),
+    picked = pool.at(-1);
+  for (let i = 0; i < pool.length; i++)
+    if ((r -= w[i]) <= 0) {
+      picked = pool[i];
+      break;
+    }
+  if (tier === 1 && MISSILES.has(picked)) pk.ammo?.set(car, 3);
+  return picked;
 }
 
 export function createPickups(course, seed = 1, options = {}) {
@@ -84,17 +98,25 @@ export function createPickups(course, seed = 1, options = {}) {
 const lcg = seed => () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
 const fx = (pk, car) => {
   let e = pk.effects.get(car);
-  if (!e) pk.effects.set(car, (e = {zoom: 0, bubble: 0, spin: 0, slick: 0, hitGrace: 0, laser: 0, zap: 0}));
+  if (!e)
+    pk.effects.set(
+      car,
+      (e = {zoom: 0, bubble: 0, spin: 0, slick: 0, hitGrace: 0, laser: 0, zap: 0, recoverBoost: 0})
+    );
   return e;
 };
 
 // Input modifiers this car's effects impose; merged into its step input.
 export function modifiers(pk, car) {
-  const e = fx(pk, car);
+  const e = fx(pk, car),
+    canSteer = e.spin <= 0.5 + 1e-6;
   return {
     boost: e.zoom > 0 ? 1.6 : e.laser > 0 ? LASER.boost : 1,
     gripScale: e.slick > 0 ? 0.35 : 1,
     spinning: e.spin > 0,
+    canSteer,
+    controllable: canSteer,
+    hitGrace: e.hitGrace,
     shielded: e.bubble > 0,
     lasering: e.laser > 0,
     laserLeft: e.laser
@@ -148,20 +170,30 @@ function hit(pk, car) {
     e.bubble = 0;
     return false;
   } // the bubble pops instead
-  e.hitGrace = pk.hitGrace;
+  const isPlayer = !pk.playerCar || car === pk.playerCar;
+  e.hitGrace = isPlayer ? pk.hitGrace : Math.min(pk.hitGrace, 1.1);
   e.spin = 0.9;
-  car.vel = scale(car.vel, 0.45);
+  if (isPlayer) e.recoverBoost = 0.8;
+  car.vel = scale(car.vel, isPlayer ? 0.45 : 0.15);
   car.ang = add(car.ang, [0, 9, 0]);
   car.vel[1] += 1.2;
   return true;
 }
 
-// `immune`: kid mode's player (one car) or Furball's downed cars (a Set) — balloons pass by,
+// `immune`: Furball's downed cars (a Set) or an explicit immune car — balloons pass by,
 // missiles ignore them and slicks do not grab.
 const immuneTest = immune => (immune instanceof Set ? c => immune.has(c) : c => c === immune);
 export function stepPickups(pk, cars, world, dt, immune = null) {
   const isImmune = immuneTest(immune);
-  for (const e of pk.effects.values()) for (const k in e) e[k] = Math.max(0, e[k] - dt);
+  for (const e of pk.effects.values()) {
+    const spinning = e.spin > 0;
+    for (const k of ['zoom', 'bubble', 'spin', 'slick', 'hitGrace', 'laser', 'zap'])
+      e[k] = e[k] - dt > 1e-6 ? e[k] - dt : 0;
+    if (spinning && e.spin === 0 && e.recoverBoost > 0) {
+      e.zoom = Math.max(e.zoom, e.recoverBoost);
+      e.recoverBoost = 0;
+    }
+  }
   for (const spot of pk.spots) {
     spot.ready = Math.max(0, spot.ready - dt);
     spot.rivalReady = Math.max(0, spot.rivalReady - dt);
@@ -189,8 +221,8 @@ export function stepPickups(pk, cars, world, dt, immune = null) {
         if (car === cars[0]) spot.ready = pk.respawn ?? RESPAWN;
         else if (!pk.rivalPersonal) spot.rivalReady = cooldown;
       } else spot.ready = pk.respawn ?? RESPAWN;
-      // Missiles sometimes come as a 3-pack; firing the last of a pack calls "Winchester".
-      if (MISSILES.has(item) && pk.rng() < 0.2) pk.ammo.set(car, 3);
+      // Missiles in the last third always come as a 3-pack; elsewhere 20% do.
+      if (MISSILES.has(item) && (inBackThird(pk, car) || pk.rng() < 0.2)) pk.ammo.set(car, 3);
       else pk.ammo.delete(car);
     }
   }
@@ -234,7 +266,13 @@ export function stepPickups(pk, cars, world, dt, immune = null) {
   for (const s of pk.slicks) {
     s.life -= dt;
     for (const c of cars)
-      if (c !== s.owner && !isImmune(c) && len(sub(c.pos, s.pos)) < 0.55 && fx(pk, c).bubble <= 0)
+      if (
+        c !== s.owner &&
+        !isImmune(c) &&
+        len(sub(c.pos, s.pos)) < 0.55 &&
+        fx(pk, c).bubble <= 0 &&
+        fx(pk, c).hitGrace <= 0
+      )
         fx(pk, c).slick = 1.2;
     if (s.life < 11) s.owner = null; // after a second, the dropper can slide on it too
   }

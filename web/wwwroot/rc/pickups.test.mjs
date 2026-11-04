@@ -2,7 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {baseCourse} from './sim.mjs';
 import {createRace, stepRace} from './physics/race.mjs';
-import {createPickups, stepPickups, use, modifiers} from './physics/pickups.mjs';
+import {
+  createPickups,
+  stepPickups,
+  use,
+  modifiers,
+  pickItem,
+  ITEMS,
+  SUPER,
+  COMEBACK_ITEMS
+} from './physics/pickups.mjs';
 import {createCar, stepCar} from './physics/car.mjs';
 import {createWorld, addBox} from './physics/world.mjs';
 import {heldMissilePose} from './pickup-visuals.mjs';
@@ -156,21 +165,57 @@ test('a full race with pickups stays sane and rivals still finish', () => {
   assert.ok(used > 0, 'rivals used pickups');
 });
 
-test('kid mode: rival balloons and oil never catch the player', () => {
-  const world = flat(),
-    kid = createCar(undefined, [0, 0.13, -3.5], 0),
-    rival = createCar(undefined, [0, 0.13, 0], 0),
-    pk = createPickups({});
+test('kid mode: player is not immune, takes a cartoon tumble, steers within 0.4 s, and gets 3.5 s hitGrace', () => {
+  const race = createRace(baseCourse(), {mode: 'kid', opponents: 1}),
+    kid = race.player.car,
+    rival = race.rivals[0].session.car,
+    pk = race.pickups;
+  kid.pos = [0, 0.13, -3.5];
+  kid.vel = [0, 0, -4];
+  rival.pos = [0, 0.13, 0];
+  rival.vel = [0, 0, -4];
   pk.held.set(rival, 'balloon');
-  use(pk, rival);
-  let hitKid = false;
-  for (let i = 0; i < 240; i++)
-    hitKid ||= stepPickups(pk, [rival, kid], world, 1 / 120, kid).some(e => e.car === kid);
-  assert.equal(hitKid, false);
-  assert.equal(modifiers(pk, kid).spinning, false);
+  let hitStep = -1;
+  for (let i = 0; i < 60; i++) {
+    stepRace(race, {throttle: 1});
+    if (race.events.some(e => e.car === kid)) {
+      hitStep = i;
+      break;
+    }
+  }
+  assert.ok(hitStep >= 0, 'rival balloon hits the kid player');
+  assert.equal(modifiers(pk, kid).spinning, true);
+  assert.equal(modifiers(pk, kid).canSteer, false);
+  assert.ok(modifiers(pk, kid).hitGrace > 3.4, '3.5 s hitGrace starts on hit');
+  // Controls are dead before 0.4 s, then steering works within 0.4 s while the spin finishes.
+  for (let i = 0; i < 20; i++) stepRace(race, {steer: 1, throttle: 1});
+  assert.equal(kid.steer, 0, 'steer locked during first 0.4 s of tumble');
+  for (let i = 20; i < 48; i++) stepRace(race, {steer: 1, throttle: 1});
+  assert.equal(modifiers(pk, kid).spinning, true, 'still tumbling at 0.4 s');
+  assert.equal(modifiers(pk, kid).canSteer, true, 'controllable at 0.4 s');
+  stepRace(race, {steer: 1, throttle: 1});
+  assert.ok(kid.steer > 0, 'steer input turns the wheels within 0.4 s');
+  // When the 0.9 s tumble ends, a short recovery boost auto-refills.
+  for (let i = 49; i < 108; i++) stepRace(race, {throttle: 1});
+  assert.equal(modifiers(pk, kid).spinning, false, 'tumble ends at 0.9 s');
+  assert.ok(modifiers(pk, kid).boost > 1, 'recovery boost fires as the tumble ends');
+  // Immune for 3.5 s via hitGrace (balloons and oil do not catch the player during grace).
+  pk.balloons.push({pos: [...kid.pos], vel: [0, 0, 0], owner: rival, life: 1});
   pk.slicks.push({pos: [...kid.pos], life: 5, owner: rival});
-  stepPickups(pk, [rival, kid], world, 1 / 120, kid);
-  assert.equal(modifiers(pk, kid).gripScale, 1);
+  assert.equal(
+    stepPickups(pk, [kid, rival], race.course.world, 1 / 120).some(e => e.car === kid),
+    false,
+    'immune during 3.5 s hitGrace'
+  );
+  assert.equal(modifiers(pk, kid).gripScale, 1, 'oil ignored during 3.5 s hitGrace');
+  for (let i = 109; i < 420; i++) stepPickups(pk, [kid, rival], race.course.world, 1 / 120);
+  assert.equal(modifiers(pk, kid).hitGrace, 0, '3.5 s hitGrace expires at 3.5 s');
+  pk.balloons.push({pos: [...kid.pos], vel: [0, 0, 0], owner: rival, life: 1});
+  assert.equal(
+    stepPickups(pk, [kid, rival], race.course.world, 1 / 120).some(e => e.car === kid),
+    true,
+    'hit lands again once 3.5 s hitGrace expires'
+  );
 });
 
 import {MISSILES, beamDir} from './physics/pickups.mjs';
@@ -251,15 +296,88 @@ test('the munitions trailer behind a missile carrier takes a shot from behind an
   assert.equal(pk.ammo.has(a), false);
 });
 
-test('kid mode: missiles never target the player', () => {
-  const w = flat(),
-    kid = createCar(undefined, [0, 0.13, -8], 0),
-    rival = createCar(undefined, [0, 0.13, 0], 0),
-    pk = createPickups({});
-  pk.order = [kid, rival];
-  pk.held.set(rival, 'pitbull');
-  use(pk, rival);
-  assert.ok(!run(pk, [rival, kid], w, 600, kid).some(e => e.car === kid));
+test('kid mode: a rival cannot hit the kid player twice inside 12 s, and rivals get hit and fall back', () => {
+  const race = createRace(baseCourse(), {mode: 'kid', opponents: 1}),
+    kid = race.player.car,
+    rival = race.rivals[0].session.car,
+    pk = race.pickups;
+  const setup = () => {
+    kid.pos = [0, 0.13, -3.5];
+    kid.vel = [0, 0, 0];
+    rival.pos = [0, 0.13, 0];
+    rival.vel = [0, 0, 0];
+  };
+  setup();
+  pk.held.set(rival, 'balloon');
+  for (let i = 0; i < 60; i++) stepRace(race, {});
+  assert.equal(
+    race.events.filter(e => e.car === kid).length,
+    1,
+    'first rival shot hits the kid player'
+  );
+  // Advance past the 3.5 s hitGrace (to 5 s), re-arm the rival, and step until 11.9 s: rival holds fire.
+  for (let i = 60; i < 120 * 5; i++) stepRace(race, {});
+  assert.equal(modifiers(pk, kid).hitGrace, 0, 'hitGrace has expired by 5 s');
+  setup();
+  pk.held.set(rival, 'balloon');
+  for (let i = 120 * 5; i < 120 * 11.9; i++) {
+    setup();
+    stepRace(race, {});
+  }
+  assert.equal(
+    race.events.filter(e => e.car === kid).length,
+    1,
+    'rival cannot hit the kid player a second time inside 12 s'
+  );
+  // Once 12 s have elapsed since the first hit, the rival may fire and hit again.
+  for (let i = 0; i < 120 * 1.5; i++) {
+    setup();
+    stepRace(race, {});
+  }
+  assert.equal(
+    race.events.filter(e => e.car === kid).length,
+    2,
+    'rival hits again after 12 s'
+  );
+
+  // Rivals in kid mode are not immune: the player hits a rival ahead and the rival visibly falls back.
+  const race2 = createRace(baseCourse(), {mode: 'kid', opponents: 1}),
+    pCar = race2.player.car,
+    rCar = race2.rivals[0].session.car;
+  pCar.pos = [-0.5, 0.13, 0];
+  pCar.vel = [0, 0, -8];
+  rCar.pos = [0.5, 0.13, -2.5];
+  rCar.vel = [0, 0, -8];
+  race2.pickups.held.set(pCar, 'foxtwo');
+  let rivalHit = false;
+  for (let i = 0; i < 150; i++) {
+    stepRace(race2, {throttle: 1, fire: i === 0});
+    if (race2.events.some(e => e.car === rCar && e.by === pCar)) rivalHit = true;
+  }
+  assert.equal(rivalHit, true, 'kid player item hits rival');
+  assert.ok(pCar.pos[2] < rCar.pos[2], `rival fell back behind player (${pCar.pos[2]} vs ${rCar.pos[2]})`);
+});
+
+test('position-weighted items: P6-P8 roll >= 75% comeback over 1000 seeded rolls; P1 never rolls the strongest item', () => {
+  const cars = Array.from({length: 8}, (_, i) => createCar(undefined, [0, 0.13, i], 0)),
+    pk = createPickups({pickups: [{pos: [0, 0.15, 0]}]}, 42);
+  pk.order = cars;
+  for (const place of [5, 6, 7]) {
+    let comeback = 0;
+    for (let i = 0; i < 1000; i++) {
+      const item = pickItem(pk, cars[place], true);
+      if (COMEBACK_ITEMS.has(item)) comeback++;
+      if (MISSILES.has(item)) assert.equal(pk.ammo.get(cars[place]), 3, 'back-third missiles come as 3-packs');
+    }
+    assert.ok(comeback >= 750, `P${place + 1} rolled ${comeback}/1000 comeback items`);
+  }
+  for (let i = 0; i < 1000; i++) {
+    const item = pickItem(pk, cars[0], true);
+    assert.notEqual(item, SUPER, 'P1 never rolls laser');
+    assert.notEqual(item, 'pitbull', 'P1 never rolls pitbull');
+    assert.notEqual(item, 'zoom', 'P1 never rolls zoom');
+    assert.ok(ITEMS.includes(item));
+  }
 });
 
 test('a 3-pack fires three times, then calls Winchester', () => {
