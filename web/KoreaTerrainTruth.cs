@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using System.Reflection;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Environment;
@@ -120,9 +122,15 @@ internal static class PackedTerrainTruth {
         if (stream.Length != expectedLength)
             throw new InvalidDataException(
                 $"{displayName} terrain truth length {stream.Length} does not match {expectedLength}");
-        var samples = new short[checked(width * height)];
-        for (int index = 0; index < samples.Length; index++)
-            samples[index] = reader.ReadInt16();
+        // One block read and a reinterpreting copy, not width*height BinaryReader.ReadInt16 calls:
+        // the browser runs this in the .NET interpreter on the main thread during boot, where the
+        // per-sample loop over ~2.9 M samples froze the page for seconds (owner report, 4 Nov 2026).
+        // Little-endian on disk, as BinaryReader always read it; swap only on a big-endian host.
+        var payload = new byte[checked(width * height * sizeof(short))];
+        stream.ReadExactly(payload);
+        short[] samples = MemoryMarshal.Cast<byte, short>(payload).ToArray();
+        if (!BitConverter.IsLittleEndian)
+            BinaryPrimitives.ReverseEndianness(samples, samples);
         return new QuantizedTerrainGrid(originEastM, originNorthM, spacingM,
             width, height, metresPerUnit, waterSentinel, samples);
     }
