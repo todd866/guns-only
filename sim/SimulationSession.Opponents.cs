@@ -670,19 +670,18 @@ public sealed partial class SimulationSession {
     }
 
     void ConfigureFormationLookaheadCadence() {
-        if (_beat.ContinuousCombat is null || _wingmen.Count != 1) return;
+        if (_beat.ContinuousCombat is null || _wingmen.Count == 0) return;
         ConfigureLookaheadCadence(_bandit, _primaryOpponentGunTargetId);
-        ConfigureLookaheadCadence(
-            _wingmen[0].Bandit,
-            _wingmen[0].PlayerGunTargetId);
+        foreach (Wingman wingman in _wingmen)
+            ConfigureLookaheadCadence(wingman.Bandit, wingman.PlayerGunTargetId);
     }
 
     static void ConfigureLookaheadCadence(IBandit bandit, long actorId) {
         int cadence = ReactiveBandit.LookaheadDecisionCadenceTicks;
-        int actorLane = (int)(actorId % cadence);
-        // Five ticks keeps adjacent formation IDs off the same two-tick render frame while
-        // remaining coprime to the twelve-tick cadence, so every actor ID maps deterministically.
-        int phase = actorLane * 5 % cadence;
+        int actorSlot = (int)(actorId % cadence);
+        // Five ticks per slot keeps adjacent gun-target IDs off the same two-tick render frame
+        // while mapping four concurrent actor slots to distinct cadence lanes (8/1/6/11 mod 12).
+        int phase = actorSlot * 5 % cadence;
         switch (bandit) {
             case NeutralMergeBandit merge:
                 merge.ConfigureLookaheadCadencePhase(phase);
