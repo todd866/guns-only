@@ -5951,6 +5951,8 @@ window.__gunsOnlyRC = {
   },
   audio: () => Object.keys(audio.samples || {}),
   line: () => race.line.map(p => [p[0], p[1]]),
+  // The exact view, so another renderer (the Unreal parity spike) can frame the same shot.
+  camera: () => ({pos: camera.position.toArray(), quat: camera.quaternion.toArray(), fov: camera.fov, near: camera.near, far: camera.far}),
   snapshot: () => ({
     ...readout(s),
     rivals: race.rivals.map(rv => ({
