@@ -93,12 +93,12 @@ export function createRaceMenu({
   if (!globalThis.document) throw new TypeError('createRaceMenu requires a document');
   const dialog = document.createElement('dialog');
   dialog.className = 'rc-race-menu';
-  dialog.setAttribute('aria-label', 'Choose a race');
+  dialog.setAttribute('aria-label', 'Pick a race');
   const getProgress = typeof progress === 'function' ? progress : () => progress;
   let cupIndex = 0,
     battle = false,
     lastFocus = null;
-  const header = `<form method="dialog" class="rc-race-menu-head"><div><span class="rc-kicker">RACE</span><h2>Choose your race</h2></div><button type="button" data-close aria-label="Close race menu">×</button></form><div class="rc-race-tabs" role="tablist" aria-label="Race series">${CUP_COURSES.map((c, i) => `<button type="button" role="tab" data-cup="${i}">${c.cup}</button>`).join('')}<button type="button" role="tab" data-battle="true">Battle</button></div><div class="rc-race-grid" data-grid></div><button type="button" data-start-cup>Start cup</button>`;
+  const header = `<form method="dialog" class="rc-race-menu-head"><div><span class="rc-kicker">RACE</span><h2>Pick a race</h2></div><button type="button" data-close aria-label="Close">×</button></form><div class="rc-race-tabs" role="tablist" aria-label="Cups">${CUP_COURSES.map((c, i) => `<button type="button" role="tab" data-cup="${i}">${c.cup}</button>`).join('')}<button type="button" role="tab" data-battle="true">Battle</button></div><div class="rc-race-grid" data-grid></div><button type="button" data-start-cup>Start cup</button>`;
   dialog.innerHTML = header;
   document.body.append(dialog);
   const grid = dialog.querySelector('[data-grid]');
@@ -135,10 +135,10 @@ export function createRaceMenu({
           route = routeFor(id),
           disabled = !allowed,
           reason = !event
-            ? 'Coming soon'
+            ? 'Soon'
             : locked
-              ? 'Finish base cups + find all 15 badges'
-              : 'Find this course in the base';
+              ? 'Win 8 races · find 15 badges'
+              : 'Drive around base';
         return `<article class="rc-race-card ${disabled ? 'is-locked' : ''}" style="--cup:${battle ? '#c58df2' : CUP_COURSES[cupIndex].color}"><button type="button" data-event="${esc(id)}" data-battle="${battle}" ${disabled ? 'disabled' : ''} title="${esc(reference)}" aria-label="${esc(name)}${disabled ? ` ${esc(reason)}` : ''}"><svg viewBox="0 0 92 60" aria-hidden="true">${route.length ? `<path d="${routePath(route)}"/>` : '<path d="M20 30L46 12L72 30M25 27V50H67V27M40 50V34H52V50"/>'}</svg><span class="rc-race-card-copy"><strong>${esc(name)}</strong>${disabled ? `<em>${esc(reason)}</em>` : ''}</span><span class="rc-race-number">${String(i + 1).padStart(2, '0')}</span></button></article>`;
       })
       .join('');
