@@ -32,48 +32,39 @@ const SKY = Object.freeze({
   }),
 });
 
-/** @type {ReadonlyArray<{ depth: number, x: number, y: number, puffs: ReadonlyArray<readonly [number, number, number, number, number]> }>} */
+const DRIFT_PX_PER_S = 4.5;
+const VIEW_W = 1600;
+const VIEW_H = 1067;
+
+/** Puffs in viewBox space: cx, cy, rx, ry, alpha — matched to menu-hangar.svg cumulus. */
+/** @type {ReadonlyArray<{ depth: number, puffs: ReadonlyArray<readonly [number, number, number, number, number]> }>} */
 const CLOUDS = Object.freeze([
   {
     depth: 0.22,
-    x: 0.22,
-    y: 0.21,
     puffs: Object.freeze([
-      [0, 0, 0.19, 0.11, 0.78],
-      [0.07, -0.04, 0.14, 0.09, 0.72],
-      [-0.08, 0.02, 0.12, 0.08, 0.65],
-      [0.12, 0.03, 0.11, 0.07, 0.58],
-      [-0.04, 0.06, 0.15, 0.07, 0.52],
+      [280 / VIEW_W, 248 / VIEW_H, 210 / VIEW_W, 72 / VIEW_H, 0.72],
+      [340 / VIEW_W, 232 / VIEW_H, 150 / VIEW_W, 58 / VIEW_H, 0.65],
+      [180 / VIEW_W, 262 / VIEW_H, 120 / VIEW_W, 52 / VIEW_H, 0.55],
     ]),
   },
   {
     depth: 0.28,
-    x: 0.78,
-    y: 0.16,
     puffs: Object.freeze([
-      [0, 0, 0.17, 0.10, 0.74],
-      [-0.06, -0.03, 0.13, 0.08, 0.68],
-      [0.09, 0.02, 0.12, 0.07, 0.6],
-      [0.04, 0.05, 0.14, 0.08, 0.5],
+      [1180 / VIEW_W, 188 / VIEW_H, 190 / VIEW_W, 68 / VIEW_H, 0.62],
+      [1240 / VIEW_W, 172 / VIEW_H, 140 / VIEW_W, 54 / VIEW_H, 0.58],
+      [1080 / VIEW_W, 202 / VIEW_H, 110 / VIEW_W, 48 / VIEW_H, 0.48],
     ]),
   },
   {
     depth: 0.35,
-    x: 0.48,
-    y: 0.38,
     puffs: Object.freeze([
-      [0, 0, 0.14, 0.08, 0.55],
-      [0.06, -0.02, 0.10, 0.06, 0.48],
-      [-0.07, 0.03, 0.11, 0.07, 0.42],
+      [560 / VIEW_W, 412 / VIEW_H, 160 / VIEW_W, 56 / VIEW_H, 0.46],
     ]),
   },
   {
     depth: 0.18,
-    x: 0.62,
-    y: 0.34,
     puffs: Object.freeze([
-      [0, 0, 0.11, 0.07, 0.45],
-      [0.05, 0.02, 0.09, 0.05, 0.38],
+      [1320 / VIEW_W, 392 / VIEW_H, 130 / VIEW_W, 50 / VIEW_H, 0.38],
     ]),
   },
 ]);
@@ -96,10 +87,6 @@ const HILL_BANDS = Object.freeze([
     d: "M0 862 L142 812 L246 848 L392 796 L500 840 L624 800 L768 846 L884 806 L1016 848 L1160 802 L1288 844 L1412 804 L1536 846 L1600 826 V896 H0 Z",
   },
 ]);
-
-const DRIFT_PX_PER_S = 4.5;
-const VIEW_W = 1600;
-const VIEW_H = 1067;
 
 function themePalette(root) {
   return root?.getAttribute("data-theme") === "light" ? SKY.light : SKY.dark;
@@ -134,9 +121,10 @@ function paintSky(ctx, w, h, palette) {
 
 function paintPuff(ctx, cx, cy, rx, ry, coreHex, rimHex, alpha) {
   const scale = Math.max(rx, ry);
-  const g = ctx.createRadialGradient(cx, cy, scale * 0.08, cx, cy, scale);
+  const g = ctx.createRadialGradient(cx, cy, scale * 0.04, cx, cy, scale * 1.08);
   g.addColorStop(0, rgbaFromHex(coreHex, alpha));
-  g.addColorStop(0.55, rgbaFromHex(rimHex, alpha * 0.85));
+  g.addColorStop(0.42, rgbaFromHex(rimHex, alpha * 0.88));
+  g.addColorStop(0.78, rgbaFromHex(rimHex, alpha * 0.28));
   g.addColorStop(1, "rgba(255, 255, 255, 0)");
   ctx.fillStyle = g;
   ctx.beginPath();
@@ -154,31 +142,24 @@ function rgbaFromHex(hex, alpha) {
 
 function paintClouds(ctx, w, h, palette, driftPx) {
   ctx.save();
+  ctx.filter = `blur(${Math.max(5, Math.min(w, h) * 0.009)}px)`;
   ctx.globalCompositeOperation = "source-over";
   for (const cloud of CLOUDS) {
     const layerDrift = driftPx * cloud.depth;
-    const anchorX = cloud.x * w + layerDrift;
-    const anchorY = cloud.y * h;
-    for (const [dx, dy, rxN, ryN, alpha] of cloud.puffs) {
-      const rx = rxN * w;
-      const ry = ryN * h;
+    for (const [cxN, cyN, rxN, ryN, alpha] of cloud.puffs) {
       paintPuff(
         ctx,
-        anchorX + dx * w,
-        anchorY + dy * h,
-        rx,
-        ry,
+        cxN * w + layerDrift,
+        cyN * h,
+        rxN * w,
+        ryN * h,
         palette.cloudLight,
         palette.cloudMid,
         alpha,
       );
     }
-    const shadeY = anchorY + h * 0.045;
-    ctx.fillStyle = palette.cloudShade;
-    ctx.beginPath();
-    ctx.ellipse(anchorX, shadeY, w * 0.11 * cloud.depth + w * 0.08, h * 0.018, 0, 0, Math.PI * 2);
-    ctx.fill();
   }
+  ctx.filter = "none";
   ctx.restore();
 }
 

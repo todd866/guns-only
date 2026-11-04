@@ -53,6 +53,7 @@ test("mountReadyMenuBackdrop returns a disposer and paints without throwing", ()
       globalAlpha: 1,
       globalCompositeOperation: "source-over",
       fillStyle: "",
+      filter: "none",
     }),
   };
   const boot = { classList: { contains: (name) => name === "ready" ? false : false } };
