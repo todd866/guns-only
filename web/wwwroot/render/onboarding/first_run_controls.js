@@ -180,19 +180,20 @@ const OVERLAY_CSS = `
   letter-spacing: 0.18em;
   color: #d4b56a;
 }
-.controls-onboarding-group table { border-collapse: collapse; width: 100%; }
+.controls-onboarding-group table { border-collapse: collapse; width: 100%; table-layout: fixed; }
 .controls-onboarding-group td {
   padding: 3px 0;
   font-size: 12px;
   vertical-align: baseline;
 }
 .controls-onboarding-group td:first-child {
-  width: 96px;
+  width: var(--controls-onboarding-key-col, 130px);
   padding-right: 14px;
   white-space: nowrap;
   font-size: 11px;
   font-weight: 700;
   color: #cfe3b8;
+  vertical-align: top;
 }
 .controls-onboarding-group td:last-child { color: #9aa392; }
 .controls-onboarding-foot {
@@ -316,7 +317,9 @@ export function createControlsOnboarding({
     for (const [keys, meaning] of group.rows) {
       const row = doc.createElement("tr");
       const keyCell = doc.createElement("td");
-      renderKeyColumn(keyCell, keys, doc);
+      const keyInner = doc.createElement("span");
+      renderKeyColumn(keyInner, keys, doc);
+      keyCell.append(keyInner);
       const meaningCell = doc.createElement("td");
       meaningCell.textContent = meaning;
       row.append(keyCell, meaningCell);
