@@ -6413,7 +6413,23 @@ readyStart.addEventListener("click", () => {
   // activation. Android otherwise rejects fullscreen after the game finally reaches beginFlight.
   requestMobileFullscreenFromGesture();
   activateReadyAction();
+  renderLaunchState();
 });
+
+// Owns <html data-launch> (see the "Launch honesty" CSS in index.html): "booting" until the first
+// frame, "starting" from a Fly press until flight, absent otherwise. Without it the picker shows
+// an enabled Fly button that answers nothing for the whole boot and terrain warmup.
+function renderLaunchState() {
+  const root = document.documentElement;
+  const booting = !bootScreen?.classList.contains("ready");
+  const starting = bootLaunchPending
+    || (autoLaunchPending && pauseReasons.has("ready"))
+    || (booting && bootLaunchPending);
+  const next = starting ? "starting" : booting ? "booting" : "";
+  if ((root.dataset.launch ?? "") === next) return;
+  if (next) root.dataset.launch = next;
+  else delete root.dataset.launch;
+}
 
 readySelector?.addEventListener("click", (event) => {
   const domain = event.target.closest("[data-domain-filter]")?.dataset.domainFilter;
@@ -12755,6 +12771,7 @@ async function boot() {
       renderPilotPhysiology(presentedState);
       renderIncidentReplay(replayFrame);
       renderPauseUi(state);
+      renderLaunchState();
       recorder.observeFramePhase("ui", performance.now() - afterView);
       if (firstFrame) {
         firstFrame = false;
