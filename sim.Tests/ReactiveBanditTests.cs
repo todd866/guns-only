@@ -579,4 +579,53 @@ public class ReactiveBanditTests {
                 < BanditSkillProfile.For(PilotSkill.Competent).LeadFireConeRad);
         Assert.True(bandit.WantsToFire(observation));
     }
+
+    [Fact]
+    public void AceEntersFineTrackInsideTwoPointFiveDegreeGateAndNotAtSixDegrees() {
+        AircraftParams air = FlightModel.Su27SPublicDataSurrogate;
+        var baseOwn = new AircraftState(
+            new Vec3D(0.0, 5486.4, 0.0), 300.0, 0.0, 0.0, 0.0, air.MassKg);
+        // Banked contact inside gun range so ShouldFineTrack takes the manoeuvring-target path.
+        var contact = new AircraftState(
+            new Vec3D(0.0, 5486.4, 500.0), 300.0, 0.0, 0.0, 0.6, air.MassKg);
+        ActorObservation observation = ActorObservation.Capture(contact, 0);
+        Vec3D leadDir = BanditFireControl.LeadDirection(baseOwn, observation);
+        Vec3D perpendicular = new Vec3D(0.0, 1.0, 0.0).Cross(leadDir).Normalized();
+
+        AircraftState AimedOffLead(double offRad) => baseOwn with {
+            BodyAttitude = PointBodyAt(
+                leadDir * Math.Cos(offRad) + perpendicular * Math.Sin(offRad))
+        };
+
+        // At ~6 deg (inside the Veteran's 0.1047 rad gate, outside the Ace's 0.0436 rad gate),
+        // the Ace keeps the 9-candidate rollout while the Veteran enters fine-track.
+        const double sixDegGateRad = 0.100;
+        AircraftState ownAtSixDeg = AimedOffLead(sixDegGateRad);
+        Assert.InRange(
+            BanditFireControl.LeadNoseErrorRad(ownAtSixDeg, observation),
+            0.095, 0.1047);
+
+        var aceAtSixDeg = new ReactiveBandit(ownAtSixDeg, air, PilotSkill.Ace);
+        aceAtSixDeg.Step(observation, Dt);
+        Assert.Equal(9, aceAtSixDeg.DecisionTrace.CandidateCount);
+
+        var veteranAtSixDeg = new ReactiveBandit(ownAtSixDeg, air, PilotSkill.Veteran);
+        veteranAtSixDeg.Step(observation, Dt);
+        Assert.Equal(1, veteranAtSixDeg.DecisionTrace.CandidateCount);
+
+        // Inside the 2.5 deg (0.0436 rad) gate, both Ace and Boss enter the closed-loop finisher.
+        const double insideAceGateRad = 2.0 * Math.PI / 180.0;
+        AircraftState ownInsideGate = AimedOffLead(insideAceGateRad);
+        Assert.True(
+            BanditFireControl.LeadNoseErrorRad(ownInsideGate, observation) <= 0.0436);
+
+        var aceInsideGate = new ReactiveBandit(ownInsideGate, air, PilotSkill.Ace);
+        aceInsideGate.Step(observation, Dt);
+        Assert.Equal(1, aceInsideGate.DecisionTrace.CandidateCount);
+
+        var bossInsideGate = new ReactiveBandit(
+            ownInsideGate, air, PilotSkill.Ace, profile: BanditSkillProfile.Boss());
+        bossInsideGate.Step(observation, Dt);
+        Assert.Equal(1, bossInsideGate.DecisionTrace.CandidateCount);
+    }
 }
