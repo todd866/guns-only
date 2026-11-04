@@ -105,7 +105,8 @@ public sealed class CobraGroundWarRuntime
     /// fewer points bleeds in proportion to the deficit, so taking and keeping ground is the only
     /// way to win. An even split bleeds nobody, which is what makes a stalemate a stalemate.
     /// </summary>
-    public const double StartingTickets = 300.0;
+    // Argon review 2026-11-05: 180 tickets bleeds a 3-1 split out in 3 min instead of 5.
+    public const double StartingTickets = 180.0;
     public const double TicketBleedPerSecondPerPoint = 0.5;
     /// <summary>
     /// Gameplay pad dwell before rounds come back. Guns safe and collective down for this long
@@ -220,7 +221,9 @@ public sealed class CobraGroundWarRuntime
     // Kept as properties, redefined against tickets: the mission act ladder and the HUD both read
     // these as "how close is this to being over", which is now a ticket question.
     public double VictoryHoldProgress =>
-        Math.Clamp(1.0 - _hostileTickets / StartingTickets, 0.0, 1.0);
+        _missionOutcome == HoldTheBridgeOutcome.Victory
+            ? 1.0
+            : Math.Clamp(1.0 - _hostileTickets / StartingTickets, 0.0, 1.0);
     public double DefeatHoldProgress =>
         Math.Clamp(1.0 - _friendlyTickets / StartingTickets, 0.0, 1.0);
 
@@ -293,6 +296,19 @@ public sealed class CobraGroundWarRuntime
     {
         int friendlyPoints = FriendlyPointsHeld;
         int hostilePoints = HostilePointsHeld;
+        // Argon review 2026-11-05: total-control knockout ends the battle as Victory at once.
+        if (friendlyPoints == _sites.Count) {
+            _missionOutcome = HoldTheBridgeOutcome.Victory;
+            _missionOutcomeReason = "total-control";
+            _recentEvents.Add(new GroundWarEvent(
+                _authorityTick,
+                "mission-victory",
+                null,
+                null,
+                GroundFaction.Friendly,
+                _fob.CentreWorldM));
+            return;
+        }
         int friendlyDeficit = hostilePoints - friendlyPoints;
         int hostileDeficit = friendlyPoints - hostilePoints;
         if (friendlyDeficit > 0)
