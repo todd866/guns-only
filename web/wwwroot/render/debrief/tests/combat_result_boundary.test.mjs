@@ -49,3 +49,12 @@ test("Recover rejects a stale click after physical loss", () => {
   ctx.latestState = { ...flying, player_terminal_state: "DESTROYED_AIRBORNE" };
   assert.equal(ctx.recoverFromCombatResult(), false);
 });
+
+test("shell wires F-22 score row and Space/⏎ result key handler before flight controls", async () => {
+  const html = await readFile(new URL("../../../index.html", import.meta.url), "utf8");
+  assert.match(html, /id="f22-row-score"[\s\S]*?id="f22-score"[\s\S]*?id="f22-best"/);
+  assert.doesNotMatch(html.slice(html.indexOf('id="f22-result"'), html.indexOf("</section>", html.indexOf('id="f22-result"'))), /\bEnter\b/);
+  assert.match(app, /createF22ResultKeyHandler/);
+  assert.match(app, /if \(f22ResultKeyHandler\.keydown\(event\)\) return;/);
+  assert.match(app, /if \(f22ResultKeyHandler\.keyup\(event\)\) return;/);
+});

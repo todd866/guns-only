@@ -33,12 +33,19 @@ export function f22SortieResult(state, { handoff, loss } = {}) {
     && state.runway_touchdown_contact === true
     && state.runway_touchdown_survivable === true;
   const returning = handoff?.occurred === true || state.player_rtb_active === true;
-  const endedEarly = state.sortie_ended_early === true && state.combat_complete === true;
+  const won = Math.max(0, Math.trunc(number(state.engagements_won) ?? 0));
+  const cap = Math.max(0, Math.trunc(number(state.engagement_cap) ?? 0));
+  const minObjective = state.escalating_waves === true ? Math.max(2, cap) : cap;
+  const allWavesWon = minObjective > 0 && won >= minObjective;
+  const combatComplete = state.combat_complete === true || allWavesWon;
+  const endedEarly = state.sortie_ended_early === true && !combatComplete;
   const terrainLesson = state.first_run_weapons_cold === true
     || String(state.player_impact_surface || "").toUpperCase() === "GROUND"
     || (number(state.auto_gcas_activation_count) ?? 0) > 0;
-  const victory = outcome === "VICTORY" && recovered;
   const lost = outcome === "DEFEAT" || outcome === "DRAW";
+  const victory = !lost
+    && ((outcome === "VICTORY" && (recovered || combatComplete))
+      || (state.sortie_ended_early === true && combatComplete));
   const facts = [];
   const kills = number(state.kill_count);
   if (kills !== null) facts.push(`Targets destroyed ${Math.max(0, Math.trunc(kills))}`);
@@ -61,15 +68,17 @@ export function f22SortieResult(state, { handoff, loss } = {}) {
   let practiceExercise = correction ? "recovery" : "";
   if (endedEarly) {
     title = "Sortie ended";
-    brief = "Combat complete. Sortie ended before landing.";
+    brief = "Sortie ended before landing.";
     correction = "";
     practiceExercise = "";
   } else if (victory) {
     title = "Sortie complete";
-    brief = "Fight complete. Aircraft recovered.";
+    brief = recovered
+      ? "Fight complete. Aircraft recovered."
+      : "Combat complete. Sortie ended before landing.";
     // The earned next opponent is its own instrument row; no correction is invented for a
-    // clean recovery.
-    correction = margin !== null && margin < 0
+    // clean recovery or a combat-complete run that skipped recovery.
+    correction = recovered && margin !== null && margin < 0
       ? "Leave the fight with more landing fuel." : "";
     practiceExercise = terrainLesson ? "valley" : "";
   } else if (recovered && outcome === "DISCONTINUED") {
