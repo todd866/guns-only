@@ -123,13 +123,22 @@ export function rideHeight(p = BUGGY) {
   return p.restLength - sag + p.wheelRadius - p.wheels[0].at[1];
 }
 
-export function placeCar(car, pos, yaw) {
+// Gate recovery drops the car rolling forward so a lip or jump is not a dead stop.
+export const RECOVERY_ROLL_MPS = 6;
+
+export function placeCar(car, pos, yaw, rollMps = 0) {
   car.placement = (car.placement ?? 0) + 1;
   car.pos = [...pos];
   car.q = quatAxisAngle([0, 1, 0], -yaw);
   car.vel = [0, 0, 0];
   car.ang = [0, 0, 0];
   car.steer = 0;
+  if (rollMps > 0) {
+    const fwd = rotate(car.q, [0, 0, -1]);
+    car.vel = [fwd[0] * rollMps, fwd[1] * rollMps, fwd[2] * rollMps];
+  }
+  car.speed = len(car.vel);
+  car.forwardSpeed = dot(car.vel, rotate(car.q, [0, 0, -1]));
 }
 
 const applyInvInertia = (car, v) =>
