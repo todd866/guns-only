@@ -1466,6 +1466,15 @@ public sealed class ReactiveBandit :
     PilotCommand GunTrackCommand(in ActorObservation player) {
         var own = State;
         var aim = BanditFireControl.LeadPoint(own, player);
+        if (UsesAceFinisherGate) {
+            // GunTrackCommand steers the flight-path vector (own.Gamma / own.ForwardDir), whereas
+            // BanditFireControl and GunKill score and launch along the physical body boresight
+            // (GunKill.GunDirection). Under G load the boresight sits above the velocity vector by
+            // angle of attack, which parked the 2.5 deg finisher ~0.9 deg off the lead point.
+            double leadRangeM = (aim - own.Position).Length;
+            Vec3D boreOffset = GunKill.GunDirection(own) - own.ForwardDir();
+            aim -= boreOffset * leadRangeM;
+        }
         double availableG = AvailableAcquireG(safetyReserve: false);
         double authorityG = UsesAceFinisherGate
             ? System.Math.Min(_profile.EffectiveFineTrackAuthorityG, availableG)
