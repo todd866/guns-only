@@ -56,6 +56,16 @@ public sealed record CombatConfig(
         OpponentGun: GunProfiles.GSh301PublicDataSurrogate,
         // USAF fact sheet: the F-22 carries 480 rounds of 20 mm. The magazine is that number.
         PlayerInfiniteAmmo: false);
+    /// Production beat 7 ("hard to earn the shot, trivial to convert it"): in
+    /// analysis/playtest/2026-10-16-beat7/report.md the owner clone fired ~266 rounds per run for
+    /// 0 hits and the novice pilot scored 0 kills across 30 runs against the default silhouette
+    /// and 3-hit defeat threshold. A 14 m player target hit radius and 2 hits to defeat convert
+    /// earned firing windows without touching ballistics, player hits-to-defeat, the bandit gun,
+    /// or other callers of <see cref="ModernVisualMerge"/>.
+    public static CombatConfig ModernVisualMergeArcade { get; } = ModernVisualMerge with {
+        OpponentHitsToDefeat = 2,
+        PlayerTargetHitRadiusM = 14.0,
+    };
     /// Top Gun 1v1 DACT: symmetric 480-round M61 magazines on both sides (Tomcat canonical;
     /// MiG-28 fiction carries the same public-data gun surrogate until a dedicated F-5
     /// installation profile lands).
@@ -1649,7 +1659,7 @@ public static class Beats {
             PlayerParams: FlightModel.F22APublicDataSurrogate,
             BanditParams: FlightModel.Su27SPublicDataSurrogate,
             UsesNeutralMergeBandit: true,
-            Combat: CombatConfig.ModernVisualMerge,
+            Combat: CombatConfig.ModernVisualMergeArcade,
             Fuel: new FuelConfig(
                 CapacityLb: 18000.0,
                 // The fight begins after launch and ingress, not at chocks with topped tanks.
@@ -1863,6 +1873,7 @@ public static class Beats {
         // one merge against one opponent, and force the Ace tier rather than the escalation curve.
         ContinuousCombat = null,
         BanditSkill = PilotSkill.Ace,
+        Combat = CombatConfig.ModernVisualMerge,
         // The classical duel keeps the safe first pass the front door gave up.
         VisualMergeEvaluation = new VisualMergeEvaluationConfig(),
         Mission = new MissionContract(
