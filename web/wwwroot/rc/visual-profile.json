@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0.0",
+  "profileId": "visual.rc.saucer-springs.v1",
+  "base": "f22-desktop",
+  "_notes": [
+    "Declared as data; nothing reads this file yet. Every number is RC's CURRENT value, read 2026-10-31 from rc/main.js (lines 99-118, 168), rc/visuals.js (LIGHTING, followSun, GRADE) and rc/adaptive-resolution.mjs.",
+    "base 'f22-desktop' = the flight game's korea-1950s visual-profile.json, quality tier 'desktop' (render/visual/profile.js). Flight values for comparison: toneMapping aces_filmic, exposure 1.02, fog linear #A8C1CC 9000-56000 m, ambient 1.35, sun 2.4 #FFE3B7, shadow map 2048, shadow distance 6000 m.",
+    "Differs: exposure (RC 1.10-1.15, 0.82 under the HDRI polish path, vs flight 1.02). Believed: the toy palette is saturated and bright; the RC grade pass (saturation 1.14, contrast 1.07, vignette .24) was tuned by eye on top of it, and RC has a post-tone-map grade the flight game lacks.",
+    "Differs: fog (RC 65-150 m scene default, 180-950 m on tracks, 280-680 m open world vs flight 9000-56000 m). Believed: toy scale, a 1:10 car; 1 RC metre reads as ~10 real metres, so haze must start close to keep the horizon soft. Converge by scale factor, not by copying kilometres.",
+    "Differs: sun colour/intensity (RC outdoor #fff1db x3.4, open world #ffe4bf; flight #FFE3B7 x2.4) and hemisphere (RC 1.35 outdoor / 2.1 indoor vs flight ambient 1.35). Believed: kid-facing warm golden afternoon; indoor tracks (bx, school) need a bright even ceiling light.",
+    "Differs: shadow box (RC +-20 m on tracks, +-38 m open world, +-65 m default, contact sun +-6 m with its own 1024 map vs flight 2048 map over up to 3000 m). Believed: texel density, ~2 cm texels at toy scale keep tyre contact legible. Snap is world-axis in RC (visuals.js followSun) and light-space in flight (shadow_stabilizer.js); shared/sun.js has both.",
+    "Differs: adaptive resolution. RC is a percentile policy on frame time (p75, slow 19 ms, calm 17.8 ms, step .15 pixel ratio, window 90 frames) because WebKit's whole-millisecond frame clock produces pacing tails; flight is an EMA scale controller (target 60 fps, down 1.08x, up .82x). Not numerically comparable; the shared module hosts RC's policy.",
+    "Same already: ACES filmic tone mapping, sRGB output, PCFSoftShadowMap shadows."
+  ],
+  "tone": {
+    "toneMapping": "aces_filmic",
+    "outputColorSpace": "srgb",
+    "exposure": 1.15,
+    "exposureByContext": { "outdoorTrack": 1.1, "indoorTrack": 1.15, "polishDistrict": 0.82, "polishOpenWorld": 1.1 }
+  },
+  "grade": { "saturation": 1.14, "contrast": 1.07, "warm": [0.02, 0.008, -0.014], "cool": [-0.012, 0, 0.016], "vignette": 0.24, "outdoorOnly": true },
+  "atmosphere": {
+    "default": { "mode": "linear", "fogColor": "#b2c6c5", "near": 65, "far": 150, "skyColor": "#b2c6c5" },
+    "district": { "mode": "linear", "fogColor": "#c9dde6", "near": 180, "far": 950, "skyColor": "#a9d4ee", "cameraFar": 900 },
+    "openWorld": { "mode": "linear", "fogColor": "#c9dde6", "near": 280, "far": 680, "skyColor": "#a9d4ee", "cameraFar": 40000 }
+  },
+  "sun": {
+    "default": { "color": "0xffd6a0", "intensity": 3.2, "position": [-30, 55, -25] },
+    "outdoor": { "color": "0xfff1db", "intensity": 3.4, "direction": [-0.45, 1, -0.35] },
+    "indoor": { "color": "0xfff1dc", "intensity": 1.6, "direction": [-0.15, 1, -0.1] },
+    "openWorld": { "color": "0xffe4bf", "direction": [-0.95, 1, 0.7] },
+    "contact": { "color": "0xffe4bd", "intensity": 0.65, "intensityOnTracks": 0.5 },
+    "polishScale": { "hemiIntensity": 0.35, "sunIntensity": 0.85, "appliesTo": "non-open-world districts" }
+  },
+  "hemisphere": {
+    "default": { "sky": "0xd5edf1", "ground": "0x5a624a", "intensity": 1.5 },
+    "outdoor": { "sky": "0xd8ecf5", "ground": "0x8a7a5e", "intensity": 1.35 },
+    "indoor": { "sky": "0xfff3df", "ground": "0x8c7a62", "intensity": 2.1 }
+  },
+  "environment": {
+    "studioIntensity": 0.45, "trackIntensity": 0.6,
+    "hdriRadianceScale": { "outdoor": 0.9, "indoor": 0.55, "openWorld": 0.06 }
+  },
+  "shadow": {
+    "mapSize": 2048, "box": { "default": [65, 55], "openWorld": 38, "track": 20 }, "near": 1, "far": { "default": 150, "track": 120 },
+    "bias": { "default": -0.0003, "track": -0.0002 }, "normalBias": { "track": 0.02 },
+    "followDistance": 60, "snap": "world-axis",
+    "contact": { "mapSize": 1024, "box": 6, "near": 0.1, "far": 30, "bias": -0.00015, "normalBias": 0.015 }
+  },
+  "adaptive": {
+    "min": "min(devicePixelRatio, 1)", "max": "min(devicePixelRatio, 1.75)", "percentile": 0.75, "targetMs": 16.667,
+    "slowMs": 19, "calmMs": 17.8, "window": 90, "step": 0.15, "calmFor": 4, "cooldown": 2, "maxFrameMs": 100
+  }
+}

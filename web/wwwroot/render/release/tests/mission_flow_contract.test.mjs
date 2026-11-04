@@ -97,7 +97,7 @@ test("the root shell uses the same explicit lifecycle and action vocabulary", as
   assert.match(app, /readyRestart\.querySelector\("\.shell-action-label"\)\.textContent = readyScreen\.dataset\.mode === "pause"\s*\? "Restart" : selectedPracticeExercise \? "Restart practice" : finished \? "Repeat sortie" : "Restart sortie"/);
   assert.match(app, /readyReturn\.querySelector\("\.shell-action-label"\)\.textContent = "Aircraft"/);
   assert.match(app, /syncReadyModalOwnership\(showScreen\)/);
-  assert.match(app, /readyReplay\.textContent = "Replay"/);
+  assert.match(app, /readyReplay\.querySelector\("\.shell-action-label"\)\.textContent = "Replay"/);
   assert.match(app, /const singleCorrection = result\.safetyCorrection[\s\S]*?visualMerge\?\.correction[\s\S]*?result\.correction/);
   assert.doesNotMatch(app, /Did well ·|Fight turned ·|Next rep ·|replay cached/);
 });

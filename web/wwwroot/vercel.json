@@ -95,6 +95,14 @@
   ],
   "rewrites": [
     {
+      "source": "/rc",
+      "destination": "https://guns-only-rc.vercel.app/rc/"
+    },
+    {
+      "source": "/rc/(.*)",
+      "destination": "https://guns-only-rc.vercel.app/rc/$1"
+    },
+    {
       "source": "/telemetry",
       "destination": "/api/telemetry"
     },

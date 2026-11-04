@@ -492,7 +492,9 @@ test("iPhone selecting Top Gun and returning from Settings cannot scroll Ready s
     const page = await context.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}?menu=1&audioQa=silent`, {
+    // Top Gun left the picker on 2026-10-22 (menu is F-22, Cobra and RC); its deep link still
+    // selects it on the Ready card, which is the layout this test guards.
+    await page.goto(`${site.url}?menu=1&program=top-gun&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(30000),
     });
@@ -513,7 +515,6 @@ test("iPhone selecting Top Gun and returning from Settings cannot scroll Ready s
       // minimum patience for tick/frame-driven waits.
       { timeout: scaled(20000) },
     );
-    await page.locator('[data-program-node="top-gun"]').click();
     await page.waitForFunction(() => {
       const topGun = document.querySelector('[data-program-node="top-gun"]');
       const start = document.querySelector("#ready-start");
@@ -897,7 +898,8 @@ test("the published Cobra Hold the Bridge route boots authority and takes a Tab 
   }
 });
 
-test("the published Weekend Ride route boots and accepts throttle input", async () => {
+// Weekend Ride left the front door for Area 51½ on 2026-10-21; it stays a preview route.
+test("the published Weekend Ride preview route boots and accepts throttle input", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
   const site = await serveStatic(WWWROOT);
@@ -909,7 +911,7 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}weekend-ride/?audioQa=silent`, {
+    await page.goto(`${site.url}weekend-ride/?preview=1&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(45000),
     });

@@ -1,3 +1,4 @@
+// Pure frame-time policy for non-flight hosts (RC): see shared/adaptive.js. This EMA controller is flight-only.
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }

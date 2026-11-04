@@ -7,6 +7,7 @@ import { attemptDurationSeconds } from "./render/shell/attempt_duration.js?v=__R
 import { beginMissionCloudEntry } from "./render/shell/mission_cloud_entry.js?v=__RELEASE_BUILD__";
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
 import { attemptElapsedSeconds, attemptStartSeconds } from "./render/progression/attempt_clock.js";
+import { paintMissionStrip } from "./render/shell/mission_strip.js";
 import { isF22Sortie } from "./render/debrief/f22_sortie_result.js";
 import {
   f22ResultInstrument, paintF22ResultInstrument,
@@ -561,6 +562,7 @@ const targetStickHelp = document.querySelector("#target-stick-help");
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
 const readyScreen = document.querySelector("#ready-screen");
+const readyMissionStrip = document.querySelector("#ready-mission-strip");
 const sortieGrade = document.querySelector("#sortie-grade");
 const sortieGradeKills = document.querySelector("#sortie-grade-kills");
 const sortieGradeAccuracy = document.querySelector("#sortie-grade-accuracy");
@@ -600,6 +602,7 @@ const readyProgramStatuses = [...document.querySelectorAll("[data-program-status
 const readyDomainButtons = [...document.querySelectorAll("[data-domain-filter]")];
 const readyProgramProgress = document.querySelector("#ready-program-progress");
 const readyStart = document.querySelector("#ready-start");
+const readyStartLabel = readyStart.querySelector(".shell-action-label");
 const readyReplay = document.querySelector("#ready-replay");
 const readyHandoff = document.querySelector("#ready-handoff");
 const readyIntroReplay = document.querySelector("#ready-intro-replay");
@@ -2031,7 +2034,20 @@ const frameGovernor = {
   },
 
   reset(view = null) {
-    // A new sortie re-earns its quality: one bad moment should not permanently downgrade a session.
+    const terrainKey = view?.terrainPresentationKey;
+    const requestedKey = view?.terrainPresentationRequestedKey;
+    const qualityKey = `${selectedBeat}:${terrainKey ?? ""}`;
+    if (terrainKey && (!requestedKey || requestedKey === terrainKey)
+      && this.qualityView === view && this.qualityKey === qualityKey) {
+      // Respawning in the same scene must not resize render targets or rebuild scenery.
+      // Discard menu/loading samples; normal clean-window recovery still restores quality.
+      frameGovernorPolicy.idle(performance.now());
+      latestFrameContractPass = null;
+      return;
+    }
+    this.qualityView = view;
+    this.qualityKey = qualityKey;
+    // A different scene starts from its authored quality policy.
     frameGovernorPolicy.reset(performance.now());
     this.terrainLevel = 0;
     this.viewLevel = 0;
@@ -2985,6 +3001,13 @@ const initialProgramSelection = resolveInitialProgramSelection({
   defaultProgramNode,
 });
 const initialProgramNode = initialProgramSelection.selectedProgramNode;
+// The picker lists only some production modes (owner, 2026-10-22: F-22, Cobra and RC). A deep link
+// to an unlisted production mode (?program=top-gun) shows that one option, so the selection sits
+// visibly in the rail instead of as an invisible pressed button. Previews stay hidden.
+if (initialProgramNode && experienceLaunchable(initialProgramNode.id)) {
+  readyProgramButtons.find((button) => button.dataset.programNode === initialProgramNode.id)
+    ?.closest(".sortie-option")?.removeAttribute("hidden");
+}
 // A recognised preview/quarantined deep link remains represented in the Ready UI instead of
 // silently dismissing its release blocker. It is never the selected mission authority: the shell
 // keeps the recommended production mission selected/staged behind the disabled Ready action.
@@ -3240,6 +3263,9 @@ function snapshotFeedbackReport(now, presentedState) {
 let autoLaunchPending = false;
 let firstRunAutostartPending = false;
 let firstRunValleyDismissed = false;
+// A Fly pressed while the runtime is still booting. The cover returns until the first frame,
+// which then performs the launch the player already asked for.
+let bootLaunchPending = false;
 let terrainLaunchWarmupPromise = null;
 let terrainLaunchWarmupOwner = null;
 let terrainLaunchWarmupGeneration = 0;
@@ -3951,6 +3977,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     configuration: "AH-1G flight-foundation authority · four capture points · fortified gun pits · finite M134 · Camp Ember rearm and stable recovery",
     brief: "Four points hold the valley and you start with one. Each hostile point is locked by a fortified gun pit that friendly ground fire cannot break — destroy it, clear the remaining troops, then cover the friendly lift while it captures. Holding more points than the enemy bleeds their tickets to zero and decides the battle. Then return to Camp Ember and settle on the pad to close the sortie. Press M for the map.",
     controls: "W/S collective · arrows cyclic · A/D yaw · Tab / LB target · F / RB gunner · M tactical map · Camp Ember pad to rearm and recover",
+  }),
+  "area-51": Object.freeze({
+    kicker: "Off duty · base housing",
+    title: "RC Odyssey",
+    sortie: "Explore · race · battle",
+    configuration: "1:10 toy buggy · rigid-body four-wheel physics · kid mode on (B toggles Big Kid)",
+    brief: "Start at the neighbourhood skatepark, explore the base, and join nearby races.",
+    controls: "W/S throttle/brake · A/D steer · Space brake · F fire pickup · R recover · B kid/Big Kid · Esc pause · O exit",
   }),
   "weekend-ride": Object.freeze({
     kicker: "Off duty · 10,000 ft runway",
@@ -5143,6 +5177,11 @@ function renderPauseUi(state = latestState) {
   if (readyCorrection) readyCorrection.hidden = true;
   readyScreen.dataset.mode = (firstRunReady || practiceReady)
     ? "intro" : ready ? "program" : (finished || combatResult) ? "debrief" : "pause";
+  paintMissionStrip(readyMissionStrip, state, {
+    // Keep session values prepared; data-mode owns whether the strip is displayed.
+    mode: selectedPracticeExercise ? practiceExercise(selectedPracticeExercise)?.title : brief.title,
+    startSeconds: attemptStartSimSeconds,
+  });
   paintSortieGrade(finished && !selectedPracticeExercise ? state : null);
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
   const casevacReady = ready && selectedBeat === 13;
@@ -5248,7 +5287,7 @@ function renderPauseUi(state = latestState) {
       ? "Choose another mission" : "Replay valley intro";
   }
   if (readyRestart) {
-    readyRestart.hidden = ready || (finished && !!selectedPracticeExercise);
+    readyRestart.hidden = finished && !!selectedPracticeExercise;
     // The primary finished action may advance the programme before it launches. This utility
     // repeats the sortie which just ended, so giving both controls the old "Fly again" label hid
     // a real navigation decision from the pilot.
@@ -5256,11 +5295,11 @@ function renderPauseUi(state = latestState) {
       ? "Restart" : selectedPracticeExercise ? "Restart practice" : finished ? "Repeat sortie" : "Restart sortie";
   }
   if (readyReturn) {
-    readyReturn.hidden = ready && !selectedPracticeExercise;
+    readyReturn.hidden = firstRunReady;
     readyReturn.querySelector(".shell-action-label").textContent = "Aircraft";
   }
   if (readyHandoff) {
-    readyHandoff.hidden = !handoffActionAvailable;
+    // Pause always exposes RTB; authority controls whether it can be used.
     readyHandoff.disabled = !handoffActionAvailable;
     readyHandoff.querySelector(".shell-action-label").textContent = endSortieAvailable ? "End" : "RTB";
     readyHandoff.title = endSortieAvailable
@@ -5294,7 +5333,7 @@ function renderPauseUi(state = latestState) {
         || result?.correction || exercise.correction;
       readyCorrection.hidden = !readyCorrection.textContent;
     }
-    readyStart.textContent = finished ? "Repeat practice" : "Start practice";
+    readyStartLabel.textContent = finished ? "Repeat practice" : "Start practice";
     readyHint.textContent = "Practice results are saved locally and do not count as a full sortie.";
   } else if (finished) {
     const result = sortieResultCopy(state);
@@ -5396,10 +5435,10 @@ function renderPauseUi(state = latestState) {
                 ? resultFacts.join(" · ")
                 : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
     readyReplay.hidden = casevac || !incidentReplay?.clip;
-    readyReplay.textContent = "Replay";
+    readyReplay.querySelector(".shell-action-label").textContent = "Replay";
     // No qualification, so the debrief offers the only two things that make sense: go again, or
     // pick the other aircraft.
-    readyStart.textContent = "Fly again";
+    readyStartLabel.textContent = "Fly again";
     if (readyControls) readyControls.textContent = carrierHandoff
       ? `${result.reserveMarginLb === null
         ? "Recovery reserve result unavailable"
@@ -5441,7 +5480,7 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     if (readyControls) readyControls.textContent = mobileControls
       ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll"
       : `ARROWS fly · W/S power · ${rtbBinding} return to base · H controls`;
-    readyStart.textContent = "Enter valley";
+    readyStartLabel.textContent = "Enter valley";
     readyHint.textContent = background
       ? "Return to the game to enter the valley"
       : mobileControls ? "Tap Enter valley when ready" : "Press Enter when ready";
@@ -5472,10 +5511,12 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
           ? keyboardControls
           : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`;
     }
-    readyStart.textContent = `Fly ${brief.title}`;
+    const exploreBase = selectedProgramNodeId === "area-51";
+    readyStartLabel.textContent = exploreBase ? "Explore" : `Fly ${brief.title}`;
     readyHint.textContent = background
-      ? "Return to the game to fly"
-      : mobileControls ? "Tap Fly to launch" : "Press Enter to fly";
+      ? "Return to the game"
+      : exploreBase ? (mobileControls ? "Tap Explore" : "Press Enter to explore")
+        : mobileControls ? "Tap Fly to launch" : "Press Enter to fly";
   } else {
     // A pause screen has one job: get you back in the aeroplane. Everything that once sat here --
     // a kicker, a sentence about the deterministic clock, a two-cell sortie/status table, a
@@ -5490,7 +5531,7 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     if (readySortieLabel) readySortieLabel.textContent = "";
     if (readyConfigLabel) readyConfigLabel.textContent = "";
     if (readyControls) readyControls.textContent = "";
-    readyStart.textContent = "Resume";
+    readyStartLabel.textContent = "Resume";
     readyHint.textContent = "";
   }
 
@@ -5536,10 +5577,10 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     || routeBlocked || comingSoon || blockers.length > 0
     || ((ready || finished) && background)
     || (arenaAwaitingMatch && arenaRequestBusy);
-  if (routeBlocked) readyStart.textContent = "Unavailable in this build";
-  else if (comingSoon) readyStart.textContent = "Coming soon";
+  if (routeBlocked) readyStartLabel.textContent = "Unavailable in this build";
+  else if (comingSoon) readyStartLabel.textContent = "Coming soon";
   else if (arenaAwaitingMatch) {
-    readyStart.textContent = arenaMatchState === "unavailable"
+    readyStartLabel.textContent = arenaMatchState === "unavailable"
       ? "Retry matchmaking"
       : arenaMatchState === "completing"
         ? "Recording result…"
@@ -6287,8 +6328,8 @@ function beginFlight() {
   combatCompleteSeenAt = null;
   pilotLogbook.begin({ activity: practiceExercise(selectedPracticeExercise)?.title || missionBrief().title,
     exercise: selectedPracticeExercise || "", startSimSeconds: attemptStartSimSeconds });
-  // Ready/warmup frames are deliberately excluded from the performance sample, and every sortie
-  // starts from its mission-authored terrain radius and restored shadow/scenery policy.
+  // Discard Ready/warmup samples. Same-scene respawns retain learned quality; a new scene
+  // starts from its mission-authored terrain radius and shadow/scenery policy.
   frameGovernor.reset(activeView);
   resetAdaptiveAiBudget({ recordInitial: true });
   beginMissionCloudEntry(activeView, latestState);
@@ -6309,6 +6350,15 @@ function activateReadyAction() {
   if (pauseReasons.has("combat-result")
     && !pauseReasons.has("settings") && !pauseReasons.has("notebook")) return againFromCombatResult();
   if (buildIdentityBlocksSortie()) return false;
+  if (!bridge) {
+    // Dedicated routes (Saucer Springs) need no simulator runtime: leave the page now.
+    const standalone = experienceById(selectedProgramNodeId);
+    if (!selectedPracticeExercise && standalone?.mission == null && standalone?.route
+      && pauseReasons.has("ready")) return launchMission(selectedBeat);
+    bootLaunchPending = true;
+    bootScreen?.classList.remove("picker-live");
+    return false;
+  }
   if (pauseReasons.has("finished")) {
     if (selectedPracticeExercise) return restartMissionNow();
     if (!isMultiplayerLane()) {
@@ -7650,7 +7700,7 @@ class PresentationAssetManager {
   }
 
   showCompatibility(slot) {
-    const identity = slot.dynamic ? "shared-presentation" : slot.entityId || "unprojected";
+    const identity = "shared-presentation";
     const key = `compatibility:${slot.presentationId}:${identity}`;
     if (slot.activeKey === key && slot.object) return;
     const factory = this.compatibilityFactory(slot);
@@ -7664,7 +7714,12 @@ class PresentationAssetManager {
   }
 
   setPresentation(slot, presentationId, entityId) {
-    if (slot.presentationId === presentationId && slot.entityId === entityId) return;
+    if (slot.presentationId === presentationId) {
+      // A target promotion changes authority identity, not the aircraft geometry. Preserve the
+      // slot's already-built model, shaders and pending load until its presentation changes.
+      slot.entityId = entityId;
+      return;
+    }
     slot.presentationId = presentationId;
     slot.entityId = entityId;
     slot.epoch += 1;
@@ -7890,7 +7945,7 @@ class PresentationAssetManager {
       }
     }
     const assetIdentity = lod?.uri ?? descriptor.fallback ?? descriptor.id;
-    const instanceIdentity = slot.entityId || "unprojected";
+    const instanceIdentity = slot.name; // One retained visual per stable presentation slot.
     const key = slot.remoteAssetPolicy
       ? slot.remoteAssetPolicy.registryInstanceKey(descriptorScope, assetIdentity)
       : `registry:${this.activePack.id}:${this.activePack.profile.id}:${slot.presentationId}:${instanceIdentity}:${assetIdentity}`;
@@ -8685,8 +8740,14 @@ class FlightView {
   applyTerrainFlightPolicy() {
     if (!this.terrainPresentation
         || !Number.isFinite(this.terrainNominalStreamingRadiusM)) return false;
-    return this.terrainPresentation.setStreamingRadiusM?.(
-      this.terrainNominalStreamingRadiusM) ?? false;
+    const retainedLevel = frameGovernor.qualityView === this
+      && frameGovernor.qualityKey === `${selectedBeat}:${this.terrainPresentationKey}`
+      ? frameGovernor.terrainLevel : 0;
+    const radiusM = retainedLevel > 0
+      ? Math.min(this.terrainNominalStreamingRadiusM,
+        FRAME_GOVERNOR_RADII_M[Math.min(retainedLevel, FRAME_GOVERNOR_RADII_M.length) - 1])
+      : this.terrainNominalStreamingRadiusM;
+    return this.terrainPresentation.setStreamingRadiusM?.(radiusM) ?? false;
   }
 
   ensureTerrainPresentation(state = null) {
@@ -12703,6 +12764,10 @@ async function boot() {
         bootScreen.classList.add("ready");
         markShellMilestone("ready");
       }
+      if (bootLaunchPending) {
+        bootLaunchPending = false;
+        queueMicrotask(activateReadyAction);
+      }
       if (state?.session_phase === "ACTIVE") markShellMilestone("active");
       if (state?.session_phase === "READY") markShellMilestone("ready");
       requestAnimationFrame(tick);
@@ -12796,4 +12861,10 @@ if ("serviceWorker" in navigator) {
   else window.addEventListener("load", registerOfflineSupport, { once: true });
 }
 
+// The picker is static markup with module-level handlers, so it is usable before the simulator
+// runtime arrives (about 20 MB). Lift the cover now unless this load flies straight into the
+// first-run valley; the gauge stays visible until the first frame.
+try {
+  if (!shouldAutoStartFirstRunValley(firstRunValleyQueryContext())) bootScreen?.classList.add("picker-live");
+} catch { /* Storage may be unavailable; keep the cover. */ }
 boot().catch(showFatal);

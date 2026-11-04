@@ -1,0 +1,33 @@
+{
+ "state": {
+  "x": 3.4802896567447887,
+  "y": 0.12858167295058318,
+  "z": 42.18036965433832,
+  "yaw": -1.5848451344223338,
+  "speed": 7.33869761532998,
+  "forwardSpeed": 7.338625932582787,
+  "steer": 0,
+  "grounded": true,
+  "contacts": 4,
+  "time": 56.78333333333075,
+  "gate": 8,
+  "running": false,
+  "finished": true,
+  "hits": 0,
+  "found": 0,
+  "seen": [],
+  "travel": 406.7622954673972,
+  "recoveries": 0,
+  "mode": "kid",
+  "paused": true,
+  "assets": "blender",
+  "item": null,
+  "place": 1
+ },
+ "errors": [
+  "Failed to load resource: the server responded with a status of 404 (Not Found)",
+  "Failed to load resource: the server responded with a status of 404 (Not Found)"
+ ],
+ "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+ "wall": 57.827
+}

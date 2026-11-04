@@ -513,3 +513,12 @@ test("runtime priming rejects unlisted unversioned URLs and incompatible manifes
   assert.equal(result.cached, 1);
   assert.equal(worker.puts.length, 1);
 });
+
+ test("independent RC releases bypass stale root cache entries", async () => {
+ const harness=await workerHarness({match:async()=>new Response('old RC')});
+ for(const path of ['/rc','/rc/','/rc/main.js','/rc/assets/world/manifest.json']){
+ const event=harness.dispatchFetch({method:'GET',mode:path.endsWith('.js')?'cors':'navigate',url:'https://guns-only.vercel.app'+path});
+ assert.equal(event.response,undefined,path);assert.equal(event.lifetimeCount,0,path);
+ }
+ assert.equal(harness.puts.length,0);
+ });

@@ -19,7 +19,6 @@ import {
 const requireFromSmoke = createRequire(
   new URL("../../web/smoke/package.json", import.meta.url),
 );
-const { chromium } = requireFromSmoke("playwright");
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIRECTORY, "../..");
@@ -204,6 +203,7 @@ async function queryRenderer(page, canvasSelector = null) {
 async function launchCandidate({ name, args, requireHardware }) {
   let browser;
   try {
+    const { chromium } = requireFromSmoke("playwright");
     browser = await chromium.launch(perfBrowserLaunchOptions({
       hardware: requireHardware,
       args,
@@ -375,6 +375,42 @@ function summarize(values) {
   };
 }
 
+export function worstFramePerfWindow(samples) {
+  if (!Array.isArray(samples)) return null;
+  let worst = null;
+  let worstMax = -Infinity;
+  for (const sample of samples) {
+    if (!sample || typeof sample !== "object") continue;
+    // frame_ms_max is the telemetry contract key. Do not infer a window's severity from a
+    // phase average: a short, sharp hitch is exactly what this diagnostic needs to retain.
+    const frameMax = sample.frame_ms_max;
+    if (typeof frameMax !== "number" || !Number.isFinite(frameMax) || frameMax < 0) continue;
+    if (frameMax > worstMax) {
+      worst = sample;
+      worstMax = frameMax;
+    }
+  }
+  return worst;
+}
+
+export function aggregatePhaseMaxima(samples) {
+  if (!Array.isArray(samples)) return [];
+  const maxima = new Map();
+  for (const sample of samples) {
+    if (!sample || typeof sample !== "object") continue;
+    for (const [key, value] of Object.entries(sample)) {
+      if (key === "frame_ms_max" || !key.endsWith("_ms_max")) continue;
+      const msMax = value;
+      if (typeof msMax !== "number" || !Number.isFinite(msMax) || msMax < 0) continue;
+      const phase = key.replace(/_ms_max$/, "");
+      maxima.set(phase, Math.max(maxima.get(phase) ?? -Infinity, msMax));
+    }
+  }
+  return [...maxima.entries()]
+    .map(([phase, msMax]) => ({ phase, msMax }))
+    .sort((left, right) => right.msMax - left.msMax || left.phase.localeCompare(right.phase));
+}
+
 function summarizeLeg(raw) {
   const warmupMs = Number.isFinite(raw.warmupMs) ? raw.warmupMs : LEG_WARMUP_MS;
   const window = measuredFrameWindow(raw.deltas, warmupMs);
@@ -396,6 +432,7 @@ function summarizeLeg(raw) {
     raw.after.z - raw.before.z,
   );
   const framePerfSamples = Array.isArray(raw.framePerfSamples) ? raw.framePerfSamples : [];
+  const framePerfWorst = worstFramePerfWindow(framePerfSamples);
   return {
     name: raw.name,
     frames: measuredDeltas.length,
@@ -427,17 +464,20 @@ function summarizeLeg(raw) {
     terrainAfter: raw.terrainAfter,
     framePerfSamples,
     framePerfLatest: framePerfSamples.at(-1) ?? null,
+    framePerfWorst,
+    framePerfPhaseMaxima: aggregatePhaseMaxima(framePerfSamples),
   };
 }
 
 function hottestPhases(framePerf) {
   if (!framePerf || typeof framePerf !== "object") return [];
   return Object.entries(framePerf)
-    .filter(([key, value]) => key.endsWith("_ms_avg") && Number.isFinite(Number(value)))
+    .filter(([key, value]) => key.endsWith("_ms_avg")
+      && typeof value === "number" && Number.isFinite(value) && value >= 0)
     .map(([key, value]) => ({
       phase: key.replace(/_ms_avg$/, ""),
-      msAvg: Number(value),
-      msMax: Number(framePerf[`${key.replace(/_ms_avg$/, "")}_ms_max`]) || null,
+      msAvg: value,
+      msMax: framePerf[`${key.replace(/_ms_avg$/, "")}_ms_max`],
     }))
     .sort((left, right) => right.msAvg - left.msAvg);
 }
@@ -449,10 +489,11 @@ function terrainTransferRequests(terrain) {
 function formatLeg(leg) {
   const terrainRequests = terrainTransferRequests(leg.terrainAfter)
     - terrainTransferRequests(leg.terrainBefore);
-  const phases = hottestPhases(leg.framePerfLatest).slice(0, 4)
-    .map((entry) => `${entry.phase}=${entry.msAvg.toFixed(2)}`)
-    .join(" ");
-  const load = leg.framePerfLatest;
+  const phaseMaxima = leg.framePerfPhaseMaxima.slice(0, 4)
+    .map((entry) => `${entry.phase}=${entry.msMax.toFixed(2)}`).join(" ");
+  const phaseAverages = hottestPhases(leg.framePerfLatest).slice(0, 4)
+    .map((entry) => `${entry.phase}=${entry.msAvg.toFixed(2)}`).join(" ");
+  const load = leg.framePerfWorst ?? leg.framePerfLatest;
   const loadLine = load
     ? `  load: gov=${load.governor_level ?? "?"} stream=${load.stream_radius_m ?? "?"}m `
       + `sceneryOff=${load.scenery_suppressed ?? "?"} eng=${load.engagement ?? "?"} `
@@ -473,7 +514,11 @@ function formatLeg(leg) {
       + `residentChunks=${leg.terrainBefore?.residentChunks ?? "?"}`
       + `->${leg.terrainAfter?.residentChunks ?? "?"}`,
     loadLine,
-    phases ? `  phases(avg ms): ${phases}` : "  phases(avg ms): (none)",
+    phaseMaxima
+      ? `  phases(max ms, captured windows incl. warmup): ${phaseMaxima}`
+      : phaseAverages
+        ? `  phases(avg ms, latest captured window): ${phaseAverages}`
+        : "  phases: (none)",
   ].join("\n");
 }
 
@@ -496,6 +541,7 @@ async function writeFlightReport(result) {
       maximumFrameMs: result.options.maxFrameMs,
     },
     longFrameMs: LONG_FRAME_MS,
+    framePerfWindowScope: "captured telemetry windows, including warmup; gate uses measured RAF deltas",
     renderer: result.renderer,
     softwareRenderer: result.softwareRenderer,
     modeLabel: result.modeLabel,
@@ -527,6 +573,9 @@ async function writeFlightReport(result) {
       distanceM: leg.distanceM,
       framePerfLatest: leg.framePerfLatest,
       hottestPhases: hottestPhases(leg.framePerfLatest),
+      framePerfWorst: leg.framePerfWorst,
+      framePerfPhaseMaxima: leg.framePerfPhaseMaxima,
+      framePerfWindowScope: "captured telemetry windows, including warmup; gate uses measured RAF deltas",
       terrainBefore: leg.terrainBefore,
       terrainAfter: leg.terrainAfter,
     })),
@@ -550,6 +599,7 @@ async function writeFlightReport(result) {
       + `${result.options.maxBudgetMissPercent}%`,
     `- Catastrophic-frame safety guard: MAX <=${result.options.maxFrameMs} ms`,
     `- Compatibility diagnostic: frames >${LONG_FRAME_MS} ms`,
+    "- FramePerf diagnostics: captured telemetry windows include warmup; gates use measured RAF deltas.",
     "",
     ...result.legs.flatMap((leg) => [
       `## ${leg.name}`,

@@ -30,6 +30,9 @@
 // darkest slope in the scene.
 
 import {
+  DECISION_SUPPORT_HORIZON_SKY_GLSL,
+} from "../environment/soft_world_atmosphere.js?v=__RELEASE_BUILD__";
+import {
   TERRAIN_SHADOW_FRAGMENT_PARS,
   TERRAIN_SHADOW_VERTEX_BODY,
   TERRAIN_SHADOW_VERTEX_PARS,
@@ -96,6 +99,7 @@ float cobraFbm(vec2 p) {
  * bounded fog mix and costs no draw call or geometry.
  */
 const HAZE_CHUNK = /* glsl */ `
+${DECISION_SUPPORT_HORIZON_SKY_GLSL}
 vec3 cobraAerial(vec3 lit, vec3 worldPosition, vec3 fogColor, float fogDensity,
     float bands, float bandBlend) {
   float distanceToCamera = length(cameraPosition - worldPosition);
@@ -120,9 +124,12 @@ vec3 cobraAerial(vec3 lit, vec3 worldPosition, vec3 fogColor, float fogDensity,
     float banded = (floor(scaled) + smoothstep(0.24, 0.82, fract(scaled))) / bands;
     aerial = mix(aerial, banded, bandBlend);
   }
-  // Low suspended moisture is a touch lighter/cooler than the high, dry rim air. This is a
-  // colour separation between depth planes, not a global exposure lift.
-  vec3 airColor = fogColor * mix(0.90, 1.055, lowlandHumidity);
+  // Valley air keeps the humid fog colour. The opaque end is the cool horizon sample
+  // (altitude 0, softWorld 0) so the far rim meets the canyon dome.
+  vec3 humid = fogColor * mix(0.90, 1.055, lowlandHumidity);
+  vec3 horizonFog = decisionSupportSkyColor(
+    worldPosition - cameraPosition, uSunDirection, 0.0, 0.0);
+  vec3 airColor = mix(humid, horizonFog, smoothstep(0.35, 0.95, aerial));
   return mix(lit, airColor, clamp(aerial, 0.0, 1.0));
 }
 `;

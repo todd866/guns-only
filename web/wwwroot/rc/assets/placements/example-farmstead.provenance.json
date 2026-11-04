@@ -1,0 +1,6 @@
+{
+  "asset": "placements/example-farmstead.json",
+  "generator": "layout authored in the dark-world valley frame (valleyPoint, open-world/spirit-mountain.mjs) and converted to world metres; props from kit/props.glb",
+  "license": "MIT (original layout data; repository MIT)",
+  "external_assets": []
+}

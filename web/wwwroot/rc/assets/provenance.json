@@ -1,0 +1,14 @@
+{
+  "generator": "tools/rc/blender/build_assets.py",
+  "blender": "5.2.0 LTS",
+  "license": "MIT (original authored geometry/materials)",
+  "external_assets": [],
+  "concept_usage": "reference only; never a mesh conversion",
+  "additional_generator": "tools/rc/blender/base_models.py",
+  "original_models": [
+    "buggy",
+    "hangar-slice",
+    "aircraft",
+    "quarters"
+  ]
+}

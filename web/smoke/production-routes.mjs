@@ -160,25 +160,23 @@ export const PRODUCTION_ROUTES = Object.freeze([
     },
   }),
   Object.freeze({
-    id: "weekend-ride",
-    path: "/weekend-ride/",
+    // The independently deployed RC entry opens directly into the connected base.
+    id: "area-51",
+    path: "/rc/",
     search: "?audioQa=silent",
-    isReady: () => document.querySelector("#status")?.dataset.ready === "true"
-      && document.querySelector("#ride-brief")?.hidden === false
-      && window.__gunsOnlyWeekendAuthority?.phase === "paused",
+    isReady: () => window.__gunsOnlyRC?.snapshot().assets === "blender"
+      && window.__gunsOnlyRC?.snapshot().world?.ready === true
+      && window.__gunsOnlyRC?.snapshot().paused === false,
     verify: async (page) => {
       const route = await page.evaluate(() => ({
-        status: document.querySelector("#status span")?.textContent?.trim() ?? "",
-        briefVisible: document.querySelector("#ride-brief")?.hidden === false,
-        title: document.querySelector("#ride-brief-title")?.textContent?.trim() ?? "",
-        phase: window.__gunsOnlyWeekendAuthority?.phase ?? "",
-        aircraftId: window.__gunsOnlyWeekendAuthority?.player_aircraft_id ?? "",
+        briefHidden: document.querySelector("#brief")?.hidden === true,
+        state: window.__gunsOnlyRC?.snapshot(),
       }));
-      assert.equal(route.status, "READY · REVIEW SESSION BRIEF");
-      assert.equal(route.briefVisible, true, "Weekend Ride Ready brief is not visible");
-      assert.equal(route.title, "Two laps, then bring it in");
-      assert.equal(route.phase, "paused", "Weekend Ride authority is running behind Ready");
-      assert.equal(route.aircraftId, "vehicle.yzf-r1.track-day.v1");
+      assert.equal(route.briefHidden, true, "Saucer Springs unexpectedly opens a menu");
+      assert.equal(route.state?.track, "hub", "Saucer Springs fell back to an isolated course");
+      assert.equal(route.state?.world?.ready, true, "Connected world is not ready");
+      assert.ok(route.state?.world?.tiles > 0, "Connected world tiles missing");
+      assert.equal(route.state?.paused, false, "Open-world entry is paused");
     },
   }),
   Object.freeze({

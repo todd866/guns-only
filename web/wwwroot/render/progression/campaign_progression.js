@@ -103,7 +103,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     shortObjective: "Fly the visible high-speed path to three balloon mines at 45,000 ft, destroy their lethal drone payloads before deployment, then recover.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
-    visible: true,
+    visible: true, // public route; owner 2026-10-22 took it off the menu (index.html `hidden`),
   }),
   // Korea 1951. The oldest aircraft in the game and the only one flown from a straight deck —
   // and until now the only one with no way in at all: the F9F-2 and the paddles/LSO machinery
@@ -158,11 +158,26 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "weekend-ride",
     mission: null,
-    sequence: 11,
+    sequence: 15,
     route: "/weekend-ride/",
     aircraft: "YZF-R1",
     title: "Weekend Ride",
     shortObjective: "Open helmet-view lapping on the painted 10,000 ft Rapier-strip circuit; end the ride when ready and review the session.",
+    qualification: "",
+    // Owner, 2026-10-21: RC Odyssey (Saucer Springs AFB) replaces the driving slot on the front door. The route and
+    // its code stay for development behind ?preview=1.
+    releaseState: EXPERIENCE_RELEASE_STATE.PREVIEW,
+    visible: false,
+    blocker: "Replaced on the front door by RC Odyssey (owner direction 2026-10-21)",
+  }),
+  experience({
+    id: "area-51",
+    mission: null,
+    sequence: 11,
+    route: "/rc/",
+    aircraft: "RC buggy",
+    title: "RC Odyssey",
+    shortObjective: "Explore the base in an RC car, join races and battle rivals.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,
@@ -182,7 +197,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     shortObjective: "Splash two MiG-28s, then trap aboard.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
-    visible: true,
+    visible: true, // public route; owner 2026-10-22 took it off the menu (index.html `hidden`),
     // Build 326 repairs the string-selector terrain-owner stall that invalidated the first
     // promotion attempt. The owner explicitly ordered production promotion on 2026-08-14 after
     // the corrected launch/authority path passed 108 focused checks. This is a transparent
@@ -199,7 +214,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     shortObjective: "Learn the lake scoop, put water on a fire you can see, then hold for Air Attack on the large-force hop.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
-    visible: true,
+    visible: true, // public route; owner 2026-10-22 took it off the menu (index.html `hidden`),
     blocker: "",
   }),
 ]);

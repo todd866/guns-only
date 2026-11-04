@@ -1,0 +1,379 @@
+{
+  "base": "http://rc.test",
+  "errors": [],
+  "results": [
+    {
+      "name": "default-open-world",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)",
+      "state": {
+        "x": -3023.067108753291,
+        "y": 0.23819000059604645,
+        "z": -776.5117063419825,
+        "yaw": -0.4658407346410207,
+        "speed": 5.573396766159017e-16,
+        "forwardSpeed": -1.3819482341209396e-17,
+        "steer": 0,
+        "grounded": true,
+        "contacts": 4,
+        "rivals": [
+          {
+            "name": "GHOST",
+            "x": -3039.6251310208418,
+            "z": -800.2433804743332,
+            "finished": false
+          },
+          {
+            "name": "SANDY",
+            "x": -3040.9943487102532,
+            "z": -800.4404295050297,
+            "finished": false
+          },
+          {
+            "name": "SPLINTER",
+            "x": -3040.608559530381,
+            "z": -799.6814874227559,
+            "finished": false
+          },
+          {
+            "name": "FLANKER",
+            "x": -3041.9946795783903,
+            "z": -799.8620207808958,
+            "finished": false
+          },
+          {
+            "name": "FROSTY",
+            "x": -3041.5757087388442,
+            "z": -799.135415851842,
+            "finished": false
+          },
+          {
+            "name": "VIPER",
+            "x": -3042.979127235918,
+            "z": -799.3189543022422,
+            "finished": false
+          },
+          {
+            "name": "BANDIT",
+            "x": -3042.5328452059985,
+            "z": -798.5779842879703,
+            "finished": false
+          }
+        ],
+        "drifting": false,
+        "time": 0,
+        "lap": 1,
+        "laps": 3,
+        "lapTimes": [],
+        "gate": 0,
+        "running": false,
+        "finished": false,
+        "hits": 0,
+        "found": 0,
+        "seen": [],
+        "travel": 0,
+        "recoveries": 0,
+        "mode": "kid",
+        "paused": false,
+        "guide": "skatepark",
+        "assets": "blender",
+        "item": null,
+        "place": 3,
+        "track": "hub",
+        "world": {
+          "tiles": 25,
+          "cached": 25,
+          "pending": 0,
+          "failed": 0,
+          "features": 2,
+          "ready": true,
+          "discovered": [
+            "gate",
+            "skatepark"
+          ],
+          "event": "district-skatepark",
+          "locked": false,
+          "golf": null,
+          "golfBest": null,
+          "bowlingBest": 0,
+          "specimens": [],
+          "expedition": {
+            "found": 0,
+            "total": 15,
+            "unlocked": false,
+            "complete": false
+          }
+        },
+        "vehicle": {
+          "topSpeed": 14,
+          "wheelRadius": 0.058,
+          "mass": 1.8
+        },
+        "body": "jet",
+        "shell": "viper",
+        "paint": "#ed9145",
+        "audioSilent": true
+      }
+    },
+    {
+      "name": "fresh-user-first-race",
+      "started": true,
+      "event": "district-housing"
+    },
+    {
+      "name": "connected-district-menu",
+      "passed": true
+    },
+    {
+      "name": "bx-free",
+      "state": {
+        "x": -553.9355084892389,
+        "y": 0.09764692620143751,
+        "z": 781.4000018291458,
+        "yaw": -1.5707964611537386,
+        "speed": 9.71421740503771,
+        "forwardSpeed": 9.71408291395904,
+        "steer": 0,
+        "grounded": true,
+        "contacts": 4,
+        "rivals": [
+          {
+            "name": "GHOST",
+            "x": -547.0983781622892,
+            "z": 754.1380254462425,
+            "finished": false
+          },
+          {
+            "name": "SANDY",
+            "x": -546.901150169806,
+            "z": 743.5094775239282,
+            "finished": false
+          },
+          {
+            "name": "SPLINTER",
+            "x": -546.5688548443898,
+            "z": 725.6996520854742,
+            "finished": false
+          },
+          {
+            "name": "FLANKER",
+            "x": -546.5036516037026,
+            "z": 722.1094794306166,
+            "finished": false
+          },
+          {
+            "name": "FROSTY",
+            "x": -544.3490598641016,
+            "z": 724.4905229203627,
+            "finished": false
+          },
+          {
+            "name": "VIPER",
+            "x": -544.6828112300548,
+            "z": 742.5346567262146,
+            "finished": false
+          },
+          {
+            "name": "BANDIT",
+            "x": -546.5572773429086,
+            "z": 752.6023885454432,
+            "finished": false
+          }
+        ],
+        "drifting": false,
+        "time": 0,
+        "lap": 1,
+        "laps": 3,
+        "lapTimes": [],
+        "gate": 0,
+        "running": false,
+        "finished": false,
+        "hits": 0,
+        "found": 0,
+        "seen": [],
+        "travel": 7.935509864033388,
+        "recoveries": 0,
+        "mode": "bigKid",
+        "paused": false,
+        "guide": "bx",
+        "assets": "blender",
+        "item": null,
+        "place": 1,
+        "track": "hub",
+        "world": {
+          "tiles": 25,
+          "cached": 25,
+          "pending": 0,
+          "failed": 0,
+          "features": 1049,
+          "ready": true,
+          "discovered": [
+            "gate",
+            "skatepark",
+            "bx"
+          ],
+          "event": "district-bx",
+          "locked": false,
+          "golf": null,
+          "golfBest": null,
+          "bowlingBest": 0,
+          "specimens": [],
+          "expedition": {
+            "found": 0,
+            "total": 15,
+            "unlocked": false,
+            "complete": false
+          }
+        },
+        "vehicle": {
+          "topSpeed": 14,
+          "wheelRadius": 0.058,
+          "mass": 1.8
+        },
+        "body": "jet",
+        "shell": "viper",
+        "paint": "#ed9145",
+        "audioSilent": true
+      }
+    },
+    {
+      "name": "bx-connected",
+      "state": {
+        "x": -553.9355084892389,
+        "y": 0.09764692620143751,
+        "z": 781.4000018291458,
+        "yaw": -1.5707964611537375,
+        "speed": 9.714217405037708,
+        "forwardSpeed": 9.71408291395904,
+        "steer": 0,
+        "grounded": true,
+        "contacts": 4,
+        "rivals": [
+          {
+            "name": "GHOST",
+            "x": -547.0983781622892,
+            "z": 754.1380254462425,
+            "finished": false
+          },
+          {
+            "name": "SANDY",
+            "x": -546.901150169806,
+            "z": 743.5094775239282,
+            "finished": false
+          },
+          {
+            "name": "SPLINTER",
+            "x": -546.5688548443898,
+            "z": 725.6996520854742,
+            "finished": false
+          },
+          {
+            "name": "FLANKER",
+            "x": -546.5036516037026,
+            "z": 722.1094794306166,
+            "finished": false
+          },
+          {
+            "name": "FROSTY",
+            "x": -544.3490598641016,
+            "z": 724.4905229203627,
+            "finished": false
+          },
+          {
+            "name": "VIPER",
+            "x": -544.6828112300548,
+            "z": 742.5346567262146,
+            "finished": false
+          },
+          {
+            "name": "BANDIT",
+            "x": -546.5572773429086,
+            "z": 752.6023885454432,
+            "finished": false
+          }
+        ],
+        "drifting": false,
+        "time": 0,
+        "lap": 1,
+        "laps": 3,
+        "lapTimes": [],
+        "gate": 0,
+        "running": false,
+        "finished": false,
+        "hits": 0,
+        "found": 0,
+        "seen": [],
+        "travel": 7.935509864033388,
+        "recoveries": 0,
+        "mode": "kid",
+        "paused": false,
+        "guide": "bx",
+        "assets": "blender",
+        "item": null,
+        "place": 1,
+        "track": "hub",
+        "world": {
+          "tiles": 25,
+          "cached": 25,
+          "pending": 0,
+          "failed": 0,
+          "features": 1049,
+          "ready": true,
+          "discovered": [
+            "gate",
+            "skatepark",
+            "bx"
+          ],
+          "event": "district-bx",
+          "locked": false,
+          "golf": null,
+          "golfBest": null,
+          "bowlingBest": 0,
+          "specimens": [],
+          "expedition": {
+            "found": 0,
+            "total": 15,
+            "unlocked": false,
+            "complete": false
+          }
+        },
+        "vehicle": {
+          "topSpeed": 14,
+          "wheelRadius": 0.058,
+          "mass": 1.8
+        },
+        "body": "jet",
+        "shell": "viper",
+        "paint": "#ed9145",
+        "audioSilent": true
+      }
+    },
+    {
+      "name": "race-assist-mode",
+      "passed": true
+    },
+    {
+      "name": "furball",
+      "passed": true
+    },
+    {
+      "name": "legacy-base",
+      "world": true
+    },
+    {
+      "name": "legacy-housing",
+      "world": true
+    },
+    {
+      "name": "legacy-bx",
+      "world": true
+    },
+    {
+      "name": "legacy-school",
+      "world": true
+    },
+    {
+      "name": "failed-world-download",
+      "retry": true
+    }
+  ]
+}

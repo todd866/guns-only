@@ -1,0 +1,1 @@
+{"version":1,"tileSize":256,"tile":[0,15],"features":[{"id":"way/1297734186","properties":{"highway":"service","kind":"highway","osm":"way/1297734186"},"geometry":{"type":"LineString","coordinates":[[-40.45,3387.34],[-39.74,3343.75],[49.77,3344.94],[49.05,4078.78],[-45.02,4076.59]]},"bbox":[-45.02,3343.75,49.77,4078.78]}]}

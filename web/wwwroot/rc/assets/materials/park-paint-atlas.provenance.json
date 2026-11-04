@@ -1,0 +1,8 @@
+{
+  "asset": "park-paint-atlas.png",
+  "authoring": "tools/rc/build-park-paint.py (deterministic, seed 1987), 28 October 2026",
+  "purpose": "Original graffiti on worn concrete for the neighbourhood skate plaza, art-directed from the owner's reference park video (bubble-letter throw-ups, tags, chalk, buffed patches)",
+  "inputs": "Procedural drawing with macOS system fonts (Arial Rounded Bold, Arial Black, Marker Felt, Chalkduster) rasterised into the texture; no photographs, no copied tags or third-party artwork",
+  "words": "All words and the alien/saucer characters are original",
+  "license": "Original generated asset, distributed under the repository MIT License"
+}

@@ -13,7 +13,7 @@ for (const [name, width, height] of [['portrait', 390, 844], ['landscape', 844, 
       const page = await browser.newPage({ viewport: { width, height }, hasTouch: true, isMobile: true });
       await page.setContent(`<meta name="viewport" content="width=device-width,initial-scale=1">
         <style>${styles}</style><div id="ready-screen" data-mode="debrief" data-f22-result="combat">
-          <div class="ready-card"><div class="ready-briefing"><section class="f22-result">
+          <div class="ready-card"><div class="ready-briefing console-surface"><section class="f22-result">
             <div class="f22-row">FIGHT <span>✓ 2/2</span></div>
             <div class="f22-row">BFM <span>D1 ✓ → O2</span></div>
           </section></div></div></div>`);
@@ -25,10 +25,19 @@ for (const [name, width, height] of [['portrait', 390, 844], ['landscape', 844, 
         screen.classList.add('visible');
         await new Promise(requestAnimationFrame);
         const card = getComputedStyle(document.querySelector('.ready-card'));
-        return { opacity: getComputedStyle(screen).opacity, cardColor: card.backgroundColor };
+        const briefing = getComputedStyle(document.querySelector('.ready-briefing'));
+        return { opacity: getComputedStyle(screen).opacity, cardColor: card.backgroundColor,
+          cardOpacity: card.opacity, cardAnimation: card.animationName,
+          briefingColor: briefing.backgroundColor, briefingImage: briefing.backgroundImage,
+          backdrop: [getComputedStyle(screen).backdropFilter, card.backdropFilter, briefing.backdropFilter] };
       });
       assert.equal(paint.opacity, '1', 'HUD must not bleed through during the result fade');
+      assert.equal(paint.cardOpacity, '1', 'the card itself must be opaque on its first visible frame');
+      assert.equal(paint.cardAnimation, 'none', 'the result card must not inherit the console fade-in');
       assert.match(paint.cardColor, /^rgb\(/, 'card needs an opaque base behind every row/action');
+      assert.equal(paint.briefingColor, paint.cardColor, 'console glass must use the solid result panel colour');
+      assert.equal(paint.briefingImage, 'none', 'the result must not retain the translucent console gradient');
+      assert.deepEqual(paint.backdrop, ['none', 'none', 'none']);
       // Exercise the card independently of the page scrim: underlying HUD colour must not
       // affect any interior pixel. The real stylesheet and cascade remain in force.
       await page.evaluate(() => {

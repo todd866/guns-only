@@ -353,6 +353,9 @@ else
         echo "deploy-web: installing the locked browser toolchain for the frame gate"
         (cd "$repo_dir/web/smoke" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null)
     fi
+    # Publishing/staging can leave compiler and filesystem work active. Wait before launching
+    # the browser; this does not warm the game or discard any measured flight frames.
+    node "$repo_dir/tools/perf/host_headroom.mjs"
     echo "deploy-web: flying the hardware frame gate on the publish artifact (~3 min, headless)"
     frame_log="$publish_dir/frame-gate.log"
     if ! node "$repo_dir/tools/perf/flight_frame_harness.mjs" --wwwroot "$deploy_root" >"$frame_log" 2>&1; then
@@ -380,6 +383,22 @@ fi
 framework_files=$(find "$deploy_root/_framework" -type f | wc -l | tr -d ' ')
 if [ "$framework_files" -lt 20 ]; then
     echo "deploy-web: incomplete Blazor framework payload ($framework_files files)" >&2
+    exit 1
+fi
+
+# Vercel stopped serving executable-bit files from CLI uploads (first seen 2026-11-01, Build 432:
+# the five Blazor runtime files that arrive 0744 from the NuGet cache -- blazor.webassembly.js,
+# dotnet.js, dotnet.native.*.js, dotnet.runtime.*.js, dotnet.native.wasm -- were absent from the
+# deployment while their .br/.gz siblings were served, so the shell 404'd on its bootstrap script and
+# verify_candidate refused the promotion). Nothing in a static publish tree needs an execute bit;
+# normalise every file to 0644 before upload so the artifact's bytes, not its modes, decide what ships.
+executable_files=$(find "$deploy_root" -type f -perm -u+x | wc -l | tr -d ' ')
+if [ "$executable_files" -gt 0 ]; then
+    echo "deploy-web: clearing the execute bit on $executable_files published file(s) before upload"
+    find "$deploy_root" -type f -perm -u+x -exec chmod 644 {} +
+fi
+if [ -n "$(find "$deploy_root" -type f -perm -u+x -print -quit)" ]; then
+    echo "deploy-web: executable files remain in the publish artifact; refusing to upload" >&2
     exit 1
 fi
 

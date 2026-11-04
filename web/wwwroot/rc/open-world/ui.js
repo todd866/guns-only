@@ -1,0 +1,920 @@
+import {renderHint} from '../key-hints.js';
+import {approachLane, canSwitchBowlingLane} from './bowling.mjs';
+import {VEHICLE_NAMES} from '../vehicle-bodies.js';
+import {BASE_BOUNDARY} from './boundary.mjs';
+import {
+  LOCATIONS,
+  PAINTS,
+  distance,
+  locationById,
+  rcLink,
+  medal,
+  eventById,
+  RACE_EVENTS as EVENTS,
+  loadProgress,
+  saveProgress,
+  SPECIMENS,
+  canEnter,
+  canVisit,
+  canEnterEvent,
+  expedition
+} from './catalog.mjs';
+import {JET_KINDS, JET_NAMES} from '../jets.js';
+import {LIVERIES, TRIMS, liveryUnlocked, PUMPKIN_CAR} from '../livery-data.mjs';
+import {DARK_PLACES} from './dark-world.mjs';
+import {createDinoInspect} from './inspect.js';
+import {SKY_HINT} from './sky-dive.mjs';
+const $ = id => document.getElementById(id);
+// One map, one destination. Controls remain ordinary labelled buttons on touch and keyboard.
+export function createWorldUI({
+  world,
+  getState,
+  pause,
+  applyShell,
+  travel,
+  interact,
+  search,
+  onOpen,
+  onGarage,
+  stats,
+  dex
+}) {
+  let placeWorld = null,
+    panel = null,
+    wasPaused = true,
+    briefHidden = true,
+    returnFocus = null,
+    travelling = false,
+    travelError = null,
+    isolated = [],
+    storage,
+    inspectPage = null,
+    inspector = null;
+  try {
+    storage = localStorage;
+  } catch {}
+  const progress = world?.progress ?? loadProgress(storage);
+  const modal = $('world-panel'),
+    map = $('world-map'),
+    g = map.getContext('2d'),
+    garage = $('garage-panel');
+  $('body').innerHTML =
+    '<option value="jet">Jet buggy</option>' +
+    Object.entries(VEHICLE_NAMES)
+      .map(([k, n]) => `<option value="${k}">${n}</option>`)
+      .join('');
+  $('body').value = progress.body;
+  $('shell').innerHTML = JET_KINDS.map(k => `<option value="${k}">${JET_NAMES[k]}</option>`).join('');
+  $('shell').value = progress.shell;
+  $('paint').innerHTML = PAINTS.map(
+    p =>
+      `<button title="${p.name}" aria-label="${p.name}" data-paint="${p.color}" style="--paint:${p.color}"></button>`
+  ).join('');
+  $('trim').innerHTML = TRIMS.map(
+    p =>
+      `<button title="Trim: ${p.name}" aria-label="Trim ${p.name}" data-trim="${p.color}" style="--paint:${p.color}"></button>`
+  ).join('');
+  $('pattern').innerHTML = LIVERIES.map(
+    l => `<button title="${l.name}" aria-label="${l.name}" data-pattern="${l.id}"></button>`
+  ).join('');
+  // Pattern buttons preview the pattern in the chosen paint and trim, the same picture as the car.
+  const preview = (id, paint, trim) => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 48;
+    const x = c.getContext('2d');
+    x.fillStyle = paint;
+    x.fillRect(0, 0, 48, 48);
+    x.fillStyle = trim;
+    if (id === 'stripes') {
+      x.fillRect(14, 0, 7, 48);
+      x.fillRect(27, 0, 7, 48);
+    } else if (id === 'twotone') {
+      x.fillRect(0, 26, 48, 22);
+    } else if (id === 'checker') {
+      for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) if ((i + j) % 2) x.fillRect(i * 8, j * 8, 8, 8);
+    } else if (id === 'camo') {
+      for (const [cx, cy, r] of [
+        [10, 12, 8],
+        [34, 10, 7],
+        [24, 30, 9],
+        [8, 38, 6],
+        [40, 36, 7]
+      ]) {
+        x.beginPath();
+        x.ellipse(cx, cy, r, r * 0.7, cx, 0, 7);
+        x.fill();
+      }
+    } else if (id === 'flames') {
+      x.beginPath();
+      x.moveTo(0, 48);
+      for (let i = 0; i <= 6; i++) x.lineTo(i * 8, i % 2 ? 14 : 26);
+      x.lineTo(48, 48);
+      x.fill();
+      x.fillStyle = '#ffd23f';
+      x.beginPath();
+      x.moveTo(0, 48);
+      for (let i = 0; i <= 6; i++) x.lineTo(i * 8, i % 2 ? 28 : 36);
+      x.lineTo(48, 48);
+      x.fill();
+    } else if (id === 'lightning') {
+      x.lineWidth = 5;
+      x.strokeStyle = trim;
+      x.beginPath();
+      x.moveTo(0, 22);
+      for (let i = 1; i <= 6; i++) x.lineTo(i * 8, i % 2 ? 32 : 16);
+      x.stroke();
+    } else if (id === 'tiger') {
+      for (let i = 0; i < 5; i++) {
+        x.beginPath();
+        x.moveTo(i * 10 + 2, 0);
+        x.lineTo(i * 10 + 8, 0);
+        x.lineTo(i * 10 + 3, 24);
+        x.lineTo(i * 10 + 9, 48);
+        x.lineTo(i * 10 + 4, 48);
+        x.lineTo(i * 10 - 1, 24);
+        x.fill();
+      }
+    } else if (id === 'stars') {
+      for (const [cx, cy, r] of [
+        [12, 12, 7],
+        [34, 18, 6],
+        [18, 36, 6],
+        [40, 40, 5]
+      ]) {
+        x.beginPath();
+        for (let k = 0; k < 10; k++) {
+          const a = -Math.PI / 2 + (k * Math.PI) / 5,
+            rr = k % 2 ? r * 0.45 : r;
+          x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+        }
+        x.fill();
+      }
+    } else if (id === 'sixseven') {
+      x.fillStyle = '#f6f4ea';
+      x.fillRect(4, 8, 40, 32);
+      x.fillStyle = '#111';
+      x.font = '900 26px system-ui';
+      x.textAlign = 'center';
+      x.fillText('67', 24, 33);
+    } else if (id === 'sheriff') {
+      x.fillStyle = '#f2c14a';
+      x.beginPath();
+      for (let k = 0; k < 12; k++) {
+        const a = -Math.PI / 2 + (k * Math.PI) / 6,
+          rr = k % 2 ? 9 : 18;
+        x.lineTo(24 + Math.cos(a) * rr, 24 + Math.sin(a) * rr);
+      }
+      x.fill();
+      x.fillStyle = '#9a6a1a';
+      x.beginPath();
+      x.arc(24, 24, 5, 0, 7);
+      x.fill();
+    } else if (id === 'shark') {
+      x.fillStyle = '#8c1018';
+      x.fillRect(0, 26, 48, 16);
+      x.fillStyle = '#f6f6f6';
+      x.beginPath();
+      for (let i = 0; i < 6; i++) {
+        x.moveTo(i * 8, 26);
+        x.lineTo(i * 8 + 4, 33);
+        x.lineTo(i * 8 + 8, 26);
+      }
+      x.fill();
+      x.fillStyle = '#111';
+      x.beginPath();
+      x.arc(36, 12, 4, 0, 7);
+      x.fill();
+    }
+    return c.toDataURL();
+  };
+  const livery = () => {
+    for (const b of $('trim').children)
+      b.setAttribute('aria-pressed', String(b.dataset.trim === progress.trim));
+    for (const b of $('pattern').children) {
+      b.style.setProperty('--preview', `url(${preview(b.dataset.pattern, progress.paint, progress.trim)})`);
+      b.setAttribute('aria-pressed', String(b.dataset.pattern === progress.pattern));
+      // Pumpkin liveries stay locked until enough pumpkins are splatted; the button says how many.
+      const l = LIVERIES.find(v => v.id === b.dataset.pattern),
+        open = liveryUnlocked(l, progress);
+      b.disabled = !open;
+      b.title = open
+        ? l.name
+        : l.earned === 'lakeTown'
+          ? `⭐ ${l.name}: free the town at the bottom of the lake, long ago`
+          : `🎃 ${l.name}: splat ${l.pumpkins} pumpkins (${progress.pumpkins ?? 0}/${l.pumpkins})`;
+      b.setAttribute('aria-label', b.title);
+    }
+  };
+  const save = () => {
+    world ? world.save() : saveProgress(storage, progress);
+    applyShell(progress.shell, progress.paint, progress.body, {
+      trim: progress.trim,
+      pattern: progress.pattern
+    });
+    onGarage?.({
+      body: progress.body,
+      shell: progress.shell,
+      paint: progress.paint,
+      pattern: progress.pattern
+    });
+    livery();
+    for (const b of $('paint').children)
+      b.setAttribute('aria-pressed', String(b.dataset.paint === progress.paint));
+  };
+  $('body').onchange = () => {
+    if (
+      !getState().roam ||
+      ($('body').value === 'golf' && !progress.discovered.includes('golf')) ||
+      ($('body').value === 'pumpkin' && (progress.pumpkins ?? 0) < PUMPKIN_CAR.pumpkins)
+    ) {
+      $('body').value = progress.body;
+      return;
+    }
+    progress.body = $('body').value;
+    save();
+  };
+  $('shell').onchange = () => {
+    progress.shell = $('shell').value;
+    save();
+  };
+  for (const b of $('paint').children)
+    b.onclick = () => {
+      progress.paint = b.dataset.paint;
+      save();
+    };
+  for (const b of $('trim').children)
+    b.onclick = () => {
+      progress.trim = b.dataset.trim;
+      save();
+    };
+  for (const b of $('pattern').children)
+    b.onclick = () => {
+      progress.pattern = b.dataset.pattern;
+      save();
+    };
+  livery();
+  for (const b of $('paint').children)
+    b.setAttribute('aria-pressed', String(b.dataset.paint === progress.paint));
+  function open(which) {
+    stopInspect();
+    onOpen?.(which);
+    if (!panel) {
+      wasPaused = getState().paused;
+      briefHidden = $('brief').hidden;
+      returnFocus = document.activeElement;
+    }
+    pause(true);
+    $('brief').hidden = true;
+    modal.hidden = which !== 'map';
+    garage.hidden = which !== 'garage';
+    $('keys-panel').hidden = which !== 'keys';
+    $('stats-panel').hidden = which !== 'stats';
+    $('dex-panel').hidden = which !== 'dex';
+    if (which === 'dex') drawDex();
+    if (which === 'stats')
+      $('stats-rows').innerHTML = (stats?.() ?? [])
+        .map(
+          ([icon, label, value, tip]) => `<dt title="${tip ?? label}">${icon} ${label}</dt><dd>${value}</dd>`
+        )
+        .join('');
+    panel = which;
+    if (which === 'garage') livery(); // rewards earned while playing (pumpkins, the sheriff star) unlock on open
+    document.body.classList.add('modal-open');
+    for (const [el, value] of isolated) el.inert = value;
+    const active =
+      which === 'map'
+        ? modal
+        : which === 'garage'
+          ? garage
+          : which === 'stats'
+            ? $('stats-panel')
+            : which === 'dex'
+              ? $('dex-panel')
+              : $('keys-panel');
+    isolated = [...document.body.children].filter(el => el !== active).map(el => [el, el.inert]);
+    for (const [el] of isolated) el.inert = true;
+    if (which === 'map') {
+      placeWorld = world?.era?.() === 'past' ? 'dark' : 'light';
+      drawFull();
+    }
+    $(
+      which === 'map'
+        ? 'map-close'
+        : which === 'garage'
+          ? 'garage-close'
+          : which === 'stats'
+            ? 'stats-close'
+            : which === 'dex'
+              ? 'dex-close'
+              : 'keys-close'
+    ).focus();
+  }
+  function close() {
+    if (travelling) return;
+    stopInspect();
+    for (const [el, value] of isolated) el.inert = value;
+    isolated = [];
+    modal.hidden =
+      garage.hidden =
+      $('keys-panel').hidden =
+      $('stats-panel').hidden =
+      $('dex-panel').hidden =
+        true;
+    panel = null;
+    document.body.classList.remove('modal-open');
+    pause(wasPaused);
+    if (!wasPaused && getState().started) $('view').focus();
+    $('brief').hidden = briefHidden;
+    if (wasPaused && returnFocus?.isConnected && !returnFocus.closest('[hidden]')) returnFocus.focus();
+  }
+  $('map-close').onclick =
+    $('garage-close').onclick =
+    $('keys-close').onclick =
+    $('stats-close').onclick =
+    $('dex-close').onclick =
+      close;
+  $('keys').onclick = () => open('keys');
+  $('menu-stats').onclick = () => open('stats');
+  $('menu-dex').onclick = () => open('dex');
+  function stopInspect() {
+    inspector?.dispose();
+    inspector = null;
+    inspectPage = null;
+    $('dex-inspect').hidden = true;
+    $('dex-back').hidden = true;
+    $('dex-count').hidden = false;
+    $('dex-rows').hidden = false;
+    $('dex-title').textContent = 'DINO BOOK';
+  }
+  function startInspect() {
+    inspector?.dispose();
+    const page = inspectPage;
+    if (!page) return;
+    // A forced-lost WebGL context belongs to its canvas. Every open/retry needs a new canvas too.
+    const oldCanvas = $('dex-canvas'),
+      canvas = oldCanvas.cloneNode(false);
+    oldCanvas.replaceWith(canvas);
+    $('dex-retry').hidden = true;
+    $('dex-wait').hidden = false;
+    canvas.setAttribute('aria-busy', 'true');
+    for (const b of $('dex-clips').children) {
+      b.disabled = true;
+      b.setAttribute('aria-pressed', 'false');
+    }
+    inspector = createDinoInspect({
+      canvas,
+      model: page.model,
+      onReady() {
+        $('dex-wait').hidden = true;
+        canvas.setAttribute('aria-busy', 'false');
+        for (const b of $('dex-clips').children) b.disabled = false;
+      },
+      onClip(clip) {
+        for (const b of $('dex-clips').children)
+          b.setAttribute(
+            'aria-pressed',
+            String(b.dataset.clip === clip || (b.dataset.clip === 'flap' && clip === 'glide'))
+          );
+      },
+      onError() {
+        $('dex-wait').hidden = true;
+        $('dex-retry').hidden = false;
+        canvas.setAttribute('aria-busy', 'false');
+        for (const b of $('dex-clips').children) b.disabled = true;
+        if (document.activeElement === canvas) $('dex-retry').focus();
+      }
+    });
+    canvas.focus();
+  }
+  function openInspect(page, data) {
+    if (!page.seen) return;
+    stopInspect();
+    inspectPage = page;
+    $('dex-rows').hidden = true;
+    $('dex-count').hidden = true;
+    $('dex-back').hidden = false;
+    $('dex-inspect').hidden = false;
+    $('dex-title').textContent = page.name;
+    const names = data.herdNames?.(page.kind) ?? [];
+    if (names.length) {
+      const herd = document.createElement('small');
+      herd.textContent = names.join(', ');
+      $('dex-title').append(herd);
+    }
+    $('dex-canvas').setAttribute(
+      'aria-label',
+      `${page.name}: drag or use arrow keys to turn; + and - to zoom`
+    );
+    $('dex-clips').replaceChildren();
+    for (const [label, clip] of [
+      ['Idle', 'idle'],
+      ['Walk', 'walk'],
+      ['Run', 'run'],
+      ['Jump', 'jump'],
+      ...(page.kind === 'quetzal' ? [['Fly', 'flap']] : [])
+    ]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.dataset.clip = clip;
+      if (clip === 'flap') b.title = 'Fly / glide';
+      b.onclick = () => inspector?.play(clip);
+      $('dex-clips').append(b);
+    }
+    startInspect();
+  }
+  $('dex-back').onclick = () => {
+    const kind = inspectPage?.kind;
+    stopInspect();
+    drawDex();
+    [...$('dex-rows').children].find(row => row.dataset.kind === kind)?.focus();
+  };
+  $('dex-retry').onclick = startInspect;
+  // The Dino Book (dex.mjs): one row per kind, [portrait] [name] [★ befriended]; a silhouette and ??? until seen.
+  function drawDex() {
+    if (inspectPage) return; // A late portrait must not replace the open viewer or steal its focus.
+    const d = dex?.();
+    if (!d) return;
+    $('dex-count').textContent =
+      `${d.pages.filter(p => p.seen).length}/${d.pages.length} seen · 💰 ${d.gold} · 🔋 ${d.batteries ?? 0} · ⚙️ ${d.parts ?? 0}`;
+    $('dex-count').title = 'Kinds seen out of every kind in the book · gold, batteries, and parts';
+    const focusedKind = document.activeElement?.closest('#dex-rows .dex-row')?.dataset.kind;
+    $('dex-rows').innerHTML = d.pages
+      .map(p => {
+        const pic = d.portrait(p.model, () => panel === 'dex' && drawDex());
+        const tag = p.seen ? 'button' : 'div';
+        return `<${tag}${p.seen ? ' type="button"' : ''} data-kind="${p.kind}" class="dex-row${p.seen ? '' : ' unseen'}" title="${p.seen ? p.name : 'Not seen yet: explore the dark world'}"><span class="dex-pic">${pic ? `<img src="${pic}" alt="">` : ''}</span><span class="dex-name">${p.seen ? p.name : '???'}</span><span class="dex-mark" title="${p.friends ? `${p.friends} in your herd` : p.seen ? 'Seen, not yet a friend' : 'Not seen yet'}">${p.friends ? '★'.repeat(Math.min(3, p.friends)) + (p.friends > 3 ? `×${p.friends}` : '') : p.seen ? '·' : ''}</span></${tag}>`;
+      })
+      .join('');
+    for (const row of $('dex-rows').querySelectorAll('button')) {
+      row.onclick = () =>
+        openInspect(
+          d.pages.find(p => p.kind === row.dataset.kind),
+          d
+        );
+      if (row.dataset.kind === focusedKind) row.focus();
+    }
+  }
+  $('garage').onclick = $('menu-garage').onclick = () => open('garage');
+  $('atlas').onclick = $('menu-map').onclick = () => {
+    if (world) open('map');
+    else
+      location.href = rcLink(
+        {
+          track: 'hub',
+          from: new URLSearchParams(search).get('from') ?? new URLSearchParams(search).get('track')
+        },
+        search
+      );
+  };
+  $('map').onclick = () => $('atlas').click();
+  $('map').onkeydown = e => {
+    if (e.code === 'Enter' || e.code === 'Space') {
+      e.preventDefault();
+      $('atlas').click();
+    }
+  };
+  $('interact').onclick = interact;
+  window.addEventListener('keydown', e => {
+    if (!panel || e.code !== 'Tab') return;
+    const root =
+        panel === 'map'
+          ? modal
+          : panel === 'garage'
+            ? garage
+            : panel === 'stats'
+              ? $('stats-panel')
+              : panel === 'dex'
+                ? $('dex-panel')
+                : $('keys-panel'),
+      items = [
+        ...root.querySelectorAll('button:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]')
+      ].filter(el => !el.closest('[hidden]'));
+    if (!items.length) return;
+    e.preventDefault();
+    const i = items.indexOf(document.activeElement);
+    items[(i + (e.shiftKey ? -1 : 1) + items.length) % items.length].focus();
+  });
+  const roads =
+    world?.overview.roads.map(r => ({
+      ...r,
+      bounds: [
+        Math.min(...r.points.map(p => p[0])),
+        Math.min(...r.points.map(p => p[1])),
+        Math.max(...r.points.map(p => p[0])),
+        Math.max(...r.points.map(p => p[1]))
+      ]
+    })) ?? [];
+  const rows = new Map();
+  if (world) {
+    $('world-event').innerHTML = EVENTS.filter(e => canEnterEvent(progress, e))
+      .map(e => `<option value="${e.id}">${e.name}</option>`)
+      .join('');
+    $('world-event').value = world.selected.id;
+    $('world-event').onchange = () => {
+      const e = eventById($('world-event').value);
+      world.navigate(e.location, getState().pos);
+      drawFull();
+    };
+    $('world-race').onclick = () => {
+      const e = eventById($('world-event').value),
+        p = locationById(e.location);
+      const url = canEnterEvent(progress, e) && world.eventURL({...p, track: null, event: e.id});
+      if (url) location.href = url;
+    };
+    $('destinations').replaceChildren();
+    // Two tabs (owner: the place list organised into light world / dark world); the dark world's places jump you into the past.
+    const tabs = document.createElement('div');
+    tabs.className = 'place-tabs';
+    tabs.setAttribute('role', 'tablist');
+    tabs.innerHTML =
+      '<button role="tab" data-world="light" title="Places in the light world (now)">☀️ Light world</button><button role="tab" data-world="dark" title="Places in the dark world (long ago)">🌑 Dark world</button>';
+    $('destinations').append(tabs);
+    for (const b of tabs.children)
+      b.onclick = () => {
+        placeWorld = b.dataset.world;
+        drawFull();
+      };
+    for (const p of DARK_PLACES) {
+      const row = document.createElement('div');
+      row.className = 'destination';
+      row.dataset.world = 'dark';
+      row.innerHTML = `<button class="destination-name" style="--zone:${p.color}" title="${p.name}"><span class="zone-dot"></span><span>${p.short}</span></button><button class="travel" aria-label="Jump to ${p.name}" title="Jump there, into the past">Jump</button>`;
+      const [choose, go] = row.querySelectorAll('button');
+      choose.onclick = () => go.click();
+      go.onclick = async () => {
+        if (travelling) return;
+        travelling = true;
+        travelError = null;
+        drawFull();
+        try {
+          const ok = await travel(p.id);
+          if (ok) {
+            travelling = false;
+            close();
+          } else travelError = p.id;
+        } catch {
+          travelError = p.id;
+        } finally {
+          travelling = false;
+          drawFull();
+        }
+      };
+      $('destinations').append(row);
+      rows.set(p.id, {row, choose, go, dark: p});
+    }
+    for (const p of LOCATIONS) {
+      const row = document.createElement('div');
+      row.className = 'destination';
+      row.dataset.world = 'light';
+      row.hidden = !canVisit(progress, p);
+      row.innerHTML = `<button class="destination-name" style="--zone:${p.color}" title="Set route to ${p.name}"><span class="zone-dot"></span><span>${p.short}</span><small></small></button><button class="travel" aria-label="Jump to ${p.name}" title="Jump to this location">Jump</button>`;
+      const [choose, go] = row.querySelectorAll('button');
+      choose.onclick = () => {
+        world.navigate(p.id, getState().pos);
+        drawFull();
+        if (getState().roam) {
+          wasPaused = false;
+          briefHidden = true;
+          close();
+        }
+      };
+      go.onclick = async () => {
+        if (travelling) return;
+        travelling = true;
+        travelError = null;
+        drawFull();
+        try {
+          const ok = await travel(p.id);
+          if (ok) {
+            travelling = false;
+            close();
+          } else travelError = p.id;
+        } catch {
+          travelError = p.id;
+        } finally {
+          travelling = false;
+          drawFull();
+        }
+      };
+      $('destinations').append(row);
+      rows.set(p.id, {row, choose, go});
+    }
+  }
+  function project(x, z, w, h) {
+    const b = getState().pos[0] > 9000 ? [9850, 0, 11400, 400] : world.overview.bounds,
+      pad = 24,
+      k = Math.min((w - pad * 2) / (b[2] - b[0]), (h - pad * 2) / (b[3] - b[1]));
+    return [w / 2 + (x - (b[0] + b[2]) / 2) * k, h / 2 + (z - (b[1] + b[3]) / 2) * k];
+  }
+  function drawRoads(ctx, point, area = null) {
+    ctx.strokeStyle = '#6b9280';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    for (const ring of Object.values(BASE_BOUNDARY.rings)) {
+      ctx.beginPath();
+      ring.forEach((p, i) => (i ? ctx.lineTo(...point(...p)) : ctx.moveTo(...point(...p))));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.lineWidth = 1;
+    for (const r of roads) {
+      if (
+        area &&
+        (r.bounds[0] > area[2] || r.bounds[2] < area[0] || r.bounds[1] > area[3] || r.bounds[3] < area[1])
+      )
+        continue;
+      if (r.kind === 'path' || r.kind === 'footway') continue;
+      ctx.strokeStyle = r.kind === 'runway' ? '#a7bfbe' : '#3d585e';
+      ctx.lineWidth = r.kind === 'runway' ? 3 : 1;
+      ctx.beginPath();
+      r.points.forEach((p, i) => {
+        const v = point(...p);
+        i ? ctx.lineTo(...v) : ctx.moveTo(...v);
+      });
+      ctx.stroke();
+    }
+  }
+  function route(ctx, point) {
+    const points = world.route();
+    if (!points.length) return;
+    ctx.strokeStyle = '#f0bf65';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    points.forEach((p, i) => (i ? ctx.lineTo(...point(...p)) : ctx.moveTo(...point(...p))));
+    ctx.stroke();
+  }
+  function player(ctx, point, pos, yaw) {
+    const p = point(pos[0], pos[2]);
+    ctx.save();
+    ctx.translate(...p);
+    ctx.rotate(yaw);
+    ctx.fillStyle = '#fff3cd';
+    ctx.strokeStyle = '#13262c';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.lineTo(4, 5);
+    ctx.lineTo(0, 3);
+    ctx.lineTo(-4, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+  function drawFull() {
+    if (!world) return;
+    placeWorld ??= world.era?.() === 'past' ? 'dark' : 'light';
+    for (const b of document.querySelectorAll('.place-tabs button'))
+      b.setAttribute('aria-selected', String(b.dataset.world === placeWorld));
+    for (const {row, go, dark} of rows.values())
+      if (dark) {
+        row.hidden = placeWorld !== 'dark';
+        go.disabled = travelling || !getState().roam;
+        go.title = travelError === dark.id ? 'That jump failed; click to retry' : 'Jump there, into the past';
+      }
+    const chosen = eventById($('world-event').value),
+      unlocked = canEnterEvent(progress, chosen);
+    $('world-race').disabled = travelling || !unlocked || !world.canRace();
+    $('map-close').disabled = travelling;
+    $('world-event').disabled = travelling;
+    $('world-race').title = !world.canRace()
+      ? '🎳 Finish bowling first'
+      : unlocked
+        ? 'Start selected event'
+        : chosen.id === 'dreamland'
+          ? 'Finish base cups and find every badge to unlock'
+          : 'This event is still locked';
+    const w = map.width,
+      h = map.height,
+      s = getState(),
+      point = (x, z) => project(x, z, w, h);
+    g.fillStyle = '#142b31';
+    g.fillRect(0, 0, w, h);
+    drawRoads(g, point);
+    if (s.pos[0] > 9000) {
+      g.strokeStyle = '#aa9fe3';
+      g.lineWidth = 3;
+      for (const e of EVENTS.filter(e => e.alien && canEnterEvent(progress, e))) {
+        g.beginPath();
+        e.points.forEach((p, i) => (i ? g.lineTo(...point(p[0], p[1])) : g.moveTo(...point(p[0], p[1]))));
+        g.stroke();
+      }
+    }
+    route(g, point);
+    for (const p of LOCATIONS) {
+      const accessible = canVisit(progress, p),
+        v = point(p.pos[0], p.pos[2]),
+        known = progress.discovered.includes(p.id);
+      if (accessible) {
+        g.fillStyle = known ? p.color : '#6e8a8a';
+        g.strokeStyle = world.target()?.id === p.id ? '#fff3cd' : p.color;
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(...v, world.target()?.id === p.id ? 7 : 4, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+      }
+      const {row, choose, go} = rows.get(p.id);
+      row.hidden = !canVisit(progress, p) || placeWorld !== 'light';
+      go.disabled = travelling || !s.roam || !canVisit(progress, p);
+      go.title =
+        travelError === p.id
+          ? 'Road download failed; click to retry'
+          : !s.roam
+            ? 'Finish or leave the event before fast travel'
+            : `Jump to ${p.name}`;
+      row.classList.toggle('selected', world.target()?.id === p.id);
+      const event = EVENTS.find(e => e.location === p.id),
+        best = progress.raceWins?.[event?.id];
+      choose.querySelector('small').textContent =
+        p.id === 'rec' && progress.bowlingBest != null
+          ? `${progress.bowlingBest}/300`
+          : p.id === 'golf' && progress.golfBest
+            ? `${progress.golfBest} hits`
+            : p.id === 'lab'
+              ? expedition(progress).complete
+                ? '★'
+                : canEnter(progress, p)
+                  ? 'Race'
+                  : '🔒'
+              : `${progress.specimens.includes(p.id) ? '◇✓' : '◇'}${best ? ' ' + medal(event, best) : known ? ' ✓' : ''}`;
+      choose.title =
+        p.id === 'lab' && !canEnter(progress, p)
+          ? `Set route to ${p.name}; challenge locked`
+          : `Set route to ${p.name}`;
+    }
+    player(g, point, s.pos, s.yaw);
+    g.fillStyle = '#a3bbb7';
+    g.font = '12px system-ui';
+    g.fillText('N ↑', 18, 24);
+    $('world-count').textContent = `◇ ${progress.specimens.length}/${SPECIMENS.length} badges`;
+    $('world-count').title = `${progress.discovered.length}/${LOCATIONS.length} places discovered`;
+  }
+  map.onclick = e => {
+    const r = map.getBoundingClientRect(),
+      scale = Math.min(r.width / map.width, r.height / map.height),
+      x = (e.clientX - r.left - (r.width - map.width * scale) / 2) / scale,
+      y = (e.clientY - r.top - (r.height - map.height * scale) / 2) / scale;
+    const p = LOCATIONS.find(
+      p =>
+        canVisit(progress, p) &&
+        (() => {
+          const v = project(p.pos[0], p.pos[2], map.width, map.height);
+          return Math.hypot(v[0] - x, v[1] - y) < 20;
+        })()
+    );
+    if (p) {
+      world.navigate(p.id, getState().pos);
+      drawFull();
+      if (getState().roam) {
+        wasPaused = false;
+        briefHidden = true;
+        close();
+      }
+    }
+  };
+  let nextDraw = 0,
+    interactText = '';
+  // The key is a keycap that touch layouts hide; tapping the prompt does the same thing.
+  function interactLabel(text, key) {
+    if (interactText === text + key) return;
+    interactText = text + key;
+    const button = $('interact');
+    if (key == null) {
+      renderHint(button, text);
+      return;
+    }
+    if (text.startsWith('🎳')) renderHint(button, key ? `${text} [${key}]` : text);
+    else {
+      const cap = document.createElement('kbd');
+      cap.textContent = key;
+      button.replaceChildren(text + ' ', cap);
+    }
+  }
+  return {
+    progress,
+    panel: () => panel,
+    open,
+    close,
+    apply: () =>
+      applyShell(progress.shell, progress.paint, progress.body, {
+        trim: progress.trim,
+        pattern: progress.pattern
+      }),
+    update(now) {
+      const s = getState();
+      $('body').disabled = !s.roam;
+      $('body').querySelector('[value="golf"]').disabled = !progress.discovered.includes('golf');
+      $('shell-row').hidden = progress.body !== 'jet';
+      $('vehicle-note').textContent = !s.roam
+        ? 'Vehicle change in free drive'
+        : progress.body === 'golf'
+          ? 'Golf cart · 8 m/s'
+          : progress.body === 'monster'
+            ? 'Monster · tall suspension'
+            : progress.body === 'rally'
+              ? 'Rally · extra grip'
+              : 'Your squadron.';
+      if (panel === 'map' && now > nextDraw) {
+        drawFull();
+        nextDraw = now + 250;
+      }
+      if (world) {
+        const dest = world.target();
+        $('destination').hidden = !dest || !s.roam;
+        if (dest) {
+          const d = distance(s.pos, dest.pos),
+            bearing = Math.atan2(dest.pos[0] - s.pos[0], -(dest.pos[2] - s.pos[2])) - s.yaw;
+          $('destination-arrow').style.transform = `rotate(${bearing}rad)`;
+          $('destination-name').textContent = dest.short;
+          $('destination-distance').textContent =
+            d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d)} m`;
+        }
+        const p = world.near(s.pos),
+          golf = world.activity();
+        $('interact').hidden =
+          (!p && !s.skate && (!golf || golf.done)) ||
+          !s.roam ||
+          s.paused ||
+          s.skating ||
+          s.flying ||
+          (p?.game === 'sky-dive' && !s.skyJump);
+        if (s.skyJump) interactLabel(SKY_HINT, null);
+        else if (s.robot && (p?.game === 'bowling' || golf?.kind === 'bowling')) {
+          const ready = approachLane(s.pos);
+          $('interact').hidden ||= !!golf?.launched;
+          const wrongLane = ready && golf?.kind === 'bowling' && !golf.done && ready.id !== golf.lane;
+          interactLabel(
+            wrongLane
+              ? canSwitchBowlingLane(golf)
+                ? '🎳 Hold [E] · [left] [right] aim · let go'
+                : `🎳 Your lane is number ${golf.lane}`
+              : ready
+                ? golf?.done
+                  ? '🎳 Play again · hold [E]'
+                  : '🎳 Hold [E] · [left] [right] aim · let go'
+                : '🎳 Bowling! Walk to a lane · hold [E], let go to roll',
+            ''
+          );
+        } else if (s.skate) interactLabel('🛹 Skate', 'E');
+        else if (golf && !golf.done)
+          interactLabel(
+            golf.kind === 'bowling'
+              ? `🎳 Car Bowling · ${golf.frame + 1}/10 · Next roll`
+              : `Golf ${golf.hole + 1}/3 · ${golf.strokes} hits · Reset`,
+            'E'
+          );
+        else if (p)
+          interactLabel(
+            ...(p.skate
+              ? ['🛹 Skate', 'E']
+              : p.game === 'bowling'
+                ? ['🎳 Car Bowling · Play', 'E']
+                : p.game === 'sky-dive'
+                  ? [SKY_HINT, null]
+                  : p.game === 'golf'
+                    ? ['Car Golf · Play', 'E']
+                    : p.game === 'flying-school'
+                      ? ['Flying School · Play', 'E']
+                      : !canEnter(progress, p)
+                        ? [`◇ ${progress.specimens.length}/${SPECIMENS.length} · Map`, 'Tab']
+                        : p.kind === 'discovery'
+                          ? [`${p.short} · Map`, 'Tab']
+                          : p.id === 'skatepark'
+                            ? ['Race', 'E']
+                            : [`${p.name} · Go in`, 'E'])
+          );
+      }
+    },
+    drawMini(ctx, pos, yaw) {
+      if (!world) return false;
+      const w = ctx.canvas.width,
+        h = ctx.canvas.height,
+        k = 0.48,
+        point = (x, z) => [w / 2 + (x - pos[0]) * k, h / 2 + (z - pos[2]) * k];
+      ctx.fillStyle = '#142b31';
+      ctx.fillRect(0, 0, w, h);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, w, h);
+      ctx.clip();
+      drawRoads(ctx, point, [pos[0] - w / k, pos[2] - h / k, pos[0] + w / k, pos[2] + h / k]);
+      route(ctx, point);
+      for (const p of LOCATIONS) {
+        if (!canVisit(progress, p)) continue;
+        const v = point(p.pos[0], p.pos[2]);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(...v, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      player(ctx, point, pos, yaw);
+      ctx.restore();
+      ctx.fillStyle = '#b4cac3';
+      ctx.font = '10px system-ui';
+      ctx.fillText('N ↑', 8, 14);
+      return true;
+    }
+  };
+}

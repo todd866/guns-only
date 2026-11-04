@@ -89,6 +89,12 @@ three minutes. `GUNS_DEPLOY_SKIP_FRAME_GATE=1` skips it with a warning; use that
 emergency rollback, never to get a regression out. First recorded run (Apple M5, Build 372 +
 practice-smoke fix): 59.95 / 59.98 fps, p95 17.3 ms, budget misses 0.06% / 0.03%.
 
+After publishing, deployment waits for 15 continuous seconds of host headroom: at least 30%
+interval CPU idle and one-minute load no higher than the logical CPU count. This wait happens
+before launching the browser, so it neither warms the game nor discards measured frames. A host
+that stays busy for five minutes stops the deployment before the test; retry after other work
+settles. The hardware frame thresholds remain unchanged.
+
 The performance browser blocks service workers so the measured low-level leg must perform
 real terrain range reads. Offline priming would otherwise prepare whole pages before the leg
 and remove the streaming workload. Published browser smoke separately checks automatic worker

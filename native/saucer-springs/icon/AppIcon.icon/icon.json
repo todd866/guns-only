@@ -1,0 +1,26 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "extended-srgb:0.10000,0.07000,0.26000,1.00000",
+      "extended-srgb:0.62000,0.26000,0.44000,1.00000"
+    ]
+  },
+  "groups" : [
+    {
+      "layers" : [
+        { "image-name" : "saucer.png", "name" : "saucer", "glass" : true }
+      ],
+      "shadow" : { "kind" : "neutral", "opacity" : 0.5 }
+    },
+    {
+      "layers" : [
+        { "image-name" : "buggy.png", "name" : "buggy", "glass" : false },
+        { "image-name" : "beam.png", "name" : "beam", "glass" : false }
+      ],
+      "shadow" : { "kind" : "neutral", "opacity" : 0.4 }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [ "macOS" ]
+  }
+}

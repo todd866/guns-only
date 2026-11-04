@@ -1,0 +1,1665 @@
+{
+  "title": "Saucer Springs AFB",
+  "subtitle": "World design · 23 October 2026",
+  "note": "Design target, not a completion claim. Existing anchors follow the current game; proposed sites are fictional placements pending footprint clearance. Routes within venues are schematic.",
+  "sectors": [
+    {
+      "id": "town",
+      "name": "Base town",
+      "color": "#b77c43"
+    },
+    {
+      "id": "airfield",
+      "name": "Flight line",
+      "color": "#537c93"
+    },
+    {
+      "id": "leisure",
+      "name": "Recreation",
+      "color": "#568b70"
+    },
+    {
+      "id": "desert",
+      "name": "Desert playground",
+      "color": "#bb765d"
+    },
+    {
+      "id": "secret",
+      "name": "Dreamland",
+      "color": "#8a78a4"
+    }
+  ],
+  "places": [
+    {
+      "id": "gate",
+      "number": 1,
+      "name": "Main Gate & Airpark",
+      "sector": "town",
+      "x": -607,
+      "z": -29,
+      "placement": "Existing anchor",
+      "status": "Playable scaffold",
+      "purpose": "First view of the whole base: RC-scale tyres beside full-size aircraft, mountains and the tower. A clear choice between town, flight line and home streets.",
+      "entrance": "Wide open visitor lane links both directions of the perimeter road. Event ring sits in a lay-by, never across the drive-through lane.",
+      "route": [
+        "Welcome monument",
+        "Defenders booth",
+        "Gate-guard aircraft",
+        "Visitor car park",
+        "Town road"
+      ],
+      "events": [
+        {
+          "name": "Gate Guard",
+          "type": "Circuit",
+          "length": "300–400 m",
+          "time": "40–55 s / lap",
+          "hook": "Slalom round jet pylons; tow-rope-sized lane markings make the toy scale obvious."
+        }
+      ],
+      "shortcut": "A low plinth ramp passes under the F-4 tail; a dogleg forces braking before the drop back onto the car park.",
+      "recovery": "Barrier arms stay raised on the public driving path. Falling off a plinth returns to the paved loop.",
+      "art": [
+        "Sandstone welcome monument; SAUCER SPRINGS AFB",
+        "F-105, F-4, F-100, F-111, F-117 static displays",
+        "Alien marshal booth, PT belt, flag and direction signs"
+      ],
+      "collectible": "First specimen sits visibly beside the visitor lane; five airpark coins introduce optional exploration.",
+      "acceptance": "From fresh start, a child can drive toward any public district without entering a race or selecting a level. Both gate lanes pass the real car."
+    },
+    {
+      "id": "housing",
+      "number": 2,
+      "name": "Family Housing · Liberty Loop",
+      "sector": "town",
+      "x": -1285,
+      "z": -1132,
+      "placement": "Existing anchor",
+      "status": "Integrated district; needs art pass",
+      "purpose": "A familiar neighbourhood becomes a giant toy obstacle course. Safe roads are the easy line; gardens reward throttle control.",
+      "entrance": "Two street openings join the north base road. The current south entrance remains flush with the district floor.",
+      "route": [
+        "PT-belt start",
+        "Cul-de-sac",
+        "Sprinkler lawns",
+        "Open garage ramp",
+        "Backyard barbecue",
+        "Playground",
+        "Street exit"
+      ],
+      "events": [
+        {
+          "name": "Liberty Loop",
+          "type": "Circuit",
+          "length": "406 m",
+          "time": "45–60 s / lap",
+          "hook": "Boost pad on the straight; garden obstacles never block the road."
+        },
+        {
+          "name": "Paper Route",
+          "type": "Checkpoint run",
+          "length": "1.2 km target",
+          "time": "2–3 min",
+          "hook": "Mailbox flags flip when passed; finish back at the neighbourhood entrance."
+        }
+      ],
+      "shortcut": "Garden Wall Run: box ramp → 0.8 m wall top → braking dogleg → 0.8 m gap. About 8% quicker when clean; misses land in a yard with a broad road opening.",
+      "recovery": "Sprinklers nudge, never pin. Trampoline has sloped access and an open landing apron. Every fenced yard has a car-sized exit.",
+      "art": [
+        "Tan/peach/sage stucco and terracotta roofs",
+        "Xeriscape, bikes, basketball hoop, trampoline, barbecue",
+        "PCS pods/boxes, mailboxes, Yard of the Month, 15 MPH and quiet-hours signs"
+      ],
+      "collectible": "Specimen under a barbecue side table; five coins at the garage, trampoline, wall, moving pod and playground.",
+      "acceptance": "Complete road lap and every yard exit; a full-throttle shortcut miss rejoins the slow route. No doorstep, kerb or district seam traps the buggy."
+    },
+    {
+      "id": "hq",
+      "number": 3,
+      "name": "HQ Offices · Paperwork Circuit",
+      "sector": "town",
+      "x": -700,
+      "z": -250,
+      "placement": "Proposed site",
+      "status": "Missing district — restored to scope",
+      "purpose": "A small office building becomes a maze at wheel height: desk legs, carpet islands, a huge copier and rolling chairs.",
+      "entrance": "Front accessible ramp from the civic road; rear mailroom loading ramp exits onto the same road network. Both doors stay open.",
+      "route": [
+        "Reception mat",
+        "Desk-leg slalom",
+        "Rolling-chair bay",
+        "Copier room",
+        "Mailroom",
+        "Conference table",
+        "Front lobby"
+      ],
+      "events": [
+        {
+          "name": "Paperwork Circuit",
+          "type": "Circuit",
+          "length": "280–340 m",
+          "time": "45–60 s / lap",
+          "hook": "Carpet slows; polished corridor lets you slide. Chairs move across a visible, timed crossing."
+        },
+        {
+          "name": "Mandatory Fun Run",
+          "type": "Sprint",
+          "length": "500–650 m",
+          "time": "75–100 s",
+          "hook": "HQ rear door → civic green → BX forecourt; a pizza-table finish."
+        }
+      ],
+      "shortcut": "Mail-cart ramp climbs a low sorting shelf, brakes around a parcel, hops to the adjacent shelf and drops by the conference room. Main route stays at least 3 m wide.",
+      "recovery": "Chairs yield if the car is in their path. Paper stacks are light props; power cables are flattened into collision. Every under-desk pocket has two exits.",
+      "art": [
+        "Low-pile blue carpet, cream walls, venetian-blind light",
+        "Desks, caster chairs, copier, mail carts, intrays, paper boxes",
+        "Fictional squadron noticeboard; one understated meeting joke"
+      ],
+      "collectible": "Specimen visible in a transparent outgoing-mail tray; five coins use the copier base, desk tunnel, chair bay, shelf and rear courtyard.",
+      "acceptance": "Drive in from town, complete a lap, drive out the loading ramp in the same session. Camera never stays behind a desk panel or chair back."
+    },
+    {
+      "id": "hospital",
+      "number": 4,
+      "name": "Hospital & Civic Green",
+      "sector": "town",
+      "x": -412,
+      "z": -507,
+      "placement": "Reference anchor; footprint to fit",
+      "status": "Background landmark; through-route to detail",
+      "purpose": "A recognisable town landmark and a calm route between housing and Main Gate. It adds life without becoming another mandatory race.",
+      "entrance": "Public forecourt joins the north road; pedestrian ramps cross the green. Ambulance bay stays outside the racing line.",
+      "route": [
+        "Civic green",
+        "Canopy",
+        "Forecourt",
+        "Shuttle stop",
+        "North road"
+      ],
+      "events": [
+        {
+          "name": "Civic connector",
+          "type": "Free drive",
+          "length": "200–350 m",
+          "time": "30–60 s",
+          "hook": "A shaded alternative to the main road, with chapel and water-tower sightlines."
+        }
+      ],
+      "shortcut": "Optional planter-edge coin route has sloped access and rejoins the forecourt; no rooftop route.",
+      "recovery": "Parked ambulances remain static; benches and planters never form sealed pockets.",
+      "art": [
+        "Hospital canopy and restrained medical symbol",
+        "Chapel, water tower, shade structures, shuttle bus",
+        "Town landscaping connects to the surrounding housing palette"
+      ],
+      "collectible": "Coins on the public route; no extra mandatory specimen added to the existing save requirements.",
+      "acceptance": "Forecourt connects at both ends and cannot accidentally start an event. Quiet visual respite between busy venues."
+    },
+    {
+      "id": "bx",
+      "number": 5,
+      "name": "Base Exchange",
+      "sector": "town",
+      "x": -546,
+      "z": 791,
+      "placement": "Existing anchor",
+      "status": "Integrated district; needs richer finish",
+      "purpose": "The big retail circuit: amber concourse, contrasting departments, giant products, food-court table tunnels and an obvious return to daylight.",
+      "entrance": "Automatic front doors from the car park; stockroom service door is a second physical exit. The racing ribbon remains visible throughout Free Drive.",
+      "route": [
+        "Entrance mural",
+        "Amber concourse",
+        "Electronics islands",
+        "Toy corner",
+        "Clothing runway",
+        "Food-court tables",
+        "Checkout 3",
+        "Front doors"
+      ],
+      "events": [
+        {
+          "name": "The BX",
+          "type": "Circuit",
+          "length": "317 m",
+          "time": "40–55 s / lap",
+          "hook": "Department colours and overhead shapes identify the next turn."
+        },
+        {
+          "name": "Parking Lot Scramble",
+          "type": "Furball",
+          "length": "100 × 80 m arena",
+          "time": "3 min",
+          "hook": "Parked cars and trolley corrals create cover with two exits each."
+        }
+      ],
+      "shortcut": "Stockroom cuts the clothing loop via a box ramp and pallet deck. Flight Suit Runway is a narrower elevated alternative with a braking dogleg. Neither bypasses a checkpoint.",
+      "recovery": "Trolleys and cans scatter away. Tables give at least 0.55 m clearance; shelf ends are chamfered. Reverse out through either door.",
+      "art": [
+        "Reference-led Nellis BX ceiling grid and troffers",
+        "Black fixtures with orange bands; amber concrete and wood-look departments",
+        "Original signage, toy jets, unbranded café and food counters; no store logos"
+      ],
+      "collectible": "Specimen in the stockroom; five coins off the main line, each with an obvious way back.",
+      "acceptance": "The route is readable with sound muted. No checkerboard overlap or floor seam. The front door remains visible from the lobby at toy camera height."
+    },
+    {
+      "id": "commissary",
+      "number": 6,
+      "name": "Commissary & Shoppette",
+      "sector": "town",
+      "x": -690,
+      "z": 960,
+      "placement": "Proposed campus extension",
+      "status": "Not a complete interior yet",
+      "purpose": "Grocery shelves provide a different retail rhythm from the BX: long freezer straights, tight endcap turns and a playful can-stack shortcut.",
+      "entrance": "Shares the BX campus service road, with front supermarket doors and a rear delivery ramp. No scene transition.",
+      "route": [
+        "Trolley porch",
+        "Produce islands",
+        "Freezer straight",
+        "Can-stack endcap",
+        "Checkout belt ramp",
+        "Loading bay",
+        "Front aisle"
+      ],
+      "events": [
+        {
+          "name": "Commissary Dash",
+          "type": "Circuit",
+          "length": "300–360 m",
+          "time": "45–60 s / lap",
+          "hook": "Knock over a stack of cans to expose a short route; freezer doors reflect the car."
+        }
+      ],
+      "shortcut": "Flattened cartons climb a low checkout counter, then a narrow belt crosses to the bagging shelf. A braking turn avoids the till; a miss drops onto the main aisle.",
+      "recovery": "Cans use capped lightweight effects; collision cannot bury the car. Rear dock has a permanent sloping return path.",
+      "art": [
+        "Glossy cream tile, freezer wall, produce crates",
+        "Cans, cartons, shopping baskets and checkout counters",
+        "Shoppette and Class 6 remain exterior base-life dressing; no drinking gameplay"
+      ],
+      "collectible": "Optional grocery coins and a challenge coin reward; no new mandatory specimen gate.",
+      "acceptance": "Distinct silhouette and surfaces from the BX; both exits work; toppled props reset only when out of view or on event restart."
+    },
+    {
+      "id": "school",
+      "number": 7,
+      "name": "Saucer Springs Elementary",
+      "sector": "town",
+      "x": -1228,
+      "z": 718,
+      "placement": "Existing anchor",
+      "status": "Integrated district; needs unified naming/art",
+      "purpose": "A child recognises the gym, lunch tables and playground instantly. Each changes the driving surface and the shape of the line.",
+      "entrance": "Front walk from the school road; playground gate returns via the bus loop. Entrances are continuous with the outside terrain.",
+      "route": [
+        "Flagpole walk",
+        "Locker hall",
+        "Science pocket",
+        "Library",
+        "Gym drift",
+        "Cafeteria tunnel",
+        "Playground slide",
+        "Front walk"
+      ],
+      "events": [
+        {
+          "name": "School Run",
+          "type": "Circuit",
+          "length": "322 m",
+          "time": "45–60 s / lap",
+          "hook": "A broad gym slide leads into precise cafeteria steering; the playground slide is the big jump."
+        }
+      ],
+      "shortcut": "Library diagonal rewards a tight turn; Planter Run climbs beside the flagpole, brakes and jumps back onto the front walk.",
+      "recovery": "Slide has a wide landing lane. Gym walls have rounded lower edges. No racing below a surface the chase camera cannot see through.",
+      "art": [
+        "Warm brick/stucco, bright lockers, maple gym floor",
+        "Cafeteria tables, parachute, monkey bars, sandbox, library shelving",
+        "Toy-scale science display with a cheerful alien specimen"
+      ],
+      "collectible": "Science-pocket specimen; five coins distributed across classroom, gym, lunch and playground.",
+      "acceptance": "Ribbon stays readable through all rooms. Drive through the front door and leave via the playground without a reload or teleport."
+    },
+    {
+      "id": "gym",
+      "number": 8,
+      "name": "Gym & Deep End Pool",
+      "sector": "leisure",
+      "x": -1201,
+      "z": 1224,
+      "placement": "Reference campus; placement needs clearance",
+      "status": "Venue expansion to build",
+      "purpose": "A broad polished gym opens onto an empty pool used as a gentle stunt bowl. This is the practice space for learning slides and ramps.",
+      "entrance": "Two recreation-campus paths enter the gym and pool apron. A wide sloping pool ramp is always available.",
+      "route": [
+        "Basketball court",
+        "Equipment mat",
+        "Pool deck",
+        "Shallow bowl",
+        "Deep end",
+        "Exit ramp"
+      ],
+      "events": [
+        {
+          "name": "Deep End",
+          "type": "Stunt session",
+          "length": "60 × 35 m",
+          "time": "Untimed",
+          "hook": "Link bowl turns and small jumps; bank points by returning to the deck."
+        }
+      ],
+      "shortcut": "A shallow-to-deep transfer crosses a low divider; a safer roll-through line remains beside it.",
+      "recovery": "No drain suction, drowning or vertical-walled trap. The exit ramp is visible from the deepest point.",
+      "art": [
+        "Court markings and stacked mats",
+        "Empty painted pool, ladder, diving-board silhouette",
+        "Warm evening light and broad visible exits"
+      ],
+      "collectible": "Lip coins teach controlled approaches; no required high jump to progress.",
+      "acceptance": "Every landing can roll to the exit without recovery. Auto-right works on both the bowl wall and the flat bottom."
+    },
+    {
+      "id": "ramp",
+      "number": 9,
+      "name": "Red Flag Flight Line",
+      "sector": "airfield",
+      "x": 618,
+      "z": 71,
+      "placement": "Existing anchor",
+      "status": "Playable scaffold; hero rows to refine",
+      "purpose": "The main spectacle: a tiny RC car threads under real-sized allied and aggressor jets while ground crews and tugs make the ramp feel alive.",
+      "entrance": "Three wide taxi/service-road approaches. Public RC lanes remain open around aircraft nose wheels and beyond the event area.",
+      "route": [
+        "Crew-chief start",
+        "Fighter row",
+        "Underwing slalom",
+        "AGE lane",
+        "Bomber shadow",
+        "Hot pit",
+        "Tower-side return"
+      ],
+      "events": [
+        {
+          "name": "Ramp Rat",
+          "type": "Circuit",
+          "length": "550–650 m",
+          "time": "60–85 s / lap",
+          "hook": "Use aircraft gear and wings as readable gates."
+        },
+        {
+          "name": "Hot Pit",
+          "type": "Pickup race",
+          "length": "450–550 m",
+          "time": "60–80 s",
+          "hook": "Collect three coloured service tokens in any order, then return."
+        },
+        {
+          "name": "Ramp Furball",
+          "type": "Arena",
+          "length": "180 × 140 m",
+          "time": "3 min",
+          "hook": "Aircraft shadows and tugs break sightlines; weather balloons reveal opponents."
+        },
+        {
+          "name": "FOD Walk",
+          "type": "Collecting",
+          "length": "200 × 150 m",
+          "time": "Untimed",
+          "hook": "Sweep up bright harmless debris; finish with a clean-ramp stamp."
+        }
+      ],
+      "shortcut": "A low equipment ramp crosses the back of a parked tug, then drops beneath a wing. Wing surfaces are only driveable where explicitly authored.",
+      "recovery": "Crossing tugs signal and yield; no jet blast or lethal machinery. Keep wheel gaps wider than the buggy plus steering margin.",
+      "art": [
+        "Recognisable F-16/F-15/F-22/F-35/A-10 silhouettes first",
+        "Allied jets, B-52, tankers and transports in coherent parking rows",
+        "MJ-1, R-11, tow tugs, crew chiefs, FOD bins, tower and restrained apron paint"
+      ],
+      "collectible": "Specimen near a crew-chief ladder; aircraft identification coins are optional discovery rewards.",
+      "acceptance": "Underwing route, traffic crossings and camera clearance pass at toy scale. Distant rows use consistent low-detail silhouettes rather than generic triangles."
+    },
+    {
+      "id": "runway",
+      "number": 10,
+      "name": "Runways 03 / 21",
+      "sector": "airfield",
+      "x": 24,
+      "z": 1842,
+      "placement": "Existing anchor",
+      "status": "Playable drag scaffold",
+      "purpose": "A huge straight where a toy feels tiny. Two long diagonals establish the geography from almost anywhere on the base.",
+      "entrance": "Taxiway links at both ends and mid-field. Runway access never depends on starting a drag race.",
+      "route": [
+        "Threshold bars",
+        "400 m drag grid",
+        "Centreline boost pads",
+        "Finish runoff",
+        "Taxiway return"
+      ],
+      "events": [
+        {
+          "name": "Runway Drag",
+          "type": "Sprint",
+          "length": "400 m",
+          "time": "33–45 s",
+          "hook": "Afterburner only; launch timing and boost placement decide a close finish."
+        }
+      ],
+      "shortcut": "No hidden shortcut in the timed drag. Optional parallel taxiway provides a free-drive return trip.",
+      "recovery": "Generous braking runoff; parked and ambient aircraft cannot collide with the player during the event.",
+      "art": [
+        "Two recognisable parallel runways on source axes",
+        "Threshold paint, edge lights, signs and windsock",
+        "Night-wave departures with occasional friendly UFO lights"
+      ],
+      "collectible": "Specimen at the return taxiway, never in an active event finish lane.",
+      "acceptance": "A slow launch can lose. Night lighting preserves road readability without excessive glare or a dark car silhouette."
+    },
+    {
+      "id": "hangars",
+      "number": 11,
+      "name": "Hangar Row & Garage",
+      "sector": "airfield",
+      "x": 380,
+      "z": 400,
+      "placement": "Existing anchor",
+      "status": "Playable scaffold; approved art target applies",
+      "purpose": "The approved orange-buggy hangar becomes a real place in the base: maintenance bays, tool chests, parked jets and the garage display.",
+      "entrance": "Large open front and rear hangar doors join the service road. Garage interaction is in a side bay outside the racing line.",
+      "route": [
+        "Tool-chest grid",
+        "Open hangar",
+        "Gear-leg tunnel",
+        "Hose ramp",
+        "Second hangar",
+        "Outdoor figure-eight crossover",
+        "Service road"
+      ],
+      "events": [
+        {
+          "name": "Hangar Hop",
+          "type": "Sprint",
+          "length": "500–600 m",
+          "time": "60–85 s",
+          "hook": "Race through two open hangars and cross beneath a service ramp."
+        },
+        {
+          "name": "Hangar Eight",
+          "type": "Circuit",
+          "length": "450–550 m",
+          "time": "55–75 s / lap",
+          "hook": "An original figure-eight archetype, with physically separated over/under paths."
+        }
+      ],
+      "shortcut": "A maintenance platform rises beside a jet, turns sharply past a toolbox, hops to a low wing-work stand and rejoins outside.",
+      "recovery": "Hoses are ramps, not snagging cylinders. Fall zones below the elevated line return to the slower road.",
+      "art": [
+        "Approved sculpted amber/ivory buggy, graphite chassis, exposed coil-overs",
+        "Used concrete, tyre marks, yellow lines, tools and warm practical lights",
+        "Original aircraft with clear landing gear and high/low detail versions"
+      ],
+      "collectible": "Specimen behind a transparent tool locker; garage displays owned paints, bodies and nose-art milestones.",
+      "acceptance": "Match approved reference in material richness and contact shadows. Doors, floor, collision and ambient lighting remain continuous with the world."
+    },
+    {
+      "id": "demo",
+      "number": 12,
+      "name": "Demonstration Team Hangar",
+      "sector": "airfield",
+      "x": 820,
+      "z": 400,
+      "placement": "Proposed site",
+      "status": "Landmark and activity to develop",
+      "purpose": "A neat contrast to the busy Red Flag ramp: immaculate red-white-blue demonstration jets and a playful ground formation exercise.",
+      "entrance": "Service-road loop links Hangar Row to the central ramp; a broad viewing apron doubles as the activity area.",
+      "route": [
+        "Display line",
+        "Leader start",
+        "Shallow slalom",
+        "Formation turn",
+        "Hangar arch",
+        "Viewing apron"
+      ],
+      "events": [
+        {
+          "name": "Formation Follow",
+          "type": "Follow-the-leader",
+          "length": "400–500 m",
+          "time": "90 s",
+          "hook": "Stay inside a generous moving ground ribbon behind a demo RC car; misses reduce stars, never restart."
+        }
+      ],
+      "shortcut": "Optional precision lane tightens the formation for a higher medal; it is not the main route.",
+      "recovery": "The leader slows when the player falls far behind. Jets remain static; no real aerial formation task is required.",
+      "art": [
+        "Generic red-white-blue demo livery without official logos",
+        "Open hangar, floor polish, neat crew equipment",
+        "Visible flag/tower landmarks orient the return drive"
+      ],
+      "collectible": "A team-style cosmetic coin rewards one completed follow, regardless of score.",
+      "acceptance": "The moving ribbon works on mute and during tight turns; finish returns to free drive exactly where the activity ends."
+    },
+    {
+      "id": "zoo",
+      "number": 13,
+      "name": "Petting Zoo",
+      "sector": "leisure",
+      "x": -1361,
+      "z": 2074,
+      "placement": "Existing source-backed anchor",
+      "status": "Hardware scaffold; activity to build",
+      "purpose": "Captured hardware becomes a friendly museum playground. Swivelling radars invite hide-and-seek between enormous wheels and launch rails.",
+      "entrance": "An open museum loop connects to the southwest base road in two places. Keep the source-backed site; discard the old unverified east-side placement.",
+      "route": [
+        "MiG display row",
+        "Radar clearing",
+        "Launcher shadows",
+        "Armour lane",
+        "Museum exit"
+      ],
+      "events": [
+        {
+          "name": "SAM Dodge",
+          "type": "Hide-and-seek",
+          "length": "120 × 100 m",
+          "time": "90 s",
+          "hook": "Collect three flags while avoiding visible radar sweep cones. Detection gives a playful spotlight and a short score pause, not a damaging missile."
+        }
+      ],
+      "shortcut": "Display plinth ramp crosses behind the SA-6, then drops into a screened lane. A wide path remains around every display.",
+      "recovery": "Radar cones have visual countdowns and broad safe zones. Gun barrels and missiles are museum props, never live weapons.",
+      "art": [
+        "MiG-21, MiG-23, MiG-29, Su-27",
+        "SA-2, SA-6, ZSU-23-4, Flat Face and Fan Song",
+        "Weathered museum labels and swivelling radar dishes"
+      ],
+      "collectible": "Specimen behind the radar information board; optional hardware discovery stamps.",
+      "acceptance": "Radar line-of-sight agrees with visible cover. Every vehicle silhouette is distinct and recognisable from a low viewpoint."
+    },
+    {
+      "id": "golf",
+      "number": 14,
+      "name": "Sunrise Vista Golf Course",
+      "sector": "leisure",
+      "x": -330,
+      "z": 2776,
+      "placement": "Existing anchor",
+      "status": "Car Golf and race scaffold",
+      "purpose": "Open green fairways interrupt the desert palette. The car becomes the putter; cart paths become a rally route.",
+      "entrance": "Clubhouse road and two cart-path connections join the south base loop.",
+      "route": [
+        "Clubhouse",
+        "First green",
+        "Sand trap",
+        "Pond bridge",
+        "Long fairway",
+        "Flag green",
+        "Cart return"
+      ],
+      "events": [
+        {
+          "name": "Car Golf",
+          "type": "Three-hole round",
+          "length": "3 × 40–90 m holes",
+          "time": "3–5 min",
+          "hook": "Nudge a large toy ball into each hole; count strokes, always allow retry."
+        },
+        {
+          "name": "Fairway Rally",
+          "type": "Circuit",
+          "length": "650–750 m",
+          "time": "75–100 s / lap",
+          "hook": "Fast paths versus slower grass and sand; a bridge shortcut crosses the pond."
+        }
+      ],
+      "shortcut": "A narrow cart bridge saves the pond detour. Falling lands on a shallow bank with a driveable ramp, not in deep water.",
+      "recovery": "Reset ball returns it to the last lie with one stroke; car recovery stays forgiving. Water has sloped edges and no drowning.",
+      "art": [
+        "Greens, flags, raked sand, pale cart paths",
+        "Clubhouse, golf carts, sparse shade trees",
+        "One golf-before-runway visual joke in a dated foundation plaque"
+      ],
+      "collectible": "Discovering the course unlocks the golf-cart body. Specimen beside the clubhouse.",
+      "acceptance": "All three holes are physically reachable; ball and hole agree visually. No ball can leave the recoverable course boundary."
+    },
+    {
+      "id": "wic",
+      "number": 15,
+      "name": "WIC PlayPlace Skatepark",
+      "sector": "leisure",
+      "x": -1130,
+      "z": 1230,
+      "placement": "Existing anchor",
+      "status": "Stunt/race scaffold; modules to refine",
+      "purpose": "The best place to play without an objective: flowing bowls, quarter-pipes and transfers at RC scale.",
+      "entrance": "Open campus paths from the gym, rink and baseball grounds. Two low roll-in ramps enter the park.",
+      "route": [
+        "Beginner roll-in",
+        "Shallow bowl",
+        "Funbox",
+        "Quarter-pipe",
+        "Half-pipe",
+        "Rail bypass",
+        "Campus exit"
+      ],
+      "events": [
+        {
+          "name": "PlayPlace",
+          "type": "Circuit",
+          "length": "250–350 m",
+          "time": "35–50 s / lap",
+          "hook": "Choose a safe rolling line or chained transfers."
+        },
+        {
+          "name": "WIC Furball",
+          "type": "Arena",
+          "length": "90 × 70 m",
+          "time": "3 min",
+          "hook": "Bowls provide cover; balloons remain visible above the lips."
+        },
+        {
+          "name": "Free Session",
+          "type": "Stunts",
+          "length": "Whole park",
+          "time": "Untimed",
+          "hook": "Coins lead through increasingly precise transfers, without a combo-loss penalty."
+        }
+      ],
+      "shortcut": "Quarter-pipe transfer over the funbox; brake for a narrow ledge before the last bowl. No mandatory rail grinding system.",
+      "recovery": "All bowls have visible roll-outs. Misses land on lower concrete paths with no sealed pits.",
+      "art": [
+        "Painted concrete, scuffed coping, restrained original graphics",
+        "Bowl, half-pipe, quarter-pipe, rails, funbox and stairs",
+        "Desert shade sails and park benches"
+      ],
+      "collectible": "Specimen in the beginner bowl; five difficult coins on lips and ledges, all optional.",
+      "acceptance": "Test each module from both directions and upside-down. Camera follows the landing surface rather than the launch angle."
+    },
+    {
+      "id": "rink",
+      "number": 16,
+      "name": "Roller Rink",
+      "sector": "leisure",
+      "x": -940,
+      "z": 1260,
+      "placement": "Existing recreation-campus anchor",
+      "status": "Floor/event scaffold; full venue to build",
+      "purpose": "Warm varnished wood under a mirror ball: long readable slides and a colourful night venue.",
+      "entrance": "Double doors from the recreation plaza, rear service door to the same campus path. Open throughout the day; lights change with the cycle.",
+      "route": [
+        "Rental counter",
+        "Entry carpet",
+        "Wood oval",
+        "Mirror-ball straight",
+        "Snack island",
+        "Wide return",
+        "Plaza doors"
+      ],
+      "events": [
+        {
+          "name": "Rink Drift",
+          "type": "Circuit",
+          "length": "150–220 m",
+          "time": "25–40 s / lap",
+          "hook": "Hold a controlled slide around the oval; carpet zones let beginners regain grip."
+        }
+      ],
+      "shortcut": "A raised rental-shoe bench gives a short straight, reached by a low ramp with a tight exit. It is slower if approached flat-out.",
+      "recovery": "Soft rink rail, broad inside apron and two exits. No strobing lights or required rhythm timing.",
+      "art": [
+        "Polished wood with restrained reflections",
+        "Mirror ball, coloured pools of light, rental skates and snack counter",
+        "Strong entrance colour visible from every part of the oval"
+      ],
+      "collectible": "Use the existing rec specimen for the campus; rink coins are separate optional discoveries.",
+      "acceptance": "Readable at day and night, sound off. A beginner can slow and leave without completing a lap."
+    },
+    {
+      "id": "bowling",
+      "number": 17,
+      "name": "Strike Recreation · Bowling",
+      "sector": "leisure",
+      "x": -1020,
+      "z": 1260,
+      "placement": "Existing anchor",
+      "status": "Pin mini-game scaffold; full interior to build",
+      "purpose": "The car is the bowling ball. Full-size pins and ball-return tunnels make the scale comic and immediately understandable.",
+      "entrance": "Shared recreation plaza with the rink; open side corridor returns to the plaza without crossing active lanes.",
+      "route": [
+        "Shoe desk",
+        "Approach mat",
+        "Lane",
+        "Pin deck",
+        "Side return corridor",
+        "Plaza"
+      ],
+      "events": [
+        {
+          "name": "Strike!",
+          "type": "Five-frame game",
+          "length": "20–25 m lanes",
+          "time": "3–4 min",
+          "hook": "Two runs per frame; show pins remaining as icons. Highest total wins, solo always finishes."
+        },
+        {
+          "name": "Lane Drag",
+          "type": "Sprint",
+          "length": "60–90 m linked lanes",
+          "time": "15–25 s",
+          "hook": "Cross-over ramps join three lanes, with a broad braking apron."
+        }
+      ],
+      "shortcut": "Side-lane ramp crosses the ball-return cover, braking around its end before rejoining the approach.",
+      "recovery": "Gutters are shallow and ramp out. Pins cannot pile around the car. Reset pins only after the car leaves the pin deck.",
+      "art": [
+        "Lane maple, dark gutters, large white pins with red bands",
+        "Ball return, seating, shoe counter and original wall mural",
+        "Shared rec-centre exterior with a clearly different entrance from the rink"
+      ],
+      "collectible": "Existing rec specimen at the shared forecourt; bowling coins sit in the safe return corridor.",
+      "acceptance": "All ten pins score exactly once; reset never moves the player. Finish leaves the car on the return path."
+    },
+    {
+      "id": "diamond",
+      "number": 18,
+      "name": "Baseball Diamond",
+      "sector": "leisure",
+      "x": -1327,
+      "z": 1490,
+      "placement": "Existing anchor",
+      "status": "Sprint scaffold; set dressing to finish",
+      "purpose": "A compact sprint with four obvious turns. The dugouts and bleachers offer an optional toy-sized exploration route.",
+      "entrance": "Two open field gates connect to the recreation loop. Infield remains driveable outside events.",
+      "route": [
+        "Home plate",
+        "First base",
+        "Second base",
+        "Third base",
+        "Home slide",
+        "Dugout exit"
+      ],
+      "events": [
+        {
+          "name": "Round the Bases",
+          "type": "Sprint",
+          "length": "110 m target",
+          "time": "17–25 s",
+          "hook": "Four turns and a long slide into home; gates use oversized base shapes."
+        }
+      ],
+      "shortcut": "A bleacher access ramp crosses a low seat row; tight dogleg rejoins behind third base. A longer dirt path is always available.",
+      "recovery": "No wire gaps or dugout steps that trap the car. Outfield fence guides back to an open gate.",
+      "art": [
+        "Dirt infield, patchy grass, chalk lines",
+        "Dugouts, benches, bleachers, scoreboard",
+        "No real team branding"
+      ],
+      "collectible": "Specimen by the dugout; optional coins beneath the bleachers.",
+      "acceptance": "All bases register in order; cutting directly to home cannot finish. Outfield exploration returns naturally to the road."
+    },
+    {
+      "id": "dirt",
+      "number": 19,
+      "name": "Desert Dirtbike Track",
+      "sector": "desert",
+      "x": 1800,
+      "z": 1450,
+      "placement": "Existing authored anchor",
+      "status": "Whoops scaffold; terrain rhythm to refine",
+      "purpose": "Whoops, berms and tabletops make suspension visible. The main line flows; the fast line demands lifting off before the biggest jump.",
+      "entrance": "Open desert service road connects the track to the runway return and Boneyard.",
+      "route": [
+        "Paddock",
+        "Small whoops",
+        "Left berm",
+        "Tabletop",
+        "Mud strip",
+        "Right berm",
+        "Paddock exit"
+      ],
+      "events": [
+        {
+          "name": "Whoops",
+          "type": "Circuit",
+          "length": "400–500 m",
+          "time": "50–70 s / lap",
+          "hook": "Rhythmic bumps reward measured throttle; one large tabletop gives the hero jump."
+        }
+      ],
+      "shortcut": "A tighter inside berm leads to a narrow double; a missed landing falls into the broad main-track runoff.",
+      "recovery": "Tabletops have no deep voids; mud slows without bogging. Perimeter slopes return to the service road.",
+      "art": [
+        "Warm dirt, gravel shoulders, tyre ruts and sparse scrub",
+        "Banners, cones, small paddock shelter",
+        "Dust effects bounded and clear enough to see the next landing"
+      ],
+      "collectible": "Specimen at the paddock; five coins step from easy berm to optional double.",
+      "acceptance": "Landings are stable in every body type. A novice holding throttle can finish the main line without repeated recovery."
+    },
+    {
+      "id": "boneyard",
+      "number": 20,
+      "name": "Desert Boneyard",
+      "sector": "desert",
+      "x": 2350,
+      "z": 1600,
+      "placement": "Existing authored anchor",
+      "status": "Wing route scaffold; aircraft art to refine",
+      "purpose": "Rows of retired airframes form a giant playground. The elevated route hops across wings while the road beneath remains a complete race.",
+      "entrance": "Service loop connects Dirtbike Track to the eastern perimeter road; two wide openings through the storage fence.",
+      "route": [
+        "Storage gate",
+        "F-4 rows",
+        "Kicker ramp",
+        "Wing-to-wing line",
+        "B-52 shadow",
+        "C-130 corridor",
+        "Storage exit"
+      ],
+      "events": [
+        {
+          "name": "Wing Walker",
+          "type": "Circuit",
+          "length": "550–650 m",
+          "time": "65–90 s / lap",
+          "hook": "A safe road loop and a harder elevated wing route share the same gates."
+        }
+      ],
+      "shortcut": "Ramps reach low maintenance platforms beside the wings; use braking doglegs before gaps. Elevated route saves roughly 8–12% when driven cleanly.",
+      "recovery": "Falling lands on the desert road. Wings are not razor-thin collision; fuselage gaps cannot wedge the chassis.",
+      "art": [
+        "B-52, F-4 and C-130 retired rows",
+        "Fabric covers, missing panels, muted sun-faded paint",
+        "Original warning signs, storage racks and tyre stacks"
+      ],
+      "collectible": "Specimen in a shaded ground-level storage bay; wing coins are optional skill rewards.",
+      "acceptance": "Every elevated segment has a tested main-road landing fallback; all aircraft retain distinct silhouettes in dusty light."
+    },
+    {
+      "id": "waterpark",
+      "number": 21,
+      "name": "Sunrise Splash Waterpark",
+      "sector": "leisure",
+      "x": -545,
+      "z": 3388,
+      "placement": "Existing authored anchor",
+      "status": "Slide/splash scaffold; full park to develop",
+      "purpose": "The base wavepool is Koopa Troopa Beach: a broad sand loop, moving water across the line, a sandbar shortcut and a difficult ramp into a rock tunnel. Slides and the lazy river extend the same driveable park.",
+      "entrance": "Two paths connect to the golf/cart-road network. Entrance plaza is the dry navigation anchor.",
+      "route": [
+        "Wavepool beach start",
+        "Dry sand sweep",
+        "Wave wash",
+        "Rock-arch ramp",
+        "Tunnel or outside beach",
+        "Sandbar",
+        "Lazy-river bridge",
+        "Beach finish"
+      ],
+      "events": [
+        {
+          "name": "Wavepool Beach",
+          "type": "Circuit",
+          "length": "500–650 m",
+          "time": "60–85 s / lap",
+          "hook": "Koopa Troopa Beach counterpart: broad beach bends, wave timing, a sandbar and the difficult tunnel jump."
+        },
+        {
+          "name": "Splash Down",
+          "type": "Circuit",
+          "length": "350–450 m",
+          "time": "50–70 s / lap",
+          "hook": "Slower shallow water versus the quicker but narrower slide route."
+        }
+      ],
+      "shortcut": "Timed sandbar cuts the outer beach as a wave retreats. A separate narrow ramp launches into a rock tunnel; miss it and land on the slower beach with no dead end.",
+      "recovery": "A permanent dry outside lane always connects the lap. Waves slow and gently displace the car; the deep-looking basin has a hidden shallow collision shelf and alien recovery if needed. No drowning.",
+      "art": [
+        "Turquoise water, coral/yellow flumes, pale concrete",
+        "Shade umbrellas, splash jets, lazy-river edging",
+        "Sun-faded original park graphics",
+        "Large wavepool, sandy beach, artificial rock arch and tunnel",
+        "Visible wave-generator wall concealed behind resort rockwork"
+      ],
+      "collectible": "Specimen at the splash-pad edge; coins in the river bend and on slide approaches.",
+      "acceptance": "Wave timing and wet-sand grip agree visually. Both shortcuts work without bypassing gates; misses return to the beach. Drive from golf into the park, race, then drive out without reloading."
+    },
+    {
+      "id": "lab",
+      "number": 22,
+      "name": "Area 51½ · Dreamland",
+      "sector": "secret",
+      "x": 2500,
+      "z": -1200,
+      "placement": "Existing authored anchor",
+      "status": "Unlock/finale scaffold; lab adventure to build",
+      "purpose": "The destination hinted at across the base: a cheerful secret lab, friendly aliens and a saucer. Finding specimens opens the gate, then the finale uses everything learned.",
+      "entrance": "Eastern service road ends at a visible inner fence. Locked gate has a specimen display and a safe turnaround. Unlocked doors remain physically open.",
+      "route": [
+        "Janet apron",
+        "Bunker door",
+        "Observation lab",
+        "Containment floor",
+        "Tram platform",
+        "Saucer chamber",
+        "Night courtyard",
+        "Road exit"
+      ],
+      "events": [
+        {
+          "name": "Dreamland Night",
+          "type": "Circuit",
+          "length": "450–550 m",
+          "time": "60–85 s / lap",
+          "hook": "Gentle moving light bridges, lab furniture and a glowing saucer reveal; finish celebrates the whole expedition."
+        }
+      ],
+      "shortcut": "A low maintenance catwalk crosses beside the saucer, then a small jump bypasses a long lab curve. Misses land on the main floor.",
+      "recovery": "Friendly aliens wave; no horror, confinement or violent escape. Moving platforms pause for the car. A ramp leads from every lowered test area.",
+      "art": [
+        "Hazard-striped science with warm welcoming light",
+        "Friendly aliens in tubes, saucer under a tarp, observation windows",
+        "White Janet-style 737 and shuttle; original lab/tram shapes"
+      ],
+      "collectible": "Keep the existing 15-specimen unlock and save IDs. Additional venues add optional coins, not surprise new locks. Finale awards Night Wave paint; free exploration continues.",
+      "acceptance": "Collect the existing specimens, drive through the opened gate, finish, drive back out and reload with progress intact. The ending never strands the player in a separate scene."
+    },
+    {
+      "id": "stables",
+      "number": 23,
+      "name": "Base Riding Stables",
+      "sector": "town",
+      "x": -1780,
+      "z": -1400,
+      "placement": "Proposed site",
+      "status": "New MK64 counterpart",
+      "purpose": "A family recreation paddock gives Moo Moo Farm its base-world home: a short undulating dirt loop with animals safely behind fences.",
+      "entrance": "Housing service lane passes the stable yard and returns to the northern loop.",
+      "route": [
+        "Stable gate",
+        "Hay bales",
+        "Paddock bend",
+        "Drainage humps",
+        "Feed shed",
+        "Yard return"
+      ],
+      "events": [
+        {
+          "name": "Paddock Dash",
+          "type": "Circuit",
+          "length": "350–450 m",
+          "time": "40–55 s / lap",
+          "hook": "Wide dirt turns, bumps and visible sprinkler heads rising from the inside verge."
+        }
+      ],
+      "shortcut": "Jump a shallow drainage channel beside stacked hay; overshoot lands on the outer loop.",
+      "recovery": "Horses stay beyond the fence; animated maintenance bots and irrigation heads provide the track hazards. No collision with animals.",
+      "art": [
+        "Timber shelters, hay bales, paddock rails, feed bins",
+        "Cartoon horses as background life; warm desert dirt"
+      ],
+      "collectible": "Optional coins along the feed-shed route; no new specimen requirement.",
+      "acceptance": "Fast, simple main loop; every pop-up has a visual tell and enough space to steer round it."
+    },
+    {
+      "id": "rail",
+      "number": 24,
+      "name": "Rail & Supply Depot",
+      "sector": "desert",
+      "x": 1950,
+      "z": 2180,
+      "placement": "Proposed site",
+      "status": "New MK64 counterpart",
+      "purpose": "A base logistics railway makes Kalimari Desert work naturally: desert bends, a slow supply train and two timed level crossings.",
+      "entrance": "A service-road loop connects the southern runway return to Boneyard; the train tracks never cut off all access.",
+      "route": [
+        "Supply shed",
+        "Desert sweep",
+        "Crossing one",
+        "Rail cutting",
+        "Crossing two",
+        "Loading yard"
+      ],
+      "events": [
+        {
+          "name": "Supply Line",
+          "type": "Circuit",
+          "length": "650–800 m",
+          "time": "75–100 s / lap",
+          "hook": "Read the train and decide whether to brake or take the slower underpass."
+        }
+      ],
+      "shortcut": "A maintenance underpass saves a wait when the train is crossing, but adds distance when the line is clear.",
+      "recovery": "Crossing lights and gates warn early. Train contact nudges to a safe shoulder; no crushing. Rail grooves cannot catch wheels.",
+      "art": [
+        "Small original freight locomotive and supply wagons",
+        "Rail depot, loading docks, crossing lights and desert cuttings"
+      ],
+      "collectible": "Optional depot coins; a coin on the underpass teaches the safe alternate route.",
+      "acceptance": "Train phase is reproducible for time trial; no spawn or recovery on rails. Both crossings are avoidable by road."
+    },
+    {
+      "id": "coldlab",
+      "number": 25,
+      "name": "Cold-Weather Test Hangar",
+      "sector": "secret",
+      "x": 2040,
+      "z": -690,
+      "placement": "Proposed site",
+      "status": "New MK64 counterpart; public outer campus",
+      "purpose": "A giant environmental test hangar contains the base’s artificial snow course. It is visible before Dreamland’s secret gate unlocks.",
+      "entrance": "Two open equipment doors join the eastern service road. The public test campus is outside the locked alien lab.",
+      "route": [
+        "Climate-lock apron",
+        "Snowfield",
+        "Service slalom",
+        "Snow berm",
+        "Cooling tower loop",
+        "Equipment exit"
+      ],
+      "events": [
+        {
+          "name": "Cold Start",
+          "type": "Circuit",
+          "length": "500–650 m",
+          "time": "65–85 s / lap",
+          "hook": "Snow grip, wide drifts and cheery snowman-shaped test dummies echo Frappe Snowland."
+        }
+      ],
+      "shortcut": "A banked snowdrift cuts an S bend; a careful lift prevents sliding into the slow snowbank.",
+      "recovery": "Snowbanks slow and guide rather than swallow the car. Vent puffs have visible timing and never obscure an entire turn.",
+      "art": [
+        "Huge insulated hangar, refrigeration pipes and artificial snow",
+        "Friendly alien snow sculptures, blue-white light, warm orange exits"
+      ],
+      "collectible": "Optional cold-test coins. Secret progress is not required to try this course.",
+      "acceptance": "All exits remain visible from the course. Snow grip is distinct from both dirt and rink ice; no white-on-white racing ribbon."
+    },
+    {
+      "id": "ice",
+      "number": 26,
+      "name": "Recreation Ice Rink",
+      "sector": "leisure",
+      "x": -1070,
+      "z": 1580,
+      "placement": "Proposed campus annex",
+      "status": "New MK64 counterpart",
+      "purpose": "An indoor ice rink provides Sherbet Land’s long slides and obstacle weaving while keeping the original roller rink as a separate warm-wood venue.",
+      "entrance": "Recreation path connects the lobby, rink-side accessible ramp and rear service opening.",
+      "route": [
+        "Rubber entry mat",
+        "Ice oval",
+        "Ice-island slalom",
+        "Resurfacer crossing",
+        "Practice corner",
+        "Grip strip"
+      ],
+      "events": [
+        {
+          "name": "Ice Patrol",
+          "type": "Circuit",
+          "length": "220–300 m",
+          "time": "35–50 s / lap",
+          "hook": "Long drifts, rounded ice sculptures and slow resurfacer bots create a readable low-grip course."
+        }
+      ],
+      "shortcut": "A smooth ice bridge crosses the centre island; a narrow exit requires a deliberate steering unwind.",
+      "recovery": "Rubber recovery strips surround the rink. Movable bots yield and bump gently. Ice gaps are shallow blue rubber recesses with ramps.",
+      "art": [
+        "Indoor rink, boards, cooling pipes and rented skates",
+        "Penguin-shaped maintenance robots and rounded ice islands"
+      ],
+      "collectible": "Optional rink coins; no additional mandatory alien specimen.",
+      "acceptance": "A child can stop on the rubber border and drive out. The low-grip line is broad enough for both assisted and unassisted cars."
+    },
+    {
+      "id": "tropical",
+      "number": 27,
+      "name": "Tropical Survival Garden",
+      "sector": "leisure",
+      "x": -760,
+      "z": 3060,
+      "placement": "Proposed site",
+      "status": "New MK64 counterpart",
+      "purpose": "A humid survival-training conservatory adjoining the waterpark provides DK’s lush route: palms, creek banks, a dock and a bridge jump.",
+      "entrance": "Two garden gates connect the golf cart path to the waterpark plaza. Service boardwalk continues around the exterior at night.",
+      "route": [
+        "Palm gate",
+        "Creek bridge",
+        "Muddy bank",
+        "Dock straight",
+        "Service tunnel",
+        "Canopy climb",
+        "Garden gate"
+      ],
+      "events": [
+        {
+          "name": "Canopy Run",
+          "type": "Circuit",
+          "length": "550–700 m",
+          "time": "70–90 s / lap",
+          "hook": "A fast dock jump leads into a winding jungle section; the base’s river-cleaning boat crosses in the background."
+        }
+      ],
+      "shortcut": "A narrow maintenance walkway trims the muddy bank; misjudging the jump drops onto a slower creek-side return lane.",
+      "recovery": "The creek is shallow. Foliage fades around the camera. Any thrown tropical fruit is a soft score-neutral bump with an obvious warning.",
+      "art": [
+        "Original tropical conservatory, palms, broad leaves and mist",
+        "Wood boardwalks, rope rails, training signs and small workboat"
+      ],
+      "collectible": "Optional canopy coins; both ground and elevated approaches remain accessible.",
+      "acceptance": "The route reads through foliage at low camera height. No canopy geometry hides the next gate or recovery location."
+    }
+  ],
+  "courses": [
+    {
+      "cup": "Mushroom",
+      "reference": "Luigi Raceway",
+      "name": "Gate Guard Raceway",
+      "place": "gate",
+      "route": [
+        "Visitor grid",
+        "Broad left sweeper",
+        "Gate-guard tunnel",
+        "Long straight",
+        "Banked return"
+      ],
+      "signature": "An inviting first oval: wide tarmac, one tunnel and a long clear straight. Learn steering, items and three-lap flow.",
+      "shortcut": "A modest inside-apron cut rewards a clean line without a jump.",
+      "hazards": "Cones on the verge only; no moving hazard in the first race.",
+      "newWork": "Extend the existing gate course into a 400–500 m teaching oval; open-world road passes alongside."
+    },
+    {
+      "cup": "Mushroom",
+      "reference": "Moo Moo Farm",
+      "name": "Paddock Dash",
+      "place": "stables",
+      "route": [
+        "Stable yard",
+        "Wide dirt bend",
+        "Irrigation humps",
+        "Feed shed",
+        "Paddock straight"
+      ],
+      "signature": "Short, bumpy farm rhythm becomes the family riding stables. Pop-up irrigation heads stand in for mole-like hazards.",
+      "shortcut": "Inside hay-bale line is quicker but bumpier.",
+      "hazards": "Visible rising sprinkler heads and shallow ruts; horses stay off the track.",
+      "newWork": "Build stable/paddock kit, animated irrigation heads and a 350–450 m dirt loop."
+    },
+    {
+      "cup": "Mushroom",
+      "reference": "Koopa Troopa Beach",
+      "name": "Wavepool Beach",
+      "place": "waterpark",
+      "route": [
+        "Beach start",
+        "Dry sand bend",
+        "Wave wash",
+        "Tunnel jump",
+        "Sandbar",
+        "Beach finish"
+      ],
+      "signature": "The owner’s explicit pairing: an artificial beach around a huge base wavepool, with rock arch and jump-through tunnel.",
+      "shortcut": "Difficult tunnel ramp plus a wave-timed sandbar; both rejoin before the next gate.",
+      "hazards": "Waves slow and nudge; a dry outside line is always open.",
+      "newWork": "Expand Sunrise Splash with wavepool, sand beach, rock tunnel, wave phase and wet-sand handling."
+    },
+    {
+      "cup": "Mushroom",
+      "reference": "Kalimari Desert",
+      "name": "Supply Line",
+      "place": "rail",
+      "route": [
+        "Depot grid",
+        "Desert bend",
+        "Crossing one",
+        "Rail cutting",
+        "Crossing two",
+        "Supply shed"
+      ],
+      "signature": "A desert loop punctuated by a moving freight train at two crossings.",
+      "shortcut": "The service underpass avoids a train wait but costs distance when the crossing is clear.",
+      "hazards": "Early crossing lights; soft train contact and safe rail shoulders.",
+      "newWork": "Add rail depot and train loop on the southeast service roads; 650–800 m course."
+    },
+    {
+      "cup": "Flower",
+      "reference": "Toad’s Turnpike",
+      "name": "Base Traffic",
+      "place": "gate",
+      "route": [
+        "Main Gate",
+        "Bus loop",
+        "BX boulevard",
+        "Service-road merge",
+        "Gate return"
+      ],
+      "signature": "Race among base buses, pickups and tugs on a broad road loop with a clear oncoming lane.",
+      "shortcut": "A signed service lane cuts a corner; it is narrower and has a slow-speed dogleg.",
+      "hazards": "Traffic telegraphs lane changes and yields when trapping would occur. Kid impacts are brief bumps.",
+      "newWork": "Author a connected 1–1.5 km town circuit, deterministic traffic lanes and visible intersections."
+    },
+    {
+      "cup": "Flower",
+      "reference": "Frappe Snowland",
+      "name": "Cold Start",
+      "place": "coldlab",
+      "route": [
+        "Equipment doors",
+        "Snowfield",
+        "Snow-dummy slalom",
+        "Banked drift",
+        "Cooling loop",
+        "Exit apron"
+      ],
+      "signature": "Artificial snow inside the environmental test hangar preserves the snowy S-bends and playful obstacles in a desert base.",
+      "shortcut": "A raised snow bank cuts the final S; hold too much throttle and the soft drift slows you.",
+      "hazards": "Snow dummies, soft banks and signalled vent puffs.",
+      "newWork": "New public cold-test hangar and snow surface; outer campus accessible before Dreamland unlock."
+    },
+    {
+      "cup": "Flower",
+      "reference": "Choco Mountain",
+      "name": "Quarry Run",
+      "place": "dirt",
+      "route": [
+        "Cutting entrance",
+        "Narrow uphill",
+        "Rockfall bend",
+        "Ridge traverse",
+        "Dusty downhill",
+        "Track return"
+      ],
+      "signature": "A winding desert quarry extension gives the dirt venue a steep mountain circuit.",
+      "shortcut": "A maintenance ledge crosses the inside of the ridge; a miss drops onto the lower main route.",
+      "hazards": "Rounded foam test boulders tumble on a visible cycle; no lethal crushing or blind full-width blockage.",
+      "newWork": "Expand northeast of Whoops with authored cliff cuttings, ridgeline and boulder runoffs; 500–650 m."
+    },
+    {
+      "cup": "Flower",
+      "reference": "Mario Raceway",
+      "name": "Demo Team Circuit",
+      "place": "demo",
+      "route": [
+        "Demo grid",
+        "Hairpin",
+        "Hangar pipe tunnel",
+        "Grass infield",
+        "Technical S",
+        "Finish straight"
+      ],
+      "signature": "A tighter showcase circuit: hairpin, S-bend, grass cut and hangar-size tunnel, with a clean demo-team identity.",
+      "shortcut": "Boost across a rough infield strip; it loses time without enough speed.",
+      "hazards": "Static tyre stacks mark the edge; the driving line is the challenge.",
+      "newWork": "Create 450–550 m technical tarmac loop adjacent to demo hangar; share doors with free drive."
+    },
+    {
+      "cup": "Star",
+      "reference": "Wario Stadium",
+      "name": "Whoops Stadium",
+      "place": "dirt",
+      "route": [
+        "Paddock grid",
+        "Whoop rhythm",
+        "Long berm",
+        "Tabletop jump",
+        "Cross-under",
+        "Final double"
+      ],
+      "signature": "A longer stadium-style dirt loop built from berms, jumps and a memorable large leap.",
+      "shortcut": "Inside berm and narrow double reward lifting before the jump; no checkpoint-skipping wall exploit.",
+      "hazards": "Bad jumps lose speed and land safely on dirt, never reset a whole lap.",
+      "newWork": "Enlarge Whoops to 700–900 m with a separate novice practice loop; 80–110 s per lap."
+    },
+    {
+      "cup": "Star",
+      "reference": "Sherbet Land",
+      "name": "Ice Patrol",
+      "place": "ice",
+      "route": [
+        "Rubber grid",
+        "Ice lake oval",
+        "Bot slalom",
+        "Ice-island tunnel",
+        "Long drift",
+        "Grip strip"
+      ],
+      "signature": "The recreation ice rink provides long low-grip turns, islands and penguin-shaped maintenance bots.",
+      "shortcut": "An ice bridge through the central island requires a controlled entry and exit.",
+      "hazards": "Bots cross predictably; blue recesses catch a wheel gently and slope back out.",
+      "newWork": "Build the ice annex alongside, not instead of, the roller rink; 220–300 m loop."
+    },
+    {
+      "cup": "Star",
+      "reference": "Royal Raceway",
+      "name": "Clubhouse Grand Prix",
+      "place": "golf",
+      "route": [
+        "Clubhouse grid",
+        "Garden bends",
+        "Pond approach",
+        "Big bridge jump",
+        "Clubhouse avenue",
+        "Green-side return"
+      ],
+      "signature": "A grand sweeping road course with a large jump and a landmark clubhouse you can explore during free drive.",
+      "shortcut": "A narrow cart path cuts the garden section; coins invite a clubhouse forecourt detour outside races.",
+      "hazards": "Water margins have shallow banks; a missed jump joins the lower road.",
+      "newWork": "Add officers’ club/clubhouse hero exterior and a 650–800 m paved loop beside existing golf."
+    },
+    {
+      "cup": "Star",
+      "reference": "Bowser’s Castle",
+      "name": "Containment Circuit",
+      "place": "lab",
+      "route": [
+        "Bunker doors",
+        "Press corridor",
+        "Moving catwalk",
+        "Courtyard turn",
+        "Saucer chamber",
+        "Lab finish"
+      ],
+      "signature": "The secret lab supplies imposing architecture and timed mechanical obstacles, with friendly aliens watching through glass.",
+      "shortcut": "A maintenance catwalk crosses the saucer chamber; brake for its narrow landing.",
+      "hazards": "Foam-faced test presses, sweeping doors and animated containment beams; all have anticipation cues and bypasses.",
+      "newWork": "Expand Dreamland interior into a 450–600 m route; locked by the existing 15 specimens, with a visible turnaround outside."
+    },
+    {
+      "cup": "Special",
+      "reference": "D.K.’s Jungle Parkway",
+      "name": "Canopy Run",
+      "place": "tropical",
+      "route": [
+        "Palm gate",
+        "Creek jump",
+        "Dock",
+        "Jungle bends",
+        "Maintenance tunnel",
+        "Canopy climb"
+      ],
+      "signature": "A tropical survival conservatory provides the lush creek, dock, bridge jump and winding canopy route.",
+      "shortcut": "A raised service walkway skips mud; a missed transfer falls to the slower bank.",
+      "hazards": "Foliage never hides gates; workboat is scenery; fruit props give light, clearly cued bumps.",
+      "newWork": "Build conservatory/garden next to wavepool and golf; 550–700 m route with two open road exits."
+    },
+    {
+      "cup": "Special",
+      "reference": "Yoshi Valley",
+      "name": "Boneyard Maze",
+      "place": "boneyard",
+      "route": [
+        "Storage gate",
+        "Three-way split",
+        "Wing bridges",
+        "Fuselage canyon",
+        "Rejoin",
+        "Wide aircraft obstacle",
+        "Storage loop"
+      ],
+      "signature": "Many narrow choices through retired aircraft converge before the finish. Route discovery is the skill.",
+      "shortcut": "One high wing route is fastest; two ground routes are safer. All branches share equivalent gate progress.",
+      "hazards": "A slow rotating radar dome sweeps the rejoin area; falls reach the service road.",
+      "newWork": "Add authored multi-path graph and clear shared rejoin gates; keep race position visible in Kid mode."
+    },
+    {
+      "cup": "Special",
+      "reference": "Banshee Boardwalk",
+      "name": "After Hours Boardwalk",
+      "place": "waterpark",
+      "route": [
+        "Closed-park arch",
+        "Lagoon boardwalk",
+        "Pump-house tunnel",
+        "Forked dock",
+        "Maintenance shed",
+        "Moonlit return"
+      ],
+      "signature": "The wavepool’s after-hours service boardwalk gives the narrow night route, creaking timber and surprise silhouettes.",
+      "shortcut": "A narrow maintenance gangway trims the pump-house detour; bright exit arrows prevent dead ends.",
+      "hazards": "Friendly inspection drones and moths replace frightening creatures; rail gaps lead to shallow recovery shelves.",
+      "newWork": "Build a 450–600 m permanent boardwalk around the lagoon, playable by day and dressed for night races."
+    },
+    {
+      "cup": "Special",
+      "reference": "Rainbow Road",
+      "name": "Night Wave Portal",
+      "place": "lab",
+      "route": [
+        "Dreamland portal",
+        "Rainbow climb",
+        "Floating curves",
+        "Saucer fly-by",
+        "Starlight spiral",
+        "Return portal",
+        "Lab apron"
+      ],
+      "signature": "The finale is Rainbow Road through an alien portal: a luminous floating track in strange space, entered by driving through the Dreamland portal and exited through the same visible connection back to the base.",
+      "shortcut": "Optional inside catwalk saves a broad bend but has a narrow dogleg; the main route has guardrails.",
+      "hazards": "Slow UFO inspection pods move with clear tells; the alien marshal beams fallen cars back to the last safe course node. A separate exit always returns to the Dreamland apron.",
+      "newWork": "Build a 1.5–2 km portal course with luminous roadway, starfield, visible guardrails, saucer fly-bys and two-way return portal. Prepare the course before the portal opens; preserve the same session, car and saved base state. One-lap expedition finale; three-lap full-cup variant. Accessible after Dreamland discovery."
+    }
+  ],
+  "battles": [
+    {
+      "reference": "Big Donut",
+      "name": "Fuel Depot Ring",
+      "place": "ramp",
+      "shape": "A broad circular service road around a fenced central storage island; four evenly spaced item bays and no dead-end pockets.",
+      "play": "See an opponent across the ring, choose which way to chase, cut behind the storage island for cover. Centre is a visible restricted island, not a damaging pit."
+    },
+    {
+      "reference": "Block Fort",
+      "name": "BX Pallet Forts",
+      "place": "bx",
+      "shape": "Four coloured pallet forts in the warehouse yard, three driveable heights, perimeter ramps and narrow connecting bridges.",
+      "play": "Climb for sightlines and item access; drop to ground to escape. Distinct colours make positions readable above the weather balloons."
+    },
+    {
+      "reference": "Double Deck",
+      "name": "HQ Parking Decks",
+      "place": "hq",
+      "shape": "Three open parking levels connected by ramps on alternating sides, with central openings and broad lower escape lanes.",
+      "play": "Read opponents’ height from their balloons and ramps; vertical routes offer choices rather than sealed camping pockets."
+    },
+    {
+      "reference": "Skyscraper",
+      "name": "Hangar Roof Deck",
+      "place": "hangars",
+      "shape": "A square elevated maintenance deck with a central opening and four exposed side ledges; a permanent external service ramp connects to the base.",
+      "play": "The compact roof makes positioning matter. Alien marshal recovers falls; Kid recovery preserves balloons, Big Kid loses one. Roof battle remains optional."
+    }
+  ],
+  "connections": [
+    {
+      "to": "hq",
+      "label": "Civic road",
+      "from": "gate"
+    },
+    {
+      "to": "housing",
+      "label": "North town road",
+      "from": "hq"
+    },
+    {
+      "to": "hospital",
+      "label": "Civic green",
+      "from": "hq"
+    },
+    {
+      "to": "bx",
+      "label": "Town spine",
+      "from": "gate"
+    },
+    {
+      "to": "school",
+      "label": "School road",
+      "from": "bx"
+    },
+    {
+      "to": "commissary",
+      "label": "Retail campus",
+      "from": "bx"
+    },
+    {
+      "to": "gym",
+      "label": "Recreation loop",
+      "from": "school"
+    },
+    {
+      "to": "wic",
+      "label": "Campus paths",
+      "from": "gym"
+    },
+    {
+      "to": "rink",
+      "label": "Campus paths",
+      "from": "wic"
+    },
+    {
+      "to": "bowling",
+      "label": "Rec plaza",
+      "from": "rink"
+    },
+    {
+      "to": "diamond",
+      "label": "Recreation loop",
+      "from": "bowling"
+    },
+    {
+      "to": "zoo",
+      "label": "South base road",
+      "from": "diamond"
+    },
+    {
+      "to": "golf",
+      "label": "South loop",
+      "from": "zoo"
+    },
+    {
+      "to": "waterpark",
+      "label": "Cart road",
+      "from": "golf"
+    },
+    {
+      "to": "ramp",
+      "label": "Flight-line road",
+      "from": "gate"
+    },
+    {
+      "to": "hangars",
+      "label": "Service lane",
+      "from": "ramp"
+    },
+    {
+      "to": "demo",
+      "label": "Service lane",
+      "from": "hangars"
+    },
+    {
+      "to": "runway",
+      "label": "Taxiway",
+      "from": "hangars"
+    },
+    {
+      "to": "dirt",
+      "label": "Desert service road",
+      "from": "runway"
+    },
+    {
+      "to": "boneyard",
+      "label": "Storage loop",
+      "from": "dirt"
+    },
+    {
+      "to": "lab",
+      "label": "Eastern perimeter",
+      "from": "boneyard"
+    },
+    {
+      "to": "ramp",
+      "label": "North perimeter",
+      "from": "lab"
+    },
+    {
+      "to": "stables",
+      "label": "Housing service lane",
+      "from": "housing"
+    },
+    {
+      "to": "rail",
+      "label": "Supply road",
+      "from": "dirt"
+    },
+    {
+      "to": "runway",
+      "label": "South service road",
+      "from": "rail"
+    },
+    {
+      "to": "coldlab",
+      "label": "Outer test-campus road",
+      "from": "lab"
+    },
+    {
+      "to": "ramp",
+      "label": "Eastern service road",
+      "from": "coldlab"
+    },
+    {
+      "to": "ice",
+      "label": "Recreation path",
+      "from": "diamond"
+    },
+    {
+      "to": "tropical",
+      "label": "Cart path",
+      "from": "golf"
+    },
+    {
+      "to": "waterpark",
+      "label": "Garden path",
+      "from": "tropical"
+    }
+  ],
+  "systems": [
+    {
+      "name": "One continuous world",
+      "detail": "Drive through every public door and gate in one session. Races temporarily add gates, rivals and pickups to the existing place; finishing returns control at the finish line."
+    },
+    {
+      "name": "Find a route",
+      "detail": "Map selects a destination and draws a ground ribbon through real openings. Fast travel is an explicit separate action for discovered places; it never substitutes for a driveable road."
+    },
+    {
+      "name": "Short races, long journeys",
+      "detail": "Most laps target 40–60 seconds. The existing 5.8 × 6.3 km base remains large; cross-base drives take minutes. Town clusters provide frequent turns, props and optional discoveries."
+    },
+    {
+      "name": "Kid / Big Kid",
+      "detail": "Kid assists prevent trapping and soften steering; rivals still race competitively. Big Kid removes handling help. Furball uses three balloons each, clear attack cues and post-hit Chaff."
+    },
+    {
+      "name": "Mario Kart 64 correspondence",
+      "detail": "16 courses and four battle arenas each have a physical Saucer Springs counterpart. Use MK64 as the default for race flow, items, readable hazards and the marshal; Re-Volt supplies toy handling and the connected base supplies exploration."
+    },
+    {
+      "name": "Alien marshal = Lakitu",
+      "detail": "A friendly alien on a small saucer presents start lights, lap/final-lap boards, wrong-way arrows, the finish flag, Retreat’s stop sign and visible tractor-beam recovery. Every cue works on mute. This supersedes the robot MP design."
+    },
+    {
+      "name": "Progress",
+      "detail": "15 existing specimens open Dreamland. Coins and records reward optional mastery. Nose art updates from lifetime Furball pops; five bodies and jet shells stay in the garage."
+    },
+    {
+      "name": "Art target",
+      "detail": "Sculpted toy buggy and recognisable real hardware; warm Nellis-inspired desert town, tactile materials, low-camera detail, friendly aliens, no real unit logos."
+    },
+    {
+      "name": "Weapons",
+      "detail": "Afterburner, Splash, Hydraulic Leak, Chaff, Fox Two, Pitbull, Fox One and Zuni. Remove the rejected trailer from the target design. Flare, Buddy Lase, JDAM and pudding have bounded optional designs in the specification."
+    }
+  ]
+}

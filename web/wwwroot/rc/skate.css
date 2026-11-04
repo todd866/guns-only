@@ -1,0 +1,49 @@
+/* Skate run HUD after THPS2: score and letters top left, clock top right, combo at the bottom. */
+#skate{position:fixed;inset:0;pointer-events:none;z-index:2;font-family:system-ui;font-variant-numeric:tabular-nums}
+.skate-top{position:absolute;left:max(14px,env(safe-area-inset-left));top:58px;display:flex;align-items:baseline;gap:12px}
+#skate-score{font:italic 900 34px/1 system-ui;color:var(--ink);text-shadow:0 2px 0 #08171b,0 0 12px #08171b99;letter-spacing:.01em}
+#skate-letters{display:flex;gap:3px}
+#skate-letters i{font:italic 900 15px/1 system-ui;color:#f3efdc40;text-shadow:0 1px 0 #08171b}
+#skate-letters i.lit{color:var(--gold)}
+#skate-clock{position:absolute;right:max(14px,env(safe-area-inset-right));top:58px;font:italic 900 30px/1 system-ui;color:var(--ink);text-shadow:0 2px 0 #08171b,0 0 12px #08171b99}
+#skate-clock.low{color:#ff8a6a}
+#skate-combo{position:absolute;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(760px,calc(100vw - 32px));display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
+#skate-tricks{font:italic 800 16px/1.25 system-ui;color:var(--ink);text-shadow:0 1px 0 #08171b,0 0 8px #08171bcc;overflow-wrap:anywhere}
+#skate-points{font:italic 900 26px/1 system-ui;color:var(--gold);text-shadow:0 2px 0 #08171b,0 0 10px #08171bcc}
+#skate-pop{position:absolute;left:50%;top:26%;transform:translateX(-50%);font:italic 900 28px/1.1 system-ui;color:var(--gold);text-shadow:0 2px 0 #08171b,0 0 14px #08171bcc;white-space:nowrap;opacity:0}
+#skate-pop.show{animation:skate-pop 1.5s ease-out forwards}
+#skate-pop.bail{color:#ff8a6a;font-size:40px}
+#skate-pop.letter{font-size:56px}
+#skate-pop.goal{color:#9fe0a8;font-size:22px}
+#skate-pop.land{color:var(--ink);font-size:24px}
+@keyframes skate-pop{0%{opacity:0;transform:translate(-50%,8px) scale(.9)}12%{opacity:1;transform:translate(-50%,0) scale(1.05)}25%{transform:translate(-50%,0) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-10px)}}
+/* While skating the base-location label and coin counters yield to the run HUD. */
+body.skating #instruments #gate,body.skating #instruments #clock,body.skating #map{display:none}
+/* Goal card: one row per goal, tick column, label, target. */
+.skate-badge{font-size:26px}
+.skate-goals{margin:0 0 12px;padding:0;list-style:none;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.skate-goals li{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:8px;padding:7px 10px;background:#11252b;font-size:14px}
+.skate-goals li b{color:#9fe0a8;font-weight:900;text-align:center}
+.skate-goals li em{font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums}
+.skate-goals li.done span{color:var(--muted)}
+.skate-goals li.fresh{background:#1d3a2c}.skate-goals li.fresh span{color:var(--ink)}
+@media(max-width:540px){.skate-top{top:54px}#skate-score{font-size:26px}#skate-clock{top:54px;font-size:24px}#skate-combo{bottom:calc(150px + env(safe-area-inset-bottom))}#skate-tricks{font-size:13px}#skate-points{font-size:20px}#skate-pop{font-size:22px;white-space:normal;width:calc(100vw - 32px);text-align:center}}
+@media(prefers-reduced-motion:reduce){#skate-pop.show{animation:none;opacity:1}}
+/* Result cards never clip: they scroll inside the viewport. Short landscape phones get the
+   goal list in two columns. */
+#result{max-height:calc(100dvh - 20px);overflow:auto}
+@media(max-height:500px){#result{padding:10px 12px}#result .result-head{margin-bottom:6px}#result h1{font-size:18px}.skate-goals{grid-template-columns:1fr 1fr;margin-bottom:8px}.skate-goals li{padding:4px 8px;font-size:13px}#result .result-stats{margin-bottom:8px}#result .result-actions button{min-height:38px}}
+
+/* The gauges share the score and combo instruments; no extra instruction rows. */
+#skate-special{position:relative;align-self:center;width:94px;height:19px;border:1px solid #edbd6a99;background:#08171be6;transform:skew(-8deg);isolation:isolate}
+#skate-special i{position:absolute;inset:0;background:#edbd6a70;transform:scaleX(var(--fill,0));transform-origin:left;z-index:-1}
+#skate-special b{display:block;text-align:center;font:italic 900 12px/17px system-ui;letter-spacing:.07em;color:#fff0c7}
+#skate-special.lit{box-shadow:0 0 12px #ffca69;border-color:#fff0c7}#skate-special.lit i{background:#efb548}#skate-special.lit b{color:#16222a}
+#skate-balance{position:relative;width:180px;height:20px;margin:0 0 3px;border:2px solid #f3efdc;background:linear-gradient(90deg,#cc593e 0 16%,#c59a46 16% 34%,#4e9770 34% 66%,#c59a46 66% 84%,#cc593e 84%);box-shadow:0 1px 7px #08171b;border-radius:10px}
+#skate-balance i{position:absolute;left:50%;top:0;bottom:0;border-left:2px solid #f3efdc}
+#skate-balance b{position:absolute;left:var(--needle,50%);top:-5px;width:4px;height:26px;transform:translateX(-50%);background:#fff;box-shadow:0 0 0 1px #08171b;border-radius:2px}
+#skate-balance.danger b{background:#ffcf87}
+@media(max-width:540px){.skate-top{gap:8px}#skate-special{width:72px;height:17px}#skate-special b{font-size:10px;line-height:15px}#skate-letters{gap:1px}#skate-letters i{font-size:13px}}
+
+/* Free skate on the board: no run clock or S-K-A-T-E letters. */
+body.free-skate #skate-clock,body.free-skate #skate-letters{display:none}

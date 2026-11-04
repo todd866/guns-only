@@ -53,6 +53,8 @@
          Exclude their entrypoints and local review assets from the public artifact. Cobra Lab is
          intentionally absent from this list: it is catalogued, quarantined, and fail-closed. -->
     <Content Update="wwwroot/asset-lab/**/*" CopyToPublishDirectory="Never" />
+    <!-- Area 51½ deploys from its own Vercel project (bin/deploy-rc); vercel.json rewrites /rc/ to it. -->
+    <Content Update="wwwroot/rc/**/*" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/effects-lab/**/*" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/environment-lab/**/*" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/present/rapier-design/**/*" CopyToPublishDirectory="Never" />

@@ -1,0 +1,252 @@
+{
+  "file": "web/wwwroot/rc/assets/districts/school.glb",
+  "checked_at": "2026-10-21T13:03:34.643Z",
+  "ok": true,
+  "errors": [],
+  "warnings": [],
+  "bytes": 5478420,
+  "materials": 24,
+  "visual_triangles": 88831,
+  "visual_primitives": 24,
+  "vis_primitives_with_color0": 24,
+  "collision_triangles": 3186,
+  "collision_meshes": 230,
+  "collision_open_meshes": 0,
+  "collision_surface_triangles": {
+    "carpet": 56,
+    "concrete": 684,
+    "dirt": 16,
+    "gymfloor": 16,
+    "metal": 1392,
+    "rubber": 358,
+    "tile": 100,
+    "wood": 564
+  },
+  "gates": [
+    {
+      "name": "GATE_00",
+      "track_m": 0,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_01",
+      "track_m": 14,
+      "half_width_m": 1.78
+    },
+    {
+      "name": "GATE_02",
+      "track_m": 81.42,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_03",
+      "track_m": 115.43,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_04",
+      "track_m": 129.54,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_05",
+      "track_m": 147.15,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_06",
+      "track_m": 178.65,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_07",
+      "track_m": 211.69,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_08",
+      "track_m": 239.75,
+      "half_width_m": 2.6
+    },
+    {
+      "name": "GATE_09",
+      "track_m": 302.83,
+      "half_width_m": 2.6
+    }
+  ],
+  "start_slots": [
+    "START_1",
+    "START_2",
+    "START_3",
+    "START_4"
+  ],
+  "ai_nodes": 52,
+  "ai_spacing_m": {
+    "min": 5.85,
+    "max": 6.27
+  },
+  "lap_length_m": 321.83,
+  "lap_time_s_at_8_to_10_mps": [
+    32.18,
+    40.23
+  ],
+  "racing_line_surface_probes": {
+    "tile": 47,
+    "gymfloor": 24,
+    "concrete": 28,
+    "rubber": 14,
+    "wood": 1
+  },
+  "lateral_sweep_samples": 28013,
+  "wedge_trap_steps": 0,
+  "pickups": 10,
+  "specimens": [
+    "SPEC_01"
+  ],
+  "coins": [
+    {
+      "name": "COIN_01",
+      "at": [
+        1.35,
+        0.25,
+        -48.4
+      ],
+      "lift_m": 0.25,
+      "surface": "carpet",
+      "line_m": 10.65,
+      "hint": "library shortcut: on the reading rug path, under the hanging model F-16"
+    },
+    {
+      "name": "COIN_02",
+      "at": [
+        -47,
+        0.25,
+        -57
+      ],
+      "lift_m": 0.25,
+      "surface": "gymfloor",
+      "line_m": 5.16,
+      "hint": "gym: under the west basketball hoop"
+    },
+    {
+      "name": "COIN_03",
+      "at": [
+        -14,
+        0.25,
+        -24
+      ],
+      "lift_m": 0.25,
+      "surface": "tile",
+      "line_m": 12,
+      "hint": "cafeteria: under a side table, chairs stacked on top"
+    },
+    {
+      "name": "COIN_04",
+      "at": [
+        -37,
+        0.7,
+        24
+      ],
+      "lift_m": 0.25,
+      "surface": "rubber",
+      "line_m": 11,
+      "hint": "playground: on top of the tot-lot hill"
+    },
+    {
+      "name": "COIN_05",
+      "at": [
+        -3,
+        0.25,
+        42.6
+      ],
+      "lift_m": 0.25,
+      "surface": "dirt",
+      "line_m": 4.6,
+      "hint": "in the sandbox, under the orange sail"
+    }
+  ],
+  "camera_hints": [
+    "CAM_library_shortcut",
+    "CAM_racing_slide",
+    "CAM_science_room",
+    "CAM_table_tunnel"
+  ],
+  "alt_routes": [
+    {
+      "name": "library",
+      "nodes": 19,
+      "length_m": 51.75,
+      "start": "AI_002",
+      "end": "AI_012",
+      "min_width_m": 1.18,
+      "max_height_m": 0,
+      "bypassed_m": 62.05
+    },
+    {
+      "name": "planter",
+      "nodes": 11,
+      "length_m": 23.12,
+      "start": "AI_040",
+      "end": "AI_047",
+      "min_width_m": 0.8,
+      "max_height_m": 0.71,
+      "bypassed_m": 42.5
+    }
+  ],
+  "budget": {
+    "visualTriangles": 250000,
+    "collisionTriangles": 40000,
+    "materials": 24,
+    "bytes": 12582912,
+    "gates": [
+      8,
+      12
+    ],
+    "starts": 4,
+    "pickups": [
+      6,
+      10
+    ],
+    "specs": 1,
+    "aiSpacing": [
+      4,
+      12
+    ],
+    "aiMaxTurnDeg": 75,
+    "coins": 5,
+    "coinMaxLift": 0.6,
+    "coinOffLine": 1.5,
+    "altEndOnLine": 1,
+    "altMinWidth": 0.55,
+    "altMinNodes": 4,
+    "walkable": [
+      "asphalt",
+      "concrete",
+      "tile",
+      "wood",
+      "carpet",
+      "gymfloor",
+      "rubber",
+      "metal",
+      "gravel",
+      "grass",
+      "dirt"
+    ],
+    "trapStep": [
+      0.025,
+      0.25
+    ],
+    "sweepBeyondHalfWidth": 4,
+    "sweepStep": 0.02,
+    "drivable": [
+      "asphalt",
+      "concrete",
+      "tile",
+      "wood",
+      "carpet",
+      "gymfloor",
+      "rubber"
+    ],
+    "toyClearance": 0.45
+  }
+}

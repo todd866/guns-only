@@ -1,0 +1,19 @@
+{
+  "kind": "raptor",
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)",
+  "software": false,
+  "frameMs": {
+    "p50": 16.7,
+    "p95": 17.9,
+    "max": 18.5
+  },
+  "drawCalls": 8,
+  "triangles": 8306,
+  "clips": {
+    "run": {
+      "screenshot": "evidence/rc-characters/web-raptor-run.png",
+      "calls": 8
+    }
+  },
+  "errs": []
+}

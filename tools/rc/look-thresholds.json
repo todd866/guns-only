@@ -1,0 +1,6 @@
+{
+  "mode": "warn",
+  "note": "Same-build capture pairs (2026-10-31, M5 hardware GPU) measured palette<=0.004, structure<=0.026, pixelMad<=1.18, edgeRatio 1.00-1.01. Limits are ~5-10x that. Flip mode to fail once a few real changes have gone through.",
+  "default": {"maxPalette": 0.03, "maxStructure": 0.1, "maxPixelMad": 4, "edgeRatio": [0.9, 1.1]},
+  "views": {}
+}

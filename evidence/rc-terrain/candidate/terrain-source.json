@@ -1,0 +1,42 @@
+{
+  "source": "USGS 3DEP Elevation",
+  "url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage?bbox=-115.22%2C36.08%2C-114.86%2C36.40&bboxSR=4326&imageSR=4326&size=1025%2C1025&format=tiff&pixelType=F32&renderingRule=%7B%22rasterFunction%22%3A+%22None%22%7D&interpolation=RSP_BilinearInterpolation&f=pjson",
+  "retrieved": "2026-10-31T01:30:36Z",
+  "sourceSHA256": "da39d28ba6d2de7dff0292cf64d4f976475991fd04dcf8a3fcfe2bc07fa5a02f",
+  "actualExtent": {
+    "xmin": -115.22,
+    "ymin": 36.059999999999995,
+    "xmax": -114.86,
+    "ymax": 36.419999999999995,
+    "spatialReference": "EPSG:4326"
+  },
+  "width": 1025,
+  "height": 1025,
+  "pixelCenterGeoreferencing": true,
+  "units": "metres",
+  "quantizationM": 0.1,
+  "datum": "569.1 m airfield OSM datum",
+  "epistemic": "surrogate",
+  "note": "DEM is USGS 3DEP terrain, not a survey; datum is the airfield OSM reference.",
+  "previous": {
+    "source": "USGS 3DEP Elevation",
+    "url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage?bbox=-115.22%2C36.08%2C-114.86%2C36.40&bboxSR=4326&imageSR=4326&size=257%2C257&format=tiff&pixelType=F32&renderingRule=%7B%22rasterFunction%22%3A+%22None%22%7D&interpolation=RSP_BilinearInterpolation&f=pjson",
+    "retrieved": "2026-10-22",
+    "sourceSHA256": "a80826f814bb47ca62d5a422783a9eed1a59cf00100422bacd24c182f2089b28",
+    "actualExtent": {
+      "xmin": -115.22,
+      "ymin": 36.059999999999995,
+      "xmax": -114.86,
+      "ymax": 36.419999999999995,
+      "spatialReference": "EPSG:4326"
+    },
+    "width": 257,
+    "height": 257,
+    "pixelCenterGeoreferencing": true,
+    "units": "metres",
+    "quantizationM": 0.1,
+    "datum": "569.1 m airfield OSM datum",
+    "epistemic": "surrogate",
+    "note": "DEM is USGS 3DEP terrain, not a survey; datum is the airfield OSM reference."
+  }
+}

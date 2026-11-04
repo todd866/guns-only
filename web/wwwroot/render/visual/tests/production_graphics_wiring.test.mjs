@@ -32,9 +32,11 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /uSoftWorld/,
     "decision-support sky must expose the Ukraine soft-world atmosphere switch");
   const skySource = await readFile(sceneBuildersUrl, "utf8");
+  assert.match(skySource, /DECISION_SUPPORT_HORIZON_SKY_GLSL/,
+    "the sky dome must compile the shared horizon function, not a forked gradient");
   assert.match(skySource,
-    /vec3 belowWarm = mix\(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix\)/,
-    "the sky's below-horizon wash must resolve the terrain's haze mix, never its own literal");
+    /decisionSupportSkyColor\(direction, uSunDirection, uAltitude, uSoftWorld\)/,
+    "the dome must use the shared sky sample the terrain buries to");
   assert.doesNotMatch(skySource, /vec3 belowWarm = vec3\(/,
     "a hardcoded below-horizon colour forks the horizon from the terrain again");
   assert.match(skySource, /UKRAINE_SOFT_WORLD_FOG_HEX/,

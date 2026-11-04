@@ -1,0 +1,12 @@
+{
+  "viewport": {"width": 1280, "height": 800},
+  "note": "Each view teleports the car with window.__gunsOnlyRC.place(pos,yaw) (y is snapped to the ground by a down-raycast); the chase rig then puts the camera ~1.4 m behind and ~0.55 m above the car looking along its heading. Pitch is not independently settable. Positions are Nellis metre frame (+x east, +z south); camera looks along (sin yaw, -cos yaw).",
+  "views": {
+    "skatepark-hub":   {"query": "track=hub", "pos": [-3023.07, 0, -776.51], "yaw": -0.466, "label": "Neighbourhood skatepark, start line"},
+    "skatepark-bowl":  {"query": "track=hub", "pos": [-3032.46, 0, -792.92], "yaw": 1.9,    "label": "Neighbourhood skatepark, far corner looking back"},
+    "housing-street":  {"query": "track=hub", "pos": [-1285, 0, -1132],     "yaw": 0,      "label": "Base Housing street, looking north"},
+    "housing-corner":  {"query": "track=hub", "pos": [-1285, 0, -1132],     "yaw": 2.4,    "label": "Base Housing, looking back south-east"},
+    "bx-apron":        {"query": "track=hub", "pos": [-546, 0, 791],        "yaw": 0.8,    "label": "The BX apron"},
+    "desert-mountain": {"query": "track=hub", "pos": [2480, 0, -900],       "yaw": 0,      "label": "Desert road, Spirit Mountain on the far horizon"}
+  }
+}

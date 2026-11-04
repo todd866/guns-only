@@ -1,0 +1,1 @@
+hub {"gpu":"ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)","frameMs":{"p50":"16.7","p95":"18.2","max":"18.7"},"errs":[],"calls":586}

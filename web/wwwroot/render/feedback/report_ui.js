@@ -15,10 +15,13 @@ export function createReportUi({ dialog, trigger, transport, setPaused, canCaptu
   let closeTimer = 0;
   let submitting = false;
   let submittedPayload = null;
+  // Enter before the screenshot finishes encoding is remembered, not dropped.
+  let submitWhenReady = false;
   note.maxLength = REPORT_NOTE_LENGTH;
   function close() {
     generation++;
     pending = false;
+    submitWhenReady = false;
     draft = null;
     screenshot = null;
     clearTimeout(closeTimer);
@@ -41,7 +44,9 @@ export function createReportUi({ dialog, trigger, transport, setPaused, canCaptu
       if (event.code === "Escape") { event.preventDefault(); close(); }
       else if (event.code === "Enter" || event.code === "NumpadEnter") {
         event.preventDefault();
-        if (!send.disabled && !event.isComposing) form.requestSubmit();
+        if (event.isComposing) return;
+        if (!send.disabled) form.requestSubmit();
+        else if (draft && !screenshot && !submitting) submitWhenReady = true;
       }
       return;
     }
@@ -89,6 +94,7 @@ export function createReportUi({ dialog, trigger, transport, setPaused, canCaptu
       if (!pending) return;
       pending = false;
       submittedPayload = null;
+      submitWhenReady = false;
       const owner = ++generation;
       note.value = "";
       note.hidden = false;
@@ -111,6 +117,7 @@ export function createReportUi({ dialog, trigger, transport, setPaused, canCaptu
         if (owner !== generation) return;
         screenshot = blob;
         send.disabled = false;
+        if (submitWhenReady) { submitWhenReady = false; form.requestSubmit(); }
       }).catch(error => {
         if (owner !== generation) return;
         note.placeholder = "Capture failed";

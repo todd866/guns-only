@@ -44,7 +44,8 @@ test("one catalog names every route and exposes only accepted production experie
     { id: "indoor", mission: null, releaseState: "quarantined" },
     { id: "medevac-command", mission: null, releaseState: "quarantined" },
     { id: "cobra-lab", mission: null, releaseState: "production" },
-    { id: "weekend-ride", mission: null, releaseState: "production" },
+    { id: "weekend-ride", mission: null, releaseState: "preview" },
+    { id: "area-51", mission: null, releaseState: "production" },
     { id: "top-gun", mission: null, releaseState: "production" },
     { id: "okanagan-fireboss", mission: null, releaseState: "production" },
   ]);
@@ -53,7 +54,7 @@ test("one catalog names every route and exposes only accepted production experie
     "first-merge",
     "rapier-intercept",
     "cobra-lab",
-    "weekend-ride",
+    "area-51",
     "top-gun",
     "okanagan-fireboss",
   ]);
@@ -69,8 +70,10 @@ test("one catalog names every route and exposes only accepted production experie
   assert.equal(experienceById("top-gun").route, null);
   assert.equal(experienceLaunchable("multiplayer"), false);
   assert.match(experienceById("multiplayer").blocker, /matchmaking.*player path/i);
-  assert.equal(experienceLaunchable("weekend-ride"), true);
-  assert.equal(experienceComingSoon("weekend-ride"), false);
+  // Owner direction 2026-10-21: Area 51½ replaces Weekend Ride on the front door.
+  assert.equal(experienceLaunchable("area-51"), true);
+  assert.equal(experienceById("area-51").route, "/rc/");
+  assert.equal(experienceLaunchable("weekend-ride"), false);
   assert.match(experienceById("weekend-ride").shortObjective, /end the ride/i,
     "open lapping still needs an explicit player-owned ending");
   assert.equal(experienceById("okanagan-fireboss").route, "/okanagan/");

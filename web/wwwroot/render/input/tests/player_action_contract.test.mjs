@@ -152,9 +152,15 @@ test("selected-target padlock roll hold stays a fixed-tick, safety-preemptible a
   assert.match(webBridgeSource,
     /SetPlayerGunTargetPadlockRollAssist\(bool selected\)[\s\S]*?Session\.SetPlayerGunTargetPadlockRollAssist\(selected\)/,
     "the browser may send only the discrete selected/tracked state");
-  assert.match(sessionSource,
-    /RapierAutomationOr\(_detents\.Command\)[\s\S]*?ApplyGunneryPitchAssist\(directedCommand\)[\s\S]*?ApplyPilotPhysiology\(assistedCommand\)[\s\S]*?ApplyPlayerGunTargetPadlockRollAssist\([\s\S]*?ApplyAutoGcas\(padlockAssistedCommand\)/,
-    "padlock SAS must follow the effective human or Rapier-directed path and remain below Auto-GCAS priority");
+  // RTB owns steering while engaged; handback restores the same fixed-tick padlock SAS.
+  // Check both combat and recovery paths independently, up to their actual physics step.
+  const padlockPaths = [...sessionSource.matchAll(
+    /PilotCommand directedCommand = RapierAutomationOr\(_detents\.Command\);(?:(?!_player\.Step\()[\s\S])*?_player\.Step\(flightCommand, FixedDeltaSeconds\);/g)]
+    .map(([path]) => path).filter(path => path.includes("ApplyPlayerGunTargetPadlockRollAssist"));
+  assert.equal(padlockPaths.length, 2, "combat and recovery must retain their fixed-tick padlock paths");
+  for (const path of padlockPaths) assert.match(path,
+    /ApplyGunneryPitchAssist\(directedCommand\);\s*PilotCommand effectiveCommand = ApplyPilotPhysiology\(RtbAutomationOr\(assistedCommand\)\);\s*PilotCommand padlockAssistedCommand = RtbAutopilotActive \? effectiveCommand : ApplyPlayerGunTargetPadlockRollAssist\(\s*effectiveCommand, _detents\.PilotRollIntent\);\s*PilotCommand flightCommand = ApplyAutoGcas\(padlockAssistedCommand\);/,
+    "RTB must bypass padlock only while engaged; physiology precedes SAS and Auto-GCAS retains final priority");
   assert.match(sessionSource,
     /_playerGunTargetPadlockRollAssistTargetId == _selectedPlayerGunTargetId/,
     "assist geometry must remain bound to the same authoritative gun-target identity");
@@ -379,10 +385,10 @@ test("every visible HTML button is wired through one auditable action surface", 
 test("pause-menu call-it-a-day is authoritative, deliberate, and observes acceptance", () => {
   assert.match(appSource,
     /const handoffActionAvailable = sessionPaused[\s\S]*?pauseReasons\.size === 1[\s\S]*?handoff\.available/,
-    "the pause action must remain hidden unless the current authoritative phase is AVAILABLE");
+    "the pause action must remain disabled unless the current authoritative phase is AVAILABLE");
   assert.match(appSource,
-    /readyHandoff\.hidden = !handoffActionAvailable[\s\S]*?readyHandoff\.disabled = !handoffActionAvailable/,
-    "visibility and enabled state must share the same authority gate");
+    /readyHandoff\.disabled = !handoffActionAvailable/,
+    "RTB must keep its authority gate even though pause always exposes the action");
   assert.match(appSource,
     /function requestCombatHandoffFromPause\(\)[\s\S]*?setPauseReason\("session", false\)[\s\S]*?const accepted = typedRequest\s*\? bridge\.RequestReturnToBase\(\) === true\s*: pressMappedKey\(code, "pause-handoff", knockItOffControl\.gkey\)[\s\S]*?if \(!accepted\)[\s\S]*?setPauseReason\("session", true\)[\s\S]*?if \(!typedRequest\) releaseMappedKey\(code, "pause-handoff"\)/,
     "the pause request must resume authority, observe typed acceptance, keep the key pulse on the legacy branch, restore pause on rejection, and release only a legacy press");
@@ -390,7 +396,7 @@ test("pause-menu call-it-a-day is authoritative, deliberate, and observes accept
     /function requestCombatHandoffFromNav\(\)[\s\S]*?const accepted = typedRequest\s*\? bridge\.RequestReturnToBase\(\) === true\s*: pressMappedKey\(code, "nav-rtb", knockItOffControl\.gkey\)[\s\S]*?if \(!accepted\)[\s\S]*?source: "navigation-button"[\s\S]*?return false[\s\S]*?if \(!typedRequest\) releaseMappedKey\(code, "nav-rtb"\)/,
     "the navigation action must observe typed acceptance, report rejection, and keep press/release on the bounded legacy branch");
   assert.match(indexSource,
-    /<button id="ready-handoff"[^>]*hidden[^>]*disabled[^>]*>[^]*?<span class="shell-action-label">RTB<\/span><\/button>/,
+    /<button id="ready-handoff"[^>]*data-console-modes="pause"[^>]*disabled[^>]*>[^]*?<span class="shell-action-label">RTB<\/span><\/button>/,
     "the mobile-safe pause action must start unavailable before authoritative state arrives");
   assert.match(appSource,
     /title: "F-22A vs Su-27S"[\s\S]*?controls: "Arrows fly[^\n]*\\nO calls it a day and starts RTB · G gear/,
@@ -747,8 +753,8 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     "the Rapier full mission must always be selectable");
   assert.ok(nodeIds.includes("cobra-lab"),
     "Cobra Canyon must be selectable from the Ready aircraft picker");
-  assert.ok(nodeIds.includes("weekend-ride"),
-    "Weekend Ride must be selectable from the Ready aircraft picker");
+  assert.ok(nodeIds.includes("area-51"),
+    "Area 51½ must be selectable from the Ready aircraft picker");
   assert.match(appSource,
     /function shellProgramEntry[\s\S]*?if \(experience\s*&&\s*experience\.mission == null/,
     "a missing program query must not treat null experience as a standalone card");
@@ -901,37 +907,38 @@ test("visual-merge results show compact facts and one bounded correction", () =>
     "raw score/dwell/hits must become labelled evidence followed by one correction");
 });
 
-test("the pictorial programme stays scannable on desktop, portrait, and short landscape", () => {
-  assert.match(indexSource,
-    /#ready-screen\[data-mode="program"\] \.ready-mission-groups\s*\{[\s\S]*?minmax\(170px, 240px\)[\s\S]*?justify-content:\s*center/,
-    "desktop posters need a stable maximum width when a domain has only two aircraft");
-  assert.match(indexSource,
-    /#ready-screen\[data-mode="program"\] \.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?aspect-ratio:\s*4 \/ 5/,
-    "desktop aircraft art needs one coherent poster ratio");
-  assert.match(indexSource,
-    /@media \(max-width: 620px\) and \(orientation: portrait\)[\s\S]*?grid-auto-columns:\s*clamp\(136px, 42vw, 190px\)/,
-    "portrait must keep a bounded horizontal aircraft rail");
-
-  const coherenceLayer = indexSource.indexOf("SHARED MISSION-FLOW SURFACES");
-  const finalShortLandscape = indexSource.lastIndexOf(
+test("the bottom-console programme stays scannable on desktop, portrait, and short landscape", () => {
+  const consoleSource = indexSource.slice(indexSource.indexOf("Owner-picked A:"));
+  assert.match(consoleSource,
+    /grid-auto-columns:\s*clamp\(210px, 22vw, 270px\)/,
+    "desktop cards stay bounded even when a domain has only two aircraft");
+  assert.match(consoleSource,
+    /height:\s*clamp\(230px, 38dvh, 410px\)/,
+    "aircraft art leaves room for the docked console on ordinary laptops");
+  assert.match(consoleSource,
+    /@media \(max-width: 760px\)[\s\S]*?grid-auto-columns:\s*min\(72vw, 270px\)/,
+    "phone cards remain a legible, bounded horizontal rail");
+  assert.match(consoleSource,
+    /@media \(max-width: 760px\)[\s\S]*?\.console-actions\s*\{[\s\S]*?repeat\(4, minmax\(0, 1fr\)\)/,
+    "seven pause actions stack into two rows at phone width");
+  const finalLandscapeSource = consoleSource.slice(consoleSource.lastIndexOf(
     "@media (max-height: 500px) and (orientation: landscape)",
-  );
-  assert.ok(coherenceLayer > 0 && finalShortLandscape > coherenceLayer,
-    "the effective short-landscape fix must live after the pictorial picker cascade");
-  const finalLandscapeSource = indexSource.slice(finalShortLandscape);
+  ));
   assert.match(finalLandscapeSource,
-    /:root #ready-screen\[data-mode="program"\] \.ready-layout\s*\{[\s\S]*?display:\s*grid[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(190px, 250px\)/,
-    "short landscape must keep the aircraft chooser and launch actions independently reachable");
+    /:root #ready-screen\[data-mode="program"\] \.ready-layout\s*\{[\s\S]*?display:\s*grid[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(300px, 1fr\)/,
+    "short landscape keeps the aircraft chooser beside full-size launch actions");
   assert.match(finalLandscapeSource,
-    /:root #ready-screen\[data-mode="program"\] \.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?aspect-ratio:\s*4 \/ 3/,
-    "short landscape needs compact art without changing the selected mission or launch flow");
-  assert.match(finalLandscapeSource,
+    /\.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?height:\s*260px/,
+    "short landscape keeps bounded art without changing launch authority");
+  const briefLandscapeSource = indexSource.slice(indexSource.indexOf(
+    "SHARED MISSION-FLOW SURFACES"), indexSource.indexOf("Owner-picked A:"));
+  assert.match(briefLandscapeSource,
     /:root #ready-screen:is\(\[data-mode="intro"\], \[data-mode="debrief"\]\) \.ready-briefing\s*\{[\s\S]*?display:\s*grid[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(230px, \.72fr\)/,
     "short-landscape briefs must put context and escape actions in independently visible columns");
-  assert.match(finalLandscapeSource,
+  assert.match(briefLandscapeSource,
     /\.ready-controls, #ready-start, #ready-replay, #ready-handoff,[\s\S]*?grid-column:\s*2/,
     "first-run and debrief actions must occupy the visible short-landscape action column");
-  assert.match(finalLandscapeSource,
+  assert.match(briefLandscapeSource,
     /\.touch-mode #ready-screen\[data-mode="intro"\] \.ready-controls\s*\{[\s\S]*?display:\s*block/,
     "short-landscape onboarding must use its open action column to expose the touch grammar");
 });

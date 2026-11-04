@@ -1,0 +1,6 @@
+{
+  "asset": "placements/example-picnic-area.json",
+  "generator": "hand-authored layout (docs/rc-placements.md); props from kit/props.glb",
+  "license": "MIT (original layout data; repository MIT)",
+  "external_assets": []
+}

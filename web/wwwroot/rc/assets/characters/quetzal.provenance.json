@@ -1,0 +1,77 @@
+{
+  "asset": "characters/quetzal.glb",
+  "generator": "tools/rc/blender/character_dino.py",
+  "blender": "5.2.0 LTS",
+  "license": "MIT (original authored geometry, rig, animation and materials; repository MIT)",
+  "external_assets": [],
+  "editable_source": "assets/rc/characters/quetzal.blend",
+  "stats": {
+    "triangles": 9424,
+    "remesh_triangles_before_decimate": 59744,
+    "bones": 32,
+    "deform_bones": 31,
+    "vertices_weighted_by_fallback": 0,
+    "extent_m_blender_xyz": [
+      3.003,
+      1.137,
+      1.256
+    ],
+    "glb_bytes": 596936,
+    "clips": {
+      "idle": {
+        "frames": 120,
+        "seconds": 2.0,
+        "loop": true,
+        "ground_speed_mps": 0.0
+      },
+      "walk": {
+        "frames": 60,
+        "seconds": 1.0,
+        "loop": true,
+        "ground_speed_mps": 0.246
+      },
+      "run": {
+        "frames": 36,
+        "seconds": 0.6,
+        "loop": true,
+        "ground_speed_mps": 0.741
+      },
+      "jump": {
+        "frames": 48,
+        "seconds": 0.8,
+        "loop": false,
+        "ground_speed_mps": 0.0
+      },
+      "gallop": {
+        "frames": 30,
+        "seconds": 0.5,
+        "loop": true,
+        "ground_speed_mps": 2.2
+      },
+      "takeoff": {
+        "frames": 48,
+        "seconds": 0.8,
+        "loop": false,
+        "ground_speed_mps": 0.0
+      },
+      "flap": {
+        "frames": 36,
+        "seconds": 0.6,
+        "loop": true,
+        "ground_speed_mps": 0.0
+      },
+      "glide": {
+        "frames": 120,
+        "seconds": 2.0,
+        "loop": true,
+        "ground_speed_mps": 0.0
+      },
+      "land": {
+        "frames": 48,
+        "seconds": 0.8,
+        "loop": false,
+        "ground_speed_mps": 0.0
+      }
+    }
+  }
+}

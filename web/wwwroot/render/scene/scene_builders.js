@@ -5,6 +5,7 @@ import {
 } from "../environment/korea_terrain.js";
 import {
   addUkraineSoftWorldFog,
+  DECISION_SUPPORT_HORIZON_SKY_GLSL,
   UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES,
   UKRAINE_SOFT_WORLD_FOG_HEX,
   UKRAINE_SOFT_WORLD_HAZE_MIX,
@@ -2942,70 +2943,14 @@ export function createDecisionSupportSky() {
       uniform float uAltitude;
       uniform float uSoftWorld;
       uniform vec3 uSunDirection;
-      uniform vec3 uFogColor;
-      uniform vec3 uAtmosphereHazeColor;
-      uniform float uAtmosphereHazeMix;
       varying vec3 vDirection;
+      ${DECISION_SUPPORT_HORIZON_SKY_GLSL}
 
       void main() {
         vec3 direction = normalize(vDirection);
-        float aboveHorizon = max(direction.y, 0.0);
-        float altitudeMix = smoothstep(2500.0, 18000.0, max(uAltitude, 0.0));
-        vec3 horizonCool = mix(vec3(0.34, 0.47, 0.52), vec3(0.18, 0.33, 0.50), altitudeMix);
-        vec3 zenithCool = mix(vec3(0.035, 0.16, 0.34), vec3(0.006, 0.025, 0.105), altitudeMix);
-        // Warm dusty horizon into a true cerulean zenith — Ghibli-adjacent soft world (ADR-0003).
-        // The old zenith (0.32, 0.44, 0.56) survived ACES + sRGB as pale grey (188, 206, 217): a
-        // washed-out overcast dome with no blue in it at any altitude. ACES compresses everything
-        // above ~0.4 linear into the top sRGB decile, so a blue sky has to be authored well BELOW
-        // that — these values were solved backwards through ACES at exposure 1.08 to land near
-        // (90, 140, 205) at low level and (45, 85, 155) at Rapier altitude.
-        // Stay under ~0.45 linear. The old 0.94 horizon survived ACES as a pure-white
-        // faceted cap across the lower first-person frame and hid the horizon.
-        vec3 horizonWarm = mix(vec3(0.42, 0.34, 0.26), vec3(0.30, 0.28, 0.24), altitudeMix);
-        vec3 zenithWarm = mix(vec3(0.080, 0.170, 0.460), vec3(0.033, 0.072, 0.199), altitudeMix);
-        vec3 horizon = mix(horizonCool, horizonWarm, uSoftWorld);
-        vec3 zenith = mix(zenithCool, zenithWarm, uSoftWorld);
-        // Soft world confines the warm band close to the horizon. At the cool 0.42 exponent a ray
-        // 27 deg up still carries 28% of the near-white warm horizon, and ACES lifts that blend
-        // into the top sRGB decile — which is why the Ukraine sky read as flat overcast grey no
-        // matter what the zenith colour was. Korea's cool curve is untouched.
-        float skyCurve = pow(aboveHorizon, mix(
-          mix(0.42, 0.28, altitudeMix),
-          mix(0.18, 0.13, altitudeMix),
-          uSoftWorld));
-        vec3 color = mix(horizon, zenith, skyCurve);
-
-        // A narrow, non-luminous horizon shoulder stays visible during unusual attitudes and over
-        // the far-field sea. Soft-world widens it slightly into a painterly band.
-        float horizonShoulder = exp(-abs(direction.y) * mix(70.0, 48.0, uSoftWorld));
-        color = mix(color, horizon * mix(1.08, 1.14, uSoftWorld),
-          horizonShoulder * mix(0.38, 0.48, uSoftWorld));
-
-        // Soft sun disc + bloom — Ukraine only. Not a lens flare; readable daylight presence.
-        if (uSoftWorld > 0.5) {
-          vec3 sunDir = normalize(uSunDirection);
-          float sunDot = max(dot(direction, sunDir), 0.0);
-          float sunCore = pow(sunDot, 1800.0);
-          float sunBloom = pow(sunDot, 42.0);
-          float sunHalo = pow(sunDot, 8.0);
-          float above = smoothstep(-0.02, 0.08, direction.y);
-          vec3 sunColor = mix(vec3(1.0, 0.82, 0.55), vec3(1.0, 0.94, 0.82), sunCore);
-          color += sunColor * (sunCore * 1.35 + sunBloom * 0.55 + sunHalo * 0.12) * above
-            * (1.0 - altitudeMix * 0.35);
-        }
-
-        if (direction.y < 0.0) {
-          vec3 belowCool = vec3(0.022, 0.075, 0.095);
-          // Warm dusty ground wash — past the streamed disc this must not read as blue ocean,
-          // and it must be the SAME colour the terrain shader buries to, or the disc edge prints
-          // as a two-tone staircase from altitude. Shared by reference with the terrain material.
-          vec3 belowWarm = mix(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix);
-          // Soft world converges faster: the 64 km disc edge is ~7 deg down at 7.8 km and ~19 deg
-          // at 21.9 km, so the horizon tint must be spent well before it, or the sky above the
-          // silhouette stays a different tan from the ground below it.
-          float groundRamp = exp(direction.y * mix(16.0, 34.0, uSoftWorld));
-          color = mix(mix(belowCool, belowWarm, uSoftWorld), horizon, groundRamp);
-        }
+        // One sample for the whole dome, including below the limb. Fog uses the same
+        // function along its view ray, so the streamed edge cannot paint a second colour.
+        vec3 color = decisionSupportSkyColor(direction, uSunDirection, uAltitude, uSoftWorld);
 
         gl_FragColor = vec4(color, 1.0);
         #include <tonemapping_fragment>
