@@ -34,7 +34,7 @@ const [bridgeSource, sessionSource, beatsSource, appSource, hudSource] = await P
 
 test("mission seven alone opts into continuous successor merges", () => {
   assert.match(beatsSource,
-    /ModernVisualMerge\(\)[\s\S]*?ContinuousCombat: new ContinuousCombatConfig\(MaximumEngagements: 2\)/);
+    /ModernVisualMerge\(\)[\s\S]*?ContinuousCombat: new ContinuousCombatConfig\(MaximumFormationSize: 4,\s*EscalatingWaves: true\)/);
   assert.match(sessionSource, /CreateForStagedNextTarget\(\)/,
     "successor targets must retain the player's finite magazine");
   assert.match(sessionSource, /CreateForFreshShooterAgainstSameTarget/,
