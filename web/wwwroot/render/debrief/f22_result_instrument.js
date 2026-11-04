@@ -2,7 +2,7 @@
 // title / brief / facts / scoreboard stack for the F-22 sortie. Every value is deterministic
 // from the kernel snapshot; explanations live in tooltips and detail views.
 //
-//   FIGHT  ✓ 2/2                           LAND ✓      combat result · engagements/waves · recovery bonus badge
+//   FIGHT  ✓ 950                          LAND ✓      combat score when waves on · recovery bonus badge
 //   SCORE  1350 · W4 ×2 · 0-hit +250 · land +150  PB ◆ +350   deterministic score · bonuses · personal-best delta
 //   GUN    18/480                          2:14        hits/rounds · attempt duration
 //   OPP    Competent ×1 → Veteran ×1 ⓘ                 this sortie's opponent → the earned next opponent
@@ -305,8 +305,8 @@ export function f22ResultInstrument(state, {
     combat: Object.freeze({
       status: combat,
       symbol: COMBAT_SYMBOL[combat],
-      value: waves ? `W${won} · ${score}` : cap > 0 ? `${won}/${cap}` : "",
-      label: waves ? `${won} waves won · ${score} points · ${COMBAT_WORDS[combat]}`
+      value: waves ? (score > 0 ? `${score}` : "") : cap > 0 ? `${won}/${cap}` : "",
+      label: waves ? `${COMBAT_WORDS[combat]} · ${score} combat points · wave ${won} cleared`
         : `${COMBAT_WORDS[combat]}${cap > 0 ? ` · ${won} of ${cap} engagements won` : ""}`,
     }),
     recovery: Object.freeze({

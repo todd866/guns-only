@@ -33,7 +33,7 @@ test("combat boundary: complete combat, recovery open, Recover offered, no landi
   assert.equal(model.actions.recover, true);
 });
 
-test("beat 7 compact combat row shows wave count and score in one callout", async () => {
+test("beat 7 compact combat row shows combat score without repeating wave multiplier", async () => {
   const state = {
     ...(await fixture("f22_combat_complete.json")),
     escalating_waves: true,
@@ -41,8 +41,8 @@ test("beat 7 compact combat row shows wave count and score in one callout", asyn
     combat_score: 950,
   };
   const model = f22ResultInstrument(state, { phase: "combat" });
-  assert.equal(model.combat.value, "W4 · 950");
-  assert.equal(model.combat.label, "4 waves won · 950 points · Combat complete");
+  assert.equal(model.combat.value, "950");
+  assert.equal(model.combat.label, "Combat complete · 950 combat points · wave 4 cleared");
   assert.ok(model.combat.label.length <= 64, "instrument callout must remain compact");
 });
 

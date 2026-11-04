@@ -794,8 +794,8 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     "every visible aircraft programme, including preview multiplayer, needs a concise mission contract");
   assert.ok(contracts.every((contract) => contract.includes("·")),
     "picker contracts should use the shared verb · endpoint language");
-  assert.ok(contracts.includes("Hold more points · Bleed tickets · RTB Ember"),
-    "Cobra's picker contract must describe its majority/ticket authority instead of requiring all four points");
+  assert.ok(contracts.includes("Clear sites · Hold · Fly home"),
+    "Cobra's picker contract must read in plain kid language");
   assert.ok(contracts.includes("Train · Attack · Coordinate · Recover"),
     "Fire Boss must advertise recovery as the endpoint shared by its three sortie curricula");
   assert.match(indexSource,

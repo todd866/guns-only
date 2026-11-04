@@ -3923,7 +3923,7 @@ const MISSION_BRIEFS = Object.freeze({
     sortie: "Two gun engagements · return to the runway",
     configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     card: "Complete two gun engagements, then land and stop on the runway.",
-    brief: "Two engagements share your fuel, ammunition and damage. Use short bursts, then follow the recovery cues home. Land and stop to complete the sortie.",
+    brief: "Waves get harder through W5 and raise your score multiplier. Landing full stop is optional and adds a +150 bonus; Space flies again.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · G gear · Esc → Call It A Day button · Space G limiter · K Auto-GCAS paddle",
   },
   8: {
@@ -3962,8 +3962,8 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Guns Only",
     sortie: "Two gun engagements · land and stop",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
-    brief: "Complete two gun engagements, then follow the recovery cues to a runway stop. Your opponent level and aiming assistance stay steady for this sortie. Gun hits and kills earn a harder next sortie.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · H controls",
+    brief: "Waves get harder through W5 and raise your score multiplier. Landing full stop is optional and adds a +150 bonus; Space flies again.",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nWaves · score · land for bonus · [H] controls · [R] restarts · [space] again",
   }),
   "okanagan-fireboss": Object.freeze({
     kicker: "Civilian · British Columbia · AT-802F Fire Boss",
