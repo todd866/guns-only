@@ -579,4 +579,50 @@ public class ReactiveBanditTests {
                 < BanditSkillProfile.For(PilotSkill.Competent).LeadFireConeRad);
         Assert.True(bandit.WantsToFire(observation));
     }
+
+    [Fact]
+    public void PressureBurstsReserveHalfTheMagazineForRealSolutions() {
+        Assert.Equal(4.0, ReactiveBandit.PresentMaximumSeconds);
+        Assert.Equal(25, ReactiveBandit.PressureBurstLimit);
+        Assert.Equal(1.8, ReactiveBandit.PressureBurstIntervalSeconds);
+        Assert.Equal(1.2, ReactiveBandit.ChaseStallSeconds);
+        Assert.Equal(75, ReactiveBandit.PressureBurstReservedSolutionRounds);
+
+        AircraftState own = State(0.0, 3000.0, 0.0, 220.0);
+        var ace = new ReactiveBandit(
+            own, FlightModel.Su27SPublicDataSurrogate, PilotSkill.Ace);
+        CombatConfig combat = CombatConfig.ModernVisualMerge;
+        var gun = new GunKill(
+            combat.OpponentAmmo, combat.PlayerHitsToDefeat,
+            combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
+
+        int totalTicks = (int)(60.0 * AircraftSim.TickHz);
+        for (int tick = 0; tick < totalTicks; tick++) {
+            // Keep a crossing target dead ahead of the current nose: inside the 3.5 deg body cone,
+            // outside the 1.25 deg lead cone because of the perpendicular 220 m/s crossing velocity.
+            Vec3D gunLine = GunKill.GunDirection(ace.State);
+            AircraftState crossing = State(
+                0.0, 3000.0, 500.0, 220.0, chi: ace.State.Chi + Math.PI / 2.0) with {
+                Position = ace.State.Position + gunLine * 500.0
+            };
+            ActorObservation obs = ActorObservation.Capture(crossing, tick);
+            bool trigger = ace.WantsToFire(obs);
+            gun.Step(trigger, ace.State, crossing, Dt);
+            ace.Step(obs, Dt);
+        }
+
+        Assert.Equal(75, gun.RoundsFired);
+        Assert.Equal(75, gun.AmmoRemaining);
+        Assert.Equal(75, ace.PressureRoundsFired);
+        Assert.True(ace.PressureBurstsFired > 10 && ace.PressureBurstsFired <= ReactiveBandit.PressureBurstLimit);
+
+        // When a real ballistic lead solution appears afterward, the reserved half of the magazine fires.
+        Vec3D finalGunLine = GunKill.GunDirection(ace.State);
+        AircraftState tailTarget = State(0.0, 3000.0, 500.0, 220.0, chi: ace.State.Chi) with {
+            Position = ace.State.Position + finalGunLine * 400.0,
+            Gamma = ace.State.Gamma
+        };
+        ActorObservation solutionObs = ActorObservation.Capture(tailTarget, totalTicks);
+        Assert.True(ace.WantsToFire(solutionObs));
+    }
 }

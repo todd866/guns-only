@@ -261,19 +261,34 @@ public sealed class ReactiveBandit :
     double _fireBurstUntil = double.NegativeInfinity;
     double _nextFireBurstAt = double.NegativeInfinity;
     double _nextPressureBurstAt = double.NegativeInfinity;
+    double _lastFireDecisionT = double.NegativeInfinity;
+    double _secondsToNextShot;
+    bool _triggerHeldLastStep;
     bool _pressureBurstActive;
     int _pressureBurstsFired;
+    int _pressureRoundsFired;
+    int _estimatedRoundsFired;
 
     /// PRESSURE BURSTS for a tier with solution discipline. Holding fire until the 1.25 deg
     /// solution made the Ace a silent shape for most of a fight and then a single lethal pass —
     /// "mostly passive, then it kills me" (owner, 2026-10-01). A real pilot with the nose on you
     /// takes the snapshot even when the solution is poor: it usually misses, and it tells you that
     /// you are being shot at. Short, spaced and budgeted so the solution shots keep their ammo:
-    /// ten 0.2 s bursts is ~50 of the Su-27's 150 rounds.
+    /// at least 50% of the Su-27's 150-round magazine (75 rounds) is reserved for real solutions.
     public const double PressureBurstSeconds = 0.2;
-    public const double PressureBurstIntervalSeconds = 3.0;
-    public const int PressureBurstLimit = 10;
+    // Argon review 2026-11-04: 3.0 -> 1.8 s interval so tracer pressure does not sag between snapshots.
+    public const double PressureBurstIntervalSeconds = 1.8;
+    // Argon review 2026-11-04: 10 -> 25 bursts so the bandit does not go silent after ~30 s, bounded by the 50% magazine reserve.
+    public const int PressureBurstLimit = 25;
+    // Argon review 2026-11-04: reserve at least 50% of the 150-round magazine (75 rounds) for real solutions.
+    public const int PressureBurstMagazineRounds = 150;
+    public const double PressureBurstSolutionReserveFraction = 0.50;
+    public const int PressureBurstReservedSolutionRounds =
+        (int)(PressureBurstMagazineRounds * PressureBurstSolutionReserveFraction);
+    public const int PressureBurstMaxRounds =
+        PressureBurstMagazineRounds - PressureBurstReservedSolutionRounds;
     public int PressureBurstsFired => _pressureBurstsFired;
+    public int PressureRoundsFired => _pressureRoundsFired;
     /// Off for actors that stand in for a player (the gunnery funnel's reference aircraft).
     public bool PressureBurstsEnabled { get; init; } = true;
     /// True while the trigger is down for a pressure burst rather than a solution shot.
@@ -742,7 +757,8 @@ public sealed class ReactiveBandit :
     /// then occasionally it gets aggressive and kills me but it's just boring." The Build 371
     /// production flight that prompted it was 70 s of a rung-0 Competent presenting, zero rounds,
     /// then the owner quit. Whatever the player does, the bandit turns in after this long.
-    public const double PresentMaximumSeconds = 12.0;
+    // Argon review 2026-11-04: 12.0 -> 4.0 s so rung 0 turns hostile in the opening minute instead of flying a passive formation drill.
+    public const double PresentMaximumSeconds = 4.0;
 
     /// True while this bandit is deliberately setting the player up rather than fighting them.
     public bool Presenting { get; private set; }
@@ -874,8 +890,9 @@ public sealed class ReactiveBandit :
     public bool WantsToFire(in ActorObservation player) {
         // A bandit that is setting the player up does not shoot them. Step's presenting gate
         // cannot cover this: the session asks the actor to fire on a separate path.
-        if (Presenting) return false;
-        if (CatastrophicallyDamaged || _terrainRecoveryActive) return false;
+        if (Presenting) return RecordFireDecision(false, pressureBurst: false);
+        if (CatastrophicallyDamaged || _terrainRecoveryActive)
+            return RecordFireDecision(false, pressureBurst: false);
         bool onSolution = BanditFireControl.InLeadFiringEnvelope(
             State, player, EffectiveLeadFireConeRad);
         // The body gate is not wrong everywhere — it is wrong exactly where it DISAGREES with the
@@ -890,15 +907,17 @@ public sealed class ReactiveBandit :
             && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad);
         if (!onSolution && !onBody) {
             if (_pressureBurstActive && T < _fireBurstUntil
+                && HasPressureAmmoReserve
                 && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad))
-                return true;
+                return RecordFireDecision(true, pressureBurst: true);
             _pressureBurstActive = false;
-            if (!PressureShotAvailable(player)) return false;
+            if (!PressureShotAvailable(player))
+                return RecordFireDecision(false, pressureBurst: false);
             _pressureBurstActive = true;
             _pressureBurstsFired++;
             _fireBurstUntil = T + PressureBurstSeconds;
             _nextPressureBurstAt = T + PressureBurstIntervalSeconds;
-            return true;
+            return RecordFireDecision(true, pressureBurst: true);
         }
         _pressureBurstActive = false;
 
@@ -912,7 +931,50 @@ public sealed class ReactiveBandit :
             _fireBurstUntil = T + BanditFireControl.BurstSeconds;
             _nextFireBurstAt = T + BanditFireControl.BurstCycleSeconds;
         }
-        return T < _fireBurstUntil;
+        return RecordFireDecision(T < _fireBurstUntil, pressureBurst: false);
+    }
+
+    bool HasPressureAmmoReserve =>
+        _pressureRoundsFired < PressureBurstMaxRounds
+        && _estimatedRoundsFired < PressureBurstMagazineRounds - PressureBurstReservedSolutionRounds;
+
+    bool RecordFireDecision(bool firing, bool pressureBurst) {
+        const double tickDt = 1.0 / AircraftSim.TickHz;
+        double shotInterval = 1.0 / GunProfiles.GSh301PublicDataSurrogate.RoundsPerSecond;
+        if (!firing) {
+            _pressureBurstActive = false;
+            _triggerHeldLastStep = false;
+            _secondsToNextShot = 0.0;
+            _lastFireDecisionT = T;
+            return false;
+        }
+        if (T > _lastFireDecisionT || !_triggerHeldLastStep) {
+            double untilShot = _triggerHeldLastStep
+                ? System.Math.Max(0.0, _secondsToNextShot)
+                : 0.0;
+            if (untilShot > tickDt + 1e-12) {
+                _secondsToNextShot = System.Math.Max(0.0, _secondsToNextShot - tickDt);
+            } else {
+                if (pressureBurst && !HasPressureAmmoReserve) {
+                    _pressureBurstActive = false;
+                    _triggerHeldLastStep = false;
+                    _secondsToNextShot = 0.0;
+                    _lastFireDecisionT = T;
+                    return false;
+                }
+                double elapsed = untilShot > 0.0 ? untilShot : 0.0;
+                _estimatedRoundsFired++;
+                if (pressureBurst) _pressureRoundsFired++;
+                _secondsToNextShot = shotInterval;
+                if (elapsed < tickDt) {
+                    double remaining = tickDt - elapsed;
+                    _secondsToNextShot = System.Math.Max(0.0, _secondsToNextShot - remaining);
+                }
+            }
+            _triggerHeldLastStep = true;
+            _lastFireDecisionT = T;
+        }
+        return true;
     }
 
     /// Only tiers that otherwise hold for the solution need pressure bursts; the body-gate tiers
@@ -922,6 +984,7 @@ public sealed class ReactiveBandit :
         && !_profile.FiresOnBodyGate
         && !(_profile.IsBoss && !BossCommitted)
         && _pressureBurstsFired < PressureBurstLimit
+        && HasPressureAmmoReserve
         && T >= _nextPressureBurstAt
         && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad);
 
@@ -2736,7 +2799,8 @@ public sealed class ReactiveBandit :
     const double ChaseRangeM = 900.0;
     /// Below this closure the bandit is not catching the player and lights the burner.
     const double ChaseClosureMps = 30.0;
-    const double ChaseStallSeconds = 3.0;
+    // Argon review 2026-11-04: 3.0 -> 1.2 s so the bandit lights burner promptly when a chase stalls outside gun range, keeping the low-attack exclusion intact.
+    public const double ChaseStallSeconds = 1.2;
     double _chaseStallSeconds;
     double _chaseStallCheckedAt;
 
