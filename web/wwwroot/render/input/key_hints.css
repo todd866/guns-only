@@ -1,4 +1,5 @@
 /* MacBook Air key caps (render/input/key_hints.js). Shared by the F-22 shell and RC. */
+:root { --controls-onboarding-key-col: 130px; }
 .keycap {
   display: inline-block;
   min-width: 1.7em;
@@ -28,6 +29,11 @@
 .key-legend-line { display: inline; }
 .key-legend-dot { margin: 0 0.35em; opacity: 0.5; }
 .key-column { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.controls-onboarding-group td:first-child .key-column {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  max-width: 100%;
+}
 .key-hint-row {
   display: inline-flex;
   flex-wrap: wrap;
