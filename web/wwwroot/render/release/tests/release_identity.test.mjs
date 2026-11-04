@@ -285,8 +285,10 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.match(airframePrimitives, /export function createPlanformGeometry/);
   assert.doesNotMatch(app, /const BUILD = new URL\(import\.meta\.url\)/);
   assert.match(app, /BUILD_IDENTITY_REVALIDATE_MS = 60_000/);
-  assert.match(app, /function buildIdentityBlocksSortie\(\)[\s\S]*?buildIdentity\.stale \|\| buildIdentity\.state === "checking"/,
-    "a sortie must remain held while current production provenance is unresolved");
+  assert.match(app, /function buildIdentityBlocksSortie\(\) \{[^}]*return buildIdentity\.stale === true;\s*\}/,
+    "a sortie must block only on a confirmed stale identity, never while checking");
+  assert.doesNotMatch(app, /function buildIdentityBlocksSortie\(\) \{[^}]*checking/,
+    "build verification must run in the background without locking Fly");
   assert.match(app, /readyStart\.disabled = buildIdentityBlocksSortie\(\)/);
   assert.match(app, /function beginFlight\(\)[\s\S]*?if \(buildIdentityBlocksSortie\(\)/);
   assert.match(app, /buildIdentityLookupSucceeded\s*\?\s*"complete"[\s\S]*?"unverified"/,
@@ -474,8 +476,8 @@ test("a committed production runtime change cannot silently reuse this build", (
   assert.ok(dirtyMarker || dirtyWithoutMarker.length === 0,
     `production runtime changed without advancing ${identityPath}: ${dirtyWithoutMarker.join(", ")}`);
 
-  const unstaged = git(["diff", "--quiet", "--", identityPath]);
-  const staged = git(["diff", "--cached", "--quiet", "--", identityPath]);
+  const unstaged = git(["diff", "--quiet", "--", identityPath, indexPath]);
+  const staged = git(["diff", "--cached", "--quiet", "--", identityPath, indexPath]);
   if (unstaged.status === 1 || staged.status === 1) return;
 
   const identityIntroduced = git([
