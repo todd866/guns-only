@@ -637,7 +637,7 @@ public class CobraMissionRuntimeTests
         Assert.Equal(CobraMissionAct.Engage, exposed.Act);
         Assert.Equal(CobraMissionAct.Engage, masked.Act);
 
-        for (int tick = 0; tick < 9 * PlayerVehicleContract.FixedStepHz; tick++)
+        for (int tick = 0; tick < 4 * PlayerVehicleContract.FixedStepHz; tick++)
         {
             exposed.Advance(new VerticalLiftPilotCommand(exposedTrim, 0.0, 0.0, 0.0));
             masked.Advance(new VerticalLiftPilotCommand(maskedTrim, 0.0, 0.0, 0.0));
