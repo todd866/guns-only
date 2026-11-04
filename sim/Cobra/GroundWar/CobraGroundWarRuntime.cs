@@ -44,7 +44,8 @@ public sealed class CobraGroundWarRuntime
     /// empty-site rule freezes that point hostile forever — the player does the one job only
     /// they can do and the point still never flips. A cleared point gets troops lifted in.
     /// </summary>
-    public const double AirMobileInsertionSeconds = 20.0;
+    // Origin: Argon review 2026-11-05 — cut air-mobile insertion delay from 20 s to 8 s to eliminate post-clear dead air.
+    public const double AirMobileInsertionSeconds = 8.0;
     /// <summary>
     /// A conquest board can sit even, and an even board bleeds nobody. Without a limit a stable
     /// 2-2 runs forever. See the scoring in BleedTickets.
@@ -57,7 +58,14 @@ public sealed class CobraGroundWarRuntime
     // wave. Friendlies remain on the pad. See docs/airframes/ah-1g-cobra/00-sources.md.
     public const double HostileSeedInfantryRingM = 170.0;
     public const double HostileSeedSoftVehicleRingM = 200.0;
-    public const double HostileWaveRingM = 160.0;
+    public const double DefaultCaptureRadiusM = 220.0;
+    // Origin: Argon review 2026-11-05 — spawn assault waves 60 m outside each site's capture circle so they march in rather than instantly contesting/resetting the site.
+    public const double HostileWaveCaptureRadiusMarginM = 60.0;
+    // Origin: Argon review 2026-11-05 — baseline wave spawn ring (220 m capture radius + 60 m margin = 280 m; 360 m at Iron Bell).
+    public const double HostileWaveRingM = DefaultCaptureRadiusM + HostileWaveCaptureRadiusMarginM;
+    public static double HostileWaveSpawnRingM(ContestedSite site) =>
+        (site ?? throw new ArgumentNullException(nameof(site))).CaptureRadiusM
+        + HostileWaveCaptureRadiusMarginM;
     /// <summary>
     /// Camp Ember is a rear-area operating base, not a conquest spawn. No authored or generated
     /// hostile may appear inside its protected arrival/departure area. The old crew-chain helper
@@ -97,9 +105,10 @@ public sealed class CobraGroundWarRuntime
     /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>
     public const double SmallArmsEventsPerSecond = 2.4;
     public const double PlayerRoundDamage = 0.55;
-    /// <summary>20 s to flip an uncontested point. The Cobra never captures — only ground units
+    /// <summary>10 s to flip an uncontested point. The Cobra never captures — only ground units
     /// occupy — so this is the clock the player's rounds buy time on.</summary>
-    public const double CaptureRatePerSecond = 1.0 / 20.0;
+    // Origin: Argon review 2026-11-05 — double uncontested capture rate from 1/20 s⁻¹ to 1/10 s⁻¹ to cut post-clear dead air.
+    public const double CaptureRatePerSecond = 1.0 / 10.0;
     /// <summary>
     /// Conquest tickets. The battle is decided here, not by the control number: the side holding
     /// fewer points bleeds in proportion to the deficit, so taking and keeping ground is the only
@@ -217,6 +226,22 @@ public sealed class CobraGroundWarRuntime
         _sites.Count(site => site.Owner == GroundSiteOwner.Friendly);
     public int HostilePointsHeld =>
         _sites.Count(site => site.Owner == GroundSiteOwner.Hostile);
+    /// <summary>
+    /// Remaining seconds until the next inbound air-mobile slick touches down on a cleared hostile
+    /// site, or null when no site is currently awaiting insertion.
+    /// </summary>
+    public double? InboundSlickCountdownSeconds =>
+        _sites
+            .Select(site => site.InboundSlickRemainingSeconds)
+            .Where(seconds => seconds.HasValue)
+            .Min();
+    /// <summary>Highest active capture progress (0..1) across contested sites.</summary>
+    public double SiteCaptureProgress =>
+        _sites.Count == 0 ? 0.0 : _sites.Max(site => site.CaptureProgress);
+    public double? InboundSlickRemainingSeconds(string siteId) =>
+        _sitesById.TryGetValue(siteId, out ContestedSite? site)
+            ? site.InboundSlickRemainingSeconds
+            : null;
     // Kept as properties, redefined against tickets: the mission act ladder and the HUD both read
     // these as "how close is this to being over", which is now a ticket question.
     public double VictoryHoldProgress =>
@@ -701,6 +726,7 @@ public sealed class CobraGroundWarRuntime
         foreach (ContestedSite site in _sites) {
             if (site.Owner != GroundSiteOwner.Hostile) {
                 _airMobileTimerSeconds.Remove(site.Id);
+                site.SetInboundSlickRemainingSeconds(null);
                 continue;
             }
             // The point must be CLEAR, not merely un-garrisoned. Seeded pushers sit well inside
@@ -720,15 +746,19 @@ public sealed class CobraGroundWarRuntime
             }
             if (hostilePresent || friendlyPresent) {
                 _airMobileTimerSeconds.Remove(site.Id);
+                site.SetInboundSlickRemainingSeconds(null);
                 continue;
             }
 
             double elapsed = _airMobileTimerSeconds.GetValueOrDefault(site.Id) + dtSeconds;
             if (elapsed < AirMobileInsertionSeconds) {
                 _airMobileTimerSeconds[site.Id] = elapsed;
+                site.SetInboundSlickRemainingSeconds(
+                    Math.Max(0.0, AirMobileInsertionSeconds - elapsed));
                 continue;
             }
             _airMobileTimerSeconds.Remove(site.Id);
+            site.SetInboundSlickRemainingSeconds(null);
             if (LivingUnits().Count() >= MaxLivingUnits) continue;
             SpawnUnit(GroundFaction.Friendly, GroundUnitRole.InfantryClump, site,
                 GroundUnitIntent.Hold, ringM: 24.0, bearingRad: 1.7);
@@ -792,13 +822,14 @@ public sealed class CobraGroundWarRuntime
                 .Where(candidate => !IsCampEmberSite(candidate))
                 .OrderBy(candidate => candidate.LocalControl)
                 .First();
+        double baseWaveRingM = HostileWaveSpawnRingM(site);
         int wave = 0;
         for (int index = 0; index < HostileWaveSoftVehicles && LivingUnits().Count() < MaxLivingUnits; index++)
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
-                GroundUnitIntent.EngageNearest, HostileWaveRingM + wave++ * 20.0);
+                GroundUnitIntent.EngageNearest, baseWaveRingM + wave++ * 20.0);
         for (int index = 0; index < HostileWaveInfantryClumps && LivingUnits().Count() < MaxLivingUnits; index++)
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
-                GroundUnitIntent.EngageNearest, HostileWaveRingM + wave++ * 20.0);
+                GroundUnitIntent.EngageNearest, baseWaveRingM + wave++ * 20.0);
     }
 
     void AgeWrecks(double dtSeconds)
@@ -1134,7 +1165,7 @@ public sealed class CobraGroundWarRuntime
                 landmark.Id,
                 landmark.Label,
                 new Vec3D(landmark.EastM, siteElevationM, landmark.NorthM),
-                captureRadiusM: ironBell ? IronBellCaptureRadiusM : 220.0));
+                captureRadiusM: ironBell ? IronBellCaptureRadiusM : DefaultCaptureRadiusM));
             sites[^1].SetInitialOwner(InitialOwnerFor(siteId));
         }
         return sites;

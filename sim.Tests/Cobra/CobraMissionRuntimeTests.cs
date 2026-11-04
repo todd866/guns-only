@@ -99,12 +99,11 @@ public class CobraMissionRuntimeTests
         Assert.Equal(CobraCanyonDefinition.RiverGorgeRouteId, river.SelectedRoute.Id);
         Assert.Equal(CobraCanyonDefinition.RidgeShadowRouteId, ridge.SelectedRoute.Id);
         Assert.Equal(CobraCanyonDefinition.RoadPlantationRouteId, road.SelectedRoute.Id);
-        // Default spawn is skids-on-pad (CG → skid), not route TargetAglM hover.
-        double padClearanceM = Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
-        Assert.Equal(padClearanceM, river.Cobra.State.PositionWorldM.Y);
-        Assert.Equal(padClearanceM, ridge.Cobra.State.PositionWorldM.Y);
-        Assert.Equal(padClearanceM, road.Cobra.State.PositionWorldM.Y);
-        Assert.Equal(CobraMissionAct.Depart, river.Act);
+        // Default spawn is the airborne ingress IP at DefaultIngressClearanceM, already in Ingress.
+        Assert.Equal(CobraMissionRuntime.DefaultIngressClearanceM, river.Cobra.State.PositionWorldM.Y, 3);
+        Assert.Equal(CobraMissionRuntime.DefaultIngressClearanceM, ridge.Cobra.State.PositionWorldM.Y, 3);
+        Assert.Equal(CobraMissionRuntime.DefaultIngressClearanceM, road.Cobra.State.PositionWorldM.Y, 3);
+        Assert.Equal(CobraMissionAct.Ingress, river.Act);
         Assert.DoesNotContain(
             river.GroundWar.Units.Where(unit => unit.Faction == GroundFaction.Hostile),
             unit => HorizontalDistanceM(
@@ -122,9 +121,33 @@ public class CobraMissionRuntimeTests
     {
         CobraCanyonDefinition world = CobraCanyonDefinition.Create();
         CobraCanyonTerrainSurface terrain = world.CreateTerrainSurface();
-        var runtime = new CobraMissionRuntime(
+        var defaultRuntime = new CobraMissionRuntime(
             world, terrain, CobraCanyonRouteChoice.RiverGorge);
-        Vec3D position = runtime.Cobra.State.PositionWorldM;
+        Vec3D defaultPosition = defaultRuntime.Cobra.State.PositionWorldM;
+        CobraCanyonLandmarkDefinition bridge = world.Landmarks.First(landmark =>
+            landmark.Kind == CobraCanyonLandmarkKind.Bridge);
+
+        Assert.True(terrain.TrySample(defaultPosition.X, defaultPosition.Z, out TerrainSample ingressSurface));
+        Assert.Equal(
+            ingressSurface.HeightM + CobraMissionRuntime.DefaultIngressClearanceM,
+            defaultPosition.Y,
+            3);
+        Assert.Equal(CobraMissionAct.Ingress, defaultRuntime.Act);
+        Assert.Equal(
+            CobraMissionRuntime.DefaultIngressStandOffM,
+            HorizontalDistanceM(defaultPosition, bridge.PositionLocalM),
+            3);
+        Assert.Equal(
+            CobraMissionRuntime.DefaultIngressSpeedMps,
+            defaultRuntime.Cobra.State.GroundVelocityMps.Length,
+            3);
+
+        var padRuntime = new CobraMissionRuntime(
+            world,
+            terrain,
+            CobraCanyonRouteChoice.RiverGorge,
+            spawn: CobraMissionRuntime.CreateCampEmberPadSpawn(world, terrain));
+        Vec3D position = padRuntime.Cobra.State.PositionWorldM;
 
         Assert.True(terrain.TrySample(position.X, position.Z, out TerrainSample surface));
         Assert.Equal(TerrainSurfaceKind.Land, surface.Kind);
@@ -132,8 +155,43 @@ public class CobraMissionRuntimeTests
             surface.HeightM + Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM,
             position.Y,
             3);
-        Assert.Equal(CobraMissionAct.Depart, runtime.Act);
-        Assert.Equal(0.0, runtime.Cobra.State.GroundVelocityMps.Length, 3);
+        Assert.Equal(CobraMissionAct.Depart, padRuntime.Act);
+        Assert.Equal(0.0, padRuntime.Cobra.State.GroundVelocityMps.Length, 3);
+    }
+
+    [Fact]
+    public void FreshDefaultMissionHasCombatLiveAndAHostileWithinTwoKilometresBeforeThirtySeconds()
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        CobraCanyonTerrainSurface terrain = world.CreateTerrainSurface();
+        var runtime = new CobraMissionRuntime(
+            world, terrain, CobraCanyonRouteChoice.RiverGorge);
+
+        Assert.Equal(CobraMissionAct.Ingress, runtime.Act);
+        double trim = runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+        var transitCommand = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
+
+        int maxTicks = (int)Math.Round(30.0 * PlayerVehicleContract.FixedStepHz);
+        int contactTick = -1;
+        for (int tick = 0; tick < maxTicks; tick++) {
+            runtime.Advance(transitCommand);
+            Vec3D playerPos = runtime.Cobra.State.PositionWorldM;
+            bool hostileWithinTwoKm = runtime.GroundWar.LivingUnits()
+                .Any(unit => unit.Faction == GroundFaction.Hostile
+                    && HorizontalDistanceM(playerPos, unit.PositionWorldM) <= 2_000.0);
+            if (runtime.GroundWarCombatLive && hostileWithinTwoKm) {
+                contactTick = tick + 1;
+                break;
+            }
+        }
+
+        Assert.True(
+            contactTick > 0 && contactTick < maxTicks,
+            $"Expected combat live with a hostile within 2 km before t=30 s; contactTick={contactTick}");
+        Assert.Equal(CobraMissionStatus.Active, runtime.Status);
+        Assert.True(runtime.GroundWarCombatLive);
     }
 
     [Fact]
@@ -660,7 +718,11 @@ public class CobraMissionRuntimeTests
             CampEmberOperations.CentreNorthM,
             out TerrainSample pad));
         padSurfaceHeightM = pad.HeightM;
-        return new CobraMissionRuntime(world, terrain, CobraCanyonRouteChoice.RiverGorge);
+        return new CobraMissionRuntime(
+            world,
+            terrain,
+            CobraCanyonRouteChoice.RiverGorge,
+            spawn: CobraMissionRuntime.CreateCampEmberPadSpawn(world, terrain));
     }
 
     /// <summary>
@@ -877,7 +939,8 @@ public class CobraMissionRuntimeTests
             terrain,
             CobraCanyonRouteChoice.RiverGorge,
             windVelocityMps: CobraCanyonWindField.DefaultSynopticMps,
-            enableTerrainWind: true);
+            enableTerrainWind: true,
+            spawn: CobraMissionRuntime.CreateCampEmberPadSpawn(world, terrain));
         var replayField = new CobraCanyonWindField(
             world.CreateTerrainSurface(),
             CobraCanyonWindField.DefaultSynopticMps);

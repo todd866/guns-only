@@ -303,16 +303,28 @@ public class CobraGroundWarRuntimeTests
             site.PositionWorldM.Z));
 
         const double stepSeconds = 0.25;
-        for (int step = 0;
+        war.Advance(stepSeconds);
+        Assert.Equal(
+            CobraGroundWarRuntime.AirMobileInsertionSeconds - stepSeconds,
+            site.InboundSlickRemainingSeconds ?? -1.0,
+            6);
+        Assert.Equal(
+            site.InboundSlickRemainingSeconds,
+            war.InboundSlickCountdownSeconds);
+
+        for (int step = 1;
             step < (int)Math.Ceiling(
                 (CobraGroundWarRuntime.AirMobileInsertionSeconds + stepSeconds) / stepSeconds);
             step++)
             war.Advance(stepSeconds);
 
+        Assert.Null(site.InboundSlickRemainingSeconds);
         Assert.Contains(war.LivingUnits(), unit =>
             unit.Faction == GroundFaction.Friendly
             && unit.ParticipatesInGroundCombat
             && InsideSite(unit));
+        Assert.True(site.CaptureProgress > 0.0);
+        Assert.Equal(site.CaptureProgress, war.SiteCaptureProgress, 6);
         Assert.True(gun.IsAlive, "the insertion must ignore, not silently delete, the AA site");
     }
 
@@ -514,10 +526,13 @@ public class CobraGroundWarRuntimeTests
     [Fact]
     public void RampAndIngressDoNotSpendTheCombatTicketPool()
     {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        var terrain = new FlatTerrain();
         var runtime = new CobraMissionRuntime(
-            CobraCanyonDefinition.Create(),
-            new FlatTerrain(),
+            world,
+            terrain,
             CobraCanyonRouteChoice.RiverGorge,
+            spawn: CobraMissionRuntime.CreateCampEmberPadSpawn(world, terrain),
             groundWarSeed: 5);
         double collective = runtime.Cobra.EstimateHoverCollective(
             runtime.Cobra.State.GrossMassKg,
@@ -533,6 +548,20 @@ public class CobraGroundWarRuntimeTests
         Assert.Equal(0, runtime.GroundWar.AuthorityTick);
         Assert.Equal(friendlyTickets, runtime.GroundWar.FriendlyTickets);
         Assert.Equal(hostileTickets, runtime.GroundWar.HostileTickets);
+
+        var ingressRuntime = new CobraMissionRuntime(
+            world,
+            terrain,
+            CobraCanyonRouteChoice.RiverGorge,
+            groundWarSeed: 5);
+        for (int tick = 0; tick < PlayerVehicleContract.FixedStepHz * 5; tick++)
+            ingressRuntime.Advance(command);
+
+        Assert.Equal(CobraMissionAct.Ingress, ingressRuntime.Act);
+        Assert.False(ingressRuntime.GroundWarCombatLive);
+        Assert.Equal(0, ingressRuntime.GroundWar.AuthorityTick);
+        Assert.Equal(friendlyTickets, ingressRuntime.GroundWar.FriendlyTickets);
+        Assert.Equal(hostileTickets, ingressRuntime.GroundWar.HostileTickets);
     }
 
     /// <summary>
@@ -1076,10 +1105,13 @@ public class CobraGroundWarRuntimeTests
     public void StrategicOutcomeStaysFlyableThroughRtbUntilStableCampEmberRecovery(
         bool victory)
     {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        var terrain = new FlatTerrain();
         var runtime = new CobraMissionRuntime(
-            CobraCanyonDefinition.Create(),
-            new FlatTerrain(),
+            world,
+            terrain,
             CobraCanyonRouteChoice.RiverGorge,
+            spawn: CobraMissionRuntime.CreateCampEmberPadSpawn(world, terrain),
             groundWarSeed: 9);
         foreach (ContestedSite site in runtime.GroundWar.Sites) {
             bool campEmber = site.Id == "site.camp-ember.v1";
@@ -1137,5 +1169,60 @@ public class CobraGroundWarRuntimeTests
         Assert.False(runtime.MissionFlyable);
         Assert.False(runtime.Diagnostics.MissionFlyable);
         Assert.Equal(frozenGroundWarTick, runtime.GroundWar.AuthorityTick);
+    }
+
+    [Fact]
+    public void FreshlySpawnedWaveDoesNotContestTheSiteOnItsFirstTick()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        ContestedSite ironBell = war.Sites.Single(site =>
+            site.Id == CobraGroundWarRuntime.IronBellSiteId);
+        ContestedSite plantation = war.Sites.Single(site =>
+            site.Id == "site.plantation-water-tower.v1");
+        Assert.Equal(280.0, CobraGroundWarRuntime.HostileWaveSpawnRingM(plantation), 6);
+        Assert.Equal(360.0, CobraGroundWarRuntime.HostileWaveSpawnRingM(ironBell), 6);
+
+        // Clear every seeded hostile combatant so only friendly defenders occupy the sites
+        // when the first hostile reinforcement wave arrives at FirstHostileWaveDelaySeconds.
+        foreach (GroundUnit hostile in war.Units
+            .Where(unit => unit.Faction == GroundFaction.Hostile
+                && unit.ParticipatesInGroundCombat)
+            .ToArray()) {
+            hostile.ApplyDamage(hostile.MaxHealth);
+        }
+
+        const double stepSeconds = 0.5;
+        GroundWarEvent? waveSpawn = null;
+        for (int step = 0;
+            step < (int)Math.Ceiling(
+                (CobraGroundWarRuntime.FirstHostileWaveDelaySeconds + 2.0) / stepSeconds);
+            step++) {
+            war.Advance(stepSeconds);
+            waveSpawn = war.RecentEvents
+                .Cast<GroundWarEvent?>()
+                .FirstOrDefault(evt => evt?.Kind == "spawn"
+                    && evt.Value.Faction == GroundFaction.Hostile);
+            if (waveSpawn is not null) break;
+        }
+
+        GroundWarEvent spawned = Assert.IsType<GroundWarEvent>(waveSpawn);
+        ContestedSite targetSite = war.Sites.Single(site => site.Id == spawned.SiteId);
+        GroundUnit[] waveUnits = war.RecentEvents
+            .Where(evt => evt.Kind == "spawn" && evt.Faction == GroundFaction.Hostile)
+            .Select(evt => war.FindUnit(evt.UnitId!)!)
+            .ToArray();
+        Assert.NotEmpty(waveUnits);
+        Assert.All(waveUnits, unit => {
+            double distanceM = HorizontalDistance(unit.PositionWorldM, targetSite.PositionWorldM);
+            Assert.True(
+                distanceM >= targetSite.CaptureRadiusM
+                    + CobraGroundWarRuntime.HostileWaveCaptureRadiusMarginM - 1e-6,
+                $"wave unit {unit.Id} spawned at {distanceM:F1} m, inside {targetSite.CaptureRadiusM + CobraGroundWarRuntime.HostileWaveCaptureRadiusMarginM:F1} m");
+        });
+
+        Assert.False(targetSite.IsContested);
+        war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+        Assert.False(targetSite.IsContested,
+            "a freshly spawned wave must march in from outside the capture circle rather than contesting on its first tick");
     }
 }
