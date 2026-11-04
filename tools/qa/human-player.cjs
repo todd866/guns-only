@@ -581,7 +581,20 @@ async function runJourney(page, baseOrigin, def, outDir, thresholds) {
   };
 }
 
+// focus-guard (owner's Macs) runs agent-spawned processes at background QoS while the owner is
+// using the machine. Freeze and timing numbers taken then are inflated, so say so on every run.
+function backgroundQosWarning() {
+  try {
+    require("node:child_process").execFileSync("focus-guard", ["active"], { stdio: "ignore" });
+    return "WARNING: focus-guard is active (owner at the keyboard): this run is at background priority, so freezes and times read high. Rerun when the Mac is idle for acceptance numbers.";
+  } catch {
+    return null; // not active, or not installed
+  }
+}
+
 async function main() {
+  const qosWarning = backgroundQosWarning();
+  if (qosWarning) process.stderr.write(qosWarning + "\n");
   const opts = parseCli(process.argv.slice(2));
   if (opts.help) {
     process.stdout.write(`Usage: node tools/qa/human-player.cjs [--base URL] [--journey f22,cobra,rc|all] [--out DIR]\n`
