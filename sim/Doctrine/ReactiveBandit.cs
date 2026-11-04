@@ -1380,11 +1380,20 @@ public sealed class ReactiveBandit :
     /// Inside gun range with the target already roughly ahead, stop optimising and close the loop
     /// directly on the SAME ballistic lead point BanditFireControl scores the shot against. One
     /// solution, shared by guidance and fire control, is the whole point.
+    bool UsesAceFinisherGate =>
+        Skill == PilotSkill.Ace
+        || _profile.IsBoss
+        || (_profile.MaxAcquireG > _profile.FineTrackMaxG && Skill != PilotSkill.Machine);
+
     PilotCommand GunTrackCommand(in ActorObservation player) {
         var own = State;
         var aim = BanditFireControl.LeadPoint(own, player);
+        double availableG = AvailableAcquireG(safetyReserve: false);
+        double authorityG = UsesAceFinisherGate
+            ? System.Math.Min(_profile.EffectiveFineTrackAuthorityG, availableG)
+            : _profile.EffectiveFineTrackAuthorityG;
         double authority = System.Math.Clamp(
-            _profile.EffectiveFineTrackAuthorityG / 5.5, 0.75, 2.0);
+            authorityG / 5.5, 0.75, 2.0);
         double tau = 0.6 / authority;
         // LEAD THE LEAD POINT. A first-order law chasing a moving aim point settles a whole lag
         // behind it — aim rate times the loop's time constant, ~3-4 deg against a turning
@@ -1432,7 +1441,7 @@ public sealed class ReactiveBandit :
         double g = (System.Math.Cos(own.Gamma)
             + desiredGammaRate * own.Speed / FlightModel.G0) / cosBank;
         g = System.Math.Clamp(g, -0.20,
-            System.Math.Max(-0.20, AvailableAcquireG(safetyReserve: false)));
+            System.Math.Max(-0.20, availableG));
         // Hold the gun cross on: chasing throttle mid-burst walks the pipper off.
         double throttle = own.Speed < _lowSpeedMps
             ? System.Math.Min(_maximumThrottle, 1.05)
@@ -1500,18 +1509,27 @@ public sealed class ReactiveBandit :
         // ManoeuvringFinisher=false is the frozen BfmDuel reference yardstick: it flies the same
         // Veteran planner but declines this law, so a tier ladder is measured against a ruler
         // that does not itself improve with the bandit build.
-        if (!_profile.ManoeuvringFinisher
-            || _profile.MaxAcquireG > _profile.FineTrackMaxG) {
+        if (!_profile.ManoeuvringFinisher) {
+            _fineTrackLatched = false;
+            return false;
+        }
+        if (!UsesAceFinisherGate && _profile.MaxAcquireG > _profile.FineTrackMaxG) {
             _fineTrackLatched = false;
             return false;
         }
         double leadErrorRad = BanditFireControl.LeadNoseErrorRad(State, player);
+        double entryRad = UsesAceFinisherGate
+            ? AceGunTrackLeadEntryRad
+            : GunTrackLeadEntryRad;
+        double exitRad = UsesAceFinisherGate
+            ? AceGunTrackLeadEntryRad * (GunTrackLeadExitRad / GunTrackLeadEntryRad)
+            : GunTrackLeadExitRad;
         if (_fineTrackLatched) {
-            if (leadErrorRad <= GunTrackLeadExitRad) return true;
+            if (leadErrorRad <= exitRad) return true;
             _fineTrackLatched = false;
             return false;
         }
-        if (leadErrorRad <= GunTrackLeadEntryRad) {
+        if (leadErrorRad <= entryRad) {
             _fineTrackLatched = true;
             return true;
         }
@@ -1524,6 +1542,10 @@ public sealed class ReactiveBandit :
     /// Wide enough that the bandit commits to tracking from a realistic post-merge position,
     /// narrow enough that it is not flying pursuit at a target behind its wing line.
     const double GunTrackEntryRad = 0.2094; // 12 degrees
+
+    /// Argon review 2026-11-04: 2.5 degree gate chosen so the rollout keeps the fight and the
+    /// closed loop only finishes it.
+    const double AceGunTrackLeadEntryRad = 0.0436; // 2.5 degrees
 
     /// Manoeuvring-target entry: the planner delivers the pipper inside ~17 cone widths of the
     /// Ace gate (6 deg) and the closed loop takes it from there. Exit a little wider than entry
