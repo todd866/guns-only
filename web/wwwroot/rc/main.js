@@ -112,7 +112,13 @@ import {
   baseCourse
 } from './sim.mjs';
 import {recover, readout} from './physics/session.mjs';
-import {createRace as createRaceBase, stepRace, placeOf, retreatActive} from './physics/race.mjs';
+import {
+  createRace as createRaceBase,
+  stepRace,
+  placeOf,
+  retreatActive,
+  RACE_RETREAT_SEEN_KEY
+} from './physics/race.mjs';
 import {TRACK_FEATURES, placeFeatures} from './physics/features.mjs';
 import {modifiers, MISSILES, beamDir, LASER} from './physics/pickups.mjs';
 import {heldMissilePose} from './pickup-visuals.mjs';
@@ -183,10 +189,24 @@ let bodyKind = 'jet';
 try {
   bodyKind = loadProgress(localStorage).body;
 } catch {}
-function createRace(course, options) {
+function raceRetreatCeremony(options = {}) {
+  if (options.roam || options.furball || options.retreatCeremony === false) return false;
+  if (options.retreatCeremony === true) return true;
+  try {
+    return !sessionStorage.getItem(RACE_RETREAT_SEEN_KEY);
+  } catch {
+    return true;
+  }
+}
+function createRace(course, options = {}) {
+  const roam = options.roam || options.furball;
   return createRaceBase(
     {...course, laps: eventLaps(course.event)},
-    {...options, params: vehicleParams(bodyKind === 'jet' ? 'buggy' : bodyKind)}
+    {
+      ...options,
+      params: vehicleParams(bodyKind === 'jet' ? 'buggy' : bodyKind),
+      retreatCeremony: roam ? false : raceRetreatCeremony(options)
+    }
   );
 }
 const audio = new SoundKit();
@@ -2054,7 +2074,7 @@ function callout(text, ms = 1600) {
   clearTimeout(calloutTimer);
   calloutTimer = setTimeout(() => {
     delete b.dataset.callout;
-    b.textContent = '🎺 Flag time! Everyone stops';
+    b.textContent = '🎺 Bugle time! Rivals stop — you keep driving';
     b.hidden = !retreatActive(race);
   }, ms);
 }
@@ -4957,6 +4977,12 @@ function frame(now) {
             },
         1 / 120
       );
+      if (race.retreatMarkSeen) {
+        try {
+          sessionStorage.setItem(RACE_RETREAT_SEEN_KEY, '1');
+        } catch {}
+        race.retreatMarkSeen = false;
+      }
       hotWheelsPost();
       skyJumpStep();
       skateStep(skateInput);

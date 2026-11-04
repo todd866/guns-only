@@ -56,6 +56,7 @@ test('recovery faces along the racing line and repeats at one gate move further 
   s.gate = 1;
   recover(s);
   const first = readout(s);
+  assert.ok(first.forwardSpeed >= 5, `recovery rolls forward (${first.forwardSpeed.toFixed(1)} m/s)`);
   assert.ok(Math.abs(first.x) < 0.01 && Math.abs(first.z) < 0.01, 'lands on the line beside the gate');
   assert.ok(
     Math.abs(first.yaw) < 0.05,

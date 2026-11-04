@@ -13,9 +13,20 @@ export const SKILL = {cruise: 0.78, ace: 0.95};
 // Aggressor-squadron callsigns, one per rival paint scheme (ghost, desert, splinter, flanker, arctic).
 export const CALLSIGNS = ['GHOST', 'SANDY', 'SPLINTER', 'FLANKER', 'FROSTY', 'VIPER', 'BANDIT'];
 
+export const RACE_RETREAT_SEEN_KEY = 'rc.raceRetreatSeen';
+export const RACE_RETREAT_SALUTE_SPEED = 0.5;
+
 export function createRace(
   course,
-  {mode = 'kid', opponents = 3, roam = false, features = null, furball = false, params} = {}
+  {
+    mode = 'kid',
+    opponents = 3,
+    roam = false,
+    features = null,
+    furball = false,
+    params,
+    retreatCeremony = true
+  } = {}
 ) {
   // Older authored districts contain four grid markers. Extend their last rows
   // instead of silently shrinking an eight-car race to four cars.
@@ -38,8 +49,7 @@ export function createRace(
     colour: i,
     callsign: CALLSIGNS[i % CALLSIGNS.length]
   }));
-  // In-race ceremony applies to every driver. Timing is provisional; rarity and
-  // presentation remain a later play-balancing task.
+  // First race of a browser session only: rivals salute at the bugle; the player keeps control.
   // Furball sessions drive like free drive (no gates, no lap) inside the race's own rules.
   if (roam || furball) for (const x of [player, ...rivals.map(r => r.session)]) x.roam = true;
   const pickupCourse = furball || roam ? {...course, pickupItems: null} : course;
@@ -68,7 +78,10 @@ export function createRace(
     pace: 6,
     drivingTime: 0,
     finishOrder: [],
-    retreat: {at: furball ? Infinity : 18, length: 5}
+    retreatCeremony: !roam && !furball && retreatCeremony,
+    retreat: {at: roam || furball || !retreatCeremony ? Infinity : 18, length: 5},
+    retreatWasActive: false,
+    retreatSalute: false
   };
   race.pickups.playerCar = player.car;
   race.pickups.superFor = mode === 'kid' ? 'player' : 'all';
@@ -349,6 +362,17 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
     race.pace += (race.player.car.forwardSpeed - race.pace) * (1 - Math.exp(-dt / 6));
   }
   if (playerInput.fire) use(pk, race.player.car);
+  const rt = retreatActive(race);
+  if (race.retreatCeremony) {
+    if (rt) {
+      if (!race.retreatWasActive) race.retreatSalute = true;
+      if (race.player.car.speed >= RACE_RETREAT_SALUTE_SPEED) race.retreatSalute = false;
+    } else if (race.retreatWasActive) {
+      if (race.retreatSalute) boostCar(pk, race.player.car, 0.9);
+      race.retreatMarkSeen = true;
+    }
+    race.retreatWasActive = rt;
+  }
   // Race order for the Pitbull (blue shell): leader first. Free drive has no order.
   pk.order =
     race.roam || fb
@@ -356,15 +380,7 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
       : [race.player, ...race.rivals.map(r => r.session)]
           .sort((a, b) => placeOf(race, a) - placeOf(race, b))
           .map(s => s.car);
-  stepSession(
-    race.player,
-    withEffects(
-      race,
-      race.player.car,
-      retreatActive(race) ? {throttle: 0, brake: true, steer: 0} : playerInput
-    ),
-    dt
-  );
+  stepSession(race.player, withEffects(race, race.player.car, playerInput), dt);
   for (const rival of race.rivals) {
     if (fb?.out.has(rival.session.car)) continue;
     // After any recovery the rival is back at a gate: drop a half-driven skill route and resume the
