@@ -1280,7 +1280,14 @@ function paintReadyControls(text) {
 
 function paintReadyHint(text) {
   if (!readyHint) return;
-  renderPlayerKeyHint(readyHint, text, {touch: mobileControls});
+  const raw = String(text ?? "").trim();
+  if (!mobileControls && /\[[^\]]+\]/.test(raw)) {
+    renderKeyHintRow(readyHint, raw);
+    readyHint.setAttribute("aria-label", raw.replace(/\[([^\]]+)\]/g, "$1").trim());
+    return;
+  }
+  readyHint.removeAttribute?.("aria-label");
+  renderPlayerKeyHint(readyHint, raw, {touch: mobileControls});
 }
 
 function paintReadyStartKey(show) {
@@ -1572,7 +1579,10 @@ let flightTestSyncSequence = 0;
 // so a mixed shell/app can be detected instead of silently reporting whichever integer happened
 // to be embedded in stale HTML. Production metadata adds commit/deployment discrimination when
 // Vercel provides it, while local development remains fully offline.
-const ENTRYPOINT_BUILD = new URL(import.meta.url).searchParams.get("v") || "dev";
+const rawEntrypointBuild = new URL(import.meta.url).searchParams.get("v");
+const ENTRYPOINT_BUILD = !rawEntrypointBuild || rawEntrypointBuild.startsWith("__RELEASE_")
+  ? "dev"
+  : rawEntrypointBuild;
 let buildIdentity = createReleaseIdentity({ entrypointBuild: ENTRYPOINT_BUILD });
 // One-shot latch so the menu auto-reload to a newer build fires once, never in a loop.
 let autoReloadArmed = false;
@@ -2737,7 +2747,7 @@ function renderBuildIdentity() {
 }
 
 function buildIdentityBlocksSortie() {
-  return buildIdentity.stale || buildIdentity.state === "checking";
+  return buildIdentity.stale === true;
 }
 
 function applyBuildIdentity(nextIdentity) {
@@ -4108,9 +4118,11 @@ function firstRunValleyQueryContext() {
 }
 
 function shouldStageFirstRunValley() {
+  const query = firstRunValleyQueryContext();
   return !firstRunValleyDismissed
     && typeof bridge?.StartFirstRunValley === "function"
-    && shouldAutoStartFirstRunValley(firstRunValleyQueryContext());
+    && query.firstRunQuery === "1"
+    && shouldAutoStartFirstRunValley(query);
 }
 
 function dismissFirstRunValleyAutostart() {
@@ -5526,9 +5538,7 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     paintReadyHint(background
       ? "Return to the game to restage"
       : ledger?.clearance === "GROUNDED"
-        ? `Allocation exception recorded — ${mobileControls
-          ? "Tap Fly to fly the next contract"
-          : "Press Enter to fly the next contract"}`
+        ? (mobileControls ? "Tap Fly again" : "[return] fly again")
         : "");
     paintReadyStartKey(false);
   } else if (firstRunReady) {
@@ -5538,7 +5548,7 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     if (readyConfigLabel) readyConfigLabel.textContent = "Fire";
     readyReplay.hidden = true;
     readyKicker.textContent = "Kestrel Gorge · F-22A";
-    readyTitle.textContent = "Enter the valley";
+    readyTitle.textContent = "Fly the valley";
     readyBrief.textContent = "Follow the valley north. Weapons unlock at the exit: launch your two missiles, then track the aircraft ahead and hit it with the gun.";
     readySortie.textContent = "Return to the runway, land and stop.";
     readyConfig.textContent = mobileControls
@@ -5547,10 +5557,10 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     paintReadyControls(mobileControls
       ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll"
       : `ARROWS fly · W/S power · ${rtbBinding} return to base · H controls`);
-    readyStartLabel.textContent = "Enter valley";
+    readyStartLabel.textContent = "Fly the valley";
     paintReadyHint(background
-      ? "Return to the game to enter the valley"
-      : mobileControls ? "Tap Enter valley when ready" : "Press Enter when ready");
+      ? "Return to the game"
+      : mobileControls ? "Tap Fly the valley" : "[return] fly");
     paintReadyStartKey(!background && !mobileControls);
   } else if (ready) {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
@@ -5583,8 +5593,8 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     readyStartLabel.textContent = exploreBase ? "Explore" : `Fly ${brief.title}`;
     paintReadyHint(background
       ? "Return to the game"
-      : exploreBase ? (mobileControls ? "Tap Explore" : "Press Enter to explore")
-        : mobileControls ? "Tap Fly to launch" : "Press Enter to fly");
+      : exploreBase ? (mobileControls ? "Tap Explore" : "[return] explore")
+        : mobileControls ? "Tap Fly" : "[return] fly");
     paintReadyStartKey(!background && !mobileControls && showScreen && ready);
   } else {
     // A pause screen has one job: get you back in the aeroplane. Everything that once sat here --
@@ -5626,8 +5636,6 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     } else {
       paintReadyHint("Older or mixed build detected · reload the current release");
     }
-  } else if (buildIdentity.state === "checking" && ready) {
-    paintReadyHint("Verifying current release…");
   } else if (terrainLoading && ready) {
     paintReadyHint(terrainLaunchWarmupStatus
       || "Loading nearby terrain and low-level scenery…");
@@ -7358,7 +7366,7 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
       }
       .cvf-primary {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(max-content, 1fr));
         gap: 8px;
       }
       .cvf-label {
@@ -7369,10 +7377,9 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
       .cvf-value {
         display: block;
         margin-top: 2px;
-        overflow: hidden;
         color: #eefaf7;
+        font-variant-numeric: tabular-nums;
         white-space: nowrap;
-        text-overflow: ellipsis;
       }
       .cvf-value[data-state="EXPOSED"],
       .cvf-value[data-state="OUTSIDE"],
@@ -12976,6 +12983,9 @@ if ("serviceWorker" in navigator) {
 // first-run valley; the gauge stays visible until the first frame.
 try {
   applyShellTheme(document.documentElement, window.location);
-  if (!shouldAutoStartFirstRunValley(firstRunValleyQueryContext())) bootScreen?.classList.add("picker-live");
+  if (!shouldAutoStartFirstRunValley(firstRunValleyQueryContext())) {
+    bootScreen?.classList.add("picker-live");
+    renderPauseUi();
+  }
 } catch { /* Storage may be unavailable; keep the cover. */ }
 boot().catch(showFatal);
