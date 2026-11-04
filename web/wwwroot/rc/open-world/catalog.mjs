@@ -726,6 +726,40 @@ export const canEnter = (state, p) =>
 export const canVisit = (state, p) => !!p && (!p.alien || alienWorldUnlocked(state));
 export const canEnterEvent = (state, event) =>
   event?.alien ? alienWorldUnlocked(state) : canEnter(state, locationById(event?.location));
+/** Nearest place the kid can go but has not found yet (roam ribbon target). */
+export function nearestUndiscoveredLocation(state, pos) {
+  let best = null,
+    bestD = Infinity;
+  for (const p of LOCATIONS) {
+    if (!canEnter(state, p) || state.discovered.includes(p.id)) continue;
+    const d = distance(pos, p.pos);
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  return best;
+}
+/** Nearest public race ring the kid can start (fallback roam ribbon target). */
+export function nearestEventRing(state, pos) {
+  let best = null,
+    bestD = Infinity;
+  for (const e of EVENTS) {
+    if (e.road || !e.points?.length || !canEnterEvent(state, e)) continue;
+    const cx = e.points.reduce((s, p) => s + p[0], 0) / e.points.length,
+      cz = e.points.reduce((s, p) => s + p[1], 0) / e.points.length,
+      at = [cx, 0, cz];
+    const d = distance(pos, at);
+    if (d < bestD) {
+      bestD = d;
+      best = {id: e.id, pos: at};
+    }
+  }
+  return best;
+}
+export function roamPullTarget(state, pos) {
+  return nearestUndiscoveredLocation(state, pos) ?? nearestEventRing(state, pos);
+}
 export function collectSpecimens(state, seen) {
   const found = [];
   for (const i of seen) {
