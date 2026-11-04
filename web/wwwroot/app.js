@@ -6,6 +6,7 @@ import { highAlphaRecoveryPresentation } from "./render/hud/high_alpha_recovery.
 import { attemptDurationSeconds } from "./render/shell/attempt_duration.js?v=__RELEASE_BUILD__";
 import { beginMissionCloudEntry } from "./render/shell/mission_cloud_entry.js?v=__RELEASE_BUILD__";
 import { mountReadyMenuBackdrop } from "./render/shell/ready_menu_backdrop.js?v=__RELEASE_BUILD__";
+import { applyFrontDoor, syncFrontDoor } from "./render/shell/front_door.js?v=__RELEASE_BUILD__";
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
 import { attemptElapsedSeconds, attemptStartSeconds } from "./render/progression/attempt_clock.js";
 import { paintMissionStrip } from "./render/shell/mission_strip.js";
@@ -4925,6 +4926,7 @@ function renderCampaignProgress() {
   // Release state, not qualification progress, owns launchability. Hidden preview fixtures stay
   // represented for focused development, but a copied URL cannot promote one into production.
   if (readyProgramProgress) readyProgramProgress.textContent = "";
+  syncFrontDoor(document, window.location);
   for (const button of readyProgramButtons) {
     const nodeId = button.dataset.programNode;
     const selected = nodeId === selectedProgramNodeId;
@@ -12985,6 +12987,7 @@ if ("serviceWorker" in navigator) {
 try {
   applyShellTheme(document.documentElement, window.location);
   mountReadyMenuBackdrop();
+  applyFrontDoor(document.documentElement, window.location);
   if (!shouldAutoStartFirstRunValley(firstRunValleyQueryContext())) {
     bootScreen?.classList.add("picker-live");
     renderPauseUi();
