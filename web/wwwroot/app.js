@@ -269,6 +269,14 @@ import {
   resetControlBindings,
   savePlayerSettings,
 } from "./render/settings/player_settings.js?v=__RELEASE_BUILD__";
+import {keyCap} from "./render/input/key_hints.js?v=__RELEASE_BUILD__";
+import {
+  appendBindingKey,
+  renderControlLegend,
+  renderKeyColumn,
+  renderKeyHintRow,
+  renderPlayerKeyHint,
+} from "./render/input/key_label_ui.js?v=__RELEASE_BUILD__";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -603,6 +611,7 @@ const readyDomainButtons = [...document.querySelectorAll("[data-domain-filter]")
 const readyProgramProgress = document.querySelector("#ready-program-progress");
 const readyStart = document.querySelector("#ready-start");
 const readyStartLabel = readyStart.querySelector(".shell-action-label");
+const readyStartKey = readyStart.querySelector(".shell-action-key");
 const readyReplay = document.querySelector("#ready-replay");
 const readyHandoff = document.querySelector("#ready-handoff");
 const readyIntroReplay = document.querySelector("#ready-intro-replay");
@@ -1254,6 +1263,33 @@ let previousRunPausedForAudio = false;
 const mobileControls = localTouchPreview || coarsePointer || (touchCapable && smallViewport);
 document.documentElement.classList.toggle("touch-mode", mobileControls);
 document.documentElement.classList.toggle("touch-primary", mobileControls);
+
+function paintReadyControls(text) {
+  if (!readyControls) return;
+  if (!text) {
+    readyControls.replaceChildren();
+    return;
+  }
+  if (mobileControls) {
+    readyControls.textContent = text;
+    return;
+  }
+  renderControlLegend(readyControls, text);
+}
+
+function paintReadyHint(text) {
+  if (!readyHint) return;
+  renderPlayerKeyHint(readyHint, text, {touch: mobileControls});
+}
+
+function paintReadyStartKey(show) {
+  if (!readyStartKey) return;
+  readyStartKey.replaceChildren();
+  const visible = show === true && !mobileControls;
+  readyStartKey.hidden = !visible;
+  if (visible) readyStartKey.append(keyCap("return"));
+}
+
 // Touch phone = the assisted contract around the two-stick primary controls: throttle holds corner
 // velocity until the pilot takes the lever, qualified gun solutions may fire automatically, and a
 // centred stick holds the path. ONE contract per sortie, latched at launch from the DEVICE, never
@@ -3192,6 +3228,23 @@ let incidentReplay = null;
 let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
 const reportButton = document.querySelector("#ready-report");
+
+function paintShellKeyHints() {
+  const pauseDesktop = pauseButton?.querySelector(".pause-desktop");
+  if (pauseDesktop) renderKeyHintRow(pauseDesktop, "[esc] · PAUSE");
+  if (incidentReplaySkip) renderKeyHintRow(incidentReplaySkip, "Debrief · [esc]");
+  const reportKey = reportButton?.querySelector(".shell-action-key");
+  if (reportKey) {
+    reportKey.replaceChildren(keyCap("F8"));
+    reportKey.hidden = mobileControls;
+  }
+  if (reportButton) {
+    reportButton.title = "Report";
+    reportButton.setAttribute("aria-label", "Report (F8)");
+  }
+}
+paintShellKeyHints();
+
 const reportTransport = createReportTransport({
   capabilityKey: `guns-only.feedback-enabled.${BUILD}.${ENTRYPOINT_BUILD}`,
   onEnabled(enabled) {
@@ -3294,9 +3347,14 @@ function renderSettingsBindings() {
       button.type = "button";
       button.dataset.bindAction = definition.action;
       button.dataset.capturing = String(bindingCaptureAction === definition.action);
-      button.textContent = bindingCaptureAction === definition.action
-        ? "Press key" : controlCodeLabel(playerSettings.bindings[definition.action]);
-      button.setAttribute("aria-label", `${definition.label}: ${button.textContent}`);
+      const bindingLabel = controlCodeLabel(playerSettings.bindings[definition.action]);
+      button.replaceChildren();
+      if (bindingCaptureAction === definition.action) {
+        button.textContent = "Press key";
+      } else {
+        renderKeyColumn(button, bindingLabel);
+      }
+      button.setAttribute("aria-label", `${definition.label}: ${bindingLabel}`);
       button.title = `Rebind ${definition.label}`;
       cell.append(button);
       row.append(label, cell);
@@ -3305,7 +3363,12 @@ function renderSettingsBindings() {
   });
   const reportRow = document.createElement("tr");
   reportRow.className = "settings-binding";
-  reportRow.innerHTML = '<th scope="row">Report</th><td><kbd>F8</kbd></td>';
+  const reportLabel = document.createElement("th");
+  reportLabel.scope = "row";
+  reportLabel.textContent = "Report";
+  const reportCell = document.createElement("td");
+  appendBindingKey(reportCell, "F8");
+  reportRow.append(reportLabel, reportCell);
   settingsBindings.replaceChildren(...nodes, reportRow);
 }
 
@@ -5327,7 +5390,7 @@ function renderPauseUi(state = latestState) {
       : `${key("pull")}/${key("push")} pitch · ${key("rollLeft")}/${key("rollRight")} roll · ${key("powerUp")}/${key("powerDown")} power · ${key("fire")} fire · ${key("gearToggle")} gear · H controls · Esc pause`;
     // The control legend is hidden on touch; the result correction is not a legend, so it has
     // its own always-visible row (loop audit #5).
-    if (readyControls) readyControls.textContent = finished ? "" : `${exercise.cue}\n${practiceControls}`;
+    paintReadyControls(finished ? "" : `${exercise.cue}\n${practiceControls}`);
     if (readyControls) readyControls.hidden = finished;
     if (readyCorrection && finished) {
       readyCorrection.textContent = sortieResultCopy(state)?.safetyCorrection
@@ -5335,7 +5398,8 @@ function renderPauseUi(state = latestState) {
       readyCorrection.hidden = !readyCorrection.textContent;
     }
     readyStartLabel.textContent = finished ? "Repeat practice" : "Start practice";
-    readyHint.textContent = "Practice results are saved locally and do not count as a full sortie.";
+    paintReadyHint("Practice results are saved locally and do not count as a full sortie.");
+    paintReadyStartKey(false);
   } else if (finished) {
     const result = sortieResultCopy(state);
     const casevac = isCasevacState(state);
@@ -5440,7 +5504,7 @@ function renderPauseUi(state = latestState) {
     // No qualification, so the debrief offers the only two things that make sense: go again, or
     // pick the other aircraft.
     readyStartLabel.textContent = "Fly again";
-    if (readyControls) readyControls.textContent = carrierHandoff
+    paintReadyControls(carrierHandoff
       ? `${result.reserveMarginLb === null
         ? "Recovery reserve result unavailable"
         : `${result.reserveMarginLb < 0 ? "Below" : "Above"} protected reserve by ${Math.round(Math.abs(result.reserveMarginLb))} LB`}
@@ -5457,14 +5521,15 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
           ? `Full-pass primary · ${carrierFacts.passCorrection}\nTouchdown assessment · ${carrierFacts.touchdown}\nTouchdown primary · ${carrierFacts.touchdownCorrection}`
           : ledger
             ? `${ledger.lines.map((line) => `${line.label} · ${line.creditsText}`).join("\n") || "No lines"}\n${ledger.clearanceText}`
-            : singleCorrection;
-    readyHint.textContent = background
+            : singleCorrection);
+    paintReadyHint(background
       ? "Return to the game to restage"
       : ledger?.clearance === "GROUNDED"
         ? `Allocation exception recorded — ${mobileControls
           ? "Tap Fly to fly the next contract"
           : "Press Enter to fly the next contract"}`
-        : "";
+        : "");
+    paintReadyStartKey(false);
   } else if (firstRunReady) {
     const fireBinding = controlCodeLabel(playerSettings.bindings.fire);
     const rtbBinding = controlCodeLabel(playerSettings.bindings.knockItOff);
@@ -5478,13 +5543,14 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     readyConfig.textContent = mobileControls
       ? "FOX 2 launches two missiles, one at a time, then becomes GUNS."
       : `${fireBinding} launches two missiles, one at a time, then fires guns.`;
-    if (readyControls) readyControls.textContent = mobileControls
+    paintReadyControls(mobileControls
       ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll"
-      : `ARROWS fly · W/S power · ${rtbBinding} return to base · H controls`;
+      : `ARROWS fly · W/S power · ${rtbBinding} return to base · H controls`);
     readyStartLabel.textContent = "Enter valley";
-    readyHint.textContent = background
+    paintReadyHint(background
       ? "Return to the game to enter the valley"
-      : mobileControls ? "Tap Enter valley when ready" : "Press Enter when ready";
+      : mobileControls ? "Tap Enter valley when ready" : "Press Enter when ready");
+    paintReadyStartKey(!background && !mobileControls);
   } else if (ready) {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = "Configuration";
@@ -5504,20 +5570,21 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
       const keyboardControls = brief.controls
         || "Arrows fly · W/S power · F guns · V padlock · Tab target\nH opens controls · R restarts";
       const casevacReady = selectedBeat === 13 || isCasevacState(state);
-      readyControls.textContent = mobileControls
+      paintReadyControls(mobileControls
         ? casevacReady
           ? "LEFT STICK forward/reverse/translate · RIGHT STICK yaw · VERT climb/descend · ABORT requests return\nMedevac has no target, padlock, or gun controls"
           : "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · TARGET changes contact · PADLOCK tracks · FIRE shoots\nController: LS fly · RS look · RT fire · A padlock · LB/RB power"
         : casevacReady
           ? keyboardControls
-          : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`;
+          : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`);
     }
     const exploreBase = selectedProgramNodeId === "area-51";
     readyStartLabel.textContent = exploreBase ? "Explore" : `Fly ${brief.title}`;
-    readyHint.textContent = background
+    paintReadyHint(background
       ? "Return to the game"
       : exploreBase ? (mobileControls ? "Tap Explore" : "Press Enter to explore")
-        : mobileControls ? "Tap Fly to launch" : "Press Enter to fly";
+        : mobileControls ? "Tap Fly to launch" : "Press Enter to fly");
+    paintReadyStartKey(!background && !mobileControls && showScreen && ready);
   } else {
     // A pause screen has one job: get you back in the aeroplane. Everything that once sat here --
     // a kicker, a sentence about the deterministic clock, a two-cell sortie/status table, a
@@ -5531,9 +5598,10 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     readyConfig.textContent = "";
     if (readySortieLabel) readySortieLabel.textContent = "";
     if (readyConfigLabel) readyConfigLabel.textContent = "";
-    if (readyControls) readyControls.textContent = "";
+    paintReadyControls("");
     readyStartLabel.textContent = "Resume";
-    readyHint.textContent = "";
+    paintReadyHint("");
+    paintReadyStartKey(false);
   }
 
   renderBuildIdentity();
@@ -5549,19 +5617,19 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     // page is not stale so it cannot loop. NEVER mid-flight or paused -- that would bin the sortie.
     if (ready && !autoReloadArmed && !reportUi.active) {
       autoReloadArmed = true;
-      readyHint.textContent = "Updating to the latest build…";
+      paintReadyHint("Updating to the latest build…");
       setTimeout(() => {
         if (reportUi.active) { autoReloadArmed = false; return; }
         void reloadCurrentBuild();
       }, 1200);
     } else {
-      readyHint.textContent = "Older or mixed build detected · reload the current release";
+      paintReadyHint("Older or mixed build detected · reload the current release");
     }
   } else if (buildIdentity.state === "checking" && ready) {
-    readyHint.textContent = "Verifying current release…";
+    paintReadyHint("Verifying current release…");
   } else if (terrainLoading && ready) {
-    readyHint.textContent = terrainLaunchWarmupStatus
-      || "Loading nearby terrain and low-level scenery…";
+    paintReadyHint(terrainLaunchWarmupStatus
+      || "Loading nearby terrain and low-level scenery…");
   }
 
   // Ready cannot be dismissed while another safety interlock is still active. The relevant

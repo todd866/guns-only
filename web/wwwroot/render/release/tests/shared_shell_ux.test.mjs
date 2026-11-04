@@ -25,12 +25,12 @@ test("unselected aircraft posters retain aircraft and sortie identity", () => {
 
 test("desktop flight chrome advertises Escape pause and the H quicklook repeats it", () => {
   assert.match(indexSource,
-    /class="pause-desktop"[^>]*>ESC · PAUSE<\/span>/u);
+    /class="pause-desktop key-hint-row"/u);
   assert.match(indexSource,
     /class="pause-mobile"[^>]*><svg[^>]*>[\s\S]*?<use href="#shell-pause"\/>[\s\S]*?<\/span>/u,
     "touch keeps a compact 44px pause target without advertising an unavailable key");
-  assert.equal((hudSource.match(/ESC  PAUSE \/ MENU/g) ?? []).length, 2,
-    "wide and compact H quicklooks must both expose the pause/menu lifecycle key");
+  assert.match(hudSource, /\[esc\]\s+PAUSE \/ MENU/);
+  assert.match(hudSource, /bracketizeLegendLine/);
 });
 
 test("systems and navigation disclosure selectors target both summaries and both cues", () => {
