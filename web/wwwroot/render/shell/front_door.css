@@ -1,0 +1,256 @@
+/* FRONT DOOR DESIGN VARIANTS (?frontDoor=a|b|c) — default DOM unchanged without the query. */
+
+html:is(.front-door-a, .front-door-b, .front-door-c) #ready-screen[data-mode="program"] .ready-program-heading {
+  display: none;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) #ready-screen[data-mode="program"] .ready-card {
+  max-height: min(680px, 100%);
+  overflow: hidden;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) #ready-screen[data-mode="program"] .ready-layout {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.4vh, 14px);
+  min-height: 0;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) #ready-screen[data-mode="program"] .ready-selector {
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) #ready-screen[data-mode="program"] .ready-briefing {
+  flex: 0 0 auto;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) #ready-screen[data-mode="program"] #ready-start {
+  width: 100%;
+  max-width: 22rem;
+  align-self: center;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-returning {
+  position: absolute;
+  z-index: 3;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  border-radius: var(--flow-radius-sm);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-returning .f22-row {
+  grid-template-columns: 3.2em minmax(0, 1fr) auto;
+  min-height: 38px;
+  padding: 4px 8px;
+  background: rgba(8, 12, 18, .82);
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-returning .f22-value,
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-returning .front-door-rung-num,
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-returning .front-door-streak-num,
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-returning .front-door-pb-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--flow-font-data);
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-rung-pips {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-pip {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(122, 240, 165, .35);
+  background: transparent;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-pip[data-filled="true"] {
+  background: var(--flow-accent);
+  border-color: var(--flow-accent);
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-more {
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-more > summary {
+  list-style: none;
+  cursor: pointer;
+  min-width: 5.5rem;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(253, 246, 230, .22);
+  border-radius: var(--flow-radius-sm);
+  color: var(--flow-ink-muted);
+  background: var(--flow-panel);
+  font: 700 11px/38px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .12em;
+  text-align: center;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-more-panel {
+  margin-top: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) #ready-screen[data-mode="program"]
+  .sortie-option:has(.sortie-choice[data-aircraft="cobra"]) {
+  display: none;
+}
+
+html:is(.front-door-a, .front-door-b, .front-door-c) #ready-screen[data-mode="program"]
+  .sortie-option:has(.sortie-choice[data-aircraft="f22"]) {
+  position: relative;
+}
+
+/* --- Variant A: hero card + RC corner pill --- */
+html.front-door-a #ready-screen[data-mode="program"] .ready-mission-groups {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-height: 280px;
+  position: relative;
+}
+
+html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="f22"]) {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="f22"]) .sortie-choice {
+  aspect-ratio: 4 / 3;
+  min-height: clamp(260px, 52vh, 420px);
+  filter: brightness(.92) saturate(.98);
+  border-width: 2px;
+  border-color: rgba(122, 240, 165, .45);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .45);
+}
+
+html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) {
+  position: absolute;
+  z-index: 4;
+  right: clamp(8px, 2vw, 18px);
+  bottom: clamp(118px, 22vh, 148px);
+  width: min(168px, 38vw);
+}
+
+html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-choice {
+  aspect-ratio: 1;
+  min-height: 0;
+  border-radius: 999px;
+  padding: 10px;
+  filter: brightness(.88) saturate(.95);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+}
+
+html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-contract {
+  display: none;
+}
+
+/* --- Variant B: hero banner + cards under --- */
+html.front-door-b #ready-screen[data-mode="program"] .ready-mission-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+}
+
+html.front-door-b #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="f22"]) {
+  width: 100%;
+}
+
+html.front-door-b #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="f22"]) .sortie-choice {
+  aspect-ratio: 21 / 7;
+  min-height: clamp(108px, 19vh, 168px);
+  max-height: 168px;
+  filter: brightness(.9) saturate(.98);
+  border-width: 2px;
+  border-color: rgba(122, 240, 165, .4);
+}
+
+html.front-door-b #ready-screen[data-mode="program"] .front-door-returning .f22-row {
+  min-height: 32px;
+  padding: 3px 8px;
+}
+
+html.front-door-b #ready-screen[data-mode="program"] .front-door-under-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+html.front-door-b #ready-screen[data-mode="program"] .front-door-under-row .sortie-option:has(.sortie-choice[data-aircraft="rc"]) {
+  max-width: 200px;
+}
+
+html.front-door-b #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-choice {
+  aspect-ratio: 1;
+  border-radius: var(--flow-radius-md);
+}
+
+/* --- Variant C: single hero, picker folded --- */
+html.front-door-c #ready-screen[data-mode="program"] .ready-mission-groups {
+  display: block;
+  flex: 1 1 auto;
+  min-height: clamp(280px, 54vh, 440px);
+  position: relative;
+}
+
+html.front-door-c #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="f22"]) .sortie-choice {
+  aspect-ratio: 3 / 4;
+  min-height: clamp(280px, 54vh, 440px);
+  filter: brightness(.94) saturate(1);
+  border-width: 2px;
+  border-color: rgba(122, 240, 165, .5);
+}
+
+html.front-door-c #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) {
+  position: absolute;
+  z-index: 4;
+  top: 12px;
+  right: 12px;
+  width: min(152px, 34vw);
+}
+
+html.front-door-c #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-choice {
+  aspect-ratio: 1;
+  border-radius: 999px;
+  padding: 8px;
+  filter: brightness(.86) saturate(.92);
+}
+
+html.front-door-c #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-contract {
+  display: none;
+}
+
+html.front-door-c #ready-screen[data-mode="program"] .front-door-more {
+  position: absolute;
+  z-index: 4;
+  left: 12px;
+  bottom: 12px;
+}
+
+html[data-theme="light"].front-door-a .front-door-returning .f22-row,
+html[data-theme="light"].front-door-b .front-door-returning .f22-row,
+html[data-theme="light"].front-door-c .front-door-returning .f22-row {
+  background: rgba(255, 252, 245, .88);
+}
