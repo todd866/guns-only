@@ -254,6 +254,7 @@ import {
 } from "./render/telemetry/telemetry_outbox.js?v=__RELEASE_BUILD__";
 import { createShellHealthBeacon, readLocalShellIncidents } from "./render/telemetry/shell_health.js?v=__RELEASE_BUILD__";
 import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=__RELEASE_BUILD__";
+import { applyShellTheme } from "./render/shell/shell_theme.js?v=__RELEASE_BUILD__";
 import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=__RELEASE_BUILD__";
 import {
   createBootWatchdog,
@@ -12974,6 +12975,7 @@ if ("serviceWorker" in navigator) {
 // runtime arrives (about 20 MB). Lift the cover now unless this load flies straight into the
 // first-run valley; the gauge stays visible until the first frame.
 try {
+  applyShellTheme(document.documentElement, window.location);
   if (!shouldAutoStartFirstRunValley(firstRunValleyQueryContext())) bootScreen?.classList.add("picker-live");
 } catch { /* Storage may be unavailable; keep the cover. */ }
 boot().catch(showFatal);
