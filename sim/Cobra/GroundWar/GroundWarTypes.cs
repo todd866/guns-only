@@ -37,11 +37,25 @@ public enum HoldTheBridgeOutcome
     Defeat
 }
 
+public enum GroundUnitDamageState
+{
+    Intact,
+    Damaged,
+    Destroyed
+}
+
 /// <summary>
 /// Fiction/provisional ground combatants for Cobra Canyon legibility. Not sourced vehicle models.
 /// </summary>
 public sealed class GroundUnit
 {
+    // Hard-point intermediate DAMAGED threshold at 50% of MaxHealth (Argon review 2026-11-05).
+    public const double HardPointDamagedHealthFraction = 0.5;
+    // Suppression duration in seconds during which a newly DAMAGED hard point stops firing (Argon review 2026-11-05).
+    public const double HardPointSuppressionSeconds = 4.0;
+    // Accuracy multiplier for a hard point in the intermediate DAMAGED state (Argon review 2026-11-05).
+    public const double HardPointDamagedAccuracyScale = 0.5;
+
     public GroundUnit(
         string id,
         GroundFaction faction,
@@ -82,6 +96,25 @@ public sealed class GroundUnit
     public string HomeSiteId { get; }
     public bool IsAlive => Health > 1e-9;
     public bool IsWreck => !IsAlive;
+    public bool IsDamaged =>
+        IsAlive
+        && Role == GroundUnitRole.HardPoint
+        && Health <= MaxHealth * HardPointDamagedHealthFraction + 1e-9;
+    public GroundUnitDamageState DamageState =>
+        !IsAlive
+            ? GroundUnitDamageState.Destroyed
+            : IsDamaged
+                ? GroundUnitDamageState.Damaged
+                : GroundUnitDamageState.Intact;
+    public double SuppressionRemainingSeconds { get; private set; }
+    public bool IsSuppressed => IsAlive && SuppressionRemainingSeconds > 1e-9;
+    public double Accuracy =>
+        !IsAlive
+            ? 0.0
+            : IsDamaged
+                ? HardPointDamagedAccuracyScale
+                : 1.0;
+    public bool CanFire => IsAlive && ParticipatesInGroundCombat && !IsSuppressed;
 
     /// <summary>
     /// Dug in: immune to ground-to-ground fire, killable only from the air. This is the
@@ -116,16 +149,18 @@ public sealed class GroundUnit
     };
 
     // Provisional balance, not sourced weapon effects: ground-vs-ground fire is attritional
-    // (minutes to grind a unit down) so the turret's authored 24.75 dps (45 rps x 0.55
+    // (minutes to grind a unit down) so the turret's authored 36.0 dps (45 rps x 0.80
     // damage/round) is the decisive killer. The previous 8/14/22 dps let the garrison wipe a
     // seeded wave in under 10 s, which won the mission with zero player input.
-    public double DamagePerSecond => Role switch {
+    public double BaseDamagePerSecond => Role switch {
         GroundUnitRole.InfantryClump => 1.2,
         GroundUnitRole.SoftVehicle => 2.2,
         GroundUnitRole.HardPoint => 3.2,
         GroundUnitRole.DshkSite => 0.0,
         _ => 1.2
     };
+
+    public double DamagePerSecond => CanFire ? BaseDamagePerSecond * Accuracy : 0.0;
 
     public double MoveSpeedMps => Role switch {
         GroundUnitRole.InfantryClump => 2.4,
@@ -140,8 +175,39 @@ public sealed class GroundUnit
         if (!double.IsFinite(damage) || damage < 0.0)
             throw new ArgumentOutOfRangeException(nameof(damage));
         if (!IsAlive) return;
+        bool wasDamaged = IsDamaged;
         Health = Math.Max(0.0, Health - damage);
+        if (!IsAlive) {
+            SuppressionRemainingSeconds = 0.0;
+            return;
+        }
+        if (!wasDamaged && IsDamaged)
+            SuppressionRemainingSeconds = HardPointSuppressionSeconds;
     }
+
+    public void AdvanceSuppression(double dtSeconds)
+    {
+        if (!double.IsFinite(dtSeconds) || dtSeconds <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(dtSeconds));
+        if (SuppressionRemainingSeconds <= 0.0) return;
+        SuppressionRemainingSeconds = Math.Max(0.0, SuppressionRemainingSeconds - dtSeconds);
+    }
+
+    public GroundUnitSnapshot Snapshot() => new(
+        Id,
+        Faction,
+        Role,
+        IsFortified,
+        IsAlive,
+        IsDamaged,
+        IsSuppressed,
+        DamageState,
+        Health,
+        MaxHealth,
+        Accuracy,
+        SuppressionRemainingSeconds,
+        PositionWorldM,
+        HomeSiteId);
 
     public void SetPosition(in Vec3D positionWorldM)
     {
@@ -405,6 +471,22 @@ public readonly record struct GroundWarDebrief(
     HoldTheBridgeOutcome MissionOutcome,
     string MissionOutcomeReason,
     double VictoryHoldProgress);
+
+public readonly record struct GroundUnitSnapshot(
+    string Id,
+    GroundFaction Faction,
+    GroundUnitRole Role,
+    bool IsFortified,
+    bool IsAlive,
+    bool IsDamaged,
+    bool IsSuppressed,
+    GroundUnitDamageState DamageState,
+    double Health,
+    double MaxHealth,
+    double Accuracy,
+    double SuppressionRemainingSeconds,
+    Vec3D PositionWorldM,
+    string HomeSiteId);
 
 public readonly record struct GroundWarEvent(
     long AuthorityTick,

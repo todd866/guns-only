@@ -516,6 +516,10 @@ public static partial class CobraWebBridge
                         fortified = unit.IsFortified,
                         objective_lock = objectiveLock,
                         alive = unit.IsAlive,
+                        damaged = unit.IsDamaged,
+                        suppressed = unit.IsSuppressed,
+                        damage_state = DamageStateToken(unit.DamageState),
+                        accuracy = unit.Accuracy,
                         health = unit.Health,
                         max_health = unit.MaxHealth,
                         x_m = unit.PositionWorldM.X,
@@ -740,6 +744,13 @@ public static partial class CobraWebBridge
         GroundUnitRole.HardPoint => "hard-point",
         GroundUnitRole.DshkSite => "dshk-site",
         _ => throw new ArgumentOutOfRangeException(nameof(role))
+    };
+
+    static string DamageStateToken(GroundUnitDamageState state) => state switch {
+        GroundUnitDamageState.Intact => "intact",
+        GroundUnitDamageState.Damaged => "damaged",
+        GroundUnitDamageState.Destroyed => "destroyed",
+        _ => throw new ArgumentOutOfRangeException(nameof(state))
     };
 
     static string RouteToken(CobraCanyonRouteChoice choice) => choice switch {
