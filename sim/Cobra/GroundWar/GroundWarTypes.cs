@@ -195,6 +195,18 @@ public sealed class ContestedSite
     /// <summary>True while living units of BOTH factions stand inside CaptureRadiusM.</summary>
     public bool IsContested { get; private set; }
 
+    /// <summary>
+    /// Remaining seconds until the air-mobile slick inserts a friendly squad onto this cleared
+    /// hostile site, or null when no insertion is currently counting down.
+    /// </summary>
+    public double? InboundSlickRemainingSeconds { get; private set; }
+
+    /// <summary>0..1 progress of an inbound air-mobile slick countdown, or 0 when none is inbound.</summary>
+    public double InboundSlickProgress =>
+        InboundSlickRemainingSeconds is double remaining
+            ? Math.Clamp(1.0 - remaining / CobraGroundWarRuntime.AirMobileInsertionSeconds, 0.0, 1.0)
+            : 0.0;
+
     public void SetLocalControl(double control)
     {
         if (!double.IsFinite(control))
@@ -208,6 +220,7 @@ public sealed class ContestedSite
         Owner = owner;
         CaptureProgress = 0.0;
         IsContested = false;
+        InboundSlickRemainingSeconds = null;
     }
 
     /// <summary>The single per-step ownership mutator the ground-war runtime calls.</summary>
@@ -218,6 +231,14 @@ public sealed class ContestedSite
         Owner = owner;
         CaptureProgress = Math.Clamp(progress, 0.0, 1.0);
         IsContested = contested;
+    }
+
+    /// <summary>Updates the published inbound-slick countdown for HUD/map snapshots.</summary>
+    public void SetInboundSlickRemainingSeconds(double? remainingSeconds)
+    {
+        if (remainingSeconds is double value && (!double.IsFinite(value) || value < 0.0))
+            throw new ArgumentOutOfRangeException(nameof(remainingSeconds));
+        InboundSlickRemainingSeconds = remainingSeconds;
     }
 }
 

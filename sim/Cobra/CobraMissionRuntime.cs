@@ -268,7 +268,9 @@ public sealed record CobraMissionDiagnostics(
     CobraMaskingAssessment Masking,
     CobraBattleDamageState BattleDamage,
     long MaskingAssessmentAuthorityTicks,
-    string FidelityDisclosure);
+    string FidelityDisclosure,
+    double? InboundSlickCountdownSeconds = null,
+    double SiteCaptureProgress = 0.0);
 
 public readonly record struct CobraMissionAdvanceResult(
     PlayerVehicleAdvanceResult Vehicle,
@@ -332,6 +334,12 @@ public sealed class CobraMissionRuntime
     // targetable, authority-owned hardpoint itself. See ah-1g-cobra/00-sources.md.
     public const double GarrisonCollisionRadiusM = 2.4;
     public const double GarrisonCollisionHeightM = 2.6;
+    // Origin: Argon review 2026-11-05 — default airborne IP sits 1.8 km short of Iron Bell on the ingress leg so first contact is under 30 s.
+    public const double DefaultIngressStandOffM = 1_800.0;
+    // Origin: Argon review 2026-11-05 — canyon-transit speed at the airborne IP (~120 kt authored NOE ingress).
+    public const double DefaultIngressSpeedMps = 62.0;
+    // Origin: Argon review 2026-11-05 — nap-of-earth clearance at the airborne IP, matching DefaultStartAglM.
+    public const double DefaultIngressClearanceM = CobraCanyonDefinition.DefaultStartAglM;
     const double GroundWarStepSeconds = 1.0 / GroundWarStepHz;
     static readonly VerticalLiftPilotCommand GroundedCommand = new(0.0, 0.0, 0.0, 0.0);
 
@@ -414,19 +422,22 @@ public sealed class CobraMissionRuntime
                 landmark.Id,
                 "landmark.cobra-canyon.camp-ember.v1",
                 StringComparison.Ordinal));
-        if (!terrain.TrySample(campLandmark.EastM, campLandmark.NorthM, out TerrainSample padSurface))
+        if (!terrain.TrySample(campLandmark.EastM, campLandmark.NorthM, out _))
             throw new InvalidOperationException("Camp Ember has no terrain truth.");
-        // The cold open faces the surveyed north-west departure/go-around lane. Route selection
-        // changes after departure; it must never turn the parked aircraft toward a berm or cliff.
-        double defaultYawRad = CampEmberOperations.FinalHeadingRad;
-        double padClearanceM = Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
-        CobraMissionSpawn resolvedSpawn = spawn ?? new CobraMissionSpawn(
-            new Vec3D(
-                campLandmark.EastM,
-                padSurface.HeightM + padClearanceM,
-                campLandmark.NorthM),
-            Vec3D.Zero,
-            defaultYawRad);
+        CobraCanyonLandmarkDefinition bridgeLandmark = definition.Landmarks.First(landmark =>
+            string.Equals(
+                landmark.Id,
+                "landmark.cobra-canyon.iron-bell-bridge.v1",
+                StringComparison.Ordinal));
+        if (!terrain.TrySample(bridgeLandmark.EastM, bridgeLandmark.NorthM, out TerrainSample bridgeSurface))
+            throw new InvalidOperationException("Iron Bell Bridge has no terrain datum.");
+        _bridgeCentreWorldM = new Vec3D(
+            bridgeLandmark.EastM,
+            bridgeSurface.HeightM,
+            bridgeLandmark.NorthM);
+
+        CobraMissionSpawn resolvedSpawn = spawn
+            ?? CreateDefaultIngressSpawn(definition, terrain);
         if (!resolvedSpawn.PositionWorldM.IsFinite
             || !resolvedSpawn.GroundVelocityMps.IsFinite
             || !double.IsFinite(resolvedSpawn.YawRad))
@@ -475,22 +486,12 @@ public sealed class CobraMissionRuntime
                 CobraAirframePool.SpareStationYawRad));
         }
         _groundWar = new CobraGroundWarRuntime(definition, terrain, groundWarSeed);
-        CobraCanyonLandmarkDefinition bridgeLandmark = definition.Landmarks.First(landmark =>
-            string.Equals(
-                landmark.Id,
-                "landmark.cobra-canyon.iron-bell-bridge.v1",
-                StringComparison.Ordinal));
-        if (!terrain.TrySample(bridgeLandmark.EastM, bridgeLandmark.NorthM, out TerrainSample bridgeSurface))
-            throw new InvalidOperationException("Iron Bell Bridge has no terrain datum.");
-        _bridgeCentreWorldM = new Vec3D(
-            bridgeLandmark.EastM,
-            bridgeSurface.HeightM,
-            bridgeLandmark.NorthM);
         // Depart is a friendly rear-area pad. No target is manufactured in the protected lane;
         // the first hostiles are the authored forward-objective forces.
         Status = CobraMissionStatus.Active;
         _cachedMaskingAssessment = AssessMaskingAt(_cobra.State.PositionWorldM);
         _maskingAssessmentAuthorityTicks = 0;
+        _act = spawn is null ? CobraMissionAct.Ingress : CobraMissionAct.Depart;
         RefreshAct(resolvedSpawn.PositionWorldM, clearanceM: resolvedSpawn.PositionWorldM.Y - (
             terrain.TrySample(
                 resolvedSpawn.PositionWorldM.X,
@@ -498,6 +499,85 @@ public sealed class CobraMissionRuntime
                 out TerrainSample spawnSurface)
                 ? spawnSurface.HeightM
                 : resolvedSpawn.PositionWorldM.Y));
+    }
+
+    /// <summary>
+    /// Cold-start spawn on Camp Ember's pad facing the surveyed departure lane. Retained for
+    /// explicit pad-launch scenarios and turnaround tests while the default mission starts at the
+    /// airborne ingress IP.
+    /// </summary>
+    public static CobraMissionSpawn CreateCampEmberPadSpawn(
+        CobraCanyonDefinition definition,
+        ITerrainSurface terrain)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(terrain);
+        CobraCanyonLandmarkDefinition campLandmark = definition.Landmarks.First(landmark =>
+            string.Equals(
+                landmark.Id,
+                "landmark.cobra-canyon.camp-ember.v1",
+                StringComparison.Ordinal));
+        if (!terrain.TrySample(campLandmark.EastM, campLandmark.NorthM, out TerrainSample padSurface))
+            throw new InvalidOperationException("Camp Ember has no terrain truth.");
+        double padClearanceM = Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
+        return new CobraMissionSpawn(
+            new Vec3D(
+                campLandmark.EastM,
+                padSurface.HeightM + padClearanceM,
+                campLandmark.NorthM),
+            Vec3D.Zero,
+            CampEmberOperations.FinalHeadingRad);
+    }
+
+    /// <summary>
+    /// Default airborne IP spawn on the River Gorge ingress ~1.8 km short of Iron Bell at
+    /// canyon-transit speed and nap-of-earth clearance.
+    /// </summary>
+    public static CobraMissionSpawn CreateDefaultIngressSpawn(
+        CobraCanyonDefinition definition,
+        ITerrainSurface terrain)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(terrain);
+        CobraCanyonLandmarkDefinition bridgeLandmark = definition.Landmarks.First(landmark =>
+            string.Equals(
+                landmark.Id,
+                "landmark.cobra-canyon.iron-bell-bridge.v1",
+                StringComparison.Ordinal));
+        IReadOnlyList<CobraCanyonRoutePoint> gorgePoints =
+            definition.Route(CobraCanyonRouteChoice.RiverGorge).Points;
+        int bridgeIndex = 0;
+        for (int index = 0; index < gorgePoints.Count; index++) {
+            if (string.Equals(
+                gorgePoints[index].LandmarkId,
+                "landmark.cobra-canyon.iron-bell-bridge.v1",
+                StringComparison.Ordinal)) {
+                bridgeIndex = index;
+                break;
+            }
+        }
+        CobraCanyonRoutePoint ingressPoint = gorgePoints[Math.Max(0, bridgeIndex - 1)];
+        double approachEastM = bridgeLandmark.EastM - ingressPoint.EastM;
+        double approachNorthM = bridgeLandmark.NorthM - ingressPoint.NorthM;
+        double approachLengthM = Math.Sqrt(
+            approachEastM * approachEastM + approachNorthM * approachNorthM);
+        double dirEast = approachLengthM > 1e-6 ? approachEastM / approachLengthM : 0.0;
+        double dirNorth = approachLengthM > 1e-6 ? approachNorthM / approachLengthM : 1.0;
+        double spawnEastM = bridgeLandmark.EastM - dirEast * DefaultIngressStandOffM;
+        double spawnNorthM = bridgeLandmark.NorthM - dirNorth * DefaultIngressStandOffM;
+        if (!terrain.TrySample(spawnEastM, spawnNorthM, out TerrainSample ingressSurface))
+            throw new InvalidOperationException("Default ingress IP has no terrain truth.");
+        double yawRad = Math.Atan2(dirEast, dirNorth);
+        return new CobraMissionSpawn(
+            new Vec3D(
+                spawnEastM,
+                ingressSurface.HeightM + DefaultIngressClearanceM,
+                spawnNorthM),
+            new Vec3D(
+                dirEast * DefaultIngressSpeedMps,
+                0.0,
+                dirNorth * DefaultIngressSpeedMps),
+            yawRad);
     }
 
     public CobraCanyonDefinition Definition => _definition;
@@ -1242,7 +1322,9 @@ public sealed class CobraMissionRuntime
             _cachedMaskingAssessment,
             _threatFire.State,
             _maskingAssessmentAuthorityTicks,
-            CobraCanyonDefinition.FidelityDisclosure);
+            CobraCanyonDefinition.FidelityDisclosure,
+            _groundWar.InboundSlickCountdownSeconds,
+            _groundWar.SiteCaptureProgress);
     }
 
     static double SegmentHorizontalLength(
