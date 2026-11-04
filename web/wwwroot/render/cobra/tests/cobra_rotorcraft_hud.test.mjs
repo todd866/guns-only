@@ -4,12 +4,14 @@ import test from "node:test";
 
 import {
   AH1G_NOMINAL_ROTOR_RPM,
+  ROTOR_CAUTION_EDGE_PCT,
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
   formatCobraRotorcraftStrip,
 } from "../cobra_rotorcraft_hud.js";
+import { cobraHudBattleAuthority } from "./harness/battle_fixture.mjs";
 
 function recordingHudContext() {
   const textCalls = [];
@@ -29,7 +31,9 @@ function recordingHudContext() {
     arc() {},
     strokeRect() {},
     fill() {},
+    fillRect() {},
     stroke() {},
+    globalAlpha: 1,
     measureText(text) { return { width: String(text).length * 6 }; },
     fillText(text, x, y) { textCalls.push({ text, x, y, fillStyle }); },
     get fillStyle() { return fillStyle; },
@@ -167,6 +171,14 @@ test("rotorcraft HUD model reads NR and torque as percentages of authoritative l
   const nearLimit = modelFixture();
   nearLimit.vehicle.rotorcraft.transmission_limit_fraction = 0.98;
   assert.equal(cobraRotorcraftHudModel(nearLimit).rotor.torqueLevel, "caution");
+
+  const edgeNr = modelFixture();
+  edgeNr.vehicle.rotorcraft.main_rotor_rpm = AH1G_NOMINAL_ROTOR_RPM * (ROTOR_CAUTION_EDGE_PCT / 100);
+  assert.equal(cobraRotorcraftHudModel(edgeNr).rotor.nrLevel, "caution",
+    "NR and torque share the same caution edge");
+  const edgeTorque = modelFixture();
+  edgeTorque.vehicle.rotorcraft.transmission_limit_fraction = ROTOR_CAUTION_EDGE_PCT / 100;
+  assert.equal(cobraRotorcraftHudModel(edgeTorque).rotor.torqueLevel, "caution");
 });
 
 test("hover emphasis engages below translational lift and grades the sink", () => {
@@ -541,6 +553,33 @@ test("damage annunciations draw in their warning and caution colors", () => {
   const scas = ctx.textCalls.find((call) => call.text === "SCAS OUT");
   assert.equal(engine?.fillStyle, "#ff465d");
   assert.equal(scas?.fillStyle, "#ffb020");
+});
+
+test("combat and mission instrument rows publish health, tickets, slick eta, and task truth", () => {
+  const authority = cobraHudBattleAuthority();
+  const model = cobraRotorcraftHudModel(authority);
+  assert.ok(model.combat.healthFrac > 0 && model.combat.healthFrac < 1);
+  assert.equal(model.combat.hitPulse, true);
+  assert.equal(model.slick.etaSeconds, 8);
+  assert.equal(model.mission.task.name, "CAU SONG MA");
+  assert.match(model.mission.task.countdown, /^T−/);
+  assert.equal(model.mission.sites.length, 4);
+  assert.deepEqual(model.mission.tickets, {
+    friendly: 297,
+    hostile: 300,
+    trend: { arrow: "↓", level: "warning" },
+  });
+  assert.equal(model.tactical.activeSite.label, "CAU SONG MA");
+
+  const ctx = recordingHudContext();
+  drawCobraRotorcraftHud(ctx, model, {
+    width: 1280,
+    height: 720,
+    projectWorldPoint: () => ({ x: 640, y: 320, inFrame: true }),
+  });
+  const texts = ctx.textCalls.map((call) => call.text);
+  assert.ok(texts.some((text) => /297\s+300/.test(text)), texts.join(" | "));
+  assert.ok(texts.some((text) => text.includes("SLICK") || /\d+ s/.test(text)));
 });
 
 test("model fails closed without vehicle truth", () => {
