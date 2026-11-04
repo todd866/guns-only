@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cobra rotorcraft HUD harness</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body { display: grid; place-items: center; }
+    body[data-scheme="light"] { background: #dfe8ef; }
+    body[data-scheme="dark"] { background: #060d12; }
+    canvas { display: block; }
+  </style>
+</head>
+<body data-scheme="dark">
+  <canvas id="hud" width="1280" height="720"></canvas>
+  <script type="module">
+    import { cobraHudBattleAuthority } from "./battle_fixture.mjs";
+    import { cobraRotorcraftHudModel, drawCobraRotorcraftHud } from "../../cobra_rotorcraft_hud.js";
+
+    const canvas = document.querySelector("#hud");
+    const ctx = canvas.getContext("2d");
+    const params = new URLSearchParams(location.search);
+    const scheme = params.get("scheme") === "light" ? "light" : "dark";
+    document.body.dataset.scheme = scheme;
+
+    const authority = cobraHudBattleAuthority();
+    const model = cobraRotorcraftHudModel(authority);
+    ctx.save();
+    if (scheme === "light") {
+      ctx.fillStyle = "#dfe8ef";
+    } else {
+      ctx.fillStyle = "#060d12";
+    }
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+
+    drawCobraRotorcraftHud(ctx, model, {
+      width: canvas.width,
+      height: canvas.height,
+      pixelRatio: 1,
+      colorScheme: scheme,
+      projectWorldPoint: (x, y, z) => ({
+        x: 640 + (Number(x) || 0) * 0.05,
+        y: 320 - (Number(y) || 0) * 0.4,
+        inFrame: true,
+      }),
+    });
+
+    window.__cobraHudPng = () => canvas.toDataURL("image/png");
+    window.__cobraHudReady = true;
+  </script>
+</body>
+</html>
