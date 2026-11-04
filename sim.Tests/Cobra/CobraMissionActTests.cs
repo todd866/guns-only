@@ -94,8 +94,10 @@ public class CobraMissionActTests
     [Fact]
     public void VictoryOutcomeArmsRtbAndOnlyStablePadRecoveryCompletes()
     {
+        // Victory/Defeat now complete immediately where the player is; the RTB act is the
+        // optional bonus leg that completes on stable Camp Ember pad recovery.
         Assert.Equal(
-            CobraMissionAct.Rtb,
+            CobraMissionAct.Complete,
             CobraMissionActProgress.Next(
                 CobraMissionAct.Hold,
                 Bridge,

@@ -417,7 +417,7 @@ public class CobraMissionRuntimeTests
     }
 
     [Fact]
-    public void AuthoredObstacleCollisionLatchesMissionLossWithoutFakingProviderDamage()
+    public void AuthoredObstacleCollisionWithTwoSparesSwapsToFobAndZeroSparesIsTerminal()
     {
         CobraCanyonDefinition world = CobraCanyonDefinition.Create();
         var probe = new CobraMissionRuntime(
@@ -429,19 +429,59 @@ public class CobraMissionRuntimeTests
             deck.CentreWorldM, 0.0, out CobraResolvedObstacle contact));
         Assert.Equal(deck.Id, contact.Id);
 
-        var collisionRuntime = new CobraMissionRuntime(
+        // With 2 Ready spares left, an obstacle collision transfers the player into a spare
+        // at the FOB pad, increments AirframeSwaps, keeps Status Active, records the lost
+        // airframe, and keeps the tactical ground war running while the player is down.
+        var withSpares = new CobraMissionRuntime(
             world,
             new FlatTerrain(),
             CobraCanyonRouteChoice.RiverGorge,
             spawn: new CobraMissionSpawn(deck.CentreWorldM, Vec3D.Zero, 0.0));
-        double trimCollective = collisionRuntime.Cobra.EstimateHoverCollective(
-            collisionRuntime.Cobra.State.GrossMassKg,
+        double trimCollective = withSpares.Cobra.EstimateHoverCollective(
+            withSpares.Cobra.State.GrossMassKg,
             CobraMissionRuntime.DefaultAirDensityKgM3);
+
+        CobraMissionAdvanceResult swapped = withSpares.Advance(
+            new VerticalLiftPilotCommand(trimCollective, 0.0, 0.0, 0.0));
+
+        Assert.Equal(CobraMissionStatus.Active, withSpares.Status);
+        Assert.Equal(CobraMissionStatus.Active, swapped.Diagnostics.Status);
+        Assert.Equal(1, withSpares.AirframeSwaps);
+        Assert.Equal(deck.Id, swapped.Diagnostics.CollisionObstacleId);
+        Assert.True(swapped.Diagnostics.ProviderFlyable);
+        Assert.True(withSpares.MissionFlyable);
+        Assert.Equal(CobraTurnaroundPhase.AwaitStartRelease, withSpares.Turnaround.Phase);
+        Assert.Single(
+            withSpares.AirframePool,
+            slot => slot.Id == "cobra-canyon.airframe-1"
+                && slot.State == CobraAirframeState.Destroyed);
+        Assert.Single(
+            withSpares.AirframePool,
+            slot => slot.State == CobraAirframeState.PlayerFlying);
+        Assert.Single(
+            withSpares.AirframePool,
+            slot => slot.State == CobraAirframeState.Ready);
+        Assert.True(withSpares.GroundWar.IsInsideFob(withSpares.Cobra.State.PositionWorldM));
+        Assert.True(withSpares.GroundWarCombatLive);
+        long groundWarTickAtCrash = withSpares.GroundWar.AuthorityTick;
+        for (int tick = 0; tick < 12; tick++)
+            withSpares.Advance(new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0));
+        Assert.True(withSpares.GroundWar.AuthorityTick > groundWarTickAtCrash,
+            "the ground war must keep running while the player is down on the FOB pad");
+
+        // With 0 spares left, the same obstacle collision is terminal.
+        var collisionRuntime = new CobraMissionRuntime(
+            world,
+            new FlatTerrain(),
+            CobraCanyonRouteChoice.RiverGorge,
+            spawn: new CobraMissionSpawn(deck.CentreWorldM, Vec3D.Zero, 0.0),
+            initialReadySpares: 0);
 
         CobraMissionAdvanceResult result = collisionRuntime.Advance(
             new VerticalLiftPilotCommand(trimCollective, 0.0, 0.0, 0.0));
 
         Assert.Equal(CobraMissionStatus.ObstacleCollision, result.Diagnostics.Status);
+        Assert.Equal(0, collisionRuntime.AirframeSwaps);
         Assert.Equal(deck.Id, result.Diagnostics.CollisionObstacleId);
         Assert.True(result.Diagnostics.ProviderFlyable);
         Assert.False(result.Diagnostics.MissionFlyable);
@@ -464,7 +504,8 @@ public class CobraMissionRuntimeTests
             world,
             new FlatTerrain(),
             CobraCanyonRouteChoice.RiverGorge,
-            spawn: new CobraMissionSpawn(collisionCentre, Vec3D.Zero, 0.0));
+            spawn: new CobraMissionSpawn(collisionCentre, Vec3D.Zero, 0.0),
+            initialReadySpares: 0);
         double trim = collisionRuntime.Cobra.EstimateHoverCollective(
             collisionRuntime.Cobra.State.GrossMassKg,
             CobraMissionRuntime.DefaultAirDensityKgM3);
@@ -1036,9 +1077,9 @@ public class CobraMissionRuntimeTests
     }
 
     [Fact]
-    public void FatalContactOutsideCampEmberRemainsTerminal()
+    public void FatalContactOutsideCampEmberConsumesSpareAndEndsOnlyWhenNoSpareRemains()
     {
-        var runtime = new CobraMissionRuntime(
+        var withSpares = new CobraMissionRuntime(
             CobraCanyonDefinition.Create(),
             new FlatTerrain(),
             CobraCanyonRouteChoice.RiverGorge,
@@ -1047,10 +1088,26 @@ public class CobraMissionRuntimeTests
                 new Vec3D(0.0, -7.5, 0.0),
                 0.0));
 
-        runtime.Advance(new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0));
+        withSpares.Advance(new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0));
 
-        Assert.Equal(CobraMissionStatus.VehicleAuthorityLost, runtime.Status);
-        Assert.Equal(0, runtime.AirframeSwaps);
-        Assert.Equal(CobraTurnaroundPhase.Operational, runtime.Turnaround.Phase);
+        Assert.Equal(CobraMissionStatus.Active, withSpares.Status);
+        Assert.Equal(1, withSpares.AirframeSwaps);
+        Assert.Equal(CobraTurnaroundPhase.AwaitStartRelease, withSpares.Turnaround.Phase);
+
+        var noSpares = new CobraMissionRuntime(
+            CobraCanyonDefinition.Create(),
+            new FlatTerrain(),
+            CobraCanyonRouteChoice.RiverGorge,
+            spawn: new CobraMissionSpawn(
+                new Vec3D(0.0, 0.365, 0.0),
+                new Vec3D(0.0, -7.5, 0.0),
+                0.0),
+            initialReadySpares: 0);
+
+        noSpares.Advance(new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0));
+
+        Assert.Equal(CobraMissionStatus.VehicleAuthorityLost, noSpares.Status);
+        Assert.Equal(0, noSpares.AirframeSwaps);
+        Assert.Equal(CobraTurnaroundPhase.Operational, noSpares.Turnaround.Phase);
     }
 }

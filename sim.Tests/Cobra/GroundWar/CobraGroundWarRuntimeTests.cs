@@ -579,19 +579,23 @@ public class CobraGroundWarRuntimeTests
     public void TicketBleedIsWallClockAtAnyStepRate(double stepHz)
     {
         CobraGroundWarRuntime war = CreateWar();
-        foreach (ContestedSite site in war.Sites)
-            war.OverrideSiteOccupancyForTests(site.Id, friendly: 1, hostile: 0);
+        foreach (string siteId in new[] {
+            "site.camp-ember.v1", "site.iron-bell-bridge.v1", "site.plantation-water-tower.v1",
+        })
+            war.OverrideSiteOccupancyForTests(siteId, friendly: 1, hostile: 0);
+        war.OverrideSiteOccupancyForTests("site.red-earth-quarry.v1", friendly: 0, hostile: 1);
         double stepSeconds = 1.0 / stepHz;
         for (int step = 0; step < (int)Math.Round(25.0 / stepSeconds); step++)
             war.Advance(stepSeconds);
-        Assert.Equal(4, war.FriendlyPointsHeld);
+        Assert.Equal(3, war.FriendlyPointsHeld);
+        Assert.Equal(1, war.HostilePointsHeld);
 
         double hostileAtSplit = war.HostileTickets;
         const double windowSeconds = 30.0;
         for (int step = 0; step < (int)Math.Round(windowSeconds / stepSeconds); step++)
             war.Advance(stepSeconds);
 
-        double expected = CobraGroundWarRuntime.TicketBleedPerSecondPerPoint * 4.0 * windowSeconds;
+        double expected = CobraGroundWarRuntime.TicketBleedPerSecondPerPoint * 2.0 * windowSeconds;
         Assert.Equal(expected, hostileAtSplit - war.HostileTickets, 6);
     }
 
@@ -1080,11 +1084,37 @@ public class CobraGroundWarRuntimeTests
     }
 
     [Fact]
-    public void TicketExhaustionEndsTheMission()
+    public void TotalControlKnockoutWinsImmediatelyWithoutWaitingForTickets()
     {
         CobraGroundWarRuntime war = CreateWar();
         foreach (ContestedSite site in war.Sites)
             war.OverrideSiteOccupancyForTests(site.Id, friendly: 1, hostile: 0);
+
+        const double stepSeconds = 0.25;
+        int steps = (int)Math.Round(25.0 / stepSeconds);
+        for (int step = 0;
+            step < steps && war.MissionOutcome == HoldTheBridgeOutcome.Pending;
+            step++)
+            war.Advance(stepSeconds);
+
+        Assert.Equal(war.Sites.Count, war.FriendlyPointsHeld);
+        Assert.Equal(0, war.HostilePointsHeld);
+        Assert.Equal(HoldTheBridgeOutcome.Victory, war.MissionOutcome);
+        Assert.Equal("total-control", war.MissionOutcomeReason);
+        Assert.True(war.HostileTickets > 0.0,
+            "4-0 total control must end the ground war immediately without waiting for tickets to bleed out");
+        Assert.Equal(1.0, war.VictoryHoldProgress, 6);
+    }
+
+    [Fact]
+    public void TicketExhaustionEndsTheMission()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        foreach (string siteId in new[] {
+            "site.camp-ember.v1", "site.iron-bell-bridge.v1", "site.plantation-water-tower.v1",
+        })
+            war.OverrideSiteOccupancyForTests(siteId, friendly: 1, hostile: 0);
+        war.OverrideSiteOccupancyForTests("site.red-earth-quarry.v1", friendly: 0, hostile: 1);
 
         const double stepSeconds = 0.25;
         int steps = (int)Math.Round(400.0 / stepSeconds);
@@ -1093,6 +1123,7 @@ public class CobraGroundWarRuntimeTests
             step++)
             war.Advance(stepSeconds);
 
+        Assert.Equal(3, war.FriendlyPointsHeld);
         Assert.Equal(HoldTheBridgeOutcome.Victory, war.MissionOutcome);
         Assert.Equal("tickets-exhausted", war.MissionOutcomeReason);
         Assert.True(war.HostileTickets <= 0.0);
@@ -1111,8 +1142,16 @@ public class CobraGroundWarRuntimeTests
             world,
             terrain,
             CobraCanyonRouteChoice.RiverGorge,
-            spawn: CobraMissionRuntime.CreateCampEmberPadSpawn(world, terrain),
-            groundWarSeed: 9);
+            groundWarSeed: 9,
+            // Hovering above the pad, not skids-on: the mission must register Victory/Defeat
+            // where the aircraft is, with RecoveredAtFob still false until the bonus leg lands.
+            spawn: new CobraMissionSpawn(
+                new Vec3D(
+                    CampEmberOperations.CentreEastM,
+                    201.5,
+                    CampEmberOperations.CentreNorthM),
+                Vec3D.Zero,
+                CampEmberOperations.FinalHeadingRad));
         foreach (ContestedSite site in runtime.GroundWar.Sites) {
             bool campEmber = site.Id == "site.camp-ember.v1";
             runtime.GroundWar.OverrideSiteOccupancyForTests(
@@ -1121,10 +1160,9 @@ public class CobraGroundWarRuntimeTests
                 hostile: victory || campEmber ? 0 : 1);
         }
 
-        // Resolve the strategic fight directly while the aircraft is staged at Camp Ember. The
-        // mission runtime then owns the player-facing transition: outcome -> RTB -> recovery.
-        // Keeping the fixture on the pad lets the test prove the stable-contact gate without a
-        // test-only teleport seam in the flight provider.
+        // Resolve the strategic fight directly while the aircraft is staged at Camp Ember.
+        // Victory/Defeat now register immediately where the player is, and the optional RTB
+        // bonus leg still gates Complete and RecoveredAtFob on stable Camp Ember contact.
         HoldTheBridgeOutcome expectedOutcome = victory
             ? HoldTheBridgeOutcome.Victory
             : HoldTheBridgeOutcome.Defeat;
@@ -1141,12 +1179,21 @@ public class CobraGroundWarRuntimeTests
 
         runtime.Advance(groundedCommand);
 
+        Assert.Equal(
+            victory ? CobraMissionStatus.Victory : CobraMissionStatus.Defeat,
+            runtime.Status);
+        Assert.Equal(CobraMissionAct.Complete, runtime.Act);
+        Assert.False(runtime.RecoveredAtFob);
+        Assert.False(runtime.Diagnostics.RecoveredAtFob);
+        Assert.Equal(frozenGroundWarTick, runtime.GroundWar.AuthorityTick);
+
+        // Retarget the RTB flow to the optional bonus leg.
+        runtime.BeginRtbBonusLeg();
         Assert.Equal(CobraMissionStatus.Active, runtime.Status);
         Assert.Equal(CobraMissionAct.Rtb, runtime.Act);
         Assert.True(runtime.MissionFlyable);
         Assert.True(runtime.Diagnostics.MissionFlyable);
         Assert.False(runtime.GroundWarCombatLive);
-        Assert.Equal(frozenGroundWarTick, runtime.GroundWar.AuthorityTick);
 
         for (int tick = 0;
             tick < 5 * PlayerVehicleContract.FixedStepHz
@@ -1166,6 +1213,8 @@ public class CobraGroundWarRuntimeTests
         Assert.Equal(
             VehicleContactKind.StableSurfaceContact,
             runtime.Cobra.Observation.Contact.Kind);
+        Assert.True(runtime.RecoveredAtFob);
+        Assert.True(runtime.Diagnostics.RecoveredAtFob);
         Assert.False(runtime.MissionFlyable);
         Assert.False(runtime.Diagnostics.MissionFlyable);
         Assert.Equal(frozenGroundWarTick, runtime.GroundWar.AuthorityTick);
@@ -1184,11 +1233,15 @@ public class CobraGroundWarRuntimeTests
 
         // Clear every seeded hostile combatant so only friendly defenders occupy the sites
         // when the first hostile reinforcement wave arrives at FirstHostileWaveDelaySeconds.
-        foreach (GroundUnit hostile in war.Units
-            .Where(unit => unit.Faction == GroundFaction.Hostile
-                && unit.ParticipatesInGroundCombat)
-            .ToArray()) {
-            hostile.ApplyDamage(hostile.MaxHealth);
+        // Keep one hostile-held site that no friendly stands in garrisoned: with every site
+        // cleared the friendlies would take total control and win outright before the first
+        // reinforcement wave is due. A site with no friendlies inside is never the wave target.
+        ContestedSite keptSite = war.Sites.First(site => site.Owner == GroundSiteOwner.Hostile);
+        foreach (GroundUnit unit in war.Units.Where(unit => unit.ParticipatesInGroundCombat).ToArray()) {
+            bool insideKept = HorizontalDistance(unit.PositionWorldM, keptSite.PositionWorldM)
+                <= keptSite.CaptureRadiusM + 60.0;
+            bool kill = unit.Faction == GroundFaction.Hostile ? !insideKept : insideKept;
+            if (kill) unit.ApplyDamage(unit.MaxHealth);
         }
 
         const double stepSeconds = 0.5;
