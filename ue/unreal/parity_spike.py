@@ -235,7 +235,12 @@ def main(argv):
     def build():
         # Runs on a later editor tick: with -ExecCmds the script itself executes during startup,
         # and the editor then opens its startup map on top of anything built at frame 0.
-        levels.new_level(f'/Game/ParitySpike/{args.track}')
+        level_path = f'/Game/ParitySpike/{args.track}'
+        if unreal.EditorAssetLibrary.does_asset_exist(level_path):
+            # new_level() silently fails when the asset exists (run 4 built into Untitled_1).
+            log(f'deleting stale level {level_path}: {unreal.EditorAssetLibrary.delete_asset(level_path)}')
+        if not levels.new_level(level_path):
+            raise RuntimeError(f'new_level({level_path}) failed')
         m = calibrate(tmp)
         district = import_scene(os.path.join(repo, TRACK_GLB[args.track]), f'/Game/ParitySpike/{args.track}')
         log(f'district actors: {len(district)}; collision hidden: {hide_collision(district)}')
@@ -273,6 +278,9 @@ def main(argv):
     # One screenshot at a time, driven by editor ticks: the request only renders on a later
     # frame, and several queued in one frame collapse into the last.
     def tick(_dt):
+        if state.get('busy'):
+            return  # take_high_res_screenshot and imports pump slate ticks synchronously; never re-enter
+        state['busy'] = True
         state['ticks'] += 1
         try:
             if state['phase'] == 'wait':
@@ -298,13 +306,16 @@ def main(argv):
                 finish(0)
                 return
             cam, name = pose(state['queue'].pop(0))
-            unreal.AutomationLibrary.take_high_res_screenshot(w, h, name, camera=cam)
             state['pending'] = name
             state['ticks'] = 0
-            log(f'queued {name}')
+            log(f'queueing {name}')
+            ok = unreal.AutomationLibrary.take_high_res_screenshot(w, h, name, camera=cam)
+            log(f'queued {name}: {ok}')
         except Exception:
             log('callback failed:\n' + traceback.format_exc())
             finish(1)
+        finally:
+            state['busy'] = False
 
     state['handle'] = unreal.register_slate_post_tick_callback(tick)
     log('scheduled: build after 30 ticks, then one screenshot per settled frame; the editor quits when done')
