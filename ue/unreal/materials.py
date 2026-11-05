@@ -134,7 +134,8 @@ def apply_material_table(actors, table_path):
         comp = actor.get_component_by_class(unreal.StaticMeshComponent)
         if comp is None:
             continue
-        static_mesh = comp.get_static_mesh()
+        # UE 5.8 Python exposes the mesh as the 'static_mesh' property, not a getter.
+        static_mesh = comp.get_editor_property('static_mesh')
         slot_count = comp.get_num_materials()
         for slot_index in range(slot_count):
             name = _slot_name(static_mesh, slot_index)
