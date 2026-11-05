@@ -97,6 +97,7 @@ import {createCup, loadCup, saveCup, recordCupRace, nextCupEvent, cupStandings} 
 import {createRaceMenu, CUP_COURSES} from './race-menu.js';
 import {createAlienMarshal} from './alien-marshal.js';
 import {createGamepadInput, padGuide} from './gamepad.mjs';
+import {createMenuPad} from './gamepad-menu.mjs';
 import {frameSeconds} from './frame-time.mjs';
 import {poseCar} from './vehicle-pose.mjs';
 import {makeVehicleBody} from './vehicle-bodies.js';
@@ -4899,10 +4900,16 @@ const prof = {
   }
 };
 const pollGamepad = createGamepadInput();
+// Menus answer the controller too: the open dialog, else the pause/start menu.
+const menuPad = createMenuPad({
+  root: () => document.querySelector('.overlay:not([hidden])') ?? ($('brief').hidden ? null : $('brief')),
+  back: () => (ui.panel() ? ui.close() : started && paused ? pause(false) : null)
+});
 const frameMs = [];
 function frame(now) {
   const pad = pollGamepad(navigator.getGamepads?.());
   if (pad.joined) callout(padGuide(pad.joined), 7000);
+  if (menuPad(navigator.getGamepads?.(), now)) pad.fire = pad.boost = false;
   if (pad.start) {
     if (!started) $('start').click();
     else if (!ui.panel()) pause(!paused);
