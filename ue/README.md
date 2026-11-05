@@ -101,6 +101,10 @@ The Unreal project itself (binary `.uasset`s, tens of GB of derived data) lives 
 - **The buggy's heading** comes from the web heading vector (sin yaw, 0, −cos yaw) mapped through
   the axis map plus the mesh's +90° nose offset; a per-track constant was wrong (hub run 1).
 
+- **Xcode 27.2 builds UE 5.8 game modules.** `Build.sh RCOdysseyEditor Mac Development` compiled the
+  minimal `RCOdyssey` module in 107 s (5 Nov 2026), so Phase 3's C++ work (Puerts, RenderAdapter) is
+  not blocked by Epic's "Xcode 26.x" requirement; UBT reported the Mac SDK as VALID 26.1.1.
+
 ## Known unknowns (check on the first run)
 
 - The buggy's forward axis against the web yaw (`TODO(calibrate)` in `parity_spike.py`).
