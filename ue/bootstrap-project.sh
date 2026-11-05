@@ -9,9 +9,12 @@ EDITOR="$ENGINE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor
 mkdir -p "$DEST/Config" "$DEST/Content"
 cp "$HERE/project-template/RCOdyssey.uproject" "$DEST/"
 cp "$HERE/project-template/Config/"*.ini "$DEST/Config/"
+mkdir -p "$DEST/Source" && cp -R "$HERE/project-template/Source/" "$DEST/Source/"
 echo "project: $DEST/RCOdyssey.uproject"
 [ -x "$EDITOR" ] && echo "editor:  $EDITOR" || echo "editor:  NOT INSTALLED at $ENGINE"
 cat <<USAGE
+build the C++ module (Phase 3 toolchain check):
+  "$ENGINE/Engine/Build/BatchFiles/Mac/Build.sh" RCOdysseyEditor Mac Development -project="$DEST/RCOdyssey.uproject" -game -progress
 run the parity spike:
   "$EDITOR" "$DEST/RCOdyssey.uproject" -unattended -nosplash -NoSound -log -WINDOWED -ResX=1280 -ResY=720 \
     -ExecCmds="py $HERE/unreal/parity_spike.py --repo $(cd "$HERE/.." && pwd) --track housing"

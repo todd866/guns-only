@@ -4,11 +4,36 @@
   "Category": "",
   "Description": "RC Odyssey in Unreal: same game logic as the web build, Lumen renderer. Scripts tracked in guns-only/ue/.",
   "Plugins": [
-    { "Name": "PythonScriptPlugin", "Enabled": true },
-    { "Name": "EditorScriptingUtilities", "Enabled": true },
-    { "Name": "Interchange", "Enabled": true },
-    { "Name": "InterchangeEditor", "Enabled": true },
-    { "Name": "glTFExporter", "Enabled": true },
-    { "Name": "MovieRenderPipeline", "Enabled": true }
+    {
+      "Name": "PythonScriptPlugin",
+      "Enabled": true
+    },
+    {
+      "Name": "EditorScriptingUtilities",
+      "Enabled": true
+    },
+    {
+      "Name": "Interchange",
+      "Enabled": true
+    },
+    {
+      "Name": "InterchangeEditor",
+      "Enabled": true
+    },
+    {
+      "Name": "glTFExporter",
+      "Enabled": true
+    },
+    {
+      "Name": "MovieRenderPipeline",
+      "Enabled": true
+    }
+  ],
+  "Modules": [
+    {
+      "Name": "RCOdyssey",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
   ]
 }
