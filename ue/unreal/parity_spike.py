@@ -255,12 +255,12 @@ def main(argv):
 
     def pose(view):
         car, m = view['car'], state['m']
-        # TODO(calibrate): the buggy's forward axis vs the web yaw is unverified; check the first
-        # render against the web shot and fix the yaw offset here once.
+        # Calibrated 5 Nov 2026 against ue/views/housing-{arrival,turn}.png: the imported buggy's
+        # forward axis is opposite the web heading, so the UE yaw is 180 - deg(web yaw).
         for b in state['roots']:
             b.set_actor_location(web_to_ue(m, [car['x'], car['y'], car['z']]),
                                  False, False)
-            b.set_actor_rotation(unreal.Rotator(0, 0, -math.degrees(car['yaw'])), False)
+            b.set_actor_rotation(unreal.Rotator(0, 0, 180 - math.degrees(car['yaw'])), False)
         cam = place_camera(m, view, w / h)
         return cam, os.path.join(out_dir, f"{args.track}-{view['name']}.png")
 
