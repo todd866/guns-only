@@ -108,10 +108,13 @@ export function createRCTelemetry({
   const query = new URLSearchParams(locationObject?.search ?? '');
   const consent = () => readConsent(safeStorage) && query.get('telemetry') !== 'off';
   const injectedTransport = arguments[0]?.fetchImpl !== undefined || arguments[0]?.outbox !== undefined;
+  // ?telemetry=local: a home TV build served from the laptop posts to that laptop's own
+  // /telemetry sink (never the public endpoint), so play on the TV is still recorded.
+  const localSink = query.get('telemetry') === 'local' && /^(127\.0\.0\.1|localhost)$/.test(locationObject?.hostname ?? '');
   const uploadAllowed =
     consent() &&
     query.get('telemetry') !== 'off' &&
-    (injectedTransport || canonicalHost(locationObject)) &&
+    (injectedTransport || localSink || canonicalHost(locationObject)) &&
     typeof fetchImpl === 'function';
   if (indexedDB === undefined) {
     try {

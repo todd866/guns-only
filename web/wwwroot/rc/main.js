@@ -4900,6 +4900,38 @@ const prof = {
   }
 };
 const pollGamepad = createGamepadInput();
+// Home TV: who is doing what. Each pad's active time and buttons per 5 s window, with the
+// mode, posted to the serving laptop (local builds only, never the public site).
+const padLog = (() => {
+  const local = /^(127\.0\.0\.1|localhost)$/.test(location.hostname),
+    acc = new Map();
+  let windowStart = 0,
+    last = 0;
+  return (pads, now) => {
+    if (!local) return;
+    const dt = last ? Math.min(250, now - last) : 0;
+    last = now;
+    for (const p of Array.from(pads ?? []).filter(p => p?.connected)) {
+      const pressed = p.buttons.flatMap((b, i) => (b.value > 0.5 ? [i] : [])),
+        moving = p.axes.some(a => Math.abs(a) > 0.3);
+      const a = acc.get(p.id) ?? {pad: p.index, activeMs: 0, buttons: {}};
+      if (pressed.length || moving) a.activeMs += dt;
+      for (const i of pressed) a.buttons[i] = (a.buttons[i] ?? 0) + 1;
+      acc.set(p.id, a);
+    }
+    if (!windowStart) windowStart = now;
+    if (now - windowStart < 5000) return;
+    const who = [...acc].filter(([, a]) => a.activeMs > 0).map(([id, a]) => ({id, ...a, activeMs: Math.round(a.activeMs)}));
+    if (who.length)
+      navigator.sendBeacon('/pad-log', JSON.stringify({
+        at: new Date().toISOString(), mode, track: telemetryTrack, paused, panel: !!ui.panel(), started,
+        vehicle: robot ? 'robot' : skate ? 'skate' : s.flight.mode ? 'flight' : 'car',
+        place: openWorld ? nearestLocation(s.car.pos).short : null, speed: Math.round(Math.hypot(...(s.car.vel ?? [0, 0, 0])) * 3.6), who
+      }));
+    acc.clear();
+    windowStart = now;
+  };
+})();
 // Menus answer the controller too: the open dialog, else the pause/start menu.
 const menuPad = createMenuPad({
   root: () => document.querySelector('.overlay:not([hidden])') ?? ($('brief').hidden ? null : $('brief')),
@@ -4910,6 +4942,7 @@ function frame(now) {
   const pad = pollGamepad(navigator.getGamepads?.());
   if (pad.joined) callout(padGuide(pad.joined), 7000);
   if (menuPad(navigator.getGamepads?.(), now)) pad.fire = pad.boost = false;
+  padLog(navigator.getGamepads?.(), now);
   if (pad.start) {
     if (!started) $('start').click();
     else if (!ui.panel()) pause(!paused);
