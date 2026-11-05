@@ -100,6 +100,7 @@ import {createGamepadInput} from './gamepad.mjs';
 import {createMenuPad} from './gamepad-menu.mjs';
 import {padSvg, padKind} from './pad-art.mjs';
 import {createCoach} from './coach.mjs';
+import {createTag, setTagOn, stepTag, TAG, hudLine, resultHead, resultStats, tagTelemetry} from './tag.mjs';
 import {frameSeconds} from './frame-time.mjs';
 import {poseCar} from './vehicle-pose.mjs';
 import {makeVehicleBody} from './vehicle-bodies.js';
@@ -1031,6 +1032,22 @@ function legendStart() {
     callout('🏔️ Find Spirit Mountain!', 5000);
   }
 }
+const tag = createTag(),
+  tagHud = [0, 1].map(i => {
+    const el = Object.assign(document.createElement('div'), {className: `tag-chip ${i ? 'right' : 'left'}`, hidden: true});
+    document.body.append(el);
+    return el;
+  }),
+  tagResult = Object.assign(document.createElement('div'), {id: 'tag-result', hidden: true});
+tagResult.innerHTML = '<div class="tag-card"><h2></h2><p></p></div>';
+document.body.append(tagResult);
+const tagHead = tagResult.querySelector('h2'),
+  tagStats = tagResult.querySelector('p');
+$('menu-tag').onclick = () => {
+  setTagOn(tag, !tag.on);
+  $('menu-tag').setAttribute('aria-pressed', String(tag.on));
+  if (tag.on) callout('🏷️ Tag! Least IT time wins', 2800);
+};
 $('menu-furball').onclick = () => {
   if (!raceReady()) return;
   if (openWorld) {
@@ -5059,7 +5076,8 @@ camera2.layers.enable(1);
 let warpHeld = [false, false],
   warpAt = 0;
 function findFrame(all, now) {
-  const on = splitOn;
+  const on = splitOn,
+    it = tag.on ? tag.it : 0;
   beams.forEach(b => (b.visible = on));
   finders.forEach(f => (f.hidden = !on));
   if (!on) return;
@@ -5068,6 +5086,20 @@ function findFrame(all, now) {
     b = rv.session.car.pos;
   beams[0].position.set(a[0], a[1] + 20, a[2]);
   beams[1].position.set(b[0], b[1] + 20, b[2]);
+  const pulse = 0.32 + 0.18 * Math.sin(now * 0.008);
+  beams.forEach((beamMesh, i) => {
+    const isIt = it === i + 1,
+      mat = beamMesh.material;
+    if (tag.on && isIt) {
+      mat.color.set('#ff4444');
+      mat.opacity = pulse;
+      beamMesh.scale.set(2, 1, 2);
+    } else {
+      mat.color.set(i ? '#4fb3ff' : '#ff9a2e');
+      mat.opacity = 0.45;
+      beamMesh.scale.set(1, 1, 1);
+    }
+  });
   const d = Math.round(Math.hypot(a[0] - b[0], a[2] - b[2])),
     w = innerWidth / 2,
     h = innerHeight,
@@ -5082,13 +5114,15 @@ function findFrame(all, now) {
       sx = behind ? -v.x : v.x,
       sy = behind ? -v.y : v.y,
       inside = !behind && Math.abs(sx) < 0.92 && Math.abs(sy) < 0.9;
+    const partnerIt = (i === 0 && it === 2) || (i === 1 && it === 1),
+      tail = partnerIt ? 'IT!' : `${who} · ${d} m`;
     // On screen: a tag over their car. Off screen: pinned to the edge, pointing at them.
     const k = inside ? 1 : 0.88 / Math.max(Math.abs(sx), Math.abs(sy), 0.001),
       px = x0 + ((sx * k + 1) / 2) * w,
       py = ((1 - sy * k) / 2) * h,
       ang = Math.atan2(-sy, sx);
-    f.style.cssText = `left:${px}px;top:${py}px;--c:${colour}`;
-    f.innerHTML = `${inside ? '▼' : `<b style="transform:rotate(${ang}rad)">➤</b>`} ${who} · ${d} m`;
+    f.style.cssText = `left:${px}px;top:${py}px;--c:${partnerIt ? '#ff4444' : colour}`;
+    f.innerHTML = `${inside ? '▼' : `<b style="transform:rotate(${ang}rad)">➤</b>`} ${tail}`;
   });
   // LB / L: jump to your partner (2 s apart so a held button doesn't ping-pong).
   const pads = [all.filter(p => p?.connected && p.index !== split.pad), [all[split.pad]].filter(Boolean)];
@@ -5106,6 +5140,46 @@ function findFrame(all, now) {
     }
     warpHeld[i] = down;
   });
+}
+function tagFrame(dt) {
+  const menu = $('menu-tag');
+  if (menu.hidden === splitOn) menu.hidden = !splitOn;
+  if (!splitOn) {
+    if (tag.on) {
+      setTagOn(tag, false);
+      menu.setAttribute('aria-pressed', 'false');
+    }
+    tagHud.forEach(h => (h.hidden = true));
+    tagResult.hidden = true;
+    return;
+  }
+  if (!tag.on) {
+    tagHud.forEach(h => (h.hidden = true));
+    tagResult.hidden = true;
+    return;
+  }
+  const a = s.car.pos,
+    b = race.rivals[0].session.car.pos,
+    dist = Math.hypot(a[0] - b[0], a[2] - b[2]),
+    ev = stepTag(tag, dt, dist, paused || ui.panel());
+  if (ev.tagged) callout('🏷️ Tagged!', 900);
+  const showResult = tag.resultLeft > 0;
+  tagResult.hidden = !showResult;
+  if (showResult) {
+    tagHead.textContent = resultHead(tag);
+    tagStats.textContent = resultStats(tag).join(' · ');
+  }
+  for (let p = 1; p <= 2; p++) {
+    const el = tagHud[p - 1];
+    if (showResult) {
+      el.hidden = true;
+      continue;
+    }
+    const safe = tag.safe === p && tag.safeLeft > 0;
+    el.classList.toggle('safe', safe);
+    el.textContent = safe ? 'Safe!' : hudLine(tag, p);
+    el.hidden = false;
+  }
 }
 const p2Hud = Object.assign(document.createElement('div'), {id: 'p2-hud', hidden: true}),
   splitLine = Object.assign(document.createElement('div'), {id: 'split-line', hidden: true});
@@ -5174,6 +5248,7 @@ const padLog = (() => {
         at: new Date().toISOString(), mode, track: telemetryTrack, paused, panel: !!ui.panel(), started,
         vehicle: robot ? 'robot' : skate ? 'skate' : s.flight.mode ? 'flight' : 'car',
         split: split ? {p2Pad: split.pad, on: splitOn} : null, p1Pad,
+        tag: tagTelemetry(tag),
         place: openWorld ? nearestLocation(s.car.pos).short : null, speed: Math.round(Math.hypot(...(s.car.vel ?? [0, 0, 0])) * 3.6), who
       }));
     acc.clear();
@@ -5201,9 +5276,10 @@ function frame(now) {
       rv.human = () => {
         const f = split?.fire;
         if (split) split.fire = false;
+        const tb = tag.on && tag.it === 2 && !tag.resultLeft ? TAG.itBoost : 1;
         return paused || ui.panel()
           ? {throttle: 0, steer: 0, brake: true}
-          : {throttle: pad2.throttle, steer: pad2.steer, brake: pad2.brake, drift: pad2.drift, fire: !!f};
+          : {throttle: pad2.throttle, steer: pad2.steer, brake: pad2.brake, drift: pad2.drift, fire: !!f, boost: tb};
       };
       // Keep the two cars together: the world only streams around player 1.
       const a = s.car.pos,
@@ -5267,6 +5343,7 @@ function frame(now) {
     }
   }
   last = now;
+  tagFrame(dt);
   if (!paused && !ui.panel() && countdown > 0) {
     countdown -= dt;
     const n = Math.ceil(countdown);
@@ -5331,6 +5408,7 @@ function frame(now) {
       skyPrev[0] = s.car.pos[0];
       skyPrev[1] = s.car.pos[1];
       skyPrev[2] = s.car.pos[2];
+      const tagBoost = tag.on && tag.it === 1 && !tag.resultLeft ? TAG.itBoost : 1;
       stepRace(
         race,
         robot
@@ -5343,7 +5421,7 @@ function frame(now) {
               grindDir: form === 'board' ? stick() : null,
               fire: fireQueued,
               flight: fl,
-              boost: fl.burner && !s.flight.mode ? FLIGHT.burnerBoost : 1
+              boost: (fl.burner && !s.flight.mode ? FLIGHT.burnerBoost : 1) * tagBoost
             },
         1 / 120
       );
