@@ -61,6 +61,27 @@ const ACCUMULATOR_INPUT = {
   jump: false
 };
 
+test('determinism: identical FrameState sequence on the same input script', () => {
+  const course = courseAtOpen();
+  const collect = () => {
+    const host = createSimHost({course, mode: 'kid', rivals: []});
+    const seq = [];
+    let step = 0;
+    let sim = 0;
+    while (sim + 1e-12 < 2) {
+      host.step(FIXED_DT, inputScript(step));
+      seq.push(host.frame());
+      sim += FIXED_DT;
+      step++;
+    }
+    return seq;
+  };
+  const a = collect();
+  const b = collect();
+  assert.equal(a.length, b.length);
+  for (let i = 0; i < a.length; i++) assert.deepEqual(a[i], b[i]);
+});
+
 test('determinism: identical frame JSON after 10 s on the same input script', () => {
   const course = courseAtOpen();
   const a = createSimHost({course, mode: 'kid', rivals: []});
@@ -130,6 +151,23 @@ test('frame() is JSON round-trip stable with no undefined or NaN', () => {
   const round = JSON.parse(JSON.stringify(frame));
   assert.deepEqual(round, frame);
   assertJsonClean(frame);
+});
+
+test('onFixedStep runs exactly once per fixed step', () => {
+  const host = createSimHost({course: courseAtOpen(), mode: 'kid', rivals: []});
+  let after = 0;
+  host.onFixedStep(() => after++);
+  for (let i = 0; i < 240; i++) host.step(FIXED_DT, ACCUMULATOR_INPUT);
+  assert.equal(after, 240);
+  assert.equal(host.frame().step, 240);
+});
+
+test('onBeforeFixedStep runs exactly once per fixed step', () => {
+  const host = createSimHost({course: courseAtOpen(), mode: 'kid', rivals: []});
+  let before = 0;
+  host.onBeforeFixedStep(() => before++);
+  for (let i = 0; i < 180; i++) host.step(FIXED_DT, ACCUMULATOR_INPUT);
+  assert.equal(before, 180);
 });
 
 test('sim-host.mjs has no forbidden imports or browser APIs in source text', () => {
