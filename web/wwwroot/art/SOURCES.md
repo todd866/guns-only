@@ -242,8 +242,8 @@ table further down stays the single place a filename is bound to a hash.
 | `jet-f14.webp` | 900×900 | 14886 | `e67c8ed4413eabf7bca198847e1be0bb64f61270c6c0e90b158852f00251d85e` | Top Gun F-14A picker vector render |
 | `jet-mig-28.webp` | 900×900 | 13344 | `bc768c8e5aaee8437dd425879cc0d9d4b0f6a7dcfcc1fdc3a23c76db279d3212` | Top Gun MiG-28 aggressor vector render |
 | `aircraft-fireboss.webp` | 1200×1200 | 208924 | `9737e2ceb208145c86e142d3e12975549565d4acc672a7000380c26e9beef149` | Okanagan Fire Boss picker poster; project-generated with OpenAI ImageGen on 2026-08-15, then corrected to the modern five-blade turboprop configuration |
-| `menu-hangar-small.webp` | 900×600 | 8518 | `a17a868a3905c6fc9d8217ae156c7123228baaf1009dce7ef781e9e613ebde45` | Narrow/loading fallback |
-| `menu-hangar.webp` | 1600×1067 | 18382 | `2b0bd29b275e6993c0ad9f355dfc5c048b1e05abaf2cd60323784f881ff9f070` | Wide/loading background |
+| `menu-hangar-small.webp` | 900×600 | 8886 | `c817ac2f6251d5b4c7b95ade99d6362fbbbf2d5a538dcf22c27ca1b7ff911d4b` | Narrow/loading fallback |
+| `menu-hangar.webp` | 1600×1067 | 19260 | `228769e997eb8359f7a295ed6ff3195050fed93966023dfd6a39b0d3847eca34` | Wide/loading background |
 
 ### Saucer Springs AFB picker — CURRENT
 
