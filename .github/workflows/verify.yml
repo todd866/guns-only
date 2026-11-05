@@ -136,6 +136,12 @@ jobs:
           SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/guns-only-smoke-artifacts
           SMOKE_WWWROOT: ${{ runner.temp }}/guns-only-publish/wwwroot
           FIRST_MERGE_RECEIPT_ORIENTATIONS: portrait
+          # The hosted runner renders with SwiftShader and delivers roughly one animation frame
+          # per second while the WASM runtime boots behind the picker. Playwright's "stable"
+          # check needs two equal frames, so the fresh-visit console clicks timed out on the
+          # same tree that had passed an hour earlier (Builds 436-441, 5 Nov 2026). This widens
+          # only the waits; it does not relax any assertion.
+          SMOKE_TIMEOUT_SCALE: "2"
         run: |
           mkdir -p "$MEDEVAC_QA_CAPTURE_DIR"
           set -o pipefail
