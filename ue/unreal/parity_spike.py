@@ -38,7 +38,7 @@ TRACK_GLB = {
     'school': 'web/wwwroot/rc/assets/districts/school.glb',
 }
 BUGGY_GLB = 'web/wwwroot/rc/assets/buggy.glb'
-CM_PER_M = 100.0
+# The calibrated axis map already carries metres -> cm (columns of 100); do not scale again.
 
 actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 levels = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
@@ -159,7 +159,7 @@ def web_rotation_y_to_ue(m, yaw):
 
 def place_roots(m, new_actors, anchor_m, yaw):
     """Apply the web district placement (anchor in metres, yaw about +Y) to imported root actors."""
-    placement = unreal.Transform(web_to_ue(m, [a * CM_PER_M for a in anchor_m]),
+    placement = unreal.Transform(web_to_ue(m, anchor_m),
                                  web_rotation_y_to_ue(m, yaw), unreal.Vector(1, 1, 1))
     roots = [a for a in new_actors if a.get_attach_parent_actor() is None]
     for a in roots:
@@ -203,7 +203,7 @@ def hide_collision(new_actors):
 # ---------------------------------------------------------------- 4. views
 def place_camera(m, view, aspect):
     cam = view['camera']
-    pos = web_to_ue(m, [c * CM_PER_M for c in cam['pos']])
+    pos = web_to_ue(m, cam['pos'])
     fwd = web_to_ue(m, quat_rotate(cam['quat'], (0, 0, -1)))   # three cameras look down -Z
     up = web_to_ue(m, quat_rotate(cam['quat'], (0, 1, 0)))
     rot = unreal.MathLibrary.make_rot_from_xz(fwd, up)
@@ -258,7 +258,7 @@ def main(argv):
         # TODO(calibrate): the buggy's forward axis vs the web yaw is unverified; check the first
         # render against the web shot and fix the yaw offset here once.
         for b in state['roots']:
-            b.set_actor_location(web_to_ue(m, [car['x'] * CM_PER_M, car['y'] * CM_PER_M, car['z'] * CM_PER_M]),
+            b.set_actor_location(web_to_ue(m, [car['x'], car['y'], car['z']]),
                                  False, False)
             b.set_actor_rotation(unreal.Rotator(0, 0, -math.degrees(car['yaw'])), False)
         cam = place_camera(m, view, w / h)
