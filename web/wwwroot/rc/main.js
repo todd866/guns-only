@@ -4988,6 +4988,15 @@ function splitInput(all, now) {
         telemetry.choice?.('split', 'join');
       }
   startHeld = starts;
+  // ?players=2: the TV stays two-player; any second connected pad is player 2, even after a reload.
+  if (!split && started && race.rivals.length && new URLSearchParams(location.search).get('players') === '2' && live.length > 1) {
+    const one = p1Pad ?? live[0].index,
+      two = live.find(p => p.index !== one);
+    if (two) {
+      p1Pad = one;
+      split = {pad: two.index, heading: null, placed: false, fire: false};
+    }
+  }
   if (split && all[split.pad]?.buttons[8]?.value > 0.5) {
     if (race.rivals[0]) delete race.rivals[0].human;
     split = null;
