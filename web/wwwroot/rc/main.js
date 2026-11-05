@@ -4937,6 +4937,25 @@ const coachEls = [1, 2].map(n => {
 let coachLast = 0,
   coachDrawn = 0,
   p1Last = null;
+// The on-screen "Skate [E]" style button: player 1's left face button presses it, and its
+// key cap shows that button as printed on the pad in their hands (X on the Ultimate, Y on the SN30).
+let useHeld = false;
+function useButton(all) {
+  const mine = all.filter(p => p?.connected && p.index !== split?.pad),
+    now = mine.some(p => p.buttons[2]?.value > 0.5),
+    btn = $('interact');
+  if (now && !useHeld && !btn.hidden && !paused && !ui.panel()) btn.click();
+  useHeld = now;
+  const gp = all[p1Last];
+  if (!gp || btn.hidden) return;
+  const kind = padKind(gp.id),
+    label = kind === 'sn30' ? 'Y' : 'X';
+  for (const k of btn.querySelectorAll('kbd'))
+    if (k.textContent === 'E' || k.dataset.pad) {
+      k.dataset.pad = kind;
+      if (k.textContent !== label) k.textContent = label;
+    }
+}
 function coachFrame(all, p1, p2, now) {
   const dt = coachLast ? Math.min(0.1, (now - coachLast) / 1000) : 0;
   coachLast = now;
@@ -5096,6 +5115,7 @@ function frame(now) {
   if (menuPad(navigator.getGamepads?.(), now)) pad.fire = pad.boost = false;
   padLog(navigator.getGamepads?.(), now);
   coachFrame(allPads, pad, pad2, now);
+  useButton(allPads);
   if (pad.start) {
     if (!started) $('start').click();
     else if (!ui.panel()) pause(!paused);
