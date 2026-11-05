@@ -1308,7 +1308,7 @@ window.addEventListener('pagehide', () => {
   telemetry.flush({force: true});
 });
 // Two chase cameras side by side. The polish pass is one-camera, so split renders plainly.
-globalThis.__rcTv = {get race() { return race; }, get split() { return split; }, get splitOn() { return splitOn; }};
+globalThis.__rcTv = {get pointers() { return pointers; }, get race() { return race; }, get split() { return split; }, get splitOn() { return splitOn; }};
 function renderSplit() {
   const w = innerWidth,
     h = innerHeight,
@@ -5119,7 +5119,8 @@ function findFrame(all, now) {
         dz = to[2] - from[2],
         close = Math.hypot(dx, dz) < 4;
       p.g.visible = !close;
-      p.g.position.set(from[0], from[1] + 0.75 + bob, from[2]);
+      p.g.position.set(from[0], from[1] + 0.38 + bob * 0.4, from[2]);
+      p.g.scale.setScalar(0.4);
       p.g.rotation.y = Math.atan2(dx, dz);
       p.mat.color.set(it === partner ? '#ff4444' : p.colour);
     });
