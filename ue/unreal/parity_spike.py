@@ -238,20 +238,51 @@ def main(argv):
     levels.save_current_level()
 
     w, h = views['viewport']
-    for view in views['views']:
+    roots = [a for a in buggy if a.get_attach_parent_actor() is None]  # move roots only
+    queue = list(views['views'])
+    state = {'pending': None, 'ticks': 0, 'handle': None}
+
+    def pose(view):
         car = view['car']
         # TODO(calibrate): the buggy's forward axis vs the web yaw is unverified; check the first
         # render against the web shot and fix the yaw offset here once.
-        for b in (a for a in buggy if a.get_attach_parent_actor() is None):  # move roots only
+        for b in roots:
             b.set_actor_location(web_to_ue(m, [car['x'] * CM_PER_M, car['y'] * CM_PER_M, car['z'] * CM_PER_M]),
                                  False, False)
             b.set_actor_rotation(unreal.Rotator(0, 0, -math.degrees(car['yaw'])), False)
         cam = place_camera(m, view, w / h)
-        name = os.path.join(out_dir, f"{args.track}-{view['name']}.png")
-        unreal.AutomationLibrary.take_high_res_screenshot(w, h, name, camera=cam)
-        log(f'queued {name}')
-    log('done; screenshots are written once the editor renders the queued frames')
+        return cam, os.path.join(out_dir, f"{args.track}-{view['name']}.png")
 
+    # One screenshot at a time, driven by editor ticks: the request only renders on a later
+    # frame, and several queued in one frame collapse into the last. The editor must tick, so
+    # launch without -RenderOffscreen and with -ExecCmds="py ..." (ExecutePythonScript exits first).
+    def tick(_dt):
+        state['ticks'] += 1
+        if state['pending']:
+            if os.path.exists(state['pending']):
+                log(f"wrote {state['pending']}")
+            elif state['ticks'] < 900:
+                return
+            else:
+                log(f"timed out waiting for {state['pending']}")
+            state['pending'] = None
+            state['ticks'] = 0
+        if state['ticks'] < 10:
+            return  # let the scene settle a few frames
+        if not queue:
+            unreal.unregister_slate_post_tick_callback(state['handle'])
+            log('done')
+            if not os.environ.get('PARITY_KEEP_OPEN'):
+                unreal.SystemLibrary.quit_editor()
+            return
+        cam, name = pose(queue.pop(0))
+        unreal.AutomationLibrary.take_high_res_screenshot(w, h, name, camera=cam)
+        state['pending'] = name
+        state['ticks'] = 0
+        log(f'queued {name}')
+
+    state['handle'] = unreal.register_slate_post_tick_callback(tick)
+    log('screenshots scheduled; the editor quits when they are written')
 
 if __name__ == '__main__':
     main(sys.argv[1:])

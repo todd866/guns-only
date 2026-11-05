@@ -13,6 +13,6 @@ echo "project: $DEST/RCOdyssey.uproject"
 [ -x "$EDITOR" ] && echo "editor:  $EDITOR" || echo "editor:  NOT INSTALLED at $ENGINE"
 cat <<USAGE
 run the parity spike:
-  "$EDITOR" "$DEST/RCOdyssey.uproject" -unattended -nosplash -NoSound -log \
-    -ExecutePythonScript="$HERE/unreal/parity_spike.py --repo $(cd "$HERE/.." && pwd) --track housing"
+  "$EDITOR" "$DEST/RCOdyssey.uproject" -unattended -nosplash -NoSound -log -WINDOWED -ResX=1280 -ResY=720 \
+    -ExecCmds="py $HERE/unreal/parity_spike.py --repo $(cd "$HERE/.." && pwd) --track housing"
 USAGE
