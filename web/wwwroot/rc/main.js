@@ -4993,6 +4993,80 @@ let split = null,
   p1Pad = null,
   startHeld = new Set(),
   splitOn = false;
+// Finding each other: a light beam over each car, seen only from the OTHER player's camera
+// (layer 1 = player 1's beam, drawn by camera2; layer 2 = player 2's, drawn by camera), and
+// an edge arrow with the distance when the partner is off screen. LB/L jumps you to them.
+const beam = (colour, layer) => {
+  const m = new T.Mesh(
+    new T.CylinderGeometry(0.22, 0.22, 40, 10, 1, true),
+    new T.MeshBasicMaterial({color: colour, transparent: true, opacity: 0.45, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide})
+  );
+  m.layers.set(layer);
+  m.visible = false;
+  m.renderOrder = 5;
+  scene.add(m);
+  return m;
+};
+const beams = [beam('#ff9a2e', 1), beam('#4fb3ff', 2)],
+  finders = [1, 2].map(n => {
+    const el = Object.assign(document.createElement('div'), {className: 'finder', hidden: true});
+    el.setAttribute('aria-hidden', 'true');
+    document.body.append(el);
+    return el;
+  });
+camera.layers.enable(2);
+camera2.layers.enable(1);
+let warpHeld = [false, false],
+  warpAt = 0;
+function findFrame(all, now) {
+  const on = splitOn;
+  beams.forEach(b => (b.visible = on));
+  finders.forEach(f => (f.hidden = !on));
+  if (!on) return;
+  const a = s.car.pos,
+    rv = race.rivals[0],
+    b = rv.session.car.pos;
+  beams[0].position.set(a[0], a[1] + 20, a[2]);
+  beams[1].position.set(b[0], b[1] + 20, b[2]);
+  const d = Math.round(Math.hypot(a[0] - b[0], a[2] - b[2])),
+    w = innerWidth / 2,
+    h = innerHeight,
+    v = new T.Vector3();
+  [
+    [camera, b, 0, 'P2', '#4fb3ff'],
+    [camera2, a, w, 'P1', '#ff9a2e']
+  ].forEach(([cam, at, x0, who, colour], i) => {
+    const f = finders[i];
+    v.set(at[0], at[1] + 0.6, at[2]).project(cam);
+    const behind = v.z > 1,
+      sx = behind ? -v.x : v.x,
+      sy = behind ? -v.y : v.y,
+      inside = !behind && Math.abs(sx) < 0.92 && Math.abs(sy) < 0.9;
+    // On screen: a tag over their car. Off screen: pinned to the edge, pointing at them.
+    const k = inside ? 1 : 0.88 / Math.max(Math.abs(sx), Math.abs(sy), 0.001),
+      px = x0 + ((sx * k + 1) / 2) * w,
+      py = ((1 - sy * k) / 2) * h,
+      ang = Math.atan2(-sy, sx);
+    f.style.cssText = `left:${px}px;top:${py}px;--c:${colour}`;
+    f.innerHTML = `${inside ? '▼' : `<b style="transform:rotate(${ang}rad)">➤</b>`} ${who} · ${d} m`;
+  });
+  // LB / L: jump to your partner (2 s apart so a held button doesn't ping-pong).
+  const pads = [all.filter(p => p?.connected && p.index !== split.pad), [all[split.pad]].filter(Boolean)];
+  pads.forEach((list, i) => {
+    const down = list.some(p => p.buttons[4]?.value > 0.5);
+    if (down && !warpHeld[i] && now - warpAt > 2000 && !paused && !ui.panel()) {
+      warpAt = now;
+      if (i === 1) split.placed = false;
+      else {
+        s.car.pos = [b[0] - 2.5, b[1] + 0.4, b[2]];
+        s.car.vel = [0, 0, 0];
+        if (rv.session.car.q) s.car.q = [...rv.session.car.q];
+      }
+      callout(i === 0 ? '✨ P1 jumped to P2' : '✨ P2 jumped to P1', 1500);
+    }
+    warpHeld[i] = down;
+  });
+}
 const p2Hud = Object.assign(document.createElement('div'), {id: 'p2-hud', hidden: true}),
   splitLine = Object.assign(document.createElement('div'), {id: 'split-line', hidden: true});
 document.body.append(p2Hud, splitLine);
@@ -5103,7 +5177,8 @@ function frame(now) {
         recover(rv.session);
         split.heading = null;
       }
-      if (!split.placed || Math.hypot(a[0] - b[0], a[2] - b[2]) > 120) {
+      // Fell through the world (the ground only streams in round player 1): straight back up.
+      if (!split.placed || Math.hypot(a[0] - b[0], a[2] - b[2]) > 120 || b[1] < a[1] - 20) {
         split.placed = true;
         rv.session.car.pos = [a[0] + 2.5, a[1] + 0.4, a[2]];
         rv.session.car.vel = [0, 0, 0];
@@ -5116,6 +5191,7 @@ function frame(now) {
   padLog(navigator.getGamepads?.(), now);
   coachFrame(allPads, pad, pad2, now);
   useButton(allPads);
+  findFrame(allPads, now);
   if (pad.start) {
     if (!started) $('start').click();
     else if (!ui.panel()) pause(!paused);
