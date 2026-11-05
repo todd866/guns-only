@@ -73,8 +73,8 @@ public class CobraThreatFireRuntimeTests
         double maximumFirstHitSeconds = minimumFirstHitSeconds
             + CobraThreatFireRuntime.MaximumBurstTravelRangeM
                 / CobraThreatFireRuntime.ProvisionalProjectileSpeedMps;
-        Assert.InRange(minimumFirstHitSeconds, 15.0, 23.0);
-        Assert.InRange(maximumFirstHitSeconds, 15.0, 23.0);
+        Assert.InRange(minimumFirstHitSeconds, 10.5, 18.5);
+        Assert.InRange(maximumFirstHitSeconds, 10.5, 18.5);
 
         var threat = new CobraThreatFireRuntime();
         double rangeM = CobraThreatFireRuntime.MaximumBurstTravelRangeM;
@@ -232,7 +232,14 @@ public class CobraThreatFireRuntimeTests
         CobraResolvedThreatObserver[] observers = Resolved("observer.one", Vec3D.Zero);
         GroundUnit[] guns = ThreatSites(observers);
 
-        threat.Advance(10.1, exposed, observers, guns, Geometry(TargetWorldM));
+        threat.Advance(
+            CobraThreatFireRuntime.AcquisitionSeconds
+                + CobraThreatFireRuntime.BurstImpactBaseDelaySeconds
+                + 0.1,
+            exposed,
+            observers,
+            guns,
+            Geometry(TargetWorldM));
 
         Assert.True(threat.State.ThreatTracking);
         Assert.False(threat.State.ReceivingFire);
@@ -247,28 +254,27 @@ public class CobraThreatFireRuntimeTests
         CobraMaskingAssessment pointBlank = Assessment(LineOfSight("observer.one", 0.0));
         CobraResolvedThreatObserver[] observers = Resolved("observer.one", Vec3D.Zero);
 
-        // Burst 1 at 8 s misses; burst 2 at 13 s hits SCAS at 15 s.
+        // Burst 1 at 3.5 s misses; burst 2 at 8.5 s hits SCAS at 10.5 s.
         threat.Advance(
-            15.0, pointBlank, observers, ThreatSites(observers), Geometry(TargetWorldM));
+            10.5, pointBlank, observers, ThreatSites(observers), Geometry(TargetWorldM));
 
         Assert.True(threat.State.ScasDamaged);
         Assert.False(threat.State.EngineDamaged);
         Assert.Equal(1, threat.State.DamagingHits);
 
-        // Burst 3 at 18 s misses; burst 4 at 23 s hits the engine at 25 s.
+        // Burst 3 at 13.5 s is also aimed and hits the engine at 15.5 s.
         threat.Advance(
-            10.0, pointBlank, observers, ThreatSites(observers), Geometry(TargetWorldM));
+            5.0, pointBlank, observers, ThreatSites(observers), Geometry(TargetWorldM));
 
         Assert.Equal(2, threat.State.DamagingHits);
         Assert.True(threat.State.EngineDamaged);
         Assert.Equal(
-            new[] { false, true, false, true },
+            new[] { false, true, true },
             threat.RecentBursts.Select(burst => burst.WillHit).ToArray());
         Assert.Equal(
             new[] {
                 CobraThreatBurstSubsystem.None,
                 CobraThreatBurstSubsystem.Scas,
-                CobraThreatBurstSubsystem.None,
                 CobraThreatBurstSubsystem.Engine,
             },
             threat.RecentBursts.Select(burst => burst.Subsystem).ToArray());
@@ -280,6 +286,139 @@ public class CobraThreatFireRuntimeTests
         Assert.Equal(0, threat.State.DamagingHits);
         Assert.False(threat.State.ScasDamaged);
         Assert.False(threat.State.EngineDamaged);
+    }
+
+    [Fact]
+    public void ExposedHoverDrawsTracersWithinThreePointFiveSeconds()
+    {
+        var threat = new CobraThreatFireRuntime();
+        CobraMaskingAssessment exposed = Assessment(LineOfSight("observer.one", 850.0));
+        CobraResolvedThreatObserver[] observers = Resolved("observer.one", Vec3D.Zero);
+
+        Assert.Equal(3.5, CobraThreatFireRuntime.AcquisitionSeconds);
+
+        threat.Advance(
+            3.5,
+            exposed,
+            observers,
+            ThreatSites(observers),
+            Geometry(TargetWorldM));
+
+        CobraThreatBurstEvent burst = Assert.Single(threat.RecentBursts);
+        Assert.True(burst.FiredAtSeconds <= 3.5);
+        Assert.True(threat.State.ReceivingFire);
+        Assert.Equal(1, threat.State.BurstsFired);
+        Assert.Equal(0, threat.State.DamagingHits);
+        Assert.False(burst.WillHit);
+    }
+
+    [Fact]
+    public void HalfSecondMaskRetainsMoreThanHalfTheAcquisition()
+    {
+        var threat = new CobraThreatFireRuntime();
+        CobraMaskingAssessment exposed = Assessment(LineOfSight("observer.one", 850.0));
+        CobraMaskingAssessment masked = Assessment(Blocked("observer.one", 850.0));
+        CobraResolvedThreatObserver[] observers = Resolved("observer.one", Vec3D.Zero);
+
+        const double initialExposureSeconds = 3.0;
+        threat.Advance(
+            initialExposureSeconds,
+            exposed,
+            observers,
+            ThreatSites(observers),
+            Geometry(TargetWorldM));
+        double progressBeforeMask = threat.State.AcquisitionProgress;
+
+        threat.Advance(
+            0.5,
+            masked,
+            observers,
+            ThreatSites(observers),
+            Geometry(TargetWorldM));
+
+        Assert.Equal("observer.one", threat.State.ActiveObserverId);
+        Assert.True(threat.State.ContinuousExposureSeconds > 0.5 * initialExposureSeconds);
+        Assert.True(threat.State.AcquisitionProgress > 0.5 * progressBeforeMask);
+        Assert.True(threat.State.AcquisitionProgress > 0.5);
+
+        threat.Advance(
+            1.5,
+            exposed,
+            observers,
+            ThreatSites(observers),
+            Geometry(TargetWorldM));
+
+        Assert.Single(threat.RecentBursts);
+        Assert.Equal(1, threat.State.BurstsFired);
+
+        threat.Advance(
+            CobraThreatFireRuntime.AcquisitionSeconds
+                / CobraThreatFireRuntime.AcquisitionMaskDecayRate,
+            masked,
+            observers,
+            ThreatSites(observers),
+            Geometry(TargetWorldM));
+
+        Assert.False(threat.State.ThreatTracking);
+        Assert.Null(threat.State.ActiveObserverId);
+        Assert.Equal(0.0, threat.State.AcquisitionProgress);
+    }
+
+    [Fact]
+    public void JinkingTargetAtFifteenMetersPerSecondLateralIsNotHitByBurstTwo()
+    {
+        var threat = new CobraThreatFireRuntime();
+        CobraMaskingAssessment exposed = Assessment(LineOfSight("observer.one", 850.0));
+        CobraResolvedThreatObserver[] observers = Resolved("observer.one", Vec3D.Zero);
+
+        threat.Advance(
+            CobraThreatFireRuntime.AcquisitionSeconds
+                + CobraThreatFireRuntime.BurstIntervalSeconds,
+            exposed,
+            observers,
+            ThreatSites(observers),
+            Geometry(TargetWorldM));
+
+        Assert.Equal(2, threat.RecentBursts.Count);
+        CobraThreatBurstEvent secondBurst = threat.RecentBursts[1];
+        Assert.False(secondBurst.HasImpacted);
+
+        const double dtSeconds = 1.0 / 120.0;
+        const double lateralJinkMps = 15.0;
+        double elapsedJinkSeconds = 0.0;
+        while (!threat.RecentBursts[1].HasImpacted)
+        {
+            elapsedJinkSeconds += dtSeconds;
+            Vec3D jinkPosition = TargetWorldM + new Vec3D(lateralJinkMps * elapsedJinkSeconds, 0.0, 0.0);
+            threat.Advance(
+                dtSeconds,
+                exposed,
+                observers,
+                ThreatSites(observers),
+                Geometry(jinkPosition));
+        }
+
+        CobraThreatBurstEvent resolvedSecondBurst = threat.RecentBursts[1];
+        Assert.True(resolvedSecondBurst.HasImpacted);
+        Assert.False(resolvedSecondBurst.WillHit);
+        Assert.Equal(CobraThreatBurstSubsystem.None, resolvedSecondBurst.Subsystem);
+        Assert.Equal(0, threat.State.DamagingHits);
+        Assert.False(threat.State.ScasDamaged);
+
+        // Holding still after the jink proves SCAS damage comes from the first actual hit,
+        // never as a scripted second-burst-only effect.
+        Vec3D heldPosition = TargetWorldM + new Vec3D(lateralJinkMps * elapsedJinkSeconds, 0.0, 0.0);
+        threat.Advance(
+            6.0,
+            exposed,
+            observers,
+            ThreatSites(observers),
+            Geometry(heldPosition));
+
+        Assert.True(threat.State.ScasDamaged);
+        Assert.False(threat.State.EngineDamaged);
+        Assert.Equal(1, threat.State.DamagingHits);
+        Assert.Equal(CobraThreatBurstSubsystem.Scas, threat.RecentBursts[2].Subsystem);
     }
 
     [Fact]
