@@ -243,6 +243,9 @@ function paintFrame(ctx, w, h, palette, driftPx, doc) {
 
 /** Drift repaints at most this often; the menu does not need 60 Hz clouds. */
 const DRIFT_FRAME_MS = 66;
+/** Largest bitmap the backdrop paints; CSS stretches it to the viewport. */
+const PAINT_MAX_W = 1600;
+const PAINT_MAX_H = 1000;
 
 /**
  * @param {{ document?: Document, window?: Window, canvas?: HTMLCanvasElement | null }} [options]
@@ -264,14 +267,24 @@ export function mountReadyMenuBackdrop(options = {}) {
   let lastTs = 0;
   let visible = false;
 
+  // The painted size is capped: a full-page screenshot (Playwright, the Medevac QA capture)
+  // stretches the viewport to the document height, and a fixed-inset canvas would then paint a
+  // blurred cloud layer thousands of pixels tall on a software rasteriser (Build 437 CI hung the
+  // capture for 30 s). The bitmap is at most PAINT_MAX_W x PAINT_MAX_H and CSS stretches it; a
+  // blurred sky does not need more.
+  let paintW = 1;
+  let paintH = 1;
   const resize = () => {
     const dpr = Math.min(win.devicePixelRatio || 1, 2);
     const w = Math.max(1, Math.floor(canvas.clientWidth));
     const h = Math.max(1, Math.floor(canvas.clientHeight));
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
+    const scale = Math.min(1, PAINT_MAX_W / w, PAINT_MAX_H / h);
+    paintW = Math.max(1, Math.floor(w * scale));
+    paintH = Math.max(1, Math.floor(h * scale));
+    canvas.width = Math.floor(paintW * dpr);
+    canvas.height = Math.floor(paintH * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintFrame(ctx, w, h, themePalette(root), driftPx, doc);
+    paintFrame(ctx, paintW, paintH, themePalette(root), driftPx, doc);
   };
 
   const syncVisibility = () => {
@@ -302,8 +315,8 @@ export function mountReadyMenuBackdrop(options = {}) {
       syncVisibility();
       return;
     }
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
+    const w = paintW;
+    const h = paintH;
     // While the runtime is still booting the sky is a still picture: one frame, no loop, so the
     // main thread belongs to the WASM boot. The boot class observer restarts the drift after.
     if (boot && !boot.classList.contains("ready")) {
