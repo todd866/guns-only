@@ -67,7 +67,7 @@ test("authoritative state and events expose every replacement edge", () => {
 
 test("mission brief and splash cue explain escalating waves and landing bonus", () => {
   assert.match(appSource,
-    /Two gun engagements · return to the runway[\s\S]*?480 rounds across all fights/);
+    /Waves · score · land for bonus[\s\S]*?480 rounds across all fights/);
   assert.match(appSource,
     /Waves get harder through W5 and raise your score multiplier/);
   assert.match(appSource,

@@ -114,12 +114,12 @@ test("first run is a deliberate Ready interlock and Fire visibly names its live 
     /"first-merge": Object\.freeze\(\{[\s\S]*?\n  \}\),/,
   )?.[0] ?? "";
   assert.match(firstMergeBrief,
-    /sortie: "Two gun engagements · land and stop"/,
+    /sortie: "Waves · score · land for bonus"/,
     "the programme brief names the fight without claiming an opening pair");
   assert.doesNotMatch(firstMergeBrief, /first pass safe/i,
     "the combat sortie must not advertise a safe pass");
   assert.match(index,
-    /id="ready-sortie">Two gun engagements · land and stop</,
+    /id="ready-sortie">Waves · score · land for bonus</,
     "the static Ready fallback must match the finite sortie contract");
   assert.match(app, /touchFireAriaLabel/);
   assert.match(app, /touchFireButton\.textContent = touchFireVisibleLabel\(state\)/,

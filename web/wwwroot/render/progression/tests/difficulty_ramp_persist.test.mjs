@@ -84,9 +84,9 @@ test("director state saves after an engagement and on hide, and restores on the 
   assert.equal(armed.at(-1), V2_RUNG_2);
 });
 
-test("the guns-only sortie is two engagements and then a landing", () => {
+test("the guns-only sortie is escalating waves with an optional landing bonus", () => {
   const guns = experienceById("first-merge");
-  assert.match(guns.shortObjective, /Two gun engagements, then land/);
+  assert.match(guns.shortObjective, /Waves get harder\. Land for a bonus/);
   assert.doesNotMatch(guns.shortObjective, /endless/i);
 });
 
@@ -95,9 +95,10 @@ test("the guns-only ready brief does not promise an opening ace pair or an endle
   assert.doesNotMatch(app, /opening wave is a pair of Aces/);
   assert.doesNotMatch(app, /Splash the pair/);
   assert.doesNotMatch(app, /F-22A · endless/);
-  assert.match(app, /Complete two gun engagements, then follow the recovery cues to a runway stop\./);
-  assert.match(app, /Your opponent level and aiming assistance stay steady for this sortie\./);
-  assert.match(app, /Gun hits and kills earn a harder next sortie\./);
+  // The ready brief sells waves and an optional landing bonus (Build 434), never an endless
+  // sortie; the opponent ladder is explained by the waves, not by a fixed-opponent promise.
+  assert.match(app, /Waves get harder through W5 and raise your score multiplier\. Landing full stop is optional and adds a \+150 bonus/);
+  assert.doesNotMatch(app, /Complete two gun engagements, then/);
 });
 
 test("a credited hit saves at once, before any engagement ends", () => {
