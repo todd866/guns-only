@@ -1291,6 +1291,7 @@ window.addEventListener('pagehide', () => {
   telemetry.flush({force: true});
 });
 // Two chase cameras side by side. The polish pass is one-camera, so split renders plainly.
+globalThis.__rcTv = {get race() { return race; }, get split() { return split; }, get splitOn() { return splitOn; }};
 function renderSplit() {
   const w = innerWidth,
     h = innerHeight,
@@ -4958,7 +4959,7 @@ function coachFrame(all, p1, p2, now) {
     el.classList.toggle('right', i === 1);
     if (c.show && draw) {
       const pressed = new Set(gp.buttons.flatMap((b, k) => (b.value > 0.5 ? [k] : [])));
-      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 600});
+      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 440});
     }
   });
 }
@@ -4990,11 +4991,18 @@ function splitInput(all, now) {
   startHeld = starts;
   // ?players=2: the TV stays two-player; any second connected pad is player 2, even after a reload.
   if (!split && started && race.rivals.length && new URLSearchParams(location.search).get('players') === '2' && live.length > 1) {
-    const one = p1Pad ?? live[0].index,
+    let saved = null;
+    try {
+      saved = localStorage.getItem('guns-only.rc.tv.p1');
+    } catch {}
+    const one = live.find(p => p.id === saved)?.index ?? p1Pad ?? live[0].index,
       two = live.find(p => p.index !== one);
     if (two) {
       p1Pad = one;
       split = {pad: two.index, heading: null, placed: false, fire: false};
+      try {
+        localStorage.setItem('guns-only.rc.tv.p1', all[one]?.id ?? '');
+      } catch {}
     }
   }
   if (split && all[split.pad]?.buttons[8]?.value > 0.5) {
@@ -5068,6 +5076,14 @@ function frame(now) {
       // Keep the two cars together: the world only streams around player 1.
       const a = s.car.pos,
         b = rv.session.car.pos;
+      // Pushing and going nowhere for 3 s (nose in a hill, wedged on a wall): back on the road.
+      const rs = rv.session.car;
+      split.stuck = !paused && pad2 && pad2.throttle > 0.3 && Math.hypot(rs.vel?.[0] ?? 0, rs.vel?.[2] ?? 0) < 0.5 ? (split.stuck ?? 0) + 1 / 60 : 0;
+      if (split.stuck > 3) {
+        split.stuck = 0;
+        recover(rv.session);
+        split.heading = null;
+      }
       if (!split.placed || Math.hypot(a[0] - b[0], a[2] - b[2]) > 120) {
         split.placed = true;
         rv.session.car.pos = [a[0] + 2.5, a[1] + 0.4, a[2]];
