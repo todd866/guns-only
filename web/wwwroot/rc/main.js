@@ -5187,6 +5187,10 @@ const menuPad = createMenuPad({
 });
 const frameMs = [];
 function frame(now) {
+  // Sound starts on a click or key; a household on controllers never makes one, so any pad
+  // press wakes it too (the browser allows it once the page has had any real interaction).
+  if (audio.ctx?.state !== 'running' && Array.from(navigator.getGamepads?.() ?? []).some(p => p?.buttons.some(b => b.pressed)))
+    audio.start();
   const allPads = Array.from(navigator.getGamepads?.() ?? []),
     {p1: pad, p2: pad2} = splitInput(allPads, now);
   splitOn = !!split && !robot && !skate && !s.flight.mode && !!race.rivals[0] && started;
