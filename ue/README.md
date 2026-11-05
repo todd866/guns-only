@@ -94,6 +94,13 @@ The Unreal project itself (binary `.uasset`s, tens of GB of derived data) lives 
   `HEAVY_SLOT_LOCAL=1 heavy-slot` (it needs this Mac's GPU) and only while the owner is idle:
   the editor window takes focus.
 
+- **The district GLBs carry no textures** (skatepark: 10 flat materials, housing: 24, zero images);
+  the web's concrete, graffiti and road detail come from a runtime material pass in the renderer.
+  Unreal shows the flat base colours, so the next fidelity step is a material-name → UE material
+  table (`concrete`, `asphalt`, `paint`, `steel`…), not a re-export.
+- **The buggy's heading** comes from the web heading vector (sin yaw, 0, −cos yaw) mapped through
+  the axis map plus the mesh's +90° nose offset; a per-track constant was wrong (hub run 1).
+
 ## Known unknowns (check on the first run)
 
 - The buggy's forward axis against the web yaw (`TODO(calibrate)` in `parity_spike.py`).
