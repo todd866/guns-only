@@ -243,6 +243,8 @@ function paintFrame(ctx, w, h, palette, driftPx, doc) {
 
 /** Drift repaints at most this often; the menu does not need 60 Hz clouds. */
 const DRIFT_FRAME_MS = 66;
+/** Clouds drift only if this is true; the shipped menu paints a still sky. */
+const ALLOW_DRIFT = false;
 /** A paint slower than this halves the drift rate; slower than PAINT_STILL_MS stops it. */
 const PAINT_SLOW_MS = 12;
 const DRIFT_FRAME_SLOW_MS = 250;
@@ -348,6 +350,15 @@ export function mountReadyMenuBackdrop(options = {}) {
     const paintStart = win.performance?.now?.() ?? 0;
     paintFrame(ctx, w, h, themePalette(root), driftPx, doc);
     const paintMs = (win.performance?.now?.() ?? 0) - paintStart;
+    // STATIC SKY (Build 441). Any per-frame paint behind the picker cost the CI runner its
+    // animation frames after the valley replay (Builds 436-440: Playwright never saw Settings
+    // "stable"); main shows a still painting there and passes. The sky is painted once per
+    // state change or resize and then left alone. Drift stays available behind ALLOW_DRIFT.
+    if (!ALLOW_DRIFT) {
+      still = true;
+      visible = false;
+      return;
+    }
     // ADAPTIVE. On a software rasteriser (CI, a weak laptop) one paint can cost tens of
     // milliseconds; at 15 Hz that is the whole main thread and the runtime behind the menu
     // starves (Build 438 CI: one animation frame per four seconds). A sky that is expensive to
