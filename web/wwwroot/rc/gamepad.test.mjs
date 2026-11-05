@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGamepadInput} from './gamepad.mjs';
+import {createGamepadInput, padGuide} from './gamepad.mjs';
 test('standard controller deadzones, analog controls, action edges and disconnect reset', () => {
   const poll = createGamepadInput(),
     p = {
@@ -21,7 +21,8 @@ test('standard controller deadzones, analog controls, action edges and disconnec
     drift: false,
     fire: true,
     start: true,
-    boost: false
+    boost: false,
+    joined: null
   });
   p.buttons[3].value = 1;
   assert.equal(poll([p]).boost, true, 'Y toggles boost');
@@ -46,4 +47,19 @@ test('every connected pad drives: an idle pad listed first does not mask the act
   assert.equal(out.fire, true);
   assert.equal(poll([idle, active]).fire, false, 'fire is once per press across pads');
   assert.equal(poll([idle, {...active, connected: false}]).throttle, 0);
+});
+
+test('d-pad drives, and each pad is introduced once with the letters printed on it', () => {
+  const poll = createGamepadInput(),
+    sn30 = {connected: true, id: '8Bitdo SN30 Pro (STANDARD GAMEPAD)', mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({length: 17}, () => ({value: 0}))};
+  assert.equal(poll([sn30]).joined, null, 'idle pads are not announced');
+  sn30.buttons[12].value = 1;
+  sn30.buttons[15].value = 1;
+  const out = poll([sn30]);
+  assert.equal(out.throttle, 1);
+  assert.equal(out.steer, 1);
+  assert.equal(out.joined, sn30.id);
+  assert.equal(poll([sn30]).joined, null, 'announced once');
+  assert.match(padGuide(sn30.id), /B fire/);
+  assert.match(padGuide('8BitDo Ultimate 2 Wireless (STANDARD GAMEPAD Vendor: 2dc8 Product: 6012)'), /A fire/);
 });

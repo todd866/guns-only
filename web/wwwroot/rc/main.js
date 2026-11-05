@@ -96,7 +96,7 @@ import {drawDetailedMinimap} from './open-world/minimap.js';
 import {createCup, loadCup, saveCup, recordCupRace, nextCupEvent, cupStandings} from './grand-prix.mjs';
 import {createRaceMenu, CUP_COURSES} from './race-menu.js';
 import {createAlienMarshal} from './alien-marshal.js';
-import {createGamepadInput} from './gamepad.mjs';
+import {createGamepadInput, padGuide} from './gamepad.mjs';
 import {frameSeconds} from './frame-time.mjs';
 import {poseCar} from './vehicle-pose.mjs';
 import {makeVehicleBody} from './vehicle-bodies.js';
@@ -4902,6 +4902,7 @@ const pollGamepad = createGamepadInput();
 const frameMs = [];
 function frame(now) {
   const pad = pollGamepad(navigator.getGamepads?.());
+  if (pad.joined) callout(padGuide(pad.joined), 7000);
   if (pad.start) {
     if (!started) $('start').click();
     else if (!ui.panel()) pause(!paused);
