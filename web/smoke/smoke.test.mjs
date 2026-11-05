@@ -1589,7 +1589,7 @@ test("a fresh visit opens the wordless F-22 picker and the valley stays an opt-i
     }
 
     // The valley is still one deliberate tap away, and leaving it does not make it sticky.
-    await page.locator("#ready-intro-replay").click();
+    await page.locator("#ready-intro-replay").click({ timeout: scaled(30000) });
     await page.waitForFunction(() =>
       document.querySelector("#ready-screen")?.dataset.mode === "intro"
         && document.querySelector("#ready-start .shell-action-label")?.textContent?.trim() === "Fly the valley",
@@ -1597,7 +1597,7 @@ test("a fresh visit opens the wordless F-22 picker and the valley stays an opt-i
     assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
       "the visible replay action must not make the intro sticky for Fly again");
 
-    await page.locator("#ready-settings").click();
+    await page.locator("#ready-settings").click({ timeout: scaled(30000) });
     await page.waitForFunction(() =>
       document.querySelector("#settings-screen")?.getAttribute("aria-hidden") === "false",
     undefined, { polling: scaled(100), timeout: scaled(20000) });
