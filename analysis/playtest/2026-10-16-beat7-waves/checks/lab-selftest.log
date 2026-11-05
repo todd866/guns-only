@@ -1,0 +1,14 @@
+  Determining projects to restore...
+CSSM_ModuleLoad(): One or more parameters passed to a function were not valid.
+  All projects are up-to-date for restore.
+  GunsOnly.Sim -> /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/sim/bin/Release/net8.0/GunsOnly.Sim.dll
+  GunsOnly.PlaytestLab -> /Users/iantodd/Projects/guns-only/.worktrees/lab-rtb/tools/playtest-lab/bin/Release/net8.0/GunsOnly.PlaytestLab.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:04.31
+PASS: beat-7 lab stay-or-go policy
+PASS: lab RTB AP engage, hands-off, threat drop, blocked retry, cleared retry.
+PASS: clone reference cases, deterministic/varied seeds, all 14 beats stage, timeout/partial-bin accounting, real near-miss passages, mixed-factor dual clocks, End without landing, compressed physical runway recovery, CLI validation.

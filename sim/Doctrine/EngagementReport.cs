@@ -9,6 +9,7 @@ public enum EngagementEndReason : byte {
     CombatResult = 0,
     PlayerHandoff = 1,
     DefensiveSuccess = 2,
+    RtbInterception = 3,
 }
 
 public readonly record struct EngagementReport(

@@ -77,8 +77,8 @@ test("Report key is unbound, reserved from rebinding, and appears in settings an
   assert.notEqual(normalisePlayerSettings({ bindings: { fire: REPORT_KEY } }).bindings.fire, REPORT_KEY);
   const source = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
   const hud = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
-  assert.match(source, /Report<\/th><td><kbd>F8/);
-  assert.match(hud, /F8  REPORT/);
+  assert.match(source, /appendBindingKey\(reportCell, "F8"\)/);
+  assert.match(hud, /bracketizeLegendLine\(line\)/);
   assert.doesNotMatch(source, /event.code === "F8"/); // handled only by the report controller
   assert.match(source, /event.code === "Backquote"[\s\S]*?emitFlightTestSyncMarker/);
 });

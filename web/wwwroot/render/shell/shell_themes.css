@@ -1,0 +1,757 @@
+/* ==========================================================================
+   SHELL THEME VARIANTS (?shellTheme=glass|canopy|ink|bezel)
+   Strictly scoped to html.shell-theme-* so default (no query) is untouched.
+   Preserves exact row counts, column alignments, control sets, and hit targets.
+   ========================================================================== */
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) :is(#ready-screen, #settings-screen, #feedback-report, #pause-button) {
+  font-feature-settings: "tnum" 1, "cv01" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shared structural discipline across all four variants while preserving exact geometry */
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-screen:is([data-mode="pause"], [data-mode="program"], [data-f22-result]) .ready-briefing.console-surface {
+  position: relative;
+  padding: 14px 18px;
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) .console-strip {
+  min-height: 68px;
+  padding: 2px 12px 12px;
+  gap: 28px;
+  border-bottom: 1px solid var(--console-line);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) .console-mission .shell-icon {
+  color: var(--console-accent);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-mission-mode {
+  font: 700 24px/1.15 var(--console-font);
+  letter-spacing: 0.02em;
+  color: var(--console-ink);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) .console-number {
+  font: 700 28px/1 var(--console-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--console-ink);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) .console-unit {
+  font: 600 13px/1 var(--console-data);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--console-muted);
+}
+
+/* Sortie picker cards: crisp frame, tabular badge, no wrapping */
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+  position: relative;
+  overflow: hidden;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
+  font: 750 12px/1.1 var(--console-data);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+  font: 700 28px/1.05 var(--console-font);
+  letter-spacing: -0.01em;
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+  font: 600 13px/1.25 var(--console-data);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* F-22 Result Instrument: strict tabular alignment, crisp tags, zero clipping */
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-screen[data-f22-result] .f22-row {
+  grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+  min-height: 68px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--console-line);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-screen[data-f22-result] .f22-tag {
+  font: 750 12px/1 var(--console-data);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--console-muted);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-screen[data-f22-result] #f22-score {
+  font: 650 22px/1.15 var(--console-data);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--console-ink);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value, #f22-best-delta) {
+  font: 700 26px/1.1 var(--console-data);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #ready-screen[data-f22-result] #f22-opponent {
+  font: 650 21px/1.2 var(--console-font);
+  white-space: nowrap;
+  color: var(--console-ink);
+}
+
+/* Settings Card: instrument-grade switches, keycaps, and tabular readouts */
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #settings-screen .settings-card {
+  padding: 12px;
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #settings-screen :is(.settings-toggle, .settings-range) {
+  grid-template-columns: 2.6rem minmax(0, 1fr) auto;
+  min-height: 36px;
+  padding: 0 12px;
+  font: 550 14px/1.2 var(--console-font);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #settings-screen .settings-glyph {
+  color: var(--console-muted);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #settings-screen .settings-disclosure > summary {
+  padding: 4px 8px;
+  font: 700 13px/1 var(--console-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--console-muted);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #settings-screen .settings-binding th {
+  font: 550 13.5px/1.15 var(--console-font);
+  white-space: nowrap;
+  color: var(--console-ink);
+}
+
+:is(
+  html.shell-theme-glass,
+  html.shell-theme-canopy,
+  html.shell-theme-ink,
+  html.shell-theme-bezel
+) #settings-screen .settings-binding :is(button, kbd) {
+  display: inline-grid;
+  place-items: center;
+  min-width: 46px;
+  min-height: 25px;
+  padding: 0 8px;
+  border-radius: var(--console-radius);
+  font: 700 12px/1 var(--console-data);
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* ==========================================================================
+   1. GLASS (.shell-theme-glass)
+   Brushed-glass MFD panel with a thin cyan HUD rule & monospaced tabular digits
+   ========================================================================== */
+
+html.shell-theme-glass,
+html.shell-theme-glass :is(#ready-screen, #settings-screen, #feedback-report, #pause-button) {
+  --console-font: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --console-data: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --console-ink: #edfaff;
+  --console-muted: #93bed4;
+  --console-accent: #38e8ff;
+  --console-good: #4dffb5;
+  --console-bad: #ff6b7b;
+  --console-line: #235870;
+  --console-panel: #08121b;
+  --console-raised: #0e1f2d;
+  --console-surface: linear-gradient(180deg, rgba(13, 28, 41, 0.96), rgba(7, 16, 24, 0.98));
+  --console-key: linear-gradient(180deg, #163247, #0c1d2b);
+  --console-shadow:
+    inset 0 2px 0 #38e8ff,
+    inset 0 0 0 1px rgba(56, 232, 255, 0.2),
+    0 20px 48px rgba(0, 5, 10, 0.72);
+  --console-backdrop:
+    radial-gradient(ellipse at 50% 30%, rgba(56, 232, 255, 0.08) 0%, rgba(2, 8, 14, 0.72) 100%);
+  --console-radius: 3px;
+  --flow-action-top: #72f2ff;
+  --flow-action-bottom: #18b8d4;
+}
+
+html.shell-theme-glass[data-theme="light"],
+html.shell-theme-glass[data-theme="light"] :is(#ready-screen, #settings-screen, #feedback-report, #pause-button) {
+  --console-ink: #071926;
+  --console-muted: #36596e;
+  --console-accent: #007799;
+  --console-good: #007348;
+  --console-bad: #c42838;
+  --console-line: #9cbcd0;
+  --console-panel: #edf5f9;
+  --console-raised: #dfeef6;
+  --console-surface: linear-gradient(180deg, rgba(244, 250, 253, 0.97), rgba(226, 239, 247, 0.99));
+  --console-key: linear-gradient(180deg, #ffffff, #d7e8f2);
+  --console-shadow:
+    inset 0 2px 0 #0088b3,
+    inset 0 0 0 1px rgba(0, 119, 153, 0.18),
+    0 16px 38px rgba(7, 25, 38, 0.18);
+  --console-backdrop:
+    radial-gradient(ellipse at 50% 30%, rgba(255, 255, 255, 0.25) 0%, rgba(180, 205, 220, 0.55) 100%);
+  --flow-action-top: #38d6f0;
+  --flow-action-bottom: #0099bd;
+}
+
+html.shell-theme-glass :is(#ready-screen, #settings-screen, #feedback-report) .console-surface {
+  border-color: var(--console-line);
+  border-top: 2px solid var(--console-accent);
+}
+
+html.shell-theme-glass #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+  border: 1px solid rgba(56, 232, 255, 0.35);
+  border-top: 2px solid rgba(56, 232, 255, 0.65);
+  box-shadow: inset 0 0 24px rgba(56, 232, 255, 0.08), 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+html.shell-theme-glass #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] {
+  border-color: var(--console-accent);
+  box-shadow:
+    0 0 0 2px var(--console-accent),
+    inset 0 2px 0 var(--console-accent),
+    0 14px 36px rgba(0, 0, 0, 0.55);
+}
+
+html.shell-theme-glass #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
+  color: #5cecff;
+}
+
+html.shell-theme-glass #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+  color: #f2fcff;
+}
+
+html.shell-theme-glass #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+  color: #b5deed;
+}
+
+html.shell-theme-glass #ready-screen :is(#ready-start.console-primary, .f22-actions .console-primary, .console-primary) {
+  border: 1px solid var(--console-accent);
+  color: #03151e;
+  font-family: var(--console-data);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+html.shell-theme-glass #ready-screen .console-actions button:not(.console-primary) {
+  font-family: var(--console-data);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+html.shell-theme-glass #settings-screen .settings-binding :is(button, kbd) {
+  border: 1px solid var(--console-line);
+  border-top-color: var(--console-accent);
+  background: var(--console-key);
+  color: var(--console-ink);
+}
+
+html.shell-theme-glass #pause-button {
+  border-color: var(--console-line);
+  border-top: 2px solid var(--console-accent);
+  background: var(--console-panel);
+  color: var(--console-ink);
+  font-family: var(--console-data);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+
+/* ==========================================================================
+   2. CANOPY (.shell-theme-canopy)
+   Dark gold/emerald canopy-tint sheet with physical backlit cockpit keycaps
+   ========================================================================== */
+
+html.shell-theme-canopy,
+html.shell-theme-canopy :is(#ready-screen, #settings-screen, #feedback-report, #pause-button) {
+  --console-font: "Avenir Next", "DIN Alternate", "Segoe UI", sans-serif;
+  --console-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --console-ink: #f4f7ec;
+  --console-muted: #a6b8a4;
+  --console-accent: #e8b948;
+  --console-good: #62f294;
+  --console-bad: #ff6e59;
+  --console-line: #3b4f40;
+  --console-panel: #0e1410;
+  --console-raised: #162019;
+  --console-surface: linear-gradient(180deg, #1b261e 0%, #0d130f 100%);
+  --console-key: linear-gradient(180deg, #27352b 0%, #18221b 100%);
+  --console-shadow:
+    inset 0 1px 0 rgba(232, 185, 72, 0.42),
+    0 22px 48px rgba(0, 0, 0, 0.75);
+  --console-backdrop:
+    radial-gradient(ellipse at 50% 35%, rgba(232, 185, 72, 0.06) 0%, rgba(4, 9, 6, 0.72) 100%);
+  --console-radius: 5px;
+  --flow-action-top: #f7d168;
+  --flow-action-bottom: #cf9624;
+}
+
+html.shell-theme-canopy[data-theme="light"],
+html.shell-theme-canopy[data-theme="light"] :is(#ready-screen, #settings-screen, #feedback-report, #pause-button) {
+  --console-ink: #141f16;
+  --console-muted: #425746;
+  --console-accent: #9c6d08;
+  --console-good: #0e7538;
+  --console-bad: #b82918;
+  --console-line: #aebdaf;
+  --console-panel: #eaefe8;
+  --console-raised: #dfe7dd;
+  --console-surface: linear-gradient(180deg, #f3f6f1 0%, #e1e8df 100%);
+  --console-key: linear-gradient(180deg, #ffffff 0%, #e4ebe2 100%);
+  --console-shadow:
+    inset 0 1px 0 #ffffff,
+    0 16px 36px rgba(16, 28, 18, 0.2);
+  --console-backdrop:
+    radial-gradient(ellipse at 50% 35%, rgba(245, 248, 242, 0.25) 0%, rgba(185, 200, 186, 0.55) 100%);
+  --flow-action-top: #f5cd62;
+  --flow-action-bottom: #d49b27;
+}
+
+/* Backlit keycap architecture for canopy buttons */
+html.shell-theme-canopy #ready-screen .console-actions {
+  gap: 8px;
+  padding-top: 4px;
+}
+
+html.shell-theme-canopy #ready-screen .console-actions button:not(.console-primary) {
+  border: 1px solid var(--console-line);
+  border-radius: 4px;
+  background: var(--console-key);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 2px 0 rgba(0, 0, 0, 0.55);
+  font-weight: 600;
+}
+
+html.shell-theme-canopy[data-theme="light"] #ready-screen .console-actions button:not(.console-primary) {
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    0 2px 0 rgba(20, 31, 22, 0.16);
+}
+
+html.shell-theme-canopy #ready-screen .console-actions button:not(.console-primary) .shell-icon {
+  color: var(--console-good);
+}
+
+html.shell-theme-canopy #ready-screen .console-actions button:not(.console-primary):hover:not(:disabled) {
+  border-color: var(--console-good);
+  background: var(--console-raised);
+}
+
+html.shell-theme-canopy #ready-screen :is(#ready-start.console-primary, .f22-actions .console-primary, .console-primary) {
+  border: 1px solid var(--console-accent);
+  border-radius: 4px;
+  color: #1a1203;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 3px 0 #7a5408;
+  font-weight: 700;
+}
+
+html.shell-theme-canopy #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+  border: 1px solid #455e4b;
+  box-shadow: inset 0 1px 0 rgba(232, 185, 72, 0.25), 0 14px 32px rgba(0, 0, 0, 0.5);
+}
+
+html.shell-theme-canopy #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] {
+  border-color: #62f294;
+  box-shadow:
+    0 0 0 2px #62f294,
+    inset 0 0 20px rgba(98, 242, 148, 0.18),
+    0 16px 38px rgba(0, 0, 0, 0.6);
+}
+
+html.shell-theme-canopy #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
+  color: #62f294;
+}
+
+html.shell-theme-canopy #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+  color: #f7faef;
+}
+
+html.shell-theme-canopy #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+  color: #cce0ca;
+}
+
+html.shell-theme-canopy #settings-screen .settings-binding :is(button, kbd),
+html.shell-theme-canopy #settings-screen .settings-actions button {
+  border: 1px solid var(--console-line);
+  background: var(--console-key);
+  color: var(--console-ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+
+html.shell-theme-canopy[data-theme="light"] #settings-screen .settings-binding :is(button, kbd),
+html.shell-theme-canopy[data-theme="light"] #settings-screen .settings-actions button {
+  box-shadow: inset 0 1px 0 #ffffff, 0 2px 0 rgba(20, 31, 22, 0.15);
+}
+
+html.shell-theme-canopy #pause-button {
+  border: 1px solid var(--console-line);
+  background: var(--console-key);
+  color: var(--console-good);
+  font-family: var(--console-data);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+
+/* ==========================================================================
+   3. INK (.shell-theme-ink)
+   Paper-and-ink Ghibli aviation card with editorial serif & single vermilion accent
+   ========================================================================== */
+
+html.shell-theme-ink,
+html.shell-theme-ink :is(#ready-screen, #settings-screen, #feedback-report, #pause-button) {
+  --console-font: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --console-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --console-ink: #f7f1e3;
+  --console-muted: #c8bda6;
+  --console-accent: #d95338;
+  --console-good: #68c987;
+  --console-bad: #e85d44;
+  --console-line: #544d43;
+  --console-panel: #1c1916;
+  --console-raised: #26221e;
+  --console-surface: linear-gradient(180deg, #24201c 0%, #181512 100%);
+  --console-key: #2e2924;
+  --console-shadow:
+    inset 0 0 0 1px rgba(247, 241, 227, 0.1),
+    0 18px 42px rgba(8, 6, 4, 0.68);
+  --console-backdrop:
+    radial-gradient(ellipse at 50% 35%, rgba(247, 241, 227, 0.04) 0%, rgba(12, 10, 8, 0.68) 100%);
+  --console-radius: 2px;
+  --flow-action-top: #e36348;
+  --flow-action-bottom: #c44227;
+}
+
+html.shell-theme-ink[data-theme="light"],
+html.shell-theme-ink[data-theme="light"] :is(#ready-screen, #settings-screen, #feedback-report, #pause-button) {
+  --console-ink: #1f1b17;
+  --console-muted: #574e41;
+  --console-accent: #c23b22;
+  --console-good: #1b6e36;
+  --console-bad: #b82914;
+  --console-line: #c2b59f;
+  --console-panel: #f7f2e7;
+  --console-raised: #efe7d6;
+  --console-surface: linear-gradient(180deg, #faf6ec 0%, #efe7d6 100%);
+  --console-key: #ffffff;
+  --console-shadow:
+    inset 0 0 0 1px rgba(31, 27, 23, 0.08),
+    0 14px 34px rgba(31, 27, 23, 0.18);
+  --console-backdrop:
+    radial-gradient(ellipse at 50% 35%, rgba(250, 246, 236, 0.25) 0%, rgba(215, 202, 180, 0.52) 100%);
+  --flow-action-top: #d95034;
+  --flow-action-bottom: #b8361c;
+}
+
+html.shell-theme-ink :is(#ready-screen, #settings-screen, #feedback-report) .console-surface {
+  border: 1px solid var(--console-line);
+  border-top: 3px solid var(--console-accent);
+}
+
+html.shell-theme-ink #ready-screen :is(#ready-start.console-primary, .f22-actions .console-primary, .console-primary) {
+  border: 1px solid var(--console-accent);
+  color: #fffaf2;
+  background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  font-weight: 600;
+}
+
+html.shell-theme-ink #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+  border: 1px solid rgba(247, 241, 227, 0.32);
+  border-radius: 2px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+html.shell-theme-ink #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] {
+  border-color: var(--console-accent);
+  box-shadow:
+    0 0 0 2px var(--console-accent),
+    0 16px 36px rgba(0, 0, 0, 0.52);
+}
+
+html.shell-theme-ink #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
+  color: #f29b88;
+}
+
+html.shell-theme-ink #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+  color: #fcf7eb;
+  font-family: var(--console-font);
+  font-weight: 600;
+}
+
+html.shell-theme-ink #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+  color: #dfd4be;
+}
+
+html.shell-theme-ink #settings-screen .settings-binding :is(button, kbd) {
+  border: 1px solid var(--console-line);
+  background: var(--console-key);
+  color: var(--console-ink);
+}
+
+html.shell-theme-ink #settings-screen .settings-toggle input:checked {
+  border-color: var(--console-accent);
+  background: rgba(217, 83, 56, 0.24);
+}
+
+html.shell-theme-ink #settings-screen .settings-toggle input:checked::after {
+  background: var(--console-accent);
+}
+
+html.shell-theme-ink #pause-button {
+  border: 1px solid var(--console-line);
+  border-left: 3px solid var(--console-accent);
+  background: var(--console-panel);
+  color: var(--console-ink);
+}
+
+
+/* ==========================================================================
+   4. BEZEL (.shell-theme-bezel)
+   Machined bezel-and-glass instrument cluster with dial-tick corner reticles
+   ========================================================================== */
+
+html.shell-theme-bezel,
+html.shell-theme-bezel :is(#ready-screen, #settings-screen, #feedback-report, #pause-button) {
+  --console-font: "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  --console-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --console-ink: #f2f5f8;
+  --console-muted: #a3afbe;
+  --console-accent: #ffaa2b;
+  --console-good: #3ee68a;
+  --console-bad: #ff5c6a;
+  --console-line: #4f5b6b;
+  --console-panel: #12161c;
+  --console-raised: #1b212a;
+  --console-surface: linear-gradient(180deg, #222934 0%, #12161c 100%);
+  --console-key: linear-gradient(180deg, #2f3846 0%, #1c222b 100%);
+  --console-shadow:
+    inset 0 1px 0 #738294,
+    inset 0 0 0 2px #0b0e12,
+    0 22px 48px rgba(0, 0, 0, 0.75);
+  --console-backdrop:
+    radial-gradient(ellipse at 50% 35%, rgba(255, 170, 43, 0.05) 0%, rgba(5, 7, 10, 0.72) 100%);
+  --console-radius: 6px;
+  --flow-action-top: #ffc25c;
+  --flow-action-bottom: #e08e12;
+}
+
+html.shell-theme-bezel[data-theme="light"],
+html.shell-theme-bezel[data-theme="light"] :is(#ready-screen, #settings-screen, #feedback-report, #pause-button) {
+  --console-ink: #121820;
+  --console-muted: #455262;
+  --console-accent: #c47400;
+  --console-good: #0d7a42;
+  --console-bad: #c22735;
+  --console-line: #a6b1be;
+  --console-panel: #e6eaef;
+  --console-raised: #dadfe6;
+  --console-surface: linear-gradient(180deg, #f2f5f8 0%, #dce2e9 100%);
+  --console-key: linear-gradient(180deg, #ffffff 0%, #dfe5ec 100%);
+  --console-shadow:
+    inset 0 1px 0 #ffffff,
+    inset 0 0 0 2px #c5cdd8,
+    0 16px 36px rgba(18, 24, 32, 0.22);
+  --console-backdrop:
+    radial-gradient(ellipse at 50% 35%, rgba(255, 255, 255, 0.25) 0%, rgba(180, 192, 206, 0.55) 100%);
+  --flow-action-top: #ffbe55;
+  --flow-action-bottom: #de8c0d;
+}
+
+html.shell-theme-bezel :is(#ready-screen, #settings-screen, #feedback-report) .console-surface {
+  border: 2px solid var(--console-line);
+}
+
+/* Instrument dial-face treatment on each aircraft option */
+html.shell-theme-bezel #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+  border: 2px solid #525f6f;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 0 2px rgba(10, 14, 18, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 16px 34px rgba(0, 0, 0, 0.55);
+}
+
+html.shell-theme-bezel #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.36);
+  background: radial-gradient(circle, rgba(255, 170, 43, 0) 45%, rgba(255, 255, 255, 0.12) 100%);
+  pointer-events: none;
+}
+
+html.shell-theme-bezel #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] {
+  border-color: #ffaa2b;
+  box-shadow:
+    0 0 0 2px #ffaa2b,
+    inset 0 0 0 2px rgba(10, 14, 18, 0.9),
+    0 18px 40px rgba(0, 0, 0, 0.65);
+}
+
+html.shell-theme-bezel #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft]::after {
+  border-color: #ffaa2b;
+  background: radial-gradient(circle, #ffaa2b 0 36%, transparent 42%);
+}
+
+html.shell-theme-bezel #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
+  color: #ffc25c;
+}
+
+html.shell-theme-bezel #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+  color: #f5f8fc;
+}
+
+html.shell-theme-bezel #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+  color: #c8d3e0;
+}
+
+html.shell-theme-bezel #ready-screen :is(#ready-start.console-primary, .f22-actions .console-primary, .console-primary) {
+  border: 2px solid var(--console-accent);
+  color: #1c1100;
+  font-weight: 700;
+}
+
+html.shell-theme-bezel #settings-screen .settings-binding :is(button, kbd) {
+  border: 1.5px solid var(--console-line);
+  background: var(--console-key);
+  color: var(--console-ink);
+}
+
+html.shell-theme-bezel #pause-button {
+  border: 2px solid var(--console-line);
+  background: var(--console-panel);
+  color: var(--console-accent);
+  font-family: var(--console-data);
+  font-size: 13px;
+  font-weight: 700;
+}

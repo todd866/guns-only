@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {baseCourse} from './sim.mjs';
 import {createRace, stepRace, progress, bump, placeOf, driveInput} from './physics/race.mjs';
 import {createCar} from './physics/car.mjs';
+import {createWorld, addBox} from './physics/world.mjs';
 
 const course = baseCourse();
 test('AI rivals lap the base route on the physics car', () => {
@@ -103,11 +104,50 @@ test('a rival recovered mid-shortcut drops the shortcut and resumes the main lin
   assert.ok(rv.node >= 0 && rv.node < race.line.length);
 });
 
-test('ceremony brakes the player as well as the rivals', () => {
-  const race = createRace(course);
+test('first race ceremony stops rivals but not the player', () => {
+  const race = createRace(course, {retreatCeremony: true, opponents: 2});
   race.player.running = true;
-  race.player.car.vel = [0, 0, -5];
   race.clock = 18;
-  for (let i = 0; i < 240; i++) stepRace(race, {throttle: 1});
-  assert.ok(Math.hypot(...race.player.car.vel) < 0.2);
+  for (let i = 0; i < 120 * 5; i++) stepRace(race, {throttle: 1, steer: 0});
+  assert.ok(race.clock >= 19 && race.clock < 23, `clock ${race.clock}`);
+  assert.ok(race.player.car.forwardSpeed > 3, 'player keeps throttle during the bugle');
+  assert.ok(
+    race.rivals.every(r => r.session.car.speed < 1.5),
+    'rivals brake for the flag'
+  );
+});
+
+test('later races skip the bugle lock: full throttle stays fast through t=17–24', () => {
+  const world = createWorld();
+  addBox(world, 0, 0, 400, 400, -1, 0);
+  const straight = {
+    world,
+    laps: 1,
+    start: {pos: [0, 0, 0], yaw: 0},
+    checkpoints: [
+      [0, 0, 'Start', 2],
+      [0, -120, 'Finish', 2]
+    ],
+    secrets: []
+  };
+  const race = createRace(straight, {retreatCeremony: false, opponents: 0, mode: 'bigKid'});
+  race.player.running = true;
+  race.player.finished = false;
+  race.player.gate = 1;
+  assert.equal(race.retreat.at, Infinity, 'second race skips the ceremony');
+  race.player.car.pos = [0, 0.13, -50];
+  race.player.car.vel = [0, 0, -13];
+  race.clock = 16;
+  for (let i = 0; i < 120 * 2; i++) stepRace(race, {throttle: 1, steer: 0});
+  const speeds = [];
+  for (let i = 0; i < 120 * 10; i++) {
+    stepRace(race, {throttle: 1, steer: 0});
+    const t = race.clock;
+    if (t >= 17 && t <= 24) speeds.push(race.player.car.forwardSpeed);
+  }
+  assert.ok(speeds.length > 100);
+  assert.ok(
+    speeds.every(v => v > 10),
+    `expected >10 m/s, saw min ${Math.min(...speeds).toFixed(1)}`
+  );
 });

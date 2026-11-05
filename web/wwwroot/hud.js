@@ -1,4 +1,6 @@
 import * as THREE from "./vendor/three.module.js";
+import {renderHint} from "./render/input/key_hints.js";
+import {bracketizeLegendLine, renderKeyHintRow} from "./render/input/key_label_ui.js";
 import {
   airdataReadout,
   fuelReadout,
@@ -386,6 +388,14 @@ class CombatHud {
     // Rectangles claimed by contact labels this frame; draw() clears it each pass. Initialized
     // here so a label drawn before the first full frame cannot read undefined.
     this._contactLabelSlots = [];
+    this._quicklookRoot = document.createElement("div");
+    this._quicklookRoot.id = "hud-control-quicklook";
+    this._quicklookRoot.hidden = true;
+    document.body.append(this._quicklookRoot);
+    this._legendChip = document.createElement("div");
+    this._legendChip.id = "hud-legend-chip";
+    this._legendChip.hidden = true;
+    document.body.append(this._legendChip);
 
     this.worldPoint = new THREE.Vector3();
     this.ndc = new THREE.Vector3();
@@ -5616,20 +5626,25 @@ class CombatHud {
   // theory that the lesson had landed; in practice the binding is exactly the one a pilot forgets
   // between sessions, and a dim 20 px chip is cheap. It stays.
   drawLegendHint() {
-    if (this.showLegendHint !== true || this.legendVisible || this.touchMode) return;
-    const ctx = this.ctx;
-    ctx.save();
-    const text = "H \u00B7 CONTROLS";
-    ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const width = ctx.measureText(text).width + 18;
+    if (this.showLegendHint !== true || this.legendVisible || this.touchMode) {
+      this._legendChip.hidden = true;
+      return;
+    }
+    const width = 92;
     const x = this.width - this.safeInsets.right - width - 12;
     const y = this.height - this.safeInsets.bottom - 40;
+    const ctx = this.ctx;
+    ctx.save();
     this.glassPanel(x, y, width, 20, GREEN_DIM);
-    ctx.fillStyle = GREEN_DIM;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, x + width / 2, y + 10);
     ctx.restore();
+    this._legendChip.hidden = false;
+    this._legendChip.style.left = `${x}px`;
+    this._legendChip.style.top = `${y}px`;
+    this._legendChip.style.width = `${width}px`;
+    this._legendChip.style.height = "20px";
+    this._legendChip.style.display = "grid";
+    this._legendChip.style.placeItems = "center";
+    renderKeyHintRow(this._legendChip, "[H] · CONTROLS");
   }
 
   drawTimeCompression(frame) {
@@ -6076,7 +6091,10 @@ class CombatHud {
   }
 
   drawLegend(frame) {
-    if (!this.legendVisible || this.touchMode || document.documentElement.classList.contains("touch-mode")) return;
+    if (!this.legendVisible || this.touchMode || document.documentElement.classList.contains("touch-mode")) {
+      this._quicklookRoot.hidden = true;
+      return;
+    }
     const ctx = this.ctx;
     const panelWidth = Math.min(930, this.width - 34);
     const compact = this.width < 760;
@@ -6119,7 +6137,7 @@ class CombatHud {
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("hookToggle", "KeyU")}  HOOK   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${fireQuicklook}   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
       `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   ${restartOrRtbQuicklook}   ·   M  SOUND   ·   \`  SYNC MARK   ·   H  HIDE`,
-      `${binding("timeCompressionToggle", "KeyY")}  RTB COMPRESS   ·   ESC  PAUSE / MENU   ·   F8  REPORT`,
+      `${binding("timeCompressionToggle", "KeyY")}  RTB COMPRESS   ·   [esc]  PAUSE / MENU   ·   [F8]  REPORT`,
       topGunQuicklook
         ? `TOP GUN · ${topGunQuicklook.weapons} · ${topGunQuicklook.returnToCarrier}`
         : firstRunValley
@@ -6132,7 +6150,7 @@ class CombatHud {
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
       `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${fireQuicklook}   ·   M  SOUND`,
       `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   ${restartOrRtbQuicklook}   ·   \`  SYNC MARK   ·   H  HIDE`,
-      `${binding("timeCompressionToggle", "KeyY")}  RTB COMPRESS   ·   ESC  PAUSE / MENU   ·   F8  REPORT`,
+      `${binding("timeCompressionToggle", "KeyY")}  RTB COMPRESS   ·   [esc]  PAUSE / MENU   ·   [F8]  REPORT`,
     ];
     if (topGunQuicklook) {
       compactLines.push(`TOP GUN · ${topGunQuicklook.weapons} · ${topGunQuicklook.returnToCarrier}`);
@@ -6148,11 +6166,16 @@ class CombatHud {
       compactLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE FLY-UP)`);
     }
     const lines = compact ? compactLines : wideLines;
-    const lineHeight = compact ? 27 : 31;
     const startY = y + (compact ? 59 : 61);
-    ctx.fillStyle = "rgba(207, 244, 222, 0.68)";
-    ctx.font = `${compact ? 8 : 10}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    lines.forEach((line, index) => ctx.fillText(line, this.width / 2, startY + index * lineHeight));
+    this._quicklookRoot.hidden = false;
+    this._quicklookRoot.style.top = `${startY - 36}px`;
+    this._quicklookRoot.replaceChildren();
+    for (const line of lines) {
+      const row = document.createElement("div");
+      row.className = "key-legend-line";
+      renderHint(row, bracketizeLegendLine(line));
+      this._quicklookRoot.append(row);
+    }
   }
 
   draw(frame) {

@@ -60,7 +60,8 @@ public readonly record struct BanditSkillProfile(
     /// Firing on the solution instead of on the target is trigger discipline, and it is the one
     /// lever that moved conversion: range discipline and finisher retuning were both swept across
     /// 24 combinations and every cell stayed at 0 hits / 0.0% on-solution.
-    bool FiresOnBodyGate = true) {
+    bool FiresOnBodyGate = true,
+    bool CommitToFight = false) {
 
     /// The G the finisher's gains are scaled to (defaults to the tier's full acquire envelope).
     public double EffectiveFineTrackAuthorityG =>
@@ -130,7 +131,14 @@ public readonly record struct BanditSkillProfile(
             LowBlockDoctrine: LowBlockDoctrine.Hunt,
             LowBlockClearanceM: 105.0,
             LowBlockRecommitSeconds: 0.35,
-            EnergyRetentionWeight: 1.30),
+            EnergyRetentionWeight: 1.30,
+            // The robot closes the same gun-track loop as the Ace (2026-11-05), with the
+            // authority its airframe-limited envelope allows: the Ace's 5.5 G loop is a human
+            // pilot's; the machine holds the solution at 7.5 G, which is what puts it past the
+            // Ace on the continuous-window ladder.
+            LeadFireConeDeg: 1.25,
+            FineTrackAuthorityG: 7.5,
+            FineTrackMaxG: 99.0),
         _ => For(PilotSkill.Competent),
     };
 

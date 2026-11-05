@@ -579,6 +579,8 @@ public class DifficultyRampTests {
             ContinuousCombat = source.ContinuousCombat! with {
                 ReplacementDelaySeconds = 0.2,
                 MaximumFormationSize = 1,
+                MaximumEngagements = 2,
+                EscalatingWaves = false,
             },
         };
     }
@@ -587,6 +589,7 @@ public class DifficultyRampTests {
         UsesNeutralMergeBandit = false,
         ContinuousCombat = CloseGunFight().ContinuousCombat! with {
             MaximumFormationSize = 2,
+            MaximumEngagements = 2,
         },
     };
 

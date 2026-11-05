@@ -212,7 +212,9 @@ public sealed class PracticeSessionTests {
         session.FeedKey(GKey.Trigger, true);
         for (int i = 0; i < 1000 && session.Lifecycle == SimulationSession.LifecycleState.Active; i++)
             session.StepFixed();
-        Assert.True(session.SortiePlayerHits >= 3);
+        // The gunnery target is the beat-7 bandit, which the arcade rules defeat after two hits
+        // (CombatConfig.ModernVisualMergeArcade, 2026-11-04); the hold ends on the kill.
+        Assert.True(session.SortiePlayerHits >= 2);
         Assert.True(session.KillCount >= 1);
         Assert.Equal(PracticeStatus.Completed, session.Practice!.Status);
         Assert.Equal(SortieOutcome.Discontinued, session.Outcome);

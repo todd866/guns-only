@@ -747,6 +747,6 @@ test("carrier debrief keeps physical outcome, full-pass trend, and touchdown fac
     /const resultFacts = Array\.isArray\(result\.facts\)[\s\S]*?readyConfig\.textContent = carrierHandoff[\s\S]*?appendResultFacts\([\s\S]*?carrierFacts\.passGrade[\s\S]*?carrierFacts\.waveOff/,
     "Top Gun summary must combine credited/uncredited kills with the full-pass assessment");
   assert.match(app,
-    /readyControls\.textContent = carrierHandoff[\s\S]*?Full-pass primary · \$\{carrierFacts\.passCorrection\}[\s\S]*?Touchdown assessment · \$\{carrierFacts\.touchdown\}[\s\S]*?Touchdown primary · \$\{carrierFacts\.touchdownCorrection\}/,
+    /paintReadyControls\(carrierHandoff[\s\S]*?Full-pass primary · \$\{carrierFacts\.passCorrection\}[\s\S]*?Touchdown assessment · \$\{carrierFacts\.touchdown\}[\s\S]*?Touchdown primary · \$\{carrierFacts\.touchdownCorrection\}/,
     "Top Gun controls must expose reserve, pass correction and touchdown correction together");
 });

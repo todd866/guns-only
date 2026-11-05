@@ -335,7 +335,7 @@ test("finished Medevac screen uses disposition and four independent axes", () =>
   assert.match(source,
     /readyConfig\.textContent = carrierHandoff[\s\S]*: result\.handoff[\s\S]*: state\?\.maintenance_scenario[\s\S]*: casevac[\s\S]*\? casevacFacts\.axes/);
   assert.match(source,
-    /readyControls\.textContent = carrierHandoff[\s\S]*: result\.handoff[\s\S]*: casevac[\s\S]*Primary correction · \$\{casevacFacts\.correction\}/);
+    /paintReadyControls\(carrierHandoff[\s\S]*: result\.handoff[\s\S]*: casevac[\s\S]*Primary correction · \$\{casevacFacts\.correction\}/);
 });
 
 test("touch CASEVAC exposes and drives four truthful independent axes", () => {

@@ -1,6 +1,6 @@
 // One player's race: car + assists + gates, specimens, timing and recovery.
 // A course is { world, checkpoints:[[x,z,name]], secrets:[{x,z}], start:{pos,yaw} }.
-import {createCar, stepCar, placeCar, rideHeight, carYaw, BUGGY} from './car.mjs';
+import {createCar, stepCar, placeCar, rideHeight, carYaw, BUGGY, RECOVERY_ROLL_MPS} from './car.mjs';
 import {createAssist, assistInput, MODES} from './assists.mjs';
 import {stepSkateRide} from './grind.mjs';
 import {createFlight, stepFlight} from './flight.mjs';
@@ -181,7 +181,8 @@ export function recover(s) {
     placeCar(
       s.car,
       [p[0], groundBelow(s.course.world, [p[0], p[1] ?? 0, p[2]]) + rideHeight(s.car.params) + 0.02, p[2]],
-      Math.atan2(q[0] - p[0], -(q[2] - p[2]))
+      Math.atan2(q[0] - p[0], -(q[2] - p[2])),
+      RECOVERY_ROLL_MPS
     );
   } else {
     const yaw = s.gate === 0 ? s.course.start.yaw : Math.atan2(next[0] - last[0], -(next[1] - last[1]));
@@ -198,7 +199,8 @@ export function recover(s) {
           0.02,
         last[1]
       ],
-      yaw
+      yaw,
+      RECOVERY_ROLL_MPS
     );
   }
   s.recoveries++;

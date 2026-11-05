@@ -1,0 +1,6 @@
+ace    s021 loss         126.5s player   126.5s sim K1 H3/3 dead 12.2s 22x
+ace    s022 incomplete  1619.7s player  3600.0s sim K1 H3/2 dead 380.9s 58x
+ace    s023 win         1092.5s player  1348.4s sim K1 H3/1 dead 82.2s 33x
+ace    s024 incomplete  3600.0s player  3600.0s sim K3 H3/0 dead 123.0s 35x
+wrote /private/tmp/waves2-rejoin-probe/report.md (4 runs, 7 flags)
+/private/tmp/waves2-rejoin-probe

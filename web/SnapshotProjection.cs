@@ -1872,6 +1872,11 @@ internal static class SnapshotProjection {
             + $"\"sortie_ended_early\":{(Session.SortieEndedEarly ? "true" : "false")},"
             + $"\"engagement_cap\":{Session.FiniteEngagementCap},"
             + $"\"engagements_won\":{Session.EngagementsWon},"
+            + $"\"escalating_waves\":{(Session.EscalatingWavesEnabled ? "true" : "false")},"
+            + $"\"sortie_seed\":{Session.SortieSeed},"
+            + $"\"wave_score_multiplier\":{Session.WaveScoreMultiplier.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)},"
+            + $"\"combat_score\":{Session.CombatScore.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)},"
+            + $"\"rtb_bounce_active\":{(Session.RtbBounceActive ? "true" : "false")},"
             + $"\"bfm_opponent_skill\":{JsonString(Session.LastDirectorSpawn?.Skill.ToString().ToUpperInvariant() ?? "")},"
             + $"\"bfm_opponent_count\":{Session.LastDirectorSpawn?.FormationSize ?? 0},"
             + $"\"bfm_lesson\":{JsonString(Session.BfmLessonId)},"
@@ -2129,6 +2134,7 @@ internal static class SnapshotProjection {
     static string MissionRtbReasonToken(MissionRtbReason reason) => reason switch {
         MissionRtbReason.PilotKnockItOff => "PILOT_KNOCK_IT_OFF",
         MissionRtbReason.BingoFuel => "BINGO_FUEL",
+        MissionRtbReason.Winchester => "WINCHESTER",
         _ => "NONE"
     };
 

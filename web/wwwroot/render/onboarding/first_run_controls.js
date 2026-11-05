@@ -1,3 +1,9 @@
+import {
+  renderKeyColumn,
+  renderKeyHintRow,
+  renderPlayerKeyHint,
+} from "../input/key_label_ui.js";
+
 /**
  * First-run controls onboarding, shared across mission shells.
  *
@@ -174,20 +180,20 @@ const OVERLAY_CSS = `
   letter-spacing: 0.18em;
   color: #d4b56a;
 }
-.controls-onboarding-group table { border-collapse: collapse; width: 100%; }
+.controls-onboarding-group table { border-collapse: collapse; width: 100%; table-layout: fixed; }
 .controls-onboarding-group td {
   padding: 3px 0;
   font-size: 12px;
   vertical-align: baseline;
 }
 .controls-onboarding-group td:first-child {
-  width: 96px;
+  width: var(--controls-onboarding-key-col, 130px);
   padding-right: 14px;
   white-space: nowrap;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11px;
   font-weight: 700;
   color: #cfe3b8;
+  vertical-align: top;
 }
 .controls-onboarding-group td:last-child { color: #9aa392; }
 .controls-onboarding-foot {
@@ -311,7 +317,9 @@ export function createControlsOnboarding({
     for (const [keys, meaning] of group.rows) {
       const row = doc.createElement("tr");
       const keyCell = doc.createElement("td");
-      keyCell.textContent = keys;
+      const keyInner = doc.createElement("span");
+      renderKeyColumn(keyInner, keys, doc);
+      keyCell.append(keyInner);
       const meaningCell = doc.createElement("td");
       meaningCell.textContent = meaning;
       row.append(keyCell, meaningCell);
@@ -323,9 +331,11 @@ export function createControlsOnboarding({
   const foot = doc.createElement("div");
   foot.className = "controls-onboarding-foot";
   const hint = doc.createElement("small");
-  hint.textContent = touch
-    ? "Tap Got it to continue"
-    : "Enter confirms · Esc closes · H reopens";
+  if (touch) {
+    hint.textContent = "Tap Got it to continue";
+  } else {
+    renderKeyHintRow(hint, "[return] confirms · [esc] closes · [H] reopens", doc);
+  }
   const dismissButton = doc.createElement("button");
   dismissButton.id = "controls-onboarding-dismiss";
   dismissButton.type = "button";
@@ -337,7 +347,11 @@ export function createControlsOnboarding({
   const reopenChip = doc.createElement("button");
   reopenChip.id = "controls-onboarding-reopen";
   reopenChip.type = "button";
-  reopenChip.textContent = touch ? "? · CONTROLS" : "H · CONTROLS";
+  if (touch) {
+    reopenChip.textContent = "? · CONTROLS";
+  } else {
+    renderKeyHintRow(reopenChip, "[H] · CONTROLS", doc);
+  }
   reopenChip.setAttribute("aria-label", "Show controls");
 
   const nudgeChip = doc.createElement("div");

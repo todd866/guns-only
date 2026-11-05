@@ -1,14 +1,25 @@
-// F-22 result instrument: four information rows and one action row, replacing the generic
-// title / brief / facts / scoreboard stack for the F-22 sortie. Every value is read from the
-// kernel snapshot; nothing here grades, scores or invents a cause. Words live in tooltips.
+// F-22 result instrument: five information rows and one action row, replacing the generic
+// title / brief / facts / scoreboard stack for the F-22 sortie. Every value is deterministic
+// from the kernel snapshot; explanations live in tooltips and detail views.
 //
-//   FIGHT  ✓ 2/2            LAND ✓      combat result · engagements won/billed · recovery
-//   GUN    18/480           2:14        hits/rounds · attempt duration
-//   OPP    Competent ×1 → Veteran ×1 ⓘ  this sortie's opponent → the earned next opponent
-//   ▸      Close before firing  [Practise guns]   one correction, only when evidence gives one
+//   FIGHT  ✓ 950                          LAND ✓      combat score when waves on · recovery bonus badge
+//   SCORE  1350 · W4 ×2 · 0-hit +250 · land +150  PB ◆ +350   deterministic score · bonuses · personal-best delta
+//   GUN    18/480                          2:14        hits/rounds · attempt duration
+//   OPP    Competent ×1 → Veteran ×1 ⓘ                 this sortie's opponent → the earned next opponent
+//   ▸      Close before firing  [Practise guns]        one correction, only when evidence gives one
 //   [Again] [Recover] [Logbook] [Aircraft] [Settings]
 
 import { isF22Sortie } from "./f22_sortie_result.js";
+
+export const F22_UNTOUCHED_BONUS = 250;
+export const F22_LANDING_BONUS = 150;
+export const F22_PERSONAL_BEST_KEY_PREFIX = "guns-only.f22-personal-best.v1";
+export const F22_PERSONAL_BEST_STORAGE_KEY = F22_PERSONAL_BEST_KEY_PREFIX;
+
+export function f22PersonalBestKey(state) {
+  const beat = String(state?.mission_definition_id || "").trim();
+  return beat ? `${F22_PERSONAL_BEST_KEY_PREFIX}:${beat}` : F22_PERSONAL_BEST_KEY_PREFIX;
+}
 
 const token = (value) => String(value ?? "").trim().toUpperCase();
 const count = (value) => {
@@ -114,6 +125,70 @@ const RECOVERY_SYMBOL = Object.freeze({ recovered: "✓", lost: "×", open: "–
 const RECOVERY_WORDS = Object.freeze({
   recovered: "Landed and stopped", lost: "Aircraft not recovered", open: "Not landed",
 });
+const SCORE_SYMBOL = Object.freeze({ best: "★", below: "−", tie: "–", first: "–" });
+
+function defaultStorage() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredPersonalBest(storage, state) {
+  if (!storage || typeof storage.getItem !== "function") return null;
+  try {
+    const raw = storage.getItem(f22PersonalBestKey(state))
+      ?? storage.getItem(F22_PERSONAL_BEST_KEY_PREFIX);
+    if (raw === null || raw === undefined || raw === "") return null;
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct >= 0) return Math.trunc(direct);
+    const parsed = JSON.parse(raw);
+    const candidate = Number(
+      parsed?.[state?.mission_definition_id] ?? parsed?.best ?? parsed?.score,
+    );
+    return Number.isFinite(candidate) && candidate >= 0 ? Math.trunc(candidate) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredPersonalBest(storage, state, score) {
+  if (!storage || typeof storage.setItem !== "function") return false;
+  if (!Number.isFinite(score) || score < 0) return false;
+  try {
+    storage.setItem(f22PersonalBestKey(state), String(Math.trunc(score)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const activeRunBaseline = new Map();
+
+function resolvePersonalBest(storage, state, total, shouldRecord, runKey) {
+  const key = f22PersonalBestKey(state);
+  let previousBest;
+  if (runKey) {
+    const cacheKey = `${key}|${runKey}`;
+    if (!activeRunBaseline.has(cacheKey)) {
+      if (activeRunBaseline.size >= 32) activeRunBaseline.clear();
+      activeRunBaseline.set(cacheKey, readStoredPersonalBest(storage, state));
+    }
+    previousBest = activeRunBaseline.get(cacheKey);
+  } else {
+    previousBest = readStoredPersonalBest(storage, state);
+  }
+  const best = previousBest === null ? total : Math.max(previousBest, total);
+  if (shouldRecord && (previousBest === null || total > previousBest)) {
+    writeStoredPersonalBest(storage, state, best);
+  }
+  const delta = previousBest === null ? null : total - previousBest;
+  const newBest = previousBest !== null && total > previousBest;
+  const status = newBest ? "best" : delta !== null && delta < 0 ? "below" : delta === 0 ? "tie" : "first";
+  const deltaText = delta === null ? "" : delta > 0 ? `+${delta}` : `${delta}`;
+  return { previousBest, best, delta, deltaText, newBest, status, symbol: SCORE_SYMBOL[status] };
+}
 
 /**
  * Pure model for the result instrument.
@@ -126,12 +201,44 @@ export function f22ResultInstrument(state, {
   correction = "",
   practiceExercise = "",
   practiceLabel = "",
+  storage = defaultStorage(),
+  runKey = "",
 } = {}) {
   if (!isF22Sortie(state)) return null;
   const combat = f22CombatDisposition(state);
   const recovery = f22RecoveryDisposition(state);
   const won = count(state.engagements_won) ?? 0;
   const cap = count(state.engagement_cap) ?? 0;
+  const waves = state.escalating_waves === true;
+  const waveScoreSum = Array.isArray(state.wave_scores)
+    ? state.wave_scores.reduce((sum, item) => {
+      const value = count(item);
+      return sum + (value ?? 0);
+    }, 0)
+    : 0;
+  const score = count(state.combat_score) ?? waveScoreSum;
+  const wave = count(state.wave_reached ?? state.engagements_won) ?? 0;
+  const rawMultiplier = Number(state.wave_multiplier ?? state.wave_score_multiplier);
+  const multiplier = Number.isFinite(rawMultiplier) && rawMultiplier > 0
+    ? rawMultiplier
+    : (wave > 2 ? 1 + 0.5 * (wave - 2) : 1);
+  const multiplierText = Number.isInteger(multiplier) ? `${multiplier}` : multiplier.toFixed(1);
+  const explicitHitsTaken = count(
+    state.hits_taken ?? state.player_hits_taken ?? state.opponent_hits,
+  );
+  const damagedHealth = Number.isFinite(Number(state.player_health))
+    && Number(state.player_health) < 1;
+  const hitsTaken = explicitHitsTaken !== null ? explicitHitsTaken : (damagedHealth ? 1 : 0);
+  const untouched = state.untouched === true
+    ? true
+    : state.untouched === false
+      ? false
+      : (hitsTaken === 0 && !lost(state) && (combat === "complete" || won > 0 || score > 0));
+  const untouchedBonus = untouched ? F22_UNTOUCHED_BONUS : 0;
+  const landingBonus = recovery === "recovered" ? F22_LANDING_BONUS : 0;
+  const totalScore = score + untouchedBonus + landingBonus;
+  const shouldRecordBest = totalScore > 0 || combat !== "open" || state.finished === true;
+  const pb = resolvePersonalBest(storage, state, totalScore, shouldRecordBest, runKey);
   const hits = count(state.sortie_hits) ?? 0;
   const rounds = count(state.sortie_rounds_fired) ?? 0;
   const clock = formatAttemptClock(durationSeconds);
@@ -146,13 +253,28 @@ export function f22ResultInstrument(state, {
   const bfmCriterion = String(state.bfm_lesson_criterion ?? "").trim();
   const bfmCorrection = String(state.bfm_correction ?? "").trim();
 
-  const recoveryDetail = [RECOVERY_WORDS[recovery]];
+  const recoveryDetail = [
+    RECOVERY_WORDS[recovery],
+    recovery === "recovered"
+      ? `+${F22_LANDING_BONUS} landing bonus`
+      : recovery === "open"
+        ? `+${F22_LANDING_BONUS} landing bonus on full stop`
+        : "no landing bonus",
+  ];
   const fuel = Number(state.fuel_lb);
   const margin = Number(state.fuel_reserve_margin_lb);
   if (recovery === "recovered" && Number.isFinite(fuel))
     recoveryDetail.push(`fuel ${Math.round(fuel)} lb`);
   if (recovery === "recovered" && Number.isFinite(margin))
     recoveryDetail.push(`reserve ${margin < 0 ? "−" : "+"}${Math.round(Math.abs(margin))} lb`);
+
+  const scoreValue = `${totalScore} · W${wave} ×${multiplierText} · 0-hit +${untouchedBonus} · land +${landingBonus}`;
+  const scoreLabel = `Run score ${totalScore} · wave ${wave} (×${multiplierText}) ${score} + untouched ${untouchedBonus} + landing ${landingBonus}`;
+  const bestLabel = pb.newBest
+    ? `New personal best ${pb.best} (${pb.deltaText} vs ${pb.previousBest})`
+    : pb.previousBest !== null
+      ? `Personal best ${pb.best} (${pb.deltaText})`
+      : `Personal best ${pb.best} · first run`;
 
   const nowWords = opponentWords(state.sortie_opponent_skill, state.sortie_opponent_count);
   const nextWords = opponentWords(state.earned_opponent_skill, state.earned_opponent_count);
@@ -183,13 +305,34 @@ export function f22ResultInstrument(state, {
     combat: Object.freeze({
       status: combat,
       symbol: COMBAT_SYMBOL[combat],
-      value: cap > 0 ? `${won}/${cap}` : "",
-      label: `${COMBAT_WORDS[combat]}${cap > 0 ? ` · ${won} of ${cap} engagements won` : ""}`,
+      value: waves ? (score > 0 ? `${score}` : "") : cap > 0 ? `${won}/${cap}` : "",
+      label: waves ? `${COMBAT_WORDS[combat]} · ${score} combat points · wave ${won} cleared`
+        : `${COMBAT_WORDS[combat]}${cap > 0 ? ` · ${won} of ${cap} engagements won` : ""}`,
     }),
     recovery: Object.freeze({
       status: recovery,
       symbol: RECOVERY_SYMBOL[recovery],
+      bonus: landingBonus,
       label: recoveryDetail.join(" · "),
+    }),
+    score: Object.freeze({
+      total: totalScore,
+      combatScore: score,
+      wave,
+      multiplier,
+      untouched,
+      untouchedBonus,
+      landingBonus,
+      best: pb.best,
+      previousBest: pb.previousBest,
+      delta: pb.delta,
+      deltaText: pb.deltaText,
+      newBest: pb.newBest,
+      status: pb.status,
+      symbol: pb.symbol,
+      value: scoreValue,
+      label: scoreLabel,
+      bestLabel,
     }),
     gun: Object.freeze({
       value: `${hits}/${rounds}`,
@@ -233,6 +376,7 @@ function setText(element, value) {
 
 function setStatusSymbol(element, status) {
   const icon = status === "complete" || status === "recovered" ? "check"
+    : status === "best" ? "mark"
     : status === "lost" ? "close" : "minus";
   const href = `#shell-${icon}`;
   if (element && element.getAttribute("href") !== href) element.setAttribute("href", href);
@@ -240,8 +384,62 @@ function setStatusSymbol(element, status) {
 
 function setLabel(element, label) {
   if (!element) return;
+  if (element.getAttribute("aria-label") !== label) element.setAttribute("aria-label") !== undefined && element.setAttribute("aria-label", label);
   if (element.getAttribute("aria-label") !== label) element.setAttribute("aria-label", label);
   if (element.title !== label) element.title = label;
+}
+
+const RESULT_RETRY_CODES = new Set(["Space", "Enter", "NumpadEnter"]);
+
+function secondaryControlOwnsKeyTarget(target) {
+  const interactive = target?.closest?.("button, a[href], input, select, textarea, [role=button]");
+  if (!interactive) return false;
+  return interactive.id !== "f22-again";
+}
+
+/**
+ * One-key retry loop for the F-22 result screen. Space and ⏎ trigger Again when focus is not
+ * on a secondary control (Recover, Logbook, etc.), while suppressing key repeat and blocking
+ * a held retry key from leaking into live flight controls across the merge restart.
+ */
+export function createF22ResultKeyHandler({
+  isResultActive = () => false,
+  onAgain = () => {},
+} = {}) {
+  const heldCodes = new Set();
+  return Object.freeze({
+    keydown(event) {
+      const code = event?.code;
+      if (!RESULT_RETRY_CODES.has(code)) return false;
+      if (heldCodes.has(code)) {
+        event.preventDefault?.();
+        return true;
+      }
+      if (!isResultActive()) return false;
+      if (secondaryControlOwnsKeyTarget(event.target)) {
+        if (event.repeat) {
+          event.preventDefault?.();
+          return true;
+        }
+        return false;
+      }
+      event.preventDefault?.();
+      if (event.repeat) return true;
+      heldCodes.add(code);
+      onAgain(event);
+      return true;
+    },
+    keyup(event) {
+      const code = event?.code;
+      if (!heldCodes.has(code)) return false;
+      heldCodes.delete(code);
+      event.preventDefault?.();
+      return true;
+    },
+    reset() {
+      heldCodes.clear();
+    },
+  });
 }
 
 /**
@@ -262,6 +460,16 @@ export function paintF22ResultInstrument(root, model) {
   recovery.dataset.status = model.recovery.status;
   setStatusSymbol($("f22-recovery-symbol"), model.recovery.status);
   setLabel(recovery, model.recovery.label);
+  if (model.score) {
+    const score = $("f22-score");
+    setText(score, model.score.value);
+    setLabel(score, model.score.label);
+    const best = $("f22-best");
+    if (best) best.dataset.status = model.score.status;
+    setStatusSymbol($("f22-best-symbol"), model.score.status);
+    setText($("f22-best-delta"), model.score.deltaText);
+    setLabel(best, model.score.bestLabel);
+  }
   const gun = $("f22-gun");
   setText(gun, model.gun.value);
   setLabel(gun, model.gun.label);

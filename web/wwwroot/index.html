@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="run-paused">
+<html lang="en" class="run-paused" data-launch="booting">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -884,6 +884,18 @@
       background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
     }
 
+    #ready-menu-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 11;
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none;
+    }
+
+    #ready-menu-backdrop[hidden] { display: none; }
+
     #ready-screen {
       position: fixed;
       z-index: 12;
@@ -896,19 +908,13 @@
         calc(var(--safe-bottom) + 20px)
         calc(var(--safe-left) + 20px);
       color: #f6f1e4;
-      /* A PAINTING, not a phosphor scrim. The menu used to inherit the HUD's palette -- dark
-         green-black with a radial glow -- which is correct for avionics and wrong for the front
-         door of a film. The backdrop is a gouache sky; the gradient over it is only enough scrim
-         to keep type legible against the bright cloud tops, weighted to the bottom where the
-         cards sit rather than washing the whole image out. 18 KB WebP, 8 KB under 900 px. */
+      /* Gouache sky lives on #ready-menu-backdrop; this layer is only the type scrim. */
       background-image:
         linear-gradient(105deg,
           rgba(12, 14, 22, .78) 0%,
           rgba(12, 14, 22, .46) 34%,
           rgba(12, 14, 22, .10) 58%,
-          rgba(12, 14, 22, .34) 100%),
-        image-set(
-          url("./art/menu-hangar.webp") type("image/webp"));
+          rgba(12, 14, 22, .34) 100%);
       background-size: cover;
       background-position: center 46%;
       background-repeat: no-repeat;
@@ -939,9 +945,7 @@
           linear-gradient(to bottom,
             rgba(12, 14, 22, .30) 0%,
             rgba(12, 14, 22, .52) 46%,
-            rgba(12, 14, 22, .82) 100%),
-          image-set(
-            url("./art/menu-hangar-small.webp") type("image/webp"));
+            rgba(12, 14, 22, .82) 100%);
       }
     }
     /* app.js moves the same primary action after the title on touch layouts, so visual and focus
@@ -4117,7 +4121,7 @@
     }
     .f22-tag-sym { font-size: 14px; color: var(--flow-accent); letter-spacing: 0; }
     .f22-result #f22-row-correction { grid-template-columns: 1em minmax(0, 1fr) auto; }
-    .f22-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .f22-value { min-width: 0; overflow: visible; white-space: normal; overflow-wrap: break-word; }
     .f22-correction {
       white-space: normal;
       color: var(--flow-ink-muted);
@@ -4131,9 +4135,11 @@
       font-weight: 800;
       text-align: center;
     }
-    [data-status="complete"] > .f22-sym, [data-status="recovered"] > .f22-sym { color: var(--flow-accent); }
-    [data-status="lost"] > .f22-sym { color: #ff8a7a; }
-    [data-status="open"] > .f22-sym { color: var(--flow-ink-faint); }
+    [data-status="complete"] > .f22-sym, [data-status="recovered"] > .f22-sym,
+    [data-status="best"] > :is(.f22-sym, #f22-best-delta) { color: var(--flow-accent); }
+    [data-status="lost"] > .f22-sym, [data-status="below"] > :is(.f22-sym, #f22-best-delta) { color: #ff8a7a; }
+    [data-status="open"] > .f22-sym, [data-status="first"] > .f22-sym,
+    [data-status="tie"] > :is(.f22-sym, #f22-best-delta) { color: var(--flow-ink-faint); }
     .f22-result button {
       min-height: 40px;
       padding: 0 12px;
@@ -4227,6 +4233,19 @@
         linear-gradient(rgb(3 7 12 / .18), rgb(3 7 12 / .32));
       --console-radius: 4px;
     }
+    :root[data-theme="light"] {
+      --console-ink: #141c24;
+      --console-muted: #4b5866;
+      --console-accent: #b87b14;
+      --console-good: #0e7a46;
+      --console-bad: #c43225;
+      --console-line: #b8c2cc;
+      --console-panel: #f4f1ea;
+      --console-raised: #e8e3d9;
+      --console-surface: linear-gradient(180deg, rgba(248, 245, 238, .98), rgba(235, 230, 220, .99));
+      --console-key: linear-gradient(180deg, #ffffff, #ebe6dc 48%, #dcd5c8);
+      --console-shadow: inset 0 1px 0 #ffffff, 0 14px 36px rgb(20 28 36 / .18);
+    }
     :is(#ready-screen, #settings-screen, #feedback-report) {
       --flow-font-display: var(--console-font);
       --flow-ink: var(--console-ink);
@@ -4263,7 +4282,7 @@
       transition: none;
     }
     :root #ready-screen[data-mode="program"] {
-      background-image: var(--console-backdrop), url("./art/menu-hangar.webp");
+      background-image: var(--console-backdrop);
       background-size: cover;
       background-position: center;
     }
@@ -4464,7 +4483,8 @@
     :root #ready-screen[data-f22-result] .f22-value { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
     :root #ready-screen[data-f22-result] #f22-combat { display: flex; align-items: center; gap: 10px; }
     :root #ready-screen[data-f22-result] .f22-sym { margin: 0; width: 28px; height: 28px; }
-    :root #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value) { font-size: 28px; white-space: nowrap; }
+    :root #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value, #f22-best-delta) { font-size: 28px; white-space: nowrap; }
+    :root #ready-screen[data-f22-result] #f22-score { font-size: clamp(16px, 2.1vw, 22px); white-space: normal; }
     :root #ready-screen[data-f22-result] #f22-opponent { font: 600 22px/1.3 var(--console-font); }
     :root #ready-screen[data-f22-result] .f22-correction { color: var(--console-muted); font: 500 18px/1.3 var(--console-font); }
     :root #ready-screen[data-f22-result] .f22-detail { padding: 12px; background: var(--console-panel); color: var(--console-muted); font: 500 16px/1.4 var(--console-font); }
@@ -4472,8 +4492,9 @@
     :root #ready-screen[data-f22-result] .f22-info { min-width: 48px; }
     :root #ready-screen[data-f22-result] .f22-actions { padding-top: 12px; }
     :root #ready-screen[data-f22-result] .f22-actions .console-primary { flex: 1.5 1 0; width: auto; min-height: 72px; font-size: 28px; }
-    :root #ready-screen[data-f22-result] [data-status="lost"] > .f22-sym { color: var(--console-bad); }
-    :root #ready-screen[data-f22-result] [data-status="open"] > .f22-sym { color: var(--console-muted); }
+    :root #ready-screen[data-f22-result] [data-status="best"] > :is(.f22-sym, #f22-best-delta) { color: var(--console-good); }
+    :root #ready-screen[data-f22-result] :is([data-status="lost"], [data-status="below"]) > :is(.f22-sym, #f22-best-delta) { color: var(--console-bad); }
+    :root #ready-screen[data-f22-result] :is([data-status="open"], [data-status="first"], [data-status="tie"]) > :is(.f22-sym, #f22-best-delta) { color: var(--console-muted); }
     /* Keep the result instrument's action ownership; generic actions must never leak through. */
     :root #ready-screen[data-f22-result] :is(#ready-start, .ready-secondary-actions),
     :root #ready-screen :is(.console-actions button[hidden], .f22-result button[hidden], .f22-row[hidden]) { display: none; }
@@ -4517,7 +4538,7 @@
       :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] { height: clamp(230px, 34dvh, 340px); padding: 14px; }
       :root #ready-screen[data-mode="program"] .ready-domain-tabs button { min-height: 48px; font-size: 18px; }
       :root #ready-screen[data-f22-result] .f22-row { grid-template-columns: 2.8rem minmax(0, 1fr) auto; gap: 8px; min-height: 64px; padding: 10px 4px; }
-      :root #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value) { font-size: 20px; }
+      :root #ready-screen[data-f22-result] :is(#f22-gun, #f22-clock, #f22-combat-value, #f22-score, #f22-best-delta) { font-size: 20px; }
       :root #ready-screen[data-f22-result] #f22-row-gun > .f22-datum .shell-icon { width: 20px; }
       :root #ready-screen[data-f22-result] #f22-opponent { font-size: 18px; }
       :root #ready-screen[data-f22-result] .f22-correction { font-size: 16px; }
@@ -4540,9 +4561,60 @@
       :root #ready-screen[data-mode="program"] .ready-mission-groups { grid-auto-columns: minmax(200px, 1fr); }
       :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] { height: 260px; }
     }
+
+    /* Launch honesty (owner, 4 Nov 2026: "the button to launch the f22 really isn't working").
+       The simulator boots on the main thread while the picker is already on screen, so for
+       several seconds a click cannot be answered, then terrain warmup takes several more.
+       `data-launch` on <html> says which: booting until the first frame, starting from the
+       click until flight. The stripe animates on the compositor, so it keeps moving even while
+       the main thread is busy. app.js renderLaunchState() owns the attribute after boot. */
+    :root[data-launch] #ready-screen #ready-start.console-primary {
+      position: relative;
+      overflow: hidden;
+      cursor: progress;
+    }
+    :root[data-launch] #ready-screen #ready-start.console-primary > * { visibility: hidden; }
+    :root[data-launch] #ready-screen #ready-start.console-primary::after {
+      content: "Loading\2026";
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      /* The programme picker draws its chevron on this pseudo-element; undo it here. */
+      width: auto;
+      height: auto;
+      border: 0;
+      rotate: none;
+      translate: none;
+    }
+    :root[data-launch="starting"] #ready-screen #ready-start.console-primary::after {
+      content: "Starting\2026";
+    }
+    :root[data-launch] #ready-screen #ready-start.console-primary::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 35%;
+      height: 3px;
+      background: currentColor;
+      opacity: .5;
+      animation: launch-sweep 1.1s linear infinite;
+      will-change: transform;
+    }
+    @keyframes launch-sweep {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(290%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      :root[data-launch] #ready-screen #ready-start.console-primary::before { animation-duration: 4s; }
+    }
   </style>
   <link rel="stylesheet" href="./render/onboarding/pilot_notebook.css">
   <link rel="stylesheet" href="./render/input/touch_fighter_layout.css">
+  <link rel="stylesheet" href="./render/input/key_hints.css">
+  <link rel="stylesheet" href="./render/shell/shell_themes.css">
+  <link rel="stylesheet" href="./render/shell/front_door.css">
 </head>
 <body>
   <svg class="shell-symbols" width="0" height="0" aria-hidden="true" focusable="false">
@@ -4621,7 +4693,7 @@
       <button id="feedback-cancel" type="button" data-action="cancel" aria-label="Cancel report" title="Cancel (Esc)"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-close"/></svg></button>
     </form>
   </dialog>
-  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)" title="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">ESC · PAUSE</span><span class="pause-mobile" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-pause"/></svg></span></button>
+  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)" title="Pause sortie (Escape)"><span class="pause-desktop key-hint-row" aria-hidden="true"></span><span class="pause-mobile" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-pause"/></svg></span></button>
   <output id="flight-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></output>
   <section id="rapier-radio" aria-label="Optional radio captions" hidden>
     <output id="rapier-radio-text" role="status" aria-live="polite" aria-atomic="true"></output>
@@ -4669,7 +4741,7 @@
           <option value="DECK">Deck camera</option>
           <option value="COCKPIT">Cockpit camera</option>
         </select>
-        <button id="incident-replay-skip" type="button">Debrief · Esc</button>
+        <button id="incident-replay-skip" type="button" class="key-hint-row"></button>
       </div>
     </div>
   </section>
@@ -4899,6 +4971,8 @@
     <div id="rotate-hint" hidden></div>
   </div>
 
+  <canvas id="ready-menu-backdrop" aria-hidden="true" hidden></canvas>
+
   <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="program" data-domain="military" data-hero="f22">
     <div class="ready-card">
       <header class="ready-menu-header">
@@ -4928,7 +5002,7 @@
               <button type="button" class="sortie-choice" data-aircraft="f22" data-program-node="first-merge" aria-pressed="true">
                 <span class="sortie-number">GUNS ONLY <b data-program-status="first-merge"></b></span>
                 <strong>F-22A</strong>
-                <small class="sortie-contract">Two engagements · land</small>
+                <small class="sortie-contract">Waves · score · land for bonus</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="preview" hidden>
@@ -4949,7 +5023,7 @@
               <button type="button" class="sortie-choice" data-aircraft="cobra" data-program-node="cobra-lab" aria-pressed="false">
                 <span class="sortie-number">COBRA CANYON <b data-program-status="cobra-lab"></b></span>
                 <strong>AH-1G</strong>
-                <small class="sortie-contract">Hold more points · Bleed tickets · RTB Ember</small>
+                <small class="sortie-contract">Clear sites · Hold · Fly home</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
@@ -5019,20 +5093,25 @@
             <div id="ready-mission-clock" class="console-metric" hidden title="Mission clock"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-clock"/></svg><span class="console-number"></span><span class="console-unit">time</span></div>
             <div id="ready-mission-engagements" class="console-metric" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="console-number"></span><span class="console-unit">engagements</span></div>
           </div>
-          <div id="ready-kicker">F-22A · two engagements</div>
+          <div id="ready-kicker">F-22A · waves</div>
           <h2 id="ready-title">Guns Only</h2>
-          <p id="ready-brief">Complete two gun engagements, then return to the runway, land and stop.</p>
+          <p id="ready-brief">Waves get harder through W5 and raise your score. Landing full stop is optional and adds a bonus.</p>
           <div class="ready-facts" aria-label="Mission details">
-            <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">Two gun engagements · land and stop</span></div>
+            <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">Waves · score · land for bonus</span></div>
             <div class="ready-fact"><small id="ready-config-label">Configuration</small><span id="ready-config">F-22 public-data surrogate · 480 rounds · Auto-GCAS armed</span></div>
           </div>
-          <!-- F-22 result instrument: four rows + one action row (render/debrief/f22_result_instrument.js).
+          <!-- F-22 result instrument: five rows + one action row (render/debrief/f22_result_instrument.js).
                Words live in title/aria-label; the visible tags only say what each number is. -->
           <section id="f22-result" class="f22-result" hidden aria-label="Sortie result">
             <div class="f22-row" id="f22-row-combat">
               <span class="f22-tag" aria-hidden="true">FIGHT</span>
               <span class="f22-value" id="f22-combat" role="img"><svg class="shell-icon f22-sym" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use id="f22-combat-symbol" href="#shell-minus"/></svg><span id="f22-combat-value"></span></span>
               <span class="f22-datum" id="f22-recovery" role="img"><span class="f22-tag" aria-hidden="true">LAND</span><svg class="shell-icon f22-sym" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use id="f22-recovery-symbol" href="#shell-minus"/></svg></span>
+            </div>
+            <div class="f22-row" id="f22-row-score">
+              <span class="f22-tag" aria-hidden="true">SCORE</span>
+              <span class="f22-value" id="f22-score"></span>
+              <span class="f22-datum" id="f22-best" role="img"><span class="f22-tag" aria-hidden="true">PB</span><svg class="shell-icon f22-sym" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use id="f22-best-symbol" href="#shell-minus"/></svg><span id="f22-best-delta"></span></span>
             </div>
             <div class="f22-row" id="f22-row-gun">
               <span class="f22-tag" aria-hidden="true">GUN</span>
@@ -5051,7 +5130,7 @@
               <button class="f22-datum" id="f22-practice" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="shell-action-label">Practice</span></button>
             </div>
             <div class="f22-actions console-actions">
-              <button id="f22-again" class="f22-primary console-primary" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span class="shell-action-label">Again</span></button>
+              <button id="f22-again" class="f22-primary console-primary" type="button" title="Again · Space / ⏎"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span class="shell-action-label">Again</span></button>
               <button id="f22-recover" type="button" hidden title="Continue this aircraft into the runway recovery"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-rtb"/></svg><span class="shell-action-label">Recover</span></button>
               <button id="f22-logbook" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-book"/></svg><span class="shell-action-label">Logbook</span></button>
               <button id="f22-aircraft" type="button" title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-jet"/></svg><span class="shell-action-label">Aircraft</span></button>
@@ -5090,9 +5169,9 @@
             </div>
           </details>
           <p id="ready-controls" class="ready-controls">Arrows fly · W/S power · F guns · V padlock · Tab target
-Two engagements, then recover · H controls · R restarts</p>
+Waves · score · land for bonus · [H] controls · [R] restarts · [space] again</p>
           <div id="ready-route-notice" class="ready-route-notice" role="status" hidden></div>
-          <button id="ready-start" class="console-primary" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-play"/></svg><span class="shell-action-label">Fly First Merge</span></button>
+          <button id="ready-start" class="console-primary" type="button"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-play"/></svg><span class="shell-action-label">Fly First Merge</span><span class="shell-action-key" hidden aria-hidden="true"></span></button>
           <button id="ready-replay" type="button" hidden><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-replay"/></svg><span class="shell-action-label">Replay incident again</span></button>
           <div class="ready-secondary-actions console-actions">
             <button id="ready-practice" type="button" data-console-modes="program pause debrief intro"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-reticle"/></svg><span class="shell-action-label">Practice</span></button>
@@ -5101,10 +5180,10 @@ Two engagements, then recover · H controls · R restarts</p>
             <button id="ready-return" type="button" data-console-modes="pause debrief intro" title="Choose another aircraft"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-jet"/></svg><span class="shell-action-label">Aircraft</span></button>
             <button id="ready-restart" type="button" data-console-modes="pause debrief" title="Restart sortie"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-restart"/></svg><span class="shell-action-label">Restart</span></button>
             <button id="ready-settings" type="button" data-console-modes="program pause debrief intro" title="Build __RELEASE_BUILD__ · verifying"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-gear"/></svg><span class="shell-action-label">Settings</span></button>
-            <button id="ready-report" type="button" data-console-modes="program pause debrief intro" disabled title="Report (F8)"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-flag"/></svg><span class="shell-action-label">Report</span></button>
+            <button id="ready-report" type="button" data-console-modes="program pause debrief intro" disabled title="Report"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-flag"/></svg><span class="shell-action-label">Report</span><span class="shell-action-key" hidden aria-hidden="true"></span></button>
             <button id="ready-handoff" type="button" data-console-modes="pause" disabled title="Call it a day and return to base"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-rtb"/></svg><span class="shell-action-label">RTB</span></button>
           </div>
-          <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
+          <div id="ready-hint" class="key-hint-row" aria-live="polite"></div>
           <!--
             The one line of chrome the pictorial menu keeps, and only on iPhone in a browser tab.
             The bars top and bottom are Safari's, not the game's; the manifest is display:fullscreen

@@ -31,6 +31,7 @@ public sealed partial class SimulationSession {
     /// is ContinuousCombat.MaximumEngagements. Zero for every other beat.
     public int FiniteEngagementCap =>
         !UsesDifficultyRamp(_beat) || _beat.Practice != PracticeExercise.None ? 0
+        : EscalatingWavesEnabled ? 2
         : _bfmSortieStartIndex >= 0 && BfmLesson.Get(_bfmSortieStartIndex).Defensive ? 1
         : _beat.FirstRunValley is not null ? 1
         : _beat.ContinuousCombat?.MaximumEngagements ?? 0;

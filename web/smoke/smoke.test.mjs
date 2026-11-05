@@ -1570,7 +1570,7 @@ test("a fresh visit opens the wordless F-22 picker and the valley stays an opt-i
           && globalThis.__gunsState.mission_definition_id !== "",
       undefined, { polling: scaled(100), timeout: scaled(45000) });
       const door = await page.evaluate(() => ({
-        start: document.querySelector("#ready-start")?.textContent?.trim() ?? "",
+        start: document.querySelector("#ready-start .shell-action-label")?.textContent?.trim() ?? "",
         missionId: globalThis.__gunsState?.mission_definition_id ?? "",
         selected: document.querySelector('[data-program-node="first-merge"]')
           ?.getAttribute("aria-pressed") === "true",
@@ -1592,7 +1592,7 @@ test("a fresh visit opens the wordless F-22 picker and the valley stays an opt-i
     await page.locator("#ready-intro-replay").click();
     await page.waitForFunction(() =>
       document.querySelector("#ready-screen")?.dataset.mode === "intro"
-        && document.querySelector("#ready-start")?.textContent?.trim() === "Enter valley",
+        && document.querySelector("#ready-start .shell-action-label")?.textContent?.trim() === "Fly the valley",
     undefined, { polling: scaled(100), timeout: scaled(20000) });
     assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
       "the visible replay action must not make the intro sticky for Fly again");
@@ -2027,7 +2027,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
       const options = [...routeCard.querySelectorAll(".cvr-option")]
         .map((element) => element.textContent.replace(/\s+/g, " ").trim());
       return {
-        startText: document.querySelector("#ready-start")?.textContent?.trim(),
+        startText: document.querySelector("#ready-start .shell-action-label")?.textContent?.trim(),
         routeText: routeCard.textContent.replace(/\s+/g, " ").trim(),
         options,
         routes: globalThis.__gunsState.casevac_routes?.length,

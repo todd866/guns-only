@@ -579,4 +579,99 @@ public class ReactiveBanditTests {
                 < BanditSkillProfile.For(PilotSkill.Competent).LeadFireConeRad);
         Assert.True(bandit.WantsToFire(observation));
     }
+
+    [Fact]
+    public void AceEntersFineTrackInsideTwoPointFiveDegreeGateAndNotAtSixDegrees() {
+        AircraftParams air = FlightModel.Su27SPublicDataSurrogate;
+        var baseOwn = new AircraftState(
+            new Vec3D(0.0, 5486.4, 0.0), 300.0, 0.0, 0.0, 0.0, air.MassKg);
+        // Banked contact inside gun range so ShouldFineTrack takes the manoeuvring-target path.
+        var contact = new AircraftState(
+            new Vec3D(0.0, 5486.4, 500.0), 300.0, 0.0, 0.0, 0.6, air.MassKg);
+        ActorObservation observation = ActorObservation.Capture(contact, 0);
+        Vec3D leadDir = BanditFireControl.LeadDirection(baseOwn, observation);
+        Vec3D perpendicular = new Vec3D(0.0, 1.0, 0.0).Cross(leadDir).Normalized();
+
+        AircraftState AimedOffLead(double offRad) => baseOwn with {
+            BodyAttitude = PointBodyAt(
+                leadDir * Math.Cos(offRad) + perpendicular * Math.Sin(offRad))
+        };
+
+        // At ~6 deg (inside the Veteran's 0.1047 rad gate, outside the Ace's 0.0436 rad gate),
+        // the Ace keeps the 9-candidate rollout while the Veteran enters fine-track.
+        const double sixDegGateRad = 0.100;
+        AircraftState ownAtSixDeg = AimedOffLead(sixDegGateRad);
+        Assert.InRange(
+            BanditFireControl.LeadNoseErrorRad(ownAtSixDeg, observation),
+            0.095, 0.1047);
+
+        var aceAtSixDeg = new ReactiveBandit(ownAtSixDeg, air, PilotSkill.Ace);
+        aceAtSixDeg.Step(observation, Dt);
+        Assert.Equal(9, aceAtSixDeg.DecisionTrace.CandidateCount);
+
+        var veteranAtSixDeg = new ReactiveBandit(ownAtSixDeg, air, PilotSkill.Veteran);
+        veteranAtSixDeg.Step(observation, Dt);
+        Assert.Equal(1, veteranAtSixDeg.DecisionTrace.CandidateCount);
+
+        // Inside the 2.5 deg (0.0436 rad) gate, both Ace and Boss enter the closed-loop finisher.
+        const double insideAceGateRad = 2.0 * Math.PI / 180.0;
+        AircraftState ownInsideGate = AimedOffLead(insideAceGateRad);
+        Assert.True(
+            BanditFireControl.LeadNoseErrorRad(ownInsideGate, observation) <= 0.0436);
+
+        var aceInsideGate = new ReactiveBandit(ownInsideGate, air, PilotSkill.Ace);
+        aceInsideGate.Step(observation, Dt);
+        Assert.Equal(1, aceInsideGate.DecisionTrace.CandidateCount);
+
+        var bossInsideGate = new ReactiveBandit(
+            ownInsideGate, air, PilotSkill.Ace, profile: BanditSkillProfile.Boss());
+        bossInsideGate.Step(observation, Dt);
+        Assert.Equal(1, bossInsideGate.DecisionTrace.CandidateCount);
+    }
+
+    [Fact]
+    public void PressureBurstsReserveHalfTheMagazineForRealSolutions() {
+        Assert.Equal(10.5, ReactiveBandit.PresentMaximumSeconds);
+        Assert.Equal(25, ReactiveBandit.PressureBurstLimit);
+        Assert.Equal(1.8, ReactiveBandit.PressureBurstIntervalSeconds);
+        Assert.Equal(1.2, ReactiveBandit.ChaseStallSeconds);
+        Assert.Equal(75, ReactiveBandit.PressureBurstReservedSolutionRounds);
+
+        AircraftState own = State(0.0, 3000.0, 0.0, 220.0);
+        var ace = new ReactiveBandit(
+            own, FlightModel.Su27SPublicDataSurrogate, PilotSkill.Ace);
+        CombatConfig combat = CombatConfig.ModernVisualMerge;
+        var gun = new GunKill(
+            combat.OpponentAmmo, combat.PlayerHitsToDefeat,
+            combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
+
+        int totalTicks = (int)(60.0 * AircraftSim.TickHz);
+        for (int tick = 0; tick < totalTicks; tick++) {
+            // Keep a crossing target dead ahead of the current nose: inside the 3.5 deg body cone,
+            // outside the 1.25 deg lead cone because of the perpendicular 220 m/s crossing velocity.
+            Vec3D gunLine = GunKill.GunDirection(ace.State);
+            AircraftState crossing = State(
+                0.0, 3000.0, 500.0, 220.0, chi: ace.State.Chi + Math.PI / 2.0) with {
+                Position = ace.State.Position + gunLine * 500.0
+            };
+            ActorObservation obs = ActorObservation.Capture(crossing, tick);
+            bool trigger = ace.WantsToFire(obs);
+            gun.Step(trigger, ace.State, crossing, Dt);
+            ace.Step(obs, Dt);
+        }
+
+        Assert.Equal(75, gun.RoundsFired);
+        Assert.Equal(75, gun.AmmoRemaining);
+        Assert.Equal(75, ace.PressureRoundsFired);
+        Assert.True(ace.PressureBurstsFired > 10 && ace.PressureBurstsFired <= ReactiveBandit.PressureBurstLimit);
+
+        // When a real ballistic lead solution appears afterward, the reserved half of the magazine fires.
+        Vec3D finalGunLine = GunKill.GunDirection(ace.State);
+        AircraftState tailTarget = State(0.0, 3000.0, 500.0, 220.0, chi: ace.State.Chi) with {
+            Position = ace.State.Position + finalGunLine * 400.0,
+            Gamma = ace.State.Gamma
+        };
+        ActorObservation solutionObs = ActorObservation.Capture(tailTarget, totalTicks);
+        Assert.True(ace.WantsToFire(solutionObs));
+    }
 }

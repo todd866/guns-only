@@ -1,0 +1,35 @@
+✔ destruction during the splash hold never pauses a live wreck on Combat result (1.46925ms)
+✔ a flying pilot gets the boundary after two seconds and can resume the same aircraft (0.610416ms)
+✔ Recover rejects a stale click after physical loss (0.786125ms)
+✔ combat boundary: complete combat, recovery open, Recover offered, no landing claimed (6.877041ms)
+✔ beat 7 compact combat row shows wave count and score in one callout (1.233042ms)
+✔ recovered victory: both results complete, no Recover, no landing lesson (1.047208ms)
+✔ early end after combat is a debrief with combat complete and LAND open (1.649416ms)
+✔ Recover is only offered while the real aircraft can continue (1.846ms)
+✔ dispositions keep combat and recovery separate (0.690083ms)
+✔ a correction row appears only when there is a correction or a practice (1.259667ms)
+✔ BFM lesson reuses the opponent row and uses the kernel correction (0.527042ms)
+✔ a passed BFM lesson shows the next lesson and suppresses generic correction (0.593708ms)
+✔ unknown values render as a dash, never a fabricated number (0.304916ms)
+✔ physical DESTROYED_AIRBORNE before final outcome loses recovery and cannot Recover (1.662291ms)
+✔ physical IMPACTED before final outcome loses recovery and cannot Recover (0.541041ms)
+✔ F-22 result is scoped to the exact mission and live sorties (0.947166ms)
+✔ two kills never imply two completed engagements or a victory (0.702458ms)
+✔ victory requires outcome plus complete contact and survivable recovery (0.203208ms)
+✔ a mutual kill remains a combat loss and recommends gunnery practice (0.121ms)
+✔ malformed numeric evidence stays out of F-22 facts and lessons (0.141958ms)
+✔ early bingo and partial success keep the recovery facts honest (0.248042ms)
+✔ landing deviation masks follow the C# priority order (0.176625ms)
+✔ recovery and valley practice suggestions use recorded evidence (0.125875ms)
+✔ caller safety lessons still override the F-22 card safely (0.547875ms)
+✔ kernel-projected recovered victory reads as a complete sortie (6.42425ms)
+✔ kernel-projected early end never grants landing bonus or recovery progression (0.608708ms)
+✔ an abandoned sortie gets observed facts only, never landing advice (0.135625ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 96.44825

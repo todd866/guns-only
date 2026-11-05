@@ -39,6 +39,7 @@
     <Compile Include="..\web\MotorcycleSnapshotProjection.cs" Link="MotorcycleSnapshotProjection.cs" />
     <Compile Include="..\web\OkanaganSnapshotProjection.cs" Link="OkanaganSnapshotProjection.cs" />
     <Compile Include="..\web\MedevacWebJsonContext.cs" Link="MedevacWebJsonContext.cs" />
+    <Compile Include="..\tools\playtest-lab\LabStayOrGoPolicy.cs" Link="LabStayOrGoPolicy.cs" />
     <Compile Include="..\web\KoreaTerrainTruth.cs" Link="KoreaTerrainTruth.cs" />
     <EmbeddedResource
       Include="..\content\packs\korea-1950s\environment\terrain\central-front.truth"

@@ -27,4 +27,5 @@ public enum MissionRtbReason : byte {
     None = 0,
     PilotKnockItOff = 1,
     BingoFuel = 2,
+    Winchester = 3,
 }

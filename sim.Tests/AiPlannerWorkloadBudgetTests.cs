@@ -98,6 +98,25 @@ public class AiPlannerWorkloadBudgetTests {
     }
 
     [Fact]
+    public void FourConcurrentAceBanditsEvaluateAtMostOneCandidatePerTick() {
+        SimulationSession session =
+            CreateSession(formationSize: 4, AiComputeLevel.Full);
+        Assert.Equal(4, session.LiveOpponentCount);
+
+        long maximumCandidateEvaluationsPerTick = 0;
+        for (int tick = 0; tick < 8 * AircraftSim.TickHz; tick++) {
+            AiWorkloadCounters before = session.AiWorkload;
+            session.StepFixed();
+            AiWorkloadCounters work = session.AiWorkload - before;
+            maximumCandidateEvaluationsPerTick = Math.Max(
+                maximumCandidateEvaluationsPerTick,
+                work.CandidateEvaluations);
+        }
+
+        Assert.InRange(maximumCandidateEvaluationsPerTick, 0, 1);
+    }
+
+    [Fact]
     public void AbsolutePairLanesStayBoundedAcrossNeutralHandoffAndTacticalPreemption() {
         var terrain = new FlatTerrain();
         WeatherProfile weather = WorkloadWeather(terrain);

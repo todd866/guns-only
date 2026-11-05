@@ -19,6 +19,8 @@ public class F22FiniteSortieTests {
             ContinuousCombat = source.ContinuousCombat! with {
                 ReplacementDelaySeconds = 0.2,
                 MaximumFormationSize = 1,
+                MaximumEngagements = 2,
+                EscalatingWaves = false,
             },
         };
     }
@@ -62,7 +64,8 @@ public class F22FiniteSortieTests {
         Assert.True(Math.Sqrt(
             runway.FarEndPosition.X * runway.FarEndPosition.X
             + runway.FarEndPosition.Z * runway.FarEndPosition.Z) < 48_000.0);
-        Assert.Equal(2, beat.ContinuousCombat!.MaximumEngagements);
+        // Beat 7 now deliberately continues after the two billed opening merges.
+        Assert.Equal(0, beat.ContinuousCombat!.MaximumEngagements);
         Assert.False(beat.CombatRules.PlayerInfiniteAmmo);
         Assert.Equal(480, beat.CombatRules.PlayerAmmo);
     }

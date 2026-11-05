@@ -1,0 +1,52 @@
+{
+  "url": "http://127.0.0.1:61779/index.html",
+  "verification": {
+    "firstRunValleyKey": null,
+    "readyVisible": true,
+    "readyMode": "program",
+    "selectedNode": "first-merge",
+    "selectedAircraft": "F-22A",
+    "startDisabled": false,
+    "startLabel": "Fly Guns Only",
+    "startKeyCap": "return",
+    "startAfterContent": "\"\"",
+    "hintAriaLabel": "return fly",
+    "hintKeyCap": "return",
+    "f22ScoreBox": {
+      "scrollWidth": 691,
+      "clientWidth": 691,
+      "textOverflow": "clip"
+    },
+    "f22OpponentBox": {
+      "scrollWidth": 702,
+      "clientWidth": 702,
+      "textOverflow": "clip"
+    },
+    "cvfBoxes": [
+      {
+        "text": "999 M",
+        "scrollWidth": 86,
+        "clientWidth": 86,
+        "textOverflow": "clip"
+      },
+      {
+        "text": "120.0 M/S",
+        "scrollWidth": 86,
+        "clientWidth": 86,
+        "textOverflow": "clip"
+      },
+      {
+        "text": "-100%",
+        "scrollWidth": 86,
+        "clientWidth": 86,
+        "textOverflow": "clip"
+      },
+      {
+        "text": "-99.9 MIN",
+        "scrollWidth": 86,
+        "clientWidth": 86,
+        "textOverflow": "clip"
+      }
+    ]
+  }
+}

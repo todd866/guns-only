@@ -69,6 +69,17 @@ public sealed class CobraTurnaroundRuntime
     public bool WeaponsEnabled => Phase == CobraTurnaroundPhase.Operational;
     public bool Servicing => Phase != CobraTurnaroundPhase.Operational;
 
+    /// <summary>
+    /// Places turnaround authority directly at the cold-spare start gate after a field crash
+    /// consumes a Ready Camp Ember spare.
+    /// </summary>
+    public void BeginAwaitStartReleaseAfterCrash()
+    {
+        _padContactSeconds = 0.0;
+        _shutdownReleaseObserved = false;
+        Transition(CobraTurnaroundPhase.AwaitStartRelease, CobraTurnaroundAction.Release);
+    }
+
     public CobraTurnaroundDirective Advance(
         double deltaSeconds,
         in CobraTurnaroundObservation observation)

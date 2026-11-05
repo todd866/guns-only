@@ -779,7 +779,7 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     "WebKit scrollIntoView must not shift the overflow-hidden outer Ready card sideways");
   assert.doesNotMatch(appSource, /configurationPractice=1 lets the pattern/,
     "Ready help must not advertise the configurationPractice query");
-  assert.match(appSource, /mobileControls \? "Tap Fly to launch" : "Press Enter to fly"/,
+  assert.match(appSource, /mobileControls \? "Tap Fly" : "\[return\] fly"/,
     "the touch briefing must name its real launch gesture");
   assert.match(indexSource, /\.sortie-choice\s*\{[\s\S]*?min-height:\s*78px/);
   assert.match(indexSource,
@@ -794,8 +794,8 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     "every visible aircraft programme, including preview multiplayer, needs a concise mission contract");
   assert.ok(contracts.every((contract) => contract.includes("·")),
     "picker contracts should use the shared verb · endpoint language");
-  assert.ok(contracts.includes("Hold more points · Bleed tickets · RTB Ember"),
-    "Cobra's picker contract must describe its majority/ticket authority instead of requiring all four points");
+  assert.ok(contracts.includes("Clear sites · Hold · Fly home"),
+    "Cobra's picker contract must read in plain kid language");
   assert.ok(contracts.includes("Train · Attack · Coordinate · Recover"),
     "Fire Boss must advertise recovery as the endpoint shared by its three sortie curricula");
   assert.match(indexSource,
@@ -1067,7 +1067,7 @@ test("non-bridge player actions advertised by the quicklook have observable UI h
     assert.ok(copy.includes(help), `missing help for ${help}`);
     assert.match(appSource, handler, `${help} has no UI effect`);
   }
-  assert.ok(copy.includes("PRESS ENTER TO FLY"));
+  assert.match(appSource, /"\[return\] fly"/);
   assert.match(appSource, /event\.code === "Enter"[\s\S]*?activateReadyAction\(\)/);
 });
 

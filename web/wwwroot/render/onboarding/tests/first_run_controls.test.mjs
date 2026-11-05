@@ -38,6 +38,15 @@ class FakeElement {
     this.id = "";
     this.className = "";
     this.textContent = "";
+    this.classList = {
+      add: (...parts) => {
+        for (const part of parts) {
+          if (!this.className.split(/\s+/).includes(part)) {
+            this.className = this.className ? `${this.className} ${part}` : part;
+          }
+        }
+      },
+    };
     this._listeners = new Map();
   }
 
@@ -48,6 +57,11 @@ class FakeElement {
       child.setConnected(this.isConnected);
       this.children.push(child);
     }
+  }
+
+  replaceChildren(...children) {
+    this.children = [];
+    this.append(...children);
   }
 
   setConnected(connected) {
@@ -109,6 +123,16 @@ class FakeDocument {
 
   createElement(tagName) {
     return new FakeElement(this, tagName);
+  }
+
+  createTextNode(value) {
+    return {
+      nodeType: 3,
+      textContent: String(value),
+      children: [],
+      remove() {},
+      setConnected() {},
+    };
   }
 
   getElementById(id) {

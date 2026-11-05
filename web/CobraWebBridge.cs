@@ -478,12 +478,17 @@ public static partial class CobraWebBridge
                     local_control = site.LocalControl,
                     owner = site.Owner.ToString().ToLowerInvariant(),
                     capture_progress = site.CaptureProgress,
+                    inbound_slick_s = site.InboundSlickRemainingSeconds,
+                    inbound_slick_progress = site.InboundSlickProgress,
                     contested = site.IsContested,
                     x_m = site.PositionWorldM.X,
                     y_m = site.PositionWorldM.Y,
                     z_m = site.PositionWorldM.Z,
                     capture_radius_m = site.CaptureRadiusM,
                 }).ToArray(),
+                inbound_slick_s = groundWar.InboundSlickCountdownSeconds,
+                air_mobile_insertion_s = CobraGroundWarRuntime.AirMobileInsertionSeconds,
+                site_capture_progress = groundWar.SiteCaptureProgress,
                 tickets = new {
                     friendly = groundWar.FriendlyTickets,
                     hostile = groundWar.HostileTickets,
@@ -511,6 +516,10 @@ public static partial class CobraWebBridge
                         fortified = unit.IsFortified,
                         objective_lock = objectiveLock,
                         alive = unit.IsAlive,
+                        damaged = unit.IsDamaged,
+                        suppressed = unit.IsSuppressed,
+                        damage_state = DamageStateToken(unit.DamageState),
+                        accuracy = unit.Accuracy,
                         health = unit.Health,
                         max_health = unit.MaxHealth,
                         x_m = unit.PositionWorldM.X,
@@ -735,6 +744,13 @@ public static partial class CobraWebBridge
         GroundUnitRole.HardPoint => "hard-point",
         GroundUnitRole.DshkSite => "dshk-site",
         _ => throw new ArgumentOutOfRangeException(nameof(role))
+    };
+
+    static string DamageStateToken(GroundUnitDamageState state) => state switch {
+        GroundUnitDamageState.Intact => "intact",
+        GroundUnitDamageState.Damaged => "damaged",
+        GroundUnitDamageState.Destroyed => "destroyed",
+        _ => throw new ArgumentOutOfRangeException(nameof(state))
     };
 
     static string RouteToken(CobraCanyonRouteChoice choice) => choice switch {

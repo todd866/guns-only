@@ -303,16 +303,28 @@ public class CobraGroundWarRuntimeTests
             site.PositionWorldM.Z));
 
         const double stepSeconds = 0.25;
-        for (int step = 0;
+        war.Advance(stepSeconds);
+        Assert.Equal(
+            CobraGroundWarRuntime.AirMobileInsertionSeconds - stepSeconds,
+            site.InboundSlickRemainingSeconds ?? -1.0,
+            6);
+        Assert.Equal(
+            site.InboundSlickRemainingSeconds,
+            war.InboundSlickCountdownSeconds);
+
+        for (int step = 1;
             step < (int)Math.Ceiling(
                 (CobraGroundWarRuntime.AirMobileInsertionSeconds + stepSeconds) / stepSeconds);
             step++)
             war.Advance(stepSeconds);
 
+        Assert.Null(site.InboundSlickRemainingSeconds);
         Assert.Contains(war.LivingUnits(), unit =>
             unit.Faction == GroundFaction.Friendly
             && unit.ParticipatesInGroundCombat
             && InsideSite(unit));
+        Assert.True(site.CaptureProgress > 0.0);
+        Assert.Equal(site.CaptureProgress, war.SiteCaptureProgress, 6);
         Assert.True(gun.IsAlive, "the insertion must ignore, not silently delete, the AA site");
     }
 
@@ -514,10 +526,13 @@ public class CobraGroundWarRuntimeTests
     [Fact]
     public void RampAndIngressDoNotSpendTheCombatTicketPool()
     {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        var terrain = new FlatTerrain();
         var runtime = new CobraMissionRuntime(
-            CobraCanyonDefinition.Create(),
-            new FlatTerrain(),
+            world,
+            terrain,
             CobraCanyonRouteChoice.RiverGorge,
+            spawn: CobraMissionRuntime.CreateCampEmberPadSpawn(world, terrain),
             groundWarSeed: 5);
         double collective = runtime.Cobra.EstimateHoverCollective(
             runtime.Cobra.State.GrossMassKg,
@@ -533,6 +548,20 @@ public class CobraGroundWarRuntimeTests
         Assert.Equal(0, runtime.GroundWar.AuthorityTick);
         Assert.Equal(friendlyTickets, runtime.GroundWar.FriendlyTickets);
         Assert.Equal(hostileTickets, runtime.GroundWar.HostileTickets);
+
+        var ingressRuntime = new CobraMissionRuntime(
+            world,
+            terrain,
+            CobraCanyonRouteChoice.RiverGorge,
+            groundWarSeed: 5);
+        for (int tick = 0; tick < PlayerVehicleContract.FixedStepHz * 5; tick++)
+            ingressRuntime.Advance(command);
+
+        Assert.Equal(CobraMissionAct.Ingress, ingressRuntime.Act);
+        Assert.False(ingressRuntime.GroundWarCombatLive);
+        Assert.Equal(0, ingressRuntime.GroundWar.AuthorityTick);
+        Assert.Equal(friendlyTickets, ingressRuntime.GroundWar.FriendlyTickets);
+        Assert.Equal(hostileTickets, ingressRuntime.GroundWar.HostileTickets);
     }
 
     /// <summary>
@@ -550,19 +579,23 @@ public class CobraGroundWarRuntimeTests
     public void TicketBleedIsWallClockAtAnyStepRate(double stepHz)
     {
         CobraGroundWarRuntime war = CreateWar();
-        foreach (ContestedSite site in war.Sites)
-            war.OverrideSiteOccupancyForTests(site.Id, friendly: 1, hostile: 0);
+        foreach (string siteId in new[] {
+            "site.camp-ember.v1", "site.iron-bell-bridge.v1", "site.plantation-water-tower.v1",
+        })
+            war.OverrideSiteOccupancyForTests(siteId, friendly: 1, hostile: 0);
+        war.OverrideSiteOccupancyForTests("site.red-earth-quarry.v1", friendly: 0, hostile: 1);
         double stepSeconds = 1.0 / stepHz;
         for (int step = 0; step < (int)Math.Round(25.0 / stepSeconds); step++)
             war.Advance(stepSeconds);
-        Assert.Equal(4, war.FriendlyPointsHeld);
+        Assert.Equal(3, war.FriendlyPointsHeld);
+        Assert.Equal(1, war.HostilePointsHeld);
 
         double hostileAtSplit = war.HostileTickets;
         const double windowSeconds = 30.0;
         for (int step = 0; step < (int)Math.Round(windowSeconds / stepSeconds); step++)
             war.Advance(stepSeconds);
 
-        double expected = CobraGroundWarRuntime.TicketBleedPerSecondPerPoint * 4.0 * windowSeconds;
+        double expected = CobraGroundWarRuntime.TicketBleedPerSecondPerPoint * 2.0 * windowSeconds;
         Assert.Equal(expected, hostileAtSplit - war.HostileTickets, 6);
     }
 
@@ -1051,11 +1084,37 @@ public class CobraGroundWarRuntimeTests
     }
 
     [Fact]
-    public void TicketExhaustionEndsTheMission()
+    public void TotalControlKnockoutWinsImmediatelyWithoutWaitingForTickets()
     {
         CobraGroundWarRuntime war = CreateWar();
         foreach (ContestedSite site in war.Sites)
             war.OverrideSiteOccupancyForTests(site.Id, friendly: 1, hostile: 0);
+
+        const double stepSeconds = 0.25;
+        int steps = (int)Math.Round(25.0 / stepSeconds);
+        for (int step = 0;
+            step < steps && war.MissionOutcome == HoldTheBridgeOutcome.Pending;
+            step++)
+            war.Advance(stepSeconds);
+
+        Assert.Equal(war.Sites.Count, war.FriendlyPointsHeld);
+        Assert.Equal(0, war.HostilePointsHeld);
+        Assert.Equal(HoldTheBridgeOutcome.Victory, war.MissionOutcome);
+        Assert.Equal("total-control", war.MissionOutcomeReason);
+        Assert.True(war.HostileTickets > 0.0,
+            "4-0 total control must end the ground war immediately without waiting for tickets to bleed out");
+        Assert.Equal(1.0, war.VictoryHoldProgress, 6);
+    }
+
+    [Fact]
+    public void TicketExhaustionEndsTheMission()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        foreach (string siteId in new[] {
+            "site.camp-ember.v1", "site.iron-bell-bridge.v1", "site.plantation-water-tower.v1",
+        })
+            war.OverrideSiteOccupancyForTests(siteId, friendly: 1, hostile: 0);
+        war.OverrideSiteOccupancyForTests("site.red-earth-quarry.v1", friendly: 0, hostile: 1);
 
         const double stepSeconds = 0.25;
         int steps = (int)Math.Round(400.0 / stepSeconds);
@@ -1064,6 +1123,7 @@ public class CobraGroundWarRuntimeTests
             step++)
             war.Advance(stepSeconds);
 
+        Assert.Equal(3, war.FriendlyPointsHeld);
         Assert.Equal(HoldTheBridgeOutcome.Victory, war.MissionOutcome);
         Assert.Equal("tickets-exhausted", war.MissionOutcomeReason);
         Assert.True(war.HostileTickets <= 0.0);
@@ -1076,11 +1136,22 @@ public class CobraGroundWarRuntimeTests
     public void StrategicOutcomeStaysFlyableThroughRtbUntilStableCampEmberRecovery(
         bool victory)
     {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        var terrain = new FlatTerrain();
         var runtime = new CobraMissionRuntime(
-            CobraCanyonDefinition.Create(),
-            new FlatTerrain(),
+            world,
+            terrain,
             CobraCanyonRouteChoice.RiverGorge,
-            groundWarSeed: 9);
+            groundWarSeed: 9,
+            // Hovering above the pad, not skids-on: the mission must register Victory/Defeat
+            // where the aircraft is, with RecoveredAtFob still false until the bonus leg lands.
+            spawn: new CobraMissionSpawn(
+                new Vec3D(
+                    CampEmberOperations.CentreEastM,
+                    201.5,
+                    CampEmberOperations.CentreNorthM),
+                Vec3D.Zero,
+                CampEmberOperations.FinalHeadingRad));
         foreach (ContestedSite site in runtime.GroundWar.Sites) {
             bool campEmber = site.Id == "site.camp-ember.v1";
             runtime.GroundWar.OverrideSiteOccupancyForTests(
@@ -1089,10 +1160,9 @@ public class CobraGroundWarRuntimeTests
                 hostile: victory || campEmber ? 0 : 1);
         }
 
-        // Resolve the strategic fight directly while the aircraft is staged at Camp Ember. The
-        // mission runtime then owns the player-facing transition: outcome -> RTB -> recovery.
-        // Keeping the fixture on the pad lets the test prove the stable-contact gate without a
-        // test-only teleport seam in the flight provider.
+        // Resolve the strategic fight directly while the aircraft is staged at Camp Ember.
+        // Victory/Defeat now register immediately where the player is, and the optional RTB
+        // bonus leg still gates Complete and RecoveredAtFob on stable Camp Ember contact.
         HoldTheBridgeOutcome expectedOutcome = victory
             ? HoldTheBridgeOutcome.Victory
             : HoldTheBridgeOutcome.Defeat;
@@ -1109,12 +1179,21 @@ public class CobraGroundWarRuntimeTests
 
         runtime.Advance(groundedCommand);
 
+        Assert.Equal(
+            victory ? CobraMissionStatus.Victory : CobraMissionStatus.Defeat,
+            runtime.Status);
+        Assert.Equal(CobraMissionAct.Complete, runtime.Act);
+        Assert.False(runtime.RecoveredAtFob);
+        Assert.False(runtime.Diagnostics.RecoveredAtFob);
+        Assert.Equal(frozenGroundWarTick, runtime.GroundWar.AuthorityTick);
+
+        // Retarget the RTB flow to the optional bonus leg.
+        runtime.BeginRtbBonusLeg();
         Assert.Equal(CobraMissionStatus.Active, runtime.Status);
         Assert.Equal(CobraMissionAct.Rtb, runtime.Act);
         Assert.True(runtime.MissionFlyable);
         Assert.True(runtime.Diagnostics.MissionFlyable);
         Assert.False(runtime.GroundWarCombatLive);
-        Assert.Equal(frozenGroundWarTick, runtime.GroundWar.AuthorityTick);
 
         for (int tick = 0;
             tick < 5 * PlayerVehicleContract.FixedStepHz
@@ -1134,8 +1213,213 @@ public class CobraGroundWarRuntimeTests
         Assert.Equal(
             VehicleContactKind.StableSurfaceContact,
             runtime.Cobra.Observation.Contact.Kind);
+        Assert.True(runtime.RecoveredAtFob);
+        Assert.True(runtime.Diagnostics.RecoveredAtFob);
         Assert.False(runtime.MissionFlyable);
         Assert.False(runtime.Diagnostics.MissionFlyable);
         Assert.Equal(frozenGroundWarTick, runtime.GroundWar.AuthorityTick);
+    }
+
+    [Fact]
+    public void FreshlySpawnedWaveDoesNotContestTheSiteOnItsFirstTick()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        ContestedSite ironBell = war.Sites.Single(site =>
+            site.Id == CobraGroundWarRuntime.IronBellSiteId);
+        ContestedSite plantation = war.Sites.Single(site =>
+            site.Id == "site.plantation-water-tower.v1");
+        Assert.Equal(280.0, CobraGroundWarRuntime.HostileWaveSpawnRingM(plantation), 6);
+        Assert.Equal(360.0, CobraGroundWarRuntime.HostileWaveSpawnRingM(ironBell), 6);
+
+        // Clear every seeded hostile combatant so only friendly defenders occupy the sites
+        // when the first hostile reinforcement wave arrives at FirstHostileWaveDelaySeconds.
+        // Keep one hostile-held site that no friendly stands in garrisoned: with every site
+        // cleared the friendlies would take total control and win outright before the first
+        // reinforcement wave is due. A site with no friendlies inside is never the wave target.
+        ContestedSite keptSite = war.Sites.First(site => site.Owner == GroundSiteOwner.Hostile);
+        foreach (GroundUnit unit in war.Units.Where(unit => unit.ParticipatesInGroundCombat).ToArray()) {
+            bool insideKept = HorizontalDistance(unit.PositionWorldM, keptSite.PositionWorldM)
+                <= keptSite.CaptureRadiusM + 60.0;
+            bool kill = unit.Faction == GroundFaction.Hostile ? !insideKept : insideKept;
+            if (kill) unit.ApplyDamage(unit.MaxHealth);
+        }
+
+        const double stepSeconds = 0.5;
+        GroundWarEvent? waveSpawn = null;
+        for (int step = 0;
+            step < (int)Math.Ceiling(
+                (CobraGroundWarRuntime.FirstHostileWaveDelaySeconds + 2.0) / stepSeconds);
+            step++) {
+            war.Advance(stepSeconds);
+            waveSpawn = war.RecentEvents
+                .Cast<GroundWarEvent?>()
+                .FirstOrDefault(evt => evt?.Kind == "spawn"
+                    && evt.Value.Faction == GroundFaction.Hostile);
+            if (waveSpawn is not null) break;
+        }
+
+        GroundWarEvent spawned = Assert.IsType<GroundWarEvent>(waveSpawn);
+        ContestedSite targetSite = war.Sites.Single(site => site.Id == spawned.SiteId);
+        GroundUnit[] waveUnits = war.RecentEvents
+            .Where(evt => evt.Kind == "spawn" && evt.Faction == GroundFaction.Hostile)
+            .Select(evt => war.FindUnit(evt.UnitId!)!)
+            .ToArray();
+        Assert.NotEmpty(waveUnits);
+        Assert.All(waveUnits, unit => {
+            double distanceM = HorizontalDistance(unit.PositionWorldM, targetSite.PositionWorldM);
+            Assert.True(
+                distanceM >= targetSite.CaptureRadiusM
+                    + CobraGroundWarRuntime.HostileWaveCaptureRadiusMarginM - 1e-6,
+                $"wave unit {unit.Id} spawned at {distanceM:F1} m, inside {targetSite.CaptureRadiusM + CobraGroundWarRuntime.HostileWaveCaptureRadiusMarginM:F1} m");
+        });
+
+        Assert.False(targetSite.IsContested);
+        war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+        Assert.False(targetSite.IsContested,
+            "a freshly spawned wave must march in from outside the capture circle rather than contesting on its first tick");
+    }
+
+    [Fact]
+    public void TwoSecondBurstLeavesFullHardPointDamagedAndSilentAndSecondBurstKillsIt()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        GroundUnit hardPoint = war.LivingUnits().First(unit =>
+            unit.Faction == GroundFaction.Hostile
+            && unit.Role == GroundUnitRole.HardPoint
+            && unit.IsFortified);
+        GroundUnit friendlyTarget = war.LivingUnits().First(unit =>
+            unit.Faction == GroundFaction.Friendly
+            && unit.Role == GroundUnitRole.HardPoint);
+        // Isolate the hostile hard point and one friendly hard point within weapon range (200 m)
+        // so suppression silence and halved post-suppression accuracy are directly measured.
+        Vec3D isolatedPosition = new(1_200.0, 200.4, 1_200.0);
+        hardPoint.SetPosition(isolatedPosition);
+        friendlyTarget.SetPosition(isolatedPosition + new Vec3D(200.0, 0.0, 0.0));
+        foreach (GroundUnit other in war.LivingUnits()
+            .Where(unit => !ReferenceEquals(unit, hardPoint) && !ReferenceEquals(unit, friendlyTarget))
+            .ToArray()) {
+            other.ApplyDamage(other.MaxHealth);
+        }
+
+        Assert.Equal(140.0, hardPoint.MaxHealth, 6);
+        Assert.Equal(140.0, hardPoint.Health, 6);
+        Assert.Equal(GroundUnitDamageState.Intact, hardPoint.DamageState);
+        Assert.False(hardPoint.IsDamaged);
+        Assert.False(hardPoint.IsSuppressed);
+        Assert.True(hardPoint.CanFire);
+        Assert.Equal(1.0, hardPoint.Accuracy, 6);
+        Assert.Equal(hardPoint.BaseDamagePerSecond, hardPoint.DamagePerSecond, 6);
+
+        // First 2 s burst at the runtime's real 45 rps rate (240 fixed 120 Hz steps = 90 rounds).
+        int ticksPerTwoSecondBurst = (int)Math.Round(2.0 * PlayerVehicleContract.FixedStepHz);
+        bool firstBurstHit = false;
+        for (int tick = 0; tick < ticksPerTwoSecondBurst; tick++)
+            firstBurstHit |= war.ApplyAuthorizedFire(hardPoint.Id, PlayerVehicleContract.FixedDeltaSeconds);
+
+        Assert.True(firstBurstHit);
+        Assert.Equal(90, war.Debrief.RoundsExpended);
+        Assert.True(hardPoint.IsAlive, "First 2 s burst must leave the hard point alive in DAMAGED state.");
+        Assert.True(hardPoint.IsDamaged, "First 2 s burst must put the hard point into DAMAGED state (<= 50% HP).");
+        Assert.Equal(GroundUnitDamageState.Damaged, hardPoint.DamageState);
+        Assert.True(hardPoint.Health <= hardPoint.MaxHealth * CobraGroundWarRuntime.HardPointDamagedHealthFraction);
+        Assert.True(hardPoint.IsSuppressed, "Newly DAMAGED hard point must stop firing (suppressed).");
+        Assert.False(hardPoint.CanFire);
+        Assert.Equal(0.0, hardPoint.DamagePerSecond, 6);
+        Assert.Equal(
+            CobraGroundWarRuntime.HardPointDamagedAccuracyScale,
+            hardPoint.Accuracy,
+            6);
+
+        GroundUnitSnapshot snapshot = Assert.Single(
+            war.SnapshotUnits(),
+            candidate => candidate.Id == hardPoint.Id);
+        Assert.True(snapshot.IsDamaged);
+        Assert.True(snapshot.IsSuppressed);
+        Assert.Equal(GroundUnitDamageState.Damaged, snapshot.DamageState);
+        Assert.Equal(0.5, snapshot.Accuracy, 6);
+
+        // While suppressed, the hard point stays silent: deals 0 damage to friendlyTarget and emits no small-arms fire.
+        double friendlyHealthBeforeSuppressionStep = friendlyTarget.Health;
+        war.Advance(1.0);
+        Assert.Equal(friendlyHealthBeforeSuppressionStep, friendlyTarget.Health, 6);
+        Assert.True(hardPoint.IsSuppressed);
+        Assert.False(hardPoint.CanFire);
+        Assert.Equal(0.0, hardPoint.DamagePerSecond, 6);
+        Assert.DoesNotContain(
+            war.RecentEvents,
+            evt => evt.Kind == "small-arms" && evt.UnitId == hardPoint.Id);
+
+        // After the remaining suppression window elapses, the hard point remains DAMAGED and resumes at half accuracy.
+        war.Advance(CobraGroundWarRuntime.HardPointSuppressionSeconds - 1.0);
+        Assert.True(hardPoint.IsAlive);
+        Assert.True(hardPoint.IsDamaged);
+        Assert.False(hardPoint.IsSuppressed);
+        Assert.True(hardPoint.CanFire);
+        Assert.Equal(0.5, hardPoint.Accuracy, 6);
+        Assert.Equal(hardPoint.BaseDamagePerSecond * 0.5, hardPoint.DamagePerSecond, 6);
+
+        double friendlyHealthBeforeResumedStep = friendlyTarget.Health;
+        war.Advance(1.0);
+        Assert.Equal(
+            hardPoint.BaseDamagePerSecond * 0.5,
+            friendlyHealthBeforeResumedStep - friendlyTarget.Health,
+            6);
+
+        // Second 2 s burst kills the hard point (~4 s total gun time).
+        for (int tick = 0; tick < ticksPerTwoSecondBurst && hardPoint.IsAlive; tick++)
+            war.ApplyAuthorizedFire(hardPoint.Id, PlayerVehicleContract.FixedDeltaSeconds);
+
+        Assert.False(hardPoint.IsAlive, "Second 2 s burst must kill the DAMAGED hard point.");
+        Assert.Equal(GroundUnitDamageState.Destroyed, hardPoint.DamageState);
+        Assert.False(hardPoint.IsDamaged);
+        Assert.False(hardPoint.IsSuppressed);
+        Assert.Equal(0.0, hardPoint.Health, 6);
+        Assert.Equal(1, war.Debrief.HostileKillsByPlayer);
+    }
+
+    [Fact]
+    public void BurstIntoThreeManGroupWithinSplashRadiusKillsAllThreeAndSoftUnitsDieInAFractionOfASecond()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        GroundUnit[] group = war.LivingUnits()
+            .Where(unit => unit.Faction == GroundFaction.Hostile
+                && unit.Role == GroundUnitRole.InfantryClump)
+            .Take(3)
+            .ToArray();
+        Assert.Equal(3, group.Length);
+        GroundUnit bystanderOutsideSplash = war.LivingUnits()
+            .First(unit => unit.Faction == GroundFaction.Hostile
+                && unit.Role == GroundUnitRole.InfantryClump
+                && !group.Contains(unit));
+        GroundUnit softVehicle = war.LivingUnits()
+            .First(unit => unit.Faction == GroundFaction.Hostile
+                && unit.Role == GroundUnitRole.SoftVehicle);
+
+        Vec3D centre = new(1_500.0, 200.4, 1_500.0);
+        group[0].SetPosition(centre);
+        group[1].SetPosition(centre + new Vec3D(1.2, 0.0, 0.0));
+        group[2].SetPosition(centre + new Vec3D(0.0, 0.0, 2.4));
+        bystanderOutsideSplash.SetPosition(centre + new Vec3D(4.0, 0.0, 0.0));
+        softVehicle.SetPosition(centre + new Vec3D(20.0, 0.8, 0.0));
+
+        // A brief 0.1 s pulse damages every member inside 2.5 m, scaled by distance from impact.
+        Assert.True(war.ApplyAuthorizedFire(group[0].Id, 0.1));
+        Assert.True(group[0].Health < group[1].Health,
+            "Direct impact at 0 m must deal more damage than splash at 1.2 m.");
+        Assert.True(group[1].Health < group[2].Health,
+            "Splash at 1.2 m must deal more damage than splash at 2.4 m.");
+        Assert.True(group[2].Health < group[2].MaxHealth,
+            "Unit at 2.4 m (within 2.5 m splash radius) must take splash damage.");
+        Assert.Equal(bystanderOutsideSplash.MaxHealth, bystanderOutsideSplash.Health, 6);
+
+        // Complete a sub-second burst (0.6 s total) on the centre target: all three in the 2.5 m group die.
+        Assert.True(war.ApplyAuthorizedFire(group[0].Id, 0.5));
+        Assert.All(group, member => Assert.False(member.IsAlive));
+        Assert.Equal(3, war.Debrief.HostileKillsByPlayer);
+        Assert.True(bystanderOutsideSplash.IsAlive);
+
+        // Soft vehicle also dies in a fraction of a second (< 0.7 s) on target.
+        Assert.True(war.ApplyAuthorizedFire(softVehicle.Id, 0.7));
+        Assert.False(softVehicle.IsAlive);
     }
 }

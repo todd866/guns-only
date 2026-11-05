@@ -35,14 +35,16 @@
   <!-- The light break itself, low and to the right, off the centre where the type sits. -->
   <ellipse cx="1128" cy="770" rx="620" ry="330" fill="url(#hbreak)"/>
 
-  <!-- Cloud decks. Flat-bottomed, two tones, cloudLight on top. -->
-  <g>
-    <path d="M96 262 L184 208 L318 194 L426 232 L540 220 L612 262 L606 288 L102 292 Z" fill="#f4e7c9" opacity="0.72"/>
-    <path d="M102 292 L606 288 L588 316 L124 318 Z" fill="#c9c9b6" opacity="0.6"/>
-    <path d="M948 176 L1030 132 L1148 122 L1240 152 L1348 144 L1408 178 L1404 200 L952 204 Z" fill="#f4e7c9" opacity="0.62"/>
-    <path d="M952 204 L1404 200 L1388 224 L972 226 Z" fill="#c9c9b6" opacity="0.5"/>
-    <path d="M420 424 L488 392 L588 384 L664 408 L748 402 L794 428 L790 444 L424 446 Z" fill="#f4e7c9" opacity="0.5"/>
-    <path d="M1160 400 L1216 374 L1300 368 L1362 388 L1432 384 L1470 406 L1466 420 L1164 422 Z" fill="#f4e7c9" opacity="0.4"/>
+  <!-- Layered cumulus: soft ellipses, no hard polygon silhouettes. -->
+  <g opacity="0.92">
+    <ellipse cx="280" cy="248" rx="210" ry="72" fill="#f4e7c9" opacity="0.72"/>
+    <ellipse cx="340" cy="232" rx="150" ry="58" fill="#f4e7c9" opacity="0.65"/>
+    <ellipse cx="180" cy="262" rx="120" ry="52" fill="#ebe0c8" opacity="0.55"/>
+    <ellipse cx="1180" cy="188" rx="190" ry="68" fill="#f4e7c9" opacity="0.62"/>
+    <ellipse cx="1240" cy="172" rx="140" ry="54" fill="#f4e7c9" opacity="0.58"/>
+    <ellipse cx="1080" cy="202" rx="110" ry="48" fill="#ebe0c8" opacity="0.48"/>
+    <ellipse cx="560" cy="412" rx="160" ry="56" fill="#f4e7c9" opacity="0.46"/>
+    <ellipse cx="1320" cy="392" rx="130" ry="50" fill="#f4e7c9" opacity="0.38"/>
   </g>
 
   <!-- Ridgelines, cool and receding, resolving to the locked ridge value at the front. Each band

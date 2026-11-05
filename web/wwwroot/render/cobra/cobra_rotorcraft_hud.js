@@ -1,5 +1,6 @@
 import { gunnerStatusText } from "./cobra_gunner_status.js";
 import { cobraObjectiveSiteId } from "./cobra_objective_site.js";
+import { cobraMissionCountdown, cobraObjectiveCopy } from "./cobra_objective_copy.js";
 import { fighterHudLayout } from "../hud/fighter_layout.js";
 
 const MPS_TO_KT = 3600 / 1852;
@@ -25,6 +26,16 @@ export function formatAviationAgl(aglM) {
 
 /** Ah1gCobraDefinition.MainRotor.NominalRpm — the 100% NR reference. */
 export const AH1G_NOMINAL_ROTOR_RPM = 324;
+
+/** Shared rotor-instrument caution edge: NR droops below this; torque spends toward it. */
+export const ROTOR_CAUTION_EDGE_PCT = 97;
+const ROTOR_CAUTION_HIGH_PCT = 103;
+const HIT_PULSE_TICKS = 36;
+
+const MISSION_SYMBOL_W = 14;
+const MISSION_GAUGE_W = 52;
+const MISSION_VALUE_W = 58;
+const MISSION_ROW_H = 15;
 
 // Same combiner language as hud.js (which keeps these module-private).
 const GREEN = "#4dff88";
@@ -118,7 +129,109 @@ function tacticalPicture(authorityState, vehicle, war) {
     .filter((unit) => unit?.alive === true && unit.faction === "hostile" && unit.role === "dshk-site")
     .map((unit) => symbol(unit, "air-threat", "AA"))
     .sort((a, b) => a.rangeM - b.rangeM);
-  return { objective, target, threats };
+  return {
+    objective,
+    target,
+    threats,
+    activeSite: site
+      ? {
+        id: site.id,
+        label: String(site.label ?? site.id ?? "POINT").toUpperCase(),
+        owner: String(site.owner ?? "neutral").toLowerCase(),
+        contested: site.contested === true,
+        captureProgress: fraction(site.capture_progress),
+      }
+      : null,
+  };
+}
+
+function fraction(value) {
+  const number = finiteOrNull(value);
+  return number === null ? null : Math.min(1, Math.max(0, number));
+}
+
+function airMobileEtaSeconds(war) {
+  const raw = war?.air_mobile_eta_seconds ?? war?.AirMobileEtaSeconds ?? war?.airMobileEtaSeconds;
+  const seconds = finiteOrNull(raw);
+  return seconds !== null && seconds > 0 ? Math.ceil(seconds) : null;
+}
+
+function ticketTrend(war) {
+  const sites = Array.isArray(war?.sites) ? war.sites : [];
+  const friendlyPoints = sites.filter((site) => site?.owner === "friendly").length;
+  const hostilePoints = sites.filter((site) => site?.owner === "hostile").length;
+  const margin = friendlyPoints - hostilePoints;
+  if (war?.combat_live === false) return { arrow: "·", level: "normal" };
+  if (margin < 0) return { arrow: "↓", level: "warning" };
+  if (margin > 0) return { arrow: "↑", level: "ready" };
+  return { arrow: "→", level: "normal" };
+}
+
+function targetCombatState(war, unit, vehicleTick) {
+  if (!unit) return null;
+  const targetId = unit.id;
+  const maxHealth = finite(unit.max_health, finite(unit.health, 1));
+  const health = finite(unit.health, maxHealth);
+  const healthFrac = maxHealth > 0 ? Math.min(1, Math.max(0, health / maxHealth)) : null;
+  const events = Array.isArray(war?.events) ? war.events : [];
+  let lastHitTick = null;
+  let lastKillTick = null;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const evt = events[index];
+    if (evt?.unit_id !== targetId) continue;
+    if (evt.kind === "gun-hit" && lastHitTick === null) lastHitTick = finiteOrNull(evt.tick);
+    if ((evt.kind === "gun-kill" || evt.kind === "unit-destroyed") && lastKillTick === null) {
+      lastKillTick = finiteOrNull(evt.tick);
+    }
+  }
+  const tick = finiteOrNull(vehicleTick);
+  const hitPulse = tick !== null && lastHitTick !== null && tick - lastHitTick <= HIT_PULSE_TICKS;
+  const killFlash = unit.alive === false
+    || (tick !== null && lastKillTick !== null && tick - lastKillTick <= HIT_PULSE_TICKS * 2);
+  return { healthFrac, hitPulse, killFlash, health, maxHealth };
+}
+
+function missionTaskRow(war, vehicle, gunner, authorityState) {
+  const copy = cobraObjectiveCopy(war, {
+    selectedTargetId: gunner?.selected_target_id ?? null,
+    player: {
+      eastM: finite(vehicle?.x_m),
+      northM: finite(vehicle?.z_m),
+    },
+  });
+  const countdown = cobraMissionCountdown(authorityState);
+  if (!copy?.line) return { symbol: "·", name: "MISSION", countdown };
+  const parts = String(copy.line).split(" · ");
+  const headline = parts[0] ?? copy.line;
+  const place = parts[1] ?? null;
+  let symbol = "◎";
+  if (/^DESTROY/i.test(headline)) symbol = "⨯";
+  else if (/^CLEAR/i.test(headline)) symbol = "△";
+  else if (/^LIFT|^HOLDING/i.test(headline)) symbol = "◆";
+  else if (/^LOSING|^BINGO|^VALLEY/i.test(headline)) symbol = "!";
+  const stripped = headline.replace(/^(DESTROY GUN PIT|CLEAR THE POINT|LIFT INBOUND|HOLDING)\s*/i, "").trim();
+  const name = place ?? (stripped || headline);
+  return { symbol, name: String(name).toUpperCase(), countdown };
+}
+
+function missionSitesRow(war) {
+  const sites = (Array.isArray(war?.sites) ? war.sites : []).filter(Boolean).slice(0, 4);
+  return sites.map((site) => ({
+    id: site.id,
+    owner: String(site.owner ?? "neutral").toLowerCase(),
+    contested: site.contested === true,
+  }));
+}
+
+function missionTicketsRow(war) {
+  const friendly = finiteOrNull(war?.tickets?.friendly);
+  const hostile = finiteOrNull(war?.tickets?.hostile);
+  if (friendly === null || hostile === null) return null;
+  return {
+    friendly: Math.round(friendly),
+    hostile: Math.round(hostile),
+    trend: ticketTrend(war),
+  };
 }
 
 function regimeToken(regime) {
@@ -222,13 +335,13 @@ export function cobraRotorcraftHudModel(authorityState, formation = null) {
 
   const nrPct = finite(rotor.main_rotor_rpm) / AH1G_NOMINAL_ROTOR_RPM * 100;
   const nrLevel = nrPct < 90 || nrPct > 107 ? "warning"
-    : nrPct < 97 || nrPct > 103 ? "caution" : "normal";
+    : nrPct <= ROTOR_CAUTION_EDGE_PCT || nrPct >= ROTOR_CAUTION_HIGH_PCT ? "caution" : "normal";
   const torquePct = finite(rotor.transmission_limit_fraction) * 100;
   // 100% IS the transmission limit (Ah1gCobraDefinition: 1100 shp), and a loaded Cobra
   // hovers in the low nineties. Caution opens only where the pilot is about to spend the
   // limit; an 85% band would sit amber through every hover and teach him to ignore it.
   const torqueLevel = torquePct > 100 ? "warning"
-    : torquePct >= 97 ? "caution" : "normal";
+    : torquePct >= ROTOR_CAUTION_EDGE_PCT ? "caution" : "normal";
 
   const gsKt = finite(vehicle.ground_speed_mps) * MPS_TO_KT;
   const vsiFpm = finite(vehicle.vertical_speed_mps) * MPS_TO_FPM;
@@ -336,6 +449,11 @@ export function cobraRotorcraftHudModel(authorityState, formation = null) {
       : `FOB ${formatAviationRange(finite(war.fob_range_m), { style: "nav" })}`);
   }
   const tactical = tacticalPicture(authorityState, vehicle, war);
+  const combatTarget = unit ?? (tactical.target
+    ? (war?.units ?? []).find((candidate) => candidate?.id === tactical.target.id && candidate.alive)
+    : null);
+  const combat = targetCombatState(war, combatTarget, vehicle.tick);
+  const slickEtaSeconds = airMobileEtaSeconds(war);
 
   return {
     rotor: {
@@ -363,6 +481,13 @@ export function cobraRotorcraftHudModel(authorityState, formation = null) {
     },
     designation,
     tactical,
+    combat,
+    slick: slickEtaSeconds === null ? null : { etaSeconds: slickEtaSeconds },
+    mission: {
+      task: missionTaskRow(war, vehicle, gunner, authorityState),
+      sites: missionSitesRow(war),
+      tickets: missionTicketsRow(war),
+    },
     formation: {
       lead: formation?.lead ?? null,
       radio: formation?.radio ?? null,
@@ -374,6 +499,142 @@ function levelColor(level, normalColor = GREEN) {
   return level === "warning" || level === "firing" ? (level === "firing" ? AMBER : RED)
     : level === "caution" ? AMBER
       : level === "ready" ? GREEN : normalColor;
+}
+
+function siteDotColor(owner, contested) {
+  if (contested) return AMBER;
+  if (owner === "friendly") return GREEN;
+  if (owner === "hostile") return RED;
+  return GREEN_DIM;
+}
+
+function drawMiniBar(ctx, x, y, width, height, fillFraction, { fill, track = "rgba(255,255,255,0.12)", pulse = false } = {}) {
+  const frac = Math.min(1, Math.max(0, Number(fillFraction) || 0));
+  ctx.fillStyle = track;
+  ctx.fillRect(x, y, width, height);
+  ctx.fillStyle = pulse ? "#ffffff" : fill;
+  ctx.globalAlpha = pulse ? 0.95 : 1;
+  ctx.fillRect(x, y, Math.max(1, width * frac), height);
+  ctx.globalAlpha = 1;
+}
+
+function drawMissionInstrumentRow(ctx, rowX, rowY, rowWidth, {
+  symbol,
+  symbolColor = GREEN_DIM,
+  drawGauge = null,
+  value = "",
+  valueColor = GREEN,
+  datum = "",
+  datumColor = GREEN_DIM,
+}) {
+  const gaugeX = rowX + MISSION_SYMBOL_W + 4;
+  const valueRight = rowX + rowWidth - 4;
+  const valueX = valueRight - MISSION_VALUE_W;
+  const datumX = gaugeX + MISSION_GAUGE_W + 6;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.font = `800 11px ${MONO}`;
+  ctx.fillStyle = symbolColor;
+  ctx.fillText(symbol, rowX, rowY);
+  if (typeof drawGauge === "function") drawGauge(gaugeX, rowY);
+  ctx.textAlign = "right";
+  ctx.fillStyle = valueColor;
+  ctx.font = `800 11px ${MONO}`;
+  ctx.fillText(value, valueRight, rowY);
+  if (datum) {
+    ctx.textAlign = "left";
+    ctx.fillStyle = datumColor;
+    ctx.font = `700 9px ${MONO}`;
+    const datumMax = valueX - datumX - 4;
+    let text = datum;
+    while (text.length > 1 && ctx.measureText(text).width > datumMax) text = text.slice(0, -1);
+    ctx.fillText(text, datumX, rowY);
+  }
+}
+
+function drawMissionPanel(ctx, model, { width, height, safeInsets, colorScheme = "dark" }) {
+  const mission = model.mission;
+  if (!mission) return;
+  const rows = 3 + (model.slick ? 1 : 0);
+  const panelW = 196;
+  const panelH = rows * MISSION_ROW_H + 14;
+  const insetBottom = Math.max(Number(safeInsets?.bottom) || 0, 8);
+  const insetRight = Math.max(Number(safeInsets?.right) || 0, 12);
+  const x = width - insetRight - panelW;
+  const y = height - insetBottom - panelH;
+  const border = colorScheme === "light" ? "rgba(12, 40, 52, 0.35)" : "rgba(77, 255, 136, 0.28)";
+  panel(ctx, x, y, panelW, panelH, border);
+  let rowY = y + 10;
+  const rowX = x + 8;
+  const rowWidth = panelW - 16;
+  const task = mission.task ?? { symbol: "·", name: "MISSION", countdown: null };
+  drawMissionInstrumentRow(ctx, rowX, rowY, rowWidth, {
+    symbol: task.symbol,
+    symbolColor: task.symbol === "!" ? AMBER : GREEN,
+    drawGauge: (gaugeX, gy) => {
+      ctx.textAlign = "left";
+      ctx.fillStyle = GREEN;
+      ctx.font = `700 9px ${MONO}`;
+      let text = task.name;
+      const maxW = rowWidth - MISSION_VALUE_W - (gaugeX - rowX) - 8;
+      while (text.length > 3 && ctx.measureText(text).width > maxW) text = text.slice(0, -1);
+      ctx.fillText(text, gaugeX, gy);
+    },
+    value: task.countdown ?? "—",
+    valueColor: GREEN,
+  });
+  rowY += MISSION_ROW_H;
+  drawMissionInstrumentRow(ctx, rowX, rowY, rowWidth, {
+    symbol: "▣",
+    symbolColor: GREEN_DIM,
+    drawGauge: (gaugeX, gy) => {
+      const sites = mission.sites ?? [];
+      const gap = 10;
+      for (let index = 0; index < 4; index += 1) {
+        const site = sites[index];
+        const cx = gaugeX + 5 + index * gap;
+        ctx.beginPath();
+        ctx.arc(cx, gy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = site ? siteDotColor(site.owner, site.contested) : "rgba(255,255,255,0.08)";
+        ctx.fill();
+        if (site?.contested) {
+          ctx.strokeStyle = AMBER;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+    },
+    value: "",
+    valueColor: GREEN,
+  });
+  rowY += MISSION_ROW_H;
+  const tickets = mission.tickets;
+  if (tickets) {
+    const trendColor = tickets.trend.level === "warning" ? RED
+      : tickets.trend.level === "ready" ? GREEN : GREEN_DIM;
+    drawMissionInstrumentRow(ctx, rowX, rowY, rowWidth, {
+      symbol: tickets.trend.arrow,
+      symbolColor: trendColor,
+      value: `${tickets.friendly}  ${tickets.hostile}`,
+      valueColor: GREEN,
+      datum: "tickets",
+    });
+    rowY += MISSION_ROW_H;
+  }
+  if (model.slick) {
+    drawMissionInstrumentRow(ctx, rowX, rowY, rowWidth, {
+      symbol: "➔",
+      symbolColor: AMBER,
+      drawGauge: (gaugeX, gy) => {
+        ctx.textAlign = "left";
+        ctx.fillStyle = AMBER;
+        ctx.font = `700 9px ${MONO}`;
+        ctx.fillText("SLICK", gaugeX, gy);
+      },
+      value: `${model.slick.etaSeconds} s`,
+      valueColor: AMBER,
+    });
+  }
 }
 
 function panel(ctx, x, y, width, height, border) {
@@ -467,8 +728,17 @@ function drawTacticalAwareness(ctx, model, { width, projectWorldPoint }) {
     ctx.font = `800 9px ${MONO}`;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
+    const labelX = half + 5;
     ctx.fillText(`${symbol.label} · ${formatAviationRange(symbol.rangeM, { style: "nav" })}`,
-      half + 5, 0);
+      labelX, 0);
+    const activeSite = model.tactical?.activeSite;
+    if (!threat && activeSite
+      && String(symbol.label ?? "").toUpperCase() === activeSite.label
+      && activeSite.captureProgress !== null && activeSite.captureProgress > 0) {
+      drawMiniBar(ctx, labelX, half + 2, 42, 4, activeSite.captureProgress, {
+        fill: activeSite.contested || activeSite.owner === "hostile" ? AMBER : GREEN,
+      });
+    }
     ctx.restore();
   }
 
@@ -502,6 +772,7 @@ export function drawCobraRotorcraftHud(ctx, model, {
   pixelRatio = 1,
   safeInsets = null,
   projectWorldPoint = null,
+  colorScheme = "dark",
 } = {}) {
   if (!model || !ctx) return;
   const layout = fighterHudLayout({ width, height, safeInsets: safeInsets ?? {} });
@@ -611,9 +882,29 @@ export function drawCobraRotorcraftHud(ctx, model, {
       ctx.textAlign = "left";
       ctx.fillStyle = color;
       ctx.font = `800 10px ${MONO}`;
-      ctx.fillText(model.designation.label, point.x + half + 5, point.y - half + 5);
+      const labelX = point.x + half + 5;
+      const labelY = point.y - half + 5;
+      if (model.combat?.killFlash) {
+        ctx.fillStyle = RED;
+        ctx.font = `800 12px ${MONO}`;
+        ctx.fillText("×", point.x - half - 10, point.y - half + 2);
+      }
+      ctx.fillStyle = color;
+      ctx.font = `800 10px ${MONO}`;
+      ctx.fillText(model.designation.label, labelX, labelY);
+      if (model.combat?.healthFrac !== null && model.combat?.healthFrac !== undefined) {
+        const barW = Math.max(half * 1.6, 36);
+        const barX = point.x - barW / 2;
+        const barY = point.y + half + 6;
+        drawMiniBar(ctx, barX, barY, barW, 4, model.combat.healthFrac, {
+          fill: color,
+          pulse: model.combat.hitPulse === true,
+        });
+      }
     }
   }
+
+  drawMissionPanel(ctx, model, { width, height, safeInsets, colorScheme });
 
   // Rotor-state annunciations sit ABOVE the ROTOR panel (left tape lane) — never the centre
   // warning lane. Owner: centre-screen BLADE STALL / VRS plates 24/7 are unusable chrome.

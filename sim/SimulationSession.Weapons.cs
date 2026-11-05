@@ -94,8 +94,7 @@ public sealed partial class SimulationSession {
         OpponentPresent
         && (_visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true)
         && !(_firstRunValleyRuntime?.WeaponsCold ?? false)
-        && !CombatHandoffRequested
-        && !PlayerRtbActive
+        && !RecoveryCeasefire
         && !_autoGcasState.Active
         && !_pilotTriggerInterlocked
         && _pilotPhysiology.State.ControlImpairment
@@ -125,7 +124,7 @@ public sealed partial class SimulationSession {
 
     void Trigger(bool down) {
         if (!OpponentPresent) down = false;
-        if (down && (CombatHandoffRequested || PlayerRtbActive)) down = false;
+        if (down && RecoveryCeasefire) down = false;
         if (_firstRunValleyRuntime is { } firstRun) {
             if (firstRun.WeaponsCold) down = false;
             else if (firstRun.Aim9Remaining > 0) {
@@ -156,7 +155,7 @@ public sealed partial class SimulationSession {
         OpponentPresent
         && Lifecycle == LifecycleState.Active
         && allowNewFire
-        && !PlayerRtbActive
+        && (!PlayerRtbActive || RtbBounceActive)
         && !TerminalPhaseActive
         && !WeaponsInhibited
         && _beat.CombatRules.OpponentAmmo > 0
@@ -270,8 +269,7 @@ public sealed partial class SimulationSession {
     void StepWeapons(in AircraftState playerState, in AircraftState opponentState,
         bool playerTriggerHeld, bool allowNewFire = true) {
         bool weaponsReleased =
-            allowNewFire && !WeaponsInhibited && !CombatHandoffRequested
-            && !PlayerRtbActive;
+            allowNewFire && !WeaponsInhibited && !RecoveryCeasefire;
         bool playerWeaponsAuthorized = weaponsReleased && PlayerWeaponsAuthorized;
         bool primaryRetargeted = _reliefTargetingOpponentGuns.ContainsKey(
             _primaryOpponentGunTargetId);

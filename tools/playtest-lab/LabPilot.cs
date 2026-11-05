@@ -5,8 +5,8 @@ using GunsOnly.Sim.Training;
 
 namespace GunsOnly.PlaytestLab;
 
-/// Adapts BanditPressureReport's pursuit/energy controller, with delayed observations
-/// as in FirstMergeOpeningAcceptanceTests. No writes to aircraft state or damage.
+/// Delayed HUD-cue pilots with pursuit/energy and terrain-escape fallbacks.
+/// Commands and trigger inputs use production gun assist; no aircraft-state or damage writes.
 public sealed class LabPilot {
     readonly string name;
     readonly ClonedPilotPolicy? clone;
@@ -21,6 +21,7 @@ public sealed class LabPilot {
     bool trigger, rtbObserved, bingoObserved;
     string mode = "setup", candidateMode = "setup";
     double candidateSince, decisionTime;
+    double laterWaveDesiredAltitude = double.NaN;
     long targetId;
     public LabPilot(string name, int seed, ClonedPilotPolicy? clone, int rtbAfter, bool endAfterCombat = false) {
         this.name = name; this.clone = clone; this.rtbAfter = rtbAfter; this.endAfterCombat = endAfterCombat;
@@ -37,7 +38,9 @@ public sealed class LabPilot {
         latency = (int)Math.Round((name == "novice" ? .8 + .6 * reaction : .15 + .15 * reaction) * AircraftSim.TickHz);
         handsOff = name == "novice" ? 2 + 3 * start : .3 + 1.2 * start;
         aimBias = (bias - .5) * (name == "novice" ? 4 : .3) * Math.PI / 180;
-        hud = new HudCuePilot(.20 + .1 * reaction, 1 + .35 * (seed % 8));
+        hud = name == "novice"
+            ? new HudCuePilot(.4 + .3 * reaction, .8 + 1.5 * start, aimBias, 8.0)
+            : new HudCuePilot(.20 + .1 * reaction, 1 + .35 * (seed % 8));
     }
 
     public IReadOnlyList<string> Drive(SimulationSession s, double? perceivedSeconds = null) {
@@ -45,21 +48,49 @@ public sealed class LabPilot {
         decisionTime = perceivedSeconds ?? s.TimeSeconds;
         if (s.CasevacMission) { SetMode(casevac.Drive(s), decisionTime); return decisions; }
         if (!s.PlayerAlive) { Fire(s, false); return decisions; }
-        if (endAfterCombat && s.CanEndSortie && s.TryEndSortie()) {
+        if (endAfterCombat && s.FiniteCombatComplete && s.CanEndSortie && s.TryEndSortie()) {
             decisions.Add("End:combat-complete"); return decisions;
         }
         if (s.PlayerFuel.IsBingo && !bingoObserved) { bingoObserved = true; decisions.Add("bingo:acknowledge"); }
-        bool empty = s.OpponentPresent && s.PlayerGun.AmmoRemaining == 0;
-        if (s.ReturnToBaseAvailable && (s.FiniteCombatComplete || s.PlayerFuel.IsBingo || empty || s.TimeSeconds >= rtbAfter)) {
+        bool empty = false;
+        int ammo = int.MaxValue;
+        if (s.OpponentPresent) {
+            // Some specialist beats expose an opponent rail without staging a
+            // player gun graph. Treat that as “ammo unknown”, not winchester.
+            try { ammo = s.PlayerGun.AmmoRemaining; empty = ammo == 0; }
+            catch (InvalidOperationException) { }
+        }
+        bool stayOrGo = LabStayOrGoPolicy.ShouldRequestRtb(new(
+            s.EscalatingWavesEnabled,
+            s.EngagementsWon,
+            s.PlayerHealth,
+            s.PlayerFuel.IsBingo,
+            ammo,
+            name));
+        bool noviceDamageRtb = s.EscalatingWavesEnabled && name == "novice" && s.PlayerHealth < .999;
+        bool aceDamageRtb = s.EscalatingWavesEnabled && name == "ace" && s.PlayerHealth < .9;
+        bool combatBudgetRtb = !s.EscalatingWavesEnabled || name == "clone";
+        if (s.ReturnToBaseAvailable && ((s.FiniteCombatComplete && stayOrGo) || noviceDamageRtb || aceDamageRtb
+            || s.PlayerFuel.IsBingo || empty || (combatBudgetRtb && s.TimeSeconds >= rtbAfter))) {
             if (s.TryRequestReturnToBase(s.PlayerFuel.IsBingo ? MissionRtbReason.BingoFuel : MissionRtbReason.PilotKnockItOff))
-                decisions.Add("RTB:" + (s.FiniteCombatComplete ? "combat-complete" : s.PlayerFuel.IsBingo ? "bingo" : empty ? "ammo-empty" : "combat-budget"));
+                decisions.Add("RTB:" + (aceDamageRtb || noviceDamageRtb ? "damage" : s.PlayerFuel.IsBingo ? "bingo" : empty ? "ammo-empty" : s.FiniteCombatComplete ? (s.EngagementsWon >= 5 ? "wave-limit" : "combat-complete") : "combat-budget"));
         }
         if (s.PlayerRtbActive && !rtbObserved) {
             if (!decisions.Any(d => d.StartsWith("RTB:"))) decisions.Add("RTB:accept-mission-handoff");
             rtbObserved = true;
         }
-        bool recover = s.PlayerRtbActive || (!s.OpponentPresent && !s.Beat.StartsOnCatapult)
-            || (s.Beat.RecoveryCompletesSortie && s.LiveOpponentCount == 0);
+        bool bounceDefense = s.RtbBounceActive;
+        if ((!s.PlayerRtbActive || bounceDefense) && TryLaterWaveSafety(s)) return decisions;
+        if (!bounceDefense && name == "ace" && s.EscalatingWavesEnabled
+            && s.IncomingWaveBearingRad is double bearing && s.LiveOpponentCount == 0) {
+            double error = Math.IEEERemainder(bearing - s.Player.State.Chi, 2 * Math.PI);
+            double contactBank = Math.Clamp(error * 1.8, -60 * Math.PI / 180, 60 * Math.PI / 180);
+            double turnG = Math.Min(4, 1 / Math.Max(.5, Math.Cos(contactBank)));
+            s.Controls.ScriptedPilotOverride = new PilotCommand(turnG, contactBank, 1, 0);
+            Fire(s, false); SetMode("turn-contact", decisionTime); return decisions;
+        }
+        bool recover = !bounceDefense && (s.PlayerRtbActive || (!s.EscalatingWavesEnabled && !s.OpponentPresent && !s.Beat.StartsOnCatapult)
+            || (!s.EscalatingWavesEnabled && s.Beat.RecoveryCompletesSortie && s.LiveOpponentCount == 0));
         if (recover) {
             Fire(s, false);
             SetMode(recovery.Drive(s), decisionTime);
@@ -69,6 +100,18 @@ public sealed class LabPilot {
             observations.Clear();
             if (targetId != 0) decisions.Add("target:acquire-successor");
             targetId = s.PlayerGun.SelectedTargetId;
+        }
+        if (name == "novice" && s.SelectedOpponentAlive
+            && ExperienceObserver.Clearance(s, s.Player.State.Position) > 220
+            && ExperienceObserver.Clearance(s, s.Player.State.Position + s.Player.State.VelocityVector() * 3) > 220) {
+            // The pursuit/terrain branch may have left a scripted command latched on
+            // the previous tick.  HUD input must own the aircraft once its cue path is
+            // valid, otherwise the novice can appear to aim while the old command wins.
+            s.Controls.ScriptedPilotOverride = null;
+            bool fire = hud.Drive(s);
+            Fire(s, fire && s.PlayerWeaponsAuthorized);
+            SetMode(fire ? "shoot" : "track-cue", decisionTime);
+            return decisions;
         }
         if (name == "ace" && ExperienceObserver.Clearance(s, s.Player.State.Position + s.Player.State.VelocityVector() * 8) > 600) {
             s.Controls.ScriptedPilotOverride = null;
@@ -125,6 +168,31 @@ public sealed class LabPilot {
         SetMode(shot ? "shoot" : slow ? "energy-recovery" : angle > .2 ? "turn" : "pursue", decisionTime);
         return decisions;
     }
+    bool TryLaterWaveSafety(SimulationSession s) {
+        // The opening pair is deliberately unchanged. Once the ladder has paid
+        // out two wins, preserve a competent pilot's flight path while turning
+        // or fighting; the existing 4G terrain escape is a last-resort guard.
+        if (name != "ace" || !s.EscalatingWavesEnabled || s.EngagementsWon < 2) return false;
+        AircraftState own = s.Player.State;
+        double clearance = ExperienceObserver.Clearance(s, own.Position);
+        double aheadClearance = ExperienceObserver.Clearance(s, own.Position + own.VelocityVector() * 3);
+        double ground = own.Position.Y - clearance;
+        if (!double.IsFinite(laterWaveDesiredAltitude))
+            laterWaveDesiredAltitude = Math.Clamp(Math.Max(own.Position.Y, ground + 2500), 2500, 10000);
+        double verticalSpeed = own.VelocityVector().Y;
+        double pulloutHeight = own.Speed * own.Speed / (9.81 * 5)
+            * (1 - Math.Cos(Math.Min(0, own.Gamma)));
+        bool warningRecovery = s.LiveOpponentCount == 0 && (own.Gamma < -5 * Math.PI / 180 || verticalSpeed < -20);
+        bool steepOrLow = warningRecovery || clearance < 500
+            || (verticalSpeed < 0 && Math.Min(clearance, aheadClearance) < pulloutHeight + 700);
+        if (!steepOrLow) return false;
+        double altitudeError = laterWaveDesiredAltitude - own.Position.Y;
+        double g = Math.Clamp(1 + altitudeError * .0008 - verticalSpeed * .018, 1, 8);
+        if (own.Gamma < -15 * Math.PI / 180) g = Math.Max(g, 6);
+        s.Controls.ScriptedPilotOverride = new PilotCommand(g, 0, 1, 0);
+        Fire(s, false); SetMode("later-wave-pullout", decisionTime);
+        return true;
+    }
     void SetMode(string next, double seconds) {
         if (next != candidateMode) { candidateMode = next; candidateSince = seconds; }
         // A stable tactical change is a decision; servo flutter at 120 Hz is not.
@@ -141,7 +209,8 @@ public sealed class LabPilot {
 // Port of FirstMergeOpeningAcceptanceTests.HudPilot: delay the observed body-frame
 // cue, NOT a world cue projected into the pilot's future attitude. Preserve the
 // authored trim throttle during the opening instead of accelerating out of the shot.
-public sealed class HudCuePilot(double reactionSeconds, double handsOffSeconds) {
+public sealed class HudCuePilot(double reactionSeconds, double handsOffSeconds, double aimBiasRad = 0.0,
+    double sprayWindowDeg = 0.0) {
     readonly Queue<(double Up, double Right, bool Solution, double Range, bool Valid)> seen = new();
     readonly int latency = Math.Max(1, (int)Math.Round(reactionSeconds * AircraftSim.TickHz));
     double pitch, roll;
@@ -155,7 +224,8 @@ public sealed class HudCuePilot(double reactionSeconds, double handsOffSeconds) 
             range = to.Length;
             Vec3D cue = s.PlayerGun.HasLeadSolution ? s.PlayerGun.LeadDirection : to.Normalized();
             double cf = Math.Max(1e-6, cue.Dot(s.Player.BodyForward));
-            up = Math.Atan2(cue.Dot(s.Player.BodyUp), cf) * 180 / Math.PI;
+            up = Math.Atan2(cue.Dot(s.Player.BodyUp), cf) * 180 / Math.PI
+                - aimBiasRad * 180 / Math.PI;
             right = Math.Atan2(cue.Dot(s.Player.BodyRight), cf) * 180 / Math.PI;
             if (cue.Dot(s.Player.BodyForward) <= 0) {
                 up = Math.Sign(cue.Dot(s.Player.BodyUp) + 1e-9) * 90;
@@ -170,7 +240,9 @@ public sealed class HudCuePilot(double reactionSeconds, double handsOffSeconds) 
         if (picture.Valid && s.TimeSeconds >= handsOffSeconds) {
             targetRoll = Math.Clamp(.04 * picture.Right, -.35, .35);
             targetPitch = Math.Clamp(.045 * picture.Up, -.3, .6);
-            fire = picture.Solution && picture.Range < 900;
+            double sightError = Math.Sqrt(picture.Up * picture.Up + picture.Right * picture.Right);
+            fire = picture.Range < 900
+                && (picture.Solution || (sprayWindowDeg > 0.0 && sightError < sprayWindowDeg));
         }
         double step = 3 * SortieRunner.Dt;
         pitch += Math.Clamp(targetPitch - pitch, -step, step);

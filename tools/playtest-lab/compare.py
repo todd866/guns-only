@@ -42,7 +42,8 @@ def row(label, runs):
     phase = ", ".join(f"{p} {a['phasePct'][p]:.1f}%/{a['simPhasePct'][p]:.1f}%" for p in report.PHASES if a['phasePct'][p] or a['simPhasePct'][p])
     return (f"| {label} | {a['runs']} | {a['complete']} | {a['censored']} | {a['recovered']} | {a['landed']} | {a['endedEarly']} | "
             f"{a['meanPerceivedLength']:.1f}s / {a['meanSimulatedLength']:.1f}s | "
-            f"{a['longestDeadAirSeconds']:.1f}s / {a['simLongestDeadAirSeconds']:.1f}s | "
+            f"{a['longestDeadAirSeconds']:.1f}s / {a['simLongestDeadAirSeconds']:.1f}s; active {a['longestDeadAirExcludingRtbAutopilotSeconds']:.1f}s | "
+            f"{a['wavesWon']:.0f} / {a['combatScore']:.0f} / {a['bounceRuns']} | "
             f"{a['combatShare']:.1f}% / {a['simCombatShare']:.1f}% | {phase} |"), a
 
 def compare(baseline: Path, landing: Path, end: Path) -> str:
@@ -62,10 +63,10 @@ def compare(baseline: Path, landing: Path, end: Path) -> str:
         new_commits = {manifests[n].get("sourceCommit") for n in ("land with compression", "end after combat") if manifests.get(n)}
         if len(new_commits) > 1: errors.append("- landing and end cohorts have different sourceCommit values")
     lines = ["# Beat 7 RTB comparison", "", "Perceived / simulated seconds are shown as `player / sim`. Phase shares and combat share use the same order. The baseline ran at 1×, so its perceived and simulated clocks coincide. Combat = merge + fight + defensive; shares pool durations across runs. Longest dead air is the maximum contiguous streak.", "",
-             "| cohort | runs | complete | censored | recovered | landed | ended early | mean sortie | longest dead air | combat share | phase shares (perceived/sim) |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
+             "| cohort | runs | complete | censored | recovered | landed | ended early | mean sortie | longest dead air raw / active | waves / score / bounce runs | combat share | phase shares (perceived/sim) |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|" ]
     for name, _ in cohorts:
         if loaded[name]: lines.append(row(name, loaded[name])[0])
-        else: lines.append(f"| {name} | unavailable | — | — | — | — | — | — | — | — | — |")
+        else: lines.append(f"| {name} | unavailable | — | — | — | — | — | — | — | — | — | — |")
     if errors: lines += ["", "## Provenance / data guard", "", *errors]
     for name, _ in cohorts:
         if manifests.get(name):

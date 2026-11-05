@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import vm from "node:vm";
+import { shouldAutoStartFirstRunValley, firstRunValleyPending } from "../first_run_valley.js";
+import { PRACTICE_EXERCISES, practiceExercise } from "../practice.js";
 
 const root = new URL("../../../", import.meta.url);
 
@@ -88,8 +91,14 @@ test("first run is a deliberate Ready interlock and Fire visibly names its live 
     /const firstRunReady = firstRunAutostartPending && ready && !finished;/,
     "settings, help, and background holds must not relabel staged intro authority as the picker");
   assert.match(app,
-    /else if \(firstRunReady\)[\s\S]*readyStartLabel\.textContent = "Enter valley"/,
+    /else if \(firstRunReady\)[\s\S]*readyTitle\.textContent = "Fly the valley"[\s\S]*readyStartLabel\.textContent = "Fly the valley"/,
     "the first aircraft clock must wait behind an explicit pilot action");
+  assert.doesNotMatch(app,
+    /Press Enter to fly|Press Enter when ready|Press Enter to explore|Tap Enter valley|Enter the valley|"Enter valley"/,
+    "ready and valley prompts must use key-hint conventions and never say Enter");
+  assert.match(app, /"\[return\] fly"/);
+  assert.match(app, /"\[return\] explore"/);
+  assert.match(app, /"\[return\] fly again"/);
   assert.doesNotMatch(app,
     /firstRunAutostartPending = true;\s*autoLaunchPending = true/,
     "staging the valley must never arm launch before the pilot consents");
@@ -105,12 +114,12 @@ test("first run is a deliberate Ready interlock and Fire visibly names its live 
     /"first-merge": Object\.freeze\(\{[\s\S]*?\n  \}\),/,
   )?.[0] ?? "";
   assert.match(firstMergeBrief,
-    /sortie: "Two gun engagements · land and stop"/,
+    /sortie: "Waves · score · land for bonus"/,
     "the programme brief names the fight without claiming an opening pair");
   assert.doesNotMatch(firstMergeBrief, /first pass safe/i,
     "the combat sortie must not advertise a safe pass");
   assert.match(index,
-    /id="ready-sortie">Two gun engagements · land and stop</,
+    /id="ready-sortie">Waves · score · land for bonus</,
     "the static Ready fallback must match the finite sortie contract");
   assert.match(app, /touchFireAriaLabel/);
   assert.match(app, /touchFireButton\.textContent = touchFireVisibleLabel\(state\)/,
@@ -137,4 +146,43 @@ test("first-run Quicklook reuses the remappable Fire binding in every teaching l
   assert.match(quicklook, /\$\{fireBinding\} FIRES TWO HEATERS/u);
   assert.match(quicklook, /\$\{fireBinding\}: TWO HEATERS → GUNS/u);
   assert.doesNotMatch(quicklook, /(?:^|· )F(?: |:) (?:FIRES|TWO HEATERS)/u);
+});
+
+test("fresh profile with empty localStorage lands on program picker with first-merge and Fly live while valley stays reachable", async () => {
+  const app = await source("app.js");
+  const fnStart = app.indexOf("function firstRunValleyQueryContext()");
+  const fnEnd = app.indexOf("function dismissFirstRunValleyAutostart()");
+  assert.ok(fnStart > 0 && fnEnd > fnStart);
+  const snippet = app.slice(fnStart, fnEnd);
+
+  const emptyStorage = { getItem: () => null, setItem: () => {} };
+  const evaluateStage = (href, dismissed = false) => {
+    const context = {
+      URL,
+      window: { location: { href }, localStorage: emptyStorage },
+      firstRunValleyDismissed: dismissed,
+      bridge: { StartFirstRunValley() {} },
+      firstRunValleyPending,
+      shouldAutoStartFirstRunValley,
+    };
+    return vm.runInNewContext(`${snippet}\nshouldStageFirstRunValley()`, context);
+  };
+
+  assert.equal(firstRunValleyPending(emptyStorage), true, "fresh localStorage is unseen");
+  assert.equal(evaluateStage("https://guns-only.com/"), false,
+    "fresh root visit with empty localStorage must not hijack Ready into the valley");
+  assert.equal(evaluateStage("https://guns-only.com/?program=first-merge"), false,
+    "fresh first-merge visit with empty localStorage must stay on the picker");
+  assert.equal(evaluateStage("https://guns-only.com/?firstRun=1"), true,
+    "explicit ?firstRun=1 replay query still stages the valley");
+  assert.equal(evaluateStage("https://guns-only.com/?firstRun=1&menu=1"), false,
+    "?menu=1 still overrides ?firstRun=1");
+  assert.equal(evaluateStage("https://guns-only.com/?firstRun=1", true), false,
+    "dismissed valley stays off for the session unless reset by replay");
+
+  const valleyPractice = practiceExercise("valley");
+  assert.ok(valleyPractice && PRACTICE_EXERCISES.includes(valleyPractice));
+  assert.equal(valleyPractice.code, 1);
+  assert.match(app, /function stagePracticeExercise\(id\)[\s\S]*?selectedPracticeExercise = id[\s\S]*?enterReady/);
+  assert.match(app, /else if \(forceFirstRunValley \|\| shouldStageFirstRunValley\(\)\)[\s\S]*?bridge\.StartFirstRunValley\(\)/);
 });

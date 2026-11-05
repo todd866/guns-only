@@ -5,12 +5,14 @@ import { createReportUi } from "./render/feedback/report_ui.js";
 import { highAlphaRecoveryPresentation } from "./render/hud/high_alpha_recovery.js?v=__RELEASE_BUILD__";
 import { attemptDurationSeconds } from "./render/shell/attempt_duration.js?v=__RELEASE_BUILD__";
 import { beginMissionCloudEntry } from "./render/shell/mission_cloud_entry.js?v=__RELEASE_BUILD__";
+import { mountReadyMenuBackdrop } from "./render/shell/ready_menu_backdrop.js?v=__RELEASE_BUILD__";
+import { applyFrontDoor, syncFrontDoor } from "./render/shell/front_door.js?v=__RELEASE_BUILD__";
 import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
 import { attemptElapsedSeconds, attemptStartSeconds } from "./render/progression/attempt_clock.js";
 import { paintMissionStrip } from "./render/shell/mission_strip.js";
 import { isF22Sortie } from "./render/debrief/f22_sortie_result.js";
 import {
-  f22ResultInstrument, paintF22ResultInstrument,
+  createF22ResultKeyHandler, f22ResultInstrument, paintF22ResultInstrument,
 } from "./render/debrief/f22_result_instrument.js";
 import {
   createDirectorPersistence,
@@ -254,6 +256,7 @@ import {
 } from "./render/telemetry/telemetry_outbox.js?v=__RELEASE_BUILD__";
 import { createShellHealthBeacon, readLocalShellIncidents } from "./render/telemetry/shell_health.js?v=__RELEASE_BUILD__";
 import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=__RELEASE_BUILD__";
+import { applyShellTheme } from "./render/shell/shell_theme.js?v=__RELEASE_BUILD__";
 import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=__RELEASE_BUILD__";
 import {
   createBootWatchdog,
@@ -269,6 +272,14 @@ import {
   resetControlBindings,
   savePlayerSettings,
 } from "./render/settings/player_settings.js?v=__RELEASE_BUILD__";
+import {keyCap} from "./render/input/key_hints.js?v=__RELEASE_BUILD__";
+import {
+  appendBindingKey,
+  renderControlLegend,
+  renderKeyColumn,
+  renderKeyHintRow,
+  renderPlayerKeyHint,
+} from "./render/input/key_label_ui.js?v=__RELEASE_BUILD__";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -603,6 +614,7 @@ const readyDomainButtons = [...document.querySelectorAll("[data-domain-filter]")
 const readyProgramProgress = document.querySelector("#ready-program-progress");
 const readyStart = document.querySelector("#ready-start");
 const readyStartLabel = readyStart.querySelector(".shell-action-label");
+const readyStartKey = readyStart.querySelector(".shell-action-key");
 const readyReplay = document.querySelector("#ready-replay");
 const readyHandoff = document.querySelector("#ready-handoff");
 const readyIntroReplay = document.querySelector("#ready-intro-replay");
@@ -1254,6 +1266,56 @@ let previousRunPausedForAudio = false;
 const mobileControls = localTouchPreview || coarsePointer || (touchCapable && smallViewport);
 document.documentElement.classList.toggle("touch-mode", mobileControls);
 document.documentElement.classList.toggle("touch-primary", mobileControls);
+
+let paintedReadyControls = null;
+
+function paintReadyControls(text) {
+  if (!readyControls) return;
+  const key = `${mobileControls ? "m" : "d"}:${text ?? ""}`;
+  if (paintedReadyControls === key) return;
+  paintedReadyControls = key;
+  if (!text) {
+    readyControls.replaceChildren();
+    return;
+  }
+  if (mobileControls) {
+    readyControls.textContent = text;
+    return;
+  }
+  renderControlLegend(readyControls, text);
+}
+
+// These painters run from renderPauseUi on every frame. Rebuilding the keycap nodes each call
+// kept the console's DOM in perpetual churn, which the published smoke saw as a button that is
+// never "stable" (Build 436 CI). Repaint only when the text or state actually changes.
+let paintedReadyHint = null;
+let paintedReadyStartKey = null;
+
+function paintReadyHint(text) {
+  if (!readyHint) return;
+  const raw = String(text ?? "").trim();
+  const key = `${mobileControls ? "m" : "d"}:${raw}`;
+  if (paintedReadyHint === key) return;
+  paintedReadyHint = key;
+  if (!mobileControls && /\[[^\]]+\]/.test(raw)) {
+    renderKeyHintRow(readyHint, raw);
+    readyHint.setAttribute("aria-label", raw.replace(/\[([^\]]+)\]/g, "$1").trim());
+    return;
+  }
+  readyHint.removeAttribute?.("aria-label");
+  renderPlayerKeyHint(readyHint, raw, {touch: mobileControls});
+}
+
+function paintReadyStartKey(show) {
+  if (!readyStartKey) return;
+  const visible = show === true && !mobileControls;
+  if (paintedReadyStartKey === visible) return;
+  paintedReadyStartKey = visible;
+  readyStartKey.replaceChildren();
+  readyStartKey.hidden = !visible;
+  if (visible) readyStartKey.append(keyCap("return"));
+}
+
 // Touch phone = the assisted contract around the two-stick primary controls: throttle holds corner
 // velocity until the pilot takes the lever, qualified gun solutions may fire automatically, and a
 // centred stick holds the path. ONE contract per sortie, latched at launch from the DEVICE, never
@@ -1535,7 +1597,10 @@ let flightTestSyncSequence = 0;
 // so a mixed shell/app can be detected instead of silently reporting whichever integer happened
 // to be embedded in stale HTML. Production metadata adds commit/deployment discrimination when
 // Vercel provides it, while local development remains fully offline.
-const ENTRYPOINT_BUILD = new URL(import.meta.url).searchParams.get("v") || "dev";
+const rawEntrypointBuild = new URL(import.meta.url).searchParams.get("v");
+const ENTRYPOINT_BUILD = !rawEntrypointBuild || rawEntrypointBuild.startsWith("__RELEASE_")
+  ? "dev"
+  : rawEntrypointBuild;
 let buildIdentity = createReleaseIdentity({ entrypointBuild: ENTRYPOINT_BUILD });
 // One-shot latch so the menu auto-reload to a newer build fires once, never in a loop.
 let autoReloadArmed = false;
@@ -2700,7 +2765,7 @@ function renderBuildIdentity() {
 }
 
 function buildIdentityBlocksSortie() {
-  return buildIdentity.stale || buildIdentity.state === "checking";
+  return buildIdentity.stale === true;
 }
 
 function applyBuildIdentity(nextIdentity) {
@@ -3192,6 +3257,23 @@ let incidentReplay = null;
 let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
 const reportButton = document.querySelector("#ready-report");
+
+function paintShellKeyHints() {
+  const pauseDesktop = pauseButton?.querySelector(".pause-desktop");
+  if (pauseDesktop) renderKeyHintRow(pauseDesktop, "[esc] · PAUSE");
+  if (incidentReplaySkip) renderKeyHintRow(incidentReplaySkip, "Debrief · [esc]");
+  const reportKey = reportButton?.querySelector(".shell-action-key");
+  if (reportKey) {
+    reportKey.replaceChildren(keyCap("F8"));
+    reportKey.hidden = mobileControls;
+  }
+  if (reportButton) {
+    reportButton.title = "Report";
+    reportButton.setAttribute("aria-label", "Report (F8)");
+  }
+}
+paintShellKeyHints();
+
 const reportTransport = createReportTransport({
   capabilityKey: `guns-only.feedback-enabled.${BUILD}.${ENTRYPOINT_BUILD}`,
   onEnabled(enabled) {
@@ -3294,9 +3376,14 @@ function renderSettingsBindings() {
       button.type = "button";
       button.dataset.bindAction = definition.action;
       button.dataset.capturing = String(bindingCaptureAction === definition.action);
-      button.textContent = bindingCaptureAction === definition.action
-        ? "Press key" : controlCodeLabel(playerSettings.bindings[definition.action]);
-      button.setAttribute("aria-label", `${definition.label}: ${button.textContent}`);
+      const bindingLabel = controlCodeLabel(playerSettings.bindings[definition.action]);
+      button.replaceChildren();
+      if (bindingCaptureAction === definition.action) {
+        button.textContent = "Press key";
+      } else {
+        renderKeyColumn(button, bindingLabel);
+      }
+      button.setAttribute("aria-label", `${definition.label}: ${bindingLabel}`);
       button.title = `Rebind ${definition.label}`;
       cell.append(button);
       row.append(label, cell);
@@ -3305,7 +3392,12 @@ function renderSettingsBindings() {
   });
   const reportRow = document.createElement("tr");
   reportRow.className = "settings-binding";
-  reportRow.innerHTML = '<th scope="row">Report</th><td><kbd>F8</kbd></td>';
+  const reportLabel = document.createElement("th");
+  reportLabel.scope = "row";
+  reportLabel.textContent = "Report";
+  const reportCell = document.createElement("td");
+  appendBindingKey(reportCell, "F8");
+  reportRow.append(reportLabel, reportCell);
   settingsBindings.replaceChildren(...nodes, reportRow);
 }
 
@@ -3856,10 +3948,10 @@ const MISSION_BRIEFS = Object.freeze({
     activity: "dogfight",
     kicker: "2030s Ukraine theatre · mission 07",
     title: "F-22A vs Su-27S",
-    sortie: "Two gun engagements · return to the runway",
+    sortie: "Waves · score · land for bonus",
     configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
-    card: "Complete two gun engagements, then land and stop on the runway.",
-    brief: "Two engagements share your fuel, ammunition and damage. Use short bursts, then follow the recovery cues home. Land and stop to complete the sortie.",
+    card: "Waves get harder. Land for a bonus.",
+    brief: "Waves get harder through W5 and raise your score multiplier. Landing full stop is optional and adds a +150 bonus; Space flies again.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · G gear · Esc → Call It A Day button · Space G limiter · K Auto-GCAS paddle",
   },
   8: {
@@ -3894,12 +3986,12 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     controls: "Arrows fly · W/S power · O returns to ship when the route calls RTB\nSpace G limiter · H controls",
   }),
   "first-merge": Object.freeze({
-    kicker: "2030s Ukraine · F-22A · two engagements",
+    kicker: "2030s Ukraine · F-22A · waves",
     title: "Guns Only",
-    sortie: "Two gun engagements · land and stop",
+    sortie: "Waves · score · land for bonus",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
-    brief: "Complete two gun engagements, then follow the recovery cues to a runway stop. Your opponent level and aiming assistance stay steady for this sortie. Gun hits and kills earn a harder next sortie.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · H controls",
+    brief: "Waves get harder through W5 and raise your score multiplier. Landing full stop is optional and adds a +150 bonus; Space flies again.",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nWaves · score · land for bonus · [H] controls · [R] restarts · [space] again",
   }),
   "okanagan-fireboss": Object.freeze({
     kicker: "Civilian · British Columbia · AT-802F Fire Boss",
@@ -4044,9 +4136,11 @@ function firstRunValleyQueryContext() {
 }
 
 function shouldStageFirstRunValley() {
+  const query = firstRunValleyQueryContext();
   return !firstRunValleyDismissed
     && typeof bridge?.StartFirstRunValley === "function"
-    && shouldAutoStartFirstRunValley(firstRunValleyQueryContext());
+    && query.firstRunQuery === "1"
+    && shouldAutoStartFirstRunValley(query);
 }
 
 function dismissFirstRunValleyAutostart() {
@@ -4848,6 +4942,7 @@ function renderCampaignProgress() {
   // Release state, not qualification progress, owns launchability. Hidden preview fixtures stay
   // represented for focused development, but a copied URL cannot promote one into production.
   if (readyProgramProgress) readyProgramProgress.textContent = "";
+  syncFrontDoor(document, window.location);
   for (const button of readyProgramButtons) {
     const nodeId = button.dataset.programNode;
     const selected = nodeId === selectedProgramNodeId;
@@ -5090,6 +5185,7 @@ function renderF22ResultInstrument(state, { finished, combatResult }) {
     correction: result?.safetyCorrection || result?.correction || "",
     practiceExercise,
     practiceLabel: practiceExercise ? readyPractice?.textContent || "Practice" : "",
+    runKey: `${attemptStartSimSeconds ?? ""}:${state?.player_entity_id ?? ""}:${state?.sortie_seed ?? ""}`,
   }));
 }
 
@@ -5326,7 +5422,7 @@ function renderPauseUi(state = latestState) {
       : `${key("pull")}/${key("push")} pitch · ${key("rollLeft")}/${key("rollRight")} roll · ${key("powerUp")}/${key("powerDown")} power · ${key("fire")} fire · ${key("gearToggle")} gear · H controls · Esc pause`;
     // The control legend is hidden on touch; the result correction is not a legend, so it has
     // its own always-visible row (loop audit #5).
-    if (readyControls) readyControls.textContent = finished ? "" : `${exercise.cue}\n${practiceControls}`;
+    paintReadyControls(finished ? "" : `${exercise.cue}\n${practiceControls}`);
     if (readyControls) readyControls.hidden = finished;
     if (readyCorrection && finished) {
       readyCorrection.textContent = sortieResultCopy(state)?.safetyCorrection
@@ -5334,7 +5430,8 @@ function renderPauseUi(state = latestState) {
       readyCorrection.hidden = !readyCorrection.textContent;
     }
     readyStartLabel.textContent = finished ? "Repeat practice" : "Start practice";
-    readyHint.textContent = "Practice results are saved locally and do not count as a full sortie.";
+    paintReadyHint("Practice results are saved locally and do not count as a full sortie.");
+    paintReadyStartKey(false);
   } else if (finished) {
     const result = sortieResultCopy(state);
     const casevac = isCasevacState(state);
@@ -5439,7 +5536,7 @@ function renderPauseUi(state = latestState) {
     // No qualification, so the debrief offers the only two things that make sense: go again, or
     // pick the other aircraft.
     readyStartLabel.textContent = "Fly again";
-    if (readyControls) readyControls.textContent = carrierHandoff
+    paintReadyControls(carrierHandoff
       ? `${result.reserveMarginLb === null
         ? "Recovery reserve result unavailable"
         : `${result.reserveMarginLb < 0 ? "Below" : "Above"} protected reserve by ${Math.round(Math.abs(result.reserveMarginLb))} LB`}
@@ -5456,14 +5553,13 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
           ? `Full-pass primary · ${carrierFacts.passCorrection}\nTouchdown assessment · ${carrierFacts.touchdown}\nTouchdown primary · ${carrierFacts.touchdownCorrection}`
           : ledger
             ? `${ledger.lines.map((line) => `${line.label} · ${line.creditsText}`).join("\n") || "No lines"}\n${ledger.clearanceText}`
-            : singleCorrection;
-    readyHint.textContent = background
+            : singleCorrection);
+    paintReadyHint(background
       ? "Return to the game to restage"
       : ledger?.clearance === "GROUNDED"
-        ? `Allocation exception recorded — ${mobileControls
-          ? "Tap Fly to fly the next contract"
-          : "Press Enter to fly the next contract"}`
-        : "";
+        ? (mobileControls ? "Tap Fly again" : "[return] fly again")
+        : "");
+    paintReadyStartKey(false);
   } else if (firstRunReady) {
     const fireBinding = controlCodeLabel(playerSettings.bindings.fire);
     const rtbBinding = controlCodeLabel(playerSettings.bindings.knockItOff);
@@ -5471,19 +5567,20 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     if (readyConfigLabel) readyConfigLabel.textContent = "Fire";
     readyReplay.hidden = true;
     readyKicker.textContent = "Kestrel Gorge · F-22A";
-    readyTitle.textContent = "Enter the valley";
+    readyTitle.textContent = "Fly the valley";
     readyBrief.textContent = "Follow the valley north. Weapons unlock at the exit: launch your two missiles, then track the aircraft ahead and hit it with the gun.";
     readySortie.textContent = "Return to the runway, land and stop.";
     readyConfig.textContent = mobileControls
       ? "FOX 2 launches two missiles, one at a time, then becomes GUNS."
       : `${fireBinding} launches two missiles, one at a time, then fires guns.`;
-    if (readyControls) readyControls.textContent = mobileControls
+    paintReadyControls(mobileControls
       ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll"
-      : `ARROWS fly · W/S power · ${rtbBinding} return to base · H controls`;
-    readyStartLabel.textContent = "Enter valley";
-    readyHint.textContent = background
-      ? "Return to the game to enter the valley"
-      : mobileControls ? "Tap Enter valley when ready" : "Press Enter when ready";
+      : `ARROWS fly · W/S power · ${rtbBinding} return to base · H controls`);
+    readyStartLabel.textContent = "Fly the valley";
+    paintReadyHint(background
+      ? "Return to the game"
+      : mobileControls ? "Tap Fly the valley" : "[return] fly");
+    paintReadyStartKey(!background && !mobileControls);
   } else if (ready) {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = "Configuration";
@@ -5503,20 +5600,21 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
       const keyboardControls = brief.controls
         || "Arrows fly · W/S power · F guns · V padlock · Tab target\nH opens controls · R restarts";
       const casevacReady = selectedBeat === 13 || isCasevacState(state);
-      readyControls.textContent = mobileControls
+      paintReadyControls(mobileControls
         ? casevacReady
           ? "LEFT STICK forward/reverse/translate · RIGHT STICK yaw · VERT climb/descend · ABORT requests return\nMedevac has no target, padlock, or gun controls"
           : "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · TARGET changes contact · PADLOCK tracks · FIRE shoots\nController: LS fly · RS look · RT fire · A padlock · LB/RB power"
         : casevacReady
           ? keyboardControls
-          : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`;
+          : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`);
     }
     const exploreBase = selectedProgramNodeId === "area-51";
     readyStartLabel.textContent = exploreBase ? "Explore" : `Fly ${brief.title}`;
-    readyHint.textContent = background
+    paintReadyHint(background
       ? "Return to the game"
-      : exploreBase ? (mobileControls ? "Tap Explore" : "Press Enter to explore")
-        : mobileControls ? "Tap Fly to launch" : "Press Enter to fly";
+      : exploreBase ? (mobileControls ? "Tap Explore" : "[return] explore")
+        : mobileControls ? "Tap Fly" : "[return] fly");
+    paintReadyStartKey(!background && !mobileControls && showScreen && ready);
   } else {
     // A pause screen has one job: get you back in the aeroplane. Everything that once sat here --
     // a kicker, a sentence about the deterministic clock, a two-cell sortie/status table, a
@@ -5530,9 +5628,10 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     readyConfig.textContent = "";
     if (readySortieLabel) readySortieLabel.textContent = "";
     if (readyConfigLabel) readyConfigLabel.textContent = "";
-    if (readyControls) readyControls.textContent = "";
+    paintReadyControls("");
     readyStartLabel.textContent = "Resume";
-    readyHint.textContent = "";
+    paintReadyHint("");
+    paintReadyStartKey(false);
   }
 
   renderBuildIdentity();
@@ -5548,19 +5647,17 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     // page is not stale so it cannot loop. NEVER mid-flight or paused -- that would bin the sortie.
     if (ready && !autoReloadArmed && !reportUi.active) {
       autoReloadArmed = true;
-      readyHint.textContent = "Updating to the latest build…";
+      paintReadyHint("Updating to the latest build…");
       setTimeout(() => {
         if (reportUi.active) { autoReloadArmed = false; return; }
         void reloadCurrentBuild();
       }, 1200);
     } else {
-      readyHint.textContent = "Older or mixed build detected · reload the current release";
+      paintReadyHint("Older or mixed build detected · reload the current release");
     }
-  } else if (buildIdentity.state === "checking" && ready) {
-    readyHint.textContent = "Verifying current release…";
   } else if (terrainLoading && ready) {
-    readyHint.textContent = terrainLaunchWarmupStatus
-      || "Loading nearby terrain and low-level scenery…";
+    paintReadyHint(terrainLaunchWarmupStatus
+      || "Loading nearby terrain and low-level scenery…");
   }
 
   // Ready cannot be dismissed while another safety interlock is still active. The relevant
@@ -6413,7 +6510,23 @@ readyStart.addEventListener("click", () => {
   // activation. Android otherwise rejects fullscreen after the game finally reaches beginFlight.
   requestMobileFullscreenFromGesture();
   activateReadyAction();
+  renderLaunchState();
 });
+
+// Owns <html data-launch> (see the "Launch honesty" CSS in index.html): "booting" until the first
+// frame, "starting" from a Fly press until flight, absent otherwise. Without it the picker shows
+// an enabled Fly button that answers nothing for the whole boot and terrain warmup.
+function renderLaunchState() {
+  const root = document.documentElement;
+  const booting = !bootScreen?.classList.contains("ready");
+  const starting = bootLaunchPending
+    || (autoLaunchPending && pauseReasons.has("ready"))
+    || (booting && bootLaunchPending);
+  const next = starting ? "starting" : booting ? "booting" : "";
+  if ((root.dataset.launch ?? "") === next) return;
+  if (next) root.dataset.launch = next;
+  else delete root.dataset.launch;
+}
 
 readySelector?.addEventListener("click", (event) => {
   const domain = event.target.closest("[data-domain-filter]")?.dataset.domainFilter;
@@ -7272,7 +7385,7 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
       }
       .cvf-primary {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(max-content, 1fr));
         gap: 8px;
       }
       .cvf-label {
@@ -7283,10 +7396,9 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
       .cvf-value {
         display: block;
         margin-top: 2px;
-        overflow: hidden;
         color: #eefaf7;
+        font-variant-numeric: tabular-nums;
         white-space: nowrap;
-        text-overflow: ellipsis;
       }
       .cvf-value[data-state="EXPOSED"],
       .cvf-value[data-state="OUTSIDE"],
@@ -12125,6 +12237,26 @@ function activeFlightAxisOwnsKey(event) {
   return reassertableKeyboardAxisGkeys.has(keyMap.get(event.code));
 }
 
+function isF22ResultScreenActive() {
+  return Boolean(readyScreen?.dataset.f22Result)
+    && readyScreen.classList.contains("visible")
+    && !readyScreen.inert
+    && !pauseReasons.has("settings")
+    && !pauseReasons.has("notebook")
+    && !pauseReasons.has("help")
+    && !pauseReasons.has("calibration");
+}
+
+const f22ResultKeyHandler = createF22ResultKeyHandler({
+  isResultActive: isF22ResultScreenActive,
+  onAgain() {
+    primeSelectedMissionAudio();
+    requestMobileFullscreenFromGesture();
+    if (pauseReasons.has("combat-result")) againFromCombatResult();
+    else readyStart.click();
+  },
+});
+
 function installInput(view) {
   // Unlock the shared graph on the first real keyboard/pointer interaction, regardless of which
   // flight control the pilot uses. armFlightAudio verifies browser user activation, so synthetic
@@ -12140,6 +12272,7 @@ function installInput(view) {
   });
 
   window.addEventListener("keydown", (event) => {
+    if (f22ResultKeyHandler.keydown(event)) return;
     // Native controls own Enter, Space and arrow-key semantics while focused. This prevents the
     // dialog's mission buttons from leaking into flight shortcuts or launching the previous card.
     // During live flight, a mapped flight axis takes priority over stale button focus.
@@ -12283,6 +12416,7 @@ function installInput(view) {
   }, { passive: false });
 
   window.addEventListener("keyup", (event) => {
+    if (f22ResultKeyHandler.keyup(event)) return;
     // Release a flight key that this input layer owns even if focus moved to an interactive
     // element after key-down. Ownership belongs to the original edge, not the key-up target.
     if (keyOwners.get(event.code)?.has("keyboard")) {
@@ -12299,6 +12433,7 @@ function installInput(view) {
   }, { passive: false });
 
   window.addEventListener("blur", () => {
+    f22ResultKeyHandler.reset();
     setPauseReason("background", true);
   });
 
@@ -12755,6 +12890,7 @@ async function boot() {
       renderPilotPhysiology(presentedState);
       renderIncidentReplay(replayFrame);
       renderPauseUi(state);
+      renderLaunchState();
       recorder.observeFramePhase("ui", performance.now() - afterView);
       if (firstFrame) {
         firstFrame = false;
@@ -12865,6 +13001,12 @@ if ("serviceWorker" in navigator) {
 // runtime arrives (about 20 MB). Lift the cover now unless this load flies straight into the
 // first-run valley; the gauge stays visible until the first frame.
 try {
-  if (!shouldAutoStartFirstRunValley(firstRunValleyQueryContext())) bootScreen?.classList.add("picker-live");
+  applyShellTheme(document.documentElement, window.location);
+  mountReadyMenuBackdrop();
+  applyFrontDoor(document.documentElement, window.location);
+  if (!shouldAutoStartFirstRunValley(firstRunValleyQueryContext())) {
+    bootScreen?.classList.add("picker-live");
+    renderPauseUi();
+  }
 } catch { /* Storage may be unavailable; keep the cover. */ }
 boot().catch(showFatal);

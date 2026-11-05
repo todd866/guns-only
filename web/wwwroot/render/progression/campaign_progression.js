@@ -32,7 +32,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     sequence: 1,
     aircraft: "F-22A",
     title: "Guns Only",
-    shortObjective: "Two gun engagements, then land. The next sortie opens harder if you earned it.",
+    shortObjective: "Waves get harder. Land for a bonus. Beat your best score.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,

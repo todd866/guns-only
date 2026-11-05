@@ -1,0 +1,25 @@
+CSSM_ModuleLoad(): One or more parameters passed to a function were not valid.
+40s own speed=353 alt=1493 primary range=6560 nose=1 speed=207 alt=1559 tactic=Return role=Pressure
+  wing range=7507 nose=2 speed=207 alt=1677 tactic=Return
+50s own speed=324 alt=1279 primary range=1444 nose=4 speed=290 alt=1484 tactic=Acquire role=Pressure
+  wing range=2619 nose=26 speed=282 alt=1550 tactic=Acquire
+60s own speed=250 alt=2818 primary range=3564 nose=115 speed=317 alt=2246 tactic=Return role=Bracket
+  wing range=2813 nose=120 speed=316 alt=1584 tactic=Acquire
+70s own speed=206 alt=3623 primary range=2245 nose=78 speed=277 alt=4687 tactic=Acquire role=Bracket
+  wing range=2121 nose=76 speed=280 alt=4124 tactic=Acquire
+80s own speed=157 alt=4209 primary range=1494 nose=122 speed=323 alt=3935 tactic=Acquire role=Bracket
+  wing range=1481 nose=54 speed=302 alt=4289 tactic=Acquire
+90s own speed=196 alt=3357 primary range=3122 nose=152 speed=377 alt=976 tactic=Return role=Bracket
+  wing range=2051 nose=136 speed=335 alt=3872 tactic=Acquire
+100s own speed=255 alt=1896 primary range=3837 nose=135 speed=365 alt=435 tactic=Return role=Pressure
+  wing range=5285 nose=121 speed=379 alt=1073 tactic=Return
+110s own speed=272 alt=1129 primary range=3015 nose=108 speed=340 alt=1183 tactic=Acquire role=Pressure
+  wing range=9820 nose=114 speed=366 alt=265 tactic=Return
+120s own speed=249 alt=1306 primary range=1489 nose=118 speed=344 alt=1549 tactic=Defend role=Pressure
+  wing range=11451 nose=73 speed=363 alt=258 tactic=Return
+130s own speed=275 alt=887 primary range=1836 nose=155 speed=366 alt=461 tactic=Acquire role=Pressure
+  wing range=7603 nose=38 speed=361 alt=534 tactic=Return
+140s own speed=302 alt=730 primary range=3241 nose=151 speed=355 alt=938 tactic=Acquire role=Bracket
+  wing range=1440 nose=2 speed=353 alt=689 tactic=Acquire
+150s own speed=271 alt=1162 primary range=3428 nose=115 speed=306 alt=3622 tactic=Acquire role=Bracket
+  wing range=3425 nose=107 speed=344 alt=1313 tactic=Acquire

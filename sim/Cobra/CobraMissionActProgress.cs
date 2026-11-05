@@ -33,15 +33,19 @@ public static class CobraMissionActProgress
         if (current == CobraMissionAct.Complete)
             return CobraMissionAct.Complete;
 
+        if (current == CobraMissionAct.Rtb) {
+            return HorizontalDistanceM(positionWorldM, fobCentreWorldM) <= RtbPadCompleteRadiusM
+                && clearanceM is <= RtbPadCompleteClearanceM
+                && stableRecoveryAtFob
+                    ? CobraMissionAct.Complete
+                    : CobraMissionAct.Rtb;
+        }
+
+        // Argon review 2026-11-05: Victory/Defeat complete the mission where the player is;
+        // RTB remains an optional bonus leg rather than a mandatory post-victory slog.
         if (status is CobraMissionStatus.Victory or CobraMissionStatus.Defeat
             || outcome is HoldTheBridgeOutcome.Victory or HoldTheBridgeOutcome.Defeat) {
-            if (current == CobraMissionAct.Rtb
-                && HorizontalDistanceM(positionWorldM, fobCentreWorldM) <= RtbPadCompleteRadiusM
-                && clearanceM is <= RtbPadCompleteClearanceM
-                && stableRecoveryAtFob) {
-                return CobraMissionAct.Complete;
-            }
-            return CobraMissionAct.Rtb;
+            return CobraMissionAct.Complete;
         }
 
         return current switch {

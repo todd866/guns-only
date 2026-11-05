@@ -39,3 +39,27 @@ test("Fly before the runtime: dedicated routes leave now, simulator launches wai
   assert.deepEqual([f22.r, f22.pending, f22.calls, f22.removed], [false, true, [], ["picker-live"]]);
   assert.match(app, /if \(bootLaunchPending\) \{\s*bootLaunchPending = false;\s*queueMicrotask\(activateReadyAction\);/);
 });
+
+test("buildIdentityBlocksSortie blocks only on a confirmed stale identity, not while checking", () => {
+  const match = app.match(/function buildIdentityBlocksSortie\(\) \{[\s\S]*?\n\}/);
+  assert.ok(match, "buildIdentityBlocksSortie must exist in app.js");
+  const check = (buildIdentity) => vm.runInNewContext(
+    `${match[0]}\nbuildIdentityBlocksSortie()`,
+    { buildIdentity },
+  );
+  assert.equal(check({ stale: false, state: "checking" }), false,
+    "in-flight build check must not lock the Fly button");
+  assert.equal(check({ stale: false, state: "current" }), false);
+  assert.equal(check({ stale: false, state: "unverified" }), false);
+  assert.equal(check({ stale: false, state: "candidate" }), false);
+  assert.equal(check({ stale: true, state: "stale" }), true,
+    "confirmed stale build must still block sortie launch");
+  assert.match(app, /if \(showScreen && ready && !wasScreenVisible\) void resolveBuildIdentity\(\{ force: true \}\);/);
+  assert.match(app, /if \(buildIdentity\.stale\)[\s\S]*?void reloadCurrentBuild\(\)/);
+});
+
+test("f22-value and cvf-value layouts fit their longest values without text-overflow ellipsis", () => {
+  assert.doesNotMatch(index, /\.f22-value\s*\{[^}]*text-overflow:\s*ellipsis/);
+  assert.doesNotMatch(app, /\.cvf-value\s*\{[^}]*text-overflow:\s*ellipsis/);
+  assert.match(app, /\.cvf-primary\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4,\s*minmax\(max-content,\s*1fr\)\)/);
+});

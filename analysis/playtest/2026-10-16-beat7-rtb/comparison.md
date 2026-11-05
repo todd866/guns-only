@@ -43,3 +43,18 @@ Perceived time is continuous native tick weighting (`dt / pre-tick factor`), not
 - [New land + RTB autopilot](land-autopilot/report.md), source `ee5853bc7c81e86fa990b6bff0ac3e5924a8e150`.
 - All cohorts retain clone SHA-256 `a1ac519084ac414a873933838e4cd00dc816ed9c92fcd4a2b962fad56ba039ef`.
 - [Earlier validation and measurement limits](validation.md); [AP validation](autopilot-validation.md).
+
+## Escalating waves + RTB autopilot
+
+New paired cohort: **90 runs, seeds 0–29 for each pilot**, source `600b024f`. **108 xUnit + 27 Node + 14 Python passed**, plus the native lab self-test. [Full wave comparison](../2026-10-16-beat7-waves/comparison.md), [validation](../2026-10-16-beat7-waves/validation.md), [per-seed ace plot](../2026-10-16-beat7-waves/ace-gates.png).
+
+| Pilot / cohort | Mean sortie perceived / sim (s) | Combat % perceived / sim | Longest raw dead air (s) | Longest excluding RTB AP (s) | Hits taken, runs | Combat losses | Crashes | Draws | Landed | Censored |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| all / Waves + AP | 953.7 / 1103.8 | 92.8 / 80.2 | 2380.4 | 2380.4 | 40/90 | 35 | 30 | 1 | 4 | 20 |
+| clone / Waves + AP | 50.8 / 50.8 | 88.5 / 88.5 | 38.0 | 38.0 | 0/30 | 0 | 30 | 0 | 0 | 0 |
+| novice / Waves + AP | 2342.0 / 2792.2 | 94.1 / 78.9 | 2380.4 | 2380.4 | 10/30 | 6 | 0 | 0 | 4 | 20 |
+| ace / Waves + AP | 468.2 / 468.2 | 86.8 / 86.8 | 151.1 | 151.1 | 30/30 | 29 | 0 | 1 | 0 | 0 |
+
+**Gates remain red.** Ace mean duration is 468.2 s (target 300–480) and combat share is 86.8% (target ≥40%), but only 8/30 ace sorties fall inside that duration band. Ace longest dead air is 151.1 s; all-pilot maximum is 2380.4 s, both above ≤30 s even after excluding actual RTB AP. Ace takes hits in 30/30 runs and suffers 29 combat losses plus one draw. Novice wins zero waves, with 20/30 censored runs; its first-two-win gate fails. Combat phase includes pursuit and does not imply continuous meaningful action.
+
+All 90 tapes passed the wave audit; 30 clone tapes and all 30 ace opening engagement summaries match the prior AP cohort. Actual RTB bounces occur in 10 novice runs; none of the aces reaches a successful return. The incomplete 66-run first attempt is retained separately after exposing a fixed W4 mixed-tier doctrine-index crash. No push, deployment or stamp.

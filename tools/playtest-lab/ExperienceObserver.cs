@@ -50,6 +50,13 @@ public sealed class TimelineSecond {
 }
 public sealed record EngagementTension(int Engagement, double Seconds, double SimSeconds, double Mean, double Peak);
 public sealed record LabEvent(double Second, double SimSecond, string Kind, string Source, string Target, int Count);
+public sealed class WaveContact {
+    public int Wave { get; init; }
+    public double PreviousWinSimSecond { get; init; }
+    public double WarningSeconds { get; init; }
+    public double? FirstThreatSimSecond { get; set; }
+    public bool CanceledForRtb { get; set; }
+}
 public sealed class RunResult {
     public int SchemaVersion { get; init; } = 2;
     public int Beat { get; init; }
@@ -84,6 +91,16 @@ public sealed class RunResult {
     public double DeadAirSeconds { get; set; }
     public double SimDeadAirSeconds { get; set; }
     public double LongestDeadAirSeconds { get; set; }
+    public double DeadAirExcludingRtbAutopilotSeconds { get; set; }
+    public double SimDeadAirExcludingRtbAutopilotSeconds { get; set; }
+    public double LongestDeadAirExcludingRtbAutopilotSeconds { get; set; }
+    public double SimLongestDeadAirExcludingRtbAutopilotSeconds { get; set; }
+    public int WavesWon { get; set; }
+    public double CombatScore { get; set; }
+    public double WaveScoreMultiplier { get; set; }
+    public bool RtbBounceScheduled { get; set; }
+    public bool RtbBounceSpawned { get; set; }
+    public List<WaveContact> WaveContacts { get; set; } = new();
     public Dictionary<string, double> PhaseSeconds { get; set; } = new();
     public Dictionary<string, double> SimPhaseSeconds { get; set; } = new();
     public List<EngagementTension> EngagementTensions { get; set; } = new();
@@ -103,6 +120,7 @@ public sealed class ExperienceObserver {
     TimelineSecond bin = new();
     int ticks, rounds, given, taken, kills;
     double gSum, energySum, tensionSum, deadRun, simDeadRun, perceived;
+    double measuredDeadRun, measuredSimDeadRun;
     long eventCursor;
     bool lowGround;
     Vec3D playerBefore;
@@ -142,6 +160,23 @@ public sealed class ExperienceObserver {
         double g = rotary ? 0 : s.Player.LastNz;
         double energy = position.Y + speed * speed / (2 * FlightModel.G0);
         (bool threat, double proximity, double closure) = rotary ? (false, 0, 0) : Threat(s);
+        // Keep arrival evidence separate from the broad action/dead-air proxy:
+        // pilot decisions cannot reset this win-to-physical-threat clock.
+        if (s.EscalatingWavesEnabled) {
+            int nextWave = s.EngagementsWon + 1;
+            if (s.IncomingWaveBearingRad is not null
+                && !result.WaveContacts.Any(w => w.Wave == nextWave))
+                result.WaveContacts.Add(new WaveContact {
+                    Wave = nextWave,
+                    PreviousWinSimSecond = s.TimeSeconds,
+                    WarningSeconds = s.OpponentReplacementSeconds,
+                });
+            foreach (var contact in result.WaveContacts.Where(w => w.FirstThreatSimSecond is null && !w.CanceledForRtb)) {
+                if (s.PlayerRtbActive || s.CombatHandoffRequested) contact.CanceledForRtb = true;
+                else if (s.EngagementNumber == contact.Wave && threat)
+                    contact.FirstThreatSimSecond = s.TimeSeconds;
+            }
+        }
         bool target = !rotary && s.SelectedOpponentAlive && s.PlayerWeaponsAuthorized && s.PlayerGun.GunSolution;
         string phase = Phase(s, threat);
         int dr = s.SortiePlayerRoundsFired - rounds, dh = s.SortiePlayerHits - given,
@@ -163,6 +198,7 @@ public sealed class ExperienceObserver {
         if (action && result.TimeToFirstAction is null) {
             result.TimeToFirstAction = perceived; result.SimTimeToFirstAction = simStart;
         }
+        bool deliberateRtbAutopilot = !rotary && s.PlayerRtbActive && s.RtbAutopilotActive && !s.RtbBounceActive;
         if (action) deadRun = simDeadRun = 0;
         else {
             deadRun += dt; simDeadRun += simDt;
@@ -170,12 +206,20 @@ public sealed class ExperienceObserver {
             result.LongestDeadAirSeconds = Math.Max(result.LongestDeadAirSeconds, deadRun);
             result.SimLongestDeadAirSeconds = Math.Max(result.SimLongestDeadAirSeconds, simDeadRun);
         }
+        if (action || deliberateRtbAutopilot) measuredDeadRun = measuredSimDeadRun = 0;
+        else {
+            measuredDeadRun += dt; measuredSimDeadRun += simDt;
+            result.DeadAirExcludingRtbAutopilotSeconds += dt;
+            result.SimDeadAirExcludingRtbAutopilotSeconds += simDt;
+            result.LongestDeadAirExcludingRtbAutopilotSeconds = Math.Max(result.LongestDeadAirExcludingRtbAutopilotSeconds, measuredDeadRun);
+            result.SimLongestDeadAirExcludingRtbAutopilotSeconds = Math.Max(result.SimLongestDeadAirExcludingRtbAutopilotSeconds, measuredSimDeadRun);
+        }
         double tension = Math.Clamp(.35 * proximity + .15 * closure + (threat ? .25 : 0)
             + (threat && !rotary ? .15 * (1 - s.PlayerHealth) : 0)
             + (alive && !excludeGround ? .1 * Math.Clamp(1 - clearance / options.GroundMissM, 0, 1) : 0), 0, 1);
         if (shotMisses > 0) tension = Math.Max(.85, tension);
         if (dtaken > 0) tension = Math.Max(.95, tension);
-        if (!rotary && alive && !s.PlayerRtbActive && s.LiveOpponentCount > 0) {
+        if (!rotary && alive && (!s.PlayerRtbActive || s.RtbBounceActive) && s.LiveOpponentCount > 0) {
             int engagement = s.EngagementNumber;
             var total = engagements.GetValueOrDefault(engagement);
             engagements[engagement] = (total.Seconds + dt, total.SimSeconds + simDt, total.Sum + tension * dt, Math.Max(total.Peak, tension));
@@ -328,7 +372,7 @@ public sealed class ExperienceObserver {
         };
         if (!s.PlayerAlive) return "dead";
         if (s.RunwayWeightOnWheels || s.ConventionalRunwayPhase == RunwayRecoveryPhase.Rollout || s.Recovery == Carrier.Recovery.Trap) return "landing";
-        if (s.PlayerRtbActive || (!s.OpponentPresent && s.Beat.RecoveryCompletesSortie)) {
+        if ((s.PlayerRtbActive && !s.RtbBounceActive) || (!s.OpponentPresent && s.Beat.RecoveryCompletesSortie && !s.RtbBounceActive)) {
             var g = s.ApproachGuidancePlan;
             if (s.ConventionalRunwayRecovery is { } recovery) {
                 var frame = recovery.Runway.Frame(s.Player.State.Position);
@@ -352,6 +396,11 @@ public sealed class ExperienceObserver {
         result.SimOutcome = s.Outcome.ToString(); result.TerminalState = s.PlayerTerminalState.ToString();
         result.Landed = s.ConventionalRtbRecoveryCompleted || s.ConventionalRunwayPhase == RunwayRecoveryPhase.Recovered || s.Recovery == Carrier.Recovery.Trap;
         result.CombatComplete = s.FiniteCombatComplete;
+        result.WavesWon = s.EngagementsWon;
+        result.CombatScore = s.CombatScore;
+        result.WaveScoreMultiplier = s.WaveScoreMultiplier;
+        result.RtbBounceScheduled = s.RtbBounceScheduled;
+        result.RtbBounceSpawned = s.RtbBounceSpawned;
         result.RtbReason = s.ReturnToBaseReason.ToString(); result.RunwayPhase = s.ConventionalRunwayPhase.ToString();
         result.LandingDetail = s.RunwayTouchdown.ToString();
         bool crashed = s.PlayerImpactSurface is ImpactSurface.Ground or ImpactSurface.Water or ImpactSurface.CarrierStructure or ImpactSurface.FlightDeck

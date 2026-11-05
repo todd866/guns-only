@@ -85,11 +85,16 @@ public sealed partial class SimulationSession {
     }
 
     void MaybeRequestBingoRtb() {
-        if (!_fuel.IsBingo
+        // An unarmed fixture staged with PlayerAmmo == 0 is disarmed, not Winchester: only a
+        // sortie that started with rounds and expended them triggers an ammunition RTB handoff.
+        bool winchester = EscalatingWavesEnabled && OpponentPresent
+            && _beat.CombatRules.PlayerAmmo > 0
+            && _gunKill.AmmoRemaining == 0;
+        if ((!_fuel.IsBingo && !winchester)
             || PlayerRtbActive
             || _returnToBaseReason != MissionRtbReason.None)
             return;
-        TryRequestReturnToBase(MissionRtbReason.BingoFuel);
+        TryRequestReturnToBase(_fuel.IsBingo ? MissionRtbReason.BingoFuel : MissionRtbReason.Winchester);
     }
 
     /// <summary>

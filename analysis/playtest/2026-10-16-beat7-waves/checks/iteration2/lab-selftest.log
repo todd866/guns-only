@@ -1,0 +1,3 @@
+PASS: beat-7 lab stay-or-go policy
+PASS: lab RTB AP engage, hands-off, threat drop, blocked retry, cleared retry.
+PASS: clone reference cases, deterministic/varied seeds, all 14 beats stage, timeout/partial-bin accounting, real near-miss passages, mixed-factor dual clocks, End without landing, compressed physical runway recovery, CLI validation.

@@ -268,7 +268,10 @@ public sealed record CobraMissionDiagnostics(
     CobraMaskingAssessment Masking,
     CobraBattleDamageState BattleDamage,
     long MaskingAssessmentAuthorityTicks,
-    string FidelityDisclosure);
+    string FidelityDisclosure,
+    double? InboundSlickCountdownSeconds = null,
+    double SiteCaptureProgress = 0.0,
+    bool RecoveredAtFob = false);
 
 public readonly record struct CobraMissionAdvanceResult(
     PlayerVehicleAdvanceResult Vehicle,
@@ -332,6 +335,12 @@ public sealed class CobraMissionRuntime
     // targetable, authority-owned hardpoint itself. See ah-1g-cobra/00-sources.md.
     public const double GarrisonCollisionRadiusM = 2.4;
     public const double GarrisonCollisionHeightM = 2.6;
+    // Origin: Argon review 2026-11-05 — default airborne IP sits 1.8 km short of Iron Bell on the ingress leg so first contact is under 30 s.
+    public const double DefaultIngressStandOffM = 1_800.0;
+    // Origin: Argon review 2026-11-05 — canyon-transit speed at the airborne IP (~120 kt authored NOE ingress).
+    public const double DefaultIngressSpeedMps = 62.0;
+    // Origin: Argon review 2026-11-05 — nap-of-earth clearance at the airborne IP, matching DefaultStartAglM.
+    public const double DefaultIngressClearanceM = CobraCanyonDefinition.DefaultStartAglM;
     const double GroundWarStepSeconds = 1.0 / GroundWarStepHz;
     static readonly VerticalLiftPilotCommand GroundedCommand = new(0.0, 0.0, 0.0, 0.0);
 
@@ -376,7 +385,8 @@ public sealed class CobraMissionRuntime
         Vec3D? windVelocityMps = null,
         bool enableTerrainWind = true,
         CobraMissionSpawn? spawn = null,
-        int? groundWarSeed = null)
+        int? groundWarSeed = null,
+        int initialReadySpares = 2)
     {
         _definition = definition ?? throw new ArgumentNullException(nameof(definition));
         _terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
@@ -414,19 +424,22 @@ public sealed class CobraMissionRuntime
                 landmark.Id,
                 "landmark.cobra-canyon.camp-ember.v1",
                 StringComparison.Ordinal));
-        if (!terrain.TrySample(campLandmark.EastM, campLandmark.NorthM, out TerrainSample padSurface))
+        if (!terrain.TrySample(campLandmark.EastM, campLandmark.NorthM, out _))
             throw new InvalidOperationException("Camp Ember has no terrain truth.");
-        // The cold open faces the surveyed north-west departure/go-around lane. Route selection
-        // changes after departure; it must never turn the parked aircraft toward a berm or cliff.
-        double defaultYawRad = CampEmberOperations.FinalHeadingRad;
-        double padClearanceM = Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
-        CobraMissionSpawn resolvedSpawn = spawn ?? new CobraMissionSpawn(
-            new Vec3D(
-                campLandmark.EastM,
-                padSurface.HeightM + padClearanceM,
-                campLandmark.NorthM),
-            Vec3D.Zero,
-            defaultYawRad);
+        CobraCanyonLandmarkDefinition bridgeLandmark = definition.Landmarks.First(landmark =>
+            string.Equals(
+                landmark.Id,
+                "landmark.cobra-canyon.iron-bell-bridge.v1",
+                StringComparison.Ordinal));
+        if (!terrain.TrySample(bridgeLandmark.EastM, bridgeLandmark.NorthM, out TerrainSample bridgeSurface))
+            throw new InvalidOperationException("Iron Bell Bridge has no terrain datum.");
+        _bridgeCentreWorldM = new Vec3D(
+            bridgeLandmark.EastM,
+            bridgeSurface.HeightM,
+            bridgeLandmark.NorthM);
+
+        CobraMissionSpawn resolvedSpawn = spawn
+            ?? CreateDefaultIngressSpawn(definition, terrain);
         if (!resolvedSpawn.PositionWorldM.IsFinite
             || !resolvedSpawn.GroundVelocityMps.IsFinite
             || !double.IsFinite(resolvedSpawn.YawRad))
@@ -445,12 +458,15 @@ public sealed class CobraMissionRuntime
             recurringBaseMassKg,
             additivePayloadMassKg,
             Ah1gCobraDefinition.LateProduction);
+        if (initialReadySpares is < 0 or > 2)
+            throw new ArgumentOutOfRangeException(nameof(initialReadySpares));
         double stationSkidM = Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
         _airframePool.Add(new CobraAirframeSlot(
             "cobra-canyon.airframe-1",
             CobraAirframeState.PlayerFlying,
             resolvedSpawn.PositionWorldM,
             resolvedSpawn.YawRad));
+        int readyAssigned = 0;
         foreach ((string slotId, double northOffsetM) in new[]
         {
             ("cobra-canyon.airframe-2", CobraAirframePool.SpareStationOffsetNorthM),
@@ -467,7 +483,9 @@ public sealed class CobraMissionRuntime
                     "A spare airframe station has no terrain datum.");
             _airframePool.Add(new CobraAirframeSlot(
                 slotId,
-                CobraAirframeState.Ready,
+                readyAssigned++ < initialReadySpares
+                    ? CobraAirframeState.Ready
+                    : CobraAirframeState.Destroyed,
                 new Vec3D(
                     stationEastM,
                     stationSurface.HeightM + stationSkidM,
@@ -475,22 +493,12 @@ public sealed class CobraMissionRuntime
                 CobraAirframePool.SpareStationYawRad));
         }
         _groundWar = new CobraGroundWarRuntime(definition, terrain, groundWarSeed);
-        CobraCanyonLandmarkDefinition bridgeLandmark = definition.Landmarks.First(landmark =>
-            string.Equals(
-                landmark.Id,
-                "landmark.cobra-canyon.iron-bell-bridge.v1",
-                StringComparison.Ordinal));
-        if (!terrain.TrySample(bridgeLandmark.EastM, bridgeLandmark.NorthM, out TerrainSample bridgeSurface))
-            throw new InvalidOperationException("Iron Bell Bridge has no terrain datum.");
-        _bridgeCentreWorldM = new Vec3D(
-            bridgeLandmark.EastM,
-            bridgeSurface.HeightM,
-            bridgeLandmark.NorthM);
         // Depart is a friendly rear-area pad. No target is manufactured in the protected lane;
         // the first hostiles are the authored forward-objective forces.
         Status = CobraMissionStatus.Active;
         _cachedMaskingAssessment = AssessMaskingAt(_cobra.State.PositionWorldM);
         _maskingAssessmentAuthorityTicks = 0;
+        _act = spawn is null ? CobraMissionAct.Ingress : CobraMissionAct.Depart;
         RefreshAct(resolvedSpawn.PositionWorldM, clearanceM: resolvedSpawn.PositionWorldM.Y - (
             terrain.TrySample(
                 resolvedSpawn.PositionWorldM.X,
@@ -498,6 +506,85 @@ public sealed class CobraMissionRuntime
                 out TerrainSample spawnSurface)
                 ? spawnSurface.HeightM
                 : resolvedSpawn.PositionWorldM.Y));
+    }
+
+    /// <summary>
+    /// Cold-start spawn on Camp Ember's pad facing the surveyed departure lane. Retained for
+    /// explicit pad-launch scenarios and turnaround tests while the default mission starts at the
+    /// airborne ingress IP.
+    /// </summary>
+    public static CobraMissionSpawn CreateCampEmberPadSpawn(
+        CobraCanyonDefinition definition,
+        ITerrainSurface terrain)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(terrain);
+        CobraCanyonLandmarkDefinition campLandmark = definition.Landmarks.First(landmark =>
+            string.Equals(
+                landmark.Id,
+                "landmark.cobra-canyon.camp-ember.v1",
+                StringComparison.Ordinal));
+        if (!terrain.TrySample(campLandmark.EastM, campLandmark.NorthM, out TerrainSample padSurface))
+            throw new InvalidOperationException("Camp Ember has no terrain truth.");
+        double padClearanceM = Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
+        return new CobraMissionSpawn(
+            new Vec3D(
+                campLandmark.EastM,
+                padSurface.HeightM + padClearanceM,
+                campLandmark.NorthM),
+            Vec3D.Zero,
+            CampEmberOperations.FinalHeadingRad);
+    }
+
+    /// <summary>
+    /// Default airborne IP spawn on the River Gorge ingress ~1.8 km short of Iron Bell at
+    /// canyon-transit speed and nap-of-earth clearance.
+    /// </summary>
+    public static CobraMissionSpawn CreateDefaultIngressSpawn(
+        CobraCanyonDefinition definition,
+        ITerrainSurface terrain)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(terrain);
+        CobraCanyonLandmarkDefinition bridgeLandmark = definition.Landmarks.First(landmark =>
+            string.Equals(
+                landmark.Id,
+                "landmark.cobra-canyon.iron-bell-bridge.v1",
+                StringComparison.Ordinal));
+        IReadOnlyList<CobraCanyonRoutePoint> gorgePoints =
+            definition.Route(CobraCanyonRouteChoice.RiverGorge).Points;
+        int bridgeIndex = 0;
+        for (int index = 0; index < gorgePoints.Count; index++) {
+            if (string.Equals(
+                gorgePoints[index].LandmarkId,
+                "landmark.cobra-canyon.iron-bell-bridge.v1",
+                StringComparison.Ordinal)) {
+                bridgeIndex = index;
+                break;
+            }
+        }
+        CobraCanyonRoutePoint ingressPoint = gorgePoints[Math.Max(0, bridgeIndex - 1)];
+        double approachEastM = bridgeLandmark.EastM - ingressPoint.EastM;
+        double approachNorthM = bridgeLandmark.NorthM - ingressPoint.NorthM;
+        double approachLengthM = Math.Sqrt(
+            approachEastM * approachEastM + approachNorthM * approachNorthM);
+        double dirEast = approachLengthM > 1e-6 ? approachEastM / approachLengthM : 0.0;
+        double dirNorth = approachLengthM > 1e-6 ? approachNorthM / approachLengthM : 1.0;
+        double spawnEastM = bridgeLandmark.EastM - dirEast * DefaultIngressStandOffM;
+        double spawnNorthM = bridgeLandmark.NorthM - dirNorth * DefaultIngressStandOffM;
+        if (!terrain.TrySample(spawnEastM, spawnNorthM, out TerrainSample ingressSurface))
+            throw new InvalidOperationException("Default ingress IP has no terrain truth.");
+        double yawRad = Math.Atan2(dirEast, dirNorth);
+        return new CobraMissionSpawn(
+            new Vec3D(
+                spawnEastM,
+                ingressSurface.HeightM + DefaultIngressClearanceM,
+                spawnNorthM),
+            new Vec3D(
+                dirEast * DefaultIngressSpeedMps,
+                0.0,
+                dirNorth * DefaultIngressSpeedMps),
+            yawRad);
     }
 
     public CobraCanyonDefinition Definition => _definition;
@@ -546,8 +633,24 @@ public sealed class CobraMissionRuntime
         _resolvedThreatObservers;
     public double CollisionEnvelopeRadiusM => _cobra.Definition.MainRotor.RadiusM;
     public CobraMissionStatus Status { get; private set; }
+    public bool RecoveredAtFob => HasStableCampEmberRecovery(_cobra.State.PositionWorldM);
     public bool MissionFlyable => Status == CobraMissionStatus.Active
         && (_cobra.State.Flyable || CanServiceCurrentAirframeAtFob());
+
+    /// <summary>
+    /// Enters the optional post-outcome RTB bonus leg so the pilot can fly home to Camp Ember
+    /// for a pad recovery credit after Victory or Defeat has already been decided.
+    /// </summary>
+    public void BeginRtbBonusLeg()
+    {
+        if (_groundWar.MissionOutcome is not (HoldTheBridgeOutcome.Victory or HoldTheBridgeOutcome.Defeat))
+            throw new InvalidOperationException("The optional RTB bonus leg requires a decided ground-war outcome.");
+        if (!_cobra.State.Flyable)
+            throw new InvalidOperationException("Cannot begin the optional RTB bonus leg without a flyable airframe.");
+        _act = CobraMissionAct.Rtb;
+        Status = CobraMissionStatus.Active;
+        _diagnostics = null;
+    }
     /// <summary>
     /// Authority diagnostics for the current tick, built on first read and cached until the next
     /// Advance. Consumers sample this at snapshot rate, not tick rate.
@@ -605,6 +708,7 @@ public sealed class CobraMissionRuntime
         _nextAuthorityTick++;
 
         Vec3D currentPositionWorldM = vehicleResult.State.PositionWorldM;
+        bool transferredAfterCrash = false;
         if (!_terrain.TrySample(
             currentPositionWorldM.X,
             currentPositionWorldM.Z,
@@ -616,19 +720,40 @@ public sealed class CobraMissionRuntime
             CollisionEnvelopeRadiusM,
             out CobraResolvedObstacle collision)) {
             _collisionObstacleId = collision.Id;
-            Status = CobraMissionStatus.ObstacleCollision;
+            if (!TryTransferAirframeAfterCrash(
+                currentPositionWorldM,
+                out currentPositionWorldM,
+                out vehicleResult)) {
+                Status = CobraMissionStatus.ObstacleCollision;
+            } else {
+                transferredAfterCrash = true;
+            }
         } else if (TryFindSweptGarrisonContact(
             previousPositionWorldM,
             currentPositionWorldM,
             CollisionEnvelopeRadiusM,
             out string? garrisonId)) {
             _collisionObstacleId = garrisonId;
-            Status = CobraMissionStatus.ObstacleCollision;
+            if (!TryTransferAirframeAfterCrash(
+                currentPositionWorldM,
+                out currentPositionWorldM,
+                out vehicleResult)) {
+                Status = CobraMissionStatus.ObstacleCollision;
+            } else {
+                transferredAfterCrash = true;
+            }
         } else if (!vehicleResult.State.Flyable
             && !CanServiceCurrentAirframeAtFob()) {
-            // A pad wreck remains authority-owned long enough to secure it and cold-start a
-            // replacement. The same wreck anywhere else is still immediately terminal.
-            Status = CobraMissionStatus.VehicleAuthorityLost;
+            // Argon review 2026-11-05: Ready spares at Camp Ember act as lives when an airframe
+            // is lost away from the FOB; only exhausting the pool ends the sortie.
+            if (!TryTransferAirframeAfterCrash(
+                currentPositionWorldM,
+                out currentPositionWorldM,
+                out vehicleResult)) {
+                Status = CobraMissionStatus.VehicleAuthorityLost;
+            } else {
+                transferredAfterCrash = true;
+            }
         }
         // Route end is guidance-only: ground war / FOB resupply needs an open sandbox, not a
         // terminal RouteComplete. Remaining distance stays on RouteGuidance.
@@ -643,7 +768,9 @@ public sealed class CobraMissionRuntime
         // Camp Ember's departure is a protected launch, even when a distant DShK happens to have
         // geometric line of sight over the ridge. Do not let acquisition time or pending bursts
         // bank on the pad/connector. Ingress and every later flyable act retain live threat fire.
-        if (Status == CobraMissionStatus.Active && _act is not CobraMissionAct.Depart)
+        if (Status == CobraMissionStatus.Active
+            && !transferredAfterCrash
+            && _act is not CobraMissionAct.Depart)
         {
             bool scasWasDamaged = _threatFire.State.ScasDamaged;
             bool engineWasDamaged = _threatFire.State.EngineDamaged;
@@ -682,7 +809,7 @@ public sealed class CobraMissionRuntime
                 PlayerVehicleContract.FixedDeltaSeconds,
                 command.Collective,
                 gunnerConsent);
-        if (Status == CobraMissionStatus.Active)
+        if (Status == CobraMissionStatus.Active && !transferredAfterCrash)
         {
             CobraTurnaroundDirective turnaround = _turnaround.Advance(
                 PlayerVehicleContract.FixedDeltaSeconds,
@@ -713,11 +840,8 @@ public sealed class CobraMissionRuntime
             clearanceM = currentPositionWorldM.Y - currentSurface.HeightM;
         }
         RefreshAct(currentPositionWorldM, clearanceM);
-        // Winning or losing the basin is the turn home, not the end of a flyable helicopter.
-        // GroundWarCombatLive falls false as soon as the act becomes Rtb, freezing the strategic
-        // outcome while flight authority, threat exposure and the authored arrival remain live.
-        // Only a stable Camp Ember recovery closes the sortie; an airframe loss above still wins
-        // this ordering and remains immediately terminal.
+        // Argon review 2026-11-05: Victory/Defeat register immediately where the player is;
+        // the RTB leg is an optional bonus leg and RecoveredAtFob records pad recovery.
         if (Status == CobraMissionStatus.Active && _act == CobraMissionAct.Complete) {
             Status = _groundWar.MissionOutcome switch {
                 HoldTheBridgeOutcome.Victory => CobraMissionStatus.Victory,
@@ -1128,7 +1252,10 @@ public sealed class CobraMissionRuntime
     /// Secures the old aircraft where it came to rest. The spare index is used only to keep that
     /// rest pose clear of the station the player is about to occupy.
     /// </summary>
-    void SecureCurrentAirframe(in Vec3D positionWorldM, int spareIndex)
+    void SecureCurrentAirframe(
+        in Vec3D positionWorldM,
+        int spareIndex,
+        bool forceDestroyed = false)
     {
         int flyingIndex = _airframePool.FindIndex(
             slot => slot.State == CobraAirframeState.PlayerFlying);
@@ -1160,7 +1287,7 @@ public sealed class CobraMissionRuntime
                     + Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
             _airframePool[flyingIndex] = _airframePool[flyingIndex] with
             {
-                State = _cobra.State.Flyable
+                State = !forceDestroyed && _cobra.State.Flyable
                     ? CobraAirframeState.Crippled
                     : CobraAirframeState.Destroyed,
                 ParkedPositionWorldM = new Vec3D(restWorldM.X, restHeightM, restWorldM.Z),
@@ -1169,18 +1296,40 @@ public sealed class CobraMissionRuntime
         }
     }
 
+    bool TryTransferAirframeAfterCrash(
+        in Vec3D crashPositionWorldM,
+        out Vec3D replacementPositionWorldM,
+        out PlayerVehicleAdvanceResult replacementVehicleResult)
+    {
+        if (!_airframePool.Any(slot => slot.State == CobraAirframeState.Ready))
+        {
+            SecureCurrentAirframe(crashPositionWorldM, spareIndex: -1, forceDestroyed: true);
+            replacementPositionWorldM = crashPositionWorldM;
+            replacementVehicleResult = new PlayerVehicleAdvanceResult(_cobra.State, _cobra.Observation);
+            return false;
+        }
+
+        TransferAirframeAtFob(crashPositionWorldM, forceDestroyed: true);
+        _turnaround.BeginAwaitStartReleaseAfterCrash();
+        replacementPositionWorldM = _cobra.State.PositionWorldM;
+        replacementVehicleResult = new PlayerVehicleAdvanceResult(_cobra.State, _cobra.Observation);
+        _cachedMaskingAssessment = AssessMaskingAt(replacementPositionWorldM);
+        _maskingAssessmentAuthorityTicks = _nextAuthorityTick;
+        return true;
+    }
+
     /// <summary>
     /// Consumes the first available ramp spare after the old bird is secured. The replacement is
     /// genuinely cold; starting it remains a later turnaround-authority transition.
     /// </summary>
-    void TransferAirframeAtFob(in Vec3D positionWorldM)
+    void TransferAirframeAtFob(in Vec3D positionWorldM, bool forceDestroyed = false)
     {
         int spareIndex = _airframePool.FindIndex(
             slot => slot.State == CobraAirframeState.Ready);
         if (spareIndex < 0)
             throw new InvalidOperationException("Turnaround requested a missing spare airframe.");
 
-        SecureCurrentAirframe(positionWorldM, spareIndex);
+        SecureCurrentAirframe(positionWorldM, spareIndex, forceDestroyed);
         CobraAirframeSlot spare = _airframePool[spareIndex];
         _cobra = new Ah1gCobraDynamics(
             vehicleId: "cobra-canyon.player",
@@ -1242,7 +1391,10 @@ public sealed class CobraMissionRuntime
             _cachedMaskingAssessment,
             _threatFire.State,
             _maskingAssessmentAuthorityTicks,
-            CobraCanyonDefinition.FidelityDisclosure);
+            CobraCanyonDefinition.FidelityDisclosure,
+            _groundWar.InboundSlickCountdownSeconds,
+            _groundWar.SiteCaptureProgress,
+            RecoveredAtFob);
     }
 
     static double SegmentHorizontalLength(

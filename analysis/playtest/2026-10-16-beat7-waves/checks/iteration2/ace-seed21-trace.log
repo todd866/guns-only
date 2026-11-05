@@ -1,0 +1,20 @@
+50s own speed=349 alt=985 primary range=659 nose=21 speed=202 alt=982 tactic=Acquire role=Pressure
+  wing range=1760 nose=3 speed=207 alt=1078 tactic=Acquire
+100s own speed=312 alt=773 primary range=320 nose=14 speed=349 alt=716 tactic=Acquire role=Pressure
+  wing range=450 nose=10 speed=344 alt=726 tactic=Acquire
+150s own speed=301 alt=1066 primary range=794 nose=173 speed=358 alt=796 tactic=Return role=Bracket
+  wing range=1048 nose=116 speed=345 alt=862 tactic=Acquire
+200s own speed=319 alt=990 primary range=1208 nose=130 speed=346 alt=1352 tactic=Defend role=Pressure
+  wing range=5147 nose=29 speed=324 alt=4527 tactic=Return
+250s own speed=289 alt=1123 primary range=1678 nose=171 speed=369 alt=592 tactic=Acquire role=Bracket
+  wing range=1420 nose=71 speed=346 alt=1829 tactic=Acquire
+300s own speed=260 alt=1390 primary range=2601 nose=120 speed=359 alt=909 tactic=Acquire role=Bracket
+  wing range=60 nose=153 speed=345 alt=1399 tactic=Acquire
+350s own speed=140 alt=3673 primary range=250 nose=140 speed=352 alt=3479 tactic=Acquire role=Pressure
+  wing range=4453 nose=72 speed=358 alt=551 tactic=Acquire
+400s own speed=199 alt=2336 primary range=1201 nose=157 speed=346 alt=2347 tactic=Acquire role=Independent
+450s own speed=267 alt=1045 primary range=4149 nose=114 speed=345 alt=2083 tactic=Acquire role=Independent
+500s own speed=196 alt=2757 primary range=2375 nose=75 speed=296 alt=4993 tactic=Acquire role=Independent
+550s own speed=252 alt=2366 primary range=2639 nose=141 speed=323 alt=4458 tactic=Acquire role=Independent
+600s own speed=235 alt=2093 primary range=2855 nose=136 speed=323 alt=4164 tactic=Acquire role=Independent
+650s own speed=222 alt=1999 primary range=2998 nose=132 speed=326 alt=4004 tactic=Acquire role=Independent

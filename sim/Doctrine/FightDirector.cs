@@ -27,7 +27,9 @@ public enum BanditMount {
 public readonly record struct SpawnSpec(
     PilotSkill Skill, int DoctrineIndex, bool Boss, string Reason,
     bool Machine = false, BanditMount Mount = BanditMount.Baseline,
-    int FormationSize = 1, bool Sparring = false, int LessonIndex = -1);
+    int FormationSize = 1, bool Sparring = false, int LessonIndex = -1,
+    bool Committed = false, PilotSkill? WingSkill = null, BanditMount? WingMount = null,
+    double? ApproachBearingRad = null, double? ApproachRangeM = null);
 
 /// Session-scale pacing for infinite-spawn continuous combat: CALM → BUILD → BOSS → RELEASE.
 /// Owns a LearnerModel and turns its banded estimate into the next spawn's tier/doctrine, with
@@ -37,7 +39,7 @@ public readonly record struct SpawnSpec(
 /// commitment happens ONLY at the NextSpawn boundary — the director never counter-picks
 /// mid-fight, and identical observed history yields identical spawn sequences. Cold start
 /// reproduces the interim BanditSkillProfile.ForEngagement ladder exactly.
-public sealed class FightDirector {
+public sealed partial class FightDirector {
     const int BossWinStreak = 3;
     const double BossUnbeatenSeconds = 240.0;
     const int BossCooldownEngagements = 4;
