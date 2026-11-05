@@ -38,6 +38,7 @@ TRACK_GLB = {
     'school': 'web/wwwroot/rc/assets/districts/school.glb',
 }
 BUGGY_GLB = 'web/wwwroot/rc/assets/buggy.glb'
+BUGGY_NOSE_OFFSET_DEG = 90.0  # imported buggy nose = local -Y; see pose()
 # The calibrated axis map already carries metres -> cm (columns of 100); do not scale again.
 
 actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
@@ -255,12 +256,18 @@ def main(argv):
 
     def pose(view):
         car, m = view['car'], state['m']
-        # Calibrated 5 Nov 2026 against ue/views/housing-{arrival,turn}.png: the imported buggy's
-        # forward axis is opposite the web heading, so the UE yaw is 180 - deg(web yaw).
+        # Heading: the web chase camera sits behind the car in every captured view, which fixes
+        # the three.js convention as forward = (sin yaw, 0, -cos yaw). Map that vector through the
+        # calibrated axis map (so an importer axis change cannot break it) and add the imported
+        # buggy's own forward offset: its nose points along local -Y, i.e. +90 deg from local X
+        # (calibrated 5 Nov 2026 on housing-arrival, where the camera must see the tail).
+        fwd = web_to_ue(m, [math.sin(car['yaw']), 0.0, -math.cos(car['yaw'])])
+        heading = unreal.MathLibrary.make_rot_from_x(fwd)
+        rot = unreal.Rotator(0.0, 0.0, heading.yaw + BUGGY_NOSE_OFFSET_DEG)
         for b in state['roots']:
             b.set_actor_location(web_to_ue(m, [car['x'], car['y'], car['z']]),
                                  False, False)
-            b.set_actor_rotation(unreal.Rotator(0, 0, 180 - math.degrees(car['yaw'])), False)
+            b.set_actor_rotation(rot, False)
         cam = place_camera(m, view, w / h)
         return cam, os.path.join(out_dir, f"{args.track}-{view['name']}.png")
 
