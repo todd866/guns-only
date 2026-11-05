@@ -245,14 +245,24 @@ function syncVariantLayout(doc, variant, chrome) {
 /**
  * Mount variant chrome and paint returning-player instruments. No-op without `?frontDoor=`.
  */
+// syncFrontDoor runs from renderCampaignProgress on every frame. With no variant chosen the
+// teardown path re-homed the RC card into the mission groups each call, a DOM move per frame
+// that the menu backdrop's observer answered with a repaint per frame (Build 439 CI: one
+// animation frame per four seconds). Tear down only when chrome was actually mounted.
+let frontDoorMounted = false;
+
 export function syncFrontDoor(doc = globalThis.document, locationLike = globalThis.location, storage) {
   const variant = resolveFrontDoor(locationLike);
   if (!variant) {
-    removeFrontDoorChrome(doc);
+    if (frontDoorMounted) {
+      removeFrontDoorChrome(doc);
+      frontDoorMounted = false;
+    }
     return null;
   }
   const chrome = ensureFrontDoorChrome(doc, variant);
   if (!chrome) return variant;
+  frontDoorMounted = true;
   moveMoreCandidates(doc, chrome.more.querySelector(".front-door-more-panel"));
   syncVariantLayout(doc, variant, chrome);
 

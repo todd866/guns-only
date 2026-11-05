@@ -292,12 +292,19 @@ export function mountReadyMenuBackdrop(options = {}) {
     paintFrame(ctx, paintW, paintH, themePalette(root), driftPx, doc);
   };
 
+  // The observers below fire on every attribute write to #boot or #ready-screen, and other
+  // shell code writes those every frame. Only a CHANGE of the inputs that decide painting may
+  // restart the loop; a repeat of the same state is a no-op, otherwise each write reset the
+  // throttle and the sky repainted every frame (Build 439 CI: one frame per four seconds).
+  let paintKey = "";
+  let still = false;
   const syncVisibility = () => {
-    const want = shouldPaint({
-      boot,
-      ready,
-      hidden: doc.visibilityState === "hidden",
-    });
+    const hidden = doc.visibilityState === "hidden";
+    const want = shouldPaint({ boot, ready, hidden });
+    const key = `${want}:${hidden}:${boot?.classList.contains("ready")}:${ready?.getAttribute("data-mode")}`;
+    if (key === paintKey) return;
+    paintKey = key;
+    still = false;
     canvas.hidden = !want;
     if (!want) {
       if (raf) {
@@ -307,11 +314,9 @@ export function mountReadyMenuBackdrop(options = {}) {
       visible = false;
       return;
     }
-    if (!visible) {
-      visible = true;
-      lastTs = 0;
-      if (!raf) raf = win.requestAnimationFrame(tick);
-    }
+    visible = true;
+    lastTs = 0;
+    if (!raf) raf = win.requestAnimationFrame(tick);
   };
 
   const tick = (ts) => {
@@ -329,6 +334,7 @@ export function mountReadyMenuBackdrop(options = {}) {
       visible = false;
       return;
     }
+    if (still) return;
     if (lastTs > 0 && ts - lastTs < driftFrameMs) {
       raf = win.requestAnimationFrame(tick);
       return;
@@ -347,6 +353,7 @@ export function mountReadyMenuBackdrop(options = {}) {
     // starves (Build 438 CI: one animation frame per four seconds). A sky that is expensive to
     // paint stops drifting: a still picture is correct, a stalled picker is not.
     if (paintMs > PAINT_STILL_MS) {
+      still = true;
       visible = false;
       return;
     }
