@@ -479,9 +479,17 @@ public class CombatTrainingTests {
             ace.PlayerRearQuarterSecondsPerEngagement
                 < novice.PlayerRearQuarterSecondsPerEngagement,
             $"Ace must deny its rear quarter more effectively than Novice.{System.Environment.NewLine}{report}");
-        Assert.NotEqual(
-            novice.BanditRoundsFired,
-            ace.BanditRoundsFired);
+        // Rounds fired stopped separating the tiers once a handed sight picture converts for
+        // every tier (2026-11-05: each tier kills the player in the same nine rounds and the
+        // episode ends there, "hard to earn the shot, trivial to convert it"). Skill now shows in
+        // how fast each tier denies its rear quarter, so demand that ladder be strictly monotonic.
+        for (int tier = 1; tier < first.Count; tier++) {
+            Assert.True(
+                first[tier].PlayerRearQuarterSecondsPerEngagement
+                    < first[tier - 1].PlayerRearQuarterSecondsPerEngagement,
+                $"{first[tier].Skill} must deny its rear quarter faster than {first[tier - 1].Skill}."
+                + $"{System.Environment.NewLine}{report}");
+        }
         Assert.All(first, measurement => Assert.True(
             measurement.MaximumAbsoluteBanditFiringGammaDeg <= 60.0,
             $"{measurement.Skill} fired outside the contained combat volume."
