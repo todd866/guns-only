@@ -5073,15 +5073,63 @@ const beams = [beam('#ff9a2e', 1), beam('#4fb3ff', 2)],
   });
 camera.layers.enable(2);
 camera2.layers.enable(1);
+// A 3D arrow over your own car pointing at your partner, in their colour, seen only from your
+// own camera (layer 3 = player 1's, layer 4 = player 2's). Replaces the beams and edge tags.
+const pointer = (colour, layer) => {
+  const g = new T.Group(),
+    mat = new T.MeshBasicMaterial({color: colour, depthTest: false, transparent: true, opacity: 0.95}),
+    shaft = new T.Mesh(new T.CylinderGeometry(0.05, 0.05, 0.42, 10), mat),
+    head = new T.Mesh(new T.ConeGeometry(0.15, 0.3, 14), mat);
+  shaft.rotation.x = head.rotation.x = Math.PI / 2;
+  shaft.position.z = 0.05;
+  head.position.z = 0.4;
+  for (const m of [shaft, head]) {
+    m.layers.set(layer);
+    m.renderOrder = 10;
+    g.add(m);
+  }
+  g.visible = false;
+  scene.add(g);
+  return {g, mat, colour};
+};
+const pointers = [pointer('#4fb3ff', 3), pointer('#ff9a2e', 4)];
+camera.layers.enable(3);
+camera2.layers.enable(4);
 let warpHeld = [false, false],
   warpAt = 0;
 function findFrame(all, now) {
   const on = splitOn,
     it = tag.on ? tag.it : 0;
-  beams.forEach(b => (b.visible = on));
-  finders.forEach(f => (f.hidden = !on));
-  if (!on) return;
-  const a = s.car.pos,
+  beams.forEach(b => (b.visible = false));
+  finders.forEach(f => (f.hidden = true));
+  pointers.forEach(p => (p.g.visible = on));
+  if (!on) {
+    findWarp(all, now);
+    return;
+  }
+  {
+    const a = s.car.pos,
+      b = race.rivals[0].session.car.pos,
+      bob = Math.sin(now * 0.004) * 0.05;
+    [
+      [pointers[0], a, b, 2],
+      [pointers[1], b, a, 1]
+    ].forEach(([p, from, to, partner]) => {
+      const dx = to[0] - from[0],
+        dz = to[2] - from[2],
+        close = Math.hypot(dx, dz) < 4;
+      p.g.visible = !close;
+      p.g.position.set(from[0], from[1] + 0.75 + bob, from[2]);
+      p.g.rotation.y = Math.atan2(dx, dz);
+      p.mat.color.set(it === partner ? '#ff4444' : p.colour);
+    });
+  }
+  return findWarp(all, now);
+}
+function findWarp(all, now) {
+  if (!splitOn) return;
+  const it = tag.on ? tag.it : 0,
+    a = s.car.pos,
     rv = race.rivals[0],
     b = rv.session.car.pos;
   beams[0].position.set(a[0], a[1] + 20, a[2]);
