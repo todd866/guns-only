@@ -1267,8 +1267,13 @@ const mobileControls = localTouchPreview || coarsePointer || (touchCapable && sm
 document.documentElement.classList.toggle("touch-mode", mobileControls);
 document.documentElement.classList.toggle("touch-primary", mobileControls);
 
+let paintedReadyControls = null;
+
 function paintReadyControls(text) {
   if (!readyControls) return;
+  const key = `${mobileControls ? "m" : "d"}:${text ?? ""}`;
+  if (paintedReadyControls === key) return;
+  paintedReadyControls = key;
   if (!text) {
     readyControls.replaceChildren();
     return;
@@ -1280,9 +1285,18 @@ function paintReadyControls(text) {
   renderControlLegend(readyControls, text);
 }
 
+// These painters run from renderPauseUi on every frame. Rebuilding the keycap nodes each call
+// kept the console's DOM in perpetual churn, which the published smoke saw as a button that is
+// never "stable" (Build 436 CI). Repaint only when the text or state actually changes.
+let paintedReadyHint = null;
+let paintedReadyStartKey = null;
+
 function paintReadyHint(text) {
   if (!readyHint) return;
   const raw = String(text ?? "").trim();
+  const key = `${mobileControls ? "m" : "d"}:${raw}`;
+  if (paintedReadyHint === key) return;
+  paintedReadyHint = key;
   if (!mobileControls && /\[[^\]]+\]/.test(raw)) {
     renderKeyHintRow(readyHint, raw);
     readyHint.setAttribute("aria-label", raw.replace(/\[([^\]]+)\]/g, "$1").trim());
@@ -1294,8 +1308,10 @@ function paintReadyHint(text) {
 
 function paintReadyStartKey(show) {
   if (!readyStartKey) return;
-  readyStartKey.replaceChildren();
   const visible = show === true && !mobileControls;
+  if (paintedReadyStartKey === visible) return;
+  paintedReadyStartKey = visible;
+  readyStartKey.replaceChildren();
   readyStartKey.hidden = !visible;
   if (visible) readyStartKey.append(keyCap("return"));
 }
