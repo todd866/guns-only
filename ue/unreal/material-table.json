@@ -1,0 +1,374 @@
+{
+  "asphalt": {
+    "baseColor": "#1d1a1d",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.92
+  },
+  "black": {
+    "baseColor": "#030303",
+    "metallic": 0.0,
+    "note": "glTF base colour; GLB tints: #030303, #030304",
+    "roughness": 0.55
+  },
+  "blue": {
+    "baseColor": "#04146f",
+    "metallic": 0.0,
+    "note": "glTF base colour; GLB tints: #04146f, #0729a1",
+    "roughness": 0.5
+  },
+  "cardboard": {
+    "baseColor": "#7c4117",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.85
+  },
+  "carpet": {
+    "baseColor": "#43413b",
+    "metallic": 0.0,
+    "note": "glTF base colour; GLB tints: #0c295d, #43413b",
+    "roughness": 0.98
+  },
+  "ceiling": {
+    "baseColor": "#cec6ab",
+    "metallic": 0.0,
+    "note": "glTF base colour; GLB tints: #cec6ab, #d6ceb7",
+    "roughness": 0.9
+  },
+  "checkdark": {
+    "baseColor": "#090a0c",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.85
+  },
+  "checklight": {
+    "baseColor": "#cac4af",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.85
+  },
+  "cmu": {
+    "baseColor": "#b78b55",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.92
+  },
+  "concrete": {
+    "baseColor": "#b19c7a",
+    "metallic": 0.0,
+    "note": "glTF base colour; skatepark open-world/skatepark-materials.js:107-142 uses #979d9f r=0.82; GLB tints: #656055, #736750, #858876, #b19c7a",
+    "roughness": 0.88
+  },
+  "door_red": {
+    "baseColor": "#b1110d",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.5
+  },
+  "dusk": {
+    "baseColor": "#7c41af",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.8
+  },
+  "edge": {
+    "baseColor": "#beb6a5",
+    "metallic": 0.0,
+    "note": "open-world/skatepark-materials.js:107-142",
+    "roughness": 0.82
+  },
+  "floor": {
+    "baseColor": "#adaaa3",
+    "metallic": 0.0,
+    "note": "open-world/skatepark-materials.js:107-142",
+    "roughness": 0.82
+  },
+  "glass": {
+    "baseColor": "#3679af",
+    "metallic": 0.1,
+    "note": "glTF base colour; GLB tints: #3679af, #65a6ca",
+    "roughness": 0.15
+  },
+  "grass": {
+    "baseColor": "#368311",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.95
+  },
+  "gravel": {
+    "baseColor": "#a47443",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.97
+  },
+  "green": {
+    "baseColor": "#0d5d13",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.55
+  },
+  "grey": {
+    "baseColor": "#282829",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.7
+  },
+  "gym": {
+    "baseColor": "#b15d1d",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.14
+  },
+  "haze": {
+    "baseColor": "#958bb3",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.9
+  },
+  "header": {
+    "baseColor": "#d06404",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.5
+  },
+  "hi_vis": {
+    "baseColor": "#b8e207",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.35
+  },
+  "hivis": {
+    "baseColor": "#b8e207",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.35
+  },
+  "laminate": {
+    "baseColor": "#95521b",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.45
+  },
+  "leaf": {
+    "baseColor": "#36611a",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.85
+  },
+  "magenta": {
+    "baseColor": "#b10b43",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.5
+  },
+  "maple": {
+    "baseColor": "#af7c41",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.55
+  },
+  "metal": {
+    "baseColor": "#4f5c69",
+    "metallic": 0.6,
+    "note": "glTF base colour",
+    "roughness": 0.4
+  },
+  "navy": {
+    "baseColor": "#030616",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.5
+  },
+  "olive": {
+    "baseColor": "#645207",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.85
+  },
+  "orange": {
+    "baseColor": "#a4240b",
+    "metallic": 0.0,
+    "note": "glTF base colour; GLB tints: #a4240b, #de3206",
+    "roughness": 0.7
+  },
+  "pad_blue": {
+    "baseColor": "#072076",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.55
+  },
+  "paint": {
+    "baseColor": "#e78e08",
+    "metallic": 0.0,
+    "note": "glTF base colour; skatepark open-world/skatepark-materials.js:26-79 + open-world/districts.js:174 park-paint-atlas.webp uses #ffffff r=0.88; GLB tints: #e78e08, #ffffff",
+    "roughness": 0.6
+  },
+  "path": {
+    "baseColor": "#8e9591",
+    "metallic": 0.0,
+    "note": "open-world/skatepark-materials.js:107-142",
+    "roughness": 0.82
+  },
+  "plywood": {
+    "baseColor": "#c88333",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.7
+  },
+  "polish": {
+    "baseColor": "#7a4d1b",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.22
+  },
+  "purple": {
+    "baseColor": "#330d6f",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.55
+  },
+  "red": {
+    "baseColor": "#930907",
+    "metallic": 0.0,
+    "note": "glTF base colour; GLB tints: #930907, #a40b07",
+    "roughness": 0.5
+  },
+  "rock": {
+    "baseColor": "#552817",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.9
+  },
+  "roof_tile": {
+    "baseColor": "#861e0c",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.75
+  },
+  "rubber": {
+    "baseColor": "#06070b",
+    "metallic": 0.0,
+    "note": "glTF base colour; GLB tints: #06070b, #521009",
+    "roughness": 0.85
+  },
+  "sand": {
+    "baseColor": "#c49f57",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.97
+  },
+  "sign_green": {
+    "baseColor": "#073414",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.5
+  },
+  "sky": {
+    "baseColor": "#46a6e7",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.8
+  },
+  "steel": {
+    "baseColor": "#7a8086",
+    "metallic": 0.7,
+    "note": "glTF base colour; GLB tints: #2c4047, #7a8086",
+    "roughness": 0.32
+  },
+  "stucco": {
+    "baseColor": "#be8646",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.92
+  },
+  "stucco_adobe": {
+    "baseColor": "#b14520",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.9
+  },
+  "stucco_peach": {
+    "baseColor": "#e2794a",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.9
+  },
+  "stucco_sage": {
+    "baseColor": "#85985a",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.9
+  },
+  "stucco_sand": {
+    "baseColor": "#d4a65f",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.9
+  },
+  "teal": {
+    "baseColor": "#06615a",
+    "metallic": 0.0,
+    "note": "glTF base colour; GLB tints: #06615a, #0c5f54",
+    "roughness": 0.5
+  },
+  "trim": {
+    "baseColor": "#efe5ce",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.55
+  },
+  "troffer": {
+    "baseColor": "#fff2da",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.4
+  },
+  "trunk": {
+    "baseColor": "#411f0d",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.9
+  },
+  "turf": {
+    "baseColor": "#4e6c27",
+    "metallic": 0.0,
+    "note": "open-world/skatepark-materials.js:9-23 + open-world/residential-ground.js",
+    "roughness": 0.88
+  },
+  "vct": {
+    "baseColor": "#c6b790",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.3
+  },
+  "veneer": {
+    "baseColor": "#250b04",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.6
+  },
+  "wall": {
+    "baseColor": "#d8ca64",
+    "metallic": 0.0,
+    "note": "glTF base colour; GLB tints: #d8ca64, #dcca9f",
+    "roughness": 0.9
+  },
+  "white": {
+    "baseColor": "#e7e2d6",
+    "metallic": 0.0,
+    "note": "glTF base colour; GLB tints: #e7e2d6, #ebe7da",
+    "roughness": 0.6
+  },
+  "wood": {
+    "baseColor": "#6f320f",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.6
+  },
+  "yellow": {
+    "baseColor": "#e28a08",
+    "metallic": 0.0,
+    "note": "glTF base colour",
+    "roughness": 0.45
+  }
+}

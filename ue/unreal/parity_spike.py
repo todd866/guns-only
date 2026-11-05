@@ -31,6 +31,11 @@ import sys
 
 import unreal
 
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+from materials import apply_material_table
+
 TRACK_GLB = {
     'hub': 'web/wwwroot/rc/assets/districts/skatepark.glb',
     'housing': 'web/wwwroot/rc/assets/districts/housing.glb',
@@ -222,6 +227,8 @@ def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument('--repo', required=True)
     ap.add_argument('--track', default='housing', choices=sorted(TRACK_GLB))
+    ap.add_argument('--materials', action=argparse.BooleanOptionalAction, default=True,
+                    help='apply material-table.json to imported district meshes (default: on)')
     args = ap.parse_args(argv)
     repo = os.path.abspath(args.repo)
     views = json.load(open(os.path.join(repo, 'ue', 'views', f'{args.track}.json')))
@@ -231,7 +238,10 @@ def main(argv):
     os.makedirs(tmp, exist_ok=True)
 
     w, h = views['viewport']
-    state = {'phase': 'wait', 'ticks': 0, 'handle': None, 'pending': None, 'queue': [], 'roots': [], 'm': None}
+    state = {
+        'phase': 'wait', 'ticks': 0, 'handle': None, 'pending': None, 'queue': [], 'roots': [], 'm': None,
+        'materials': args.materials,
+    }
 
     def build():
         # Runs on a later editor tick: with -ExecCmds the script itself executes during startup,
@@ -245,6 +255,14 @@ def main(argv):
         m = calibrate(tmp)
         district = import_scene(os.path.join(repo, TRACK_GLB[args.track]), f'/Game/ParitySpike/{args.track}')
         log(f'district actors: {len(district)}; collision hidden: {hide_collision(district)}')
+        if state['materials']:
+            table_path = os.path.join(repo, 'ue', 'unreal', 'material-table.json')
+            stats = apply_material_table(district, table_path)
+            log(
+                f"materials: mapped {stats['mapped_slots']} slot(s); "
+                f"unknown names ({len(stats['unknown_names'])}): {', '.join(stats['unknown_names']) or '(none)'}; "
+                f"unmapped slots without table entry: {stats['unknown_slots']}"
+            )
         placed = views.get('district') or {'anchor': [0, 0, 0], 'yaw': 0}
         log(f"district roots placed: {place_roots(m, district, placed['anchor'], placed['yaw'])}")
         buggy = import_scene(os.path.join(repo, BUGGY_GLB), '/Game/ParitySpike/buggy')
