@@ -96,8 +96,10 @@ import {drawDetailedMinimap} from './open-world/minimap.js';
 import {createCup, loadCup, saveCup, recordCupRace, nextCupEvent, cupStandings} from './grand-prix.mjs';
 import {createRaceMenu, CUP_COURSES} from './race-menu.js';
 import {createAlienMarshal} from './alien-marshal.js';
-import {createGamepadInput, padGuide} from './gamepad.mjs';
+import {createGamepadInput} from './gamepad.mjs';
 import {createMenuPad} from './gamepad-menu.mjs';
+import {padSvg, padKind} from './pad-art.mjs';
+import {createCoach} from './coach.mjs';
 import {frameSeconds} from './frame-time.mjs';
 import {poseCar} from './vehicle-pose.mjs';
 import {makeVehicleBody} from './vehicle-bodies.js';
@@ -4922,6 +4924,44 @@ const prof = {
   }
 };
 const pollGamepad = createGamepadInput();
+// A drawing of the controller in that player's hands, with the buttons lit as they press
+// them, shown when they're struggling (sat still, both triggers, pushing a wall, new pad).
+const coachEls = [1, 2].map(n => {
+    const el = Object.assign(document.createElement('div'), {id: 'coach' + n, className: 'coach', hidden: true});
+    el.setAttribute('aria-hidden', 'true');
+    document.body.append(el);
+    return el;
+  }),
+  coaches = [createCoach(), createCoach()];
+let coachLast = 0,
+  coachDrawn = 0,
+  p1Last = null;
+function coachFrame(all, p1, p2, now) {
+  const dt = coachLast ? Math.min(0.1, (now - coachLast) / 1000) : 0;
+  coachLast = now;
+  const live = all.filter(p => p?.connected),
+    busy = p => p.buttons.some(b => b.value > 0.5) || p.axes.some(a => Math.abs(a) > 0.3);
+  for (const p of live) if (p.index !== split?.pad && busy(p)) p1Last = p.index;
+  const driving = started && !paused && !ui.panel() && !robot && !skate && !s.flight.mode,
+    players = [
+      {pad: all[p1Last] ?? live.find(p => p.index !== split?.pad), input: p1, speed: readout(s).speed, on: driving},
+      {pad: splitOn ? all[split.pad] : null, input: p2, speed: splitOn ? readout(race.rivals[0].session).speed : 0, on: driving && splitOn}
+    ],
+    draw = now - coachDrawn > 66;
+  if (draw) coachDrawn = now;
+  players.forEach(({pad: gp, input, speed, on}, i) => {
+    const el = coachEls[i];
+    if (!gp || !input) return void (el.hidden = true);
+    const c = coaches[i]({dt, speed, throttle: input.throttle, lt: gp.buttons[6]?.value ?? 0, rt: gp.buttons[7]?.value ?? 0, active: on, joined: !!input.joined});
+    el.hidden = !c.show;
+    el.classList.toggle('left', splitOn && i === 0);
+    el.classList.toggle('right', i === 1);
+    if (c.show && draw) {
+      const pressed = new Set(gp.buttons.flatMap((b, k) => (b.value > 0.5 ? [k] : [])));
+      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 600});
+    }
+  });
+}
 // Split screen: a second controller pressing Start takes over the first rival car; the TV
 // splits left (player 1) / right (player 2). Select on that controller goes back to one.
 // Driving only: robot, skate and flight drop back to one screen until you're in the car.
@@ -4959,7 +4999,6 @@ function splitInput(all, now) {
   }
   const p1 = pollGamepad(split ? all.filter(p => p && p.index !== split.pad) : all),
     p2 = split ? pollP2([all[split.pad]]) : null;
-  if (p2?.joined) callout('P2 ' + padGuide(p2.joined), 7000);
   if (p2?.fire) split.fire = true;
   return {p1, p2};
 }
@@ -5029,9 +5068,9 @@ function frame(now) {
       }
     }
   }
-  if (pad.joined) callout(padGuide(pad.joined), 7000);
   if (menuPad(navigator.getGamepads?.(), now)) pad.fire = pad.boost = false;
   padLog(navigator.getGamepads?.(), now);
+  coachFrame(allPads, pad, pad2, now);
   if (pad.start) {
     if (!started) $('start').click();
     else if (!ui.panel()) pause(!paused);

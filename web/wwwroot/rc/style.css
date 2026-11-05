@@ -247,3 +247,4 @@ button.dex-row {
 .pad-focus{outline:3px solid var(--gold)!important;outline-offset:3px;box-shadow:0 0 0 6px #edbd6a40}
 #p2-hud{position:absolute;bottom:28px;left:calc(50% + 22px);background:var(--panel);padding:8px 15px;border-left:3px solid #6fc3ff;border-radius:3px;font:600 22px ui-monospace,monospace;z-index:2;pointer-events:none}#split-line{position:absolute;top:0;bottom:0;left:50%;width:4px;margin-left:-2px;background:#0b1a1e;z-index:2;pointer-events:none}
 .split #map,.split #osm-credit{display:none}
+.coach{position:absolute;bottom:96px;left:50%;transform:translateX(-50%);background:#0d1d22d9;border:2px solid #edbd6a;border-radius:14px;padding:6px 10px;z-index:3;pointer-events:none}.coach.left{left:25%}.coach.right{left:75%}.pad-glow{animation:pad-glow .8s ease-in-out infinite}@keyframes pad-glow{50%{opacity:.25}}
