@@ -761,8 +761,13 @@ public sealed class ReactiveBandit :
     /// then occasionally it gets aggressive and kills me but it's just boring." The Build 371
     /// production flight that prompted it was 70 s of a rung-0 Competent presenting, zero rounds,
     /// then the owner quit. Whatever the player does, the bandit turns in after this long.
-    // Argon review 2026-11-04: 12.0 -> 4.0 s so rung 0 turns hostile in the opening minute instead of flying a passive formation drill.
-    public const double PresentMaximumSeconds = 4.0;
+    // Argon review 2026-11-04 cut this 12.0 -> 4.0 s so rung 0 turns hostile in the opening minute.
+    // Restored to 10.5 s on 2026-11-05: the present already ends on 2 s of real tracking
+    // (PresentHoldSeconds) or an overrun (PresentProximitySeconds), so the cap only governs a
+    // player who neither tracks nor closes, and the sparring/ramp contracts require a present that
+    // survives 10 s of a nearby but non-tracking player. The opening-minute hostility now comes
+    // from the pressure bursts that follow the present, not from cutting the present short.
+    public const double PresentMaximumSeconds = 10.5;
 
     /// True while this bandit is deliberately setting the player up rather than fighting them.
     public bool Presenting { get; private set; }
@@ -1254,6 +1259,7 @@ public sealed class ReactiveBandit :
                 Tactic = BanditTactic.Acquire;
                 RecordSingleCandidateDecision(LastCommand);
             } else {
+                _gunTrackBankCommand = null;
                 bool defending = Tactic == BanditTactic.Defend;
                 LastCommand = LookaheadCommand(player);
                 Tactic = defending
@@ -1463,6 +1469,15 @@ public sealed class ReactiveBandit :
         || _profile.IsBoss
         || (_profile.MaxAcquireG > _profile.FineTrackMaxG && Skill != PilotSkill.Machine);
 
+    /// Past-vertical hysteresis of the gun-track bank: within this band of +/-pi the commanded
+    /// sign is held, because the two solutions are the same attitude and the sign is noise.
+    public const double GunTrackPastVerticalHysteresisRad = 0.35;
+    /// Near wings-level band in which the gun-track bank sign is held for the same reason.
+    public const double GunTrackLevelDeadbandRad = 0.05;
+    /// Lead points closer than this to the nose do not command a new bank (about 1.7 deg).
+    public const double GunTrackBankHoldOffNoseRad = 0.03;
+    double? _gunTrackBankCommand;
+
     PilotCommand GunTrackCommand(in ActorObservation player) {
         var own = State;
         var aim = BanditFireControl.LeadPoint(own, player);
@@ -1473,6 +1488,22 @@ public sealed class ReactiveBandit :
             // angle of attack, which parked the 2.5 deg finisher ~0.9 deg off the lead point.
             double leadRangeM = (aim - own.Position).Length;
             Vec3D boreOffset = GunKill.GunDirection(own) - own.ForwardDir();
+            // Only the angle-of-attack part of that offset is the gun's real elevation above the
+            // flight path. The measured body-minus-path vector also carries sideslip and the roll
+            // transient, and subtracting those at full strength every tick answered this law's
+            // own steering a few ticks later: the bank command chattered at 7.6 reversals/s on a
+            // real track and the Ace lead of a cold pair parked outside its gate for a whole fight
+            // (2026-11-05, both bisected to this hunk). Project the offset onto the lift axis so
+            // the correction is a pitch-plane bias and nothing else; smoothing it instead lagged
+            // the solution and cost the Ace its conversion contract.
+            Vec3D liftAxis = own.BodyAttitude.IsFinite && own.BodyAttitude.LengthSquared >= 1e-12
+                ? own.BodyAttitude.Rotate(new Vec3D(0.0, 1.0, 0.0))
+                : new Vec3D(0.0, 1.0, 0.0);
+            double liftLength = liftAxis.Length;
+            if (liftLength > 0.5) {
+                liftAxis = liftAxis * (1.0 / liftLength);
+                boreOffset = liftAxis * boreOffset.Dot(liftAxis);
+            }
             aim -= boreOffset * leadRangeM;
         }
         double availableG = AvailableAcquireG(safetyReserve: false);
@@ -1511,7 +1542,37 @@ public sealed class ReactiveBandit :
         // a second time; do not copy that.
         double desiredGamma = System.Math.Atan2(toAim.Y, System.Math.Max(1.0, horizontalM));
         // Tight tracking wants the lift vector on the target, so allow past-vertical roll.
-        double bank = LimitedBankTo(trackAim, 1.35);
+        double desiredBank = LimitedBankTo(trackAim, 1.35);
+        // ROLL IS A RATE, NOT A SIGN. When the lead point sits near the lift axis the bank solution
+        // is +/-pi and its sign is rounding noise; commanded tick to tick, that is a controller
+        // chattering, not an aircraft rolling (RealPlayerTrackTests counts those reversals).
+        // Slew the commanded bank at a roll rate the airframe can fly, from the last command.
+        double bank = desiredBank;
+        // INSIDE THE GATE, HOLD THE BANK. The roll that puts the lift vector on a point a few
+        // tenths of a degree off the nose is ill-conditioned: its sign is decided by which side
+        // of the flight path the corrected lead point fell on this tick, and it swapped +/-1 rad
+        // tick to tick on a real track (12.5 reversals/s). A pilot that close to the solution
+        // keeps the bank he has and flies the G; only a lead point clearly off the nose is worth
+        // a new roll.
+        double offNoseCos = toAim.Length > 1e-6
+            ? own.ForwardDir().Dot(toAim * (1.0 / toAim.Length))
+            : 1.0;
+        if (!double.IsFinite(bank)) bank = _gunTrackBankCommand ?? 0.0;
+        else if (_gunTrackBankCommand is double heldBank
+            && offNoseCos > System.Math.Cos(GunTrackBankHoldOffNoseRad)) {
+            bank = heldBank;
+        }
+        else if (_gunTrackBankCommand is double previousBank
+            && System.Math.Sign(bank) != System.Math.Sign(previousBank)
+            && previousBank != 0.0
+            && (System.Math.Abs(bank) > System.Math.PI - GunTrackPastVerticalHysteresisRad
+                || System.Math.Abs(bank) < GunTrackLevelDeadbandRad)) {
+            // Past vertical, +pi and -pi are the same lift vector; near wings-level a lead point
+            // sitting on the flight path makes the sign rounding noise. In both bands keep the
+            // sign we are already rolling toward instead of flipping it tick to tick.
+            bank = System.Math.CopySign(System.Math.Abs(bank), previousBank);
+        }
+        _gunTrackBankCommand = bank;
         // Shorter time constant than the low-attack pass: this is a gun solution, not a descent.
         //
         // PER-TIER AUTHORITY. One global gain traded three tiers' competence for one tier's
@@ -1816,14 +1877,26 @@ public sealed class ReactiveBandit :
     // this far off the support fighter, the bracket has done its job and collapses.
     const double BracketCollapseRangeM = 3500.0;
     const double BracketCollapsePlayerNoseOffRad = 60.0 * System.Math.PI / 180.0;
+    /// A bracket is an offer the player gets a few seconds to answer. A player who flies straight
+    /// through it never puts his nose 60 deg off either fighter, and the lead held its 1.3 km
+    /// station for a whole 53 s fight without firing (WingmanStaysInTheFightTests, 2026-11-05).
+    /// Owner doctrine: two for one is a trade worth taking. After this long the offer expires and
+    /// the bracketing fighter commits regardless of where the player is looking.
+    public const double BracketPatienceSeconds = 12.0;
+    double? _bracketHeldSince;
 
     bool ShouldFollowFormationDirective(in ActorObservation player) {
         FormationTacticalRole role = EffectiveFormationRole;
+        if (role is not FormationTacticalRole.Bracket) _bracketHeldSince = null;
         if (role is FormationTacticalRole.Independent
                 or FormationTacticalRole.Pressure
             || Tactic == BanditTactic.Defend
             || IsGunThreat(player))
             return false;
+        if (role is FormationTacticalRole.Bracket) {
+            _bracketHeldSince ??= T;
+            if (T - _bracketHeldSince.Value >= BracketPatienceSeconds) return false;
+        }
 
         // BRACKET COLLAPSE. A bracket exists to make the player choose which nose to honour; once he
         // has chosen, the unengaged fighter turns in. Holding a fixed station 1.3 km abeam forever

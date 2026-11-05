@@ -631,7 +631,7 @@ public class ReactiveBanditTests {
 
     [Fact]
     public void PressureBurstsReserveHalfTheMagazineForRealSolutions() {
-        Assert.Equal(4.0, ReactiveBandit.PresentMaximumSeconds);
+        Assert.Equal(10.5, ReactiveBandit.PresentMaximumSeconds);
         Assert.Equal(25, ReactiveBandit.PressureBurstLimit);
         Assert.Equal(1.8, ReactiveBandit.PressureBurstIntervalSeconds);
         Assert.Equal(1.2, ReactiveBandit.ChaseStallSeconds);
