@@ -243,6 +243,10 @@ function paintFrame(ctx, w, h, palette, driftPx, doc) {
 
 /** Drift repaints at most this often; the menu does not need 60 Hz clouds. */
 const DRIFT_FRAME_MS = 66;
+/** A paint slower than this halves the drift rate; slower than PAINT_STILL_MS stops it. */
+const PAINT_SLOW_MS = 12;
+const DRIFT_FRAME_SLOW_MS = 250;
+const PAINT_STILL_MS = 30;
 /** Largest bitmap the backdrop paints; CSS stretches it to the viewport. */
 const PAINT_MAX_W = 1600;
 const PAINT_MAX_H = 1000;
@@ -274,6 +278,7 @@ export function mountReadyMenuBackdrop(options = {}) {
   // blurred sky does not need more.
   let paintW = 1;
   let paintH = 1;
+  let driftFrameMs = DRIFT_FRAME_MS;
   const resize = () => {
     const dpr = Math.min(win.devicePixelRatio || 1, 2);
     const w = Math.max(1, Math.floor(canvas.clientWidth));
@@ -324,7 +329,7 @@ export function mountReadyMenuBackdrop(options = {}) {
       visible = false;
       return;
     }
-    if (lastTs > 0 && ts - lastTs < DRIFT_FRAME_MS) {
+    if (lastTs > 0 && ts - lastTs < driftFrameMs) {
       raf = win.requestAnimationFrame(tick);
       return;
     }
@@ -334,7 +339,18 @@ export function mountReadyMenuBackdrop(options = {}) {
       if (driftPx > win.innerWidth * 2) driftPx -= win.innerWidth * 2;
     }
     lastTs = ts;
+    const paintStart = win.performance?.now?.() ?? 0;
     paintFrame(ctx, w, h, themePalette(root), driftPx, doc);
+    const paintMs = (win.performance?.now?.() ?? 0) - paintStart;
+    // ADAPTIVE. On a software rasteriser (CI, a weak laptop) one paint can cost tens of
+    // milliseconds; at 15 Hz that is the whole main thread and the runtime behind the menu
+    // starves (Build 438 CI: one animation frame per four seconds). A sky that is expensive to
+    // paint stops drifting: a still picture is correct, a stalled picker is not.
+    if (paintMs > PAINT_STILL_MS) {
+      visible = false;
+      return;
+    }
+    driftFrameMs = paintMs > PAINT_SLOW_MS ? DRIFT_FRAME_SLOW_MS : DRIFT_FRAME_MS;
     raf = win.requestAnimationFrame(tick);
   };
 
