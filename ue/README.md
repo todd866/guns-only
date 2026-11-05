@@ -73,11 +73,32 @@ r.SkinCache.CompileShaders=True
 The Unreal project itself (binary `.uasset`s, tens of GB of derived data) lives outside git at
 `~/Documents/Unreal Projects/RCOdyssey`; only these scripts and the text config are tracked.
 
+## What the first runs taught (5 Nov 2026, UE 5.8.4 on the M5)
+
+- **Xcode 27 ships without the Metal Toolchain.** The editor dies at start-up ("cannot execute
+  tool 'metal'"); `xcodebuild -downloadComponent MetalToolchain` (about 1 GB) fixes it once.
+- **`-RenderOffscreen` never ticks the editor**, so queued high-res screenshots are never
+  rendered (it idled at frame 4 for 12 minutes). Launch windowed (`-WINDOWED -ResX -ResY`).
+- **`-ExecutePythonScript` exits before any tick callback runs; `-ExecCmds="py …"` runs at frame 0**,
+  and the editor then opens its start-up map on top of whatever the script built. The script now
+  registers a slate post-tick callback and builds the scene on tick 30.
+- **`new_level()` silently fails when the level asset already exists**; the script deletes the
+  stale asset first. Everything else happens in the current (unsaveable) start-up map otherwise.
+- **`take_high_res_screenshot` and Interchange imports pump slate ticks synchronously**, so the tick
+  callback re-enters itself; it carries a `busy` guard and takes one still per settled frame.
+- **The calibrated axis map already converts metres to centimetres** (columns of 100). Scaling
+  again put the camera 4 km from the district (run 5: empty sky and a speck).
+- **Quit can hang while shaders still compile**; the script saves, requests quit, then force-exits
+  after 90 s. A run is about three minutes once shaders are cached.
+- `ue/bootstrap-project.sh` prints the exact launch line. Run it under
+  `HEAVY_SLOT_LOCAL=1 heavy-slot` (it needs this Mac's GPU) and only while the owner is idle:
+  the editor window takes focus.
+
 ## Known unknowns (check on the first run)
 
 - The buggy's forward axis against the web yaw (`TODO(calibrate)` in `parity_spike.py`).
-- Whether `take_high_res_screenshot` renders under `-RenderOffscreen`; if not, use a Movie
-  Render Queue job with the same cameras.
+- Rival wheels in FrameState carry `steer`/`speed` (needed by `poseCar`); keep them when the
+  Unreal RenderAdapter consumes FrameState.
 - The open-world ground (DEM tiles) is not imported yet; the spike shows districts on their own.
 - Heavy: shader compilation on first open takes a long time and runs hot. Do it while the owner
   is away from the laptop (`focus-guard active` exits 1).
