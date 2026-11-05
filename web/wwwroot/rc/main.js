@@ -98,6 +98,7 @@ import {createRaceMenu, CUP_COURSES} from './race-menu.js';
 import {createAlienMarshal} from './alien-marshal.js';
 import {createGamepadInput} from './gamepad.mjs';
 import {frameSeconds} from './frame-time.mjs';
+import {createSimHost, FIXED_DT} from './sim-host.mjs';
 import {poseCar} from './vehicle-pose.mjs';
 import {makeVehicleBody} from './vehicle-bodies.js';
 import * as T from '../vendor/three.module.js';
@@ -112,7 +113,7 @@ import {
   baseCourse
 } from './sim.mjs';
 import {recover, readout} from './physics/session.mjs';
-import {createRace as createRaceBase, stepRace, placeOf, retreatActive} from './physics/race.mjs';
+import {createRace as createRaceBase, placeOf, retreatActive} from './physics/race.mjs';
 import {TRACK_FEATURES, placeFeatures} from './physics/features.mjs';
 import {modifiers, MISSILES, beamDir, LASER} from './physics/pickups.mjs';
 import {heldMissilePose} from './pickup-visuals.mjs';
@@ -188,6 +189,45 @@ function createRace(course, options) {
     {...course, laps: eventLaps(course.event)},
     {...options, params: vehicleParams(bodyKind === 'jet' ? 'buggy' : bodyKind)}
   );
+}
+function adoptRace(next) {
+  race = next;
+  s = race.player;
+  simHost.setRace(race);
+  simFrame = simHost.frame();
+}
+function readoutPlayer(p) {
+  return {
+    x: p.pos[0],
+    y: p.pos[1],
+    z: p.pos[2],
+    yaw: p.yaw,
+    speed: p.speed,
+    forwardSpeed: p.forwardSpeed,
+    steer: p.steer,
+    grounded: p.grounded,
+    contacts: p.contacts
+  };
+}
+function carVisual(p) {
+  return {
+    pos: p.pos,
+    q: p.q,
+    steer: p.steer,
+    params: p.params,
+    vel: p.vel,
+    speed: p.speed,
+    wheels: p.wheels
+  };
+}
+const carFxIds = new Map();
+function carFeedbackPlayer(fx, player, key, dt) {
+  let fxId = carFxIds.get(key);
+  if (fxId == null) {
+    fxId = Math.random();
+    carFxIds.set(key, fxId);
+  }
+  fx.carFeedback({...carVisual(player), __fxId: fxId}, dt);
 }
 const audio = new SoundKit();
 const liveSolids = [...collisionSolids],
@@ -843,10 +883,11 @@ let race = createRace(course, {
     roam: startRoam,
     furball: urlMode === 'furball'
   }),
+  simHost = createSimHost({race}),
+  simFrame = simHost.frame(),
   s = race.player,
   paused = true,
   keys = new Set(),
-  acc = 0,
   last = performance.now(),
   best = 0;
 let bestKey = `guns-only.rc.best.v3.${track ?? 'base'}.${openWorld?.selected.id ?? 'lap'}.${mode}`;
@@ -2084,20 +2125,20 @@ function freeDrive() {
     return;
   }
   if (!race.roam || race.furball) {
-    race = createRace(course, {mode, opponents: rivalCount, roam: true, features: trackFeatures});
-    s = race.player;
+    adoptRace(createRace(course, {mode, opponents: rivalCount, roam: true, features: trackFeatures}));
     reported = false;
   }
   goRoam();
 }
 function goFurball() {
-  race = createRace(course, {
-    mode,
-    opponents: Math.max(3, rivalCount),
-    features: trackFeatures,
-    furball: true
-  });
-  s = race.player;
+  adoptRace(
+    createRace(course, {
+      mode,
+      opponents: Math.max(3, rivalCount),
+      features: trackFeatures,
+      furball: true
+    })
+  );
   paintKillMarks();
   reported = false;
   Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
@@ -2144,8 +2185,7 @@ function furballOver(w) {
   $('explore').onclick = () => {
     telemetry.choice('drive');
     result.hidden = true;
-    race = createRace(course, {mode, opponents: rivalCount, roam: true, features: trackFeatures});
-    s = race.player;
+    adoptRace(createRace(course, {mode, opponents: rivalCount, roam: true, features: trackFeatures}));
     goRoam();
     pause(false);
   };
@@ -2249,8 +2289,7 @@ function drawLives(now, dt) {
 }
 function startRace() {
   if (!raceReady() || openWorld?.setRacing(true) === false) return;
-  race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures});
-  s = race.player;
+  adoptRace(createRace(course, {mode, opponents: rivalCount, features: trackFeatures}));
   reported = false;
   Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
   startCountdown();
@@ -3124,7 +3163,7 @@ function timeTrip(trip) {
     s.car.vel = [0, 0, 0];
     s.car.ang = [0, 0, 0];
   }
-  acc = 0;
+  simHost.clearAccumulator();
   document.body.classList.toggle('era-past', past);
   document.body.classList.remove('portal-flash');
   void document.body.offsetWidth;
@@ -3174,7 +3213,7 @@ async function travelTo(id) {
     const cp = roamCarParams();
     Object.assign(s.car, createCar(cp, [pos[0], pos[1] + rideHeight(cp) + 0.02, pos[2]], yaw));
   }
-  acc = 0;
+  simHost.clearAccumulator();
   cameraCar = null;
   camera.position.set(pos[0] - Math.sin(yaw) * 2, pos[1] + 0.8, pos[2] + Math.cos(yaw) * 2);
   roamArmedAt = s.travel + 30;
@@ -3368,7 +3407,7 @@ function startSkateRun(id) {
     [p[0], ground + rideHeight(s.car.params) + 0.02, p[2]],
     Math.atan2(q[0] - p[0], -(q[2] - p[2]))
   );
-  acc = 0;
+  simHost.clearAccumulator();
   cameraCar = null;
   pause(false);
   canvas.focus();
@@ -3401,7 +3440,7 @@ function climbLadder(l) {
     robot.vel = [0, 0, 0];
     robot.yaw = l.yaw;
   } else placeCar(s.car, [l.pos[0], l.pos[1] + rideHeight(s.car.params) + 0.02, l.pos[2]], l.yaw);
-  acc = 0;
+  simHost.clearAccumulator();
   cameraCar = null;
   camHeading = null;
   audio.gate();
@@ -4598,7 +4637,7 @@ function enterLocation() {
       keys.clear();
       touchControls?.reset();
       fireQueued = hopQueued = false;
-      acc = 0;
+      simHost.clearAccumulator();
       cameraCar = null;
       audio.radio();
       callout(SKY_STEER_HINT, 6500);
@@ -4840,8 +4879,140 @@ const prof = {
 };
 const pollGamepad = createGamepadInput();
 const frameMs = [];
+let simPad = {},
+  simSchoolPrev = null,
+  simSkyPlacement = null,
+  simThrottleIn = 0;
+simHost.onBeforeFixedStep(() => {
+  const drive = drivingInput(keys, {
+      ...simPad,
+      steer: touchState.steer || simPad.steer,
+      throttle: touchState.throttle || simPad.throttle,
+      brake: touchState.brake || simPad.brake
+    }),
+    throttleIn = drive.throttle;
+  if (fireQueued && race.pickups.held.get(s.car)) {
+    const it = race.pickups.held.get(s.car);
+    telemetry.itemUse(it);
+    it === 'zoom' ? audio.boost() : audio.fire();
+  }
+  if (skate && fireQueued) skateGrabUntil = performance.now() + 400;
+  const skateInput = skate
+    ? {...drive, drift: drive.drift || skateTouchGrab || performance.now() < skateGrabUntil}
+    : drive;
+  const fl = {...flightInput(keys), assist: mode === 'kid' || winged(), proximity: winged()};
+  if (s.flight.mode === 'chute') fl.steer = drive.steer;
+  fl.burner = boostOn && race.roam && !skate;
+  fl.lift = skyEligible() && s.flight.mode === 'fly' ? openWorld.cloudLift(s.car.pos) : 0;
+  {
+    const was = burning;
+    burning = fl.burner && (!!s.flight.mode || throttleIn > 0);
+    if (burning && !was) audio.boost();
+  }
+  if (robot && !openWorld?.digging?.()) {
+    stepRobot(
+      robot,
+      intro.active
+        ? {}
+        : bowlingHold != null
+          ? {throttle: 0, steer: drive.steer * 0.13}
+          : {throttle: drive.throttle, steer: drive.steer, jump: keys.has('Space')},
+      course.world,
+      FIXED_DT
+    );
+  }
+  hotWheelsPre();
+  tennisStep(FIXED_DT, drive);
+  simSchoolPrev = openWorld?.school()?.active ? [...s.car.pos] : null;
+  simSkyPlacement = s.car.placement;
+  skyPrev[0] = s.car.pos[0];
+  skyPrev[1] = s.car.pos[1];
+  skyPrev[2] = s.car.pos[2];
+  simThrottleIn = throttleIn;
+  simHost.setStepInput(
+    robot
+      ? {throttle: 0, steer: 0, brake: true}
+      : {
+          ...skateInput,
+          ...trickInput(keys),
+          boardSpin: form === 'board',
+          hop: hopQueued,
+          grindDir: form === 'board' ? stick() : null,
+          fire: fireQueued,
+          flight: fl,
+          boost: fl.burner && !s.flight.mode ? FLIGHT.burnerBoost : 1
+        }
+  );
+});
+simHost.onFixedStep(() => {
+  const drive = drivingInput(keys, {
+    ...simPad,
+    steer: touchState.steer || simPad.steer,
+    throttle: touchState.throttle || simPad.throttle,
+    brake: touchState.brake || simPad.brake
+  });
+  const skateInput = skate
+    ? {...drive, drift: drive.drift || skateTouchGrab || performance.now() < skateGrabUntil}
+    : drive;
+  hotWheelsPost();
+  skyJumpStep();
+  skateStep(skateInput);
+  boardStep(skateInput);
+  if (openWorld)
+    for (const session of [s, ...race.rivals.map(r => r.session)]) openWorld.step(session.car, FIXED_DT);
+  skyTourStep(simSkyPlacement, FIXED_DT);
+  if (simSchoolPrev) schoolStep(simSchoolPrev, FIXED_DT);
+  stuntStep(FIXED_DT);
+  if (openWorld) deliveryStep(FIXED_DT);
+  if (openWorld && race.roam) {
+    bowlingPrepare(FIXED_DT);
+    const activity = openWorld.stepActivity(
+      FIXED_DT,
+      openWorld.activity()?.control === 'robot' ? robot : s.car
+    );
+    if (activity?.cancelled) bowlingHold = null;
+    if (activity?.gutter) callout('Gutter ball…');
+    if (activity?.rolled && !activity.finished) {
+      if (activity.strike) {
+        audio.finish();
+        callout('🎳 STRIKE!');
+      } else if (activity.spare) {
+        audio.coin();
+        callout('🎳 Spare!');
+      }
+    }
+    if (activity?.tee)
+      placeCar(
+        s.car,
+        [activity.tee.pos[0], rideHeight(s.car.params) + 0.02, activity.tee.pos[2]],
+        activity.tee.yaw
+      );
+    if (activity?.sunk) {
+      audio.coin();
+      callout('IN THE CUP');
+    }
+    if (activity?.finished) {
+      telemetry.activityEnd({
+        game: openWorld.activity()?.kind ?? (activity.score != null ? 'bowling' : 'golf'),
+        score: activity.score,
+        total: activity.total
+      });
+      audio.finish();
+      callout(
+        activity.score != null
+          ? `🎳 Game over · ${activity.score}`
+          : `CAR GOLF · ${activity.total} HITS · BEST ${openWorld.progress.golfBest}`
+      );
+    }
+  }
+  fireQueued = false;
+  hopQueued = false;
+  lastThrottle = simThrottleIn || simPad.throttle;
+  soundEvents(readout(s), s.car);
+});
 function frame(now) {
-  const pad = pollGamepad(navigator.getGamepads?.());
+  simPad = pollGamepad(navigator.getGamepads?.());
+  const pad = simPad;
   if (pad.start) {
     if (!started) $('start').click();
     else if (!ui.panel()) pause(!paused);
@@ -4888,132 +5059,14 @@ function frame(now) {
     $('countdown').textContent = countdown > 0 ? String(n) : 'GO!';
     if (countdown <= 0 && countdown > -0.6) {
     }
-    acc = 0;
+    simHost.clearAccumulator();
   }
   if (!paused && !ui.panel() && countdown <= 0 && (!openWorld || openWorld.stream.ready(s.car.pos))) {
     $('countdown').hidden = countdown <= -0.6;
     if (countdown > -0.6) countdown -= dt;
-    acc += dt;
     prof.simStart = performance.now();
-    while (acc >= 1 / 120) {
-      const drive = drivingInput(keys, {
-          ...pad,
-          steer: touchState.steer || pad.steer,
-          throttle: touchState.throttle || pad.throttle,
-          brake: touchState.brake || pad.brake
-        }),
-        throttleIn = drive.throttle;
-      if (fireQueued && race.pickups.held.get(s.car)) {
-        const it = race.pickups.held.get(s.car);
-        telemetry.itemUse(it);
-        it === 'zoom' ? audio.boost() : audio.fire();
-      }
-      if (skate && fireQueued) skateGrabUntil = performance.now() + 400;
-      const skateInput = skate
-        ? {...drive, drift: drive.drift || skateTouchGrab || performance.now() < skateGrabUntil}
-        : drive;
-      // A winged dinosaur flies with the proximity assist in every mode (no levelling, a late save).
-      const fl = {...flightInput(keys), assist: mode === 'kid' || winged(), proximity: winged()};
-      if (s.flight.mode === 'chute') fl.steer = drive.steer;
-      fl.burner = boostOn && race.roam && !skate;
-      fl.lift = skyEligible() && s.flight.mode === 'fly' ? openWorld.cloudLift(s.car.pos) : 0;
-      {
-        const was = burning;
-        burning = fl.burner && (!!s.flight.mode || throttleIn > 0);
-        if (burning && !was) audio.boost();
-      }
-      if (robot && !openWorld?.digging?.()) {
-        stepRobot(
-          robot,
-          intro.active
-            ? {}
-            : bowlingHold != null
-              ? {throttle: 0, steer: drive.steer * 0.13}
-              : {throttle: drive.throttle, steer: drive.steer, jump: keys.has('Space')},
-          course.world,
-          1 / 120
-        );
-      }
-      hotWheelsPre();
-      tennisStep(1 / 120, drive);
-      const schoolPrev = openWorld?.school()?.active ? [...s.car.pos] : null;
-      const skyPlacement = s.car.placement;
-      skyPrev[0] = s.car.pos[0];
-      skyPrev[1] = s.car.pos[1];
-      skyPrev[2] = s.car.pos[2];
-      stepRace(
-        race,
-        robot
-          ? {throttle: 0, steer: 0, brake: true}
-          : {
-              ...skateInput,
-              ...trickInput(keys),
-              boardSpin: form === 'board',
-              hop: hopQueued,
-              grindDir: form === 'board' ? stick() : null,
-              fire: fireQueued,
-              flight: fl,
-              boost: fl.burner && !s.flight.mode ? FLIGHT.burnerBoost : 1
-            },
-        1 / 120
-      );
-      hotWheelsPost();
-      skyJumpStep();
-      skateStep(skateInput);
-      boardStep(skateInput);
-      if (openWorld)
-        for (const session of [s, ...race.rivals.map(r => r.session)]) openWorld.step(session.car, 1 / 120);
-      skyTourStep(skyPlacement, 1 / 120);
-      if (schoolPrev) schoolStep(schoolPrev, 1 / 120);
-      stuntStep(1 / 120);
-      if (openWorld) deliveryStep(1 / 120);
-      if (openWorld && race.roam) {
-        bowlingPrepare(1 / 120);
-        const activity = openWorld.stepActivity(
-          1 / 120,
-          openWorld.activity()?.control === 'robot' ? robot : s.car
-        );
-        if (activity?.cancelled) bowlingHold = null;
-        if (activity?.gutter) callout('Gutter ball…');
-        if (activity?.rolled && !activity.finished) {
-          if (activity.strike) {
-            audio.finish();
-            callout('🎳 STRIKE!');
-          } else if (activity.spare) {
-            audio.coin();
-            callout('🎳 Spare!');
-          }
-        }
-        if (activity?.tee)
-          placeCar(
-            s.car,
-            [activity.tee.pos[0], rideHeight(s.car.params) + 0.02, activity.tee.pos[2]],
-            activity.tee.yaw
-          );
-        if (activity?.sunk) {
-          audio.coin();
-          callout('IN THE CUP');
-        }
-        if (activity?.finished) {
-          telemetry.activityEnd({
-            game: openWorld.activity()?.kind ?? (activity.score != null ? 'bowling' : 'golf'),
-            score: activity.score,
-            total: activity.total
-          });
-          audio.finish();
-          callout(
-            activity.score != null
-              ? `🎳 Game over · ${activity.score}`
-              : `CAR GOLF · ${activity.total} HITS · BEST ${openWorld.progress.golfBest}`
-          );
-        }
-      }
-      fireQueued = false;
-      hopQueued = false;
-      acc -= 1 / 120;
-      lastThrottle = throttleIn || pad.throttle;
-      soundEvents(readout(s), s.car);
-    }
+    simHost.step(dt);
+    simFrame = simHost.frame();
   }
   if (s.flight.mode !== lastFlight) {
     telemetry.flight({
@@ -5027,17 +5080,18 @@ function frame(now) {
   document.body.classList.toggle('race-mode', !race.roam && started && !paused);
   document.body.classList.toggle('driving', started && !paused);
   tennisFrame();
-  const r = robot
+  const view = simFrame,
+    r = robot
       ? {
-          ...readout(s),
+          ...readoutPlayer(view.player),
           x: robot.pos[0],
           y: robot.pos[1] + 0.12,
           z: robot.pos[2],
           yaw: robot.yaw,
           speed: Math.hypot(robot.vel[0], robot.vel[2])
         }
-      : readout(s),
-    c = s.car,
+      : readoutPlayer(view.player),
+    c = carVisual(view.player),
     p = BUGGY;
   if (robot && robotBody) poseRobotBody(robotBody, robot);
   {
@@ -5124,7 +5178,7 @@ function frame(now) {
   const rescue = now < marshalUntil,
     showLap = now < marshalLapUntil;
   marshal.root.visible =
-    started && (countdown > -0.6 || rescue || showLap || retreatActive(race) || s.finished);
+    started && (countdown > -0.6 || rescue || showLap || retreatActive(race) || view.race.finished);
   const mx = rescue ? 0 : Math.sin(r.yaw) * 2.4 + Math.cos(r.yaw) * 0.8,
     mz = rescue ? 0 : -Math.cos(r.yaw) * 2.4 + Math.sin(r.yaw) * 0.8;
   marshal.root.position.set(r.x + mx, r.y + (rescue ? 1.3 : 0.64), r.z + mz);
@@ -5237,7 +5291,7 @@ function frame(now) {
                 [ev.washed[0], ev.washed[1] + rideHeight(s.car.params) + 0.02, ev.washed[2]],
                 Math.PI / 2
               );
-              acc = 0;
+              simHost.clearAccumulator();
             }
           } else if (ev.popped) {
             audio.impact(5);
@@ -5399,7 +5453,7 @@ function frame(now) {
         .then(trip => {
           if (!trip) return;
           placeCar(s.car, [trip.position[0], rideHeight(s.car.params) + 0.06, trip.position[2]], Math.PI);
-          acc = 0;
+          simHost.clearAccumulator();
           document.body.classList.remove('portal-flash');
           void document.body.offsetWidth;
           document.body.classList.add('portal-flash');
@@ -5411,7 +5465,7 @@ function frame(now) {
     }
     const waiting = !openWorld.stream.ready(c.pos);
     $('stream-status').hidden = !waiting;
-    if (waiting) acc = 0;
+    if (waiting) simHost.clearAccumulator();
   }
   ui.update(now);
   bowlingHud();
@@ -5467,8 +5521,9 @@ function frame(now) {
     openWorld.lighting(light.day, c.pos);
   }
   if (!paused) {
-    for (const cc of [c, ...race.rivals.map(rv => rv.session.car)]) fx.carFeedback(cc, dt);
-    for (const e of race.events.splice(0))
+    carFeedbackPlayer(fx, view.player, 'player', dt);
+    view.rivals.forEach(rv => carFeedbackPlayer(fx, rv, rv.id, dt));
+    for (const e of view.events)
       if (e.type === 'splash') {
         fx.splash(e.car?.pos ?? e.pos);
         audio.splash();
@@ -5506,8 +5561,9 @@ function frame(now) {
   if (openWorld) deliveryFrame(dt, now);
   syncRivals();
   race.rivals.forEach((rv, i) => {
-    poseCar(rivalVis[i].group, rivalVis[i].wheels, rv.session.car);
-    rivalLod(rivalVis[i], rv.session.car, c);
+    const rivalCar = carVisual(view.rivals[i]);
+    poseCar(rivalVis[i].group, rivalVis[i].wheels, rivalCar);
+    rivalLod(rivalVis[i], rivalCar, c);
   });
   // Low chase camera behind the heading; pulled in front of any wall between it and the car.
   if (cameraCar)
@@ -5544,7 +5600,7 @@ function frame(now) {
   // The boss fight pulls back and up so the robot and the whole excavator share the frame.
   // Riding a dinosaur in the dark world (the past) puts the toy up high: the camera pulls back with it.
   const jumpCamera =
-      s.flight.mode === 'chute' && openWorld?.skyDive().active ? skyDiveCamera(c.pos, camYaw) : null,
+      view.player.flightMode === 'chute' && openWorld?.skyDive().active ? skyDiveCamera(c.pos, camYaw) : null,
     mount = riggedDino?.root.visible ? 2 : toyDino?.visible ? 2.6 : 1,
     back = bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount,
     eye = [r.x, r.y + 0.12 * mount, r.z];
@@ -5594,7 +5650,7 @@ function frame(now) {
     );
   // Flying, the camera rides behind the car along its own nose and rolls with it, like a jet's
   // chase view, so the HUD horizon matches the real one. On the ground the camera stays level.
-  if (s.flight.mode === 'fly') {
+  if (view.player.flightMode === 'fly') {
     const q = new T.Quaternion(c.q[0], c.q[1], c.q[2], c.q[3]),
       fw = new T.Vector3(0, 0, -1).applyQuaternion(q),
       cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
@@ -5636,7 +5692,7 @@ function frame(now) {
     camera.lookAt(r.x, r.y + (portrait ? portraitAim : 0.08), r.z);
   } else if (camera.view?.enabled) camera.clearViewOffset();
   gates.forEach((g, i) => {
-    const next = i === (s.gate === cps.length - 1 ? 0 : s.gate);
+    const next = i === (view.race.gate === cps.length - 1 ? 0 : view.race.gate);
     g.userData.arch.material = next ? archLit : archMat;
     g.userData.label.visible = false;
     g.userData.label.quaternion.copy(camera.quaternion);
@@ -5662,7 +5718,7 @@ function frame(now) {
     }
   }
   $('clock').hidden = race.roam && !race.furball;
-  $('clock').textContent = format(race.furball ? race.furball.left : s.time);
+  $('clock').textContent = format(race.furball ? race.furball.left : view.race.time);
   drawLives(now, dt);
   drawPickups(now);
   drawFlightHud();
@@ -5676,7 +5732,7 @@ function frame(now) {
       ? openWorld
         ? nearestLocation(s.car.pos).short
         : 'FREE DRIVE'
-      : `${race.rivals.length ? `P${place()}/${race.rivals.length + 1} · ` : ''}${s.laps > 1 ? `LAP ${s.lap}/${s.laps}` : `${Math.min(s.gate + 1, cps.length)}/${cps.length}`}`;
+      : `${race.rivals.length ? `P${place()}/${race.rivals.length + 1} · ` : ''}${view.race.laps > 1 ? `LAP ${view.race.lap}/${view.race.laps}` : `${Math.min(view.race.gate + 1, cps.length)}/${cps.length}`}`;
   if (!$('banner').dataset.callout) $('banner').hidden = !retreatActive(race);
   $('secret').hidden = !course.secrets.length;
   $('secret').textContent = openWorld
@@ -5690,7 +5746,7 @@ function frame(now) {
     (prof.tris += renderer.info.render.triangles),
     prof.add(performance.now() - prof.renderStart, prof.renderStart - (prof.simStart ?? prof.renderStart)));
   if (skate || street) skateHud.update(skate || street, now);
-  if (s.finished && !reported) {
+  if (view.race.finished && !reported) {
     reported = true;
     openWorld?.finish(s.time, s.lapTimes);
     telemetry.raceFinish({
@@ -5733,7 +5789,7 @@ function frame(now) {
     pause(true);
     $('again').onclick = () => {
       telemetry.choice('again');
-      s = (race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures})).player;
+      adoptRace(createRace(course, {mode, opponents: rivalCount, features: trackFeatures}));
       reported = false;
       Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
       startCountdown();

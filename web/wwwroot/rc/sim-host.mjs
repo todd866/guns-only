@@ -1,7 +1,8 @@
 /**
  * Renderer-independent RC simulation host (V8 / Puerts safe).
  * Runs session + race physics at a fixed 120 Hz with the same accumulator pattern as main.js.
- * Open-world activity steps are not wired here; register them with {@link SimHost#onFixedStep}.
+ * Open-world activity steps register with {@link SimHost#onFixedStep}; pre-race work uses
+ * {@link SimHost#onBeforeFixedStep} and {@link SimHost#setStepInput}.
  */
 import {createRace, stepRace} from './physics/race.mjs';
 import {createSession, stepSession} from './physics/session.mjs';
@@ -26,6 +27,8 @@ import {FLIGHT} from './physics/flight.mjs';
  * @property {number} spin
  * @property {number} slip
  * @property {string|null} surface
+ * @property {boolean} contact
+ * @property {number[]|null} contactPoint
  */
 
 /**
@@ -33,7 +36,7 @@ import {FLIGHT} from './physics/flight.mjs';
  * @property {number} t simulated clock (seconds)
  * @property {number} step count of fixed 1/120 s steps executed
  * @property {Object} player
- * @property {Array<{id:string|number,pos:number[],q:number[],wheels:WheelFrame[]}>} rivals
+ * @property {Array<{id:string|number,pos:number[],q:number[],vel:number[],params:object,wheels:WheelFrame[]}>} rivals
  * @property {{lap:number,laps:number,gate:number,finished:boolean,time:number}} race
  * @property {Array<unknown>} events race/session events since the previous frame()
  */
@@ -57,12 +60,15 @@ export function mapHostInput(input = {}) {
   };
 }
 
+/** @param {import('./physics/car.mjs').createCar extends Function ? ReturnType<typeof createCar>['wheels'][number] : object} w */
 function wheelFrame(w) {
   return {
     compression: w.compression,
     spin: w.spin,
     slip: w.slip,
-    surface: w.surface ?? null
+    surface: w.surface ?? null,
+    contact: !!w.contact,
+    contactPoint: w.contactPoint ? [w.contactPoint[0], w.contactPoint[1], w.contactPoint[2]] : null
   };
 }
 
@@ -80,7 +86,7 @@ function jsonClone(value) {
 }
 
 /**
- * @param {{player: import('./physics/session.mjs').createSession extends Function ? ReturnType<typeof createSession> : object, rivals: Array<{session: object, callsign?: string}>, events: unknown[], t: number}} state
+ * @param {{player: object, rivals: Array<{session: object, callsign?: string}>, events: unknown[], t: number}} state
  * @param {number} step
  * @param {number} eventFrom
  */
@@ -95,7 +101,12 @@ function buildFrameState(state, step, eventFrom) {
       ...pose,
       steer: c.steer,
       speed: c.speed,
+      forwardSpeed: c.forwardSpeed,
       yaw: carYaw(c),
+      grounded: c.grounded,
+      contacts: c.contacts,
+      flightMode: s.flight.mode ?? null,
+      params: jsonClone(c.params),
       wheels: c.wheels.map(wheelFrame)
     },
     rivals: state.rivals.map((rival, i) => {
@@ -105,6 +116,10 @@ function buildFrameState(state, step, eventFrom) {
         id: rival.callsign ?? i,
         pos: rp.pos,
         q: rp.q,
+        vel: rp.vel,
+        steer: rc.steer,
+        speed: rc.speed,
+        params: jsonClone(rc.params),
         wheels: rc.wheels.map(wheelFrame)
       };
     }),
@@ -119,28 +134,40 @@ function buildFrameState(state, step, eventFrom) {
   };
 }
 
+/** @param {object} race */
+function bindRaceState(race) {
+  return {
+    attached: true,
+    useRace: true,
+    race,
+    player: race.player,
+    rivals: race.rivals,
+    events: race.events,
+    t: race.t
+  };
+}
+
 /**
  * @param {Object} options
- * @param {import('./physics/session.mjs').createSession extends Function ? Parameters<typeof createSession>[0] : object} options.course
+ * @param {object} [options.race] live race from the web game (createRace); steps with setStepInput
+ * @param {import('./physics/session.mjs').createSession extends Function ? Parameters<typeof createSession>[0] : object} [options.course]
  * @param {SimMode} [options.mode='kid']
  * @param {Array<unknown>} [options.rivals=[]] length selects AI opponent count; empty uses createSession (no grid offset)
  * @param {object} [options.params] car params passed to createSession
  * @returns {SimHost}
  */
-// TODO(phase 2, before Unreal depends on this): the web game always runs createRace (main.js
-// createRace wrapper, with roam and track features) even with zero rivals; v1 uses the bare
-// session when rivals is empty so its parity test matches the physics tests. Switch to the
-// game's race path and move main.js onto SimHost so there is one stepping path, not two.
-export function createSimHost({course, mode = 'kid', rivals = [], params} = {}) {
-  if (!course) throw new Error('createSimHost: course is required');
+export function createSimHost({race, course, mode = 'kid', rivals = [], params} = {}) {
+  if (!race && !course) throw new Error('createSimHost: course or race is required');
 
-  const hostOptions = {course, mode, rivals, params};
+  /** @type {object|undefined} */
+  let attachedRace = race;
 
-  /** @returns {{player: object, rivals: object[], events: unknown[], t: number, useRace: boolean, race?: object}} */
+  /** @returns {{player: object, rivals: object[], events: unknown[], t: number, useRace: boolean, race?: object, attached?: boolean}} */
   function makeState() {
+    if (attachedRace) return bindRaceState(attachedRace);
     if (rivals.length > 0) {
-      const race = createRace(course, {mode, opponents: rivals.length, params});
-      return {useRace: true, race, player: race.player, rivals: race.rivals, events: race.events, t: race.t};
+      const r = createRace(course, {mode, opponents: rivals.length, params});
+      return {useRace: true, race: r, player: r.player, rivals: r.rivals, events: r.events, t: r.t};
     }
     const player = createSession(course, {mode, params});
     return {useRace: false, player, rivals: [], events: [], t: 0};
@@ -151,19 +178,30 @@ export function createSimHost({course, mode = 'kid', rivals = [], params} = {}) 
   let step = 0;
   let eventFrom = 0;
   let lastInput = {};
+  /** @type {object} full stepRace / stepSession input for the attached race path */
+  let raceStepInput = {};
+  /** @type {Array<(dt: number, host: SimHost) => void>} */
+  const beforeHooks = [];
   /** @type {Array<(dt: number, host: SimHost) => void>} */
   const fixedHooks = [];
 
   function runFixedStep() {
-    const mapped = mapHostInput(lastInput);
-    mapped.boost = lastInput.boost && !state.player.flight.mode ? FLIGHT.burnerBoost : 1;
-    if (state.useRace) {
-      stepRace(state.race, mapped, FIXED_DT);
+    for (const fn of beforeHooks) fn(FIXED_DT, host);
+    if (state.attached) {
+      stepRace(state.race, raceStepInput, FIXED_DT);
       state.t = state.race.t;
       state.events = state.race.events;
     } else {
-      stepSession(state.player, mapped, FIXED_DT);
-      state.t += FIXED_DT;
+      const mapped = mapHostInput(lastInput);
+      mapped.boost = lastInput.boost && !state.player.flight.mode ? FLIGHT.burnerBoost : 1;
+      if (state.useRace) {
+        stepRace(state.race, mapped, FIXED_DT);
+        state.t = state.race.t;
+        state.events = state.race.events;
+      } else {
+        stepSession(state.player, mapped, FIXED_DT);
+        state.t += FIXED_DT;
+      }
     }
     for (const fn of fixedHooks) fn(FIXED_DT, host);
     step++;
@@ -187,7 +225,9 @@ export function createSimHost({course, mode = 'kid', rivals = [], params} = {}) 
     /** @returns {FrameState} */
     frame() {
       const frame = buildFrameState(state, step, eventFrom);
-      eventFrom = state.events.length;
+      // Drain consumed events so the race array stays bounded (main.js used to splice(0) each frame).
+      state.events.length = 0;
+      eventFrom = 0;
       return frame;
     },
 
@@ -197,11 +237,40 @@ export function createSimHost({course, mode = 'kid', rivals = [], params} = {}) 
       step = 0;
       eventFrom = 0;
       lastInput = {};
+      raceStepInput = {};
+    },
+
+    /** Drop leftover accumulator time (countdown hold in main.js). */
+    clearAccumulator() {
+      acc = 0;
+    },
+
+    /** @param {object} nextRace */
+    setRace(nextRace) {
+      attachedRace = nextRace;
+      state = bindRaceState(nextRace);
+      eventFrom = 0; // creation events are shown, as before the SimHost refactor
+    },
+
+    /** @param {object} input passed verbatim to stepRace on the attached-race path */
+    setStepInput(input) {
+      raceStepInput = input;
     },
 
     /**
-     * Optional hook for open-world / activity fixed steps (not run in v1).
-     * Called once per 1/120 s physics tick after session + race step.
+     * Called once per 1/120 s tick before session / race step (input build, tennis, etc.).
+     * @param {(dt: number, host: SimHost) => void} fn
+     */
+    onBeforeFixedStep(fn) {
+      beforeHooks.push(fn);
+      return () => {
+        const i = beforeHooks.indexOf(fn);
+        if (i >= 0) beforeHooks.splice(i, 1);
+      };
+    },
+
+    /**
+     * Open-world / activity fixed steps; once per 1/120 s tick after session + race step.
      * @param {(dt: number, host: SimHost) => void} fn
      */
     onFixedStep(fn) {
