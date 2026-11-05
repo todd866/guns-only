@@ -1288,6 +1288,28 @@ window.addEventListener('pagehide', () => {
   telemetry.endSession();
   telemetry.flush({force: true});
 });
+// Two chase cameras side by side. The polish pass is one-camera, so split renders plainly.
+function renderSplit() {
+  const w = innerWidth,
+    h = innerHeight,
+    half = Math.floor(w / 2),
+    aspect = camera.aspect;
+  renderer.setScissorTest(true);
+  for (const [cam, x] of [
+    [camera, 0],
+    [camera2, half]
+  ]) {
+    cam.aspect = half / h;
+    cam.updateProjectionMatrix();
+    renderer.setViewport(x, 0, half, h);
+    renderer.setScissor(x, 0, half, h);
+    renderer.render(scene, cam);
+  }
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, w, h);
+  camera.aspect = aspect;
+  camera.updateProjectionMatrix();
+}
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
   polish?.resize(innerWidth, innerHeight);
@@ -4900,6 +4922,47 @@ const prof = {
   }
 };
 const pollGamepad = createGamepadInput();
+// Split screen: a second controller pressing Start takes over the first rival car; the TV
+// splits left (player 1) / right (player 2). Select on that controller goes back to one.
+// Driving only: robot, skate and flight drop back to one screen until you're in the car.
+const camera2 = new T.PerspectiveCamera(63, 1, 0.06, 210),
+  pollP2 = createGamepadInput(),
+  target2 = new T.Vector3(),
+  desired2 = new T.Vector3();
+let split = null,
+  p1Pad = null,
+  startHeld = new Set(),
+  splitOn = false;
+const p2Hud = Object.assign(document.createElement('div'), {id: 'p2-hud', hidden: true}),
+  splitLine = Object.assign(document.createElement('div'), {id: 'split-line', hidden: true});
+document.body.append(p2Hud, splitLine);
+function splitInput(all, now) {
+  const live = all.filter(p => p?.connected);
+  p1Pad ??= live.find(p => p.buttons.some(b => b.value > 0.5))?.index ?? null;
+  const starts = new Set(live.filter(p => p.buttons[9]?.value > 0.5).map(p => p.index));
+  if (!split && started && p1Pad != null && race.rivals.length)
+    for (const i of starts)
+      if (i !== p1Pad && !startHeld.has(i)) {
+        split = {pad: i, heading: null, placed: false, fire: false};
+        callout('Player 2 joined! · Select to leave', 4500);
+        telemetry.choice?.('split', 'join');
+      }
+  startHeld = starts;
+  if (split && all[split.pad]?.buttons[8]?.value > 0.5) {
+    if (race.rivals[0]) delete race.rivals[0].human;
+    split = null;
+    callout('One player', 2500);
+  }
+  if (split && !all[split.pad]?.connected) {
+    if (race.rivals[0]) delete race.rivals[0].human;
+    split = null;
+  }
+  const p1 = pollGamepad(split ? all.filter(p => p && p.index !== split.pad) : all),
+    p2 = split ? pollP2([all[split.pad]]) : null;
+  if (p2?.joined) callout('P2 ' + padGuide(p2.joined), 7000);
+  if (p2?.fire) split.fire = true;
+  return {p1, p2};
+}
 // Home TV: who is doing what. Each pad's active time and buttons per 5 s window, with the
 // mode, posted to the serving laptop (local builds only, never the public site).
 const padLog = (() => {
@@ -4926,6 +4989,7 @@ const padLog = (() => {
       navigator.sendBeacon('/pad-log', JSON.stringify({
         at: new Date().toISOString(), mode, track: telemetryTrack, paused, panel: !!ui.panel(), started,
         vehicle: robot ? 'robot' : skate ? 'skate' : s.flight.mode ? 'flight' : 'car',
+        split: split ? {p2Pad: split.pad, on: splitOn} : null, p1Pad,
         place: openWorld ? nearestLocation(s.car.pos).short : null, speed: Math.round(Math.hypot(...(s.car.vel ?? [0, 0, 0])) * 3.6), who
       }));
     acc.clear();
@@ -4939,7 +5003,32 @@ const menuPad = createMenuPad({
 });
 const frameMs = [];
 function frame(now) {
-  const pad = pollGamepad(navigator.getGamepads?.());
+  const allPads = Array.from(navigator.getGamepads?.() ?? []),
+    {p1: pad, p2: pad2} = splitInput(allPads, now);
+  splitOn = !!split && !robot && !skate && !s.flight.mode && !!race.rivals[0] && started;
+  {
+    const rv = splitOn ? race.rivals[0] : null;
+    for (const x of race.rivals) if (x !== rv && x.human) delete x.human;
+    if (rv) {
+      rv.human = () => {
+        const f = split?.fire;
+        if (split) split.fire = false;
+        return paused || ui.panel()
+          ? {throttle: 0, steer: 0, brake: true}
+          : {throttle: pad2.throttle, steer: pad2.steer, brake: pad2.brake, drift: pad2.drift, fire: !!f};
+      };
+      // Keep the two cars together: the world only streams around player 1.
+      const a = s.car.pos,
+        b = rv.session.car.pos;
+      if (!split.placed || Math.hypot(a[0] - b[0], a[2] - b[2]) > 120) {
+        split.placed = true;
+        rv.session.car.pos = [a[0] + 2.5, a[1] + 0.4, a[2]];
+        rv.session.car.vel = [0, 0, 0];
+        if (s.car.q) rv.session.car.q = [...s.car.q];
+        split.heading = null;
+      }
+    }
+  }
   if (pad.joined) callout(padGuide(pad.joined), 7000);
   if (menuPad(navigator.getGamepads?.(), now)) pad.fire = pad.boost = false;
   padLog(navigator.getGamepads?.(), now);
@@ -5614,7 +5703,7 @@ function frame(now) {
   syncRivals();
   race.rivals.forEach((rv, i) => {
     poseCar(rivalVis[i].group, rivalVis[i].wheels, rv.session.car);
-    rivalLod(rivalVis[i], rv.session.car, c);
+    rivalLod(rivalVis[i], rv.session.car, splitOn && i === 0 ? rv.session.car : c);
   });
   // Low chase camera behind the heading; pulled in front of any wall between it and the car.
   if (cameraCar)
@@ -5721,6 +5810,32 @@ function frame(now) {
     target.set(x, y + 0.4, z - 3);
   }
   camera.lookAt(target);
+  if (splitOn) {
+    const r2 = readout(race.rivals[0].session),
+      d = split.heading == null ? 0 : Math.atan2(Math.sin(r2.yaw - split.heading), Math.cos(r2.yaw - split.heading));
+    split.heading = split.heading == null ? r2.yaw : split.heading + d * Math.min(1, dt * 4);
+    const back = 1.36 + Math.min(0.24, r2.speed * 0.015),
+      eye2 = [r2.x, r2.y + 0.12, r2.z];
+    desired2.set(r2.x - Math.sin(split.heading) * back, r2.y + 0.55, r2.z + Math.cos(split.heading) * back);
+    const ray2 = [desired2.x - eye2[0], desired2.y - eye2[1], desired2.z - eye2[2]],
+      dist2 = Math.hypot(...ray2),
+      hit2 = dist2 > 0.01 && course.world.raycast(eye2, ray2.map(v => v / dist2), dist2);
+    if (hit2) {
+      const k = Math.max(0.15, hit2.dist - 0.12) / dist2;
+      desired2.set(eye2[0] + ray2[0] * k, eye2[1] + ray2[1] * k, eye2[2] + ray2[2] * k);
+    }
+    // Carry the camera with the car first (as player 1's does), then smooth only the swing.
+    if (split.car) camera2.position.add(new T.Vector3(r2.x - split.car[0], r2.y - split.car[1], r2.z - split.car[2]));
+    split.car = [r2.x, r2.y, r2.z];
+    if (camera2.position.distanceTo(desired2) > 30) camera2.position.copy(desired2);
+    else camera2.position.lerp(desired2, 1 - Math.exp(-dt * 7));
+    camera2.fov = 60 + Math.min(5, r2.speed * 0.3);
+    target2.set(r2.x + Math.sin(split.heading) * 1.05, r2.y + 0.18, r2.z - Math.cos(split.heading) * 1.05);
+    camera2.lookAt(target2);
+    p2Hud.textContent = `P2 · ${Math.round(r2.speed * 3.6)} km/h`;
+  }
+  p2Hud.hidden = splitLine.hidden = !splitOn;
+  document.body.classList.toggle('split', splitOn);
   digCamera(now);
   if (intro.active) intro.update(dt, camera);
   underwater();
@@ -5792,7 +5907,7 @@ function frame(now) {
   drawMap();
   ((prof.renderStart = performance.now()),
     renderer.info.reset(),
-    polish ? polish.render() : renderer.render(scene, camera),
+    splitOn ? renderSplit() : polish ? polish.render() : renderer.render(scene, camera),
     (prof.calls += renderer.info.render.calls),
     (prof.tris += renderer.info.render.triangles),
     prof.add(performance.now() - prof.renderStart, prof.renderStart - (prof.simStart ?? prof.renderStart)));

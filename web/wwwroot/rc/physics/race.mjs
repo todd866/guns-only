@@ -408,14 +408,19 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
       held !== 'bubble' &&
       (rivalWants(pk, rCar, [race.player.car, rCar]) || (held === 'pitbull' && pk.order?.[0] === race.player.car));
     const targets = open ? cars : cars.slice(1);
-    if ((!fb || mayFire(race, rival)) && rivalWants(pk, rCar, targets) && (open || !aimsAtPlayer)) {
+    // A rival driven by a second player (split screen) fires when that player presses fire.
+    if (!rival.human && (!fb || mayFire(race, rival)) && rivalWants(pk, rCar, targets) && (open || !aimsAtPlayer)) {
       if (!fb && race.mode === 'kid' && aimsAtPlayer) {
         race.playerShotAt = race.t;
         rival.shotPlayerAt = race.t;
       }
       use(pk, rCar);
     }
-    const input = rival.follow
+    const human = rival.human?.();
+    if (human?.fire) use(pk, rCar);
+    const input = human
+      ? human
+      : rival.follow
       ? followInput(rival.session, rival.follow)
       : fb
         ? furballInput(race, rival, () => driveInput(race, rival))
