@@ -21,6 +21,8 @@ What it does, in order (each step is idempotent, so a rerun resumes):
 Nothing here is tuned to look good yet; the point is an honest same-view comparison.
 """
 import argparse
+import threading
+import traceback
 import json
 import math
 import os
@@ -227,62 +229,85 @@ def main(argv):
     tmp = os.path.join(unreal.Paths.project_saved_dir(), 'ParitySpike')
     os.makedirs(tmp, exist_ok=True)
 
-    levels.new_level(f'/Game/ParitySpike/{args.track}')
-    m = calibrate(tmp)
-    district = import_scene(os.path.join(repo, TRACK_GLB[args.track]), f'/Game/ParitySpike/{args.track}')
-    log(f'district actors: {len(district)}; collision hidden: {hide_collision(district)}')
-    placed = views.get('district') or {'anchor': [0, 0, 0], 'yaw': 0}
-    log(f"district roots placed: {place_roots(m, district, placed['anchor'], placed['yaw'])}")
-    buggy = import_scene(os.path.join(repo, BUGGY_GLB), '/Game/ParitySpike/buggy')
-    build_lighting()
-    levels.save_current_level()
-
     w, h = views['viewport']
-    roots = [a for a in buggy if a.get_attach_parent_actor() is None]  # move roots only
-    queue = list(views['views'])
-    state = {'pending': None, 'ticks': 0, 'handle': None}
+    state = {'phase': 'wait', 'ticks': 0, 'handle': None, 'pending': None, 'queue': [], 'roots': [], 'm': None}
+
+    def build():
+        # Runs on a later editor tick: with -ExecCmds the script itself executes during startup,
+        # and the editor then opens its startup map on top of anything built at frame 0.
+        levels.new_level(f'/Game/ParitySpike/{args.track}')
+        m = calibrate(tmp)
+        district = import_scene(os.path.join(repo, TRACK_GLB[args.track]), f'/Game/ParitySpike/{args.track}')
+        log(f'district actors: {len(district)}; collision hidden: {hide_collision(district)}')
+        placed = views.get('district') or {'anchor': [0, 0, 0], 'yaw': 0}
+        log(f"district roots placed: {place_roots(m, district, placed['anchor'], placed['yaw'])}")
+        buggy = import_scene(os.path.join(repo, BUGGY_GLB), '/Game/ParitySpike/buggy')
+        build_lighting()
+        levels.save_current_level()
+        state['m'] = m
+        state['roots'] = [a for a in buggy if a.get_attach_parent_actor() is None]  # move roots only
+        state['queue'] = list(views['views'])
 
     def pose(view):
-        car = view['car']
+        car, m = view['car'], state['m']
         # TODO(calibrate): the buggy's forward axis vs the web yaw is unverified; check the first
         # render against the web shot and fix the yaw offset here once.
-        for b in roots:
+        for b in state['roots']:
             b.set_actor_location(web_to_ue(m, [car['x'] * CM_PER_M, car['y'] * CM_PER_M, car['z'] * CM_PER_M]),
                                  False, False)
             b.set_actor_rotation(unreal.Rotator(0, 0, -math.degrees(car['yaw'])), False)
         cam = place_camera(m, view, w / h)
         return cam, os.path.join(out_dir, f"{args.track}-{view['name']}.png")
 
+    def finish(code):
+        unreal.unregister_slate_post_tick_callback(state['handle'])
+        state['phase'] = 'finished'
+        log(f'done (exit {code})')
+        if os.environ.get('PARITY_KEEP_OPEN'):
+            return
+        levels.save_current_level()
+        unreal.SystemLibrary.quit_editor()
+        # The editor can hang on shutdown while shaders still compile; the stills are on disk.
+        threading.Timer(90, lambda: os._exit(code)).start()
+
     # One screenshot at a time, driven by editor ticks: the request only renders on a later
-    # frame, and several queued in one frame collapse into the last. The editor must tick, so
-    # launch without -RenderOffscreen and with -ExecCmds="py ..." (ExecutePythonScript exits first).
+    # frame, and several queued in one frame collapse into the last.
     def tick(_dt):
         state['ticks'] += 1
-        if state['pending']:
-            if os.path.exists(state['pending']):
-                log(f"wrote {state['pending']}")
-            elif state['ticks'] < 900:
+        try:
+            if state['phase'] == 'wait':
+                if state['ticks'] >= 30:
+                    build()
+                    state['phase'] = 'shoot'
+                    state['ticks'] = 0
                 return
-            else:
-                log(f"timed out waiting for {state['pending']}")
-            state['pending'] = None
+            if state['phase'] != 'shoot':
+                return
+            if state['pending']:
+                if os.path.exists(state['pending']):
+                    log(f"wrote {state['pending']}")
+                elif state['ticks'] < 900:
+                    return
+                else:
+                    log(f"timed out waiting for {state['pending']}")
+                state['pending'] = None
+                state['ticks'] = 0
+            if state['ticks'] < 10:
+                return  # let the scene settle a few frames
+            if not state['queue']:
+                finish(0)
+                return
+            cam, name = pose(state['queue'].pop(0))
+            unreal.AutomationLibrary.take_high_res_screenshot(w, h, name, camera=cam)
+            state['pending'] = name
             state['ticks'] = 0
-        if state['ticks'] < 10:
-            return  # let the scene settle a few frames
-        if not queue:
-            unreal.unregister_slate_post_tick_callback(state['handle'])
-            log('done')
-            if not os.environ.get('PARITY_KEEP_OPEN'):
-                unreal.SystemLibrary.quit_editor()
-            return
-        cam, name = pose(queue.pop(0))
-        unreal.AutomationLibrary.take_high_res_screenshot(w, h, name, camera=cam)
-        state['pending'] = name
-        state['ticks'] = 0
-        log(f'queued {name}')
+            log(f'queued {name}')
+        except Exception:
+            log('callback failed:\n' + traceback.format_exc())
+            finish(1)
 
     state['handle'] = unreal.register_slate_post_tick_callback(tick)
-    log('screenshots scheduled; the editor quits when they are written')
+    log('scheduled: build after 30 ticks, then one screenshot per settled frame; the editor quits when done')
 
 if __name__ == '__main__':
     main(sys.argv[1:])
