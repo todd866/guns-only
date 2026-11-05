@@ -4939,22 +4939,62 @@ let coachLast = 0,
   p1Last = null;
 // The on-screen "Skate [E]" style button: player 1's left face button presses it, and its
 // key cap shows that button as printed on the pad in their hands (X on the Ultimate, Y on the SN30).
-let useHeld = false;
+// Player 1's pad: left face (X / Y) morphs car → walk → skate, LB / L flies and lands, the top
+// face presses the on-screen Go-in/Skate button when it shows (boost otherwise). They go
+// through the same key handlers the keyboard uses (T, Return), so every rule still applies.
+const padHeld = {};
+let useClicked = false;
+const tapKey = code => {
+  canvas.dispatchEvent(new KeyboardEvent('keydown', {code, key: code, bubbles: true}));
+  canvas.dispatchEvent(new KeyboardEvent('keyup', {code, key: code, bubbles: true}));
+};
 function useButton(all) {
   const mine = all.filter(p => p?.connected && p.index !== split?.pad),
-    now = mine.some(p => p.buttons[2]?.value > 0.5),
+    edge = i => {
+      const down = mine.some(p => p.buttons[i]?.value > 0.5),
+        hit = down && !padHeld[i];
+      padHeld[i] = down;
+      return hit && !paused && !ui.panel();
+    },
     btn = $('interact');
-  if (now && !useHeld && !btn.hidden && !paused && !ui.panel()) btn.click();
-  useHeld = now;
+  if (edge(2)) tapKey('KeyT');
+  if (edge(4)) tapKey('Enter');
+  if (edge(3) && !btn.hidden) {
+    btn.click();
+    useClicked = true;
+  }
+  formBar(all);
   const gp = all[p1Last];
   if (!gp || btn.hidden) return;
   const kind = padKind(gp.id),
-    label = kind === 'sn30' ? 'Y' : 'X';
+    label = kind === 'sn30' ? 'X' : 'Y';
   for (const k of btn.querySelectorAll('kbd'))
     if (k.textContent === 'E' || k.dataset.pad) {
       k.dataset.pad = kind;
       if (k.textContent !== label) k.textContent = label;
     }
+}
+// Player 1's forms, always on screen: the one you're in is lit, with the pad button that
+// changes it (X/Y morph, LB/L fly) drawn as printed on that pad.
+const formEl = Object.assign(document.createElement('div'), {id: 'forms', hidden: true});
+formEl.setAttribute('aria-label', 'Change: car, walk, skate, fly');
+document.body.append(formEl);
+let formKey = '';
+function formBar(all) {
+  const gp = all[p1Last];
+  formEl.hidden = !gp || !started || !race.roam || !!ui.panel();
+  formEl.classList.toggle('left', splitOn);
+  if (formEl.hidden) return;
+  const kind = padKind(gp.id),
+    now = s.flight.mode ? 'fly' : robot ? 'walk' : form === 'board' ? 'skate' : 'car',
+    key = kind + now;
+  if (key === formKey) return;
+  formKey = key;
+  const cap = (t, cls) => `<kbd class="cap ${cls}" data-pad="${kind}">${t}</kbd>`,
+    morph = kind === 'sn30' ? cap('Y', 'face') : cap('X', 'face'),
+    fly = kind === 'sn30' ? cap('L', 'bump') : cap('LB', 'bump'),
+    f = (k, icon) => `<span class="form${k === now ? ' on' : ''}">${icon}</span>`;
+  formEl.innerHTML = `${morph}${f('car', '🚗')}${f('walk', '🚶')}${f('skate', '🛹')}<i></i>${fly}${f('fly', '✈️')}`;
 }
 function coachFrame(all, p1, p2, now) {
   const dt = coachLast ? Math.min(0.1, (now - coachLast) / 1000) : 0;
@@ -5053,7 +5093,7 @@ function findFrame(all, now) {
   // LB / L: jump to your partner (2 s apart so a held button doesn't ping-pong).
   const pads = [all.filter(p => p?.connected && p.index !== split.pad), [all[split.pad]].filter(Boolean)];
   pads.forEach((list, i) => {
-    const down = list.some(p => p.buttons[4]?.value > 0.5);
+    const down = list.some(p => p.buttons[8]?.value > 0.5);
     if (down && !warpHeld[i] && now - warpAt > 2000 && !paused && !ui.panel()) {
       warpAt = now;
       if (i === 1) split.placed = false;
@@ -5078,7 +5118,7 @@ function splitInput(all, now) {
     for (const i of starts)
       if (i !== p1Pad && !startHeld.has(i)) {
         split = {pad: i, heading: null, placed: false, fire: false};
-        callout('Player 2 joined! · Select to leave', 4500);
+        callout('Player 2 joined!', 3000);
         telemetry.choice?.('split', 'join');
       }
   startHeld = starts;
@@ -5097,11 +5137,6 @@ function splitInput(all, now) {
         localStorage.setItem('guns-only.rc.tv.p1', all[one]?.id ?? '');
       } catch {}
     }
-  }
-  if (split && all[split.pad]?.buttons[8]?.value > 0.5) {
-    if (race.rivals[0]) delete race.rivals[0].human;
-    split = null;
-    callout('One player', 2500);
   }
   if (split && !all[split.pad]?.connected) {
     if (race.rivals[0]) delete race.rivals[0].human;
@@ -5197,7 +5232,8 @@ function frame(now) {
     else if (!ui.panel()) pause(!paused);
   }
   if (!paused && !ui.panel() && pad.fire) fireQueued = true;
-  if (pad.boost && !ui.panel()) toggleBoost();
+  if (pad.boost && !ui.panel() && !useClicked) toggleBoost();
+  useClicked = false;
   {
     const b = $('boost'),
       on = boostOn && race.roam && !robot && !skate;

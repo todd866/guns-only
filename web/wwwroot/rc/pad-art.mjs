@@ -10,7 +10,9 @@ export const ACTIONS = [
   {act: 'GO', ctl: 7},
   {act: 'FIRE', ctl: 0},
   {act: 'BOOST', ctl: 3},
-  {act: 'DRIFT', ctl: 5}
+  {act: 'DRIFT', ctl: 5},
+  {act: 'MORPH', ctl: 2},
+  {act: 'FLY', ctl: 4}
 ];
 
 const LAYOUT = {
@@ -40,7 +42,7 @@ export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {l
   const L = LAYOUT[kind],
     lit = i => pressed.has(i),
     pulse = k => (glow.has(k) ? ' class="pad-glow"' : ''),
-    out = [`<svg viewBox="-60 -6 420 200" width="${width}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui" font-weight="800">`];
+    out = [`<svg viewBox="-64 -6 456 200" width="${width}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui" font-weight="800">`];
   for (const [i, [x, y, w, h, t]] of Object.entries(L.shoulder))
     out.push(
       `<g${pulse(+i)}><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${lit(+i) ? ON : kind === 'sn30' ? '#3aa955' : '#3a3e44'}" stroke="#0008"/><text x="${x + w / 2}" y="${y + h - 3.5}" font-size="10" text-anchor="middle" fill="${lit(+i) ? '#000' : '#fff'}">${t}</text></g>`
@@ -67,8 +69,8 @@ export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {l
     );
   if (labels) {
     // Action tags beside the controls they belong to, outside the body so they never cover it.
-    const at = {stick: [L.sticks[0][0], L.sticks[0][1], -1], 0: [...L.face[0], 1], 3: [...L.face[3], 1], 5: [L.shoulder[5][0] + L.shoulder[5][2], L.shoulder[5][1] + 9, 1], 7: [L.shoulder[7][0] + L.shoulder[7][2], L.shoulder[7][1] + 8, 1]};
-    const place = {stick: [-58, kind === 'xbox' ? 84 : 150], 0: [304, 132], 3: [304, 84], 5: [304, 44], 7: [304, 8]};
+    const at = {stick: [L.sticks[0][0], L.sticks[0][1], -1], 0: [...L.face[0], 1], 3: [...L.face[3], 1], 5: [L.shoulder[5][0] + L.shoulder[5][2], L.shoulder[5][1] + 9, 1], 7: [L.shoulder[7][0] + L.shoulder[7][2], L.shoulder[7][1] + 8, 1], 2: [...L.face[2], 1], 4: [L.shoulder[4][0], L.shoulder[4][1] + 9, -1]};
+    const place = {stick: [-58, kind === 'xbox' ? 84 : 150], 0: [304, 132], 3: [304, 84], 5: [304, 44], 7: [304, 8], 2: [304, 108], 4: [-58, 34]};
     for (const {act, ctl, why} of ACTIONS) {
       const [cx, cy] = at[ctl],
         [tx, ty] = place[ctl],
