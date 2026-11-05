@@ -5035,7 +5035,7 @@ function coachFrame(all, p1, p2, now) {
     el.classList.toggle('right', i === 1);
     if (c.show && draw) {
       const pressed = new Set(gp.buttons.flatMap((b, k) => (b.value > 0.5 ? [k] : [])));
-      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 440});
+      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 440, skip: i === 1 ? ['MORPH', 'FLY'] : []});
     }
   });
 }

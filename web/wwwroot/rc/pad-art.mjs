@@ -38,7 +38,7 @@ const LAYOUT = {
 const ON = '#ffd34d';
 
 // state: {pressed: Set<int>, axes: [x,y,...]}, glow: Set of control keys to pulse ('stick', 0, 3...).
-export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {labels = true, glow = new Set(), width = 300} = {}) {
+export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {labels = true, glow = new Set(), width = 300, skip = []} = {}) {
   const L = LAYOUT[kind],
     lit = i => pressed.has(i),
     pulse = k => (glow.has(k) ? ' class="pad-glow"' : ''),
@@ -71,7 +71,7 @@ export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {l
     // Action tags beside the controls they belong to, outside the body so they never cover it.
     const at = {stick: [L.sticks[0][0], L.sticks[0][1], -1], 0: [...L.face[0], 1], 3: [...L.face[3], 1], 5: [L.shoulder[5][0] + L.shoulder[5][2], L.shoulder[5][1] + 9, 1], 7: [L.shoulder[7][0] + L.shoulder[7][2], L.shoulder[7][1] + 8, 1], 2: [...L.face[2], 1], 4: [L.shoulder[4][0], L.shoulder[4][1] + 9, -1]};
     const place = {stick: [-58, kind === 'xbox' ? 84 : 150], 0: [304, 132], 3: [304, 84], 5: [304, 44], 7: [304, 8], 2: [304, 108], 4: [-58, 34]};
-    for (const {act, ctl, why} of ACTIONS) {
+    for (const {act, ctl, why} of ACTIONS.filter(a => !skip.includes(a.act))) {
       const [cx, cy] = at[ctl],
         [tx, ty] = place[ctl],
         right = tx > 150;
