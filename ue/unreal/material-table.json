@@ -57,6 +57,14 @@
     "baseColor": "#b19c7a",
     "metallic": 0.0,
     "note": "glTF base colour; skatepark open-world/skatepark-materials.js:107-142 uses #979d9f r=0.82; GLB tints: #656055, #736750, #858876, #b19c7a",
+    "overrides": {
+      "hub": {
+        "baseColor": "#979d9f",
+        "metallic": 0.0,
+        "note": "skatepark runtime concrete, open-world/skatepark-materials.js:107-142",
+        "roughness": 0.82
+      }
+    },
     "roughness": 0.88
   },
   "door_red": {
@@ -201,6 +209,14 @@
     "baseColor": "#e78e08",
     "metallic": 0.0,
     "note": "glTF base colour; skatepark open-world/skatepark-materials.js:26-79 + open-world/districts.js:174 park-paint-atlas.webp uses #ffffff r=0.88; GLB tints: #e78e08, #ffffff",
+    "overrides": {
+      "hub": {
+        "baseColor": "#ffffff",
+        "metallic": 0.0,
+        "note": "skatepark paint atlas base, open-world/skatepark-materials.js:26-79",
+        "roughness": 0.88
+      }
+    },
     "roughness": 0.6
   },
   "path": {

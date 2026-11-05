@@ -66,13 +66,13 @@ def _ensure_parent(path, translucent):
     return material
 
 
-def _mic_path(material_name):
+def _mic_path(material_name, track=None):
     safe = material_name.replace(' ', '_')
-    return f'{PACKAGE}/MI_{safe}'
+    return f'{PACKAGE}/MI_{safe}' + (f'__{track}' if track else '')
 
 
-def _ensure_instance(material_name, entry):
-    path = _mic_path(material_name)
+def _ensure_instance(material_name, entry, track=None):
+    path = _mic_path(material_name, track)
     if path in _cache['instances']:
         return _cache['instances'][path]
     if unreal.EditorAssetLibrary.does_asset_exist(path):
@@ -116,8 +116,11 @@ def _slot_name(static_mesh, slot_index):
     return None
 
 
-def apply_material_table(actors, table_path):
+def apply_material_table(actors, table_path, track=None):
     """Map imported StaticMeshActor slots through material-table.json.
+
+    A row may carry 'overrides': {track: {...}} for names shared across GLBs (concrete, paint)
+    whose web look differs per district; the override gets its own MI_<name>__<track> instance.
 
     Returns dict with mapped_slots, unknown_names (sorted), and unknown_slots counts.
     """
@@ -147,7 +150,9 @@ def apply_material_table(actors, table_path):
                         unknown_names.add(name)
                         unreal.log_warning(f'[parity-spike] unknown material slot name: {name}')
                 continue
-            mic = _ensure_instance(name, table[name])
+            entry = table[name]
+            override = (entry.get('overrides') or {}).get(track) if track else None
+            mic = _ensure_instance(name, override, track) if override else _ensure_instance(name, entry)
             comp.set_material(slot_index, mic)
             mapped += 1
 

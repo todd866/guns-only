@@ -257,7 +257,7 @@ def main(argv):
         log(f'district actors: {len(district)}; collision hidden: {hide_collision(district)}')
         if state['materials']:
             table_path = os.path.join(repo, 'ue', 'unreal', 'material-table.json')
-            stats = apply_material_table(district, table_path)
+            stats = apply_material_table(district, table_path, track=args.track)
             log(
                 f"materials: mapped {stats['mapped_slots']} slot(s); "
                 f"unknown names ({len(stats['unknown_names'])}): {', '.join(stats['unknown_names']) or '(none)'}; "
