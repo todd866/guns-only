@@ -140,7 +140,7 @@ function rgbaFromHex(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function paintClouds(ctx, w, h, palette, driftPx) {
+function paintCloudPuffs(ctx, w, h, palette, driftPx) {
   ctx.save();
   ctx.filter = `blur(${Math.max(5, Math.min(w, h) * 0.009)}px)`;
   ctx.globalCompositeOperation = "source-over";
@@ -161,6 +161,46 @@ function paintClouds(ctx, w, h, palette, driftPx) {
   }
   ctx.filter = "none";
   ctx.restore();
+}
+
+// Blurring every puff on every frame cost a software-rendered 1280x720 menu its whole frame
+// budget (14 fps on an M5 with the GPU off; CI's runner lost the WASM boot behind it). Paint
+// the blurred cloud layer ONCE per size/palette into an offscreen canvas and slide that: the
+// per-frame work is then two drawImage calls.
+const cloudLayer = { canvas: null, key: "", w: 0, h: 0 };
+
+function cloudLayerFor(doc, w, h, palette) {
+  const key = `${w}x${h}:${palette.cloudLight}:${palette.cloudMid}`;
+  if (cloudLayer.canvas && cloudLayer.key === key) return cloudLayer.canvas;
+  if (typeof doc.createElement !== "function") return null;
+  const layer = doc.createElement("canvas");
+  if (!layer || typeof layer.getContext !== "function") return null;
+  layer.width = Math.max(1, Math.round(w));
+  layer.height = Math.max(1, Math.round(h));
+  const lctx = layer.getContext("2d");
+  if (!lctx) return null;
+  lctx.clearRect(0, 0, layer.width, layer.height);
+  paintCloudPuffs(lctx, w, h, palette, 0);
+  cloudLayer.canvas = layer;
+  cloudLayer.key = key;
+  cloudLayer.w = w;
+  cloudLayer.h = h;
+  return layer;
+}
+
+function paintClouds(ctx, w, h, palette, driftPx, doc) {
+  const layer = doc && typeof ctx.drawImage === "function"
+    ? cloudLayerFor(doc, w, h, palette)
+    : null;
+  if (!layer) {
+    paintCloudPuffs(ctx, w, h, palette, driftPx);
+    return;
+  }
+  // One shared drift for the cached layer (depth parallax lives in the cache's layout), wrapped
+  // so the slide is seamless.
+  const offset = ((driftPx % w) + w) % w;
+  ctx.drawImage(layer, offset - w, 0, w, h);
+  ctx.drawImage(layer, offset, 0, w, h);
 }
 
 function paintHills(ctx, w, h, palette) {
@@ -195,11 +235,14 @@ function paintHills(ctx, w, h, palette) {
   ctx.restore();
 }
 
-function paintFrame(ctx, w, h, palette, driftPx) {
+function paintFrame(ctx, w, h, palette, driftPx, doc) {
   paintSky(ctx, w, h, palette);
-  paintClouds(ctx, w, h, palette, driftPx);
+  paintClouds(ctx, w, h, palette, driftPx, doc);
   paintHills(ctx, w, h, palette);
 }
+
+/** Drift repaints at most this often; the menu does not need 60 Hz clouds. */
+const DRIFT_FRAME_MS = 66;
 
 /**
  * @param {{ document?: Document, window?: Window, canvas?: HTMLCanvasElement | null }} [options]
@@ -228,7 +271,7 @@ export function mountReadyMenuBackdrop(options = {}) {
     canvas.width = Math.floor(w * dpr);
     canvas.height = Math.floor(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintFrame(ctx, w, h, themePalette(root), driftPx);
+    paintFrame(ctx, w, h, themePalette(root), driftPx, doc);
   };
 
   const syncVisibility = () => {
@@ -259,15 +302,26 @@ export function mountReadyMenuBackdrop(options = {}) {
       syncVisibility();
       return;
     }
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    // While the runtime is still booting the sky is a still picture: one frame, no loop, so the
+    // main thread belongs to the WASM boot. The boot class observer restarts the drift after.
+    if (boot && !boot.classList.contains("ready")) {
+      paintFrame(ctx, w, h, themePalette(root), driftPx, doc);
+      visible = false;
+      return;
+    }
+    if (lastTs > 0 && ts - lastTs < DRIFT_FRAME_MS) {
+      raf = win.requestAnimationFrame(tick);
+      return;
+    }
     if (lastTs > 0) {
-      const dt = Math.min(48, ts - lastTs);
+      const dt = Math.min(200, ts - lastTs);
       driftPx += (DRIFT_PX_PER_S * dt) / 1000;
       if (driftPx > win.innerWidth * 2) driftPx -= win.innerWidth * 2;
     }
     lastTs = ts;
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    paintFrame(ctx, w, h, themePalette(root), driftPx);
+    paintFrame(ctx, w, h, themePalette(root), driftPx, doc);
     raf = win.requestAnimationFrame(tick);
   };
 

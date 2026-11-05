@@ -50,7 +50,7 @@ export const PRODUCTION_ROUTES = Object.freeze([
       const intro = await page.evaluate(() => ({
         fatal: document.querySelector("#fatal")?.classList.contains("visible") === true,
         title: document.querySelector("#ready-title")?.textContent?.trim() ?? "",
-        start: document.querySelector("#ready-start")?.textContent?.trim() ?? "",
+        start: document.querySelector("#ready-start .shell-action-label")?.textContent?.trim() ?? "",
         alternate: document.querySelector("#ready-intro-replay")?.textContent?.trim() ?? "",
         missionId: globalThis.__gunsState?.mission_definition_id ?? "",
         weaponsCold: globalThis.__gunsState?.first_run_weapons_cold === true,
@@ -58,8 +58,8 @@ export const PRODUCTION_ROUTES = Object.freeze([
         valley: globalThis.__gunsAssets?.diagnostics?.().firstRunValley ?? null,
       }));
       assert.equal(intro.fatal, false, "first-run valley remote route showed #fatal");
-      assert.equal(intro.title, "Enter the valley");
-      assert.equal(intro.start, "Enter valley");
+      assert.equal(intro.title, "Fly the valley");
+      assert.equal(intro.start, "Fly the valley");
       assert.equal(intro.alternate, "Choose another mission");
       assert.equal(
         intro.missionId,

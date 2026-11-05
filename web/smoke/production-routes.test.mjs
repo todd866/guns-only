@@ -141,8 +141,8 @@ test("first-run route proves cold authority and an authority-matched gorge", asy
   const intro = route("first-run-valley");
   const valid = {
     fatal: false,
-    title: "Enter the valley",
-    start: "Enter valley",
+    title: "Fly the valley",
+    start: "Fly the valley",
     alternate: "Choose another mission",
     missionId: "mission.modern.visual-merge.first-run-valley.v1",
     weaponsCold: true,
