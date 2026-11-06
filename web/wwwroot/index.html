@@ -1384,6 +1384,12 @@
 
     #ready-screen:not([data-mode="program"]) .ready-card { width: min(520px, 100%); }
 
+    /* The pad's menu highlight (rc/gamepad-menu.mjs): the control the stick is on. */
+    #ready-screen .pad-focus, #settings-screen .pad-focus {
+      outline: 2px solid #edbd6a;
+      outline-offset: 2px;
+    }
+
     .ready-menu-header {
       display: flex;
       align-items: baseline;

@@ -6,12 +6,14 @@ import {nearest} from "../rc/gamepad-menu.mjs";
 export const MAX_ROWS = 2;
 export const LAST_KEY = "tv.lastGame";
 
-// Toy dogfight is the split-screen flight from the 9-flight-split work
-// (render/split/toy_fight_view.js). /toy-fight/ mounts that same view.
+// The main tile is the guns-only.com main game itself (owner, 6 Nov 2026:
+// the standalone toy pages are out; the main game carries pads, 2P toys and
+// the toy skin). Toy dogfight is the split-screen flight from the
+// 9-flight-split work (render/split/toy_fight_view.js); the same view also
+// opens inside the main game from the picker or a second pad's Start.
 export const GAMES = Object.freeze([
+  Object.freeze({id: "guns", name: "Guns Only", href: "/", symbol: "✈", datum: "main"}),
   Object.freeze({id: "rc", name: "RC Odyssey", href: "/rc/?telemetry=local", symbol: "🚗", datum: "base"}),
-  Object.freeze({id: "chopper", name: "Toy Chopper", href: "/toy-chopper/", symbol: "🚁", datum: "co-op"}),
-  Object.freeze({id: "gunship", name: "Toy Gunship", href: "/toy-gunship/", symbol: "🛩", datum: "yard"}),
   Object.freeze({id: "fight", name: "Toy dogfight", href: "/toy-fight/", symbol: "⚔", datum: "2P"}),
 ]);
 

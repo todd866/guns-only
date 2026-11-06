@@ -175,6 +175,7 @@ import {
   standardGamepadState,
 } from "./render/input/dual_stick_input.js";
 import {installToyFight} from "./render/split/toy_fight_view.js";
+import {installShellMenuPad} from "./render/input/shell_menu_pad.js";
 import { mobileControlProfile } from "./render/input/mobile_control_profile.js";
 import {
   syncPlayerGunTargetSelection,
@@ -13086,7 +13087,7 @@ try {
 } catch { /* Storage may be unavailable; keep the cover. */ }
 boot().catch(showFatal);
 
-installToyFight({
+const toyFightUi = installToyFight({
   setPaused(on) {
     try { setPauseReason("toy-fight", on); }
     catch (error) { console.warn("toy fight pause", error); }
@@ -13094,5 +13095,18 @@ installToyFight({
   telemetry(fields) {
     recorder.context("split", fields);
     recorder.event("lifecycle", "toy_fight", fields);
+  },
+});
+
+// The pad drives the shell menus too (picker, pause, debrief, settings), with
+// Start as the Escape key and a second pad's Start opening the 2P toy fight.
+installShellMenuPad({
+  readyScreen,
+  settingsScreen,
+  toyFight: toyFightUi,
+  pressEscape() {
+    if (closeSettings()) return;
+    if (skipIncidentReplay()) return;
+    toggleSessionPause();
   },
 });

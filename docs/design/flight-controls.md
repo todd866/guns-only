@@ -126,3 +126,9 @@ Left stick pitch/roll · right stick look/camera · RT/LT throttle up/down
   flight, loops or rolls in Pilot yet. Kid's arcade tricks still exist in RC.
 - Guns-only rudder needs a sim input channel (C#) before LB/RB can bind.
 - RC split-screen P2 has no per-seat Pilot toggle (global Kid/Big Kid is P1's).
+- Guns-only shell menus are pad-driven (`render/input/shell_menu_pad.js`):
+  Start pauses/resumes, a second pad's Start on the picker opens the 2P toy
+  fight. Two-player on the C# missions themselves — including a real P2
+  front-seat gunner in the Cobra with its own view — needs sim-side crew and
+  camera channels (`WebBridge` is single-seat); that is a deliberate C#
+  follow-up, not something to fake client-side (same ruling as the rudder).

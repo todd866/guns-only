@@ -19,7 +19,7 @@ function storage() {
 
 const memory = storage();
 const shot = new URLSearchParams(location.search).get("shot");
-if (shot === "full") writeLast(memory, "gunship");
+if (shot === "full") writeLast(memory, "guns");
 const games = document.querySelector("#games");
 const tiles = [...games.querySelectorAll(".tile")];
 games.style.setProperty("--cols", String(columnsFor(tiles.length)));
