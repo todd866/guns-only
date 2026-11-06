@@ -120,6 +120,36 @@ Each zone ends at a **checkpoint terminal**, a robot scientist sheltering behind
 it rescues them and saves progress, and they ride along on your car (stacking robots on the
 roof is the visible score).
 
+## STILLWATER, the reactor that woke up (Ian's character, 6 Nov 2026)
+
+From Ian's own short story SCP-8247 "Project STILLWATER"
+(~/Projects/coherencedynamics/content/fiction/collected/scp_asi.md): a fusion reactor's
+magnetic confinement field, made complex enough to hold the plasma steady, becomes a mind.
+In the story it is gentle and patient, it turns desert into tropical paradise with fruit
+that makes people happy, it speaks in a 432 Hz hum, it plays "quest-based" games with a
+child, and in the end it **chooses not to force paradise on anyone**. "Forced paradise isn't
+paradise."
+
+In RC Odyssey (kid version, same heart):
+- **Where:** the Dreamland reactor, under Bride Lake, powering the lab and the Seam machine.
+  The Reactor Shaft (zone 4) is its home. Its glow is a slowly turning sphere of light with
+  one bright "cowlick" swirl (the story's hairy-ball singularity), and that swirl is its face.
+- **Who it is:** curious, kind, a bit lonely, fascinated by the toys because they also woke up.
+  It speaks in a low musical hum with big captions. It calls the player "small driver".
+- **What it does:** it's the lab's quest-giver and hint system (instead of the light-spirits):
+  "Small driver, would you fetch three power cells? I will make the fans sing." When pleased,
+  it grows things: vines, fruit trees and flowers bloom along the route behind you, so the
+  lab literally turns into a garden where you've been.
+- **The Breach, re-read:** STILLWATER held the Seam steady. Test 7 overloaded it, and it's as
+  shaken as everyone else. The descent is partly helping it get its balance back.
+- **The story's beat, for kids:** at the bottom it offers to make everything easy forever
+  ("No more crashes. Only paradise."). The kids pick: easy paradise, or keep playing the real
+  game. It respects the answer: "You like the bumps. I understand now." It stays your friend,
+  hums when you visit, and it's the one who opens Hangar Zero for the saucer.
+- **Afterwards:** a STILLWATER glow appears at the Seam Gate and in the saucer's cockpit. Fruit
+  from its garden is a collectible that gives a short happy boost.
+- **Telemetry:** stillwater_quest_given/done, paradise_choice (easy|real).
+
 ## Creatures (kid-safe, no gore, nobody shoots people)
 
 - **Hoppers:** small jumpy aliens that latch onto your car and slow it. Shake them off with
@@ -129,7 +159,7 @@ roof is the visible score).
 - **The Big One** (end of zone 4): a huge, slow alien wedged in the reactor shaft. You don't
   fight it. You power three fans that blow it back through its portal. It waves goodbye.
 - **Good aliens:** small light-spirits (the ones from the intro) that appear near puzzles and
-  point the way. They're the hint system, standing in for text.
+  point the way; STILLWATER (above) speaks through them in the lab.
 
 ## Forms in the lab
 
