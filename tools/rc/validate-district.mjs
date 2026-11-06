@@ -1,4 +1,4 @@
-// Area 51½ district GLB contract check (docs/area-51-build-plan.md). No dependencies.
+// RC Odyssey district GLB contract check (docs/area-51-build-plan.md). No dependencies.
 // usage: node tools/rc/validate-district.mjs DISTRICT.glb [--out receipt.json]
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';

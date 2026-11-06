@@ -18,7 +18,7 @@ The production catalogue exposes six accepted experiences, split into military a
   the midpoint arrestor.
 - **Cobra Canyon — Hold the Bridge / Ember Run:** fly the AH-1G through the River Gorge ground
   war, work the AI gunner, rearm at Camp Ember, and hold Iron Bell.
-- **Area 51½:** race toy RC buggies round a desert air base in the spirit of Re-Volt: rigid-body
+- **RC Odyssey:** race toy RC buggies round Saucer Springs AFB, a desert air base, in the spirit of Re-Volt: rigid-body
   four-wheel physics, AI rivals, cartoon pickups, and a kid mode on by default.
 - **Top Gun:** fly the F-14A against two MiG-28s with guns and two Sidewinders, then recover
   aboard the carrier in the anime-1986 presentation.

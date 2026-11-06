@@ -1,4 +1,4 @@
-# Area 51½ — direction (owner, 2026-10-21)
+# RC Odyssey — direction (owner, 2026-10-21)
 
 Supersedes the "Blacksite RC" framing in `rc-blacksite.md`. The engineering in that doc still
 stands; the name, audience and world change.
@@ -17,7 +17,7 @@ The name is the joke: it's half of Area 51, at toy scale.
 Re-Volt made the owner's six-year-old cry. He is the target player. That is the main design
 constraint, and it changes Re-Volt's feel in specific ways:
 
-| Re-Volt pain | Area 51½ answer |
+| Re-Volt pain | RC Odyssey answer |
 |---|---|
 | Car flips and stays stuck | Auto-righting after ~1 s, with a cheerful bounce. Never a dead stop. |
 | Twitchy steering at speed | Speed-sensitive steering and traction assist **on by default**. A "Big Kid" toggle removes them. |
@@ -41,7 +41,7 @@ handling punishing a small child.
    Re-Volt classic, with original art).
 5. **Flight line:** hangars, under parked jets (existing collision already handles wings vs
    gear), a runway drag strip, tugs crossing.
-6. **Area 51½ proper (secret):** bunker doors, a lab, friendly aliens waving from tubes. It
+6. **Dreamland proper (secret):** bunker doors, a lab, friendly aliens waving from tubes. It
    unlocks by finding the hidden alien specimens across the other districts.
 
 Free roam links the districts the way the current ten-gate route links quarters → hangar →
@@ -99,8 +99,8 @@ In the game:
 On the backlog:
 - **Set dressing:** PCS moving trucks and boxes, the reflective PT belt, "Yard of the Month",
   quiet-hours and 15 MPH signs, a gate-guard static jet, squadron rocks, a Security Forces
-  "Defenders" booth, a water tower, and a "Flightline → / Area 51½: NO" sign.
+  "Defenders" booth, a water tower, and a "Flightline → / Dreamland: NO" sign.
 - **Collectibles:** challenge coins, as Re-Volt's stars.
 - **Flight line:** a FOD-walk mini-game, crew chiefs, the wing commander's reserved parking spot
   as a shortcut, and the golf course built before the runway.
-- **Area 51½:** Janet-style flights and "Dreamland" signage.
+- **Dreamland:** Janet-style flights and "Dreamland" signage.
