@@ -1494,7 +1494,12 @@ window.addEventListener('keyup', e => {
   if (e.code === 'KeyE' && golfHold != null) golfRelease();
   if (e.code === 'KeyE' && tennisHold != null) tennisRelease();
 });
-window.addEventListener('blur', () => pause(true));
+// Couch/TV (Ian, 6 Nov 2026): the TV window loses focus whenever someone types on the laptop, which froze the
+// game mid-play. With a controller connected, keep playing on blur; keyboard-only play still pauses.
+window.addEventListener('blur', () => {
+  if (Array.from(navigator.getGamepads?.() ?? []).some(p => p?.connected)) return;
+  pause(true);
+});
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     pause(true);
