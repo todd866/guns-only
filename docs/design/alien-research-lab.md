@@ -134,8 +134,20 @@ In RC Odyssey (kid version, same heart):
 - **Where:** the Dreamland reactor, under Bride Lake, powering the lab and the Seam machine.
   The Reactor Shaft (zone 4) is its home. Its glow is a slowly turning sphere of light with
   one bright "cowlick" swirl (the story's hairy-ball singularity), and that swirl is its face.
-- **Who it is:** curious, kind, a bit lonely, fascinated by the toys because they also woke up.
-  It speaks in a low musical hum with big captions. It calls the player "small driver".
+- **Who it is: a trickster god** (Ian, 6 Nov 2026). It powers all of Saucer Springs (the base's
+  lights hum at 432 Hz if you listen), so in a sense the whole base is its body. It's kind
+  underneath but playful and vain: it makes you **jump through hoops** for its amusement and its
+  favour. "Small driver. Entertain me, and I will open the door." It cheats a little, changes
+  the rules mid-game, giggles in static, and always plays fair in the end. Fascinated by the
+  toys because they also woke up. Low musical hum, big captions.
+- **Its hoops are old-school 2.5D games** (the dreams below are its trials): you earn its doors,
+  power-ups and the saucer by playing whatever it feels like today. A rotating set of retro
+  styles, all in the toy world's look: the side-on platformer; a side-scrolling shoot-'em-up
+  flown in a toy saucer; a top-down micro-racer on a kitchen table; a maze chase; a brick-
+  breaker where your car is the paddle; a one-screen climbing tower; an endless runner on the
+  tram line. Each is a dream module with the same runner, so new hoops are cheap to add, and
+  STILLWATER announces each with a mock-grand title card ("THE TRIAL OF THE BOUNCING BLOCKS").
+  Telemetry: which hoops kids replay most decides which styles get more levels.
 - **What it does:** it's the lab's quest-giver and hint system (instead of the light-spirits):
   "Small driver, would you fetch three power cells? I will make the fans sing." When pleased,
   it grows things: vines, fruit trees and flowers bloom along the route behind you, so the
