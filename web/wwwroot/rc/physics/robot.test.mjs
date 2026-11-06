@@ -17,6 +17,14 @@ const walk = (w, r, seconds, input = {throttle: 1}) => {
   return ev;
 };
 
+test('a camera-relative stick walks that way and turns the robot to face it', () => {
+  const w = yard(),
+    r = createRobot([0, 0.2, 0], Math.PI / 2);
+  walk(w, r, 0.8, {move: {x: 0, z: -1}});
+  assert.ok(r.pos[2] < -0.8 && Math.abs(r.pos[0]) < 0.35, `walked with the camera, not the old facing ${r.pos}`);
+  assert.ok(Math.abs(r.yaw) < 0.4, `turned to face the move ${r.yaw}`);
+});
+
 test('walks forward along its facing, turns, and settles on the floor', () => {
   const w = yard(),
     r = createRobot([0, 0.2, 0], 0);

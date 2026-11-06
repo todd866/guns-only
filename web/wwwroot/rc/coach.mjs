@@ -9,20 +9,24 @@ export function createCoach() {
     intro = 0,
     showing = false;
   let away = 0;
-  return ({dt, speed, throttle = 0, lt = 0, rt = 0, active = true, joined = false, touched = true}) => {
+  return ({dt, speed, throttle = 0, lt = 0, rt = 0, active = true, joined = false, touched = true, form = 'car'}) => {
     if (joined) intro = 8;
     // Struggling means trying: a pad nobody has touched for 15 s is someone not playing.
     away = touched ? 0 : away + dt;
     if (!active || away > 15) return {show: (showing = false), glow: new Set(), why: null};
     intro = Math.max(0, intro - dt);
+    const foot = form === 'robot';
     still = speed < 0.6 && Math.abs(throttle) < 0.2 ? still + dt : 0;
     pushing = speed < 0.6 && throttle > 0.3 ? pushing + dt : 0;
-    both = lt > 0.3 && rt > 0.3 ? both + dt : 0;
+    // Both triggers at once is go and reverse cancelling. On foot they are fire and aim.
+    both = !foot && lt > 0.3 && rt > 0.3 ? both + dt : 0;
     good = speed > 2.2 && both === 0 ? good + dt : 0;
     const why = both > 1.2 ? 'both' : pushing > 2 ? 'stuck' : still > 2.5 ? 'still' : intro > 0 ? 'intro' : null;
     if (why) showing = true;
     else if (good > 3) showing = false;
-    const glow = new Set(why === 'both' ? [7, 'stick'] : why === 'stuck' ? [6, 13] : why === 'still' ? ['stick', 7, 12] : []);
+    const glow = new Set(
+      why === 'both' ? [6, 7] : why === 'stuck' ? (foot ? ['stick'] : [6]) : why === 'still' ? (foot ? ['stick'] : [7]) : []
+    );
     return {show: showing, glow, why};
   };
 }

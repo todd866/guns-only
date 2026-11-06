@@ -23,53 +23,51 @@ function face(down) {
   return Array.from({length: 16}, (_, i) => ({value: down.includes(i) ? 1 : 0}));
 }
 
-test('pad 2 robot walks on the left stick, jumps on A, and the top face punches and uses', () => {
-  const xbox = p2RobotPad({id: 'Xbox 360', axes: [0, -1, 0, 0], buttons: face([0, 3])});
-  assert.ok(xbox.throttle > 0.9);
+test('pad 2 robot walks on the camera, jumps on A, and X punches and uses', () => {
+  const xbox = p2RobotPad({id: 'Xbox 360', axes: [0, -1, 1, 0], buttons: face([0, 2])});
+  assert.ok(xbox.move.z < -0.9, 'stick up walks the way a north-facing camera looks');
+  assert.equal(xbox.throttle, 0);
   assert.equal(xbox.steer, 0);
   assert.equal(xbox.jump, true);
   assert.equal(xbox.punch, true);
   assert.equal(xbox.use, true);
-  const sn = p2RobotPad({id: '8BitDo SN30', axes: [0.5, 0.5, 0, 0], buttons: face([1, 3])});
-  assert.ok(sn.steer > 0.3);
-  assert.ok(sn.throttle < -0.3);
-  assert.equal(sn.jump, true);
+  assert.equal(Math.abs(xbox.move.x) < 1e-9, true, 'the right stick does not walk');
+  const sn = p2RobotPad({id: '8BitDo SN30', axes: [0.5, 0.5, 0, 0], buttons: face([0, 2])}, 0);
+  assert.ok(sn.move.x > 0.3, 'stick right walks camera-right');
+  assert.ok(sn.move.z > 0.2, 'stick down walks back');
+  assert.equal(sn.jump, true, 'index 0 jumps on every pad');
   assert.equal(sn.punch, true);
-  assert.equal(sn.use, true);
-  assert.equal(p2RobotPad({id: 'Ultimate', axes: [0, 0, 0, 0], buttons: face([1])}).jump, false);
-  assert.equal(p2RobotPad({id: 'SN30 Pro', axes: [0, 0, 0, 0], buttons: face([0])}).jump, false);
-  assert.equal(p2RobotPad(null).throttle, 0);
+  assert.equal(p2RobotPad({id: 'Ultimate', axes: [0, 0, 0, 0], buttons: face([1])}).jump, false, 'B is morph, not jump');
+  assert.equal(p2RobotPad(null).move.x, 0);
   assert.equal(p2RobotPad(null).jump, false);
 });
 
-test('flightGamepadInput maps sticks like keyboard flightInput', () => {
-  const gp = {axes: [0, 0, 1, -0.5], buttons: []},
-    poll = {throttle: 0.6, steer: -0.4, boost: true};
+test('flightGamepadInput pitches and rolls on the left stick for both players', () => {
+  const gp = {axes: [1, 1, 0.5, -0.5], buttons: Array.from({length: 17}, () => ({value: 0}))};
+  gp.buttons[7] = {value: 0.6};
+  const poll = {boost: true};
   assert.deepEqual(flightGamepadInput(gp, poll, 'bigKid'), {
-    pitch: axisExpect(-(-0.5)),
+    pitch: 1,
     roll: 1,
-    yaw: -0.4,
+    yaw: 0,
     power: 0.6,
     burner: true,
     assist: false
   });
-  const easy = flightGamepadInput(gp, poll, 'kid');
-  assert.equal(easy.easy, true);
-  assert.equal(easy.climb, 0.6);
+  const kid = flightGamepadInput(gp, poll, 'kid');
+  assert.equal(kid.pitch, 1);
+  assert.equal(kid.power, 0.6);
+  assert.equal(kid.assist, true);
+  assert.equal(kid.easy, undefined, 'the right stick is the camera, not an easy-fly steer');
 });
-
-function axisExpect(v) {
-  v = Math.max(-1, Math.min(1, v));
-  return Math.abs(v) < 0.12 ? 0 : (Math.sign(v) * (Math.abs(v) - 0.12)) / 0.88;
-}
 
 test('rivalHumanInput passes flight while airborne', () => {
   const session = {flight: {mode: 'fly'}, car: {}},
     out = rivalHumanInput({
       paused: false,
       uiPanel: false,
-      pad2: {throttle: 1, steer: 0.2, brake: false, drift: false, boost: false},
-      gp: {axes: [0, 0, 0, 0.5]},
+      pad2: {throttle: 0, steer: 0, moveX: 0.2, brake: false, drift: false, boost: true},
+      gp: {axes: [0, 1, 0, 0.5], buttons: face([])},
       mode: 'bigKid',
       session,
       fire: false,
@@ -78,7 +76,8 @@ test('rivalHumanInput passes flight while airborne', () => {
     });
   assert.ok(out.flight);
   assert.equal(out.throttle, 0);
-  assert.equal(out.flight.pitch, axisExpect(-0.5));
+  assert.equal(out.flight.pitch, 1, 'stick pulled back raises the nose');
+  assert.equal(out.flight.burner, true);
 });
 
 test('rivalHumanInput holds the car while player 2 is the robot', () => {

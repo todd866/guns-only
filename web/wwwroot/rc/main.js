@@ -121,7 +121,7 @@ import {drawDetailedMinimap} from './open-world/minimap.js';
 import {createCup, loadCup, saveCup, recordCupRace, nextCupEvent, cupStandings} from './grand-prix.mjs';
 import {createRaceMenu, CUP_COURSES} from './race-menu.js';
 import {createAlienMarshal} from './alien-marshal.js';
-import {createGamepadInput} from './gamepad.mjs';
+import {createGamepadInput, cameraMove, flyShoulder} from './gamepad.mjs';
 import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput} from './split-p2.mjs';
 import {attachDreams} from './open-world/dreams/runner.js';
 import {createMenuPad} from './gamepad-menu.mjs';
@@ -393,7 +393,8 @@ let lookMode = false,
   lookYaw = 0,
   lookPitch = 0,
   lookIdle = 0,
-  lookDrag = null;
+  lookDrag = null,
+  padAim = false;
 const lookKeys = new Set();
 // A mouse drag on the view looks around any time; it settles back behind you a moment after.
 canvas.addEventListener('pointerdown', e => {
@@ -1485,7 +1486,8 @@ window.addEventListener('keydown', e => {
   }
   if (e.code === 'KeyB') setMode(mode === 'kid' ? 'bigKid' : 'kid');
   if (e.code === 'KeyM') setMuted(!muted);
-  if (e.code === 'KeyO') exit();
+  // Couch/TV (Ian, 6 Nov 2026): O must not leave the game. Typing on the laptop while the
+  // TV window had focus quit it. Exit stays on the pause menu button.
 });
 window.addEventListener('keyup', e => {
   keys.delete(e.code);
@@ -3009,7 +3011,7 @@ function outlawStep(dt) {
     riding,
     speed: Math.hypot(s.car.vel[0], s.car.vel[2]),
     robot,
-    input: {attack, lock: keys.has('ShiftLeft') || keys.has('ShiftRight')},
+    input: {attack, lock: keys.has('ShiftLeft') || keys.has('ShiftRight') || padAim},
     mode,
     dt
   });
@@ -5458,30 +5460,47 @@ const coachEls = [1, 2].map(n => {
 let coachLast = 0,
   coachDrawn = 0,
   p1Last = null;
-// The on-screen "Skate [E]" style button: player 1's left face button presses it, and its
-// key cap shows that button as printed on the pad in their hands (X on the Ultimate, Y on the SN30).
-// Player 1's pad: left face (X / Y) morphs car → walk → skate, LB / L flies and lands, the top
-// face presses the on-screen Go-in/Skate button when it shows (boost otherwise). They go
-// through the same key handlers the keyboard uses (T, Return), so every rule still applies.
+// Standard face: B morphs (T), X boosts on a car and punches on foot, Y is drift on a car
+// and boost / the on-screen Skate button on foot. LB starts flight; a short tap in the air
+// opens the chute, a hold rolls. They go through the same key handlers (T, Return).
 const padHeld = {},
   p2PadHeld = {};
-let useClicked = false;
+let useClicked = false,
+  p1FlyShoulder = null,
+  p2FlyShoulder = null;
 const tapKey = code => {
   canvas.dispatchEvent(new KeyboardEvent('keydown', {code, key: code, bubbles: true}));
   canvas.dispatchEvent(new KeyboardEvent('keyup', {code, key: code, bubbles: true}));
 };
 function useButton(all) {
   const mine = all.filter(p => p?.connected && p.index !== split?.pad),
+    play = !paused && !ui.panel(),
     edge = i => {
       const down = mine.some(p => p.buttons[i]?.value > 0.5),
         hit = down && !padHeld[i];
       padHeld[i] = down;
-      return hit && !paused && !ui.panel();
+      return hit && play;
     },
     btn = $('interact');
-  if (edge(2)) tapKey('KeyT');
-  if (edge(4)) tapKey('Enter');
-  if (edge(3) && !btn.hidden) {
+  if (edge(1)) tapKey('KeyT');
+  {
+    const lb = mine.some(p => p.buttons[4]?.value > 0.5),
+      shoulder = flyShoulder(p1FlyShoulder, {flying: !!s.flight.mode, down: lb && play, now: performance.now()});
+    p1FlyShoulder = shoulder.state;
+    if (play && (shoulder.takeoff || shoulder.chute)) tapKey('Enter');
+  }
+  if (edge(2)) {
+    if (robot) {
+      punchQueued = true;
+      useQueued = true;
+    }
+    if (!btn.hidden) {
+      btn.click();
+      if (!robot) useClicked = true;
+    }
+  }
+  // On foot, Y is still boost and the on-screen Skate / go-in button.
+  if (edge(3) && robot && !btn.hidden) {
     btn.click();
     useClicked = true;
   }
@@ -5491,19 +5510,25 @@ function useButton(all) {
         const down = gp2?.connected && (gp2.buttons[i]?.value ?? 0) > 0.5,
           hit = down && !p2PadHeld[i];
         p2PadHeld[i] = down;
-        return hit && !paused && !ui.panel();
+        return hit && play;
       };
-    if (p2Edge(2)) p2ToggleMorph();
-    // Top face is punch and use while player 2 is the walker (the same actions as player 1's robot).
-    if (p2Edge(3) && split.p2Form === 'robot') p2PunchQueued = true;
-    if (p2Edge(4)) p2ToggleFlight();
+    if (p2Edge(1)) p2ToggleMorph();
+    if (p2Edge(2) && split.p2Form === 'robot') p2PunchQueued = true;
+    const lb2 = gp2?.connected && (gp2.buttons[4]?.value ?? 0) > 0.5,
+      shoulder2 = flyShoulder(p2FlyShoulder, {
+        flying: !!race.rivals[0].session.flight.mode,
+        down: lb2 && play,
+        now: performance.now()
+      });
+    p2FlyShoulder = shoulder2.state;
+    if (play && (shoulder2.takeoff || shoulder2.chute)) p2ToggleFlight();
   }
   formBar(all);
   formBarP2(all);
   const gp = all[p1Last];
   if (!gp || btn.hidden) return;
   const kind = padKind(gp.id),
-    label = kind === 'sn30' ? 'X' : 'Y';
+    label = robot ? (kind === 'sn30' ? 'X' : 'Y') : kind === 'sn30' ? 'Y' : 'X';
   for (const k of btn.querySelectorAll('kbd'))
     if (k.textContent === 'E' || k.dataset.pad) {
       k.dataset.pad = kind;
@@ -5511,7 +5536,7 @@ function useButton(all) {
     }
 }
 // Player 1's forms, always on screen: the one you're in is lit, with the pad button that
-// changes it (X/Y morph, LB/L fly) drawn as printed on that pad.
+// changes it (B morph, LB fly) drawn as printed on that pad.
 const formEl = Object.assign(document.createElement('div'), {id: 'forms', hidden: true}),
   formEl2 = Object.assign(document.createElement('div'), {id: 'forms-p2', hidden: true});
 formEl.setAttribute('aria-label', 'Change: car, walk, skate, fly');
@@ -5624,7 +5649,7 @@ function formBar(all) {
   if (key === formKey) return;
   formKey = key;
   const cap = (t, cls) => `<kbd class="cap ${cls}" data-pad="${kind}">${t}</kbd>`,
-    morph = kind === 'sn30' ? cap('Y', 'face') : cap('X', 'face'),
+    morph = kind === 'sn30' ? cap('A', 'face') : cap('B', 'face'),
     fly = kind === 'sn30' ? cap('L', 'bump') : cap('LB', 'bump'),
     f = (k, icon) => `<span class="form${k === now ? ' on' : ''}">${icon}</span>`;
   formEl.innerHTML = `${morph}${f('car', '🚗')}${f('walk', '🚶')}${f('skate', '🛹')}<i></i>${fly}${f('fly', '✈️')}`;
@@ -5646,10 +5671,23 @@ function formBarP2(all) {
   if (key === formKey2) return;
   formKey2 = key;
   const cap = (t, cls) => `<kbd class="cap ${cls}" data-pad="${kind}">${t}</kbd>`,
-    morph = kind === 'sn30' ? cap('Y', 'face') : cap('X', 'face'),
+    morph = kind === 'sn30' ? cap('A', 'face') : cap('B', 'face'),
     fly = kind === 'sn30' ? cap('L', 'bump') : cap('LB', 'bump'),
     f = (k, icon) => `<span class="form${k === now ? ' on' : ''}">${icon}</span>`;
   formEl2.innerHTML = `${morph}${f('car', '🚗')}${f('walk', '🚶')}${f('skate', '🛹')}<i></i>${fly}${f('fly', '✈️')}`;
+}
+function playingForm(player) {
+  if (player === 2) {
+    const rv = race.rivals[0];
+    if (rv?.session.flight.mode) return 'fly';
+    if (split?.p2Form === 'robot') return 'robot';
+    if (split?.p2Form === 'board') return 'board';
+    return 'car';
+  }
+  if (s.flight.mode) return 'fly';
+  if (robot) return 'robot';
+  if (form === 'board' || skate) return 'board';
+  return 'car';
 }
 function coachFrame(all, p1, p2, now) {
   const dt = coachLast ? Math.min(0.1, (now - coachLast) / 1000) : 0;
@@ -5657,34 +5695,40 @@ function coachFrame(all, p1, p2, now) {
   const live = all.filter(p => p?.connected),
     busy = p => p.buttons.some(b => b.value > 0.5) || p.axes.some(a => Math.abs(a) > 0.3);
   for (const p of live) if (p.index !== split?.pad && busy(p)) p1Last = p.index;
-  const p1Drive = started && !paused && !ui.panel() && !robot && !skate && !s.flight.mode,
-    rv0 = race.rivals[0],
-    p2Drive =
-      started &&
-      !paused &&
-      !ui.panel() &&
-      splitOn &&
-      rv0 &&
-      !rv0.session.flight.mode &&
-      split?.p2Form !== 'board' &&
-      split?.p2Form !== 'robot',
+  const rv0 = race.rivals[0],
+    p1Form = playingForm(1),
+    p2Form = playingForm(2),
     players = [
-      {pad: all[p1Last] ?? live.find(p => p.index !== split?.pad), input: p1, speed: readout(s).speed, on: p1Drive},
-      {pad: splitOn ? all[split.pad] : null, input: p2, speed: splitOn ? readout(rv0.session).speed : 0, on: p2Drive}
+      {
+        pad: all[p1Last] ?? live.find(p => p.index !== split?.pad),
+        input: p1,
+        speed: robot ? Math.hypot(robot.vel[0], robot.vel[2]) : readout(s).speed,
+        on: started && !paused && !ui.panel(),
+        form: p1Form,
+        effort: p1Form === 'robot' ? Math.hypot(p1?.moveX || 0, p1?.moveY || 0) : p1?.throttle || 0
+      },
+      {
+        pad: splitOn ? all[split.pad] : null,
+        input: p2,
+        speed: splitOn && rv0 ? (split?.p2Form === 'robot' && p2Robot ? Math.hypot(p2Robot.vel[0], p2Robot.vel[2]) : readout(rv0.session).speed) : 0,
+        on: started && !paused && !ui.panel() && splitOn && !!rv0,
+        form: p2Form,
+        effort: p2Form === 'robot' ? Math.hypot(p2?.moveX || 0, p2?.moveY || 0) : p2?.throttle || 0
+      }
     ],
     draw = now - coachDrawn > 66;
   if (draw) coachDrawn = now;
-  players.forEach(({pad: gp, input, speed, on}, i) => {
+  players.forEach(({pad: gp, input, speed, on, form: shape, effort}, i) => {
     const el = coachEls[i];
     if (!gp || !input) return void (el.hidden = true);
     const busyNow = gp.buttons.some(b => b.value > 0.5) || gp.axes.some(a => Math.abs(a) > 0.3);
-    const c = coaches[i]({dt, speed, throttle: input.throttle, lt: gp.buttons[6]?.value ?? 0, rt: gp.buttons[7]?.value ?? 0, active: on, joined: !!input.joined, touched: busyNow});
+    const c = coaches[i]({dt, speed, throttle: effort, lt: gp.buttons[6]?.value ?? 0, rt: gp.buttons[7]?.value ?? 0, active: on, joined: !!input.joined, touched: busyNow, form: shape});
     el.hidden = !c.show;
     el.classList.toggle('left', splitOn && i === 0);
     el.classList.toggle('right', i === 1);
     if (c.show && draw) {
       const pressed = new Set(gp.buttons.flatMap((b, k) => (b.value > 0.5 ? [k] : [])));
-      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 440, skip: []});
+      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 440, form: shape});
     }
   });
 }
@@ -5704,9 +5748,11 @@ const playersUrl2 = new URLSearchParams(location.search).get('players') === '2',
   joinCard = Object.assign(document.createElement('div'), {id: 'join-card', hidden: true});
 joinCard.innerHTML = '<div class="join-pad" aria-hidden="true"></div><p class="join-cta">START ▶ join</p>';
 document.body.append(joinCard);
+let justJoined = false;
 function joinWithPad(padIndex) {
   if (split || !started || padIndex == null || padIndex === p1Pad || !race.rivals.length) return;
-  split = {pad: padIndex, heading: null, placed: false, fire: false, p2Form: 'car'};
+  split = {pad: padIndex, heading: null, lookYaw: 0, lookPitch: 0, lookIdle: 0, placed: false, fire: false, p2Form: 'car'};
+  justJoined = true;
   callout('👥 2 players!', 3000);
   telemetry.choice?.('split', 'join');
 }
@@ -6004,8 +6050,8 @@ function splitInput(all, now) {
       idle2 = t - split.p2At > 60000;
     split.solo = idle1 && !idle2 ? 2 : idle2 && !idle1 ? 1 : 0;
   }
-  const p1 = pollGamepad(split ? all.filter(p => p && p.index !== split.pad) : all),
-    p2 = split ? pollP2([all[split.pad]]) : null;
+  const p1 = pollGamepad(split ? all.filter(p => p && p.index !== split.pad) : all, playingForm(1)),
+    p2 = split ? pollP2([all[split.pad]], playingForm(2)) : null;
   if (p2?.fire) split.fire = true;
   return {p1, p2};
 }
@@ -6249,12 +6295,18 @@ function frame(now) {
   coachFrame(allPads, pad, pad2, now);
   useButton(allPads);
   findFrame(allPads, now);
-  if (pad.start) {
+  if (pad.start || (pad2?.start && split && !justJoined)) {
     if (!started) $('start').click();
     else if (!ui.panel()) pause(!paused);
   }
-  if (!paused && !ui.panel() && pad.fire && !labBusy(labRide)) fireQueued = true;
-  if (labBusy(labRide) && pad.fire) labSkipEdge = true;
+  justJoined = false;
+  padAim = !!(robot && pad.aim);
+  if ((pad.map || pad2?.map) && started && !ui.panel()) $('atlas').click();
+  if (!paused && !ui.panel() && pad.fire && !labBusy(labRide)) {
+    fireQueued = true;
+    if (robot) punchQueued = true;
+  }
+  if (labBusy(labRide) && (pad.fire || pad.jump)) labSkipEdge = true;
   if (pad.boost && !ui.panel() && !useClicked && !leverNear(robot ? robot.pos : s.car.pos)) toggleBoost();
   useClicked = false;
   {
@@ -6315,8 +6367,8 @@ function frame(now) {
           brake: touchState.brake || pad.brake
         });
       return [
-        {move: clamp((d.steer || 0) + (d.throttle || 0)), jump: keys.has('Space') || !!(pad.fire || hopQueued)},
-        pad2 ? {move: clamp((pad2.steer || 0) + (pad2.throttle || 0)), jump: !!pad2.fire} : {move: 0, jump: false}
+        {move: clamp((d.steer || 0) + (d.throttle || 0)), jump: keys.has('Space') || !!(pad.jump || hopQueued)},
+        pad2 ? {move: clamp((pad2.steer || 0) + (pad2.throttle || 0)), jump: !!pad2.jump} : {move: 0, jump: false}
       ];
     };
     dreams.frame(dt, dreamInput(), {
@@ -6350,6 +6402,28 @@ function frame(now) {
           brake: touchState.brake || pad.brake
         }),
         throttleIn = drive.throttle;
+      if (
+        pad.jump &&
+        !robot &&
+        race.roam &&
+        s.car.grounded &&
+        !s.flight.mode &&
+        !dreams?.ownsSim()
+      ) {
+        s.car.vel = [s.car.vel[0], s.car.vel[1] + (form === 'board' ? FLIGHT.ollie : FLIGHT.hop), s.car.vel[2]];
+        pad.jump = false;
+      }
+      if (
+        pad2?.jump &&
+        split?.p2Form !== 'robot' &&
+        race.rivals[0] &&
+        !race.rivals[0].session.flight.mode &&
+        race.rivals[0].session.car.grounded
+      ) {
+        const rc = race.rivals[0].session.car;
+        rc.vel = [rc.vel[0], rc.vel[1] + (split.p2Form === 'board' ? FLIGHT.ollie : FLIGHT.hop), rc.vel[2]];
+        pad2.jump = false;
+      }
       if (fireQueued && race.pickups.held.get(s.car)) {
         const it = race.pickups.held.get(s.car);
         telemetry.itemUse(it);
@@ -6360,8 +6434,16 @@ function frame(now) {
         ? {...drive, drift: drive.drift || skateTouchGrab || performance.now() < skateGrabUntil}
         : drive;
       // A winged dinosaur flies with the proximity assist in every mode (no levelling, a late save).
-      const fl = {...flightInput(keys), assist: mode === 'kid' || winged(), proximity: winged()};
-      if (s.flight.mode === 'chute') fl.steer = drive.steer;
+      const keyFl = flightInput(keys),
+        fl = {
+          pitch: keyFl.pitch || pad.pitch || 0,
+          roll: keyFl.roll || pad.roll || 0,
+          yaw: keyFl.yaw || 0,
+          power: keyFl.power || pad.power || 0,
+          assist: mode === 'kid' || winged(),
+          proximity: winged()
+        };
+      if (s.flight.mode === 'chute') fl.steer = drive.steer || pad.moveX || 0;
       fl.burner = boostOn && race.roam && !skate;
       fl.lift = skyEligible() && s.flight.mode === 'fly' ? openWorld.cloudLift(s.car.pos) : 0;
       {
@@ -6370,22 +6452,31 @@ function frame(now) {
         if (burning && !was) audio.boost();
       }
       if (robot && !openWorld?.digging?.()) {
+        const keyWalk = drivingInput(keys, {}),
+          keyboard = keyWalk.throttle !== 0 || keyWalk.steer !== 0,
+          camYaw = (camHeading ?? robot.yaw) + lookYaw;
         stepRobot(
           robot,
           intro.active
             ? {}
             : bowlingHold != null
-              ? {throttle: 0, steer: drive.steer * 0.13}
-              : {throttle: drive.throttle, steer: drive.steer, jump: keys.has('Space')},
+              ? {throttle: 0, steer: (keyboard ? keyWalk.steer : pad.moveX) * 0.13}
+              : keyboard
+                ? {throttle: keyWalk.throttle, steer: keyWalk.steer, jump: keys.has('Space') || pad.jumpHeld}
+                : {
+                    move: cameraMove(camYaw, pad.moveX, pad.moveY),
+                    jump: keys.has('Space') || pad.jumpHeld,
+                    sprint: pad.sprint
+                  },
           course.world,
           1 / 120
         );
       }
       if (split?.p2Form === 'robot' && p2Robot) {
-        const walk = p2RobotPad(allPads[split.pad]);
+        const walk = p2RobotPad(allPads[split.pad], (split.heading ?? p2Robot.yaw) + (split.lookYaw || 0));
         stepRobot(
           p2Robot,
-          {throttle: walk.throttle, steer: walk.steer, jump: walk.jump},
+          {move: walk.move, jump: walk.jump, sprint: walk.sprint},
           course.world,
           1 / 120
         );
@@ -6690,7 +6781,7 @@ function frame(now) {
             ? {
                 robot,
                 mode,
-                input: {attack: attackNow, use: useNow, lock: keys.has('ShiftLeft') || keys.has('ShiftRight')}
+                input: {attack: attackNow, use: useNow, lock: keys.has('ShiftLeft') || keys.has('ShiftRight') || padAim}
               }
             : null,
           {mode, air: robot ? !robot.grounded : s.car.contacts === 0 && !s.skateRide?.active}
@@ -7051,16 +7142,31 @@ function frame(now) {
     camHeading += d * Math.min(1, dt * (vertArc ? 10 : 4));
     camEasing = !!vertArc || Math.abs(d) > 0.04;
   }
-  // Looking around: look mode's arrows (or a mouse drag) swing the camera round you; out of look
-  // mode it eases back behind you.
+  // Looking around: the right stick orbits (stick up looks up). On foot it stays where you
+  // leave it until R3. Everywhere else it springs back about a second after you let go.
+  // Look mode's arrows and a mouse drag do the same swing.
   {
-    const held = k => (lookKeys.has(k) ? 1 : 0);
+    const held = k => (lookKeys.has(k) ? 1 : 0),
+      stick = !paused && !ui.panel() && (Math.abs(pad.lookX) > 0 || Math.abs(pad.lookY) > 0),
+      foot = !!robot;
+    if (pad.recentre && !paused) {
+      lookYaw = 0;
+      lookPitch = 0;
+      lookIdle = 0;
+    } else if (stick) {
+      lookYaw += pad.lookX * dt * 1.7;
+      lookPitch = Math.max(-0.35, Math.min(1.05, lookPitch - pad.lookY * dt * 1.15));
+      lookIdle = foot ? 1e9 : 1;
+    }
     if (lookMode) {
       lookYaw += (held('ArrowRight') - held('ArrowLeft')) * dt * 2.2;
       lookPitch = Math.max(-0.3, Math.min(1.1, lookPitch + (held('ArrowUp') - held('ArrowDown')) * dt * 1.3));
-    } else if ((lookIdle -= dt) <= 0) {
-      lookYaw *= Math.exp(-dt * 2.5);
-      lookPitch *= Math.exp(-dt * 2.5);
+    } else if (!foot && !stick) {
+      if (lookIdle > 10) lookIdle = 1;
+      if ((lookIdle -= dt) <= 0) {
+        lookYaw *= Math.exp(-dt * 2.5);
+        lookPitch *= Math.exp(-dt * 2.5);
+      }
     }
   }
   const camYaw = camHeading + lookYaw;
@@ -7069,7 +7175,7 @@ function frame(now) {
   const jumpCamera =
       s.flight.mode === 'chute' && openWorld?.skyDive().active ? skyDiveCamera(c.pos, camYaw) : null,
     mount = riggedDino?.root.visible ? 2 : toyDino?.visible ? 2.6 : 1,
-    back = bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount,
+    back = (bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount) * (padAim ? 0.62 : 1),
     eye = [r.x, r.y + 0.12 * mount, r.z];
   desired.set(
     r.x - Math.sin(camYaw) * back * Math.cos(lookPitch),
@@ -7127,6 +7233,10 @@ function frame(now) {
     const q = new T.Quaternion(c.q[0], c.q[1], c.q[2], c.q[3]),
       fw = new T.Vector3(0, 0, -1).applyQuaternion(q),
       cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
+    if (Math.abs(lookYaw) + Math.abs(lookPitch) > 1e-3) {
+      fw.applyAxisAngle(cu, -lookYaw);
+      fw.applyAxisAngle(new T.Vector3().crossVectors(fw, cu).normalize(), -lookPitch);
+    }
     desired.set(r.x, r.y, r.z).addScaledVector(fw, -2.3).addScaledVector(cu, 0.55);
     camera.position.lerp(desired, cameraGlide(openingHeld, dt, 9));
     camera.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
@@ -7157,9 +7267,32 @@ function frame(now) {
         : readout(rs2),
       d = split.heading == null ? 0 : Math.atan2(Math.sin(r2.yaw - split.heading), Math.cos(r2.yaw - split.heading));
     split.heading = split.heading == null ? r2.yaw : split.heading + d * Math.min(1, dt * 4);
-    const back = 1.36 + Math.min(0.24, r2.speed * 0.015),
+    if (pad2 && !paused && !ui.panel()) {
+      const looking = Math.abs(pad2.lookX) > 0 || Math.abs(pad2.lookY) > 0,
+        foot2 = split.p2Form === 'robot';
+      if (pad2.recentre) split.lookYaw = split.lookPitch = split.lookIdle = 0;
+      else if (looking) {
+        split.lookYaw = (split.lookYaw || 0) + pad2.lookX * dt * 1.7;
+        split.lookPitch = Math.max(-0.35, Math.min(1.05, (split.lookPitch || 0) - pad2.lookY * dt * 1.15));
+        split.lookIdle = foot2 ? 1e9 : 1;
+      } else if (!foot2) {
+        if ((split.lookIdle ?? 0) > 10) split.lookIdle = 1;
+        split.lookIdle = (split.lookIdle || 0) - dt;
+        if (split.lookIdle <= 0) {
+          split.lookYaw = (split.lookYaw || 0) * Math.exp(-dt * 2.5);
+          split.lookPitch = (split.lookPitch || 0) * Math.exp(-dt * 2.5);
+        }
+      }
+    }
+    const hy = split.heading + (split.lookYaw || 0),
+      hp = split.lookPitch || 0,
+      back = (1.36 + Math.min(0.24, r2.speed * 0.015)) * (walking && pad2?.aim ? 0.62 : 1),
       eye2 = [r2.x, r2.y + 0.12, r2.z];
-    desired2.set(r2.x - Math.sin(split.heading) * back, r2.y + 0.55, r2.z + Math.cos(split.heading) * back);
+    desired2.set(
+      r2.x - Math.sin(hy) * back * Math.cos(hp),
+      r2.y + 0.55 + Math.sin(hp) * back,
+      r2.z + Math.cos(hy) * back * Math.cos(hp)
+    );
     const ray2 = [desired2.x - eye2[0], desired2.y - eye2[1], desired2.z - eye2[2]],
       dist2 = Math.hypot(...ray2),
       hit2 = dist2 > 0.01 && course.world.raycast(eye2, ray2.map(v => v / dist2), dist2);
@@ -7173,12 +7306,16 @@ function frame(now) {
     if (camera2.position.distanceTo(desired2) > 30) camera2.position.copy(desired2);
     else camera2.position.lerp(desired2, 1 - Math.exp(-dt * 7));
     camera2.fov = 60 + Math.min(5, r2.speed * 0.3);
-    target2.set(r2.x + Math.sin(split.heading) * 1.05, r2.y + 0.18, r2.z - Math.cos(split.heading) * 1.05);
+    target2.set(r2.x + Math.sin(hy) * 1.05, r2.y + 0.18, r2.z - Math.cos(hy) * 1.05);
     if (!walking && rs2.flight.mode === 'fly') {
       const c2 = rs2.car,
         q = new T.Quaternion(c2.q[0], c2.q[1], c2.q[2], c2.q[3]),
         fw = new T.Vector3(0, 0, -1).applyQuaternion(q),
         cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
+      if (Math.abs(split.lookYaw || 0) + Math.abs(split.lookPitch || 0) > 1e-3) {
+        fw.applyAxisAngle(cu, -(split.lookYaw || 0));
+        fw.applyAxisAngle(new T.Vector3().crossVectors(fw, cu).normalize(), -(split.lookPitch || 0));
+      }
       desired2.set(r2.x, r2.y, r2.z).addScaledVector(fw, -2.3).addScaledVector(cu, 0.55);
       camera2.position.lerp(desired2, 1 - Math.exp(-dt * 9));
       camera2.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();

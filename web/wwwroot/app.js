@@ -4120,7 +4120,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "Explore · race · battle",
     configuration: "1:10 toy buggy · rigid-body four-wheel physics · kid mode on (B toggles Big Kid)",
     brief: "Start at the neighbourhood skatepark, explore the base, and join nearby races.",
-    controls: "W/S throttle/brake · A/D steer · Space brake · F fire pickup · R recover · B kid/Big Kid · Esc pause · O exit",
+    controls: "W/S drive · A/D steer · Space jump · Q fire · F boost · Z brake · R recover · B kid · Esc pause",
   }),
   "weekend-ride": Object.freeze({
     kicker: "Off duty · 10,000 ft runway",

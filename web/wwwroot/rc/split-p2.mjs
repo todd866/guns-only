@@ -1,10 +1,5 @@
-// Player 2 split-screen: when split stays on, pad flight input, rival drive packet.
-import {padKind} from './pad-art.mjs';
-
-const axis = v => {
-  v = Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
-  return Math.abs(v) < 0.12 ? 0 : (Math.sign(v) * (Math.abs(v) - 0.12)) / 0.88;
-};
+// Player 2 split-screen: the same standard pad as player 1, on their own controller.
+import {mapPad, cameraMove} from './gamepad.mjs';
 
 /** Split stays on for a joined rival, including while either player is the walking robot. */
 export function splitScreenOn({split, rival, started, p1Robot, p2Robot}) {
@@ -20,31 +15,31 @@ export function toggleP2SkateForm(form) {
   return 'robot';
 }
 
-/** Left stick walks, A jumps (bottom on Xbox, right on SN30), top face punches and uses. */
-export function p2RobotPad(gp) {
-  const down = i => (gp?.buttons?.[i]?.value ?? 0) > 0.5,
-    jump = padKind(gp?.id) === 'sn30' ? 1 : 0,
-    top = down(3);
+/** Left stick walks relative to player 2's camera. A (index 0) jumps, X punches and uses. */
+export function p2RobotPad(gp, camYaw = 0) {
+  const m = mapPad('robot', gp),
+    move = cameraMove(camYaw, m.moveX, m.moveY);
   return {
-    throttle: gp ? -axis(gp.axes?.[1] ?? 0) : 0,
-    steer: gp ? axis(gp.axes?.[0] ?? 0) : 0,
-    jump: down(jump),
-    punch: top,
-    use: top
+    move,
+    throttle: 0,
+    steer: 0,
+    jump: m.jumpHeld,
+    punch: m.punch,
+    use: m.punch,
+    sprint: m.sprint,
+    aim: m.aim
   };
 }
 
-/** Right stick pitch/roll, left stick/triggers power/yaw — same contract as driving-input flightInput + kid easy flyer. */
+/** Left stick pitch/roll, triggers throttle, right stick is the camera (not the aeroplane). */
 export function flightGamepadInput(gp, poll, mode) {
-  if (mode === 'kid') {
-    return {easy: true, steer: poll.steer ?? 0, climb: poll.throttle ?? 0, burner: !!poll.boost};
-  }
+  const m = mapPad('fly', gp);
   return {
-    pitch: axis(-(gp?.axes?.[3] ?? 0)),
-    roll: axis(gp?.axes?.[2] ?? 0),
-    yaw: poll.steer ?? 0,
-    power: poll.throttle ?? 0,
-    burner: !!poll.boost,
+    pitch: m.pitch,
+    roll: m.roll,
+    yaw: 0,
+    power: m.power,
+    burner: !!poll?.boost,
     assist: mode === 'kid'
   };
 }
@@ -54,17 +49,19 @@ export function rivalHumanInput({paused, uiPanel, pad2, gp, mode, session, fire,
   // The walker is its own body. Hold the hidden car so the stick does not drive it.
   if (p2Form === 'robot')
     return {throttle: 0, steer: 0, brake: true, drift: false, fire: false, boost: tagBoost, boardSpin: false};
-  const base = {
-    throttle: pad2.throttle,
-    steer: pad2.steer,
-    brake: pad2.brake,
-    drift: pad2.drift,
-    fire: !!fire,
-    boost: tagBoost,
-    boardSpin: p2Form === 'board'
-  };
-  if (!session.flight.mode) return base;
+  const flying = !!session.flight.mode,
+    mapped = mapPad(flying ? 'fly' : p2Form === 'board' ? 'board' : 'car', gp),
+    base = {
+      throttle: flying ? 0 : (pad2?.throttle ?? mapped.throttle),
+      steer: flying ? 0 : (pad2?.steer ?? mapped.steer),
+      brake: pad2?.brake ?? false,
+      drift: flying ? false : !!(pad2?.drift ?? mapped.drift),
+      fire: !!fire,
+      boost: tagBoost,
+      boardSpin: p2Form === 'board'
+    };
+  if (!flying) return base;
   const fl = flightGamepadInput(gp, pad2, mode);
-  if (session.flight.mode === 'chute') fl.steer = pad2.steer;
+  if (session.flight.mode === 'chute') fl.steer = pad2?.moveX || pad2?.steer || 0;
   return {...base, throttle: 0, brake: false, flight: fl};
 }

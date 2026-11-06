@@ -16,6 +16,9 @@ export function nearest(items, from, [dx, dy]) {
   }
   return best;
 }
+// In a menu, A confirms and B goes back. The same indices as the standard pad.
+export const MENU_CONFIRM = 0;
+export const MENU_BACK = 1;
 const pressed = (p, i) => (p?.buttons?.[i]?.value ?? 0) > 0.5;
 function direction(pads) {
   for (const p of pads) {
@@ -50,8 +53,8 @@ export function createMenuPad({root, back, doc = globalThis.document}) {
   return (pads, now) => {
     const live = Array.from(pads ?? []).filter(p => p?.connected),
       r = root(),
-      aNow = live.some(p => pressed(p, 0)),
-      bNow = live.some(p => pressed(p, 1)),
+      aNow = live.some(p => pressed(p, MENU_CONFIRM)),
+      bNow = live.some(p => pressed(p, MENU_BACK)),
       dir = direction(live);
     if (!r) {
       if (current) mark(null);

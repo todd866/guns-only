@@ -69,11 +69,29 @@ export function stepRobot(r, input = {}, world, dt = 1 / 120) {
     }
     return ev;
   }
-  const steer = Math.max(-1, Math.min(1, input.steer || 0)),
-    throttle = Math.max(-1, Math.min(1, input.throttle || 0));
-  r.yaw += steer * ROBOT.turn * dt * (throttle < 0 ? -1 : 1);
-  const fwd = fwdOf(r.yaw),
-    speed = (r.crouched ? ROBOT.crawl : ROBOT.walk) * throttle * (throttle < 0 ? 0.6 : 1);
+  const steer = Math.max(-1, Math.min(1, input.steer || 0));
+  let throttle = Math.max(-1, Math.min(1, input.throttle || 0));
+  // Camera-relative stick: move along the wish and turn to face it. The keyboard
+  // keeps the old throttle/steer (walk the way you're facing, A/D turn).
+  let wish = null;
+  if (input.move) {
+    const mx = input.move.x || 0,
+      mz = input.move.z || 0,
+      mag = Math.min(1, Math.hypot(mx, mz));
+    throttle = mag;
+    if (mag > 0.05) {
+      const wantYaw = Math.atan2(mx, -mz),
+        d = Math.atan2(Math.sin(wantYaw - r.yaw), Math.cos(wantYaw - r.yaw));
+      r.yaw += Math.max(-12 * dt, Math.min(12 * dt, d));
+      wish = [mx / mag, 0, mz / mag];
+    }
+  } else r.yaw += steer * ROBOT.turn * dt * (throttle < 0 ? -1 : 1);
+  const fwd = wish || fwdOf(r.yaw),
+    speed =
+      (r.crouched ? ROBOT.crawl : ROBOT.walk) *
+      throttle *
+      (throttle < 0 ? 0.6 : 1) *
+      (input.sprint && throttle > 0 ? 1.65 : 1);
   // Horizontal velocity eases toward the wanted walk; in the air there is a little control.
   const want = scale(fwd, speed),
     a = Math.min(1, ROBOT.accel * dt * (r.grounded ? 1 : 0.25));
