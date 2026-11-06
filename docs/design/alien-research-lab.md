@@ -160,6 +160,31 @@ In RC Odyssey (kid version, same heart):
   Its EM can also drop small "perception tricks" into the real lab: corridors that loop until
   you stop and listen, doors that are only there when you look away, a floor that's lava that
   turns out to be orange carpet.
+- **Two reaches: EM for machines, fungus for living things (Ian, 6 Nov 2026).**
+  - **Machines, by EM:** an RC car is a radio link and a camera, so STILLWATER doesn't need to
+    touch your mind: it just rewrites the signal. That's *why* the dreams work on toys: the
+    picture you see is the car's feed, and it can paint anything into it. It's also why the
+    effects stop at the edge of its field. The tell is a faint signal shimmer and radio static
+    at the screen edges whenever it's "in the feed". The same reach can nudge machines: lights,
+    doors, fans, the tram, robots (gently).
+  - **Living things, by fungus:** it can't radio a dinosaur, so it grows a mycelium network
+    instead: glowing mushrooms, fungal threads along walls and roots, puffs of sparkly spores.
+    Creatures that breathe the spores go calm and happy and follow its suggestions. That's how
+    the lab's sleepy aliens behave, and through the Seam it reaches the dark world's dinosaurs.
+    Kid-safe tone: bioluminescent, cosy and fairy-ring-like, not zombies. Controlled creatures
+    look dozy-content (half-lidded, little sparkles), and the effect fades when they leave the
+    mushrooms.
+  - **Gameplay from that split:**
+    - mushroom rings are the doorways into dreams (drive into a ring and the feed wobbles in);
+    - spore puffs calm a grumpy dinosaur so you can ride past, or ask one to carry you;
+    - mushroom trails show STILLWATER's quests: "follow the glowing caps";
+    - in the dark world, a spreading glow-fungus network marks where its reach has got to, and
+      can be a new layer of the map;
+    - the "real or dream?" game: the static shimmer means you're seeing its picture; no
+      shimmer means it's real.
+  - Tech: the EM tell is a post-process edge shimmer and static audio layer toggled by distance
+    to STILLWATER's field; fungus is instanced emissive caps with a spore particle puff, and
+    a "calmed" flag on creatures inside a spore radius.
 - **The Breach, re-read:** STILLWATER held the Seam steady. Test 7 overloaded it, and it's as
   shaken as everyone else. The descent is partly helping it get its balance back.
 - **The story's beat, for kids:** at the bottom it offers to make everything easy forever
