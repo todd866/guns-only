@@ -84,6 +84,20 @@ import {renderHint} from './key-hints.js';
 import {say, nameFrom} from './open-world/typed.mjs';
 import {createAdventure} from './open-world/adventure.js';
 import {createIntro} from './open-world/intro.js';
+import {createLabView} from './open-world/lab-accident.js';
+import {
+  LAB_EVENTS,
+  GET_OUT,
+  beginLab,
+  carPoses,
+  createLabState,
+  labBusy,
+  labSeen,
+  labUnderground,
+  markLabSeen,
+  stepLab,
+  tourNear
+} from './open-world/lab-accident.mjs';
 import {createFileSelect} from './open-world/file-select.js';
 import {readSlots, slotSave} from './physics/save-slots.mjs';
 import {mineWorld as mineWorldPos} from './open-world/mine.mjs';
@@ -239,6 +253,13 @@ let track = 'hub',
 let adventure = null,
   ladderHint = false;
 const intro = createIntro();
+let labRide = null,
+  labView = null,
+  labBoot = false,
+  labHanded = false,
+  labSkipEdge = false,
+  labStored = false,
+  labStore = null;
 // Diving (Spirit Mountain's reservoir): with the camera under a water surface, the haze turns
 // murky teal and short, and the sky goes with it; surfacing puts the day's own back.
 let underState = null;
@@ -313,6 +334,12 @@ if (track && track !== 'hub') {
 }
 const course = openWorld?.course ?? district?.course ?? baseCourse(),
   cps = course.checkpoints;
+try {
+  labStore = localStorage;
+} catch {}
+labRide = createLabState({seen: labSeen(labStore)});
+labStored = labRide.seen;
+labBoot = !!openWorld?.labShortcut;
 // Asset collision proxies join the triangle world the car drives on.
 function addSolid(b) {
   liveSolids.push(b);
@@ -675,6 +702,7 @@ if (!track) {
   if (openWorld) await openWorld.attach(scene);
   if (openWorld) {
     adventure = createAdventure(scene, course.world);
+    labView = createLabView(scene);
     $('menu-legend').hidden = !(
       adventure.inventory.legend ||
       (() => {
@@ -1205,7 +1233,12 @@ window.addEventListener('keydown', e => {
     }
     return;
   }
-  if (e.code === 'KeyT' && !paused && race.roam && !skate && !s.flight.mode) {
+  if (labBusy(labRide) && !e.repeat && (e.code === 'Enter' || e.code === 'Space')) {
+    e.preventDefault();
+    labSkipEdge = true;
+    return;
+  }
+  if (e.code === 'KeyT' && !paused && race.roam && !skate && !s.flight.mode && !labBusy(labRide)) {
     boostOn = false;
     transform();
   }
@@ -1229,7 +1262,7 @@ window.addEventListener('keydown', e => {
   )
     s.car.vel = [s.car.vel[0], s.car.vel[1] + (form === 'board' ? FLIGHT.ollie : FLIGHT.hop), s.car.vel[2]];
   if (e.code === 'KeyF') toggleBoost();
-  if (e.code === 'KeyR' && !paused) {
+  if (e.code === 'KeyR' && !paused && !labBusy(labRide)) {
     boostOn = false;
     telemetry.recover('key', s.car.pos);
     recover(s);
@@ -1251,7 +1284,7 @@ window.addEventListener('keydown', e => {
     const pastRide = openWorld?.era?.() === 'past' && form === 'car',
       flier = !!DINO_KINDS[herd().herd[herd().mount]?.kind]?.flies;
     if (pastRide && !flier && !s.flight.mode) beep(`🦖 ${dinoName()} can't fly!`, 'sad');
-    else if (race.roam && !skate && !adventure?.underground(s.car.pos)) {
+    else if (race.roam && !skate && !adventure?.underground(s.car.pos) && !labUnderground(s.car.pos) && !labBusy(labRide)) {
       const was = s.flight.mode,
         m = toggleFlight(s.flight, s.car, {roam: true});
       if (m !== was) {
@@ -4694,8 +4727,107 @@ function skyJumpStep() {
   audio.finish();
   callout(skyLandingText(report), 5000);
 }
+function startLab() {
+  if (!labRide || !beginLab(labRide)) return;
+  labHanded = false;
+  keys.clear();
+  boostOn = false;
+  fireQueued = hopQueued = false;
+  if (s.flight.mode) s.flight.mode = null;
+  const rv = race.rivals[0];
+  if (rv?.session?.flight?.mode) rv.session.flight.mode = null;
+}
+function pinLabCars() {
+  const splitRide = !!(split && race.rivals[0]);
+  const pose = carPoses(labRide, {split: splitRide, lift: rideHeight(s.car.params)});
+  const pin = (car, pos) => {
+    car.pos[0] = pos[0];
+    car.pos[1] = pos[1];
+    car.pos[2] = pos[2];
+    car.vel[0] = car.vel[1] = car.vel[2] = 0;
+    car.ang[0] = car.ang[1] = car.ang[2] = 0;
+    car.q = [...pose.q];
+    car.steer = 0;
+  };
+  pin(s.car, pose.p1);
+  if (pose.p2) pin(race.rivals[0].session.car, pose.p2);
+}
+function labLook() {
+  const pads = Array.from(navigator.getGamepads?.() ?? []),
+    dead = v => (Math.abs(v ?? 0) < 0.15 ? 0 : v),
+    p1 = pads.find(p => p?.connected && p.index !== split?.pad),
+    p2 = split ? pads[split.pad] : null,
+    key = (a, b) => (keys.has(a) ? 1 : 0) - (keys.has(b) ? 1 : 0);
+  return {
+    lookX: dead(p1?.axes?.[0]) || key('ArrowRight', 'ArrowLeft'),
+    lookY: -dead(p1?.axes?.[1]) || key('ArrowUp', 'ArrowDown'),
+    look2X: dead(p2?.axes?.[0]),
+    look2Y: p2 ? -dead(p2?.axes?.[1]) : undefined
+  };
+}
+function labSounds(cues) {
+  for (const c of cues) {
+    if (c === 'beep' || c === 'go') audio.beep(c === 'go');
+    else if (c === 'hum') audio.tone(62, 0, 0.42, {type: 'sine', level: 0.07, glide: 96, wet: 0.4});
+    else if (c === 'alarm') audio.tone(740, 0, 0.14, {type: 'square', level: 0.045, cutoff: 1700});
+    else if (c === 'spark') audio.tone(170, 0, 0.05, {type: 'sawtooth', level: 0.05, glide: 42});
+  }
+}
+function labCallout(text) {
+  const b = $('banner');
+  b.replaceChildren(text);
+  b.hidden = false;
+  b.dataset.callout = '1';
+  clearTimeout(calloutTimer);
+  calloutTimer = setTimeout(() => {
+    delete b.dataset.callout;
+    b.textContent = '🎺 Bugle time! Rivals stop — you keep driving';
+    b.hidden = !retreatActive(race);
+  }, 7000);
+}
+function labFrame(dt) {
+  if (!labRide || !openWorld) return;
+  if (labBoot && started && !paused) {
+    labBoot = false;
+    startLab();
+  }
+  if (labRide.phase === 'idle') {
+    labRide.wave += dt;
+    labView?.update(labRide);
+    return;
+  }
+  if (!paused) {
+    const held = labBusy(labRide);
+    stepLab(labRide, dt, held ? {...labLook(), skip: labSkipEdge} : {});
+    labSkipEdge = false;
+    if (labRide.seen && !labStored) {
+      labStored = true;
+      markLabSeen(labStore);
+    }
+    if (held && labBusy(labRide)) pinLabCars();
+  }
+  for (const id of labRide.events.splice(0)) if (Object.values(LAB_EVENTS).includes(id)) telemetry.discover(id, 'lab');
+  labSounds(labRide.cues.splice(0));
+  labView?.update(labRide);
+  if (labRide.phase === 'free' && !labHanded) {
+    labHanded = true;
+    const pose = carPoses(labRide, {split: !!(split && race.rivals[0]), lift: rideHeight(s.car.params)});
+    placeCar(s.car, pose.p1, pose.yaw, 0);
+    if (pose.p2) placeCar(race.rivals[0].session.car, pose.p2, pose.yaw, 0);
+    labCallout(labRide.callout || GET_OUT);
+    cameraCar = [s.car.pos[0], s.car.pos[1], s.car.pos[2]];
+    if (split) {
+      split.car = null;
+      split.heading = pose.yaw;
+    }
+    if (camera2.userData.labFar) {
+      camera2.far = camera2.userData.labFar;
+      camera2.updateProjectionMatrix();
+    }
+  }
+}
 function enterLocation() {
-  if (!openWorld || paused || !race.roam) return;
+  if (!openWorld || paused || !race.roam || labBusy(labRide)) return;
   // A run in progress comes first: [E] ends it (as it ends a Flying School lesson), so a child can
   // always get out, and no second minigame starts on top of it.
   if (openWorld.school()?.active) {
@@ -4757,6 +4889,10 @@ function enterLocation() {
       audio.finish();
       callout(`🎳 Game over · ${openWorld.activity().score}`);
     }
+    return;
+  }
+  if (!robot && form === 'car' && !skate && tourNear(s.car.pos)) {
+    startLab();
     return;
   }
   const p = openWorld.near(s.car.pos);
@@ -4842,6 +4978,7 @@ const ui = createWorldUI({
     roam: race.roam,
     started,
     flying: !!s.flight.mode,
+    labTour: !robot && form === 'car' && !skate && tourNear(s.car.pos) && !labBusy(labRide),
     skyJump: !robot && form === 'car' && !skate ? openWorld?.skyJumpNear(s.car.pos)?.id : null,
     skate: !!skateParkAt() && !skate,
     skating: !!skate
@@ -5037,7 +5174,8 @@ let formKey = '',
   formKey2 = '';
 function p2ToggleFlight() {
   const rv = race.rivals[0];
-  if (!rv || !race.roam || split?.p2Form === 'board' || adventure?.underground(s.car.pos)) return;
+  if (!rv || !race.roam || split?.p2Form === 'board' || adventure?.underground(s.car.pos) || labUnderground(s.car.pos) || labBusy(labRide))
+    return;
   const rs = rv.session,
     was = rs.flight.mode,
     m = toggleFlight(rs.flight, rs.car, {roam: true});
@@ -5527,7 +5665,8 @@ function frame(now) {
     if (!started) $('start').click();
     else if (!ui.panel()) pause(!paused);
   }
-  if (!paused && !ui.panel() && pad.fire) fireQueued = true;
+  if (!paused && !ui.panel() && pad.fire && !labBusy(labRide)) fireQueued = true;
+  if (labBusy(labRide) && pad.fire) labSkipEdge = true;
   if (pad.boost && !ui.panel() && !useClicked) toggleBoost();
   useClicked = false;
   {
@@ -5625,9 +5764,10 @@ function frame(now) {
       skyPrev[1] = s.car.pos[1];
       skyPrev[2] = s.car.pos[2];
       const tagBoost = tag.on && tag.it === 1 && !tag.resultLeft ? TAG.itBoost : 1;
+      const labHold = labBusy(labRide);
       stepRace(
         race,
-        robot
+        robot || labHold
           ? {throttle: 0, steer: 0, brake: true}
           : {
               ...skateInput,
@@ -6192,6 +6332,7 @@ function frame(now) {
       } else if (e.type === 'furball-over') furballOver(e.winner);
   }
   fx.update(dt);
+  labFrame(dt);
   poseCar(car, wheels, c);
   if (openWorld) deliveryFrame(dt, now);
   syncRivals();
@@ -6351,6 +6492,7 @@ function frame(now) {
   splitLine.hidden ||= !!split?.solo;
   digCamera(now);
   if (intro.active) intro.update(dt, camera);
+  if (labBusy(labRide)) labView?.aim(camera, camera2, labRide, {split: !!splitOn, lift: rideHeight(s.car.params)});
   underwater();
   if (ui.panel() === 'garage') {
     const a = now * 0.00022,
