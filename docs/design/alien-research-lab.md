@@ -140,6 +140,26 @@ In RC Odyssey (kid version, same heart):
   "Small driver, would you fetch three power cells? I will make the fans sing." When pleased,
   it grows things: vines, fruit trees and flowers bloom along the route behind you, so the
   lab literally turns into a garden where you've been.
+- **It can bend what you see (Ian, 6 Nov 2026).** A fusion reactor wields huge EM fields, and in the
+  story it reaches into minds. In its presence, **any dream sequence is possible**, and that's
+  the fun. Near STILLWATER, the world can become whatever it wants to show you:
+  - the lab melts into a giant kid's bedroom where you're a toy on the carpet (scale shift);
+  - gravity tips sideways and you drive on the walls and ceiling;
+  - you're inside a pinball table, a snow globe, a fish tank, a birthday cake;
+  - it replays your own runs as ghosts and remixes them into a race against yourself;
+  - a memory of the past world (dinosaurs, western town) flickers through the corridors before
+    the Seam has even opened;
+  - paint-swap worlds: everything turns crayon, chalk, Lego or a cardboard model.
+  Every dream ends with a hum and a ripple back to the real lab, and each one is a self-contained
+  bite-size level, so the dream set can grow forever without touching the main map.
+  Tech: a "dream" is a scene swap plus a post-process wobble at entry and exit (scanline ripple,
+  432 Hz hum); the car's physics stays the same, only the world, gravity vector and scale
+  change. Each dream is a module (open-world/dreams/<name>.js) with a small shared runner
+  (enter, timer or goal, exit back to the stored lab position). Dreams also work in split
+  screen: both players dream together.
+  Its EM can also drop small "perception tricks" into the real lab: corridors that loop until
+  you stop and listen, doors that are only there when you look away, a floor that's lava that
+  turns out to be orange carpet.
 - **The Breach, re-read:** STILLWATER held the Seam steady. Test 7 overloaded it, and it's as
   shaken as everyone else. The descent is partly helping it get its balance back.
 - **The story's beat, for kids:** at the bottom it offers to make everything easy forever
@@ -148,7 +168,8 @@ In RC Odyssey (kid version, same heart):
   hums when you visit, and it's the one who opens Hangar Zero for the saucer.
 - **Afterwards:** a STILLWATER glow appears at the Seam Gate and in the saucer's cockpit. Fruit
   from its garden is a collectible that gives a short happy boost.
-- **Telemetry:** stillwater_quest_given/done, paradise_choice (easy|real).
+- **Telemetry:** stillwater_quest_given/done, paradise_choice (easy|real), dream_enter/dream_exit
+  (name, time, finished or bailed).
 
 ## Creatures (kid-safe, no gore, nobody shoots people)
 
