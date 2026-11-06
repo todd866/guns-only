@@ -134,12 +134,11 @@ In RC Odyssey (kid version, same heart):
 - **Where:** the Dreamland reactor, under Bride Lake, powering the lab and the Seam machine.
   The Reactor Shaft (zone 4) is its home. Its glow is a slowly turning sphere of light with
   one bright "cowlick" swirl (the story's hairy-ball singularity), and that swirl is its face.
-- **Who it is: a trickster god** (Ian, 6 Nov 2026). It powers all of Saucer Springs (the base's
-  lights hum at 432 Hz if you listen), so in a sense the whole base is its body. It's kind
+- **Who it is: a trickster god** (Ian, 6 Nov 2026). It powers all of Saucer Springs, so in a sense the whole base is its body. It's kind
   underneath but playful and vain: it makes you **jump through hoops** for its amusement and its
   favour. "Small driver. Entertain me, and I will open the door." It cheats a little, changes
   the rules mid-game, giggles in static, and always plays fair in the end. Fascinated by the
-  toys because they also woke up. Low musical hum, big captions.
+  toys because they also woke up. Big captions and a short chime when it speaks.
 - **Its hoops are old-school 2.5D games** (the dreams below are its trials): you earn its doors,
   power-ups and the saucer by playing whatever it feels like today. A rotating set of retro
   styles, all in the toy world's look: the side-on platformer; a side-scrolling shoot-'em-up
@@ -168,10 +167,9 @@ In RC Odyssey (kid version, same heart):
     jumps; the car bounces and wall-jumps. Courses are short (60–90 s), built from a tile
     kit, and STILLWATER keeps dreaming new ones. In split screen both players run the same
     course side by side. This is the first dream to build.
-  Every dream ends with a hum and a ripple back to the real lab, and each one is a self-contained
+  Every dream ends with a ripple back to the real lab, and each one is a self-contained
   bite-size level, so the dream set can grow forever without touching the main map.
-  Tech: a "dream" is a scene swap plus a post-process wobble at entry and exit (scanline ripple,
-  432 Hz hum); the car's physics stays the same, only the world, gravity vector and scale
+  Tech: a "dream" is a scene swap plus a post-process wobble at entry and exit (scanline ripple); the car's physics stays the same, only the world, gravity vector and scale
   change. Each dream is a module (open-world/dreams/<name>.js) with a small shared runner
   (enter, timer or goal, exit back to the stored lab position). Dreams also work in split
   screen: both players dream together.
@@ -225,7 +223,7 @@ In RC Odyssey (kid version, same heart):
 - **The story's beat, for kids:** at the bottom it offers to make everything easy forever
   ("No more crashes. Only paradise."). The kids pick: easy paradise, or keep playing the real
   game. It respects the answer: "You like the bumps. I understand now." It stays your friend,
-  hums when you visit, and it's the one who opens Hangar Zero for the saucer.
+  chimes hello when you visit, and it's the one who opens Hangar Zero for the saucer.
 - **Afterwards:** a STILLWATER glow appears at the Seam Gate and in the saucer's cockpit. Fruit
   from its garden is a collectible that gives a short happy boost.
 - **Telemetry:** stillwater_quest_given/done, paradise_choice (easy|real), dream_enter/dream_exit
@@ -265,9 +263,12 @@ until P2 robot exists.
 
 ## Sound
 
+Rule (Ian, 6 Nov 2026): **no ambient hums or drones**; the sound design is already busy enough.
+STILLWATER is shown, not hummed: captions plus a short chime when it speaks.
+
 - Loudspeaker announcer, as on-screen captions plus a beep. It's chatty before the accident
   and panicky after.
-- A low hum that changes after the accident, alarm loops, portal whooshes, aliens giggling,
+- Alarm loops (short, not continuous), portal whooshes, aliens giggling,
   robots cheering when rescued.
 - All through the existing SoundKit (audio.js). Synthesise first, recordings later.
 
