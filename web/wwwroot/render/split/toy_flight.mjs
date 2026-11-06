@@ -3,8 +3,33 @@
 // command: pitch, roll, rudder, throttle. A pad command replaces the AI
 // command; the integrator does not change. This is not the F-22 polar and
 // must not be tuned against one.
+//
+// Jets fly the shared aeroplane (rc/physics/airplane.mjs, owner 6 Nov 2026):
+// bank to turn, energy, a gentle stall — per seat 'kid' or 'pilot' assist on
+// craft.assist. Choppers keep helicopter behaviour. TOY_PLANE is this game's
+// airframe; it is a param, not a retune of the shared model.
+
+import {gunsightLead, stepAirplane} from "../../rc/physics/airplane.mjs";
 
 export const WORLD = Object.freeze({half: 42, floor: 0.8, ceiling: 26});
+
+export const TOY_PLANE = Object.freeze({
+  g: 9.8,
+  vs: 6.5,
+  vmax: 19,
+  thrust: 8.5,
+  induced: 60,
+  rollRate: 2.6,
+  pitchRate: 1.5,
+  maxBank: 1.2,
+  maxPitch: 0.95,
+  align: 2.6,
+  rudderYaw: 0.9, // toys answer the pedals quickly so the cast can chase
+  stallSag: 1.1,
+  kid: Object.freeze({level: 2.2, turnBoost: 1.35, vKeep: 1.2, floor: 2.2, look: 0.9})
+});
+
+export {gunsightLead};
 
 export const ASSIST = Object.freeze({cone: 0.48, range: 36, blend: 0.74});
 
@@ -58,14 +83,24 @@ export function assistDirection(from, dir, targets, opts = ASSIST) {
   });
 }
 
+function reAim(craft) {
+  // The aeroplane keeps a velocity vector; a wall bounce re-aims it with the nose.
+  if (!Number.isFinite(craft.vx)) return;
+  const ground = Math.hypot(craft.vx, craft.vz);
+  craft.vx = Math.sin(craft.heading) * ground;
+  craft.vz = Math.cos(craft.heading) * ground;
+}
+
 function contain(craft) {
   if (craft.x > WORLD.half || craft.x < -WORLD.half) {
     craft.x = clamp(craft.x, -WORLD.half, WORLD.half);
     craft.heading = Math.PI - craft.heading;
+    reAim(craft);
   }
   if (craft.z > WORLD.half || craft.z < -WORLD.half) {
     craft.z = clamp(craft.z, -WORLD.half, WORLD.half);
     craft.heading = -craft.heading;
+    reAim(craft);
   }
   if (craft.y < WORLD.floor) {
     craft.y = WORLD.floor;
@@ -79,36 +114,44 @@ function contain(craft) {
   }
 }
 
+// A jet is the shared aeroplane: the nose leads, the path follows; bank to
+// turn; energy and a gentle stall. Humans fly their seat's assist level,
+// the cast flies 'kid' so the stall never strands a bandit.
 function stepJet(craft, cmd, dt) {
-  const pitchIn = Number(cmd.pitch) || 0;
-  const rollIn = Number(cmd.roll) || 0;
-  const rudder = Number(cmd.rudder) || 0;
-  craft.pitch = clamp(craft.pitch + pitchIn * 1.15 * dt, -0.6, 0.85);
-  craft.bank = clamp(craft.bank + rollIn * 2 * dt, -1.15, 1.15);
-  if (Math.abs(rollIn) < 0.08) craft.bank *= Math.exp(-1.4 * dt);
-  craft.heading += (rudder * 1.05 + Math.sin(craft.bank) * 0.85) * dt;
-  const target = 7 + craft.lever * 11;
-  craft.speed += (target - craft.speed) * (1 - Math.exp(-1.6 * dt));
-  const cp = Math.cos(craft.pitch);
-  craft.x += Math.sin(craft.heading) * cp * craft.speed * dt;
-  craft.z += Math.cos(craft.heading) * cp * craft.speed * dt;
-  craft.y += Math.sin(craft.pitch) * craft.speed * dt;
-  craft.vy = Math.sin(craft.pitch) * craft.speed;
+  stepAirplane(
+    craft,
+    {
+      pitch: cmd.pitch,
+      roll: cmd.roll,
+      rudder: cmd.rudder,
+      lever: craft.lever,
+      assist: craft.assist === "pilot" ? "pilot" : "kid"
+    },
+    dt,
+    TOY_PLANE,
+    {groundY: 0}
+  );
 }
 
+// Aviation signs (match the aeroplane): pull drifts back, right wing down
+// slides right, right pedal yaws right (heading − in this frame).
 function stepChopper(craft, cmd, dt) {
   const pitchIn = Number(cmd.pitch) || 0;
   const rollIn = Number(cmd.roll) || 0;
   const rudder = Number(cmd.rudder) || 0;
   craft.pitch = clamp(craft.pitch + pitchIn * 0.9 * dt - craft.pitch * 0.8 * dt, -0.45, 0.45);
   craft.bank = clamp(craft.bank + rollIn * 1.1 * dt - craft.bank * 0.8 * dt, -0.5, 0.5);
-  craft.heading += rudder * 1.3 * dt;
+  craft.heading -= rudder * 1.3 * dt;
   const climb = (craft.lever - 0.5) * 8;
   craft.vy += (climb - (Number(craft.vy) || 0)) * (1 - Math.exp(-3 * dt));
   craft.y += craft.vy * dt;
   const slide = 14 * dt;
-  craft.x += (Math.sin(craft.heading) * -craft.pitch + Math.cos(craft.heading) * craft.bank) * slide;
-  craft.z += (Math.cos(craft.heading) * -craft.pitch - Math.sin(craft.heading) * craft.bank) * slide;
+  const dx = (Math.sin(craft.heading) * -craft.pitch - Math.cos(craft.heading) * craft.bank) * slide;
+  const dz = (Math.cos(craft.heading) * -craft.pitch + Math.sin(craft.heading) * craft.bank) * slide;
+  craft.x += dx;
+  craft.z += dz;
+  craft.vx = dx / dt; // the gunsight leads choppers too
+  craft.vz = dz / dt;
   craft.speed = Math.hypot(craft.vy, craft.pitch * 14, craft.bank * 14);
   craft.rotor = (Number(craft.rotor) || 0) + dt * (8 + craft.lever * 18);
 }

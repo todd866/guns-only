@@ -2,7 +2,10 @@
 // Explanations stay in `title` (tooltip / aria), not a second line.
 
 import {CAST, castAt} from "./toy_cast.mjs";
+import {TOY_PLANE, WORLD} from "./toy_flight.mjs";
 import {POPS_TO_WIN} from "./toy_score.mjs";
+
+const unit = (v) => Math.max(0, Math.min(1, Number(v) || 0));
 
 export function pips(score, total = POPS_TO_WIN) {
   const n = Math.max(0, Math.min(total, Math.trunc(Number(score) || 0)));
@@ -46,6 +49,29 @@ export function hudRows(session, seat) {
       datum: "thr",
       title: "triggers",
     },
+    {
+      symbol: "➤",
+      fill: unit((craft?.speed ?? 0) / TOY_PLANE.vmax),
+      value: String(Math.round(craft?.speed ?? 0)),
+      datum: craft?.stalled ? "STALL" : "spd",
+      title: craft?.stalled
+        ? "Stalled: lower the nose and add throttle"
+        : "Airspeed. Slow turns tighter; too slow stalls",
+    },
+    {
+      symbol: "▲",
+      fill: unit((craft?.y ?? 0) / WORLD.ceiling),
+      value: String(Math.round(craft?.y ?? 0)),
+      datum: "alt",
+      title: "Height over the rug",
+    },
+    {
+      symbol: "G",
+      fill: unit(((craft?.gLoad ?? 1) - 1) / 3),
+      value: (craft?.gLoad ?? 1).toFixed(1),
+      datum: "g",
+      title: "Load: pulling and banking bleed speed",
+    },
   ];
 }
 
@@ -66,6 +92,20 @@ export function menuRows(session) {
       value: chopper ? "CHOPPER" : "JET",
       datum: "toy",
       title: "Same toy for both players",
+    },
+    {
+      act: "p1assist",
+      symbol: "👤",
+      value: session.assist?.p1 === "pilot" ? "P1 PILOT" : "P1 KID",
+      datum: "assist",
+      title: "Kid: auto-level, stall protection, easy turns. Pilot: the raw aeroplane.",
+    },
+    {
+      act: "p2assist",
+      symbol: "👤",
+      value: session.assist?.p2 === "pilot" ? "P2 PILOT" : "P2 KID",
+      datum: "assist",
+      title: "Kid: auto-level, stall protection, easy turns. Pilot: the raw aeroplane.",
     },
     {act: "fly", symbol: "▶", value: "FLY", datum: "", title: "Fly"},
   ];

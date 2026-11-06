@@ -5647,10 +5647,10 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
       paintReadyControls(toyLine(mobileControls
         ? casevacReady
           ? "LEFT STICK forward/reverse/translate · RIGHT STICK yaw · VERT climb/descend · ABORT requests return\nMedevac has no target, padlock, or gun controls"
-          : "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · TARGET changes contact · PADLOCK tracks · FIRE shoots\nController: LS fly · RS look · RT fire · A padlock · LB/RB power"
+          : "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · TARGET changes contact · PADLOCK tracks · FIRE shoots\nController: LS fly · RS look · A guns · RT/LT throttle · B padlock"
         : casevacReady
           ? keyboardControls
-          : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`));
+          : `${keyboardControls}\nController: LS fly · RS look · A guns · RT/LT throttle · B padlock`));
     }
     const exploreBase = selectedProgramNodeId === "area-51";
     readyStartLabel.textContent = exploreBase ? "Explore" : `Fly ${brief.title}`;
@@ -10966,10 +10966,11 @@ function installGamepadInput(view) {
     }
 
     setDirectFlightAxes(source, state.roll, state.pitch);
-    setHeld("Gamepad:RT", state.fire, 8);
+    // Fleet flight layout (owner, 6 Nov 2026): A guns, RT/LT throttle, B padlock.
+    setHeld("Gamepad:A", state.fire, 8);
     setHeld("Gamepad:Limiter", state.limitOverride, 12);
-    setHeld("Gamepad:LB", state.throttleDown, 7, false);
-    setHeld("Gamepad:RB", state.throttleUp, 6, true);
+    setHeld("Gamepad:LT", state.throttleDown, 7, false);
+    setHeld("Gamepad:RT", state.throttleUp, 6, true);
     if (state.padlockPressed) {
       togglePadlock();
       recorder.event("mobile_control", "gamepad_padlock", {

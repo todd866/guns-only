@@ -207,6 +207,32 @@ test("behaviours stay distinct", () => {
   assert.equal(boss.ai.spit, true);
 });
 
+test("assist is per player: kid cannot stall, pilot can", () => {
+  const session = createToyFight();
+  session.split = true;
+  applyMenu(session, "p2assist");
+  assert.equal(session.assist.p1, "kid");
+  assert.equal(session.assist.p2, "pilot");
+  beginToyFight(session);
+  const p1 = session.crafts.find((craft) => craft.seat === "p1");
+  const p2 = session.crafts.find((craft) => craft.seat === "p2");
+  assert.equal(p1.assist, "kid");
+  assert.equal(p2.assist, "pilot");
+  // Chop both throttles and glide: the kid seat keeps flying speed, the
+  // pilot seat is allowed to slow into the stall.
+  p1.lever = 0;
+  p2.lever = 0;
+  p1.y = p2.y = 20;
+  let pilotStalled = false;
+  for (let i = 0; i < 400; i += 1) {
+    stepCraft(p1, {pitch: 0, roll: 0, rudder: 0, throttleRate: -1}, 0.05);
+    stepCraft(p2, {pitch: 0.4, roll: 0, rudder: 0, throttleRate: -1}, 0.05);
+    pilotStalled = pilotStalled || p2.stalled === true;
+  }
+  assert.equal(p1.stalled, false, `kid speed ${p1.speed.toFixed(1)} stays above Vs`);
+  assert.equal(pilotStalled, true, "the raw aeroplane can be flown into the stall");
+});
+
 test("jet pull climbs and a chopper can hover", () => {
   const plane = jet();
   const y0 = plane.y;
@@ -255,11 +281,11 @@ test("menus and HUDs are one row per instrument", () => {
   session.split = true;
   beginToyFight(session);
   const menu = menuRows(session);
-  assert.equal(menu.length, 3);
-  assert.deepEqual(menu.map((row) => row.datum), ["mode", "toy", ""]);
+  assert.equal(menu.length, 5);
+  assert.deepEqual(menu.map((row) => row.datum), ["mode", "toy", "assist", "assist", ""]);
   const hud = hudRows(session, "p1");
-  assert.equal(hud.length, 4);
-  assert.deepEqual(hud.map((row) => row.datum), ["pops", "ready", "ready", "thr"]);
+  assert.equal(hud.length, 7);
+  assert.deepEqual(hud.map((row) => row.datum), ["pops", "ready", "ready", "thr", "spd", "alt", "g"]);
   assert.match(hud[0].pips, /[●○]/);
   assert.equal(pauseRows("👤 1 player").length, 3);
   assert.equal(pauseRows("").length, 2);

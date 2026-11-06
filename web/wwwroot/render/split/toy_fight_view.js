@@ -12,8 +12,10 @@ import {RESPAWN_S} from "./toy_score.mjs";
 import {hudRows, menuRows, pauseRows, resultRows} from "./toy_hud.mjs";
 import {
   WORLD,
+  gunsightLead,
 } from "./toy_flight.mjs";
 import {
+  DART_SPEED,
   applyMenu,
   createToyFight,
   splitTelemetry,
@@ -86,13 +88,21 @@ export function mountToyFight({
   right.append(callR, coachR, rowsR);
   const divider = el("div", "toy-divider");
   divider.setAttribute("aria-hidden", "true");
+  // Lead-computing gunsight: one pipper per seat, placed where a dart fired
+  // now would meet the nearest foe. Fly the pipper onto the toy and shoot.
+  const pipL = el("div", "toy-pipper");
+  const pipR = el("div", "toy-pipper");
+  pipL.hidden = pipR.hidden = true;
+  pipL.title = pipR.title = "Lead pipper: put it on the toy and the dart connects";
+  pipL.setAttribute("aria-hidden", "true");
+  pipR.setAttribute("aria-hidden", "true");
   const menu = el("div", "toy-menu");
   const panel = el("div", "toy-panel");
   panel.hidden = true;
   const join = el("div", "toy-join");
   join.hidden = true;
   join.innerHTML = '<div class="join-pad" aria-hidden="true"></div><p class="join-cta">START ▶ join</p>';
-  ui.append(left, right, divider, menu, panel, join);
+  ui.append(left, right, divider, pipL, pipR, menu, panel, join);
   root.append(canvas, ui);
   document.body.append(root);
 
@@ -324,7 +334,9 @@ export function mountToyFight({
         group.rotation.set(pose.pitch, (craft.heading || 0) + pose.yaw, pose.roll);
       } else {
         group.position.set(craft.x, craft.y, craft.z);
-        group.rotation.set(craft.pitch || 0, craft.heading || 0, -(craft.bank || 0));
+        // Aviation signs: pitch+ is nose up (mesh −X rotation for a +Z nose),
+        // bank+ is right wing down (the right wing sits at mesh −X).
+        group.rotation.set(-(craft.pitch || 0), craft.heading || 0, craft.bank || 0);
       }
       const rotor = group.getObjectByName("rotor");
       if (rotor) rotor.rotation.y = craft.rotor || 0;
@@ -419,7 +431,57 @@ export function mountToyFight({
       const half = Math.floor(bw / 2);
       paintCam(0, 0, half, bh, cam1, p1);
       paintCam(half, 0, bw - half, bh, cam2, p2);
-    } else paintCam(0, 0, bw, bh, cam1, p1);
+      placePipper(pipL, cam1, p1, 0, width / 2, width, height);
+      placePipper(pipR, cam2, p2, width / 2, width / 2, width, height);
+    } else {
+      paintCam(0, 0, bw, bh, cam1, p1);
+      placePipper(pipL, cam1, p1, 0, width, width, height);
+      pipR.hidden = true;
+    }
+  }
+
+  function foeOf(craft) {
+    if (!craft || craft.downFor > 0) return null;
+    let best = null;
+    let bestD = Infinity;
+    for (const other of session.crafts) {
+      if (other === craft || other.downFor > 0) continue;
+      if (session.mode === "dogfight" ? !(other.seat && other.seat !== craft.seat) : other.team === craft.team) continue;
+      const d = Math.hypot(other.x - craft.x, other.y - craft.y, other.z - craft.z);
+      if (d < bestD) {
+        bestD = d;
+        best = other;
+      }
+    }
+    return best;
+  }
+
+  const pipVec = new THREE.Vector3();
+  const camFwd = new THREE.Vector3();
+  function placePipper(node, cam, craft, x0, w, fullW, fullH) {
+    const foe = session.phase === "fly" ? foeOf(craft) : null;
+    if (!foe) {
+      node.hidden = true;
+      return;
+    }
+    const lead = gunsightLead(craft, foe, DART_SPEED);
+    pipVec.set(lead.x, lead.y, lead.z);
+    cam.getWorldDirection(camFwd);
+    const behind = camFwd.x * (lead.x - cam.position.x) + camFwd.y * (lead.y - cam.position.y) + camFwd.z * (lead.z - cam.position.z) <= 0.5;
+    if (behind) {
+      node.hidden = true;
+      return;
+    }
+    pipVec.project(cam);
+    const px = x0 + (pipVec.x * 0.5 + 0.5) * w;
+    const py = (1 - (pipVec.y * 0.5 + 0.5)) * fullH;
+    if (px < x0 + 6 || px > x0 + w - 6 || py < 6 || py > fullH - 6) {
+      node.hidden = true;
+      return;
+    }
+    node.hidden = false;
+    node.style.left = `${(px / fullW) * 100}%`;
+    node.style.top = `${(py / fullH) * 100}%`;
   }
 
   function showCall(node, side) {

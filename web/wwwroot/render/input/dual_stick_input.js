@@ -31,9 +31,12 @@ function buttonValue(gamepad, index) {
 }
 
 /**
- * Standard-mapping gamepad projection. Gamepads retain the familiar left-stick flight and
- * right-stick look layout; the phone's two on-screen sticks use a separate throttle/yaw plus
- * pitch/roll contract.
+ * Standard-mapping gamepad projection. One flight layout across the fleet
+ * (owner, 6 Nov 2026 — RC Odyssey, the toy dogfight, and here): left stick
+ * pitch/roll (pull = nose up), right stick look, RT/LT throttle up/down,
+ * A guns, B padlock, X limit override. LB/RB are reserved for rudder; the
+ * session bridge has no rudder channel yet. The phone's two on-screen sticks
+ * use a separate throttle/yaw plus pitch/roll contract.
  */
 export function standardGamepadState(gamepad, previous = {}) {
   if (!gamepad || gamepad.connected === false || gamepad.mapping !== "standard") {
@@ -53,7 +56,7 @@ export function standardGamepadState(gamepad, previous = {}) {
   }
   const flight = radialStickAxes(gamepad.axes?.[0], gamepad.axes?.[1]);
   const look = radialStickAxes(gamepad.axes?.[2], gamepad.axes?.[3], 0.18);
-  const padlock = buttonValue(gamepad, 0) > 0.5;
+  const padlock = buttonValue(gamepad, 1) > 0.5;
   return Object.freeze({
     connected: true,
     index: Math.max(0, Math.trunc(finite(gamepad.index))),
@@ -62,11 +65,11 @@ export function standardGamepadState(gamepad, previous = {}) {
     pitch: flight.y,
     lookX: look.x,
     lookY: look.y,
-    fire: buttonValue(gamepad, 7) > 0.12,
+    fire: buttonValue(gamepad, 0) > 0.5,
     limitOverride: buttonValue(gamepad, 2) > 0.5,
     padlockPressed: padlock && previous.padlock !== true,
-    throttleDown: buttonValue(gamepad, 4) > 0.5,
-    throttleUp: buttonValue(gamepad, 5) > 0.5,
+    throttleDown: buttonValue(gamepad, 6) > 0.12,
+    throttleUp: buttonValue(gamepad, 7) > 0.12,
     padlock,
   });
 }

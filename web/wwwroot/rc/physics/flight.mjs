@@ -18,6 +18,7 @@ import {
   quatNorm,
   yawOf
 } from './math.mjs';
+import {stepAirplane} from './airplane.mjs';
 
 export const FLIGHT = Object.freeze({
   // Owner, 31 Oct: "make it faster". Speeds roughly doubled; the world streams fine at burner.
@@ -92,6 +93,80 @@ export const FLIGHT = Object.freeze({
     trickTime: 0.95
   })
 });
+
+// Big Kid flies the real aeroplane (owner, 6 Nov 2026: "it was very
+// not-like-an-airplane"): the shared model in airplane.mjs — bank to turn,
+// energy, a gentle stall. This is the RC jet's airframe, a param of that
+// shared model, so tuning it cannot drag the toy dogfight's planes along.
+export const RC_PLANE = Object.freeze({
+  g: 9.8,
+  vs: 10,
+  vmax: 34,
+  thrust: 10,
+  induced: 220,
+  rollRate: 2.8,
+  pitchRate: 1.6,
+  maxBank: 1.2,
+  maxPitch: 1.0,
+  align: 2.2,
+  rudderYaw: 0.7,
+  stallSag: 1.1,
+  kid: Object.freeze({level: 2.2, turnBoost: 1.3, vKeep: 1.2, floor: 4, look: 0.9})
+});
+const RC_BURNER = Object.freeze({...RC_PLANE, vmax: 46, thrust: 19});
+
+// Pilot: raw stick onto the shared aeroplane. The car's pose and velocity
+// follow the model; the common collision/touchdown path below still runs.
+function pilotFly(f, car, ctl, world, dt) {
+  void world;
+  const P = ctl.burner ? RC_BURNER : RC_PLANE;
+  if (!f.plane || f.heading == null) {
+    const nose = rotate(car.q, [0, 0, -1]);
+    f.plane = {
+      x: car.pos[0],
+      y: car.pos[1],
+      z: car.pos[2],
+      heading: Math.atan2(nose[0], nose[2]),
+      pitch: Math.asin(Math.max(-1, Math.min(1, nose[1]))),
+      bank: 0,
+      speed: Math.max(FLIGHT.minSpeed, f.speed || 0, car.forwardSpeed ?? 0),
+      vy: car.vel[1]
+    };
+    f.heading = f.plane.heading;
+  }
+  const a = f.plane;
+  a.x = car.pos[0];
+  a.y = car.pos[1];
+  a.z = car.pos[2];
+  // RT/LT walk the lever and it holds where you leave it, like the jet's power.
+  f.power = Math.max(0, Math.min(1, f.power + (ctl.power || 0) * FLIGHT.powerRate * dt));
+  f.climb = Math.max(0, (f.climb || 0) - dt);
+  const cmd = {
+    pitch: ctl.flyUp ? Math.max(ctl.pitch || 0, 1) : ctl.pitch,
+    roll: ctl.roll,
+    rudder: ctl.yaw,
+    lever: ctl.burner ? 1 : f.power,
+    assist: 'pilot'
+  };
+  if (f.climb > 0) cmd.pitch = Math.max(cmd.pitch || 0, 0.6); // the take-off hop
+  stepAirplane(a, cmd, dt, P);
+  f.speed = a.speed;
+  f.heading = a.heading;
+  f.pitch = a.pitch;
+  f.bank = a.bank;
+  f.stalled = a.stalled;
+  f.gLoad = a.gLoad;
+  // The model's yaw frame carries the nose at +[sin H, cos H]; the car's nose
+  // is −Z, which the same forward reaches at yaw H − π.
+  car.q = quatNorm(
+    quatMul(
+      quatMul(quatAxisAngle([0, 1, 0], a.heading - Math.PI), quatAxisAngle([1, 0, 0], a.pitch)),
+      quatAxisAngle([0, 0, 1], -a.bank)
+    )
+  );
+  const vy = f.climb > 0 ? Math.max(a.vy, (FLIGHT.takeoff * f.climb) / FLIGHT.climbFor) : a.vy;
+  car.vel = [a.vx, vy, a.vz];
+}
 
 export function createFlight() {
   return {mode: null, speed: 0, power: FLIGHT.startPower, climb: 0, flights: 0, chutes: 0, landings: 0};
@@ -265,7 +340,8 @@ export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
   if (!f.mode) return false;
   const fwd = rotate(car.q, [0, 0, -1]),
     right = rotate(car.q, [1, 0, 0]);
-  if (f.mode === 'fly' && ctl.arcade) arcadeFly(f, car, ctl, world, dt);
+  if (f.mode === 'fly' && ctl.pilot) pilotFly(f, car, ctl, world, dt);
+  else if (f.mode === 'fly' && ctl.arcade) arcadeFly(f, car, ctl, world, dt);
   else if (f.mode === 'fly' && ctl.easy) {
     const E = FLIGHT.easy;
     if (f.heading == null) {

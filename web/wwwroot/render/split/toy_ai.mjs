@@ -18,11 +18,14 @@ function nearest(craft, foes) {
   return {foe: best, dist: bestD};
 }
 
+// Aviation rudder sign (airplane.mjs): rudder+ is nose RIGHT, which in this
+// frame is heading decreasing — so closing a positive heading error needs
+// negative rudder.
 function steer(craft, foe, limit = 1) {
   if (!foe) return {rudder: 0, err: 0};
   const want = Math.atan2(foe.x - craft.x, foe.z - craft.z);
   const err = wrap(want - craft.heading);
-  return {rudder: Math.max(-limit, Math.min(limit, err * 1.4)), err};
+  return {rudder: Math.max(-limit, Math.min(limit, -err * 1.4)), err};
 }
 
 function holdHeight(craft, want, pitch = 0.8) {
@@ -95,7 +98,7 @@ export function aiCommand(craft, foes, dt) {
     const lane = (craft.slot - 1) * 3;
     const aim = foe ? {x: foe.x + lane, z: foe.z} : null;
     const want = aim ? Math.atan2(aim.x - craft.x, aim.z - craft.z) : craft.heading;
-    const rudder = Math.max(-1, Math.min(1, wrap(want - craft.heading) * 1.6));
+    const rudder = Math.max(-1, Math.min(1, -wrap(want - craft.heading) * 1.6));
     return {...IDLE, rudder, throttleRate: 1, pitch: holdHeight(craft, 1.6)};
   }
   if (id === "balloon-animal-blimp") {
@@ -104,7 +107,7 @@ export function aiCommand(craft, foes, dt) {
   if (id === "tin-soldier-wrong-colour") {
     const column = (craft.slot - 1) * 4;
     const want = Math.atan2(column - craft.x, 18 - craft.z);
-    const rudder = Math.max(-0.6, Math.min(0.6, wrap(want - craft.heading)));
+    const rudder = Math.max(-0.6, Math.min(0.6, -wrap(want - craft.heading)));
     return {...IDLE, rudder, throttleRate: 0.6, pitch: holdHeight(craft, 6)};
   }
   if (id === "spinning-top-swarm") {

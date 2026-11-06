@@ -43,6 +43,16 @@ if (params.get("scene") === "fight") {
   const p2 = ui.session.crafts.find((craft) => craft.seat === "p2");
   if (p1) Object.assign(p1, {x: -4, y: 7, z: 2, heading: 0.4});
   if (p2) Object.assign(p2, {x: 5, y: 8, z: -4, heading: 2.4});
+  if (params.get("pin") === "1" && p1 && p2) {
+    // Deterministic gunsight geometry for screenshots: p2 crosses ahead of
+    // p1, re-pinned every tick so the shot always shows the lead pipper.
+    const pin = () => {
+      Object.assign(p1, {x: 0, y: 8, z: 10, heading: 0, pitch: 0, bank: 0, vx: 0, vy: 0, vz: 12});
+      Object.assign(p2, {x: 0, y: 8, z: 26, heading: 1.6, pitch: 0, bank: 0.4, vx: 8, vy: 0, vz: 0});
+    };
+    pin();
+    setInterval(pin, 16);
+  }
 }
 window.__toyFight = ui;
 window.__toyReady = true;

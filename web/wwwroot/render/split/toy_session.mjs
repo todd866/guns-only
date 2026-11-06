@@ -4,7 +4,7 @@
 import {joinPadIndex} from "../../rc/join.mjs";
 import {CAST, castAt, hitAccepted} from "./toy_cast.mjs";
 import {aiCommand} from "./toy_ai.mjs";
-import {assistDirection, craftRadius, noseOf, stepCraft} from "./toy_flight.mjs";
+import {assistDirection, craftRadius, gunsightLead, noseOf, stepCraft} from "./toy_flight.mjs";
 import {listPads, readFlightPad} from "./pad_flight.mjs";
 import {
   dogfightWinner,
@@ -17,7 +17,7 @@ import {
 
 const DART_COOL = 0.22;
 const BALLOON_COOL = 0.8;
-const DART_SPEED = 32;
+export const DART_SPEED = 32;
 const BALLOON_SPEED = 16;
 
 function rid() {
@@ -29,6 +29,7 @@ export function createToyFight() {
     phase: "menu",
     mode: "dogfight",
     craft: "jet",
+    assist: {p1: "kid", p2: "kid"},
     split: false,
     p1Pad: null,
     p2Pad: null,
@@ -59,6 +60,7 @@ function spawnHuman(session, seat, x) {
     team: "good",
     kind,
     kindId: "army",
+    assist: session.assist?.[seat] === "pilot" ? "pilot" : "kid",
     x,
     y: kind === "chopper" ? 4 : 8,
     z: seat === "p2" ? -8 : 8,
@@ -172,6 +174,12 @@ export function applyMenu(session, act) {
     session.mode = session.mode === "coop" ? "dogfight" : "coop";
   } else if (act === "craft" && session.phase === "menu") {
     session.craft = session.craft === "chopper" ? "jet" : "chopper";
+  } else if (act === "p1assist" || act === "p2assist") {
+    const seat = act === "p2assist" ? "p2" : "p1";
+    session.assist ??= {p1: "kid", p2: "kid"};
+    session.assist[seat] = session.assist[seat] === "pilot" ? "kid" : "pilot";
+    const flying = session.crafts?.find((craft) => craft.seat === seat);
+    if (flying) flying.assist = session.assist[seat];
   } else if (act === "fly") beginToyFight(session);
   else if (act === "resume") session.phase = "fly";
   else if (act === "again") againToyFight(session);
@@ -217,8 +225,11 @@ function launch(session, craft, weapon) {
     y: craft.y + 0.2,
     z: craft.z + Math.cos(craft.heading) * 1.3,
   };
-  const aimed = assistDirection(origin, noseOf(craft), foesOf(session, craft));
   const speed = weapon === "balloon" ? BALLOON_SPEED : DART_SPEED;
+  // The assist bends toward where the foe WILL be (the same lead solution the
+  // HUD pipper shows), so a moving or sinking toy is still an honest target.
+  const leads = foesOf(session, craft).map((foe) => gunsightLead(origin, foe, speed));
+  const aimed = assistDirection(origin, noseOf(craft), leads);
   if (session.shots.length > 24) session.shots.shift();
   session.shots.push({
     id: rid(),

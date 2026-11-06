@@ -172,3 +172,28 @@ html[data-theme="light"] {
 }
 .toy-coach { line-height: 0; align-self: flex-start; }
 .toy-coach[hidden] { display: none; }
+
+/* Lead-computing gunsight: a ring with a dot, placed where a dart fired now
+   meets the nearest foe. Colour follows the scheme via --toy-accent. */
+.toy-pipper {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 2px solid var(--toy-accent);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 3;
+}
+.toy-pipper::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: var(--toy-accent);
+}
+.toy-pipper[hidden] { display: none; }

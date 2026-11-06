@@ -51,6 +51,40 @@ test('rolling into a bank turns the car, and the afterburner is faster than full
   assert.ok(s.flight.speed > full + 3, `${full} -> ${s.flight.speed}`);
 });
 
+test('Pilot (Big Kid) flies the real aeroplane: same turn sense, held bank, a gentle stall', () => {
+  // Stick right turns the same way in the pilot model as in the jet integrator.
+  const j = roam(field());
+  toggleFlight(j.flight, j.car);
+  run(j, 1, {flight: {}});
+  const jYaw = carYaw(j.car);
+  run(j, 1.2, {flight: {roll: 0.7}});
+  const jTurn = Math.atan2(Math.sin(carYaw(j.car) - jYaw), Math.cos(carYaw(j.car) - jYaw));
+
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 1, {flight: {pilot: true, power: 1}});
+  const yaw0 = carYaw(s.car);
+  run(s, 0.8, {flight: {pilot: true, roll: 0.7}});
+  run(s, 0.8, {flight: {pilot: true}});
+  const turn = Math.atan2(Math.sin(carYaw(s.car) - yaw0), Math.cos(carYaw(s.car) - yaw0));
+  assert.ok(Math.abs(turn) > 0.25, `banked turn ${turn}`);
+  assert.equal(Math.sign(turn), Math.sign(jTurn), `pilot ${turn} turns like the jet ${jTurn}`);
+  // Hands off, a pilot's wings stay where they were put: the bank keeps turning it.
+  assert.ok(Math.abs(s.flight.bank) > 0.2, `bank holds hands-off (${s.flight.bank})`);
+
+  // Idle the power and hold the nose up: it slows through Vs, stalls, and sinks —
+  // then recovers flying speed once the nose comes down, without a crash.
+  let stalled = false;
+  let sank = 0;
+  for (let i = 0; i < 10 * 120 && s.flight.mode === 'fly'; i++) {
+    stepSession(s, {flight: {pilot: true, pitch: 0.4, power: -1}}, 1 / 120);
+    stalled = stalled || s.flight.stalled === true;
+    sank = Math.min(sank, s.car.vel[1]);
+  }
+  assert.ok(stalled, 'holding the nose up at idle stalls it');
+  assert.ok(sank < -1, `the stall sinks (${sank})`);
+});
+
 test('Enter again opens the parachute and the car floats down onto its wheels and drives off', () => {
   const s = roam(field());
   toggleFlight(s.flight, s.car);

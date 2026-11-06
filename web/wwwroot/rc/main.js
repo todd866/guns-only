@@ -1351,16 +1351,18 @@ function setMuted(m, report = true) {
 $('mute').onclick = () => setMuted(!muted);
 $('menu-mute').onclick = () => setMuted(!muted);
 setMuted(muted, false);
-// Invert flight: off, stick up climbs. On, stick up dives. Pitch only.
-let invertFlight = false;
+// Pull back to climb: ON by default, like the real stick (owner is a pilot;
+// 6 Nov 2026). OFF means stick up climbs. Pad pitch only; the arrow keys and
+// W/S always mean up-is-up. The old 'Invert flight' choice is honoured.
+let invertFlight = true;
 try {
-  invertFlight = localStorage.getItem('guns-only.rc.invertFlight') === '1';
+  invertFlight = localStorage.getItem('guns-only.rc.invertFlight') !== '0';
 } catch {}
 function setInvertFlight(on) {
   invertFlight = !!on;
   const el = $('menu-invert');
   el.setAttribute('aria-pressed', String(invertFlight));
-  el.setAttribute('aria-label', invertFlight ? 'Invert flight on' : 'Invert flight off');
+  el.setAttribute('aria-label', invertFlight ? 'Pull back to climb on' : 'Pull back to climb off');
   const val = el.querySelector('.sound-val');
   if (val) val.textContent = invertFlight ? 'on' : 'off';
   try {
@@ -6533,13 +6535,17 @@ function frame(now) {
       const skateInput = skate
         ? {...drive, drift: drive.drift || skateTouchGrab || performance.now() < skateGrabUntil}
         : drive;
-      // Arcade for every flying form: stick up climbs unless Invert flight is on.
-      // Arrows and W/S climb, arrows and A/D bank-and-turn. LB/RB (pad.yaw) is fine yaw.
+      // Kid flies the arcade flyer; Big Kid flies the real aeroplane (Pilot):
+      // bank to turn, energy, a gentle stall. 'Pull back to climb' flips the
+      // pad stick only — arrows and W/S always mean up-is-up. LB/RB rudder.
       const keyClimb = Number(keys.has('ArrowUp') || keys.has('KeyW')) - Number(keys.has('ArrowDown') || keys.has('KeyS')),
         keyBank = Number(keys.has('ArrowRight') || keys.has('KeyD')) - Number(keys.has('ArrowLeft') || keys.has('KeyA')),
-        att = stickAttitude({x: pad.roll || keyBank, y: pad.pitch || keyClimb}, {invert: invertFlight}),
+        padPitch = invertFlight ? -pad.pitch : pad.pitch,
+        att = stickAttitude({x: pad.roll || keyBank, y: padPitch || keyClimb}),
+        pilotFlight = mode !== 'kid' && !winged() && form !== 'chopper' && !skate && form !== 'board',
         fl = {
-          arcade: true,
+          arcade: !pilotFlight,
+          pilot: pilotFlight,
           pitch: att.pitch,
           roll: att.roll,
           yaw: pad.yaw || 0,

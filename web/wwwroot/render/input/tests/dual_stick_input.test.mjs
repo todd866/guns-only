@@ -27,22 +27,23 @@ test("radial stick removes drift and preserves full circular authority", () => {
   assert.ok(diagonal.x > 0 && diagonal.y > 0);
 });
 
-test("standard gamepad follows the two-stick phone control contract", () => {
+test("standard gamepad follows the fleet flight layout: A guns, RT/LT throttle, B padlock", () => {
   const state = standardGamepadState(gamepad({
     axes: [0.6, -0.8, -0.5, 0.25],
-    buttons: { 0: true, 2: true, 5: true, 7: 0.7 },
+    buttons: { 0: true, 1: true, 2: true, 7: 0.7 },
   }));
   assert.equal(state.connected, true);
   assert.ok(state.roll > 0);
   assert.ok(state.pitch < 0);
   assert.ok(state.lookX < 0);
   assert.ok(state.lookY > 0);
-  assert.equal(state.fire, true);
+  assert.equal(state.fire, true, "A fires the guns");
   assert.equal(state.limitOverride, true);
-  assert.equal(state.padlockPressed, true);
-  assert.equal(state.throttleUp, true);
+  assert.equal(state.padlockPressed, true, "B toggles padlock");
+  assert.equal(state.throttleUp, true, "RT is throttle up");
   assert.equal(state.throttleDown, false);
-  assert.equal(standardGamepadState(gamepad({ buttons: { 0: true } }), {
+  assert.equal(standardGamepadState(gamepad({ buttons: { 6: 0.5 } })).throttleDown, true, "LT is throttle down");
+  assert.equal(standardGamepadState(gamepad({ buttons: { 1: true } }), {
     padlock: true,
   }).padlockPressed, false);
 });
