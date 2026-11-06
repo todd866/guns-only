@@ -125,7 +125,7 @@ export function createRCTelemetry({
   }
   const durableOutbox =
     outbox ??
-    ((injectedTransport || canonicalHost(locationObject)) && typeof fetchImpl === 'function'
+    ((injectedTransport || localSink || canonicalHost(locationObject)) && typeof fetchImpl === 'function'
       ? createTelemetryOutbox({indexedDB, dbName: 'guns-rc-telemetry-outbox'})
       : null);
   const startedAt = now();
