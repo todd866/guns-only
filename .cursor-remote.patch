@@ -1,1057 +1,1800 @@
-diff --git a/web/wwwroot/rc/chase-camera.mjs b/web/wwwroot/rc/chase-camera.mjs
-new file mode 100644
-index 00000000..c035fa96
---- /dev/null
-+++ b/web/wwwroot/rc/chase-camera.mjs
-@@ -0,0 +1,42 @@
-+// Chase camera vs walls. The old pull stopped ~5 cm short of a close face, inside
-+// the near clip, so the wall texture filled the picture. Back up, and if the
-+// face is too close to back away from, lift the eye off it.
-+
-+const hypot = (x, y, z) => Math.hypot(x, y, z);
-+
-+/**
-+ * @param {number[]} eye car eye
-+ * @param {number[]} want desired camera position
-+ * @param {(origin:number[], dir:number[], max:number) => {dist:number}|null} raycast
-+ * @returns {number[]}
-+ */
-+export function pullChaseCamera(eye, want, raycast, {gap = 0.45, lift = 0.7} = {}) {
-+  const dx = want[0] - eye[0],
-+    dy = want[1] - eye[1],
-+    dz = want[2] - eye[2],
-+    dist = hypot(dx, dy, dz);
-+  if (!(dist > 1e-4) || typeof raycast !== 'function') return [want[0], want[1], want[2]];
-+  const dir = [dx / dist, dy / dist, dz / dist];
-+  const hit = raycast(eye, dir, dist);
-+  let x = want[0],
-+    y = want[1],
-+    z = want[2];
-+  if (hit && hit.dist > 0 && hit.dist < dist) {
-+    const along = Math.min(dist, Math.max(0.05, hit.dist - gap));
-+    x = eye[0] + dir[0] * along;
-+    y = eye[1] + dir[1] * along;
-+    z = eye[2] + dir[2] * along;
-+    if (hit.dist - along < gap) y += lift;
+diff --git a/web/wwwroot/rc/audio-mix.mjs b/web/wwwroot/rc/audio-mix.mjs
+index e3bc22ec..0a142be3 100644
+--- a/web/wwwroot/rc/audio-mix.mjs
++++ b/web/wwwroot/rc/audio-mix.mjs
+@@ -53,6 +53,7 @@ export const MIN_GAP = {
+   call: 1.4,
+   squeal: 0.7,
+   jet: 2.5,
++  whoosh: 0.1,
+   grind: 0.4
+ };
+ 
+@@ -71,6 +72,7 @@ export const PRIORITY = {
+   'foot-robot': 44,
+   'foot-cowboy': 44,
+   jet: 42,
++  whoosh: 40,
+   cluck: 40,
+   grind: 40,
+   gate: 35,
+diff --git a/web/wwwroot/rc/audio.js b/web/wwwroot/rc/audio.js
+index 3f7be574..8559523b 100644
+--- a/web/wwwroot/rc/audio.js
++++ b/web/wwwroot/rc/audio.js
+@@ -461,6 +461,12 @@ export class SoundKit {
+       q: 0.6
+     });
+   }
++  // Jetpack thrust. Short bursts, gated, so it follows the hold without a second loop.
++  whoosh(level = 1) {
++    if (!this.ready('whoosh', MIN_GAP.whoosh)) return;
++    const s = Math.max(0.35, Math.min(1, level));
++    this.burst({type: 'bandpass', freq: 420, sweep: 160, dur: 0.12, level: 0.05 * s, q: 0.55, attack: 0.015});
 +  }
-+  // One-sided faces miss once the camera has crossed them. A ray back toward
-+  // the car that hits immediately means the lens is in the surface: step toward
-+  // the car and up.
-+  const back = raycast([x, y, z], [-dir[0], -dir[1], -dir[2]], gap);
-+  if (back && back.dist < gap * 0.85) {
-+    const push = gap - back.dist;
-+    x -= dir[0] * push;
-+    y += lift - dir[1] * push;
-+    z -= dir[2] * push;
-+  }
-+  return [x, y, z];
-+}
-diff --git a/web/wwwroot/rc/chase-camera.test.mjs b/web/wwwroot/rc/chase-camera.test.mjs
-new file mode 100644
-index 00000000..983e399d
---- /dev/null
-+++ b/web/wwwroot/rc/chase-camera.test.mjs
-@@ -0,0 +1,26 @@
-+import test from 'node:test';
-+import assert from 'node:assert/strict';
-+import {pullChaseCamera} from './chase-camera.mjs';
-+
-+// Wall at z = -0.2, outward normal +z, so a ray from the car (z = 0) looking
-+// back (negative z) hits it. The wanted camera is 1.5 m behind the car.
-+const wall = (origin, dir, max) => {
-+  if (dir[2] >= -1e-6 || origin[2] <= -0.2) return null;
-+  const dist = (origin[2] - -0.2) / -dir[2];
-+  if (dist < 0 || dist > max) return null;
-+  return {dist};
-+};
-+
-+test('a close wall pulls the camera off the texture instead of parking on it', () => {
-+  const eye = [0, 0.5, 0];
-+  const want = [0, 0.55, -1.5];
-+  const got = pullChaseCamera(eye, want, wall);
-+  assert.ok(got[2] > -0.2, `camera stays on the car side of the wall (z ${got[2]})`);
-+  assert.ok(-0.2 - got[2] > 0.15 || got[1] > eye[1] + 0.4, 'clearance or a lift, not 5 cm of texture');
-+  assert.ok(got[1] > 0.9, `lifts off the face (y ${got[1]})`);
-+});
-+
-+test('open air leaves the chase camera where it was asked', () => {
-+  const want = [1, 2, 3];
-+  assert.deepEqual(pullChaseCamera([0, 0.5, 0], want, () => null), want);
-+});
-diff --git a/web/wwwroot/rc/coach.mjs b/web/wwwroot/rc/coach.mjs
-index 0951c5b5..21fc9f85 100644
---- a/web/wwwroot/rc/coach.mjs
-+++ b/web/wwwroot/rc/coach.mjs
-@@ -1,28 +1,18 @@
--// When does a player need the controller drawing? Pure, per player, fed every frame.
--// Shows when they sit still, hold both triggers (go + reverse cancel), push into a wall,
--// or have just picked the pad up; hides after a few seconds of real driving.
-+// Controller drawing. One show per form (car / walk / skate / fly), then it
-+// stays away until the form changes. The old "sat still / pushing a wall"
-+// rule brought it back every few seconds in split screen. Hidden during a
-+// race countdown and while that player is not driving.
- export function createCoach() {
--  let still = 0,
--    both = 0,
--    pushing = 0,
--    good = 0,
--    intro = 0,
--    showing = false;
--  let away = 0;
--  return ({dt, speed, throttle = 0, lt = 0, rt = 0, active = true, joined = false, touched = true}) => {
--    if (joined) intro = 8;
--    // Struggling means trying: a pad nobody has touched for 15 s is someone not playing.
--    away = touched ? 0 : away + dt;
--    if (!active || away > 15) return {show: (showing = false), glow: new Set(), why: null};
--    intro = Math.max(0, intro - dt);
--    still = speed < 0.6 && Math.abs(throttle) < 0.2 ? still + dt : 0;
--    pushing = speed < 0.6 && throttle > 0.3 ? pushing + dt : 0;
--    both = lt > 0.3 && rt > 0.3 ? both + dt : 0;
--    good = speed > 2.2 && both === 0 ? good + dt : 0;
--    const why = both > 1.2 ? 'both' : pushing > 2 ? 'stuck' : still > 2.5 ? 'still' : intro > 0 ? 'intro' : null;
--    if (why) showing = true;
--    else if (good > 3) showing = false;
--    const glow = new Set(why === 'both' ? [7, 'stick'] : why === 'stuck' ? [6, 13] : why === 'still' ? ['stick', 7, 12] : []);
--    return {show: showing, glow, why};
-+  let formSeen;
-+  let left = 0;
-+  return ({dt = 0, form = 'car', countdown = false, active = true} = {}) => {
-+    if (countdown || !active) return {show: false, glow: new Set(), why: null};
-+    if (form !== formSeen) {
-+      formSeen = form;
-+      left = 3;
-+    }
-+    if (left > 0) left = Math.max(0, left - dt);
-+    const show = left > 0;
-+    return {show, glow: new Set(), why: show ? 'form' : null};
-   };
- }
+   splat() {
+     if (!this.ready('splat', MIN_GAP.splat)) return;
+     this.tone(120, 0, 0.1, {level: 0.12, glide: 60, attack: 0.003});
 diff --git a/web/wwwroot/rc/coach.test.mjs b/web/wwwroot/rc/coach.test.mjs
-index ffe0e83d..e9db510f 100644
+index 83e62138..99637ccc 100644
 --- a/web/wwwroot/rc/coach.test.mjs
 +++ b/web/wwwroot/rc/coach.test.mjs
-@@ -1,25 +1,32 @@
- import test from 'node:test';
- import assert from 'node:assert/strict';
- import {createCoach} from './coach.mjs';
--const run = (c, n, f) => { let r; for (let i = 0; i < n; i++) r = c({dt: 0.1, ...f}); return r; };
--test('the controller drawing appears when a kid is stuck and leaves once they drive', () => {
-+
-+const run = (c, n, f) => {
-+  let r;
-+  for (let i = 0; i < n; i++) r = c({dt: 0.1, ...f});
-+  return r;
-+};
-+
-+test('each form is drawn once, then hidden after about 3 s', () => {
-+  const c = createCoach();
-+  assert.equal(c({dt: 0.1, form: 'car'}).show, true);
-+  assert.equal(run(c, 20, {form: 'car'}).show, true, 'still up inside 3 s');
-+  assert.equal(run(c, 15, {form: 'car'}).show, false, 'gone after 3 s');
-+  assert.equal(run(c, 200, {form: 'car', speed: 0, throttle: 0}).show, false, 'sitting still does not bring it back');
-+  assert.equal(c({dt: 0.1, form: 'skate'}).show, true, 'a new form shows again');
-+  assert.equal(c({dt: 0.1, form: 'skate'}).why, 'form');
-+});
-+
-+test('the drawing stays hidden through a race countdown', () => {
-   const c = createCoach();
--  assert.equal(run(c, 10, {speed: 3}).show, false, 'driving: hidden');
--  const sat = run(c, 30, {speed: 0, throttle: 0});
--  assert.equal(sat.show, true, 'sitting still 3 s: shown');
--  assert.ok(sat.glow.has('stick'), 'GO pulses');
--  assert.equal(run(c, 20, {speed: 3, throttle: 1}).show, true, 'still shown after 2 s of driving');
--  assert.equal(run(c, 20, {speed: 3, throttle: 1}).show, false, 'gone after 4 s of driving');
--  const both = run(c, 15, {speed: 0.2, throttle: 1, lt: 1, rt: 1});
--  assert.equal(both.why, 'both', 'both triggers held');
--  assert.ok(both.glow.has(7));
--  assert.equal(run(createCoach(), 1, {speed: 5, joined: true}).show, true, 'a new pad is introduced');
--  assert.equal(run(c, 40, {speed: 0, active: false}).show, false, 'paused: hidden');
-+  assert.equal(c({dt: 0.1, form: 'car', countdown: true}).show, false);
-+  assert.equal(run(c, 40, {form: 'car', countdown: true}).show, false);
-+  assert.equal(c({dt: 0.1, form: 'car', countdown: false}).show, true, 'after GO the unseen form may show once');
- });
+@@ -43,9 +43,15 @@ test('each form draws the controls that form actually uses', () => {
+   assert.match(car, /BOOST/);
+   assert.match(deck, /OLLIE/);
+   assert.match(foot, /MOVE/);
+-  assert.match(foot, /FIRE/);
+-  assert.match(foot, /AIM/);
++  assert.match(foot, /BLAST/);
++  assert.match(foot, /LOCK/);
+   assert.match(foot, /PUNCH/);
++  assert.match(foot, /JUMP/);
++  assert.match(foot, /JETPACK/);
++  assert.match(foot, /POWER/);
++  assert.match(foot, /SHIELD/);
++  assert.match(foot, /DASH/);
++  assert.match(foot, /MORPH/);
+   assert.match(air, /PITCH/);
+   assert.match(air, /SLOW/);
+   assert.match(gunship, /PITCH/);
+diff --git a/web/wwwroot/rc/gamepad.mjs b/web/wwwroot/rc/gamepad.mjs
+index ecd6821d..f7a188f1 100644
+--- a/web/wwwroot/rc/gamepad.mjs
++++ b/web/wwwroot/rc/gamepad.mjs
+@@ -54,6 +54,8 @@ export function mapPad(form, p) {
+       boostHeld: false,
+       morphHeld: down(p, 1),
+       punch: false,
++      dash: false,
++      shield: false,
+       aim: false,
+       sprint: false,
+       recentreHeld: down(p, 11),
+@@ -73,6 +75,8 @@ export function mapPad(form, p) {
+     out.jumpHeld = down(p, 0);
+     out.punch = down(p, 2);
+     out.boostHeld = down(p, 3);
++    out.shield = down(p, 4);
++    out.dash = down(p, 5);
+     out.sprint = down(p, 10);
+     return out;
+   }
+@@ -103,13 +107,19 @@ export function mapPad(form, p) {
+ }
  
--test('nobody holding the pad: no drawing over their half', () => {
-+test('a player who is not driving does not get the drawing', () => {
-   const c = createCoach();
--  assert.equal(run(c, 30, {speed: 0, touched: true}).show, true, 'trying and stuck: shown');
--  assert.equal(run(c, 170, {speed: 0, touched: false}).show, false, 'put down for 15 s: hidden');
--  assert.equal(run(c, 30, {speed: 0, touched: true}).show, true, 'picked up and stuck again: back');
-+  assert.equal(run(c, 10, {form: 'car', active: false}).show, false);
-+  assert.equal(c({dt: 0.1, form: 'car', active: true}).show, true);
- });
-diff --git a/web/wwwroot/rc/hunt.test.mjs b/web/wwwroot/rc/hunt.test.mjs
-index 1d525b36..0185e790 100644
---- a/web/wwwroot/rc/hunt.test.mjs
-+++ b/web/wwwroot/rc/hunt.test.mjs
-@@ -83,3 +83,13 @@ test('hunt off scores nothing and logs nothing', () => {
- });
- 
- test('fmtHunt', () => assert.equal(fmtHunt(65.2), '1:06'));
+ /** Left stick into a world XZ move, relative to the camera's yaw (the way it is looking). */
+-export function cameraMove(camYaw, lx, ly) {
++export function cameraMoveInto(out, camYaw, lx, ly) {
+   const yaw = Number.isFinite(camYaw) ? camYaw : 0,
+     fwdX = Math.sin(yaw),
+     fwdZ = -Math.cos(yaw),
+     rightX = Math.cos(yaw),
+     rightZ = Math.sin(yaw);
+-  return {x: lx * rightX + ly * fwdX, z: lx * rightZ + ly * fwdZ};
++  out.x = lx * rightX + ly * fwdX;
++  out.z = lx * rightZ + ly * fwdZ;
++  return out;
++}
 +
-+test('the round clock does not move while a menu is open', () => {
-+  const h = createHunt();
-+  setHuntOn(h, true);
-+  stepHunt(h, 3, true);
-+  assert.equal(h.roundLeft, HUNT.round);
-+  assert.equal(hudLine(h), '🎃 0/10 · 3:00');
-+  stepHunt(h, 3, false);
-+  assert.equal(hudLine(h), '🎃 0/10 · 2:57');
-+});
++export function cameraMove(camYaw, lx, ly) {
++  return cameraMoveInto({x: 0, z: 0}, camYaw, lx, ly);
+ }
+ 
+ /**
+@@ -157,6 +167,8 @@ const IDLE = {
+   aim: false,
+   sprint: false,
+   punch: false,
++  dash: false,
++  shield: false,
+   flyHeld: false,
+   pitch: 0,
+   roll: 0,
+@@ -215,6 +227,8 @@ export function createGamepadInput() {
+       aim: a.aim || b.aim,
+       sprint: a.sprint || b.sprint,
+       punch: a.punch || b.punch,
++      dash: a.dash || b.dash,
++      shield: a.shield || b.shield,
+       pitch: stronger(a.pitch, b.pitch),
+       roll: stronger(a.roll, b.roll),
+       yaw: stronger(a.yaw, b.yaw),
 diff --git a/web/wwwroot/rc/index.html b/web/wwwroot/rc/index.html
-index 058114fa..7062bc52 100644
+index 16e0effd..17cf1ff9 100644
 --- a/web/wwwroot/rc/index.html
 +++ b/web/wwwroot/rc/index.html
-@@ -32,6 +32,7 @@
- <div id="keys-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Controls" hidden><div class="panel-heading"><h2>CONTROLS</h2><button id="keys-close" aria-label="Close controls">×</button></div><dl class="touch-keys"><dt>Left pad</dt><dd>Steer</dd><dt>Go / Rev lever</dt><dd>Drive and reverse · let go to coast</dd><dt>Brake</dt><dd>Brake</dd><dt>Fire</dt><dd>Fire pickup</dd><dt>⏸</dt><dd>Menu: recover, Kid mode, sound</dd><dt>⌖ Places</dt><dd>Map, routes and jumps</dd></dl><dl class="key-list"><dt>X / W / ↑</dt><dd>Accelerate</dd><dt>S / ↓</dt><dd>Brake / reverse</dd><dt>A D / ← →</dt><dd>Steer</dd><dt>Z</dt><dd>Brake</dd><dt>↑ + S / ↓ + W</dt><dd>Wheelie / stoppie</dd><dt>Space</dt><dd>Jump (car hop, skateboard ollie, robot jump)</dd><dt>return</dt><dd>Fly · again: parachute · ↑ push ↓ pull ←→ roll A D rudder W S power · Kid: auto pull-up near the ground</dd><dt>Shift / RB</dt><dd>Hold through a turn: drift · let go: turbo</dd><dt>Q</dt><dd>Fire pickup · punch</dd><dt>Q (riding, long ago)</dt><dd>Shoot an electric arrow</dd><dt>F / pad Y</dt><dd>Boost on / off (free drive) · in the air: afterburner</dd><dt>🛹 in the air</dt><dd>Q flip · E grab (hold) · ←/→ spin · tap ↑ or ↓ first for Impossible / Shove-It, Nosegrab / Tailgrab</dd><dt>🛹 grind</dt><dd>Ollie onto a gold line · hold a direction as you land: ↑ Nosegrind, ↓ 5-0, ↑← Crooked, ↓← Smith, ↓→ Feeble · ←/→ balance · Space off</dd><dt>Y</dt><dd>Say something (type a word · in the past, say your dinosaur's name and it comes)</dd><dt>C</dt><dd>Look around: the arrows turn the camera, C again to drive (or drag with the mouse)</dd><dt>R</dt><dd>Recover</dd><dt>E</dt><dd>Go in · on foot: use your item</dd><dt>Tab / G</dt><dd>Map / garage</dd><dt>Esc / M</dt><dd>Pause / mute</dd></dl></div>
+@@ -29,7 +29,7 @@
+         <div id="dex-clips" aria-label="Moves"></div>
+       </div>
+     </div>
+-<div id="keys-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Controls" hidden><div class="panel-heading"><h2>CONTROLS</h2><button id="keys-close" aria-label="Close controls">×</button></div><dl class="touch-keys"><dt>Left pad</dt><dd>Steer</dd><dt>Go / Rev lever</dt><dd>Drive and reverse · let go to coast</dd><dt>Brake</dt><dd>Brake</dd><dt>Fire</dt><dd>Fire pickup</dd><dt>⏸</dt><dd>Menu: recover, Kid mode, sound</dd><dt>⌖ Places</dt><dd>Map, routes and jumps</dd></dl><dl class="key-list"><dt>X / W / ↑</dt><dd>Accelerate</dd><dt>S / ↓</dt><dd>Brake / reverse</dd><dt>A D / ← →</dt><dd>Steer</dd><dt>Z</dt><dd>Brake</dd><dt>↑ + S / ↓ + W</dt><dd>Wheelie / stoppie</dd><dt>Space</dt><dd>Jump (car hop, skateboard ollie, robot jump)</dd><dt>return</dt><dd>Fly · again: parachute · ↑ push ↓ pull ←→ roll A D rudder W S power · Kid: auto pull-up near the ground</dd><dt>Shift / Y / RB</dt><dd>Hold through a turn: drift · let go: turbo</dd><dt>Q</dt><dd>Fire pickup · punch</dd><dt>Q (riding, long ago)</dt><dd>Shoot an electric arrow</dd><dt>F / pad X</dt><dd>Boost on / off (free drive) · in the air: afterburner</dd><dt>🛹 in the air</dt><dd>Q flip · E grab (hold) · ←/→ spin · tap ↑ or ↓ first for Impossible / Shove-It, Nosegrab / Tailgrab</dd><dt>🛹 grind</dt><dd>Ollie onto a gold line · hold a direction as you land: ↑ Nosegrind, ↓ 5-0, ↑← Crooked, ↓← Smith, ↓→ Feeble · ←/→ balance · Space off</dd><dt>Y</dt><dd>Say something (type a word · in the past, say your dinosaur's name and it comes)</dd><dt>C</dt><dd>Look around: the arrows turn the camera, C again to drive (or drag with the mouse)</dd><dt>R</dt><dd>Recover</dd><dt>E</dt><dd>Go in · on foot: use your item</dd><dt>Tab / G</dt><dd>Map / garage</dd><dt>Esc / M</dt><dd>Pause / mute</dd></dl></div>
++<div id="keys-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Controls" hidden><div class="panel-heading"><h2>CONTROLS</h2><button id="keys-close" aria-label="Close controls">×</button></div><dl class="touch-keys"><dt>Left pad</dt><dd>Steer</dd><dt>Go / Rev lever</dt><dd>Drive and reverse · let go to coast</dd><dt>Brake</dt><dd>Brake</dd><dt>Fire</dt><dd>Fire pickup</dd><dt>⏸</dt><dd>Menu: recover, Kid mode, sound</dd><dt>⌖ Places</dt><dd>Map, routes and jumps</dd></dl><dl class="key-list"><dt>X / W / ↑</dt><dd>Accelerate</dd><dt>S / ↓</dt><dd>Brake / reverse</dd><dt>A D / ← →</dt><dd>Steer</dd><dt>Z</dt><dd>Brake</dd><dt>↑ + S / ↓ + W</dt><dd>Wheelie / stoppie</dd><dt>Space</dt><dd>Jump (car hop, skateboard ollie, robot jump)</dd><dt>return</dt><dd>Fly · again: parachute · ↑ push ↓ pull ←→ roll A D rudder W S power · Kid: auto pull-up near the ground</dd><dt>Shift / Y / RB</dt><dd>Hold through a turn: drift · let go: turbo</dd><dt>Q</dt><dd>Fire pickup · punch</dd><dt>Robot</dt><dd>A jump, hold jetpack · X punch · Y power · LB shield · RB dash · LT lock · RT blast · B morph</dd><dt>Q (riding, long ago)</dt><dd>Shoot an electric arrow</dd><dt>F / pad X</dt><dd>Boost on / off (free drive) · in the air: afterburner</dd><dt>🛹 in the air</dt><dd>Q flip · E grab (hold) · ←/→ spin · tap ↑ or ↓ first for Impossible / Shove-It, Nosegrab / Tailgrab</dd><dt>🛹 grind</dt><dd>Ollie onto a gold line · hold a direction as you land: ↑ Nosegrind, ↓ 5-0, ↑← Crooked, ↓← Smith, ↓→ Feeble · ←/→ balance · Space off</dd><dt>Y</dt><dd>Say something (type a word · in the past, say your dinosaur's name and it comes)</dd><dt>C</dt><dd>Look around: the arrows turn the camera, C again to drive (or drag with the mouse)</dd><dt>R</dt><dd>Recover</dd><dt>E</dt><dd>Go in · on foot: use your item</dd><dt>Tab / G</dt><dd>Map / garage</dd><dt>Esc / M</dt><dd>Pause / mute</dd></dl></div>
  
  <div id="skate" hidden aria-label="Skate run"><div class="skate-top"><strong id="skate-score">0</strong><span id="skate-letters" title="Collect S-K-A-T-E"><i>S</i><i>K</i><i>A</i><i>T</i><i>E</i></span></div><output id="skate-clock" title="Run time left">2:00</output><div id="skate-combo" hidden><span id="skate-tricks"></span><strong id="skate-points"></strong></div><div id="skate-pop" hidden></div></div>
-+<div id="leave-race" class="overlay" role="dialog" aria-modal="true" aria-label="Leave this race?" hidden><p>Leave this race?</p><div class="leave-actions"><button id="leave-yes" type="button">A Leave</button><button id="leave-no" type="button">B Stay</button></div></div>
  <div id="countdown" hidden>3</div><div id="banner" hidden>🎺 Bugle time! Rivals stop — you keep driving</div><div id="result" role="status" aria-live="polite" hidden></div><div id="touch" aria-label="Driving controls">
- <div id="touch-left-actions"><button id="touch-fire" class="touch-action touch-fire" aria-label="Fire pickup">Fire</button><button id="touch-brake" class="touch-action" aria-label="Brake">Brake</button><div id="touch-throttle-lever" role="slider" tabindex="0" aria-orientation="vertical" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0" aria-label="Throttle, brake and reverse — release to coast"><span class="touch-lever-fill" aria-hidden="true"></span><span id="touch-throttle-puck" class="touch-lever-puck" aria-hidden="true"></span><span class="touch-lever-mark touch-lever-forward" aria-hidden="true">▲ Go</span><span class="touch-lever-mark touch-lever-reverse" aria-hidden="true">▼ Rev</span></div></div>
- <div id="touch-stick" class="touch-stick" role="slider" tabindex="0" aria-orientation="horizontal" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0" aria-label="Steering — slide left or right"><span class="touch-stick-ring" aria-hidden="true"></span><span id="touch-stick-puck" class="touch-stick-puck" aria-hidden="true"></span></div></div>
 diff --git a/web/wwwroot/rc/main.js b/web/wwwroot/rc/main.js
-index 4d03ac25..f6da5eb7 100644
+index 11c885b7..d20601c2 100644
 --- a/web/wwwroot/rc/main.js
 +++ b/web/wwwroot/rc/main.js
-@@ -116,17 +116,19 @@ import {ITEMS} from './physics/items.mjs';
- import {bodyAt, waterHeight} from './physics/water.mjs';
- import {vehicleParams, legendCarParams, mountParams, LEGEND_CARS} from './physics/vehicles.mjs';
- import {createAdaptiveResolution, stepAdaptiveResolution} from './adaptive-resolution.mjs';
--import {createPlaymates, stepPlaymates} from './physics/playmate.mjs';
-+import {createPlaymates, stepPlaymates, dismissPlaymate} from './physics/playmate.mjs';
- import {drawDetailedMinimap} from './open-world/minimap.js';
+@@ -51,7 +51,9 @@ import {CLOUDS} from './open-world/clouds.mjs';
+ import {applyLivery} from './livery.js';
+ import {batchCarParts, unbatchCarParts} from './car-batch.js';
+ import {createRobot, stepRobot} from './physics/robot.mjs';
+-import {COMBAT} from './physics/combat.mjs';
++import {createMoves, stepMoves, bumpRobots, MOVES} from './robot-moves.mjs';
++import {createSparRing, stepSpar, bonkSpar} from './robot-spar.mjs';
++import {createRobotFx} from './robot-fx.js';
+ import {makeRobotBody, poseRobotBody, makeBoardRider, poseBoardRider} from './robot-body.js';
+ import {
+   makeToyDino,
+@@ -121,7 +123,7 @@ import {drawDetailedMinimap} from './open-world/minimap.js';
  import {createCup, loadCup, saveCup, recordCupRace, nextCupEvent, cupStandings} from './grand-prix.mjs';
  import {createRaceMenu, CUP_COURSES} from './race-menu.js';
  import {createAlienMarshal} from './alien-marshal.js';
- import {createGamepadInput} from './gamepad.mjs';
--import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput} from './split-p2.mjs';
-+import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput, screenHeld} from './split-p2.mjs';
+-import {createGamepadInput, cameraMove, flyShoulder} from './gamepad.mjs';
++import {createGamepadInput, cameraMoveInto, flyShoulder} from './gamepad.mjs';
+ import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput} from './split-p2.mjs';
  import {attachDreams} from './open-world/dreams/runner.js';
  import {createMenuPad} from './gamepad-menu.mjs';
- import {padSvg, padKind} from './pad-art.mjs';
- import {createCoach} from './coach.mjs';
-+import {raceStartDecision, armTimed, takePending} from './race-guard.mjs';
-+import {pullChaseCamera} from './chase-camera.mjs';
- import {createTag, setTagOn, stepTag, TAG, hudLine, resultHead, resultStats, tagTelemetry} from './tag.mjs';
- import {createHunt, setHuntOn, stepHunt, collect as collectHunt, hudLine as huntHudLine, resultHead as huntResultHead, resultStats as huntResultStats, huntTelemetry} from './hunt.mjs';
- import {createTeamRace, teamCard, p2LapChip} from './team-race.mjs';
-@@ -1078,8 +1080,11 @@ function raceReady() {
-   return false;
+@@ -476,6 +478,13 @@ if (track) {
+   scene.add(sun.target);
  }
- function visitRace(place, kind = 'race') {
--  const url = openWorld.eventURL(place, kind);
--  if (url) location.href = url;
-+  const go = () => {
-+    const url = openWorld.eventURL(place, kind);
-+    if (url) location.href = url;
-+  };
-+  if (!queueRace(go, 'event')) return;
- }
- $('menu-race').onclick = () => {
-   if (!raceReady()) return;
-@@ -1165,8 +1170,10 @@ function paintHunt() {
-   }
- }
- $('menu-tag').onclick = () => {
--  setTagOn(tag, !tag.on);
--  $('menu-tag').setAttribute('aria-pressed', String(tag.on));
-+  const arm = armTimed(tag, !tag.on, menusHold());
-+  if (arm === 'off') setTagOn(tag, false);
-+  else if (arm === 'on') setTagOn(tag, true);
-+  $('menu-tag').setAttribute('aria-pressed', String(tag.on || !!tag.pending));
-   if (tag.on) {
-     team.on = false;
-     if (hunt.on) {
-@@ -1178,8 +1185,10 @@ $('menu-tag').onclick = () => {
-   }
- };
- $('menu-hunt').onclick = () => {
--  setHuntOn(hunt, !hunt.on);
--  $('menu-hunt').setAttribute('aria-pressed', String(hunt.on));
-+  const arm = armTimed(hunt, !hunt.on, menusHold());
-+  if (arm === 'off') setHuntOn(hunt, false);
-+  else if (arm === 'on') setHuntOn(hunt, true);
-+  $('menu-hunt').setAttribute('aria-pressed', String(hunt.on || !!hunt.pending));
-   if (hunt.on) {
-     if (tag.on) {
-       setTagOn(tag, false);
-@@ -1208,13 +1217,14 @@ $('menu-team').onclick = () => {
-   $('result').classList.remove('team-card');
-   pause(false);
-   const before = race;
--  startRace();
--  team.on = race !== before && !race.roam && !race.furball;
--  if (team.on) {
--    const rv = race.rivals[0];
--    if (rv) rv.human = () => ({throttle: 0, steer: 0, brake: true, drift: false, fire: false});
--    if (split) split.placed = true;
--  }
-+  startRace(() => {
-+    team.on = race !== before && !race.roam && !race.furball;
-+    if (team.on) {
-+      const rv = race.rivals[0];
-+      if (rv) rv.human = () => ({throttle: 0, steer: 0, brake: true, drift: false, fire: false});
-+      if (split) split.placed = true;
+ const fx = createEffects(scene);
++const robotFx = createRobotFx(scene);
++const spar = openWorld ? createSparRing(parkPoint) : [];
++const sparBodies = spar.map(() => {
++  const g = makeRobotBody('#9aa7ad');
++  scene.add(g);
++  return g;
++});
+ const marshal = createAlienMarshal(scene, {scale: 0.32});
+ let marshalSession = null,
+   marshalRecovery = 0,
+@@ -2751,6 +2760,137 @@ let punchQueued = false,
+   trickCalled = false,
+   camHeading = null,
+   camEasing = false;
++let camShake = 0,
++  camShake2 = 0;
++const p1Move = {x: 0, z: 0},
++  p1In = {
++    move: null,
++    jump: false,
++    sprint: false,
++    throttle: 0,
++    steer: 0,
++    jumpHeld: false,
++    punchHeld: false,
++    powerHeld: false,
++    shieldHeld: false,
++    dashHeld: false,
++    lockHeld: false,
++    fireHeld: false,
++    busy: false
++  },
++  p2In = {
++    move: {x: 0, z: 0},
++    jump: false,
++    sprint: false,
++    throttle: 0,
++    steer: 0,
++    jumpHeld: false,
++    punchHeld: false,
++    powerHeld: false,
++    shieldHeld: false,
++    dashHeld: false,
++    lockHeld: false,
++    fireHeld: false,
++    busy: false
++  },
++  FIGHT_N = 16,
++  fightSlots = Array.from({length: FIGHT_N}, () => ({
++    id: 0,
++    pos: [0, 0, 0],
++    kind: '',
++    body: null,
++    shield: false
++  }));
++function rumblePad(gp, strong, ms) {
++  const act = gp?.vibrationActuator;
++  if (!act || typeof act.playEffect !== 'function') return;
++  try {
++    act.playEffect('dual-rumble', {
++      startDelay: 0,
++      duration: ms,
++      strongMagnitude: strong,
++      weakMagnitude: strong * 0.65
++    });
++  } catch {
++    /* this pad has no rumble */
++  }
++}
++function putFight(n, origin, id, pos, kind, body, shield) {
++  if (!pos || n >= FIGHT_N) return n;
++  const dx = pos[0] - origin[0],
++    dz = pos[2] - origin[2];
++  if (dx * dx + dz * dz > 64) return n;
++  const s = fightSlots[n];
++  s.id = id;
++  s.pos[0] = pos[0];
++  s.pos[1] = pos[1];
++  s.pos[2] = pos[2];
++  s.kind = kind;
++  s.body = body;
++  s.shield = !!shield;
++  return n + 1;
++}
++function fillFightSlots(selfId, origin) {
++  let n = 0;
++  for (let i = 0; i < spar.length; i++) n = putFight(n, origin, spar[i].id, spar[i].pos, 'dummy', spar[i], false);
++  if (selfId !== 1 && robot?.pos) n = putFight(n, origin, 1, robot.pos, 'robot', robot, (robot.moves?.shieldLeft || 0) > 0);
++  if (selfId !== 2 && split?.p2Form === 'robot' && p2Robot?.pos)
++    n = putFight(n, origin, 2, p2Robot.pos, 'robot', p2Robot, (p2Robot.moves?.shieldLeft || 0) > 0);
++  for (let i = 0; i < race.rivals.length; i++) {
++    const car = race.rivals[i].session.car,
++      hidden = (selfId === 1 && !!robot && car === s.car) || (selfId === 2 && split?.p2Form === 'robot' && i === 0);
++    if (!hidden) n = putFight(n, origin, 200 + i, car.pos, 'car', car, false);
++  }
++  if (selfId === 2 && !robot) n = putFight(n, origin, 300, s.car.pos, 'car', s.car, false);
++  return n;
++}
++function presentFight(body, gp, seat) {
++  const mv = body.moves;
++  if (!mv) return;
++  const out = mv.out;
++  for (let i = 0; i < out.hitCount; i++) {
++    const h = mv.hitBuf[i];
++    if (!h.blocked && h.kind === 'dummy' && h.body) bonkSpar(h.body, h.ix, h.iz);
++    else if (!h.blocked && h.body?.vel) {
++      h.body.vel[0] += h.ix;
++      h.body.vel[1] += h.iy;
++      h.body.vel[2] += h.iz;
 +    }
-+  });
-   canvas.focus();
- };
- $('menu-players').onclick = () => {
-@@ -2410,6 +2420,7 @@ function callout(text, ms = 1600) {
- let roamArmedAt = 30;
- function goRoam() {
-   team.on = false;
-+  raceArmed = false;
-   if (openWorld && !race.roam) {
-     location.href = rcLink({track: 'hub', at: nearestLocation(s.car.pos).id}, location.search);
-     return;
-@@ -2427,6 +2438,7 @@ function toMenu() {
- }
- // Free drive on this track from anywhere (a race, a Furball, a result card).
- function freeDrive() {
-+  raceArmed = false;
-   telemetry.raceQuit('drive');
-   if (openWorld) {
-     location.href = rcLink({track: 'hub', at: nearestLocation(s.car.pos).id}, location.search);
-@@ -2440,19 +2452,21 @@ function freeDrive() {
-   goRoam();
- }
- function goFurball() {
--  team.on = false;
--  race = createRace(course, {
--    mode,
--    opponents: Math.max(3, rivalCount),
--    features: trackFeatures,
--    furball: true
--  });
--  s = race.player;
--  paintKillMarks();
--  reported = false;
--  Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
--  startCountdown();
--  callout('FURBALL!');
-+  queueRace(() => {
-+    team.on = false;
-+    race = createRace(course, {
-+      mode,
-+      opponents: Math.max(3, rivalCount),
-+      features: trackFeatures,
-+      furball: true
-+    });
-+    s = race.player;
-+    paintKillMarks();
-+    reported = false;
-+    Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
-+    commitCountdown();
-+    callout('FURBALL!');
-+  }, 'event');
- }
- function furballOver(w) {
-   if (reported) return;
-@@ -2485,6 +2499,7 @@ function furballOver(w) {
-   $('again').onclick = () => {
-     telemetry.choice('again');
-     result.hidden = true;
-+    raceArmed = false;
-     goFurball();
-     pause(false);
-   };
-@@ -2594,13 +2609,16 @@ function drawLives(now, dt) {
-     v.n = n;
-   });
- }
--function startRace() {
--  if (!raceReady() || openWorld?.setRacing(true) === false) return;
--  race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures});
--  s = race.player;
--  reported = false;
--  Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
--  startCountdown();
-+function startRace(after) {
-+  queueRace(() => {
-+    if (!raceReady() || openWorld?.setRacing(true) === false) return;
-+    race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures});
-+    s = race.player;
-+    reported = false;
-+    Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
-+    commitCountdown();
-+    after?.();
-+  }, raceLive() && inStartArea() ? 'start-area' : 'event');
- }
- function drawRoam() {
-   gates.forEach(g => {
-@@ -2719,10 +2737,75 @@ function drawMap() {
- let reported = false;
- // 3-2-1-GO: nobody moves until GO (Re-Volt start).
- let countdown = -1,
--  lastBeep = 0;
-+  lastBeep = 0,
-+  raceArmed = false,
-+  leaveAction = null,
-+  leaveWasPaused = false,
-+  brakeWas = false;
-+function raceLive() {
-+  return raceArmed && !race.roam && !s.finished;
-+}
-+function inStartArea() {
-+  const p = course.start?.pos;
-+  if (!p) return false;
-+  const c = robot ? robot.pos : s.car.pos;
-+  return Math.hypot(c[0] - p[0], c[2] - p[2]) < 12;
-+}
-+function menusHold() {
-+  const leave = $('leave-race');
-+  return screenHeld({
-+    paused,
-+    panel: ui?.panel?.(),
-+    brief: started && !$('brief').hidden,
-+    dialog: !!document.querySelector('dialog[open]'),
-+    leave: !!leave && !leave.hidden
-+  });
-+}
-+function askLeave(action) {
-+  if (!$('leave-race').hidden) return;
-+  leaveAction = action;
-+  leaveWasPaused = paused;
-+  paused = true;
-+  document.body.classList.add('paused');
-+  $('brief').hidden = true;
-+  $('leave-race').hidden = false;
-+  $('leave-yes').focus();
-+}
-+function closeLeave(run) {
-+  $('leave-race').hidden = true;
-+  const action = leaveAction;
-+  leaveAction = null;
-+  if (run) action?.();
-+  if (!leaveWasPaused) {
-+    paused = false;
-+    document.body.classList.remove('paused');
-+    if (started) $('brief').hidden = true;
-+    canvas.focus();
++    robotFx.spark(h.x, h.y, h.z);
 +  }
-+}
-+function queueRace(run, trigger = 'event') {
-+  const decision = raceStartDecision({live: raceLive(), trigger, confirmed: trigger === 'confirmed'});
-+  if (decision === 'ignore') return false;
-+  if (decision === 'confirm') {
-+    askLeave(() => queueRace(run, 'confirmed'));
-+    return false;
++  if (out.shock) {
++    robotFx.shock(out.sx, out.sy, out.sz);
++    robotFx.dust(out.sx, out.sy, out.sz);
++    audio.impact(5);
++    audio.landing(3);
++    rumblePad(gp, 1, 130);
++    if (seat === 2) camShake2 = Math.max(camShake2, 0.045);
++    else camShake = Math.max(camShake, 0.045);
++  } else if (out.landed) {
++    robotFx.dust(body.pos[0], body.pos[1], body.pos[2]);
++    audio.landing(1.2);
 +  }
-+  run();
-+  return true;
-+}
-+$('leave-yes').onclick = () => closeLeave(true);
-+$('leave-no').onclick = () => closeLeave(false);
- function startCountdown() {
-+  queueRace(
-+    () => commitCountdown(),
-+    raceLive() && inStartArea() ? 'start-area' : 'event'
-+  );
-+}
-+function commitCountdown() {
-+  telemetry.raceQuit('leave');
-   if (openWorld?.selected.id === 'alley-cat') callout('🎳 Alley Cat race!', 4500);
-   telemetry.raceStart({kind: race.furball ? 'furball' : 'race', track: telemetryTrack, mode});
-+  raceArmed = true;
-   countdown = 2.999;
-   lastBeep = 4;
- }
-@@ -5674,17 +5757,37 @@ function coachFrame(all, p1, p2, now) {
-     ],
-     draw = now - coachDrawn > 66;
-   if (draw) coachDrawn = now;
--  players.forEach(({pad: gp, input, speed, on}, i) => {
-+  players.forEach(({pad: gp, input}, i) => {
-     const el = coachEls[i];
-     if (!gp || !input) return void (el.hidden = true);
--    const busyNow = gp.buttons.some(b => b.value > 0.5) || gp.axes.some(a => Math.abs(a) > 0.3);
--    const c = coaches[i]({dt, speed, throttle: input.throttle, lt: gp.buttons[6]?.value ?? 0, rt: gp.buttons[7]?.value ?? 0, active: on, joined: !!input.joined, touched: busyNow});
-+    const toy =
-+      i === 0
-+        ? s.flight.mode
-+          ? 'fly'
-+          : robot
-+            ? 'walk'
-+            : form === 'board'
-+              ? 'skate'
-+              : 'car'
-+        : rv0?.session.flight.mode
-+          ? 'fly'
-+          : split?.p2Form === 'board'
-+            ? 'skate'
-+            : split?.p2Form === 'robot'
-+              ? 'walk'
-+              : 'car';
-+    const c = coaches[i]({
-+      dt,
-+      form: toy,
-+      countdown: countdown > 0,
-+      active: started && !menusHold() && (i === 0 || splitOn)
-+    });
-     el.hidden = !c.show;
-     el.classList.toggle('left', splitOn && i === 0);
-     el.classList.toggle('right', i === 1);
-     if (c.show && draw) {
-       const pressed = new Set(gp.buttons.flatMap((b, k) => (b.value > 0.5 ? [k] : [])));
--      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 440, skip: []});
-+      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 200, skip: []});
-     }
-   });
- }
-@@ -5902,6 +6005,7 @@ function huntFrame(dt) {
-   const menu = $('menu-hunt');
-   if (menu.hidden === splitOn) menu.hidden = !splitOn;
-   if (!splitOn) {
-+    hunt.pending = false;
-     if (hunt.on) {
-       setHuntOn(hunt, false);
-       menu.setAttribute('aria-pressed', 'false');
-@@ -5910,18 +6014,24 @@ function huntFrame(dt) {
-     huntResult.hidden = true;
-     return;
-   }
-+  const held = menusHold();
-+  if (takePending(hunt, held)) {
-+    setHuntOn(hunt, true);
-+    menu.setAttribute('aria-pressed', 'true');
++  if (out.rumble > 0 && !out.shock) {
++    audio.impact(3);
++    rumblePad(gp, out.rumble, 70);
++    if (seat === 2) camShake2 = Math.max(camShake2, 0.028);
++    else camShake = Math.max(camShake, 0.028);
 +  }
-   if (!hunt.on) {
-     huntHud.forEach(el => (el.hidden = true));
-     huntResult.hidden = true;
-     return;
-   }
--  stepHunt(hunt, dt, paused || ui.panel());
-+  stepHunt(hunt, dt, held);
-   paintHunt();
- }
- function tagFrame(dt) {
-   const menu = $('menu-tag');
-   if (menu.hidden === splitOn) menu.hidden = !splitOn;
-   if (!splitOn) {
-+    tag.pending = false;
-     if (tag.on) {
-       setTagOn(tag, false);
-       menu.setAttribute('aria-pressed', 'false');
-@@ -5930,6 +6040,11 @@ function tagFrame(dt) {
-     tagResult.hidden = true;
-     return;
-   }
-+  const held = menusHold();
-+  if (takePending(tag, held)) {
-+    setTagOn(tag, true);
-+    menu.setAttribute('aria-pressed', 'true');
++  if (out.blast) {
++    robotFx.blast(out.bx, out.by, out.bz, out.tx, out.ty, out.tz);
++    audio.zap();
 +  }
-   if (!tag.on) {
-     tagHud.forEach(h => (h.hidden = true));
-     tagResult.hidden = true;
-@@ -5938,7 +6053,7 @@ function tagFrame(dt) {
-   const a = splitAnchor(),
-     b = splitFollower(),
-     dist = Math.hypot(a[0] - b[0], a[2] - b[2]),
--    ev = stepTag(tag, dt, dist, paused || ui.panel());
-+    ev = stepTag(tag, dt, dist, held);
-   if (ev.tagged) callout('🏷️ Tagged!', 900);
-   const showResult = tag.resultLeft > 0;
-   tagResult.hidden = !showResult;
-@@ -6057,10 +6172,12 @@ const padLog = (() => {
- // Menus answer the controller too: the open dialog, else the pause/start menu.
- const menuPad = createMenuPad({
-   root: () =>
-+    (!$('leave-race').hidden ? $('leave-race') : null) ??
-     document.querySelector('.overlay:not([hidden])') ??
-     ($('result').hidden || !$('result').querySelector('button') ? null : $('result')) ??
-     ($('brief').hidden ? null : $('brief')),
-   back: () => {
-+    if (!$('leave-race').hidden) return closeLeave(false);
-     if (ui.panel()) return ui.close();
-     const card = $('result');
-     if (!card.hidden) return [...card.querySelectorAll('button')].find(b => /drive|close|×|back|ok/i.test(b.textContent))?.click();
-@@ -6195,6 +6312,7 @@ function frame(now) {
-         return rivalHumanInput({
-           paused,
-           uiPanel: !!ui.panel(),
-+          held: menusHold(),
-           pad2: pad2 ?? {throttle: 0, steer: 0, brake: false, drift: false, boost: false},
-           gp: p2Gp,
-           mode,
-@@ -6292,7 +6410,7 @@ function frame(now) {
-   tagFrame(dt);
-   huntFrame(dt);
-   teamFrame();
--  if (!paused && !ui.panel() && countdown > 0) {
-+  if (!menusHold() && countdown > 0) {
-     countdown -= dt;
-     const n = Math.ceil(countdown);
-     if (n < lastBeep) {
-@@ -6305,7 +6423,7 @@ function frame(now) {
-     }
-     acc = 0;
++  if (out.thrust) audio.whoosh(0.85);
++}
++function driveWalker(body, input, world, dt, selfId, gp, seat) {
++  body.moves ??= createMoves();
++  input.jump = false;
++  if (body.moves.hitStop <= 0) stepRobot(body, input, world, dt);
++  const n = body.climb ? 0 : fillFightSlots(selfId, body.pos);
++  input.busy = !!body.climb;
++  stepMoves(body.moves, body, input, fightSlots, n, dt);
++  presentFight(body, gp, seat);
++}
+ const playmates = createPlaymates();
+ function soundEvents(r, c) {
+   if (s.assist.driftFired) {
+@@ -5487,7 +5627,7 @@ function useButton(all) {
+     const lb = mine.some(p => p.buttons[4]?.value > 0.5),
+       shoulder = flyShoulder(p1FlyShoulder, {flying: !!s.flight.mode, down: lb && play, now: performance.now()});
+     p1FlyShoulder = shoulder.state;
+-    if (play && (shoulder.takeoff || shoulder.chute)) tapKey('Enter');
++    if (play && !robot && (shoulder.takeoff || shoulder.chute)) tapKey('Enter');
    }
--  if (!paused && !ui.panel() && countdown <= 0 && (!openWorld || openWorld.stream.ready(s.car.pos))) {
-+  if (!menusHold() && countdown <= 0 && (!openWorld || openWorld.stream.ready(s.car.pos))) {
-     const dreamInput = () => {
-       const clamp = v => Math.max(-1, Math.min(1, v)),
-         d = drivingInput(keys, {
-@@ -6626,6 +6744,21 @@ function frame(now) {
+   if (edge(2)) {
+     if (robot) {
+@@ -6307,7 +6447,7 @@ function frame(now) {
+     if (robot) punchQueued = true;
+   }
+   if (labBusy(labRide) && (pad.fire || pad.jump)) labSkipEdge = true;
+-  if (pad.boost && !ui.panel() && !useClicked && !leverNear(robot ? robot.pos : s.car.pos)) toggleBoost();
++  if (pad.boost && !robot && !ui.panel() && !useClicked && !leverNear(s.car.pos)) toggleBoost();
+   useClicked = false;
+   {
+     const b = $('boost'),
+@@ -6452,44 +6592,58 @@ function frame(now) {
+         if (burning && !was) audio.boost();
        }
-       if (!s.assist.balance) trickCalled = false;
-       if (race.roam && !race.furball && race.rivals.length) {
-+        const brakeDown = !!pad.brake;
-+        if (brakeDown && !brakeWas && playmates.active) {
-+          const gone = dismissPlaymate(playmates, now / 1000);
-+          if (gone?.timeout) {
-+            gone.timeout.rival.follow = null;
-+            openWorld.navigate(null, s.car.pos);
-+            callout(`${gone.timeout.rival.callsign}: maybe next time! 👋`);
-+            telemetry.playmate({
-+              dest: gone.timeout.dest.id,
-+              result: 'ignored',
-+              closed: gone.timeout.closed
-+            });
+       if (robot && !openWorld?.digging?.()) {
+-        const keyWalk = drivingInput(keys, {}),
+-          keyboard = keyWalk.throttle !== 0 || keyWalk.steer !== 0,
+-          camYaw = (camHeading ?? robot.yaw) + lookYaw;
+-        stepRobot(
+-          robot,
+-          intro.active
+-            ? {}
+-            : bowlingHold != null
+-              ? {throttle: 0, steer: (keyboard ? keyWalk.steer : pad.moveX) * 0.13}
+-              : keyboard
+-                ? {throttle: keyWalk.throttle, steer: keyWalk.steer, jump: keys.has('Space') || pad.jumpHeld}
+-                : {
+-                    move: cameraMove(camYaw, pad.moveX, pad.moveY),
+-                    jump: keys.has('Space') || pad.jumpHeld,
+-                    sprint: pad.sprint
+-                  },
+-          course.world,
+-          1 / 120
+-        );
++        if (intro.active) stepRobot(robot, {}, course.world, 1 / 120);
++        else if (bowlingHold != null) {
++          const keyWalk = drivingInput(keys, {}),
++            keyboard = keyWalk.throttle !== 0 || keyWalk.steer !== 0;
++          stepRobot(
++            robot,
++            {throttle: 0, steer: (keyboard ? keyWalk.steer : pad.moveX) * 0.13},
++            course.world,
++            1 / 120
++          );
++        } else {
++          const keyWalk = drivingInput(keys, {}),
++            keyboard = keyWalk.throttle !== 0 || keyWalk.steer !== 0,
++            camYaw = (camHeading ?? robot.yaw) + lookYaw;
++          if (keyboard) {
++            p1In.move = null;
++            p1In.throttle = keyWalk.throttle;
++            p1In.steer = keyWalk.steer;
++          } else {
++            cameraMoveInto(p1Move, camYaw, pad.moveX, pad.moveY);
++            p1In.move = p1Move;
++            p1In.throttle = 0;
++            p1In.steer = 0;
 +          }
++          p1In.sprint = !!pad.sprint;
++          p1In.jumpHeld = keys.has('Space') || !!pad.jumpHeld;
++          p1In.punchHeld = !!(pad.punch || keys.has('KeyQ'));
++          p1In.powerHeld = !!pad.boostHeld;
++          p1In.shieldHeld = !!(pad.flyHeld || pad.shield);
++          p1In.dashHeld = !!pad.dash;
++          p1In.lockHeld = !!(pad.aim || keys.has('ShiftLeft') || keys.has('ShiftRight'));
++          p1In.fireHeld = !!pad.fireHeld;
++          p1In.busy = false;
++          driveWalker(robot, p1In, course.world, 1 / 120, 1, allPads[p1Last], 1);
 +        }
-+        brakeWas = brakeDown;
-         const e = stepPlaymates(playmates, {
-           player: s,
-           rivals: race.rivals,
-@@ -7077,16 +7210,9 @@ function frame(now) {
-     r.z + Math.cos(camYaw) * back * Math.cos(lookPitch)
-   );
-   if (jumpCamera) desired.fromArray(jumpCamera.eye);
--  const ray = [desired.x - eye[0], desired.y - eye[1], desired.z - eye[2]],
--    dist = Math.hypot(...ray),
--    hit = course.world.raycast(
--      eye,
--      ray.map(v => v / dist),
--      dist
--    );
--  if (hit) {
--    const k = Math.max(0.15, hit.dist - 0.12) / dist;
--    desired.set(eye[0] + ray[0] * k, eye[1] + ray[1] * k, eye[2] + ray[2] * k);
-+  {
-+    const pulled = pullChaseCamera(eye, [desired.x, desired.y, desired.z], (o, d, m) => course.world.raycast(o, d, m));
-+    desired.set(pulled[0], pulled[1], pulled[2]);
-   }
-   camera.fov += ((bossAt ? 70 : 60 + Math.min(5, r.speed * 0.3)) - camera.fov) * Math.min(1, dt * 3);
-   camera.updateProjectionMatrix();
-@@ -7098,18 +7224,13 @@ function frame(now) {
-     setTimeout(() => openWorld?.loadBackground?.(), 0);
-   }
-   // Sweep the smoothed position too: damping must not carry the camera through a wall.
--  const actualRay = [camera.position.x - eye[0], camera.position.y - eye[1], camera.position.z - eye[2]],
--    actualDistance = Math.hypot(...actualRay);
--  if (actualDistance > 0.01) {
--    const obstruction = course.world.raycast(
-+  {
-+    const pulled = pullChaseCamera(
-       eye,
--      actualRay.map(v => v / actualDistance),
--      actualDistance
-+      [camera.position.x, camera.position.y, camera.position.z],
-+      (o, d, m) => course.world.raycast(o, d, m)
-     );
--    if (obstruction) {
--      const k = Math.max(0.08, obstruction.dist - 0.08) / actualDistance;
--      camera.position.set(eye[0] + actualRay[0] * k, eye[1] + actualRay[1] * k, eye[2] + actualRay[2] * k);
--    }
-+    camera.position.set(pulled[0], pulled[1], pulled[2]);
-   }
-   const portrait = camera.aspect < 0.8,
-     portraitAim = -0.3 - Math.max(0, 740 - innerHeight) * 0.003;
-@@ -7129,6 +7250,12 @@ function frame(now) {
-       cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
-     desired.set(r.x, r.y, r.z).addScaledVector(fw, -2.3).addScaledVector(cu, 0.55);
-     camera.position.lerp(desired, cameraGlide(openingHeld, dt, 9));
-+    {
-+      const pulled = pullChaseCamera(eye, [camera.position.x, camera.position.y, camera.position.z], (o, d, m) =>
-+        course.world.raycast(o, d, m)
-+      );
-+      camera.position.set(pulled[0], pulled[1], pulled[2]);
-+    }
-     camera.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
-     target.set(r.x, r.y, r.z).addScaledVector(fw, 3);
-   } else camera.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
-@@ -7160,18 +7287,23 @@ function frame(now) {
-     const back = 1.36 + Math.min(0.24, r2.speed * 0.015),
-       eye2 = [r2.x, r2.y + 0.12, r2.z];
-     desired2.set(r2.x - Math.sin(split.heading) * back, r2.y + 0.55, r2.z + Math.cos(split.heading) * back);
--    const ray2 = [desired2.x - eye2[0], desired2.y - eye2[1], desired2.z - eye2[2]],
--      dist2 = Math.hypot(...ray2),
--      hit2 = dist2 > 0.01 && course.world.raycast(eye2, ray2.map(v => v / dist2), dist2);
--    if (hit2) {
--      const k = Math.max(0.15, hit2.dist - 0.12) / dist2;
--      desired2.set(eye2[0] + ray2[0] * k, eye2[1] + ray2[1] * k, eye2[2] + ray2[2] * k);
-+    {
-+      const pulled = pullChaseCamera(eye2, [desired2.x, desired2.y, desired2.z], (o, d, m) =>
-+        course.world.raycast(o, d, m)
-+      );
-+      desired2.set(pulled[0], pulled[1], pulled[2]);
-     }
-     // Carry the camera with the car first (as player 1's does), then smooth only the swing.
-     if (split.car) camera2.position.add(new T.Vector3(r2.x - split.car[0], r2.y - split.car[1], r2.z - split.car[2]));
-     split.car = [r2.x, r2.y, r2.z];
-     if (camera2.position.distanceTo(desired2) > 30) camera2.position.copy(desired2);
-     else camera2.position.lerp(desired2, 1 - Math.exp(-dt * 7));
-+    {
-+      const pulled = pullChaseCamera(eye2, [camera2.position.x, camera2.position.y, camera2.position.z], (o, d, m) =>
-+        course.world.raycast(o, d, m)
-+      );
-+      camera2.position.set(pulled[0], pulled[1], pulled[2]);
-+    }
-     camera2.fov = 60 + Math.min(5, r2.speed * 0.3);
-     target2.set(r2.x + Math.sin(split.heading) * 1.05, r2.y + 0.18, r2.z - Math.cos(split.heading) * 1.05);
-     if (!walking && rs2.flight.mode === 'fly') {
-@@ -7181,6 +7313,12 @@ function frame(now) {
-         cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
-       desired2.set(r2.x, r2.y, r2.z).addScaledVector(fw, -2.3).addScaledVector(cu, 0.55);
-       camera2.position.lerp(desired2, 1 - Math.exp(-dt * 9));
-+      {
-+        const pulled = pullChaseCamera(eye2, [camera2.position.x, camera2.position.y, camera2.position.z], (o, d, m) =>
-+          course.world.raycast(o, d, m)
-+        );
-+        camera2.position.set(pulled[0], pulled[1], pulled[2]);
+       }
+       if (split?.p2Form === 'robot' && p2Robot) {
+-        const walk = p2RobotPad(allPads[split.pad], (split.heading ?? p2Robot.yaw) + (split.lookYaw || 0));
+-        stepRobot(
+-          p2Robot,
+-          {move: walk.move, jump: walk.jump, sprint: walk.sprint},
+-          course.world,
+-          1 / 120
++        p2RobotPad(allPads[split.pad], (split.heading ?? p2Robot.yaw) + (split.lookYaw || 0), p2In);
++        p2PunchQueued = false;
++        driveWalker(p2Robot, p2In, course.world, 1 / 120, 2, allPads[split.pad], 2);
 +      }
++      if (spar.length) stepSpar(spar, 1 / 120);
++      if (robot && p2Robot && split?.p2Form === 'robot' && bumpRobots(robot, p2Robot, 1 / 120)) {
++        robotFx.spark(
++          (robot.pos[0] + p2Robot.pos[0]) * 0.5,
++          robot.pos[1] + 0.16,
++          (robot.pos[2] + p2Robot.pos[2]) * 0.5
+         );
+-        if (p2PunchQueued) {
+-          p2PunchQueued = false;
+-          p2Robot.punch = COMBAT.punchTime;
+-          p2Robot.use = COMBAT.punchTime;
+-          p2Robot.vel[0] += Math.sin(p2Robot.yaw) * COMBAT.lunge;
+-          p2Robot.vel[2] -= Math.cos(p2Robot.yaw) * COMBAT.lunge;
+-        } else if (p2Robot.punch > 0) {
+-          p2Robot.punch = Math.max(0, p2Robot.punch - 1 / 120);
+-          p2Robot.use = p2Robot.punch;
+-        }
++        rumblePad(allPads[p1Last], 0.4, 50);
++        rumblePad(allPads[split.pad], 0.4, 50);
++        camShake = Math.max(camShake, 0.02);
++        camShake2 = Math.max(camShake2, 0.02);
+       }
+       hotWheelsPre();
+       tennisStep(1 / 120, drive);
+@@ -7103,6 +7257,7 @@ function frame(now) {
+       } else if (e.type === 'furball-over') furballOver(e.winner);
+   }
+   fx.update(dt);
++  robotFx.update(dt);
+   labFrame(dt);
+   poseCar(car, wheels, c);
+   if (openWorld) deliveryFrame(dt, now);
+@@ -7121,8 +7276,38 @@ function frame(now) {
+   if (splitOn && split?.p2Form === 'robot' && p2Robot && p2RobotBody) {
+     p2RobotBody.visible = true;
+     poseRobotBody(p2RobotBody, p2Robot);
+-    if (p2Robot.punch > 0) p2RobotBody.userData.arms[1].rotation.x = -1.4;
+   } else if (p2RobotBody?.visible) p2RobotBody.visible = false;
++  if (robot?.moves) {
++    robotFx.flame(robot.pos[0], robot.pos[1], robot.pos[2], robot.yaw, robot.moves.thrusting);
++    robotFx.fuel(0, robot.pos[0], robot.pos[1], robot.pos[2], robot.moves.fuel / MOVES.fuelMax, true);
++    robotFx.bubble(0, robot.pos[0], robot.pos[1], robot.pos[2], robot.moves.shieldLeft > 0);
++  } else {
++    robotFx.fuel(0, 0, 0, 0, 0, false);
++    robotFx.bubble(0, 0, 0, 0, false);
++  }
++  if (splitOn && split?.p2Form === 'robot' && p2Robot?.moves) {
++    robotFx.flame(p2Robot.pos[0], p2Robot.pos[1], p2Robot.pos[2], p2Robot.yaw, p2Robot.moves.thrusting);
++    robotFx.fuel(1, p2Robot.pos[0], p2Robot.pos[1], p2Robot.pos[2], p2Robot.moves.fuel / MOVES.fuelMax, true);
++    robotFx.bubble(1, p2Robot.pos[0], p2Robot.pos[1], p2Robot.pos[2], p2Robot.moves.shieldLeft > 0);
++  } else {
++    robotFx.fuel(1, 0, 0, 0, 0, false);
++    robotFx.bubble(1, 0, 0, 0, false);
++  }
++  for (let i = 0; i < spar.length; i++) {
++    const d = spar[i],
++      g = sparBodies[i],
++      shell = g.userData.materials[0];
++    poseRobotBody(g, d);
++    g.scale.y = d.down > 0 ? 0.45 : 1;
++    g.rotation.z = Math.sin(d.phase * 28) * d.wobble * 0.55;
++    if (d.flash > 0) {
++      shell.emissive.setHex(0xffe7a0);
++      shell.emissiveIntensity = 0.9;
++    } else if (shell.emissiveIntensity) {
++      shell.emissive.setHex(0);
++      shell.emissiveIntensity = 0;
++    }
++  }
+   // Low chase camera behind the heading; pulled in front of any wall between it and the car.
+   if (cameraCar)
+     camera.position.add(new T.Vector3(r.x - cameraCar[0], r.y - cameraCar[1], r.z - cameraCar[2]));
+@@ -7148,8 +7333,12 @@ function frame(now) {
+   {
+     const held = k => (lookKeys.has(k) ? 1 : 0),
+       stick = !paused && !ui.panel() && (Math.abs(pad.lookX) > 0 || Math.abs(pad.lookY) > 0),
+-      foot = !!robot;
+-    if (pad.recentre && !paused) {
++      foot = !!robot,
++      footLock = robot?.moves?.lockId != null;
++    if (footLock) {
++      lookYaw = 0;
++      lookPitch = 0.12;
++    } else if (pad.recentre && !paused) {
+       lookYaw = 0;
+       lookPitch = 0;
+       lookIdle = 0;
+@@ -7169,13 +7358,21 @@ function frame(now) {
+       }
+     }
+   }
++  if (robot?.moves?.lockId != null) {
++    const lp = robot.moves.lockPos;
++    camHeading = Math.atan2(lp[0] - r.x, -(lp[2] - r.z));
++  }
+   const camYaw = camHeading + lookYaw;
+   // The boss fight pulls back and up so the robot and the whole excavator share the frame.
+   // Riding a dinosaur in the dark world (the past) puts the toy up high: the camera pulls back with it.
+-  const jumpCamera =
++  const lockP = robot?.moves?.lockId != null ? robot.moves.lockPos : null,
++    lockDist = lockP ? Math.hypot(lockP[0] - r.x, lockP[2] - r.z) : 0,
++    jumpCamera =
+       s.flight.mode === 'chute' && openWorld?.skyDive().active ? skyDiveCamera(c.pos, camYaw) : null,
+     mount = riggedDino?.root.visible ? 2 : toyDino?.visible ? 2.6 : 1,
+-    back = (bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount) * (padAim ? 0.62 : 1),
++    back =
++      (bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount) *
++      (lockP ? 1.15 + Math.min(1.1, lockDist * 0.22) : 1),
+     eye = [r.x, r.y + 0.12 * mount, r.z];
+   desired.set(
+     r.x - Math.sin(camYaw) * back * Math.cos(lookPitch),
+@@ -7252,7 +7449,15 @@ function frame(now) {
+     camera.up.set(0, 1, 0);
+     target.set(x, y + 0.4, z - 3);
+   }
++  if (lockP && !(tennisEligible() && openWorld.tennis()?.active)) {
++    target.set((r.x + lockP[0]) * 0.5, (r.y + lockP[1]) * 0.5 + 0.12, (r.z + lockP[2]) * 0.5);
++  }
+   camera.lookAt(target);
++  if (camShake > 0.001) {
++    camera.position.x += Math.sin(now * 0.073) * camShake;
++    camera.position.y += Math.cos(now * 0.091) * camShake * 0.65;
++    camShake *= Math.exp(-8 * dt);
++  }
+   if (splitOn) {
+     const rs2 = race.rivals[0].session,
+       walking = split?.p2Form === 'robot' && p2Robot,
+@@ -7270,7 +7475,10 @@ function frame(now) {
+     if (pad2 && !paused && !ui.panel()) {
+       const looking = Math.abs(pad2.lookX) > 0 || Math.abs(pad2.lookY) > 0,
+         foot2 = split.p2Form === 'robot';
+-      if (pad2.recentre) split.lookYaw = split.lookPitch = split.lookIdle = 0;
++      if (walking && p2Robot?.moves?.lockId != null) {
++        split.lookYaw = 0;
++        split.lookPitch = 0.12;
++      } else if (pad2.recentre) split.lookYaw = split.lookPitch = split.lookIdle = 0;
+       else if (looking) {
+         split.lookYaw = (split.lookYaw || 0) + pad2.lookX * dt * 1.7;
+         split.lookPitch = Math.max(-0.35, Math.min(1.05, (split.lookPitch || 0) - pad2.lookY * dt * 1.15));
+@@ -7284,9 +7492,13 @@ function frame(now) {
+         }
+       }
+     }
+-    const hy = split.heading + (split.lookYaw || 0),
+-      hp = split.lookPitch || 0,
+-      back = (1.36 + Math.min(0.24, r2.speed * 0.015)) * (walking && pad2?.aim ? 0.62 : 1),
++    const locked2 = walking && p2Robot?.moves?.lockId != null,
++      lp2 = locked2 ? p2Robot.moves.lockPos : null,
++      hy = lp2 ? Math.atan2(lp2[0] - r2.x, -(lp2[2] - r2.z)) : split.heading + (split.lookYaw || 0),
++      hp = lp2 ? 0.12 : split.lookPitch || 0,
++      back =
++        (1.36 + Math.min(0.24, r2.speed * 0.015)) *
++        (lp2 ? 1.15 + Math.min(1.1, Math.hypot(lp2[0] - r2.x, lp2[2] - r2.z) * 0.22) : 1),
+       eye2 = [r2.x, r2.y + 0.12, r2.z];
+     desired2.set(
+       r2.x - Math.sin(hy) * back * Math.cos(hp),
+@@ -7321,7 +7533,13 @@ function frame(now) {
        camera2.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
        target2.set(r2.x, r2.y, r2.z).addScaledVector(fw, 3);
      } else camera2.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
-@@ -7329,6 +7467,7 @@ function frame(now) {
-     pause(true);
-     $('again').onclick = () => {
-       telemetry.choice('again');
-+      raceArmed = false;
-       s = (race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures})).player;
-       if (team.on && race.rivals[0])
-         race.rivals[0].human = () => ({throttle: 0, steer: 0, brake: true, drift: false, fire: false});
-diff --git a/web/wwwroot/rc/physics/playmate.mjs b/web/wwwroot/rc/physics/playmate.mjs
-index 1a42ae42..33f0a962 100644
---- a/web/wwwroot/rc/physics/playmate.mjs
-+++ b/web/wwwroot/rc/physics/playmate.mjs
-@@ -14,6 +14,9 @@ export const PLAYMATE = Object.freeze({
-   // Telemetry 2026-10-30: two of three invites were ignored and hung about for minutes. A rival
-   // whose challenge isn't taken up (the player gets no closer for this long) gives up early.
-   ignored: 45,
-+  // B, or an ignored challenge, stays quiet. Telemetry 6 Nov 2026: four prompts,
-+  // three ignored, and the next one was already on the way.
-+  quiet: 300,
-   top: {kid: 10.5, bigKid: 12.5},
-   ease: 40,
-   easeTo: 0.72,
-@@ -116,7 +119,8 @@ export function stepPlaymates(state, {player, rivals, mode = 'kid', world, time,
-     const ignored = a.idle > PLAYMATE.ignored;
-     if (playerIn || rivalIn || a.time > PLAYMATE.timeout || ignored) {
-       state.active = null;
--      state.next = lerp(PLAYMATE.gap, state.rng());
-+      state.next = ignored ? PLAYMATE.quiet : lerp(PLAYMATE.gap, state.rng());
-+      if (ignored) state.quietUntil = time + PLAYMATE.quiet;
-       if (!playerIn && !rivalIn)
-         return {
-           timeout: {
-@@ -133,6 +137,14 @@ export function stepPlaymates(state, {player, rivals, mode = 'kid', world, time,
-     return null;
++    if (lp2) target2.set((r2.x + lp2[0]) * 0.5, (r2.y + lp2[1]) * 0.5 + 0.12, (r2.z + lp2[2]) * 0.5);
+     camera2.lookAt(target2);
++    if (camShake2 > 0.001) {
++      camera2.position.x += Math.sin(now * 0.073) * camShake2;
++      camera2.position.y += Math.cos(now * 0.091) * camShake2 * 0.65;
++      camShake2 *= Math.exp(-8 * dt);
++    }
+     p2Hud.textContent = `P2 · ${Math.round((!walking && rs2.flight.mode ? rs2.flight.speed : r2.speed) * 3.6)} km/h`;
    }
-   if (!ready || !rivals.length) return null;
-+  if (Number.isFinite(state.quietUntil) && time < state.quietUntil) {
-+    state.next = state.quietUntil - time;
-+    return null;
-+  }
-+  if (Number.isFinite(state.quietUntil)) {
-+    state.quietUntil = null;
-+    state.next = Math.min(0, state.next);
-+  }
-   state.next -= dt;
-   if (state.next > 0) return null;
-   const dest = pickDestination(world.places, pos, state.rng),
-@@ -153,3 +165,14 @@ export function stepPlaymates(state, {player, rivals, mode = 'kid', world, time,
-   state.races++;
-   return {start: {rival, dest, spawn}};
+   p2Hud.hidden = splitLine.hidden = !splitOn;
+diff --git a/web/wwwroot/rc/pad-art.mjs b/web/wwwroot/rc/pad-art.mjs
+index 423fc228..2cfa1125 100644
+--- a/web/wwwroot/rc/pad-art.mjs
++++ b/web/wwwroot/rc/pad-art.mjs
+@@ -22,13 +22,14 @@ const FORM_ACTIONS = {
+   robot: [
+     {act: 'MOVE', ctl: 'stick', why: 'L3 sprint'},
+     {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
+-    {act: 'FIRE', ctl: 7},
+-    {act: 'AIM', ctl: 6},
+-    {act: 'JUMP', ctl: 0},
++    {act: 'BLAST', ctl: 7},
++    {act: 'LOCK', ctl: 6},
++    {act: 'JUMP', ctl: 0, why: 'hold JETPACK'},
+     {act: 'MORPH', ctl: 1},
+     {act: 'PUNCH', ctl: 2},
+-    {act: 'BOOST', ctl: 3},
+-    {act: 'FLY', ctl: 4}
++    {act: 'POWER', ctl: 3},
++    {act: 'SHIELD', ctl: 4},
++    {act: 'DASH', ctl: 5}
+   ],
+   fly: [
+     {act: 'PITCH', ctl: 'stick', why: 'roll'},
+@@ -90,7 +91,7 @@ export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {l
+   const L = LAYOUT[kind] ?? LAYOUT.xbox,
+     lit = i => pressed.has(i),
+     pulse = k => (glow.has(k) ? ' class="pad-glow"' : ''),
+-    out = [`<svg viewBox="${labels ? "-64 -8 456 220" : "-8 -8 316 190"}" width="${width}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui" font-weight="800">`];
++    out = [`<svg viewBox="${labels ? '-120 -8 540 220' : '-8 -8 316 190'}" width="${width}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui" font-weight="800">`];
+   for (const [i, [x, y, w, h, t]] of Object.entries(L.shoulder))
+     out.push(
+       `<g${pulse(+i)}><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${lit(+i) ? ON : kind === 'sn30' ? '#3aa955' : '#3a3e44'}" stroke="#0008"/><text x="${x + w / 2}" y="${y + h - 3.5}" font-size="10" text-anchor="middle" fill="${lit(+i) ? '#000' : '#fff'}">${t}</text></g>`
+@@ -145,9 +146,11 @@ export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {l
+     for (const {act, ctl, why} of actionsFor(form).filter(a => !skip.includes(a.act))) {
+       const [cx, cy] = at[ctl],
+         [tx, ty] = place[ctl],
+-        right = tx > 150;
++        right = tx > 150,
++        textX = right ? tx : tx + 54,
++        anchor = right ? 'start' : 'end';
+       out.push(
+-        `<g${pulse(ctl)}><line x1="${cx}" y1="${cy}" x2="${right ? tx - 4 : tx + 54}" y2="${ty - 4}" stroke="#fff8" stroke-width="1.5"/><text x="${tx}" y="${ty}" font-size="17" fill="${act === 'GO' ? ON : '#fff'}">${act}</text>${why ? `<text x="${tx}" y="${ty + 12}" font-size="11" fill="#fffa">${why}</text>` : ''}</g>`
++        `<g${pulse(ctl)}><line x1="${cx}" y1="${cy}" x2="${right ? tx - 4 : tx + 54}" y2="${ty - 4}" stroke="#fff8" stroke-width="1.5"/><text x="${textX}" y="${ty}" font-size="17" text-anchor="${anchor}" fill="${act === 'GO' ? ON : '#fff'}">${act}</text>${why ? `<text x="${textX}" y="${ty + 12}" font-size="11" text-anchor="${anchor}" fill="#fffa">${why}</text>` : ''}</g>`
+       );
+     }
+   }
+diff --git a/web/wwwroot/rc/robot-body.js b/web/wwwroot/rc/robot-body.js
+index afeb2704..ebe33439 100644
+--- a/web/wwwroot/rc/robot-body.js
++++ b/web/wwwroot/rc/robot-body.js
+@@ -65,15 +65,54 @@ export function poseRobotBody(g, robot) {
+   const swing = moving ? s * 0.7 : 0;
+   legs[0].rotation.x = swing;
+   legs[1].rotation.x = -swing;
+-  arms[0].rotation.x = -swing * 0.8;
+-  arms[1].rotation.x = swing * 0.8;
++  arms[0].rotation.set(-swing * 0.8, 0, 0);
++  arms[1].rotation.set(swing * 0.8, 0, 0);
+   if (robot.climb) {
+     arms[0].rotation.x = arms[1].rotation.x = -2.6;
+   }
++  const mv = robot.moves;
++  if (mv && mv.pose && mv.pose !== 'idle') fightPose(g, arms, legs, mv);
+   g.scale.y = robot.crouched ? 0.55 : 1;
+   head.position.y = 0.27 + (moving ? Math.abs(s) * 0.008 : 0);
  }
-+
-+/** B on the prompt: same as an ignored challenge, then five quiet minutes. */
-+export function dismissPlaymate(state, time) {
-+  const a = state.active;
-+  if (!a) return null;
-+  state.active = null;
-+  state.next = PLAYMATE.quiet;
-+  state.quietUntil = time + PLAYMATE.quiet;
-+  const closed = Math.max(0, Math.round((a.startLeft ?? 0) - (a.bestLeft ?? a.startLeft ?? 0)));
-+  return {timeout: {dest: a.dest, rival: a.rival, ignored: true, closed}};
-+}
-diff --git a/web/wwwroot/rc/physics/playmate.test.mjs b/web/wwwroot/rc/physics/playmate.test.mjs
-index 4a53af0d..ba708c81 100644
---- a/web/wwwroot/rc/physics/playmate.test.mjs
-+++ b/web/wwwroot/rc/physics/playmate.test.mjs
-@@ -2,7 +2,7 @@ import test from 'node:test';
- import assert from 'node:assert/strict';
- import {createWorld} from './world.mjs';
- import {createRace, stepRace} from './race.mjs';
--import {createPlaymates, stepPlaymates, PLAYMATE} from './playmate.mjs';
-+import {createPlaymates, stepPlaymates, dismissPlaymate, PLAYMATE} from './playmate.mjs';
- import {placeCar} from './car.mjs';
  
- const seeded =
-@@ -102,3 +102,53 @@ test('the playmate drives the route and wins if the player dawdles; a quick play
-     assert.equal(finish.dest, place);
-   }
- });
++// Anticipation, impact, recovery. t is 0..1 across a strike shorter than 300 ms.
++function fightPose(g, arms, legs, mv) {
++  const t = mv.poseT || 0,
++    wind = t < 0.28 ? t / 0.28 : 0,
++    hit = t < 0.28 ? 0 : t < 0.55 ? (t - 0.28) / 0.27 : 1,
++    recover = t < 0.55 ? 0 : (t - 0.55) / 0.45,
++    s = hit * (1 - recover) - wind * 0.45;
++  if (mv.pose === 'jab') arms[1].rotation.x = -1.7 * s;
++  else if (mv.pose === 'jab2') arms[0].rotation.x = -1.7 * s;
++  else if (mv.pose === 'swing') {
++    arms[0].rotation.x = -1.1 * s;
++    arms[1].rotation.x = -1.1 * s;
++    arms[0].rotation.z = 0.8 * s;
++    arms[1].rotation.z = -0.8 * s;
++  } else if (mv.pose === 'upper') {
++    arms[0].rotation.x = -2.2 * Math.max(0, s);
++    arms[1].rotation.x = -2.2 * Math.max(0, s);
++  } else if (mv.pose === 'spin') {
++    legs[0].rotation.x = 1.1 * s;
++    legs[1].rotation.x = -1.1 * s;
++    g.rotation.y += s * Math.PI * 2;
++  } else if (mv.pose === 'pound') {
++    arms[0].rotation.x = 1.4 * Math.max(0.2, s + 0.4);
++    arms[1].rotation.x = 1.4 * Math.max(0.2, s + 0.4);
++  } else if (mv.pose === 'shield') {
++    arms[0].rotation.x = -1.2;
++    arms[1].rotation.x = -1.2;
++    arms[0].rotation.z = 0.5;
++    arms[1].rotation.z = -0.5;
++  } else if (mv.pose === 'dash') g.rotation.x = 0.45 * (1 - t);
++  else if (mv.pose === 'fly') {
++    g.rotation.x = 0.3;
++    arms[0].rotation.x = 0.6;
++    arms[1].rotation.x = 0.6;
++  }
++}
 +
-+test('B dismisses a prompt and it stays quiet for five minutes', () => {
-+  const {race, world} = setting(),
-+    pm = createPlaymates(seeded());
-+  pm.next = 0;
-+  placeCar(race.player.car, [0, 0.2, -20], 0);
-+  pm.trail = [
-+    {p: [0, 0.2, 0], t: 0},
-+    {p: [0, 0.2, -20], t: 1}
-+  ];
-+  let start = null;
-+  for (let i = 0; i < 30 && !start; i++) {
-+    stepRace(race, {throttle: 1, steer: 0}, 1 / 120);
-+    const e = stepPlaymates(pm, {
-+      player: race.player,
-+      rivals: race.rivals,
-+      world,
-+      time: i / 120,
-+      dt: 1 / 120,
-+      ready: true
-+    });
-+    if (e?.start) start = e.start;
-+  }
-+  assert.ok(start, 'prompt is up');
-+  const gone = dismissPlaymate(pm, 10);
-+  assert.equal(gone.timeout.ignored, true);
-+  assert.equal(pm.active, null);
-+  let again = null;
-+  for (let s = 0; s < PLAYMATE.quiet - 1; s++) {
-+    const e = stepPlaymates(pm, {
-+      player: race.player,
-+      rivals: race.rivals,
-+      world,
-+      time: 10 + s,
-+      dt: 1,
-+      ready: true
-+    });
-+    if (e?.start) again = e.start;
-+  }
-+  assert.equal(again, null, 'no re-prompt inside five minutes');
-+  const later = stepPlaymates(pm, {
-+    player: race.player,
-+    rivals: race.rivals,
-+    world,
-+    time: 10 + PLAYMATE.quiet + 1,
-+    dt: 1,
-+    ready: true
-+  });
-+  assert.ok(later?.start, 'a prompt may return after five minutes');
-+});
-diff --git a/web/wwwroot/rc/race-guard.mjs b/web/wwwroot/rc/race-guard.mjs
+ export function disposeRobotBody(g) {
+   g.removeFromParent();
+   g.traverse(o => o.geometry?.dispose());
+diff --git a/web/wwwroot/rc/robot-fight.test.mjs b/web/wwwroot/rc/robot-fight.test.mjs
 new file mode 100644
-index 00000000..07fc100f
+index 00000000..7538d99a
 --- /dev/null
-+++ b/web/wwwroot/rc/race-guard.mjs
-@@ -0,0 +1,46 @@
-+// A live race must not be replaced by driving back through the start.
-+// Starting a different event asks first. Pure so the TV sequence can be tested
-+// without the page: five starts in one session was raceStart quitting the
-+// previous one with reason "replaced".
++++ b/web/wwwroot/rc/robot-fight.test.mjs
+@@ -0,0 +1,206 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {MOVES, createMoves, stepMoves, pickLockTarget, bumpRobots} from './robot-moves.mjs';
++import {createDummy, bonkSpar, stepSpar} from './robot-spar.mjs';
 +
-+/** @returns {'start'|'ignore'|'confirm'|'replace'} */
-+export function raceStartDecision({live = false, trigger = 'event', confirmed = false} = {}) {
-+  if (!live) return 'start';
-+  if (trigger === 'start-area') return 'ignore';
-+  if (confirmed || trigger === 'confirmed') return 'replace';
-+  return 'confirm';
++const bot = (grounded = true) => ({pos: [0, 0, 0], vel: [0, 0, 0], yaw: 0, grounded});
++const hold = (extra = {}) => ({punchHeld: false, powerHeld: false, jumpHeld: false, dashHeld: false, lockHeld: false, fireHeld: false, shieldHeld: false, move: null, ...extra});
++
++function until(m, r, pred, input, targets = [], dt = 1 / 120) {
++  let out = null;
++  for (let i = 0; i < 80 && !pred(); i++) out = stepMoves(m, r, input, targets, targets.length, dt);
++  return out;
++}
++
++test('X-X-X is jab, jab, swing, and a late tap starts over', () => {
++  const m = createMoves(),
++    r = bot(true),
++    foe = {id: 'foe', pos: [0, 0, -0.3], kind: 'dummy'};
++  stepMoves(m, r, hold({punchHeld: true}), [foe], 1);
++  assert.equal(m.action, 'jab');
++  until(m, r, () => m.action !== 'jab', hold(), [foe]);
++  assert.equal(m.combo, 1);
++  stepMoves(m, r, hold({punchHeld: true}), [foe], 1);
++  assert.equal(m.action, 'jab2');
++  until(m, r, () => m.action !== 'jab2', hold(), [foe]);
++  assert.equal(m.combo, 2);
++  stepMoves(m, r, hold({punchHeld: true}), [foe], 1);
++  assert.equal(m.action, 'swing');
++  until(m, r, () => m.action === 'idle', hold(), [foe]);
++  for (let i = 0; i < 80; i++) stepMoves(m, r, hold(), [], 0);
++  assert.equal(m.combo, 0, 'the combo window closed');
++  stepMoves(m, r, hold({punchHeld: true}), [], 0);
++  assert.equal(m.action, 'jab');
++});
++
++test('a jab connects in front and hit-stop freezes the next sample', () => {
++  const m = createMoves(),
++    r = bot(true),
++    foe = {id: 'foe', pos: [0, 0, -0.3], kind: 'dummy', body: {vel: [0, 0, 0]}};
++  stepMoves(m, r, hold({punchHeld: true}), [foe], 1);
++  let hits = 0;
++  for (let i = 0; i < 40; i++) {
++    const out = stepMoves(m, r, hold(), [foe], 1);
++    hits += out.hitCount;
++    if (m.hitStop > 0) break;
++  }
++  assert.ok(hits >= 1, 'the jab reaches the dummy');
++  assert.ok(m.hitBuf[0].iz < -1, 'knockback is away from the robot');
++  assert.equal(m.hitBuf[0].blocked, false);
++  const frozen = stepMoves(m, r, hold(), [foe], 1);
++  assert.equal(frozen.frozen, true);
++  assert.ok(m.hitStop >= 0);
++});
++
++test('a shield soaks the hit', () => {
++  const m = createMoves(),
++    r = bot(true),
++    foe = {id: 'foe', pos: [0, 0, -0.3], shield: true};
++  stepMoves(m, r, hold({punchHeld: true}), [foe], 1);
++  let blocked = false;
++  for (let i = 0; i < 40; i++) {
++    const out = stepMoves(m, r, hold(), [foe], 1);
++    if (out.hitCount && m.hitBuf[0].blocked) blocked = true;
++  }
++  assert.equal(blocked, true);
++  assert.equal(m.hitBuf[0].ix, 0);
++  assert.equal(m.hitBuf[0].iz, 0);
++});
++
++test('Y is an uppercut standing still and a spinning kick while moving', () => {
++  const still = createMoves(),
++    a = bot(true);
++  stepMoves(still, a, hold({powerHeld: true, move: {x: 0, z: 0}}), [], 0);
++  assert.equal(still.action, 'upper');
++  assert.ok(a.vel[1] > 2);
++  const go = createMoves(),
++    b = bot(true);
++  b.vel[0] = 1;
++  stepMoves(go, b, hold({powerHeld: true, move: {x: 1, z: 0}}), [], 0);
++  assert.equal(go.action, 'spin');
++});
++
++test('jetpack fuel lasts about four seconds and refills on the ground in about two', () => {
++  const m = createMoves(),
++    r = bot(false);
++  r.pos[1] = 2;
++  let t = 0;
++  while (m.fuel > 0 && t < 6) {
++    stepMoves(m, r, hold({jumpHeld: true}), [], 0, 0.05);
++    r.grounded = false;
++    t += 0.05;
++  }
++  assert.ok(t > 3.7 && t < 4.4, `thrust time ${t}`);
++  assert.equal(m.thrusting, false);
++  assert.ok(m.fuel <= 0.05);
++  r.grounded = true;
++  t = 0;
++  while (m.fuel < MOVES.fuelMax - 0.05 && t < 4) {
++    stepMoves(m, r, hold(), [], 0, 0.05);
++    t += 0.05;
++  }
++  assert.ok(t > 1.6 && t < 2.4, `refill time ${t}`);
++  assert.ok(m.fuel > MOVES.fuelMax - 0.2);
++});
++
++test('holding A on the ground jumps once, and holding it in the air thrusts', () => {
++  const m = createMoves(),
++    r = bot(true);
++  stepMoves(m, r, hold({jumpHeld: true}), [], 0, 1 / 120);
++  assert.equal(r.grounded, false);
++  assert.ok(r.vel[1] > 2);
++  assert.equal(m.thrusting, false, 'the jump frame is not yet thrust');
++  r.vel[1] = 0.2;
++  stepMoves(m, r, hold({jumpHeld: true}), [], 0, 1 / 120);
++  assert.equal(m.thrusting, true);
++  const before = m.fuel;
++  stepMoves(m, r, hold({jumpHeld: true}), [], 0, 1 / 120);
++  assert.ok(m.fuel < before);
++});
++
++test('air X is a ground-pound: dive, then a shockwave on landing', () => {
++  const m = createMoves(),
++    r = bot(false),
++    car = {id: 'car', pos: [0.2, 0, -0.3], kind: 'car', body: {vel: [0, 0, 0]}};
++  r.pos[1] = 1.2;
++  stepMoves(m, r, hold(), [], 0);
++  stepMoves(m, r, hold({punchHeld: true}), [car], 1);
++  assert.equal(m.action, 'pound');
++  assert.ok(r.vel[1] <= MOVES.dive);
++  const air = stepMoves(m, r, hold({punchHeld: true}), [car], 1);
++  assert.equal(air.shock, false);
++  r.grounded = true;
++  r.pos[1] = 0;
++  const land = stepMoves(m, r, hold({punchHeld: true}), [car], 1);
++  assert.equal(land.shock, true);
++  assert.equal(land.landed, true);
++  assert.ok(land.hitCount >= 1);
++  assert.ok(Math.hypot(m.hitBuf[0].ix, m.hitBuf[0].iz) > 2);
++  assert.ok(land.rumble >= 1);
++});
++
++test('a plain landing is soft: dust flag, no shock', () => {
++  const m = createMoves(),
++    r = bot(false);
++  stepMoves(m, r, hold(), [], 0);
++  r.grounded = true;
++  const out = stepMoves(m, r, hold(), [], 0);
++  assert.equal(out.landed, true);
++  assert.equal(out.shock, false);
++});
++
++test('lock-on picks the nearest target inside range and clears when let go', () => {
++  const targets = [
++      {id: 'far', pos: [0, 0, -9]},
++      {id: 'near', pos: [0.4, 0, -1.2]},
++      {id: 'mid', pos: [-2, 0, -3]}
++    ],
++    origin = [0, 0, 0];
++  assert.equal(pickLockTarget(origin, targets, 3, MOVES.lockRange), 1);
++  assert.equal(pickLockTarget(origin, targets, 3, 0.5), -1);
++  const m = createMoves(),
++    r = bot(true);
++  stepMoves(m, r, hold({lockHeld: true}), targets, 3);
++  assert.equal(m.lockId, 'near');
++  assert.ok(Math.abs(m.lockPos[2] + 1.2) < 1e-9);
++  stepMoves(m, r, hold({lockHeld: false}), targets, 3);
++  assert.equal(m.lockId, null);
++});
++
++test('RB dashes along the stick and strikes recover inside 300 ms', () => {
++  const m = createMoves(),
++    r = bot(true);
++  stepMoves(m, r, hold({dashHeld: true, move: {x: 1, z: 0}}), [], 0);
++  assert.equal(m.action, 'dash');
++  assert.ok(r.vel[0] > 4 && Math.abs(r.vel[2]) < 0.2);
++  for (const t of [MOVES.jab, MOVES.swing, MOVES.upper, MOVES.spin, MOVES.dash, MOVES.shield])
++    assert.ok(t <= 0.3, t);
++});
++
++test('LB raises a brief shield', () => {
++  const m = createMoves(),
++    r = bot(true);
++  stepMoves(m, r, hold({shieldHeld: true}), [], 0, 1 / 60);
++  assert.ok(m.shieldLeft > 0.2);
++  assert.equal(m.pose, 'shield');
++  for (let i = 0; i < 40; i++) stepMoves(m, r, hold({shieldHeld: true}), [], 0, 1 / 60);
++  assert.equal(m.shieldLeft, 0, 'it drops even if the button stays down');
++});
++
++test('two robots bump apart and a dummy pops back up', () => {
++  const a = bot(true),
++    b = bot(true);
++  a.moves = createMoves();
++  b.moves = createMoves();
++  b.pos[0] = 0.1;
++  assert.equal(bumpRobots(a, b, 1 / 120), true);
++  assert.ok(a.vel[0] < 0 && b.vel[0] > 0);
++  assert.equal(bumpRobots(a, b, 1 / 120), false, 'one spark per contact');
++  const d = createDummy(101, [0, 0, 0], 0);
++  bonkSpar(d, 3, -1);
++  assert.ok(d.flash > 0 && d.wobble > 0 && d.down > 0);
++  for (let i = 0; i < 120 * 3; i++) stepSpar([d], 1 / 120);
++  assert.ok(Math.hypot(d.pos[0], d.pos[2]) < 0.2, `home again ${d.pos}`);
++  assert.equal(d.down, 0);
++  assert.equal(d.id, 101);
++});
+diff --git a/web/wwwroot/rc/robot-fx.js b/web/wwwroot/rc/robot-fx.js
+new file mode 100644
+index 00000000..998d36dc
+--- /dev/null
++++ b/web/wwwroot/rc/robot-fx.js
+@@ -0,0 +1,298 @@
++// Pooled jetpack flame, POW sparks, shockwave, shield bubble and the fuel ring.
++// Everything is allocated once. update() only writes into those buffers.
++import * as T from '../vendor/three.module.js';
++
++const MAX = 96;
++
++function puffTexture() {
++  const c = document.createElement('canvas');
++  c.width = c.height = 64;
++  const g = c.getContext('2d'),
++    grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
++  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
++  grad.addColorStop(0.45, 'rgba(255,255,255,0.35)');
++  grad.addColorStop(1, 'rgba(255,255,255,0)');
++  g.fillStyle = grad;
++  g.fillRect(0, 0, 64, 64);
++  return new T.CanvasTexture(c);
++}
++
++function powTexture() {
++  const c = document.createElement('canvas');
++  c.width = 128;
++  c.height = 64;
++  const g = c.getContext('2d');
++  g.font = '800 42px system-ui';
++  g.textAlign = 'center';
++  g.textBaseline = 'middle';
++  g.lineWidth = 7;
++  g.strokeStyle = '#1a1204';
++  g.fillStyle = '#ffe14a';
++  g.strokeText('POW', 64, 34);
++  g.fillText('POW', 64, 34);
++  const tex = new T.CanvasTexture(c);
++  tex.needsUpdate = true;
++  return tex;
++}
++
++function makeRing() {
++  const geo = new T.RingGeometry(0.12, 0.175, 28),
++    mat = new T.MeshBasicMaterial({
++      color: 0x5ce1ff,
++      transparent: true,
++      opacity: 0.92,
++      side: T.DoubleSide,
++      depthWrite: false
++    }),
++    mesh = new T.Mesh(geo, mat);
++  mesh.rotation.x = -Math.PI / 2;
++  mesh.frustumCulled = false;
++  mesh.renderOrder = 3;
++  mesh.visible = false;
++  return mesh;
++}
++
++export function createRobotFx(scene) {
++  const pos = new Float32Array(MAX * 3),
++    col = new Float32Array(MAX * 3),
++    life = new Float32Array(MAX),
++    span = new Float32Array(MAX),
++    vel = new Float32Array(MAX * 3),
++    size = new Float32Array(MAX),
++    base = new Float32Array(MAX),
++    alpha = new Float32Array(MAX);
++  const geo = new T.BufferGeometry();
++  geo.setAttribute('position', new T.BufferAttribute(pos, 3));
++  geo.setAttribute('color', new T.BufferAttribute(col, 3));
++  geo.setAttribute('aSize', new T.BufferAttribute(size, 1));
++  geo.setAttribute('aAlpha', new T.BufferAttribute(alpha, 1));
++  const mat = new T.ShaderMaterial({
++    uniforms: {map: {value: puffTexture()}, scale: {value: 380}},
++    transparent: true,
++    depthWrite: false,
++    vertexColors: true,
++    vertexShader:
++      'attribute float aSize;attribute float aAlpha;varying float vAlpha;varying vec3 vColor;uniform float scale;void main(){vColor=color;vAlpha=aAlpha;vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=aSize*scale/max(.15,-mv.z);gl_Position=projectionMatrix*mv;}',
++    fragmentShader:
++      'uniform sampler2D map;varying float vAlpha;varying vec3 vColor;void main(){float a=texture2D(map,gl_PointCoord).a*vAlpha;if(a<.02)discard;gl_FragColor=vec4(vColor,a);}'
++  });
++  const points = new T.Points(geo, mat);
++  points.frustumCulled = false;
++  points.renderOrder = 4;
++  scene.add(points);
++  let cursor = 0;
++
++  function emit(x, y, z, vx, vy, vz, r, g, b, spanS, grow) {
++    const i = cursor;
++    cursor = (cursor + 1) % MAX;
++    pos[i * 3] = x;
++    pos[i * 3 + 1] = y;
++    pos[i * 3 + 2] = z;
++    vel[i * 3] = vx;
++    vel[i * 3 + 1] = vy;
++    vel[i * 3 + 2] = vz;
++    col[i * 3] = r;
++    col[i * 3 + 1] = g;
++    col[i * 3 + 2] = b;
++    life[i] = span[i] = spanS;
++    base[i] = size[i] = grow;
++  }
++
++  const powTex = powTexture(),
++    pows = [];
++  for (let i = 0; i < 4; i++) {
++    const s = new T.Sprite(
++      new T.SpriteMaterial({map: powTex, transparent: true, depthWrite: false, opacity: 0})
++    );
++    s.visible = false;
++    s.scale.set(0.28, 0.14, 1);
++    s.userData.life = 0;
++    s.frustumCulled = false;
++    scene.add(s);
++    pows.push(s);
++  }
++  let powNext = 0;
++
++  const rings = [makeRing(), makeRing()];
++  for (const ring of rings) scene.add(ring);
++
++  const bubbles = [0, 1].map(() => {
++    const bubble = new T.Mesh(
++      new T.SphereGeometry(0.2, 16, 12),
++      new T.MeshBasicMaterial({color: 0x9ad8ff, transparent: true, opacity: 0.32, depthWrite: false})
++    );
++    bubble.visible = false;
++    bubble.frustumCulled = false;
++    scene.add(bubble);
++    return bubble;
++  });
++
++  const shocks = [0, 1].map(() => {
++    const shock = new T.Mesh(
++      new T.RingGeometry(0.28, 0.4, 28),
++      new T.MeshBasicMaterial({color: 0xffe08a, transparent: true, opacity: 0, side: T.DoubleSide, depthWrite: false})
++    );
++    shock.rotation.x = -Math.PI / 2;
++    shock.visible = false;
++    shock.frustumCulled = false;
++    shock.userData.life = 0;
++    scene.add(shock);
++    return shock;
++  });
++  let shockNext = 0;
++
++  const beams = [0, 1].map(() => {
++    const beam = new T.Mesh(
++      new T.BoxGeometry(0.025, 0.025, 1),
++      new T.MeshBasicMaterial({color: 0x8ef6ff, transparent: true, opacity: 0, depthWrite: false})
++    );
++    beam.visible = false;
++    beam.frustumCulled = false;
++    beam.userData.life = 0;
++    scene.add(beam);
++    return beam;
++  });
++  let beamNext = 0;
++  const aim = new T.Vector3();
++
++  function pop(x, y, z) {
++    const s = pows[powNext];
++    powNext = (powNext + 1) % pows.length;
++    s.position.set(x, y + 0.08, z);
++    s.material.opacity = 1;
++    s.userData.life = 0.22;
++    s.scale.set(0.2, 0.1, 1);
++    s.visible = true;
++  }
++
++  return {
++    flame(x, y, z, yaw, on) {
++      if (!on) return;
++      const bx = x - Math.sin(yaw) * 0.05,
++        bz = z + Math.cos(yaw) * 0.05,
++        jx = (Math.random() - 0.5) * 0.15,
++        jz = (Math.random() - 0.5) * 0.15;
++      emit(bx, y + 0.02, bz, jx, 0.15 + Math.random() * 0.3, jz, 1, 0.45 + Math.random() * 0.2, 0.05, 0.22, 0.08);
++      emit(bx, y + 0.03, bz, jx * 0.4, 0.35, jz * 0.4, 0.55, 0.55, 0.52, 0.4, 0.1);
++    },
++    spark(x, y, z) {
++      for (let k = 0; k < 6; k++)
++        emit(
++          x,
++          y,
++          z,
++          (Math.random() - 0.5) * 2.2,
++          0.4 + Math.random() * 1.4,
++          (Math.random() - 0.5) * 2.2,
++          1,
++          0.85,
++          0.25,
++          0.18,
++          0.06
++        );
++      pop(x, y, z);
++    },
++    dust(x, y, z) {
++      for (let k = 0; k < 8; k++)
++        emit(
++          x,
++          y + 0.02,
++          z,
++          (Math.random() - 0.5) * 1.1,
++          0.15 + Math.random() * 0.35,
++          (Math.random() - 0.5) * 1.1,
++          0.78,
++          0.72,
++          0.62,
++          0.35,
++          0.07
++        );
++    },
++    shock(x, y, z) {
++      const s = shocks[shockNext];
++      shockNext = (shockNext + 1) % shocks.length;
++      s.position.set(x, y + 0.03, z);
++      s.scale.set(0.35, 0.35, 0.35);
++      s.material.opacity = 0.85;
++      s.userData.life = 0.28;
++      s.visible = true;
++    },
++    blast(x, y, z, tx, ty, tz) {
++      const beam = beams[beamNext];
++      beamNext = (beamNext + 1) % beams.length;
++      const dx = tx - x,
++        dy = ty - y,
++        dz = tz - z,
++        len = Math.hypot(dx, dy, dz) || 0.2;
++      beam.position.set(x + dx * 0.5, y + dy * 0.5, z + dz * 0.5);
++      beam.scale.set(1, 1, len);
++      aim.set(tx, ty, tz);
++      beam.lookAt(aim);
++      beam.material.opacity = 0.95;
++      beam.userData.life = 0.08;
++      beam.visible = true;
++    },
++    fuel(i, x, y, z, amount, show) {
++      const ring = rings[i];
++      if (!ring) return;
++      ring.visible = !!show;
++      if (!show) return;
++      ring.position.set(x, y + 0.015, z);
++      const fuel = amount < 0 ? 0 : amount > 1 ? 1 : amount;
++      ring.geometry.setDrawRange(0, Math.max(6, Math.floor(fuel * ring.geometry.index.count)));
++      ring.material.color.setRGB(1 - fuel * 0.55, 0.4 + fuel * 0.5, 0.15 + fuel * 0.85);
++    },
++    bubble(i, x, y, z, show) {
++      const bubble = bubbles[i];
++      if (!bubble) return;
++      bubble.visible = !!show;
++      if (show) bubble.position.set(x, y + 0.15, z);
++    },
++    update(dt) {
++      for (let i = 0; i < MAX; i++) {
++        if (life[i] <= 0) {
++          alpha[i] = 0;
++          continue;
++        }
++        life[i] -= dt;
++        vel[i * 3 + 1] -= 1.4 * dt;
++        pos[i * 3] += vel[i * 3] * dt;
++        pos[i * 3 + 1] += vel[i * 3 + 1] * dt;
++        pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
++        const age = 1 - Math.max(0, life[i]) / span[i];
++        size[i] = base[i] * (1 + age * 1.6);
++        alpha[i] = life[i] > 0 ? 0.85 * (1 - age) : 0;
++      }
++      geo.attributes.position.needsUpdate = true;
++      geo.attributes.color.needsUpdate = true;
++      geo.attributes.aSize.needsUpdate = true;
++      geo.attributes.aAlpha.needsUpdate = true;
++      for (let i = 0; i < pows.length; i++) {
++        const s = pows[i];
++        if (s.userData.life <= 0) continue;
++        s.userData.life -= dt;
++        s.material.opacity = Math.max(0, s.userData.life / 0.22);
++        const k = 0.2 + (1 - s.material.opacity) * 0.16;
++        s.scale.set(k, k * 0.5, 1);
++        if (s.userData.life <= 0) s.visible = false;
++      }
++      for (let i = 0; i < shocks.length; i++) {
++        const s = shocks[i];
++        if (s.userData.life <= 0) continue;
++        s.userData.life -= dt;
++        const u = 1 - Math.max(0, s.userData.life) / 0.28;
++        const k = 0.35 + u * 2.4;
++        s.scale.set(k, k, k);
++        s.material.opacity = s.userData.life > 0 ? 0.85 * (1 - u) : 0;
++        if (s.userData.life <= 0) s.visible = false;
++      }
++      for (let i = 0; i < beams.length; i++) {
++        const b = beams[i];
++        if (b.userData.life <= 0) continue;
++        b.userData.life -= dt;
++        b.material.opacity = b.userData.life > 0 ? b.userData.life / 0.08 : 0;
++        if (b.userData.life <= 0) b.visible = false;
++      }
++    }
++  };
++}
+diff --git a/web/wwwroot/rc/robot-moves.mjs b/web/wwwroot/rc/robot-moves.mjs
+new file mode 100644
+index 00000000..309ff6eb
+--- /dev/null
++++ b/web/wwwroot/rc/robot-moves.mjs
+@@ -0,0 +1,483 @@
++// Shared robot jetpack and fighting moves. Free roam, the Robot Arena and the Jetpack FPS
++// all call stepMoves. Toy-feel numbers (fiction): a 6-year-old on an 8BitDo, not a measured
++// aircraft. No per-call allocations: timers, the hit buffer and the result live on the state.
++//
++// input (all optional, levels not edges — the state remembers the last sample):
++//   jumpHeld, punchHeld, powerHeld, shieldHeld, dashHeld, lockHeld, fireHeld, busy
++//   move: {x, z} camera-relative stick, or null when the keyboard is walking
++// robot: {pos, vel, yaw, grounded}. Targets: {id, pos, kind, body, shield}.
++// Caller applies hitBuf impulses. This module moves only the robot (jump, thrust, dash, dive).
++import {ROBOT} from './physics/robot.mjs';
++
++export const MOVES = Object.freeze({
++  // Strikes include anticipation, impact and recovery. Each one is under 300 ms.
++  jab: 0.18,
++  swing: 0.26,
++  upper: 0.24,
++  spin: 0.28,
++  dash: 0.14,
++  shield: 0.3,
++  comboWindow: 0.42,
++  dashCool: 0.32,
++  fireCool: 0.28,
++  fuelMax: 4,
++  fuelRefill: 2,
++  thrust: 18,
++  riseCap: 2.4,
++  jump: ROBOT.jump,
++  gravity: ROBOT.gravity,
++  dive: -7.4,
++  dashSpeed: 5.2,
++  lunge: 1.15,
++  knock: 2.5,
++  poundKnock: 3.6,
++  lift: 0.85,
++  hitStop: 0.05,
++  lockRange: 7,
++  hitRange: 0.5,
++  hitArc: 1.15,
++  poundRadius: 1.4,
++  blastRange: 6,
++  blastArc: 0.45,
++  blastKnock: 1.7
++});
++
++const HIT_SLOTS = 8;
++
++function blankHit() {
++  return {id: 0, kind: '', body: null, ix: 0, iy: 0, iz: 0, x: 0, y: 0, z: 0, blocked: false};
++}
++
++export function createMoves() {
++  return {
++    action: 'idle',
++    pose: 'idle',
++    poseT: 0,
++    combo: 0,
++    comboLeft: 0,
++    phase: 0,
++    dur: 0,
++    fuel: MOVES.fuelMax,
++    thrusting: false,
++    lockId: null,
++    lockPos: [0, 0, 0],
++    hitStop: 0,
++    shieldLeft: 0,
++    shieldCool: 0,
++    dashCool: 0,
++    fireCool: 0,
++    dashX: 0,
++    dashZ: 0,
++    recover: 0,
++    wasAir: false,
++    didHit: false,
++    buffered: 0,
++    bumpCool: 0,
++    prev: {punch: false, power: false, dash: false, fire: false, jump: false, shield: false},
++    hitBuf: Array.from({length: HIT_SLOTS}, blankHit),
++    out: {
++      thrust: false,
++      hitCount: 0,
++      shock: false,
++      sx: 0,
++      sy: 0,
++      sz: 0,
++      landed: false,
++      blast: false,
++      bx: 0,
++      by: 0,
++      bz: 0,
++      tx: 0,
++      ty: 0,
++      tz: 0,
++      rumble: 0,
++      frozen: false
++    }
++  };
++}
++
++/** Index of the nearest target inside range, or -1. */
++export function pickLockTarget(origin, targets, count, range = MOVES.lockRange) {
++  let best = -1,
++    bestD = range;
++  for (let i = 0; i < count; i++) {
++    const t = targets[i];
++    if (!t?.pos) continue;
++    const d = Math.hypot(t.pos[0] - origin[0], t.pos[2] - origin[2]);
++    if (d < bestD) {
++      bestD = d;
++      best = i;
++    }
++  }
++  return best;
++}
++
++function clearOut(state) {
++  const o = state.out;
++  o.thrust = false;
++  o.hitCount = 0;
++  o.shock = false;
++  o.landed = false;
++  o.blast = false;
++  o.rumble = 0;
++  o.frozen = false;
++}
++
++function begin(state, action, dur) {
++  state.action = action;
++  state.pose = action;
++  state.dur = dur;
++  state.phase = 0;
++  state.poseT = 0;
++  state.didHit = false;
++  state.buffered = 0;
++}
++
++function moving(robot, input) {
++  const m = input.move;
++  if (m && Math.hypot(m.x || 0, m.z || 0) > 0.35) return true;
++  return Math.hypot(robot.vel[0], robot.vel[2]) > 0.45;
++}
++
++function startPunch(state, robot) {
++  if (!robot.grounded) {
++    begin(state, 'pound', 0.3);
++    robot.vel[1] = Math.min(robot.vel[1], MOVES.dive);
++    state.combo = 0;
++    state.comboLeft = 0;
++    return;
++  }
++  const chain = state.combo > 0 && state.comboLeft > 0;
++  const step = chain ? state.combo + 1 : 1;
++  if (step >= 3) {
++    begin(state, 'swing', MOVES.swing);
++    state.combo = 0;
++  } else if (step === 2) {
++    begin(state, 'jab2', MOVES.jab);
++    state.combo = 2;
++  } else {
++    begin(state, 'jab', MOVES.jab);
++    state.combo = 1;
++  }
++  state.comboLeft = 0;
++}
++
++function startPower(state, robot, input) {
++  if (!robot.grounded) return;
++  if (moving(robot, input)) begin(state, 'spin', MOVES.spin);
++  else {
++    begin(state, 'upper', MOVES.upper);
++    robot.vel[1] = Math.max(robot.vel[1], 2.6);
++  }
++  state.combo = 0;
++  state.comboLeft = 0;
++}
++
++function startDash(state, robot, input) {
++  let dx = input.move?.x || 0,
++    dz = input.move?.z || 0,
++    mag = Math.hypot(dx, dz);
++  if (mag < 0.2) {
++    dx = Math.sin(robot.yaw);
++    dz = -Math.cos(robot.yaw);
++    mag = 1;
++  }
++  state.dashX = dx / mag;
++  state.dashZ = dz / mag;
++  begin(state, 'dash', MOVES.dash);
++  state.dashCool = MOVES.dashCool;
++  state.combo = 0;
++  state.comboLeft = 0;
++  robot.vel[0] = state.dashX * MOVES.dashSpeed;
++  robot.vel[2] = state.dashZ * MOVES.dashSpeed;
++}
++
++function endStrike(state) {
++  const was = state.action;
++  state.action = 'idle';
++  state.pose = 'idle';
++  state.poseT = 0;
++  if (was === 'jab' || was === 'jab2') state.comboLeft = MOVES.comboWindow;
++  else {
++    state.combo = 0;
++    state.comboLeft = 0;
++  }
++}
++
++function inArc(robot, t, range, arc) {
++  const dx = t.pos[0] - robot.pos[0],
++    dz = t.pos[2] - robot.pos[2],
++    d = Math.hypot(dx, dz);
++  if (d > range) return false;
++  const face = Math.atan2(dx, -dz),
++    diff = Math.atan2(Math.sin(face - robot.yaw), Math.cos(face - robot.yaw));
++  return Math.abs(diff) < arc;
++}
++
++function inRadius(robot, t, range) {
++  return Math.hypot(t.pos[0] - robot.pos[0], t.pos[2] - robot.pos[2]) <= range;
++}
++
++function consider(state, robot, targets, count, test, knock, lift) {
++  const buf = state.hitBuf;
++  let n = state.out.hitCount,
++    solid = false;
++  for (let i = 0; i < count; i++) {
++    const t = targets[i];
++    if (!t?.pos || !test(t)) continue;
++    if (n >= buf.length) break;
++    const h = buf[n++],
++      dx = t.pos[0] - robot.pos[0],
++      dz = t.pos[2] - robot.pos[2],
++      d = Math.hypot(dx, dz) || 1;
++    h.id = t.id;
++    h.kind = t.kind || '';
++    h.body = t.body || null;
++    h.blocked = !!t.shield;
++    h.ix = h.blocked ? 0 : (dx / d) * knock;
++    h.iy = h.blocked ? 0 : lift;
++    h.iz = h.blocked ? 0 : (dz / d) * knock;
++    h.x = t.pos[0];
++    h.y = (t.pos[1] || 0) + 0.14;
++    h.z = t.pos[2];
++    if (!h.blocked) solid = true;
++  }
++  state.out.hitCount = n;
++  return solid;
++}
++
++function lunge(robot) {
++  robot.vel[0] += Math.sin(robot.yaw) * MOVES.lunge;
++  robot.vel[2] -= Math.cos(robot.yaw) * MOVES.lunge;
 +}
 +
 +/**
-+ * True on the frame the car comes back into the start disc after having left it.
-+ * The opening grid (already inside, never left) is not a re-entry.
++ * One sample. Returns state.out (reused). Hits land in state.hitBuf[0..hitCount).
 + */
-+export function startAreaReentry(state, inside) {
-+  const was = !!state.inside;
-+  if (!inside) state.left = true;
-+  state.inside = !!inside;
-+  return !!(state.left && inside && !was);
++export function stepMoves(state, robot, input = {}, targets = [], count = targets.length, dt = 1 / 120) {
++  const prev = state.prev,
++    punchEdge = !!input.punchHeld && !prev.punch,
++    powerEdge = !!input.powerHeld && !prev.power,
++    dashEdge = !!input.dashHeld && !prev.dash,
++    fireEdge = !!input.fireHeld && !prev.fire,
++    jumpEdge = !!input.jumpHeld && !prev.jump,
++    shieldEdge = !!input.shieldHeld && !prev.shield;
++  prev.punch = !!input.punchHeld;
++  prev.power = !!input.powerHeld;
++  prev.dash = !!input.dashHeld;
++  prev.fire = !!input.fireHeld;
++  prev.jump = !!input.jumpHeld;
++  prev.shield = !!input.shieldHeld;
++  clearOut(state);
++
++  if (state.hitStop > 0) {
++    state.hitStop -= dt;
++    if (state.hitStop < 0) state.hitStop = 0;
++    if (punchEdge) state.buffered = 1;
++    else if (powerEdge) state.buffered = 2;
++    state.out.frozen = true;
++    state.out.thrust = state.thrusting;
++    return state.out;
++  }
++
++  if (input.busy) {
++    state.thrusting = false;
++    if (robot.grounded) state.fuel = Math.min(MOVES.fuelMax, state.fuel + (MOVES.fuelMax / MOVES.fuelRefill) * dt);
++    state.wasAir = !robot.grounded;
++    state.pose = 'idle';
++    return state.out;
++  }
++
++  if (state.action === 'idle' && state.comboLeft > 0) {
++    state.comboLeft -= dt;
++    if (state.comboLeft <= 0) {
++      state.comboLeft = 0;
++      state.combo = 0;
++    }
++  }
++  state.shieldLeft = Math.max(0, state.shieldLeft - dt);
++  state.shieldCool = Math.max(0, state.shieldCool - dt);
++  state.dashCool = Math.max(0, state.dashCool - dt);
++  state.fireCool = Math.max(0, state.fireCool - dt);
++
++  const timed =
++    state.action === 'jab' ||
++    state.action === 'jab2' ||
++    state.action === 'swing' ||
++    state.action === 'upper' ||
++    state.action === 'spin' ||
++    state.action === 'dash';
++  if (timed) {
++    state.phase += dt;
++    state.poseT = state.dur > 0 ? Math.min(1, state.phase / state.dur) : 1;
++    if (!state.didHit && state.action !== 'dash') {
++      const u = state.poseT;
++      if (u >= 0.32 && u <= 0.62) {
++        state.didHit = true;
++        const solid = consider(state, robot, targets, count, t => inArc(robot, t, MOVES.hitRange, MOVES.hitArc), MOVES.knock, MOVES.lift);
++        lunge(robot);
++        if (solid) {
++          state.hitStop = MOVES.hitStop;
++          state.out.rumble = 0.75;
++        }
++      }
++    }
++    if (state.action === 'dash') {
++      robot.vel[0] = state.dashX * MOVES.dashSpeed;
++      robot.vel[2] = state.dashZ * MOVES.dashSpeed;
++    }
++    if (state.phase >= state.dur) {
++      const chain = state.buffered || (punchEdge ? 1 : powerEdge ? 2 : 0);
++      endStrike(state);
++      if (chain === 1) startPunch(state, robot);
++      else if (chain === 2) startPower(state, robot, input);
++    }
++  } else if (state.action === 'pound') {
++    state.phase += dt;
++    state.poseT = Math.min(1, state.phase / 0.22);
++    if (!robot.grounded && robot.vel[1] > MOVES.dive) robot.vel[1] = MOVES.dive;
++  }
++
++  const landed = state.wasAir && robot.grounded;
++  if (landed) {
++    state.out.landed = true;
++    if (state.action === 'pound') {
++      state.out.shock = true;
++      state.out.sx = robot.pos[0];
++      state.out.sy = robot.pos[1];
++      state.out.sz = robot.pos[2];
++      state.out.rumble = 1;
++      consider(state, robot, targets, count, t => inRadius(robot, t, MOVES.poundRadius), MOVES.poundKnock, 1.4);
++      state.hitStop = MOVES.hitStop;
++      state.action = 'idle';
++      state.combo = 0;
++      state.comboLeft = 0;
++      state.recover = 0.16;
++      state.pose = 'pound';
++      state.poseT = 1;
++    }
++  }
++
++  if (state.action === 'idle') {
++    if (punchEdge || state.buffered === 1) startPunch(state, robot);
++    else if (powerEdge || state.buffered === 2) startPower(state, robot, input);
++    else if (dashEdge && state.dashCool <= 0) startDash(state, robot, input);
++    else if (shieldEdge && state.shieldCool <= 0) {
++      state.shieldLeft = MOVES.shield;
++      state.shieldCool = MOVES.shield + 0.2;
++    }
++  }
++
++  // A tap leaves the ground. Holding A after that is the jetpack, so the hop itself spends no fuel.
++  let hopped = false;
++  if (jumpEdge && robot.grounded && state.action !== 'pound' && state.action !== 'upper') {
++    robot.vel[1] = MOVES.jump;
++    robot.grounded = false;
++    hopped = true;
++  }
++
++  const thrust =
++    !hopped && !robot.grounded && !!input.jumpHeld && state.fuel > 0 && state.action !== 'pound';
++  state.thrusting = thrust;
++  state.out.thrust = thrust;
++  if (thrust) {
++    state.fuel = Math.max(0, state.fuel - dt);
++    robot.vel[1] += MOVES.gravity * dt + 7 * dt;
++    if (robot.vel[1] > MOVES.riseCap) robot.vel[1] = MOVES.riseCap;
++    if (state.fuel <= 0) {
++      state.thrusting = false;
++      state.out.thrust = false;
++    }
++  } else if (robot.grounded) {
++    state.fuel = Math.min(MOVES.fuelMax, state.fuel + (MOVES.fuelMax / MOVES.fuelRefill) * dt);
++  }
++
++  if (input.lockHeld) {
++    const i = pickLockTarget(robot.pos, targets, count, MOVES.lockRange);
++    if (i >= 0) {
++      const t = targets[i];
++      state.lockId = t.id;
++      state.lockPos[0] = t.pos[0];
++      state.lockPos[1] = t.pos[1] || 0;
++      state.lockPos[2] = t.pos[2];
++      const face = Math.atan2(t.pos[0] - robot.pos[0], -(t.pos[2] - robot.pos[2])),
++        diff = Math.atan2(Math.sin(face - robot.yaw), Math.cos(face - robot.yaw));
++      robot.yaw += diff * Math.min(1, 12 * dt);
++    } else state.lockId = null;
++  } else state.lockId = null;
++
++  if (fireEdge && state.fireCool <= 0) {
++    state.fireCool = MOVES.fireCool;
++    const reach = MOVES.blastRange,
++      x = robot.pos[0] + Math.sin(robot.yaw) * reach,
++      z = robot.pos[2] - Math.cos(robot.yaw) * reach;
++    state.out.blast = true;
++    state.out.bx = robot.pos[0];
++    state.out.by = robot.pos[1] + 0.16;
++    state.out.bz = robot.pos[2];
++    let hit = null,
++      hitD = reach;
++    for (let i = 0; i < count; i++) {
++      const t = targets[i];
++      if (!t?.pos || !inArc(robot, t, reach, MOVES.blastArc)) continue;
++      const d = Math.hypot(t.pos[0] - robot.pos[0], t.pos[2] - robot.pos[2]);
++      if (d < hitD) {
++        hitD = d;
++        hit = t;
++      }
++    }
++    if (hit) {
++      state.out.tx = hit.pos[0];
++      state.out.ty = (hit.pos[1] || 0) + 0.14;
++      state.out.tz = hit.pos[2];
++      consider(state, robot, targets, count, t => t === hit, MOVES.blastKnock, 0.4);
++    } else {
++      state.out.tx = x;
++      state.out.ty = robot.pos[1] + 0.16;
++      state.out.tz = z;
++    }
++  }
++
++  if (state.action === 'idle') {
++    if (state.recover > 0) {
++      state.recover -= dt;
++      state.pose = 'pound';
++      state.poseT = Math.max(0, state.recover / 0.16);
++    } else if (state.shieldLeft > 0) {
++      state.pose = 'shield';
++      state.poseT = 1 - state.shieldLeft / MOVES.shield;
++    } else if (thrust) {
++      state.pose = 'fly';
++      state.poseT = 1;
++    } else {
++      state.pose = 'idle';
++      state.poseT = 0;
++    }
++  }
++
++  state.wasAir = !robot.grounded;
++  return state.out;
 +}
 +
-+/** Arm a timed mode. An open menu defers the clock; it does not start underneath. */
-+export function armTimed(state, on, held) {
-+  if (!on) {
-+    state.pending = false;
-+    return 'off';
-+  }
-+  if (held) {
-+    state.pending = true;
-+    return 'deferred';
-+  }
-+  state.pending = false;
-+  return 'on';
++/** Soft body bump. Pushes every call; the spark is once per contact. No damage. */
++export function bumpRobots(a, b, dt = 1 / 120) {
++  if (a?.moves) a.moves.bumpCool = Math.max(0, a.moves.bumpCool - dt);
++  if (!a?.pos || !b?.pos) return false;
++  const dx = b.pos[0] - a.pos[0],
++    dz = b.pos[2] - a.pos[2],
++    d = Math.hypot(dx, dz),
++    min = 0.22;
++  if (d >= min || d < 1e-4) return false;
++  const nx = dx / d,
++    nz = dz / d,
++    push = (min - d) * 14,
++    as = a.moves?.shieldLeft > 0 ? 0.25 : 1,
++    bs = b.moves?.shieldLeft > 0 ? 0.25 : 1;
++  a.vel[0] -= nx * push * as;
++  a.vel[2] -= nz * push * as;
++  b.vel[0] += nx * push * bs;
++  b.vel[2] += nz * push * bs;
++  if (a.moves && a.moves.bumpCool > 0) return false;
++  if (a.moves) a.moves.bumpCool = 0.28;
++  return true;
 +}
-+
-+/** Start a deferred mode on the first frame the menu is gone. */
-+export function takePending(state, held) {
-+  if (state.pending && !held) {
-+    state.pending = false;
-+    return true;
-+  }
-+  return false;
-+}
-diff --git a/web/wwwroot/rc/race-guard.test.mjs b/web/wwwroot/rc/race-guard.test.mjs
+diff --git a/web/wwwroot/rc/robot-spar.mjs b/web/wwwroot/rc/robot-spar.mjs
 new file mode 100644
-index 00000000..79f9d1f4
+index 00000000..d9f0ca0f
 --- /dev/null
-+++ b/web/wwwroot/rc/race-guard.test.mjs
-@@ -0,0 +1,37 @@
-+import test from 'node:test';
-+import assert from 'node:assert/strict';
-+import {raceStartDecision, startAreaReentry, armTimed, takePending} from './race-guard.mjs';
++++ b/web/wwwroot/rc/robot-spar.mjs
+@@ -0,0 +1,60 @@
++// Sparring dummies at the skatepark hub. They wobble, flash and spring home. They do not die.
++// Local offsets are in the residential park frame, a few steps from the spawn (6, 8.7).
 +
-+test('a running race ignores the start area and asks before a different event', () => {
-+  assert.equal(raceStartDecision({live: false, trigger: 'event'}), 'start');
-+  assert.equal(raceStartDecision({live: false, trigger: 'start-area'}), 'start');
-+  assert.equal(raceStartDecision({live: true, trigger: 'start-area'}), 'ignore');
-+  assert.equal(raceStartDecision({live: true, trigger: 'event'}), 'confirm');
-+  assert.equal(raceStartDecision({live: true, trigger: 'event', confirmed: true}), 'replace');
-+  assert.equal(raceStartDecision({live: true, trigger: 'confirmed'}), 'replace');
-+});
++export const SPAR_LOCAL = Object.freeze([
++  [9.5, 0.15, 6.2],
++  [2.6, 0.15, 5.8],
++  [6.2, 0.15, 3.1]
++]);
 +
-+test('five start-area crossings in one race never replace it', () => {
-+  const watch = {inside: false, left: false};
-+  const starts = [];
-+  // Grid: already inside, then leave, then come back five times (r1..r5 on the TV).
-+  assert.equal(startAreaReentry(watch, true), false);
-+  for (let n = 0; n < 5; n++) {
-+    assert.equal(startAreaReentry(watch, false), false);
-+    assert.equal(startAreaReentry(watch, true), true);
-+    const decision = raceStartDecision({live: true, trigger: 'start-area'});
-+    if (decision === 'start' || decision === 'replace') starts.push(n);
++export function createDummy(id, pos, yaw = 0) {
++  return {
++    id,
++    home: [pos[0], pos[1], pos[2]],
++    pos: [pos[0], pos[1], pos[2]],
++    vel: [0, 0, 0],
++    yaw,
++    wobble: 0,
++    flash: 0,
++    down: 0,
++    phase: 0,
++    walkPhase: 0,
++    crouched: false,
++    climb: null
++  };
++}
++
++export function createSparRing(toWorld) {
++  const start = toWorld([6, 0.15, 8.7]);
++  return SPAR_LOCAL.map((p, i) => {
++    const at = toWorld(p),
++      yaw = Math.atan2(start[0] - at[0], -(start[2] - at[2]));
++    return createDummy(101 + i, at, yaw);
++  });
++}
++
++export function bonkSpar(d, ix, iz) {
++  d.vel[0] += ix;
++  d.vel[2] += iz;
++  d.flash = 0.28;
++  d.wobble = 1;
++  d.down = 0.34;
++}
++
++export function stepSpar(list, dt) {
++  const drag = Math.max(0, 1 - 3.2 * dt);
++  for (let i = 0; i < list.length; i++) {
++    const d = list[i];
++    d.vel[0] += (d.home[0] - d.pos[0]) * 8 * dt;
++    d.vel[2] += (d.home[2] - d.pos[2]) * 8 * dt;
++    d.vel[0] *= drag;
++    d.vel[2] *= drag;
++    d.pos[0] += d.vel[0] * dt;
++    d.pos[2] += d.vel[2] * dt;
++    d.pos[1] = d.home[1] + (d.down > 0 ? -0.05 : 0);
++    d.down = Math.max(0, d.down - dt);
++    d.flash = Math.max(0, d.flash - dt);
++    d.wobble = Math.max(0, d.wobble - dt * 1.3);
++    d.phase += dt;
 +  }
-+  assert.deepEqual(starts, []);
-+});
-+
-+test('hunt or tag armed under an open menu does not start until the menu closes', () => {
-+  const mode = {pending: false};
-+  assert.equal(armTimed(mode, true, true), 'deferred');
-+  assert.equal(mode.pending, true);
-+  assert.equal(takePending(mode, true), false, 'menu still open: clock stays off');
-+  assert.equal(takePending(mode, false), true, 'menu closed: start now');
-+  assert.equal(mode.pending, false);
-+  assert.equal(armTimed(mode, false, false), 'off');
-+  assert.equal(armTimed(mode, true, false), 'on');
-+});
++}
 diff --git a/web/wwwroot/rc/split-p2.mjs b/web/wwwroot/rc/split-p2.mjs
-index 3637f23a..054be1d3 100644
+index 16b67c9e..4fd85b45 100644
 --- a/web/wwwroot/rc/split-p2.mjs
 +++ b/web/wwwroot/rc/split-p2.mjs
-@@ -49,8 +49,20 @@ export function flightGamepadInput(gp, poll, mode) {
-   };
+@@ -1,5 +1,5 @@
+ // Player 2 split-screen: the same standard pad as player 1, on their own controller.
+-import {mapPad, cameraMove} from './gamepad.mjs';
++import {mapPad, cameraMoveInto} from './gamepad.mjs';
+ 
+ /** Split stays on for a joined rival, including while either player is the walking robot. */
+ export function splitScreenOn({split, rival, started, p1Robot, p2Robot}) {
+@@ -15,20 +15,28 @@ export function toggleP2SkateForm(form) {
+   return 'robot';
  }
  
--export function rivalHumanInput({paused, uiPanel, pad2, gp, mode, session, fire, tagBoost, p2Form}) {
--  if (paused || uiPanel) return {throttle: 0, steer: 0, brake: true};
-+/** Pause, the brief, the map, or the leave-race row holds both players. */
-+export function screenHeld({paused = false, panel = false, brief = false, dialog = false, leave = false} = {}) {
-+  return !!(paused || panel || brief || dialog || leave);
-+}
-+
-+/** Full-viewport centre for a panel. Split screen must not park it in player 1's half. */
-+export function overlayAnchor(viewportWidth, panelWidth) {
-+  const width = Math.min(panelWidth, Math.max(0, viewportWidth - 48));
-+  const left = (viewportWidth - width) / 2;
-+  return {left, width, center: left + width / 2};
-+}
-+
-+export function rivalHumanInput({paused, uiPanel, held = false, pad2, gp, mode, session, fire, tagBoost, p2Form}) {
-+  if (paused || uiPanel || held) return {throttle: 0, steer: 0, brake: true};
-   // The walker is its own body. Hold the hidden car so the stick does not drive it.
-   if (p2Form === 'robot')
-     return {throttle: 0, steer: 0, brake: true, drift: false, fire: false, boost: tagBoost, boardSpin: false};
-diff --git a/web/wwwroot/rc/split-p2.test.mjs b/web/wwwroot/rc/split-p2.test.mjs
-index 3ad7267f..de562b0d 100644
---- a/web/wwwroot/rc/split-p2.test.mjs
-+++ b/web/wwwroot/rc/split-p2.test.mjs
-@@ -1,6 +1,7 @@
- import test from 'node:test';
- import assert from 'node:assert/strict';
--import {splitScreenOn, toggleP2SkateForm, p2RobotPad, flightGamepadInput, rivalHumanInput} from './split-p2.mjs';
-+import {readFileSync} from 'node:fs';
-+import {splitScreenOn, toggleP2SkateForm, p2RobotPad, flightGamepadInput, rivalHumanInput, screenHeld, overlayAnchor} from './split-p2.mjs';
+-/** Left stick walks relative to player 2's camera. A (index 0) jumps, X punches and uses. */
+-export function p2RobotPad(gp, camYaw = 0) {
++/** Left stick walks relative to player 2's camera. Same moves as player 1: A jumps, hold A jets. */
++export function p2RobotPad(gp, camYaw = 0, out = null) {
+   const m = mapPad('robot', gp),
+-    move = cameraMove(camYaw, m.moveX, m.moveY);
+-  return {
+-    move,
+-    throttle: 0,
+-    steer: 0,
+-    jump: m.jumpHeld,
+-    punch: m.punch,
+-    use: m.punch,
+-    sprint: m.sprint,
+-    aim: m.aim
+-  };
++    o = out || {move: {x: 0, z: 0}};
++  if (!o.move) o.move = {x: 0, z: 0};
++  cameraMoveInto(o.move, camYaw, m.moveX, m.moveY);
++  o.throttle = 0;
++  o.steer = 0;
++  o.jump = m.jumpHeld;
++  o.jumpHeld = m.jumpHeld;
++  o.punch = m.punch;
++  o.punchHeld = m.punch;
++  o.use = m.punch;
++  o.sprint = !!m.sprint;
++  o.aim = !!m.aim;
++  o.lockHeld = !!m.aim;
++  o.powerHeld = !!m.boostHeld;
++  o.shieldHeld = !!(m.shield || m.flyHeld);
++  o.dashHeld = !!m.dash;
++  o.fireHeld = !!m.fireHeld;
++  o.busy = false;
++  return o;
+ }
  
- test('split stays on while either player is a robot', () => {
-   const base = {split: {pad: 1}, rival: {}, started: true, p1Robot: false, p2Robot: false};
-@@ -100,3 +101,38 @@ test('rivalHumanInput holds the car while player 2 is the robot', () => {
-   assert.equal(out.boardSpin, false);
-   assert.equal(out.flight, undefined);
- });
-+
-+test('a pause, brief, map or leave row stops player 2 as well as player 1', () => {
-+  const driving = {
-+    paused: false,
-+    uiPanel: false,
-+    pad2: {throttle: 1, steer: 0.2, brake: false, drift: false},
-+    gp: null,
-+    mode: 'kid',
-+    session: {flight: {mode: null}},
-+    fire: false,
-+    tagBoost: 1,
-+    p2Form: 'car'
-+  };
-+  assert.equal(rivalHumanInput(driving).throttle, 1);
-+  for (const flag of ['paused', 'uiPanel', 'held']) {
-+    const out = rivalHumanInput({...driving, [flag]: true});
-+    assert.equal(out.throttle, 0, flag);
-+    assert.equal(out.brake, true, flag);
-+  }
-+  assert.equal(screenHeld({brief: true}), true);
-+  assert.equal(screenHeld({panel: 'map'}), true);
-+  assert.equal(screenHeld({dialog: true}), true);
-+  assert.equal(screenHeld({leave: true}), true);
-+  assert.equal(screenHeld({}), false);
-+});
-+
-+test('split pause and map sit on the full screen centre', () => {
-+  const box = overlayAnchor(1920, 640);
-+  assert.equal(box.center, 960);
-+  assert.ok(box.left > 500, 'not pinned to the left half');
-+  const css = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
-+  assert.match(css, /body\.split :is\(#brief,#result,\.overlay,#tag-result,#hunt-result,dialog\.rc-race-menu\)\{[^}]*position:fixed/);
-+  assert.match(css, /body\.split :is\(#brief,#result,\.overlay,#tag-result,#hunt-result,dialog\.rc-race-menu\)\{[^}]*left:50%/);
-+  assert.match(css, /body\.split :is\(#brief,#result,\.overlay,#tag-result,#hunt-result,dialog\.rc-race-menu\)\{[^}]*translate\(-50%,-50%\)/);
-+});
-diff --git a/web/wwwroot/rc/style.css b/web/wwwroot/rc/style.css
-index f3abc21d..28afe1c2 100644
---- a/web/wwwroot/rc/style.css
-+++ b/web/wwwroot/rc/style.css
-@@ -274,3 +274,13 @@ button.dex-row {
- #instruments #dream-coins{left:22px;bottom:28px;top:auto;padding:10px 16px;border-left:3px solid var(--gold);font:600 28px ui-monospace,monospace;font-variant-numeric:tabular-nums;color:var(--gold)}
- @media(max-width:540px){#instruments #dream-coins{left:10px;bottom:148px;font-size:22px;padding:8px 12px}}
- @media(prefers-color-scheme:light){#instruments #dream-coins{background:#142a30;color:#f3efdc}}
-+/* Split: pause, brief, map and results sit on the whole TV, not in player 1's half. */
-+body.split :is(#brief,#result,.overlay,#tag-result,#hunt-result,dialog.rc-race-menu){position:fixed;left:50%;top:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);width:min(720px,calc(100vw - 48px));max-width:calc(100vw - 48px);z-index:30}
-+body.split.paused::before,body.split.modal-open::before{content:"";position:fixed;inset:0;background:#07141ad6;z-index:8;pointer-events:none}
-+body.split #leave-race,#leave-race{display:flex;align-items:center;gap:16px;width:max-content;max-width:calc(100vw - 48px);padding:14px 18px}
-+#leave-race p{margin:0;font:700 22px system-ui;white-space:nowrap}
-+#leave-race .leave-actions{display:flex;gap:8px}
-+#leave-race button{min-height:44px;min-width:108px;font-weight:700}
-+#leave-race #leave-yes{background:var(--gold);border-color:var(--gold);color:#1b2a2e}
-+.coach{max-width:220px}
-+@media(prefers-color-scheme:light){#leave-race{background:#142a30;color:#f3efdc}}
-diff --git a/web/wwwroot/rc/tag.test.mjs b/web/wwwroot/rc/tag.test.mjs
-index a970cda5..7603fe7b 100644
---- a/web/wwwroot/rc/tag.test.mjs
-+++ b/web/wwwroot/rc/tag.test.mjs
-@@ -38,3 +38,13 @@ test('hud line', () => {
- });
- 
- test('fmtTag', () => assert.equal(fmtTag(65.2), '1:06'));
-+
-+test('the round clock does not move while a menu is open', () => {
-+  const t = createTag();
-+  setTagOn(t, true, () => 0);
-+  stepTag(t, 3, 99, true);
-+  assert.equal(t.roundLeft, TAG.round);
-+  assert.equal(t.p1It, 0);
-+  stepTag(t, 3, 99, false);
-+  assert.ok(t.roundLeft < TAG.round);
-+});
+ /** Left stick pitch/roll, triggers throttle, right stick is the camera (not the aeroplane). */
