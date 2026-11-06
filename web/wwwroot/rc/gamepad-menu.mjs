@@ -1,6 +1,7 @@
 // Drive the menus with a controller: d-pad / left stick moves a highlight between the
 // buttons of whatever menu is open, A presses it, B goes back. Pure geometry so it can
 // be tested without a browser: `items` are {el, x, y} centres, `dir` is [dx, dy].
+import {stickAxis} from './gamepad.mjs';
 export function nearest(items, from, [dx, dy]) {
   let best = null,
     score = Infinity;
@@ -22,8 +23,10 @@ export const MENU_BACK = 1;
 const pressed = (p, i) => (p?.buttons?.[i]?.value ?? 0) > 0.5;
 function direction(pads) {
   for (const p of pads) {
-    const x = (pressed(p, 15) ? 1 : 0) - (pressed(p, 14) ? 1 : 0) || (Math.abs(p.axes?.[0] ?? 0) > 0.6 ? Math.sign(p.axes[0]) : 0),
-      y = (pressed(p, 13) ? 1 : 0) - (pressed(p, 12) ? 1 : 0) || (Math.abs(p.axes?.[1] ?? 0) > 0.6 ? Math.sign(p.axes[1]) : 0);
+    const ax = stickAxis(p.axes?.[0]),
+      ay = stickAxis(p.axes?.[1]),
+      x = (pressed(p, 15) ? 1 : 0) - (pressed(p, 14) ? 1 : 0) || (Math.abs(ax) > 0.5 ? Math.sign(ax) : 0),
+      y = (pressed(p, 13) ? 1 : 0) - (pressed(p, 12) ? 1 : 0) || (Math.abs(ay) > 0.5 ? Math.sign(ay) : 0);
     if (x || y) return Math.abs(x) >= Math.abs(y) ? [x, 0] : [0, y];
   }
   return null;

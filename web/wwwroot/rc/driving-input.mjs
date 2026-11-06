@@ -15,14 +15,16 @@ export const DRIVE_KEYS = [
   'ArrowRight'
 ];
 export function drivingInput(keys, pad = {}) {
-  const held = (...codes) => codes.some(code => keys.has(code));
-  return {
-    throttle:
-      Number(held('KeyW', 'ArrowUp', 'KeyX')) - Number(held('KeyS', 'ArrowDown')) || pad.throttle || 0,
-    steer: Number(held('KeyD', 'ArrowRight')) - Number(held('KeyA', 'ArrowLeft')) || pad.steer || 0,
-    brake: held('KeyZ') || !!pad.brake,
-    drift: held('ShiftLeft', 'ShiftRight') || !!pad.drift
-  };
+  const held = (...codes) => codes.some(code => keys.has(code)),
+    out = {
+      throttle:
+        Number(held('KeyW', 'ArrowUp', 'KeyX')) - Number(held('KeyS', 'ArrowDown')) || pad.throttle || 0,
+      steer: Number(held('KeyD', 'ArrowRight')) - Number(held('KeyA', 'ArrowLeft')) || pad.steer || 0,
+      brake: held('KeyZ') || !!pad.brake,
+      drift: held('ShiftLeft', 'ShiftRight') || !!pad.drift
+    };
+  if (Number.isFinite(pad.steerRate)) out.steerRate = pad.steerRate;
+  return out;
 }
 // Free-drive flight (Enter) uses the guns-only jet keys: ↑ push, ↓ pull, ←/→ roll, A/D rudder,
 // W/S power; the afterburner (F) is a toggle main.js fills in.

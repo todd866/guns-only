@@ -122,6 +122,15 @@ import {createCup, loadCup, saveCup, recordCupRace, nextCupEvent, cupStandings} 
 import {createRaceMenu, CUP_COURSES} from './race-menu.js';
 import {createAlienMarshal} from './alien-marshal.js';
 import {createGamepadInput, cameraMove} from './gamepad.mjs';
+import {
+  KID_STEER_RATE,
+  SENSITIVITY,
+  SENSITIVITY_KEY,
+  cycleSensitivity,
+  feelShape,
+  sensitivityFor,
+  stepLook
+} from './control-feel.mjs';
 import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput} from './split-p2.mjs';
 import {attachDreams} from './open-world/dreams/runner.js';
 import {createMenuPad} from './gamepad-menu.mjs';
@@ -393,6 +402,8 @@ let lookMode = false,
   lookYaw = 0,
   lookPitch = 0,
   lookIdle = 0,
+  lookYawRate = 0,
+  lookPitchRate = 0,
   lookDrag = null,
   padAim = false;
 const lookKeys = new Set();
@@ -1262,8 +1273,35 @@ function setMode(m) {
   try {
     localStorage.setItem('guns-only.rc.mode', m);
   } catch {}
+  paintStick();
 }
 $('mode').onclick = $('menu-kid').onclick = () => setMode(mode === 'kid' ? 'bigKid' : 'kid');
+// Stick sensitivity. Unset follows the mode: Low for a kid, Normal for a big kid.
+let stickSensitivity = null;
+try {
+  const saved = localStorage.getItem(SENSITIVITY_KEY);
+  if (saved === 'low' || saved === 'normal' || saved === 'high') stickSensitivity = saved;
+} catch {}
+function feelNow() {
+  return {sensitivity: sensitivityFor(mode, stickSensitivity), mode};
+}
+function paintStick() {
+  const value = sensitivityFor(mode, stickSensitivity),
+    el = $('stick-sensitivity');
+  if (!el) return;
+  el.dataset.step = value;
+  const val = el.querySelector('.sound-val');
+  if (val) val.textContent = value;
+  el.setAttribute('aria-label', `Stick sensitivity ${value}`);
+}
+function cycleStick() {
+  stickSensitivity = cycleSensitivity(sensitivityFor(mode, stickSensitivity));
+  try {
+    localStorage.setItem(SENSITIVITY_KEY, stickSensitivity);
+  } catch {}
+  paintStick();
+}
+$('stick-sensitivity').onclick = cycleStick;
 setMode(mode);
 // Mute (M), remembered in this browser.
 let muted = false;
@@ -4959,15 +4997,16 @@ function pinLabCars() {
 }
 function labLook() {
   const pads = Array.from(navigator.getGamepads?.() ?? []),
-    dead = v => (Math.abs(v ?? 0) < 0.15 ? 0 : v),
+    spec = SENSITIVITY[feelNow().sensitivity] ?? SENSITIVITY.low,
+    look = v => feelShape(v, {expo: spec.expo, gain: spec.camera}),
     p1 = pads.find(p => p?.connected && p.index !== split?.pad),
     p2 = split ? pads[split.pad] : null,
     key = (a, b) => (keys.has(a) ? 1 : 0) - (keys.has(b) ? 1 : 0);
   return {
-    lookX: dead(p1?.axes?.[0]) || key('ArrowRight', 'ArrowLeft'),
-    lookY: -dead(p1?.axes?.[1]) || key('ArrowUp', 'ArrowDown'),
-    look2X: dead(p2?.axes?.[0]),
-    look2Y: p2 ? -dead(p2?.axes?.[1]) : undefined
+    lookX: look(p1?.axes?.[0]) || key('ArrowRight', 'ArrowLeft'),
+    lookY: look(-(p1?.axes?.[1] ?? 0)) || key('ArrowUp', 'ArrowDown'),
+    look2X: look(p2?.axes?.[0]),
+    look2Y: p2 ? look(-(p2?.axes?.[1] ?? 0)) : undefined
   };
 }
 function labSounds(cues) {
@@ -5782,7 +5821,7 @@ document.body.append(joinCard);
 let justJoined = false;
 function joinWithPad(padIndex) {
   if (split || !started || padIndex == null || padIndex === p1Pad || !race.rivals.length) return;
-  split = {pad: padIndex, heading: null, lookYaw: 0, lookPitch: 0, lookIdle: 0, placed: false, fire: false, p2Form: 'car'};
+  split = {pad: padIndex, heading: null, lookYaw: 0, lookPitch: 0, lookIdle: 0, lookYawRate: 0, lookPitchRate: 0, placed: false, fire: false, p2Form: 'car'};
   justJoined = true;
   callout('👥 2 players!', 3000);
   telemetry.choice?.('split', 'join');
@@ -6081,8 +6120,8 @@ function splitInput(all, now) {
       idle2 = t - split.p2At > 60000;
     split.solo = idle1 && !idle2 ? 2 : idle2 && !idle1 ? 1 : 0;
   }
-  const p1 = pollGamepad(split ? all.filter(p => p && p.index !== split.pad) : all, playingForm(1)),
-    p2 = split ? pollP2([all[split.pad]], playingForm(2)) : null;
+  const p1 = pollGamepad(split ? all.filter(p => p && p.index !== split.pad) : all, playingForm(1), feelNow()),
+    p2 = split ? pollP2([all[split.pad]], playingForm(2), feelNow()) : null;
   if (p2?.fire) split.fire = true;
   return {p1, p2};
 }
@@ -6279,7 +6318,8 @@ function frame(now) {
           fire: f,
           tagBoost: tb,
           p2Form: split?.p2Form ?? 'car',
-          invert: invertFlight
+          invert: invertFlight,
+          feel: feelNow()
         });
       };
       // Keep the two toys together: the world only streams around player 1.
@@ -6396,7 +6436,8 @@ function frame(now) {
           ...pad,
           steer: touchState.steer || pad.steer,
           throttle: touchState.throttle || pad.throttle,
-          brake: touchState.brake || pad.brake
+          brake: touchState.brake || pad.brake,
+          steerRate: mode === 'kid' ? KID_STEER_RATE : undefined
         });
       return [
         {move: clamp((d.steer || 0) + (d.throttle || 0)), jump: keys.has('Space') || !!(pad.jump || hopQueued)},
@@ -6431,7 +6472,8 @@ function frame(now) {
           ...pad,
           steer: touchState.steer || pad.steer,
           throttle: touchState.throttle || pad.throttle,
-          brake: touchState.brake || pad.brake
+          brake: touchState.brake || pad.brake,
+          steerRate: mode === 'kid' ? KID_STEER_RATE : undefined
         }),
         throttleIn = drive.throttle;
       if (
@@ -6511,7 +6553,7 @@ function frame(now) {
         );
       }
       if (split?.p2Form === 'robot' && p2Robot) {
-        const walk = p2RobotPad(allPads[split.pad], (split.heading ?? p2Robot.yaw) + (split.lookYaw || 0));
+        const walk = p2RobotPad(allPads[split.pad], (split.heading ?? p2Robot.yaw) + (split.lookYaw || 0), feelNow());
         stepRobot(
           p2Robot,
           {move: walk.move, jump: walk.jump, sprint: walk.sprint},
@@ -7185,26 +7227,22 @@ function frame(now) {
   // Look mode's arrows and a mouse drag do the same swing.
   {
     const held = k => (lookKeys.has(k) ? 1 : 0),
-      stick = !paused && !ui.panel() && (Math.abs(pad.lookX) > 0 || Math.abs(pad.lookY) > 0),
-      foot = !!robot;
-    if (pad.recentre && !paused) {
-      lookYaw = 0;
-      lookPitch = 0;
-      lookIdle = 0;
-    } else if (stick) {
-      lookYaw += pad.lookX * dt * 1.7;
-      lookPitch = Math.max(-0.35, Math.min(1.05, lookPitch - pad.lookY * dt * 1.15));
-      lookIdle = foot ? 1e9 : 1;
-    }
+      foot = !!robot,
+      look = stepLook(
+        {yaw: lookYaw, pitch: lookPitch, idle: lookIdle, yawRate: lookYawRate, pitchRate: lookPitchRate},
+        !paused && !ui.panel() ? pad.lookX : 0,
+        !paused && !ui.panel() ? pad.lookY : 0,
+        dt,
+        {foot, recentre: !!(pad.recentre && !paused)}
+      );
+    lookYaw = look.yaw;
+    lookPitch = look.pitch;
+    lookIdle = look.idle;
+    lookYawRate = look.yawRate;
+    lookPitchRate = look.pitchRate;
     if (lookMode) {
       lookYaw += (held('ArrowRight') - held('ArrowLeft')) * dt * 2.2;
       lookPitch = Math.max(-0.3, Math.min(1.1, lookPitch + (held('ArrowUp') - held('ArrowDown')) * dt * 1.3));
-    } else if (!foot && !stick) {
-      if (lookIdle > 10) lookIdle = 1;
-      if ((lookIdle -= dt) <= 0) {
-        lookYaw *= Math.exp(-dt * 2.5);
-        lookPitch *= Math.exp(-dt * 2.5);
-      }
     }
   }
   const camYaw = camHeading + lookYaw;
@@ -7300,21 +7338,25 @@ function frame(now) {
       d = split.heading == null ? 0 : Math.atan2(Math.sin(r2.yaw - split.heading), Math.cos(r2.yaw - split.heading));
     split.heading = split.heading == null ? r2.yaw : split.heading + d * Math.min(1, dt * 4);
     if (pad2 && !paused && !ui.panel()) {
-      const looking = Math.abs(pad2.lookX) > 0 || Math.abs(pad2.lookY) > 0,
-        foot2 = split.p2Form === 'robot';
-      if (pad2.recentre) split.lookYaw = split.lookPitch = split.lookIdle = 0;
-      else if (looking) {
-        split.lookYaw = (split.lookYaw || 0) + pad2.lookX * dt * 1.7;
-        split.lookPitch = Math.max(-0.35, Math.min(1.05, (split.lookPitch || 0) - pad2.lookY * dt * 1.15));
-        split.lookIdle = foot2 ? 1e9 : 1;
-      } else if (!foot2) {
-        if ((split.lookIdle ?? 0) > 10) split.lookIdle = 1;
-        split.lookIdle = (split.lookIdle || 0) - dt;
-        if (split.lookIdle <= 0) {
-          split.lookYaw = (split.lookYaw || 0) * Math.exp(-dt * 2.5);
-          split.lookPitch = (split.lookPitch || 0) * Math.exp(-dt * 2.5);
-        }
-      }
+      const foot2 = split.p2Form === 'robot',
+        look2 = stepLook(
+          {
+            yaw: split.lookYaw || 0,
+            pitch: split.lookPitch || 0,
+            idle: split.lookIdle || 0,
+            yawRate: split.lookYawRate || 0,
+            pitchRate: split.lookPitchRate || 0
+          },
+          pad2.lookX,
+          pad2.lookY,
+          dt,
+          {foot: foot2, recentre: !!pad2.recentre}
+        );
+      split.lookYaw = look2.yaw;
+      split.lookPitch = look2.pitch;
+      split.lookIdle = look2.idle;
+      split.lookYawRate = look2.yawRate;
+      split.lookPitchRate = look2.pitchRate;
     }
     const hy = split.heading + (split.lookYaw || 0),
       hp = split.lookPitch || 0,

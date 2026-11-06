@@ -52,6 +52,8 @@ retry_once() {
 evidence="$repo/evidence/rc-open-world/deploy-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$evidence"
 echo "deploy-rc: unit tests"
+# control-feel.test.mjs is on this always-run list: the stick curves against 1371fbac.
+run_job node --test web/wwwroot/rc/control-feel.test.mjs || exit 1
 (cd web/wwwroot/rc && run_job node --test --test-concurrency=2) >"$evidence/unit-tests.txt" 2>&1 || { cat "$evidence/unit-tests.txt"; exit 1; }
 run_job node --test --test-concurrency=2 tools/rc/*.test.mjs tools/rc/harness/*.test.mjs >"$evidence/tool-tests.txt" 2>&1 || { cat "$evidence/tool-tests.txt"; exit 1; }
 echo "deploy-rc: asset manifest (licence, provenance, budgets, completeness)"

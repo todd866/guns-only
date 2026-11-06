@@ -158,8 +158,10 @@ export function applyImpulse(car, j, at) {
 export function stepCar(car, input, world, dt = 1 / 120) {
   const p = car.params;
   const steerTarget = Math.max(-1, Math.min(1, input.steer || 0)) * (input.steerLimit ?? p.maxSteer);
+  // Kid mode passes a lower rate. The buggy's own steerRate stays the airframe constant.
   const sd = steerTarget - car.steer,
-    maxD = p.steerRate * dt;
+    steerCap = Number.isFinite(input.steerRate) ? Math.min(p.steerRate, input.steerRate) : p.steerRate,
+    maxD = steerCap * dt;
   car.steer += Math.max(-maxD, Math.min(maxD, sd));
   car.impact = 0;
   car.wallImpact = 0;
