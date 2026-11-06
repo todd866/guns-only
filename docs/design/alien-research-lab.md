@@ -81,6 +81,9 @@ past, and the toys go **down** through it into the dark world.
 - A new vehicle beside car, robot, board and plane: **hover** (holds height, slides like an
   air-hockey puck), **climb/dive**, **tractor beam** (pick up and carry things: crates,
   pumpkins, a willing friend's car in co-op), **cloak shimmer** for a few seconds.
+- **It goes anywhere** (Ian, 6 Nov 2026): the light world, the dark world, the alien-world
+  courses (open-world/alien-world.mjs), venues and interiors big enough to fit. No zone
+  is closed to it.
 - It flies **between worlds**: the Seam Gate is big enough for it, and in the dark world it's
   the only thing that flies apart from the winged dinosaurs.
 - Controls on the pads: same layout as the plane (LB/L to take off and land, sticks to fly),
@@ -184,4 +187,3 @@ until P2 robot exists.
 
 - Gate: badge count, Old Silver Mine finish, or open from the start? (Jake wants it now.)
 - Saucer in split screen: one pilot with the other riding in the beam, or two saucers?
-- Does the saucer let you visit the alien-world courses (open-world/alien-world.mjs)?
