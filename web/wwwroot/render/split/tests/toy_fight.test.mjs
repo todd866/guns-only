@@ -287,8 +287,12 @@ test("menus and HUDs are one row per instrument", () => {
   assert.equal(hud.length, 7);
   assert.deepEqual(hud.map((row) => row.datum), ["pops", "ready", "ready", "thr", "spd", "alt", "g"]);
   assert.match(hud[0].pips, /[●○]/);
-  assert.equal(pauseRows("👤 1 player").length, 3);
-  assert.equal(pauseRows("").length, 2);
+  assert.equal(pauseRows("👤 1 player").length, 4);
+  assert.equal(pauseRows("").length, 3);
+  const games = pauseRows("").at(-1);
+  assert.equal(games.act, "games");
+  assert.equal(games.symbol, "🏠");
+  assert.equal(games.value, "Games");
   const done = resultRows(session);
   assert.equal(done.some((row) => row.value === "AGAIN"), true);
   assert.equal(done.some((row) => /win|dead|kill/i.test(row.value)), false);

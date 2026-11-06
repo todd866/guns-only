@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Toy dogfight</title>
+<style>html, body { margin: 0; height: 100%; overflow: hidden; background: #1a221c; }</style>
+</head>
+<body>
+<script type="module">
+import {installToyFight} from "../render/split/toy_fight_view.js";
+const theme = new URLSearchParams(location.search).get("theme");
+if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+installToyFight().open();
+</script>
+</body>
+</html>

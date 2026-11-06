@@ -16,6 +16,7 @@ import {GUNS, ZOOMS, zoomMag} from "./tv_cam.mjs";
 import {BOSS, friendlyDownFrame, toyWindow} from "./gunship_targets.mjs";
 import {GUNSHIP_MISSION, SQUAD, YARD, beginPlay, missionCaption} from "./gunship_mission.mjs";
 import {WASHOUT_S, createGunshipSession, leaveToTitle, startGunship, stepGunship} from "./gunship_session.mjs";
+import {attachHold, goHome} from "../tv/return.mjs";
 
 const query = new URLSearchParams(location.search);
 const theme = query.get("theme") === "light" ? "light" : "dark";
@@ -252,6 +253,7 @@ function actFor(act) {
   if (act === "resume") session.phase = "fly";
   else if (act === "restart" || act === "again") beginWatch();
   else if (act === "map") { leaveToTitle(session); paintTitle(); }
+  else if (act === "games") goHome();
 }
 for (const panel of [panels.pause, panels.result]) {
   panel.addEventListener("click", (event) => {
@@ -700,8 +702,10 @@ if (shotMode) {
 }
 
 let last = performance.now();
+const tvHold = attachHold(() => padsSource());
 function frame(nowMs) {
   requestAnimationFrame(frame);
+  tvHold();
   const dt = Math.max(0, Math.min(0.05, (nowMs - last) / 1000));
   last = nowMs;
   const pads = padsSource();
