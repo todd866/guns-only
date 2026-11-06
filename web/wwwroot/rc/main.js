@@ -5436,7 +5436,9 @@ function frame(now) {
         split.heading = null;
       }
       // Fell through the world (the ground only streams in round player 1): straight back up.
-      if (!split.placed || Math.hypot(a[0] - b[0], a[2] - b[2]) > 120 || b[1] < a[1] - 20) {
+      // Flying spreads the pair out and lifts player 1, so loosen the tether and skip the fall check.
+      const airborne = !!s.flight.mode || !!rv.session.flight.mode;
+      if (!split.placed || Math.hypot(a[0] - b[0], a[2] - b[2]) > (airborne ? 400 : 120) || (!airborne && b[1] < a[1] - 20)) {
         split.placed = true;
         rv.session.car.pos = [a[0] + 2.5, a[1] + 0.4, a[2]];
         rv.session.car.vel = [0, 0, 0];
