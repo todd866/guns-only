@@ -5,15 +5,27 @@ intent so it can be picked up cold.
 
 ## One line
 
-Under the Cold-Weather Test Hangar is the base's real secret: a fossil dig that broke through
-into the past. The base built a lab around **the Seam**, a crack where it is still dinosaur
+Out at **Dreamland, on Bride Lake** (a dry lakebed past Saucer Springs; a nod to Groom Lake), is
+the Air Force's real secret: a fossil dig that broke through into the past. The base built a lab around **the Seam**, a crack where it is still dinosaur
 time on the other side. Test day, the Seam bursts (**the Breach**), the lab floods with the
 past, and the toys go **down** through it into the dark world.
 
+## Location (Ian, 6 Nov 2026: "it should be at Bride Lake")
+
+- The lab is at **Dreamland, Bride Lake**: not on the base, and nothing on the base mentions it.
+  You get there on the unmarked **Janet** flight from the Saucer Springs flightline (the
+  guns-only ledger records Dreamland at Bride Lake, PR #174).
+- On the surface: a dry lakebed, a long runway, a few plain hangars, a radar dish, a fence and
+  "Use of deadly force authorised" signs (the real Groom Lake has these; ours are in toy scale).
+  The lab is underground beneath the hangars.
+- The **Cold-Weather Test Hangar on base stays a snow race**. Stage 1's tram currently starts
+  there; move the entry to Bride Lake (Janet flight lands, tram goes down from the hangar) when
+  Dreamland exists on the map.
+
 ## Cover story: USAF secret squirrel (Ian, 6 Nov 2026)
 
-- On paper: **Detachment 3, Saucer Springs AFB**, the "Cold-Weather Test Squadron". The snow
-  race at the Cold-Weather Test Hangar is the public face.
+- On paper: **Detachment 3**, a "test squadron" with an office at Saucer Springs AFB and
+  flights to "a range". Dreamland officially doesn't exist.
 - In reality: **Program COLD SEAM** (classified). The Seam, the Vault, the lab and Hangar Zero
   all belong to it.
 - Telltale details everywhere: badge readers, "NEED TO KNOW" doors, a visitor sign-out
@@ -38,7 +50,7 @@ past, and the toys go **down** through it into the dark world.
   light and dark worlds. The dig (open-world/dig.mjs) stays the secret way across. Dark and
   light worlds remain separate worlds crossed by portals (owner ruling 31 Oct 2026).
 
-## Why here
+## Why here (originally the Cold Lab; superseded by Bride Lake above)
 
 - Jake (6) ignored the N64 classics on the TV and only wanted RC Odyssey (6 Nov 2026). The lab
   is the next big "place" for him.
