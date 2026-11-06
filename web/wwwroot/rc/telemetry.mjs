@@ -34,7 +34,9 @@ const EVENT_CODES = new Set([
   'heartbeat',
   'form',
   'flight',
-  'discover'
+  'discover',
+  'dream_enter',
+  'dream_exit'
 ]);
 const ERROR_LIMIT = 8;
 const short = (value, n = 40) => String(value ?? 'unknown').slice(0, n);
@@ -362,6 +364,14 @@ export function createRCTelemetry({
   function mute(value) {
     record('mute', {muted: Boolean(value)});
   }
+  function dream(code, {name, ms, finished} = {}) {
+    if (code !== 'dream_enter' && code !== 'dream_exit') return false;
+    return record(code, {
+      name: short(name, 24),
+      ms: Math.max(0, Math.round(finite(ms, 0))),
+      finished: !!finished
+    });
+  }
   function observeFrame(deltaMs, activeFrame = true) {
     const eligible = activeFrame && previousActiveFrame;
     previousActiveFrame = activeFrame;
@@ -489,6 +499,7 @@ export function createRCTelemetry({
     playmate,
     form,
     flight,
+    dream,
     mute,
     observeFrame,
     flush,

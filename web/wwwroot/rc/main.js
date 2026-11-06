@@ -113,6 +113,7 @@ import {createRaceMenu, CUP_COURSES} from './race-menu.js';
 import {createAlienMarshal} from './alien-marshal.js';
 import {createGamepadInput} from './gamepad.mjs';
 import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput} from './split-p2.mjs';
+import {attachDreams} from './open-world/dreams/runner.js';
 import {createMenuPad} from './gamepad-menu.mjs';
 import {padSvg, padKind} from './pad-art.mjs';
 import {createCoach} from './coach.mjs';
@@ -147,7 +148,7 @@ import {
 import {TRACK_FEATURES, placeFeatures} from './physics/features.mjs';
 import {modifiers, MISSILES, beamDir, LASER} from './physics/pickups.mjs';
 import {heldMissilePose} from './pickup-visuals.mjs';
-import {BUGGY, createCar, placeCar, rideHeight} from './physics/car.mjs';
+import {BUGGY, carYaw, createCar, placeCar, rideHeight} from './physics/car.mjs';
 import {addBox} from './physics/world.mjs';
 import {courseFromGlb} from './physics/district.mjs';
 import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
@@ -924,6 +925,7 @@ let race = createRace(course, {
   last = performance.now(),
   best = 0;
 let bestKey = `guns-only.rc.best.v3.${track ?? 'base'}.${openWorld?.selected.id ?? 'lap'}.${mode}`;
+let dreams = null;
 try {
   best = Number(localStorage.getItem(bestKey)) || 0;
 } catch {}
@@ -1014,9 +1016,10 @@ function pause(value) {
     $('brief').hidden = !paused;
     $('brief-title').textContent = paused ? 'PAUSED' : 'RC ODYSSEY';
     $('resume').hidden = !paused;
+    $('wake').hidden = !dreams?.active();
     $('start').hidden = race.roam;
     $('start').textContent = 'Return to base';
-    if (paused) $('resume').focus();
+    if (paused) (dreams?.active() ? $('wake') : $('resume')).focus();
     else canvas.focus();
   }
 }
@@ -1043,6 +1046,11 @@ $('start').onclick = () => {
   canvas.focus();
 };
 $('resume').onclick = () => {
+  pause(false);
+  canvas.focus();
+};
+$('wake').onclick = () => {
+  dreams?.bail();
   pause(false);
   canvas.focus();
 };
@@ -1382,7 +1390,7 @@ window.addEventListener('keydown', e => {
     labSkipEdge = true;
     return;
   }
-  if (e.code === 'KeyT' && !paused && race.roam && !skate && !s.flight.mode && !labBusy(labRide)) {
+  if (e.code === 'KeyT' && !paused && race.roam && !skate && !s.flight.mode && !labBusy(labRide) && !dreams?.active()) {
     boostOn = false;
     transform();
   }
@@ -1402,11 +1410,12 @@ window.addEventListener('keydown', e => {
     race.roam &&
     !e.target.closest?.('button,input,select,textarea') &&
     s.car.grounded &&
-    !s.flight.mode
+    !s.flight.mode &&
+    !dreams?.ownsSim()
   )
     s.car.vel = [s.car.vel[0], s.car.vel[1] + (form === 'board' ? FLIGHT.ollie : FLIGHT.hop), s.car.vel[2]];
   if (e.code === 'KeyF') toggleBoost();
-  if (e.code === 'KeyR' && !paused && !labBusy(labRide)) {
+  if (e.code === 'KeyR' && !paused && !labBusy(labRide) && !dreams?.active()) {
     boostOn = false;
     telemetry.recover('key', s.car.pos);
     recover(s);
@@ -1428,7 +1437,7 @@ window.addEventListener('keydown', e => {
     const pastRide = openWorld?.era?.() === 'past' && form === 'car',
       flier = !!DINO_KINDS[herd().herd[herd().mount]?.kind]?.flies;
     if (pastRide && !flier && !s.flight.mode) beep(`🦖 ${dinoName()} can't fly!`, 'sad');
-    else if (race.roam && !skate && !adventure?.underground(s.car.pos) && !labUnderground(s.car.pos) && !labBusy(labRide)) {
+    else if (race.roam && !skate && !adventure?.underground(s.car.pos) && !labUnderground(s.car.pos) && !labBusy(labRide) && !dreams?.active()) {
       const was = s.flight.mode,
         m = toggleFlight(s.flight, s.car, {roam: true});
       if (m !== was) {
@@ -1497,13 +1506,13 @@ window.addEventListener('pagehide', () => {
 });
 // Two chase cameras side by side. The polish pass is one-camera, so split renders plainly.
 globalThis.__rcTv = {get pointers() { return pointers; }, get race() { return race; }, get split() { return split; }, get splitOn() { return splitOn; }};
-function renderSplit() {
+function renderSplit(sc = scene) {
   if (split?.solo) {
     const cam = split.solo === 1 ? camera : camera2,
       keep = cam.aspect;
     cam.aspect = innerWidth / innerHeight;
     cam.updateProjectionMatrix();
-    renderer.render(scene, cam);
+    renderer.render(sc, cam);
     cam.aspect = keep;
     cam.updateProjectionMatrix();
     return;
@@ -1521,7 +1530,7 @@ function renderSplit() {
     cam.updateProjectionMatrix();
     renderer.setViewport(x, 0, half, h);
     renderer.setScissor(x, 0, half, h);
-    renderer.render(scene, cam);
+    renderer.render(sc, cam);
   }
   renderer.setScissorTest(false);
   renderer.setViewport(0, 0, w, h);
@@ -5872,6 +5881,85 @@ const menuPad = createMenuPad({
   }
 });
 const frameMs = [];
+dreams = attachDreams({
+  scene,
+  renderer,
+  camera,
+  camera2,
+  audio,
+  telemetry,
+  coinsEl: $('dream-coins'),
+  wakeEl: $('wake'),
+  rideHeight: () => rideHeight(s.car.params),
+  poseRobot: poseRobotBody,
+  snapshot() {
+    const yaw = readout(s).yaw;
+    const list = [
+      {
+        id: 'p1',
+        pos: form === 'robot' && robot ? [...robot.pos] : [...s.car.pos],
+        yaw: form === 'robot' && robot ? robot.yaw : yaw,
+        vel: form === 'robot' && robot ? [...robot.vel] : [...s.car.vel],
+        form,
+        carPos: [...s.car.pos],
+        carYaw: yaw,
+        carVel: [...s.car.vel]
+      }
+    ];
+    if (split && race.rivals[0]) {
+      const c = race.rivals[0].session.car,
+        y2 = carYaw(c);
+      list.push({
+        id: 'p2',
+        pos: [...c.pos],
+        yaw: y2,
+        vel: [...c.vel],
+        form: split.p2Form === 'board' ? 'board' : 'car',
+        carPos: [...c.pos],
+        carYaw: y2,
+        carVel: [...c.vel]
+      });
+    }
+    return list;
+  },
+  visuals() {
+    const list = [];
+    if (form === 'robot' && robotBody) list.push({mesh: robotBody, kind: 'robot'});
+    else if (form === 'board' && boardRider) list.push({mesh: boardRider, kind: 'board'});
+    else list.push({mesh: car, kind: 'car'});
+    if (dreams.active() && (dreams.wantsSplit() || split) && race.rivals[0] && rivalVis[0]) {
+      if (split?.p2Form === 'board' && p2BoardRider) list.push({mesh: p2BoardRider, kind: 'board'});
+      else list.push({mesh: rivalVis[0].group, kind: 'car'});
+    }
+    return list;
+  },
+  park(stored) {
+    const [a, b] = stored ?? [];
+    if (a) {
+      if (form === 'robot' && robot) {
+        robot.pos[0] = a.pos[0];
+        robot.pos[1] = a.pos[1];
+        robot.pos[2] = a.pos[2];
+        robot.yaw = a.yaw;
+        robot.vel[0] = robot.vel[1] = robot.vel[2] = 0;
+      }
+      const pos = a.form === 'robot' ? a.carPos : a.pos;
+      s.car.pos[0] = pos[0];
+      s.car.pos[1] = pos[1];
+      s.car.pos[2] = pos[2];
+      s.car.vel[0] = s.car.vel[1] = s.car.vel[2] = 0;
+      s.car.ang[0] = s.car.ang[1] = s.car.ang[2] = 0;
+    }
+    if (b && race.rivals[0]) {
+      const c = race.rivals[0].session.car;
+      c.pos[0] = b.pos[0];
+      c.pos[1] = b.pos[1];
+      c.pos[2] = b.pos[2];
+      c.vel[0] = c.vel[1] = c.vel[2] = 0;
+      c.ang[0] = c.ang[1] = c.ang[2] = 0;
+    }
+  }
+});
 function frame(now) {
   // Two presented frames stay on the establishing shot so a leftover driver stall does not
   // move the camera. The glide, the session, and adaptive resolution start after that.
@@ -5897,7 +5985,7 @@ function frame(now) {
     started,
     p1Robot: !!robot,
     p2Robot: split?.p2Form === 'robot' && !!p2Robot
-  });
+  }) || !!dreams?.wantsSplit();
   {
     const rv = splitOn ? race.rivals[0] : null,
       p2Gp = split ? allPads[split.pad] : null;
@@ -6021,11 +6109,39 @@ function frame(now) {
     acc = 0;
   }
   if (!paused && !ui.panel() && countdown <= 0 && (!openWorld || openWorld.stream.ready(s.car.pos))) {
+    const dreamInput = () => {
+      const clamp = v => Math.max(-1, Math.min(1, v)),
+        d = drivingInput(keys, {
+          ...pad,
+          steer: touchState.steer || pad.steer,
+          throttle: touchState.throttle || pad.throttle,
+          brake: touchState.brake || pad.brake
+        });
+      return [
+        {move: clamp((d.steer || 0) + (d.throttle || 0)), jump: keys.has('Space') || !!(pad.fire || hopQueued)},
+        pad2 ? {move: clamp((pad2.steer || 0) + (pad2.throttle || 0)), jump: !!pad2.fire} : {move: 0, jump: false}
+      ];
+    };
+    dreams.frame(dt, dreamInput(), {
+      paused: false,
+      search: location.search,
+      positions: [
+        form === 'robot' && robot ? robot.pos : s.car.pos,
+        split && race.rivals[0] ? race.rivals[0].session.car.pos : null
+      ].filter(Boolean)
+    });
     $('countdown').hidden = countdown <= -0.6;
     if (countdown > -0.6) countdown -= dt;
     acc += dt;
     prof.simStart = performance.now();
     while (acc >= 1 / 120) {
+      if (dreams.ownsSim()) {
+        dreams.substep(1 / 120, dreamInput());
+        fireQueued = false;
+        hopQueued = false;
+        acc -= 1 / 120;
+        continue;
+      }
       const drive = drivingInput(keys, {
           ...pad,
           steer: touchState.steer || pad.steer,
@@ -6944,9 +7060,20 @@ function frame(now) {
   drawMap();
   if (splitOn && rivalVis[0] && (split?.p2Form === 'board' || split?.p2Form === 'robot'))
     rivalVis[0].group.visible = false;
+  dreams.present(dt);
+  const dreamScene = dreams.scene();
   ((prof.renderStart = performance.now()),
     renderer.info.reset(),
-    splitOn ? renderSplit() : polish ? polish.render() : renderer.render(scene, camera),
+    dreamScene
+      ? splitOn
+        ? renderSplit(dreamScene)
+        : renderer.render(dreamScene, camera)
+      : splitOn
+        ? renderSplit()
+        : polish
+          ? polish.render()
+          : renderer.render(scene, camera),
+    dreams.ripple(),
     (prof.calls += renderer.info.render.calls),
     (prof.tris += renderer.info.render.triangles),
     prof.add(performance.now() - prof.renderStart, prof.renderStart - (prof.simStart ?? prof.renderStart)));
