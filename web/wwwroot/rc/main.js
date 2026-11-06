@@ -97,6 +97,7 @@ import {createCup, loadCup, saveCup, recordCupRace, nextCupEvent, cupStandings} 
 import {createRaceMenu, CUP_COURSES} from './race-menu.js';
 import {createAlienMarshal} from './alien-marshal.js';
 import {createGamepadInput} from './gamepad.mjs';
+import {splitScreenOn, toggleP2SkateForm, rivalHumanInput} from './split-p2.mjs';
 import {createMenuPad} from './gamepad-menu.mjs';
 import {padSvg, padKind} from './pad-art.mjs';
 import {createCoach} from './coach.mjs';
@@ -2497,6 +2498,7 @@ let punchQueued = false,
   robot = null,
   robotBody = null,
   boardRider = null,
+  p2BoardRider = null,
   form = 'car',
   burning = false,
   boostOn = false,
@@ -4959,7 +4961,8 @@ let coachLast = 0,
 // Player 1's pad: left face (X / Y) morphs car → walk → skate, LB / L flies and lands, the top
 // face presses the on-screen Go-in/Skate button when it shows (boost otherwise). They go
 // through the same key handlers the keyboard uses (T, Return), so every rule still applies.
-const padHeld = {};
+const padHeld = {},
+  p2PadHeld = {};
 let useClicked = false;
 const tapKey = code => {
   canvas.dispatchEvent(new KeyboardEvent('keydown', {code, key: code, bubbles: true}));
@@ -4980,7 +4983,19 @@ function useButton(all) {
     btn.click();
     useClicked = true;
   }
+  if (split && started && race.rivals[0] && split.pad != null) {
+    const gp2 = all[split.pad],
+      p2Edge = i => {
+        const down = gp2?.connected && (gp2.buttons[i]?.value ?? 0) > 0.5,
+          hit = down && !p2PadHeld[i];
+        p2PadHeld[i] = down;
+        return hit && !paused && !ui.panel();
+      };
+    if (p2Edge(2)) p2ToggleMorph();
+    if (p2Edge(4)) p2ToggleFlight();
+  }
   formBar(all);
+  formBarP2(all);
   const gp = all[p1Last];
   if (!gp || btn.hidden) return;
   const kind = padKind(gp.id),
@@ -4993,10 +5008,49 @@ function useButton(all) {
 }
 // Player 1's forms, always on screen: the one you're in is lit, with the pad button that
 // changes it (X/Y morph, LB/L fly) drawn as printed on that pad.
-const formEl = Object.assign(document.createElement('div'), {id: 'forms', hidden: true});
+const formEl = Object.assign(document.createElement('div'), {id: 'forms', hidden: true}),
+  formEl2 = Object.assign(document.createElement('div'), {id: 'forms-p2', hidden: true});
 formEl.setAttribute('aria-label', 'Change: car, walk, skate, fly');
-document.body.append(formEl);
-let formKey = '';
+formEl2.setAttribute('aria-label', 'Player 2: car, skate, fly');
+document.body.append(formEl, formEl2);
+let formKey = '',
+  formKey2 = '';
+function p2ToggleFlight() {
+  const rv = race.rivals[0];
+  if (!rv || !race.roam || split?.p2Form === 'board' || adventure?.underground(s.car.pos)) return;
+  const rs = rv.session,
+    was = rs.flight.mode,
+    m = toggleFlight(rs.flight, rs.car, {roam: true});
+  if (m !== was) audio.boost();
+}
+function p2ToggleMorph() {
+  const rv = race.rivals[0];
+  if (!split || !rv || !race.roam || rv.session.flight.mode) return;
+  // TODO: P2 robot walk needs its own controller; car ↔ board only.
+  split.p2Form = toggleP2SkateForm(split.p2Form ?? 'car');
+  const rs = rv.session,
+    r = readout(rs),
+    paint = openWorld?.progress?.paint ?? '#4fb3ff';
+  if (split.p2Form === 'board') {
+    split.p2CarParams = rs.car.params;
+    const p = vehicleParams('board'),
+      pos = [...rs.car.pos];
+    pos[1] += rideHeight(p) - rideHeight(rs.car.params) + 0.02;
+    Object.assign(rs.car, createCar(p, pos, r.yaw));
+    if (!p2BoardRider) {
+      p2BoardRider = makeBoardRider(paint);
+      scene.add(p2BoardRider);
+    }
+    p2BoardRider.visible = true;
+  } else {
+    const p = split.p2CarParams ?? rs.car.params,
+      pos = [...rs.car.pos];
+    pos[1] += rideHeight(p) - rideHeight(rs.car.params) + 0.02;
+    Object.assign(rs.car, createCar(p, pos, r.yaw));
+    if (p2BoardRider) p2BoardRider.visible = false;
+  }
+  audio.pickup();
+}
 function formBar(all) {
   const gp = all[p1Last];
   formEl.hidden = !gp || !started || !race.roam || !!ui.panel();
@@ -5013,16 +5067,35 @@ function formBar(all) {
     f = (k, icon) => `<span class="form${k === now ? ' on' : ''}">${icon}</span>`;
   formEl.innerHTML = `${morph}${f('car', '🚗')}${f('walk', '🚶')}${f('skate', '🛹')}<i></i>${fly}${f('fly', '✈️')}`;
 }
+function formBarP2(all) {
+  const gp = split ? all[split.pad] : null,
+    rv = race.rivals[0];
+  formEl2.hidden = !gp || !started || !race.roam || !splitOn || !rv || !!ui.panel();
+  if (formEl2.hidden) return;
+  const kind = padKind(gp.id),
+    now = rv.session.flight.mode ? 'fly' : split.p2Form === 'board' ? 'skate' : 'car',
+    key = kind + now;
+  if (key === formKey2) return;
+  formKey2 = key;
+  const cap = (t, cls) => `<kbd class="cap ${cls}" data-pad="${kind}">${t}</kbd>`,
+    morph = kind === 'sn30' ? cap('Y', 'face') : cap('X', 'face'),
+    fly = kind === 'sn30' ? cap('L', 'bump') : cap('LB', 'bump'),
+    f = (k, icon) => `<span class="form${k === now ? ' on' : ''}">${icon}</span>`;
+  formEl2.innerHTML = `${morph}${f('car', '🚗')}${f('skate', '🛹')}<i></i>${fly}${f('fly', '✈️')}`;
+}
 function coachFrame(all, p1, p2, now) {
   const dt = coachLast ? Math.min(0.1, (now - coachLast) / 1000) : 0;
   coachLast = now;
   const live = all.filter(p => p?.connected),
     busy = p => p.buttons.some(b => b.value > 0.5) || p.axes.some(a => Math.abs(a) > 0.3);
   for (const p of live) if (p.index !== split?.pad && busy(p)) p1Last = p.index;
-  const driving = started && !paused && !ui.panel() && !robot && !skate && !s.flight.mode,
+  const p1Drive = started && !paused && !ui.panel() && !robot && !skate && !s.flight.mode,
+    rv0 = race.rivals[0],
+    p2Drive =
+      started && !paused && !ui.panel() && splitOn && rv0 && !rv0.session.flight.mode && split?.p2Form !== 'board',
     players = [
-      {pad: all[p1Last] ?? live.find(p => p.index !== split?.pad), input: p1, speed: readout(s).speed, on: driving},
-      {pad: splitOn ? all[split.pad] : null, input: p2, speed: splitOn ? readout(race.rivals[0].session).speed : 0, on: driving && splitOn}
+      {pad: all[p1Last] ?? live.find(p => p.index !== split?.pad), input: p1, speed: readout(s).speed, on: p1Drive},
+      {pad: splitOn ? all[split.pad] : null, input: p2, speed: splitOn ? readout(rv0.session).speed : 0, on: p2Drive}
     ],
     draw = now - coachDrawn > 66;
   if (draw) coachDrawn = now;
@@ -5035,7 +5108,7 @@ function coachFrame(all, p1, p2, now) {
     el.classList.toggle('right', i === 1);
     if (c.show && draw) {
       const pressed = new Set(gp.buttons.flatMap((b, k) => (b.value > 0.5 ? [k] : [])));
-      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 440, skip: i === 1 ? ['MORPH', 'FLY'] : []});
+      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 440, skip: []});
     }
   });
 }
@@ -5240,7 +5313,7 @@ function splitInput(all, now) {
   if (!split && started && p1Pad != null && race.rivals.length)
     for (const i of starts)
       if (i !== p1Pad && !startHeld.has(i)) {
-        split = {pad: i, heading: null, placed: false, fire: false};
+        split = {pad: i, heading: null, placed: false, fire: false, p2Form: 'car'};
         callout('Player 2 joined!', 3000);
         telemetry.choice?.('split', 'join');
       }
@@ -5255,7 +5328,7 @@ function splitInput(all, now) {
       two = live.find(p => p.index !== one);
     if (two) {
       p1Pad = one;
-      split = {pad: two.index, heading: null, placed: false, fire: false};
+      split = {pad: two.index, heading: null, placed: false, fire: false, p2Form: 'car'};
       try {
         localStorage.setItem('guns-only.rc.tv.p1', all[one]?.id ?? '');
       } catch {}
@@ -5317,18 +5390,27 @@ function frame(now) {
     audio.start();
   const allPads = Array.from(navigator.getGamepads?.() ?? []),
     {p1: pad, p2: pad2} = splitInput(allPads, now);
-  splitOn = !!split && !robot && !skate && !s.flight.mode && !!race.rivals[0] && started;
+  splitOn = splitScreenOn({split, rival: race.rivals[0], started, p1Robot: !!robot});
   {
-    const rv = splitOn ? race.rivals[0] : null;
+    const rv = splitOn ? race.rivals[0] : null,
+      p2Gp = split ? allPads[split.pad] : null;
     for (const x of race.rivals) if (x !== rv && x.human) delete x.human;
     if (rv) {
       rv.human = () => {
         const f = split?.fire;
         if (split) split.fire = false;
         const tb = tag.on && tag.it === 2 && !tag.resultLeft ? TAG.itBoost : 1;
-        return paused || ui.panel()
-          ? {throttle: 0, steer: 0, brake: true}
-          : {throttle: pad2.throttle, steer: pad2.steer, brake: pad2.brake, drift: pad2.drift, fire: !!f, boost: tb};
+        return rivalHumanInput({
+          paused,
+          uiPanel: !!ui.panel(),
+          pad2: pad2 ?? {throttle: 0, steer: 0, brake: false, drift: false, boost: false},
+          gp: p2Gp,
+          mode,
+          session: rv.session,
+          fire: f,
+          tagBoost: tb,
+          p2Form: split?.p2Form ?? 'car'
+        });
       };
       // Keep the two cars together: the world only streams around player 1.
       const a = s.car.pos,
@@ -6029,9 +6111,16 @@ function frame(now) {
   if (openWorld) deliveryFrame(dt, now);
   syncRivals();
   race.rivals.forEach((rv, i) => {
-    poseCar(rivalVis[i].group, rivalVis[i].wheels, rv.session.car);
+    const p2Board = splitOn && i === 0 && split?.p2Form === 'board';
+    if (!p2Board) poseCar(rivalVis[i].group, rivalVis[i].wheels, rv.session.car);
     rivalLod(rivalVis[i], rv.session.car, splitOn && i === 0 ? rv.session.car : c);
+    if (p2Board) rivalVis[i].group.visible = false;
   });
+  if (splitOn && split?.p2Form === 'board' && p2BoardRider && race.rivals[0]) {
+    const rc = race.rivals[0].session.car;
+    p2BoardRider.visible = true;
+    poseBoardRider(p2BoardRider, rc, rc.steer / 0.42, null);
+  } else if (p2BoardRider?.visible) p2BoardRider.visible = false;
   // Low chase camera behind the heading; pulled in front of any wall between it and the car.
   if (cameraCar)
     camera.position.add(new T.Vector3(r.x - cameraCar[0], r.y - cameraCar[1], r.z - cameraCar[2]));
@@ -6138,7 +6227,8 @@ function frame(now) {
   }
   camera.lookAt(target);
   if (splitOn) {
-    const r2 = readout(race.rivals[0].session),
+    const rs2 = race.rivals[0].session,
+      r2 = readout(rs2),
       d = split.heading == null ? 0 : Math.atan2(Math.sin(r2.yaw - split.heading), Math.cos(r2.yaw - split.heading));
     split.heading = split.heading == null ? r2.yaw : split.heading + d * Math.min(1, dt * 4);
     const back = 1.36 + Math.min(0.24, r2.speed * 0.015),
@@ -6158,8 +6248,18 @@ function frame(now) {
     else camera2.position.lerp(desired2, 1 - Math.exp(-dt * 7));
     camera2.fov = 60 + Math.min(5, r2.speed * 0.3);
     target2.set(r2.x + Math.sin(split.heading) * 1.05, r2.y + 0.18, r2.z - Math.cos(split.heading) * 1.05);
+    if (rs2.flight.mode === 'fly') {
+      const c2 = rs2.car,
+        q = new T.Quaternion(c2.q[0], c2.q[1], c2.q[2], c2.q[3]),
+        fw = new T.Vector3(0, 0, -1).applyQuaternion(q),
+        cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
+      desired2.set(r2.x, r2.y, r2.z).addScaledVector(fw, -2.3).addScaledVector(cu, 0.55);
+      camera2.position.lerp(desired2, 1 - Math.exp(-dt * 9));
+      camera2.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
+      target2.set(r2.x, r2.y, r2.z).addScaledVector(fw, 3);
+    } else camera2.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
     camera2.lookAt(target2);
-    p2Hud.textContent = `P2 · ${Math.round(r2.speed * 3.6)} km/h`;
+    p2Hud.textContent = `P2 · ${Math.round((rs2.flight.mode ? rs2.flight.speed : r2.speed) * 3.6)} km/h`;
   }
   p2Hud.hidden = splitLine.hidden = !splitOn;
   document.body.classList.toggle('split', splitOn);
