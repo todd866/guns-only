@@ -163,6 +163,7 @@ import {
   setupPolish
 } from './visuals.js';
 import {SoundKit} from './audio.js';
+import {nextStep, readStep, STORAGE} from './audio-mix.mjs';
 import {JET_KINDS, fitJetShell, paintNoseArt, artTier, NOSE_ART} from './jets.js';
 import {createRCTelemetry} from './telemetry.mjs';
 import {resultPanel, bindResultPanel, ordinal} from './result-panel.mjs';
@@ -1259,6 +1260,37 @@ function setMuted(m, report = true) {
 $('mute').onclick = () => setMuted(!muted);
 $('menu-mute').onclick = () => setMuted(!muted);
 setMuted(muted, false);
+// Effects and Engine: off / low / normal, remembered here. The header mute still silences both.
+let effectsStep = 'normal',
+  engineStep = 'normal';
+try {
+  effectsStep = readStep(localStorage.getItem(STORAGE.effects));
+  engineStep = readStep(localStorage.getItem(STORAGE.engine));
+} catch {}
+function paintSound() {
+  for (const [id, step, name] of [
+    ['sound-effects', effectsStep, 'Effects'],
+    ['sound-engine', engineStep, 'Engine']
+  ]) {
+    const el = $(id);
+    el.dataset.step = step;
+    el.querySelector('.sound-val').textContent = step;
+    el.setAttribute('aria-label', `${name} volume ${step}`);
+  }
+  audio.setMix({effects: effectsStep, engine: engineStep});
+}
+function cycleSound(which) {
+  if (which === 'effects') effectsStep = nextStep(effectsStep);
+  else engineStep = nextStep(engineStep);
+  try {
+    localStorage.setItem(STORAGE.effects, effectsStep);
+    localStorage.setItem(STORAGE.engine, engineStep);
+  } catch {}
+  paintSound();
+}
+$('sound-effects').onclick = () => cycleSound('effects');
+$('sound-engine').onclick = () => cycleSound('engine');
+paintSound();
 function exit() {
   telemetry.raceQuit('exit');
   telemetry.endSession();
@@ -4887,9 +4919,9 @@ function labLook() {
 function labSounds(cues) {
   for (const c of cues) {
     if (c === 'beep' || c === 'go') audio.beep(c === 'go');
-    else if (c === 'hum') audio.tone(62, 0, 0.42, {type: 'sine', level: 0.07, glide: 96, wet: 0.4});
-    else if (c === 'alarm') audio.tone(740, 0, 0.14, {type: 'square', level: 0.045, cutoff: 1700});
-    else if (c === 'spark') audio.tone(170, 0, 0.05, {type: 'sawtooth', level: 0.05, glide: 42});
+    // The beam's 'hum' cue is not played: no hums or drones.
+    else if (c === 'alarm') audio.tone(740, 0, 0.12, {type: 'square', level: 0.04, cutoff: 1400});
+    else if (c === 'spark') audio.tone(180, 0, 0.05, {type: 'triangle', level: 0.05, glide: 90});
   }
 }
 function labCallout(text) {
@@ -6561,21 +6593,47 @@ function frame(now) {
     if (g && g.id !== lastGrind) audio.landing(2.5);
     lastGrind = g?.id ?? null;
   }
-  audio.update({
-    speed: r.speed,
-    throttle: lastThrottle,
-    slip: c.wheels.filter(w => w.slip).length / 4,
-    surface: c.wheels.find(w => w.surface)?.surface,
-    paused: paused || countdown > 0,
-    body:
-      toyDino?.visible || riggedDino?.root.visible
-        ? 'dino'
-        : robot
-          ? 'robot'
-          : form === 'board'
-            ? 'board'
-            : 'car'
-  });
+  {
+    const p1body =
+        toyDino?.visible || riggedDino?.root.visible
+          ? 'dino'
+          : robot
+            ? 'robot'
+            : form === 'board'
+              ? 'board'
+              : 'car',
+      showSplit = splitOn && !split?.solo,
+      players = [
+        {
+          speed: r.speed,
+          throttle: lastThrottle,
+          slip: c.wheels.filter(w => w.slip).length / 4,
+          body: p1body,
+          seat: 0,
+          split: showSplit
+        }
+      ];
+    if (showSplit && race.rivals[0]) {
+      const c2 = race.rivals[0].session.car;
+      players.push({
+        speed: Math.hypot(c2.vel?.[0] ?? 0, c2.vel?.[2] ?? 0),
+        throttle: pad2?.throttle ?? 0,
+        slip: (c2.wheels?.filter(w => w.slip).length ?? 0) / 4,
+        body: split?.p2Form === 'robot' ? 'robot' : split?.p2Form === 'board' ? 'board' : 'car',
+        seat: 1,
+        split: true
+      });
+    }
+    audio.update({
+      speed: r.speed,
+      throttle: lastThrottle,
+      slip: players[0].slip,
+      surface: c.wheels.find(w => w.surface)?.surface,
+      paused: paused || countdown > 0,
+      body: p1body,
+      players
+    });
+  }
   dinoSounds(dt);
   footSounds();
   if (openWorld?.chickens && !paused)
