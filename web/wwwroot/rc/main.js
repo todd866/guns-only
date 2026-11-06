@@ -117,6 +117,7 @@ import {createMenuPad} from './gamepad-menu.mjs';
 import {padSvg, padKind} from './pad-art.mjs';
 import {createCoach} from './coach.mjs';
 import {createTag, setTagOn, stepTag, TAG, hudLine, resultHead, resultStats, tagTelemetry} from './tag.mjs';
+import {createHunt, setHuntOn, stepHunt, collect as collectHunt, hudLine as huntHudLine, resultHead as huntResultHead, resultStats as huntResultStats, huntTelemetry} from './hunt.mjs';
 import {createTeamRace, teamCard, p2LapChip} from './team-race.mjs';
 import {joinPadIndex, joinCardVisible, menuPlayersButton, joinHideUntilAfterLeave} from './join.mjs';
 import {frameSeconds, cameraGlide} from './frame-time.mjs';
@@ -1110,19 +1111,67 @@ tagResult.innerHTML = '<div class="tag-card"><h2></h2><p></p></div>';
 document.body.append(tagResult);
 const tagHead = tagResult.querySelector('h2'),
   tagStats = tagResult.querySelector('p');
+const hunt = createHunt(),
+  huntHud = [0, 1].map(i => {
+    const el = Object.assign(document.createElement('div'), {className: `hunt-chip ${i ? 'right' : 'left'}`, hidden: true});
+    document.body.append(el);
+    return el;
+  }),
+  huntResult = Object.assign(document.createElement('div'), {id: 'hunt-result', hidden: true}),
+  huntCard = Object.assign(document.createElement('div'), {className: 'hunt-card'}),
+  huntHead = document.createElement('h2'),
+  huntStats = document.createElement('p');
+huntCard.append(huntHead, huntStats);
+huntResult.append(huntCard);
+document.body.append(huntResult);
+function paintHunt() {
+  const showResult = hunt.on && hunt.resultLeft > 0;
+  huntResult.hidden = !showResult;
+  if (showResult) {
+    huntHead.textContent = huntResultHead(hunt);
+    huntStats.textContent = huntResultStats(hunt).join(' · ');
+  }
+  const line = huntHudLine(hunt);
+  for (const el of huntHud) {
+    el.hidden = !line;
+    el.textContent = line;
+  }
+}
 $('menu-tag').onclick = () => {
   setTagOn(tag, !tag.on);
   $('menu-tag').setAttribute('aria-pressed', String(tag.on));
   if (tag.on) {
     team.on = false;
+    if (hunt.on) {
+      setHuntOn(hunt, false);
+      $('menu-hunt').setAttribute('aria-pressed', 'false');
+      paintHunt();
+    }
     callout('🏷️ Tag! Least IT time wins', 2800);
   }
+};
+$('menu-hunt').onclick = () => {
+  setHuntOn(hunt, !hunt.on);
+  $('menu-hunt').setAttribute('aria-pressed', String(hunt.on));
+  if (hunt.on) {
+    if (tag.on) {
+      setTagOn(tag, false);
+      $('menu-tag').setAttribute('aria-pressed', 'false');
+    }
+    team.on = false;
+  }
+  paintHunt();
 };
 $('menu-team').onclick = () => {
   if (!splitOn || !race.rivals.length || !raceReady()) return;
   if (tag.on) {
     setTagOn(tag, false);
     $('menu-tag').setAttribute('aria-pressed', 'false');
+  }
+  if (hunt.on) {
+    setHuntOn(hunt, false);
+    $('menu-hunt').setAttribute('aria-pressed', 'false');
+    paintHunt();
   }
   telemetry.firstInput('button');
   audio.start();
@@ -5621,6 +5670,26 @@ function findWarp(all, now) {
     warpHeld[i] = down;
   });
 }
+function huntFrame(dt) {
+  const menu = $('menu-hunt');
+  if (menu.hidden === splitOn) menu.hidden = !splitOn;
+  if (!splitOn) {
+    if (hunt.on) {
+      setHuntOn(hunt, false);
+      menu.setAttribute('aria-pressed', 'false');
+    }
+    huntHud.forEach(el => (el.hidden = true));
+    huntResult.hidden = true;
+    return;
+  }
+  if (!hunt.on) {
+    huntHud.forEach(el => (el.hidden = true));
+    huntResult.hidden = true;
+    return;
+  }
+  stepHunt(hunt, dt, paused || ui.panel());
+  paintHunt();
+}
 function tagFrame(dt) {
   const menu = $('menu-tag');
   if (menu.hidden === splitOn) menu.hidden = !splitOn;
@@ -5745,11 +5814,12 @@ const padLog = (() => {
             })()
           : null,
         p1Pad,
-        covering: ['#brief', '#result', '.overlay', '#intro', '#tag-result', '#coach1', '#coach2', '#keys-panel', '#join-card']
+        covering: ['#brief', '#result', '.overlay', '#intro', '#tag-result', '#hunt-result', '#coach1', '#coach2', '#keys-panel', '#join-card']
           .flatMap(q => [...document.querySelectorAll(q)])
           .filter(el => !el.hidden && el.offsetParent !== null)
           .map(el => el.id || el.className),
         tag: tagTelemetry(tag),
+        hunt: huntTelemetry(hunt),
         place: openWorld ? nearestLocation(s.car.pos).short : null, speed: Math.round(Math.hypot(...(s.car.vel ?? [0, 0, 0])) * 3.6), who
       }));
     acc.clear();
@@ -5903,6 +5973,7 @@ function frame(now) {
   }
   last = now;
   tagFrame(dt);
+  huntFrame(dt);
   teamFrame();
   if (!paused && !ui.panel() && countdown > 0) {
     countdown -= dt;
@@ -6385,8 +6456,17 @@ function frame(now) {
         audio.radio();
         callout(f.zoo === 'sign' ? `🐾 ${f.text}` : `✈️ ${f.name} · ${f.text}`, 5500);
       }
-      const splats = openWorld.seasonStep(c.pos, c.vel, now / 1000);
+      const smashers = [[1, c]];
+      if (splitOn && race.rivals[0]?.session?.car) smashers.push([2, race.rivals[0].session.car]);
+      const splats = [];
+      for (const [player, car] of smashers) {
+        const hits = openWorld.seasonStep(car.pos, car.vel, now / 1000);
+        if (!hits.length) continue;
+        splats.push(...hits);
+        collectHunt(hunt, player, hits.length);
+      }
       if (splats.length) {
+        paintHunt();
         pumpkinsSmashed += splats.length;
         audio.splat();
         const pr = openWorld.progress,
