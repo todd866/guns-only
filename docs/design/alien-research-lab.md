@@ -149,7 +149,13 @@ In RC Odyssey (kid version, same heart):
   - it replays your own runs as ghosts and remixes them into a race against yourself;
   - a memory of the past world (dinosaurs, western town) flickers through the corridors before
     the Seam has even opened;
-  - paint-swap worlds: everything turns crayon, chalk, Lego or a cardboard model.
+  - paint-swap worlds: everything turns crayon, chalk, Lego or a cardboard model;
+  - **the platformer dream** (Ian, 6 Nov 2026): the camera swings side-on and the world flattens
+    into a 2.5D platform course of floating blocks, moving platforms, springs, collapsing
+    bridges, coins and power-up mushrooms, with a flag-and-fanfare finish. The robot runs and
+    jumps; the car bounces and wall-jumps. Courses are short (60–90 s), built from a tile
+    kit, and STILLWATER keeps dreaming new ones. In split screen both players run the same
+    course side by side. This is the first dream to build.
   Every dream ends with a hum and a ripple back to the real lab, and each one is a self-contained
   bite-size level, so the dream set can grow forever without touching the main map.
   Tech: a "dream" is a scene swap plus a post-process wobble at entry and exit (scanline ripple,
