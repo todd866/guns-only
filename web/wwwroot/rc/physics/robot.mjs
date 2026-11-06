@@ -79,10 +79,13 @@ export function stepRobot(r, input = {}, world, dt = 1 / 120) {
       mz = input.move.z || 0,
       mag = Math.min(1, Math.hypot(mx, mz));
     throttle = mag;
-    if (mag > 0.05) {
+    if (mag > 0) {
       const wantYaw = Math.atan2(mx, -mz),
-        d = Math.atan2(Math.sin(wantYaw - r.yaw), Math.cos(wantYaw - r.yaw));
-      r.yaw += Math.max(-12 * dt, Math.min(12 * dt, d));
+        d = Math.atan2(Math.sin(wantYaw - r.yaw), Math.cos(wantYaw - r.yaw)),
+        // Same cap as the old throttle/steer walk (ROBOT.turn), scaled by how far the stick is.
+        // A full stick turns at 3.2 rad/s. The 12 rad/s snap made a resting thumb whirl the toy.
+        rate = ROBOT.turn * mag;
+      r.yaw += Math.max(-rate * dt, Math.min(rate * dt, d));
       wish = [mx / mag, 0, mz / mag];
     }
   } else r.yaw += steer * ROBOT.turn * dt * (throttle < 0 ? -1 : 1);

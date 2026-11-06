@@ -3,12 +3,16 @@
 // axes 0/1 left stick, 2/3 right stick.
 // The left stick is never both steering and throttle. Where RT is the throttle,
 // pushing the stick up does nothing to the speed.
+import {applyFeel} from './control-feel.mjs';
+
 export const STICK_DEAD = 0.15;
 
 export function stickAxis(v) {
   v = Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
   return Math.abs(v) < STICK_DEAD ? 0 : (Math.sign(v) * (Math.abs(v) - STICK_DEAD)) / (1 - STICK_DEAD);
 }
+
+const clampAxis = v => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
 
 // plane / gunship / chopper / chute share the arcade row: stick up climbs, shoulders yaw.
 export function normalizeForm(form) {
@@ -28,12 +32,18 @@ const down = (p, i) => button(p, i) > 0.5;
  * Right stick Y is positive when the stick is pushed up: look up, no inversion.
  * Flight pitch is positive for nose up. Stick up climbs; invert is applied later.
  */
-export function mapPad(form, p) {
+export function mapPad(form, p, feel) {
   const f = normalizeForm(form),
-    lx = stickAxis(p?.axes?.[0]),
-    ly = stickAxis(-(p?.axes?.[1] ?? 0)),
-    rx = stickAxis(p?.axes?.[2]),
-    ry = stickAxis(-(p?.axes?.[3] ?? 0)),
+    raw = {
+      lx: clampAxis(p?.axes?.[0]),
+      ly: clampAxis(-(p?.axes?.[1] ?? 0)),
+      rx: clampAxis(p?.axes?.[2]),
+      ry: clampAxis(-(p?.axes?.[3] ?? 0))
+    },
+    lx = stickAxis(raw.lx),
+    ly = stickAxis(raw.ly),
+    rx = stickAxis(raw.rx),
+    ry = stickAxis(raw.ry),
     rt = button(p, 7),
     lt = button(p, 6),
     air = f === 'fly' || f === 'chopper',
@@ -75,7 +85,7 @@ export function mapPad(form, p) {
     out.punch = down(p, 2);
     out.boostHeld = down(p, 3);
     out.sprint = down(p, 10);
-    return out;
+    return applyFeel(out, raw, feel);
   }
   if (f === 'chopper' || f === 'fly') {
     // Stick up climbs. LB/RB are fine yaw, not roll and not take-off. A flies up, Y loops, B lands.
@@ -87,7 +97,7 @@ export function mapPad(form, p) {
     out.jumpHeld = down(p, 0);
     out.loopHeld = down(p, 3);
     out.boostHeld = down(p, 2);
-    return out;
+    return applyFeel(out, raw, feel);
   }
   // Car and skateboard: left stick steers only. RT goes, LT brakes then reverses.
   out.steer = lx;
@@ -95,7 +105,7 @@ export function mapPad(form, p) {
   out.drift = down(p, 3) || down(p, 5);
   out.jumpHeld = !air && down(p, 0);
   out.boostHeld = down(p, 2);
-  return out;
+  return applyFeel(out, raw, feel);
 }
 
 /** Left stick into a world XZ move, relative to the camera's yaw (the way it is looking). */
@@ -183,43 +193,48 @@ export function createGamepadInput() {
     map = false,
     recentre = false;
   const seen = new Set();
-  return (pads, form = 'car') => {
+  return (pads, form = 'car', feel) => {
     const live = Array.from(pads ?? []).filter(p => p?.connected),
-      all = live.map(p => mapPad(form, p)),
+      all = live.map(p => mapPad(form, p, feel)),
       fresh = live.find(p => !seen.has(p.id) && busy(p));
     if (fresh) seen.add(fresh.id);
     if (!all.length) {
       fire = start = boost = jump = morph = map = recentre = false;
       return {...IDLE};
     }
-    const m = all.reduce((a, b) => ({
-      throttle: stronger(a.throttle, b.throttle),
-      steer: stronger(a.steer, b.steer),
-      brake: a.brake || b.brake,
-      drift: a.drift || b.drift,
-      fireHeld: a.fireHeld || b.fireHeld,
-      jumpHeld: a.jumpHeld || b.jumpHeld,
-      boostHeld: a.boostHeld || b.boostHeld,
-      morphHeld: a.morphHeld || b.morphHeld,
-      recentreHeld: a.recentreHeld || b.recentreHeld,
-      pauseHeld: a.pauseHeld || b.pauseHeld,
-      mapHeld: a.mapHeld || b.mapHeld,
-      flyHeld: a.flyHeld || b.flyHeld,
-      lookX: stronger(a.lookX, b.lookX),
-      lookY: stronger(a.lookY, b.lookY),
-      moveX: stronger(a.moveX, b.moveX),
-      moveY: stronger(a.moveY, b.moveY),
-      aim: a.aim || b.aim,
-      sprint: a.sprint || b.sprint,
-      punch: a.punch || b.punch,
-      pitch: stronger(a.pitch, b.pitch),
-      roll: stronger(a.roll, b.roll),
-      yaw: stronger(a.yaw, b.yaw),
-      power: stronger(a.power, b.power),
-      strafe: stronger(a.strafe, b.strafe),
-      climb: stronger(a.climb, b.climb),
-      loopHeld: a.loopHeld || b.loopHeld
-    }));
+    const m = all.reduce((a, b) => {
+      const row = {
+        throttle: stronger(a.throttle, b.throttle),
+        steer: stronger(a.steer, b.steer),
+        brake: a.brake || b.brake,
+        drift: a.drift || b.drift,
+        fireHeld: a.fireHeld || b.fireHeld,
+        jumpHeld: a.jumpHeld || b.jumpHeld,
+        boostHeld: a.boostHeld || b.boostHeld,
+        morphHeld: a.morphHeld || b.morphHeld,
+        recentreHeld: a.recentreHeld || b.recentreHeld,
+        pauseHeld: a.pauseHeld || b.pauseHeld,
+        mapHeld: a.mapHeld || b.mapHeld,
+        flyHeld: a.flyHeld || b.flyHeld,
+        lookX: stronger(a.lookX, b.lookX),
+        lookY: stronger(a.lookY, b.lookY),
+        moveX: stronger(a.moveX, b.moveX),
+        moveY: stronger(a.moveY, b.moveY),
+        aim: a.aim || b.aim,
+        sprint: a.sprint || b.sprint,
+        punch: a.punch || b.punch,
+        pitch: stronger(a.pitch, b.pitch),
+        roll: stronger(a.roll, b.roll),
+        yaw: stronger(a.yaw, b.yaw),
+        power: stronger(a.power, b.power),
+        strafe: stronger(a.strafe, b.strafe),
+        climb: stronger(a.climb, b.climb),
+        loopHeld: a.loopHeld || b.loopHeld
+      };
+      const rate = a.steerRate ?? b.steerRate;
+      if (rate != null) row.steerRate = rate;
+      return row;
+    });
     const out = {
       ...m,
       fire: m.fireHeld && !fire,

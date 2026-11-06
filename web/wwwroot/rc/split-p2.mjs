@@ -17,8 +17,8 @@ export function toggleP2SkateForm(form) {
 }
 
 /** Left stick walks relative to player 2's camera. A (index 0) jumps, X punches and uses. */
-export function p2RobotPad(gp, camYaw = 0) {
-  const m = mapPad('robot', gp),
+export function p2RobotPad(gp, camYaw = 0, feel) {
+  const m = mapPad('robot', gp, feel),
     move = cameraMove(camYaw, m.moveX, m.moveY);
   return {
     move,
@@ -33,9 +33,9 @@ export function p2RobotPad(gp, camYaw = 0) {
 }
 
 /** Left stick climb/turn, triggers throttle, shoulders yaw. Right stick stays the camera. */
-export function flightGamepadInput(gp, poll, mode, {invert = false} = {}) {
+export function flightGamepadInput(gp, poll, mode, {invert = false, feel} = {}) {
   void mode;
-  const m = mapPad('fly', gp),
+  const m = mapPad('fly', gp, feel),
     att = stickAttitude({x: m.roll, y: m.pitch}, {invert});
   return {
     arcade: true,
@@ -49,13 +49,13 @@ export function flightGamepadInput(gp, poll, mode, {invert = false} = {}) {
   };
 }
 
-export function rivalHumanInput({paused, uiPanel, pad2, gp, mode, session, fire, tagBoost, p2Form, invert = false}) {
+export function rivalHumanInput({paused, uiPanel, pad2, gp, mode, session, fire, tagBoost, p2Form, invert = false, feel}) {
   if (paused || uiPanel) return {throttle: 0, steer: 0, brake: true};
   // The walker is its own body. Hold the hidden car so the stick does not drive it.
   if (p2Form === 'robot')
     return {throttle: 0, steer: 0, brake: true, drift: false, fire: false, boost: tagBoost, boardSpin: false};
   const flying = !!session.flight.mode,
-    mapped = mapPad(flying ? 'fly' : p2Form === 'board' ? 'board' : 'car', gp),
+    mapped = mapPad(flying ? 'fly' : p2Form === 'board' ? 'board' : 'car', gp, feel),
     base = {
       throttle: flying ? 0 : (pad2?.throttle ?? mapped.throttle),
       steer: flying ? 0 : (pad2?.steer ?? mapped.steer),
@@ -66,7 +66,7 @@ export function rivalHumanInput({paused, uiPanel, pad2, gp, mode, session, fire,
       boardSpin: p2Form === 'board'
     };
   if (!flying) return base;
-  const fl = flightGamepadInput(gp, pad2, mode, {invert});
+  const fl = flightGamepadInput(gp, pad2, mode, {invert, feel});
   if (session.flight.mode === 'chute') fl.steer = fl.roll || fl.yaw || pad2?.moveX || pad2?.steer || 0;
   return {...base, throttle: 0, brake: false, flight: fl};
 }
