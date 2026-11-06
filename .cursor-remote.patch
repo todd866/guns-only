@@ -1,76 +1,97 @@
 diff --git a/web/wwwroot/rc/audio-mix.mjs b/web/wwwroot/rc/audio-mix.mjs
-index e3bc22ec..0a142be3 100644
+index e3bc22ec..23536a05 100644
 --- a/web/wwwroot/rc/audio-mix.mjs
 +++ b/web/wwwroot/rc/audio-mix.mjs
-@@ -53,6 +53,7 @@ export const MIN_GAP = {
-   call: 1.4,
-   squeal: 0.7,
-   jet: 2.5,
-+  whoosh: 0.1,
-   grind: 0.4
+@@ -43,6 +43,7 @@ export const MIN_GAP = {
+   go: 0.4,
+   robot: 0.45,
+   bugle: 4,
++  arena: 0.32,
+   cloud: 2,
+   'foot-robot': 0.14,
+   'foot-cowboy': 0.16,
+@@ -82,6 +83,7 @@ export const PRIORITY = {
+   go: 22,
+   robot: 18,
+   bugle: 16,
++  arena: 24,
+   radio: 12,
+   cloud: 10
  };
- 
-@@ -71,6 +72,7 @@ export const PRIORITY = {
-   'foot-robot': 44,
-   'foot-cowboy': 44,
-   jet: 42,
-+  whoosh: 40,
-   cluck: 40,
-   grind: 40,
-   gate: 35,
+@@ -89,6 +91,7 @@ export const PRIORITY = {
+ export const VOICE_HOLD = {
+   finish: 1.1,
+   bugle: 3.2,
++  arena: 0.55,
+   radio: 0.28,
+   jet: 0.5,
+   robot: 0.8,
 diff --git a/web/wwwroot/rc/audio.js b/web/wwwroot/rc/audio.js
-index 3f7be574..8559523b 100644
+index 3f7be574..81c639ac 100644
 --- a/web/wwwroot/rc/audio.js
 +++ b/web/wwwroot/rc/audio.js
-@@ -461,6 +461,12 @@ export class SoundKit {
-       q: 0.6
-     });
+@@ -526,6 +526,38 @@ export class SoundKit {
+     if (!this.ready(go ? 'go' : 'beep', go ? MIN_GAP.go : MIN_GAP.beep)) return;
+     this.tone(go ? 880 : 523.25, 0, go ? 0.28 : 0.12, {type: 'triangle', level: 0.06, cutoff: 2000, wet: 0.2, bus: 'ui'});
    }
-+  // Jetpack thrust. Short bursts, gated, so it follows the hold without a second loop.
-+  whoosh(level = 1) {
-+    if (!this.ready('whoosh', MIN_GAP.whoosh)) return;
-+    const s = Math.max(0.35, Math.min(1, level));
-+    this.burst({type: 'bandpass', freq: 420, sweep: 160, dur: 0.12, level: 0.05 * s, q: 0.55, attack: 0.015});
++  arena(kind = 'FIGHT!') {
++    if (!this.ready('arena', MIN_GAP.arena)) return;
++    const notes = String(kind).startsWith('ROUND')
++      ? [
++          [523.25, 0.1],
++          [659.25, 0.1],
++          [783.99, 0.16]
++        ]
++      : kind === 'K.O.!'
++        ? [
++            [392, 0.12],
++            [311.13, 0.2]
++          ]
++        : kind === 'CHAMPION!'
++          ? [
++              [523.25, 0.08],
++              [659.25, 0.08],
++              [783.99, 0.08],
++              [1046.5, 0.22]
++            ]
++          : [
++              [880, 0.07],
++              [1174.7, 0.14]
++            ];
++    notes.reduce(
++      (at, [f, d]) => (
++        this.tone(f, at, d, {type: 'triangle', level: 0.05, attack: 0.01, cutoff: 1800, wet: 0.25, bus: 'ui'}),
++        at + d
++      ),
++      0
++    );
 +  }
-   splat() {
-     if (!this.ready('splat', MIN_GAP.splat)) return;
-     this.tone(120, 0, 0.1, {level: 0.12, glide: 60, attack: 0.003});
-diff --git a/web/wwwroot/rc/coach.test.mjs b/web/wwwroot/rc/coach.test.mjs
-index 83e62138..99637ccc 100644
---- a/web/wwwroot/rc/coach.test.mjs
-+++ b/web/wwwroot/rc/coach.test.mjs
-@@ -43,9 +43,15 @@ test('each form draws the controls that form actually uses', () => {
-   assert.match(car, /BOOST/);
-   assert.match(deck, /OLLIE/);
-   assert.match(foot, /MOVE/);
--  assert.match(foot, /FIRE/);
--  assert.match(foot, /AIM/);
-+  assert.match(foot, /BLAST/);
-+  assert.match(foot, /LOCK/);
-   assert.match(foot, /PUNCH/);
-+  assert.match(foot, /JUMP/);
-+  assert.match(foot, /JETPACK/);
-+  assert.match(foot, /POWER/);
-+  assert.match(foot, /SHIELD/);
-+  assert.match(foot, /DASH/);
-+  assert.match(foot, /MORPH/);
-   assert.match(air, /PITCH/);
-   assert.match(air, /SLOW/);
-   assert.match(gunship, /PITCH/);
+   bugle() {
+     if (!this.ready('bugle', MIN_GAP.bugle)) return;
+     [
 diff --git a/web/wwwroot/rc/gamepad.mjs b/web/wwwroot/rc/gamepad.mjs
-index ecd6821d..f7a188f1 100644
+index 14fc096e..908b5788 100644
 --- a/web/wwwroot/rc/gamepad.mjs
 +++ b/web/wwwroot/rc/gamepad.mjs
+@@ -12,7 +12,7 @@ export function stickAxis(v) {
+ 
+ // plane / gunship / chopper / chute share the arcade row: stick up climbs, shoulders yaw.
+ export function normalizeForm(form) {
+-  if (form === 'robot' || form === 'foot' || form === 'walk') return 'robot';
++  if (form === 'robot' || form === 'foot' || form === 'walk' || form === 'arena') return 'robot';
+   if (form === 'board' || form === 'skate') return 'board';
+   if (form === 'chopper') return 'chopper';
+   if (form === 'fly' || form === 'plane' || form === 'gunship' || form === 'chute') return 'fly';
 @@ -54,6 +54,8 @@ export function mapPad(form, p) {
        boostHeld: false,
        morphHeld: down(p, 1),
        punch: false,
-+      dash: false,
 +      shield: false,
++      dash: false,
        aim: false,
        sprint: false,
        recentreHeld: down(p, 11),
-@@ -73,6 +75,8 @@ export function mapPad(form, p) {
+@@ -74,6 +76,8 @@ export function mapPad(form, p) {
      out.jumpHeld = down(p, 0);
      out.punch = down(p, 2);
      out.boostHeld = down(p, 3);
@@ -79,1722 +100,1982 @@ index ecd6821d..f7a188f1 100644
      out.sprint = down(p, 10);
      return out;
    }
-@@ -103,13 +107,19 @@ export function mapPad(form, p) {
- }
- 
- /** Left stick into a world XZ move, relative to the camera's yaw (the way it is looking). */
--export function cameraMove(camYaw, lx, ly) {
-+export function cameraMoveInto(out, camYaw, lx, ly) {
-   const yaw = Number.isFinite(camYaw) ? camYaw : 0,
-     fwdX = Math.sin(yaw),
-     fwdZ = -Math.cos(yaw),
-     rightX = Math.cos(yaw),
-     rightZ = Math.sin(yaw);
--  return {x: lx * rightX + ly * fwdX, z: lx * rightZ + ly * fwdZ};
-+  out.x = lx * rightX + ly * fwdX;
-+  out.z = lx * rightZ + ly * fwdZ;
-+  return out;
-+}
-+
-+export function cameraMove(camYaw, lx, ly) {
-+  return cameraMoveInto({x: 0, z: 0}, camYaw, lx, ly);
- }
- 
- /**
-@@ -157,6 +167,8 @@ const IDLE = {
+@@ -153,6 +157,8 @@ const IDLE = {
    aim: false,
    sprint: false,
    punch: false,
-+  dash: false,
 +  shield: false,
++  dash: false,
    flyHeld: false,
    pitch: 0,
    roll: 0,
-@@ -215,6 +227,8 @@ export function createGamepadInput() {
+@@ -212,6 +218,8 @@ export function createGamepadInput() {
        aim: a.aim || b.aim,
        sprint: a.sprint || b.sprint,
        punch: a.punch || b.punch,
-+      dash: a.dash || b.dash,
 +      shield: a.shield || b.shield,
++      dash: a.dash || b.dash,
        pitch: stronger(a.pitch, b.pitch),
        roll: stronger(a.roll, b.roll),
        yaw: stronger(a.yaw, b.yaw),
 diff --git a/web/wwwroot/rc/index.html b/web/wwwroot/rc/index.html
-index 16e0effd..17cf1ff9 100644
+index 33b5f2dd..91bb1f9c 100644
 --- a/web/wwwroot/rc/index.html
 +++ b/web/wwwroot/rc/index.html
-@@ -29,7 +29,7 @@
+@@ -4,10 +4,12 @@
+ <div id="instruments"><strong id="speed">0</strong><span>km/h</span><output id="clock">0:00.00</output><span id="gate">MOTOR POOL</span><span id="secret">◇ 0/3</span><span id="coins" hidden title="Challenge coins found on this track">🪙 0/5</span><span id="dream-coins" hidden title="Coins">🪙 0</span><span id="gold" hidden title="Gold dug up · spend it in the dark world">💰 0</span><span id="item" hidden></span><span id="candy" hidden title="Trick-or-treat candy this time">🍬 0</span><span id="boost" hidden title="Boost is on · F (or X on a gamepad) turns it off">🔥 BOOST · F</span></div>
+ <div id="golf-hud" hidden aria-label="Golf"><b id="golf-hole"></b><span id="golf-par"></span><span title="Strokes on this hole">✋ <b id="golf-strokes"></b></span><span id="golf-club"></span><span id="golf-dist" title="Distance to the pin"></span><div id="golf-meter" hidden role="meter" aria-label="Swing power"></div></div>
+ <div id="tennis-hud" hidden role="status" aria-label="Tennis score"><span>🎾 You</span><b id="tennis-score">0 – 0</b><span>Bot</span><span id="tennis-meter" hidden role="meter" aria-label="Hit power" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></div>
++<div id="arena-hud" hidden aria-label="Robot arena"><div class="arena-row" id="arena-row-0"><i class="arena-face" aria-hidden="true"></i><span class="arena-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-label="You health"><span></span></span><b class="arena-hp">100</b><span class="arena-name">You</span></div><div class="arena-row" id="arena-row-1" hidden><i class="arena-face" aria-hidden="true"></i><span class="arena-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></span><b class="arena-hp">100</b><span class="arena-name"></span></div><div class="arena-row" id="arena-row-2" hidden><i class="arena-face" aria-hidden="true"></i><span class="arena-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span></span></span><b class="arena-hp">100</b><span class="arena-name"></span></div><b id="arena-banner" hidden></b><span id="arena-clock" hidden title="Round clock">60</span></div>
++<div id="arena-menu" hidden aria-label="Who fights"><button type="button" id="arena-mode-ladder">Vs CPU</button><button type="button" id="arena-mode-versus" hidden>Vs friend</button><button type="button" id="arena-mode-coop" hidden>Both vs CPU</button></div>
+ <div id="delivery-hud" hidden aria-label="Deliveries"><span id="delivery-count">📦 Boxes 0/5</span><span id="delivery-stars" aria-label="0 stars">⭐ 0</span></div>
+ <section id="school-hud" hidden aria-label="Report card"><div class="school-heading"><b>Report card</b><button id="school-close" aria-label="Close report card">×</button></div><table aria-label="Flying School scores"><tbody id="school-rows"></tbody></table></section><canvas id="map" width="360" height="320" role="button" tabindex="0" title="Open base map · Tab" aria-label="Open base map"></canvas>
+ <div id="bowling-hud" hidden aria-label="Bowling score card"><span id="bowling-lane"></span><div id="bowling-frames"></div><div id="bowling-meter" hidden role="meter" aria-label="Roll power" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div></div><canvas id="map" width="360" height="320" role="button" tabindex="0" title="Open base map · Tab" aria-label="Open base map"></canvas>
+-<div id="brief" hidden><h1><span id="brief-title">RC ODYSSEY</span> <small>Saucer Springs AFB</small></h1><nav hidden id="tracks" aria-label="Area"><a href="?track=hub" data-track="hub" title="Explore the connected Saucer Springs base">Open world</a><a href="?track=housing" data-track="housing" title="Base housing loop: palms, PCS boxes, a trampoline shortcut">Base Housing</a><a href="?track=bx" data-track="bx" title="Race the base exchange: aisles, food court, stockroom shortcut">The BX</a><a href="?track=school" data-track="school" title="Saucer Springs Elementary: slippery gym, cafeteria tables, the playground slide">The School</a></nav><div class="modes"><button id="resume" hidden title="Back to it">▶ Resume</button><button id="wake" hidden title="Leave the dream">Wake up</button><button id="start" disabled title="Explore Saucer Springs AFB">▶ Drive</button><button hidden id="menu-legend" title="The Legend of Spirit Mountain: unlocked by finishing the Old Silver Mine">🏔️ Legend</button><button id="choose-course" title="Choose a cup course or battle arena">⚑ Courses</button><button hidden id="menu-race" disabled title="Line up on the grid: three laps, seven rivals">🏁 Race</button><button hidden id="menu-furball" disabled title="Battle: pop everyone's weather balloons. Last jet flying wins">🎈 Furball</button><button id="menu-map" title="Jump to a location or set a route · Tab">⌖ Places</button><button id="menu-garage" title="Choose jet and paint · G">✈ Garage</button><button id="menu-stats" title="Your records: pumpkins, places, races, tricks">🏆 Stats</button><button id="menu-dex" title="Every kind of dinosaur you've seen and befriended">📖 Dino Book</button><button id="menu-tag" hidden title="Split-screen tag: least time as IT wins the round">🏷️ Tag</button><button id="menu-hunt" hidden title="Split-screen pumpkin hunt: ten together in three minutes">🎃 Hunt</button><button hidden id="menu-team" title="Both of you on the grid. The team place is the better finish">🏁 Team race</button><button hidden id="menu-players" title="Second controller joins split screen · Start on their pad">👥 2 players</button></div><div id="options" class="pause-settings"><div class="settings"><button id="menu-kid" title="Kid: steering help, self-righting, free recovery. Big Kid: lighter steering help.">Kid</button><button id="menu-mute" aria-label="Sound">🔊</button><button id="keys" title="Controller: left stick steers · right stick looks · RT go · LT brake · A jump · B morph · X boost · Y or RB drift · A take off, B land · Start pause. X / Z accelerate &amp; brake · Shift hold through a turn to drift, let go to turbo · W / S drive &amp; brake · A / D steer · Q fire pickup / punch · F boost on/off · Z brake · ↑+S wheelie · ↓+W stoppie · Space jump · Enter take off / land · R back on track · B Kid / Big Kid · M sound · Esc menu · E go in / use item · Tab map · G garage" aria-label="Keys">Controls</button><button id="reset" title="Tumbleweed: lost or stuck? Hop back onto the track" aria-label="Back on track">Recover</button><button id="exit" title="RTB: back to Guns Only" aria-label="Exit to Guns Only">Exit</button></div><div class="invert-row"><button id="menu-invert" type="button" aria-pressed="false" aria-label="Invert flight off" title="Off: stick up climbs. On: stick up dives.">Invert flight<span class="sound-val">off</span></button></div><div class="sound-row" role="group" aria-label="Sound"><button id="sound-effects" type="button" data-step="normal" aria-label="Effects volume normal">Effects<span class="sound-val">normal</span></button><button id="sound-engine" type="button" data-step="normal" aria-label="Engine volume normal">Engine<span class="sound-val">normal</span></button></div><p class="pause-credits">Credits <a class="credits" href="./assets/audio/SOURCES.md" target="_blank" rel="noopener" title="Real RC recordings from freesound.org (designerschoice, plingativator, CC BY 4.0; others CC0)">Sound</a> · <a id="osm-credit" class="credits" href="./assets/world/LICENSE.md" target="_blank" rel="noopener" title="© OpenStreetMap contributors, ODbL">Map</a></p></div><button id="return-world" class="return-world" hidden>← Return to base</button></div>
++<div id="brief" hidden><h1><span id="brief-title">RC ODYSSEY</span> <small>Saucer Springs AFB</small></h1><nav hidden id="tracks" aria-label="Area"><a href="?track=hub" data-track="hub" title="Explore the connected Saucer Springs base">Open world</a><a href="?track=housing" data-track="housing" title="Base housing loop: palms, PCS boxes, a trampoline shortcut">Base Housing</a><a href="?track=bx" data-track="bx" title="Race the base exchange: aisles, food court, stockroom shortcut">The BX</a><a href="?track=school" data-track="school" title="Saucer Springs Elementary: slippery gym, cafeteria tables, the playground slide">The School</a></nav><div class="modes"><button id="resume" hidden title="Back to it">▶ Resume</button><button hidden id="arena-rematch" type="button" title="Same fighters, from round 1">Rematch</button><button hidden id="arena-colour" type="button" title="Change fighter colour"><i id="arena-swatch" aria-hidden="true"></i><span>Colour</span><span id="arena-colour-name">Viper Punks</span></button><button hidden id="arena-leave" type="button" title="Back to the hub, at the arena gate">Leave arena</button><button id="wake" hidden title="Leave the dream">Wake up</button><button id="start" disabled title="Explore Saucer Springs AFB">▶ Drive</button><button hidden id="menu-legend" title="The Legend of Spirit Mountain: unlocked by finishing the Old Silver Mine">🏔️ Legend</button><button id="choose-course" title="Choose a cup course or battle arena">⚑ Courses</button><button hidden id="menu-race" disabled title="Line up on the grid: three laps, seven rivals">🏁 Race</button><button hidden id="menu-furball" disabled title="Battle: pop everyone's weather balloons. Last jet flying wins">🎈 Furball</button><button id="menu-map" title="Jump to a location or set a route · Tab">⌖ Places</button><button id="menu-garage" title="Choose jet and paint · G">✈ Garage</button><button id="menu-stats" title="Your records: pumpkins, places, races, tricks">🏆 Stats</button><button id="menu-dex" title="Every kind of dinosaur you've seen and befriended">📖 Dino Book</button><button id="menu-tag" hidden title="Split-screen tag: least time as IT wins the round">🏷️ Tag</button><button id="menu-hunt" hidden title="Split-screen pumpkin hunt: ten together in three minutes">🎃 Hunt</button><button hidden id="menu-team" title="Both of you on the grid. The team place is the better finish">🏁 Team race</button><button hidden id="menu-players" title="Second controller joins split screen · Start on their pad">👥 2 players</button></div><div id="options" class="pause-settings"><div class="settings"><button id="menu-kid" title="Kid: steering help, self-righting, free recovery. Big Kid: lighter steering help.">Kid</button><button id="menu-mute" aria-label="Sound">🔊</button><button id="keys" title="Controller: left stick steers · right stick looks · RT go · LT brake · A jump · B morph · X boost · Y or RB drift · A take off, B land · Start pause. X / Z accelerate &amp; brake · Shift hold through a turn to drift, let go to turbo · W / S drive &amp; brake · A / D steer · Q fire pickup / punch · F boost on/off · Z brake · ↑+S wheelie · ↓+W stoppie · Space jump · Enter take off / land · R back on track · B Kid / Big Kid · M sound · Esc menu · E go in / use item · Tab map · G garage" aria-label="Keys">Controls</button><button id="reset" title="Tumbleweed: lost or stuck? Hop back onto the track" aria-label="Back on track">Recover</button><button id="exit" title="RTB: back to Guns Only" aria-label="Exit to Guns Only">Exit</button></div><div class="invert-row"><button id="menu-invert" type="button" aria-pressed="false" aria-label="Invert flight off" title="Off: stick up climbs. On: stick up dives.">Invert flight<span class="sound-val">off</span></button></div><div class="sound-row" role="group" aria-label="Sound"><button id="sound-effects" type="button" data-step="normal" aria-label="Effects volume normal">Effects<span class="sound-val">normal</span></button><button id="sound-engine" type="button" data-step="normal" aria-label="Engine volume normal">Engine<span class="sound-val">normal</span></button></div><p class="pause-credits">Credits <a class="credits" href="./assets/audio/SOURCES.md" target="_blank" rel="noopener" title="Real RC recordings from freesound.org (designerschoice, plingativator, CC BY 4.0; others CC0)">Sound</a> · <a id="osm-credit" class="credits" href="./assets/world/LICENSE.md" target="_blank" rel="noopener" title="© OpenStreetMap contributors, ODbL">Map</a></p></div><button id="return-world" class="return-world" hidden>← Return to base</button></div>
+ <div id="destination" hidden><span id="destination-arrow">↑</span><span id="destination-name"></span><strong id="destination-distance"></strong></div>
+ <button id="interact" hidden></button><output id="stream-status" hidden>Road downloading…</output>
+ <section id="world-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Base map" hidden><div class="panel-heading"><h2>SAUCER SPRINGS AFB</h2><span id="world-count"></span><button id="map-close" aria-label="Close map">×</button></div><div class="atlas-layout"><canvas id="world-map" width="540" height="530" aria-label="Map of roads and event destinations"></canvas><div id="destinations" aria-label="Destinations"></div></div><div class="settings"><select id="world-event" aria-label="World event"></select><button id="world-race">🏁 Race</button></div><a class="credits" href="./assets/world/LICENSE.md" target="_blank" rel="noopener">Map credits</a></section>
+@@ -29,7 +31,7 @@
          <div id="dex-clips" aria-label="Moves"></div>
        </div>
      </div>
--<div id="keys-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Controls" hidden><div class="panel-heading"><h2>CONTROLS</h2><button id="keys-close" aria-label="Close controls">×</button></div><dl class="touch-keys"><dt>Left pad</dt><dd>Steer</dd><dt>Go / Rev lever</dt><dd>Drive and reverse · let go to coast</dd><dt>Brake</dt><dd>Brake</dd><dt>Fire</dt><dd>Fire pickup</dd><dt>⏸</dt><dd>Menu: recover, Kid mode, sound</dd><dt>⌖ Places</dt><dd>Map, routes and jumps</dd></dl><dl class="key-list"><dt>X / W / ↑</dt><dd>Accelerate</dd><dt>S / ↓</dt><dd>Brake / reverse</dd><dt>A D / ← →</dt><dd>Steer</dd><dt>Z</dt><dd>Brake</dd><dt>↑ + S / ↓ + W</dt><dd>Wheelie / stoppie</dd><dt>Space</dt><dd>Jump (car hop, skateboard ollie, robot jump)</dd><dt>return</dt><dd>Fly · again: parachute · ↑ push ↓ pull ←→ roll A D rudder W S power · Kid: auto pull-up near the ground</dd><dt>Shift / Y / RB</dt><dd>Hold through a turn: drift · let go: turbo</dd><dt>Q</dt><dd>Fire pickup · punch</dd><dt>Q (riding, long ago)</dt><dd>Shoot an electric arrow</dd><dt>F / pad X</dt><dd>Boost on / off (free drive) · in the air: afterburner</dd><dt>🛹 in the air</dt><dd>Q flip · E grab (hold) · ←/→ spin · tap ↑ or ↓ first for Impossible / Shove-It, Nosegrab / Tailgrab</dd><dt>🛹 grind</dt><dd>Ollie onto a gold line · hold a direction as you land: ↑ Nosegrind, ↓ 5-0, ↑← Crooked, ↓← Smith, ↓→ Feeble · ←/→ balance · Space off</dd><dt>Y</dt><dd>Say something (type a word · in the past, say your dinosaur's name and it comes)</dd><dt>C</dt><dd>Look around: the arrows turn the camera, C again to drive (or drag with the mouse)</dd><dt>R</dt><dd>Recover</dd><dt>E</dt><dd>Go in · on foot: use your item</dd><dt>Tab / G</dt><dd>Map / garage</dd><dt>Esc / M</dt><dd>Pause / mute</dd></dl></div>
-+<div id="keys-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Controls" hidden><div class="panel-heading"><h2>CONTROLS</h2><button id="keys-close" aria-label="Close controls">×</button></div><dl class="touch-keys"><dt>Left pad</dt><dd>Steer</dd><dt>Go / Rev lever</dt><dd>Drive and reverse · let go to coast</dd><dt>Brake</dt><dd>Brake</dd><dt>Fire</dt><dd>Fire pickup</dd><dt>⏸</dt><dd>Menu: recover, Kid mode, sound</dd><dt>⌖ Places</dt><dd>Map, routes and jumps</dd></dl><dl class="key-list"><dt>X / W / ↑</dt><dd>Accelerate</dd><dt>S / ↓</dt><dd>Brake / reverse</dd><dt>A D / ← →</dt><dd>Steer</dd><dt>Z</dt><dd>Brake</dd><dt>↑ + S / ↓ + W</dt><dd>Wheelie / stoppie</dd><dt>Space</dt><dd>Jump (car hop, skateboard ollie, robot jump)</dd><dt>return</dt><dd>Fly · again: parachute · ↑ push ↓ pull ←→ roll A D rudder W S power · Kid: auto pull-up near the ground</dd><dt>Shift / Y / RB</dt><dd>Hold through a turn: drift · let go: turbo</dd><dt>Q</dt><dd>Fire pickup · punch</dd><dt>Robot</dt><dd>A jump, hold jetpack · X punch · Y power · LB shield · RB dash · LT lock · RT blast · B morph</dd><dt>Q (riding, long ago)</dt><dd>Shoot an electric arrow</dd><dt>F / pad X</dt><dd>Boost on / off (free drive) · in the air: afterburner</dd><dt>🛹 in the air</dt><dd>Q flip · E grab (hold) · ←/→ spin · tap ↑ or ↓ first for Impossible / Shove-It, Nosegrab / Tailgrab</dd><dt>🛹 grind</dt><dd>Ollie onto a gold line · hold a direction as you land: ↑ Nosegrind, ↓ 5-0, ↑← Crooked, ↓← Smith, ↓→ Feeble · ←/→ balance · Space off</dd><dt>Y</dt><dd>Say something (type a word · in the past, say your dinosaur's name and it comes)</dd><dt>C</dt><dd>Look around: the arrows turn the camera, C again to drive (or drag with the mouse)</dd><dt>R</dt><dd>Recover</dd><dt>E</dt><dd>Go in · on foot: use your item</dd><dt>Tab / G</dt><dd>Map / garage</dd><dt>Esc / M</dt><dd>Pause / mute</dd></dl></div>
+-<div id="keys-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Controls" hidden><div class="panel-heading"><h2>CONTROLS</h2><button id="keys-close" aria-label="Close controls">×</button></div><dl class="touch-keys"><dt>Left pad</dt><dd>Steer</dd><dt>Go / Rev lever</dt><dd>Drive and reverse · let go to coast</dd><dt>Brake</dt><dd>Brake</dd><dt>Fire</dt><dd>Fire pickup</dd><dt>⏸</dt><dd>Menu: recover, Kid mode, sound</dd><dt>⌖ Places</dt><dd>Map, routes and jumps</dd></dl><dl class="key-list"><dt>X / W / ↑</dt><dd>Accelerate</dd><dt>S / ↓</dt><dd>Brake / reverse</dd><dt>A D / ← →</dt><dd>Steer</dd><dt>Z</dt><dd>Brake</dd><dt>↑ + S / ↓ + W</dt><dd>Wheelie / stoppie</dd><dt>Space</dt><dd>Jump (car hop, skateboard ollie, robot jump)</dd><dt>Fly</dt><dd>A take off · stick up climbs, left/right turns · B land · Y loop · LB RB yaw · RT go · LT brake</dd><dt>Shift / Y / RB</dt><dd>Hold through a turn: drift · let go: turbo</dd><dt>Q</dt><dd>Fire pickup · punch</dd><dt>Q (riding, long ago)</dt><dd>Shoot an electric arrow</dd><dt>F / pad X</dt><dd>Boost on / off (free drive) · in the air: afterburner</dd><dt>🛹 in the air</dt><dd>Q flip · E grab (hold) · ←/→ spin · tap ↑ or ↓ first for Impossible / Shove-It, Nosegrab / Tailgrab</dd><dt>🛹 grind</dt><dd>Ollie onto a gold line · hold a direction as you land: ↑ Nosegrind, ↓ 5-0, ↑← Crooked, ↓← Smith, ↓→ Feeble · ←/→ balance · Space off</dd><dt>Y</dt><dd>Say something (type a word · in the past, say your dinosaur's name and it comes)</dd><dt>C</dt><dd>Look around: the arrows turn the camera, C again to drive (or drag with the mouse)</dd><dt>R</dt><dd>Recover</dd><dt>E</dt><dd>Go in · on foot: use your item</dd><dt>Tab / G</dt><dd>Map / garage</dd><dt>Esc / M</dt><dd>Pause / mute</dd></dl></div>
++<div id="keys-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Controls" hidden><div class="panel-heading"><h2>CONTROLS</h2><button id="keys-close" aria-label="Close controls">×</button></div><dl class="touch-keys"><dt>Left pad</dt><dd>Steer</dd><dt>Go / Rev lever</dt><dd>Drive and reverse · let go to coast</dd><dt>Brake</dt><dd>Brake</dd><dt>Fire</dt><dd>Fire pickup</dd><dt>⏸</dt><dd>Menu: recover, Kid mode, sound</dd><dt>⌖ Places</dt><dd>Map, routes and jumps</dd></dl><dl class="key-list"><dt>X / W / ↑</dt><dd>Accelerate</dd><dt>S / ↓</dt><dd>Brake / reverse</dd><dt>A D / ← →</dt><dd>Steer</dd><dt>Z</dt><dd>Brake</dd><dt>↑ + S / ↓ + W</dt><dd>Wheelie / stoppie</dd><dt>Space</dt><dd>Jump (car hop, skateboard ollie, robot jump)</dd><dt>Fly</dt><dd>A take off · stick up climbs, left/right turns · B land · Y loop · LB RB yaw · RT go · LT brake</dd><dt>Shift / Y / RB</dt><dd>Hold through a turn: drift · let go: turbo</dd><dt>Q</dt><dd>Fire pickup · punch</dd><dt>Q (riding, long ago)</dt><dd>Shoot an electric arrow</dd><dt>F / pad X</dt><dd>Boost on / off (free drive) · in the air: afterburner</dd><dt>🛹 in the air</dt><dd>Q flip · E grab (hold) · ←/→ spin · tap ↑ or ↓ first for Impossible / Shove-It, Nosegrab / Tailgrab</dd><dt>🛹 grind</dt><dd>Ollie onto a gold line · hold a direction as you land: ↑ Nosegrind, ↓ 5-0, ↑← Crooked, ↓← Smith, ↓→ Feeble · ←/→ balance · Space off</dd><dt>Y</dt><dd>Say something (type a word · in the past, say your dinosaur's name and it comes)</dd><dt>C</dt><dd>Look around: the arrows turn the camera, C again to drive (or drag with the mouse)</dd><dt>R</dt><dd>Recover</dd><dt>E</dt><dd>Go in · on foot: use your item</dd><dt>Arena</dt><dd>A jetpack · X punch, air X pound · Y power · LB shield · RB dash · LT lock · RT blaster</dd><dt>Tab / G</dt><dd>Map / garage</dd><dt>Esc / M</dt><dd>Pause / mute</dd></dl></div>
  
  <div id="skate" hidden aria-label="Skate run"><div class="skate-top"><strong id="skate-score">0</strong><span id="skate-letters" title="Collect S-K-A-T-E"><i>S</i><i>K</i><i>A</i><i>T</i><i>E</i></span></div><output id="skate-clock" title="Run time left">2:00</output><div id="skate-combo" hidden><span id="skate-tricks"></span><strong id="skate-points"></strong></div><div id="skate-pop" hidden></div></div>
  <div id="countdown" hidden>3</div><div id="banner" hidden>🎺 Bugle time! Rivals stop — you keep driving</div><div id="result" role="status" aria-live="polite" hidden></div><div id="touch" aria-label="Driving controls">
 diff --git a/web/wwwroot/rc/main.js b/web/wwwroot/rc/main.js
-index 11c885b7..d20601c2 100644
+index 9d6bdfe2..a9ab1191 100644
 --- a/web/wwwroot/rc/main.js
 +++ b/web/wwwroot/rc/main.js
-@@ -51,7 +51,9 @@ import {CLOUDS} from './open-world/clouds.mjs';
- import {applyLivery} from './livery.js';
- import {batchCarParts, unbatchCarParts} from './car-batch.js';
- import {createRobot, stepRobot} from './physics/robot.mjs';
--import {COMBAT} from './physics/combat.mjs';
-+import {createMoves, stepMoves, bumpRobots, MOVES} from './robot-moves.mjs';
-+import {createSparRing, stepSpar, bonkSpar} from './robot-spar.mjs';
-+import {createRobotFx} from './robot-fx.js';
- import {makeRobotBody, poseRobotBody, makeBoardRider, poseBoardRider} from './robot-body.js';
- import {
-   makeToyDino,
-@@ -121,7 +123,7 @@ import {drawDetailedMinimap} from './open-world/minimap.js';
+@@ -45,6 +45,12 @@ import {SCHOOL} from './open-world/flying-school.mjs';
+ import {SKY_STEER_HINT, skyLandingText, skyDiveCamera} from './open-world/sky-dive.mjs';
+ import {createSkyDiveReport} from './open-world/sky-dive.js';
+ import {TENNIS, onTennisCourt, tennisStart, tennisAssist} from './open-world/tennis.mjs';
++import {
++  ARENA,
++  arenaCamYaw,
++  grantArenaTrophy,
++  inArenaGate
++} from './open-world/robot-arena.mjs';
+ import {STUNT_JUMPS} from './open-world/stunt-jumps.mjs';
+ import {DELIVERY} from './open-world/deliveries.mjs';
+ import {CLOUDS} from './open-world/clouds.mjs';
+@@ -121,7 +127,7 @@ import {drawDetailedMinimap} from './open-world/minimap.js';
  import {createCup, loadCup, saveCup, recordCupRace, nextCupEvent, cupStandings} from './grand-prix.mjs';
  import {createRaceMenu, CUP_COURSES} from './race-menu.js';
  import {createAlienMarshal} from './alien-marshal.js';
--import {createGamepadInput, cameraMove, flyShoulder} from './gamepad.mjs';
-+import {createGamepadInput, cameraMoveInto, flyShoulder} from './gamepad.mjs';
+-import {createGamepadInput, cameraMove} from './gamepad.mjs';
++import {createGamepadInput, cameraMove, mapPad} from './gamepad.mjs';
  import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput} from './split-p2.mjs';
  import {attachDreams} from './open-world/dreams/runner.js';
  import {createMenuPad} from './gamepad-menu.mjs';
-@@ -476,6 +478,13 @@ if (track) {
-   scene.add(sun.target);
+@@ -1041,6 +1047,11 @@ function pause(value) {
+     if (paused) (dreams?.active() ? $('wake') : $('resume')).focus();
+     else canvas.focus();
+   }
++  const inArena = arenaOn();
++  $('arena-rematch').hidden = !(inArena && paused);
++  $('arena-colour').hidden = !(inArena && paused);
++  $('arena-leave').hidden = !(inArena && paused);
++  $('exit').hidden = inArena;
  }
- const fx = createEffects(scene);
-+const robotFx = createRobotFx(scene);
-+const spar = openWorld ? createSparRing(parkPoint) : [];
-+const sparBodies = spar.map(() => {
-+  const g = makeRobotBody('#9aa7ad');
-+  scene.add(g);
-+  return g;
-+});
- const marshal = createAlienMarshal(scene, {scale: 0.32});
- let marshalSession = null,
-   marshalRecovery = 0,
-@@ -2751,6 +2760,137 @@ let punchQueued = false,
-   trickCalled = false,
-   camHeading = null,
-   camEasing = false;
-+let camShake = 0,
-+  camShake2 = 0;
-+const p1Move = {x: 0, z: 0},
-+  p1In = {
-+    move: null,
-+    jump: false,
-+    sprint: false,
-+    throttle: 0,
-+    steer: 0,
-+    jumpHeld: false,
-+    punchHeld: false,
-+    powerHeld: false,
-+    shieldHeld: false,
-+    dashHeld: false,
-+    lockHeld: false,
-+    fireHeld: false,
-+    busy: false
-+  },
-+  p2In = {
-+    move: {x: 0, z: 0},
-+    jump: false,
-+    sprint: false,
-+    throttle: 0,
-+    steer: 0,
-+    jumpHeld: false,
-+    punchHeld: false,
-+    powerHeld: false,
-+    shieldHeld: false,
-+    dashHeld: false,
-+    lockHeld: false,
-+    fireHeld: false,
-+    busy: false
-+  },
-+  FIGHT_N = 16,
-+  fightSlots = Array.from({length: FIGHT_N}, () => ({
-+    id: 0,
-+    pos: [0, 0, 0],
-+    kind: '',
-+    body: null,
-+    shield: false
-+  }));
-+function rumblePad(gp, strong, ms) {
-+  const act = gp?.vibrationActuator;
-+  if (!act || typeof act.playEffect !== 'function') return;
-+  try {
-+    act.playEffect('dual-rumble', {
-+      startDelay: 0,
-+      duration: ms,
-+      strongMagnitude: strong,
-+      weakMagnitude: strong * 0.65
-+    });
-+  } catch {
-+    /* this pad has no rumble */
-+  }
-+}
-+function putFight(n, origin, id, pos, kind, body, shield) {
-+  if (!pos || n >= FIGHT_N) return n;
-+  const dx = pos[0] - origin[0],
-+    dz = pos[2] - origin[2];
-+  if (dx * dx + dz * dz > 64) return n;
-+  const s = fightSlots[n];
-+  s.id = id;
-+  s.pos[0] = pos[0];
-+  s.pos[1] = pos[1];
-+  s.pos[2] = pos[2];
-+  s.kind = kind;
-+  s.body = body;
-+  s.shield = !!shield;
-+  return n + 1;
-+}
-+function fillFightSlots(selfId, origin) {
-+  let n = 0;
-+  for (let i = 0; i < spar.length; i++) n = putFight(n, origin, spar[i].id, spar[i].pos, 'dummy', spar[i], false);
-+  if (selfId !== 1 && robot?.pos) n = putFight(n, origin, 1, robot.pos, 'robot', robot, (robot.moves?.shieldLeft || 0) > 0);
-+  if (selfId !== 2 && split?.p2Form === 'robot' && p2Robot?.pos)
-+    n = putFight(n, origin, 2, p2Robot.pos, 'robot', p2Robot, (p2Robot.moves?.shieldLeft || 0) > 0);
-+  for (let i = 0; i < race.rivals.length; i++) {
-+    const car = race.rivals[i].session.car,
-+      hidden = (selfId === 1 && !!robot && car === s.car) || (selfId === 2 && split?.p2Form === 'robot' && i === 0);
-+    if (!hidden) n = putFight(n, origin, 200 + i, car.pos, 'car', car, false);
-+  }
-+  if (selfId === 2 && !robot) n = putFight(n, origin, 300, s.car.pos, 'car', s.car, false);
-+  return n;
-+}
-+function presentFight(body, gp, seat) {
-+  const mv = body.moves;
-+  if (!mv) return;
-+  const out = mv.out;
-+  for (let i = 0; i < out.hitCount; i++) {
-+    const h = mv.hitBuf[i];
-+    if (!h.blocked && h.kind === 'dummy' && h.body) bonkSpar(h.body, h.ix, h.iz);
-+    else if (!h.blocked && h.body?.vel) {
-+      h.body.vel[0] += h.ix;
-+      h.body.vel[1] += h.iy;
-+      h.body.vel[2] += h.iz;
-+    }
-+    robotFx.spark(h.x, h.y, h.z);
-+  }
-+  if (out.shock) {
-+    robotFx.shock(out.sx, out.sy, out.sz);
-+    robotFx.dust(out.sx, out.sy, out.sz);
-+    audio.impact(5);
-+    audio.landing(3);
-+    rumblePad(gp, 1, 130);
-+    if (seat === 2) camShake2 = Math.max(camShake2, 0.045);
-+    else camShake = Math.max(camShake, 0.045);
-+  } else if (out.landed) {
-+    robotFx.dust(body.pos[0], body.pos[1], body.pos[2]);
-+    audio.landing(1.2);
-+  }
-+  if (out.rumble > 0 && !out.shock) {
-+    audio.impact(3);
-+    rumblePad(gp, out.rumble, 70);
-+    if (seat === 2) camShake2 = Math.max(camShake2, 0.028);
-+    else camShake = Math.max(camShake, 0.028);
-+  }
-+  if (out.blast) {
-+    robotFx.blast(out.bx, out.by, out.bz, out.tx, out.ty, out.tz);
-+    audio.zap();
-+  }
-+  if (out.thrust) audio.whoosh(0.85);
-+}
-+function driveWalker(body, input, world, dt, selfId, gp, seat) {
-+  body.moves ??= createMoves();
-+  input.jump = false;
-+  if (body.moves.hitStop <= 0) stepRobot(body, input, world, dt);
-+  const n = body.climb ? 0 : fillFightSlots(selfId, body.pos);
-+  input.busy = !!body.climb;
-+  stepMoves(body.moves, body, input, fightSlots, n, dt);
-+  presentFight(body, gp, seat);
-+}
- const playmates = createPlaymates();
- function soundEvents(r, c) {
-   if (s.assist.driftFired) {
-@@ -5487,7 +5627,7 @@ function useButton(all) {
-     const lb = mine.some(p => p.buttons[4]?.value > 0.5),
-       shoulder = flyShoulder(p1FlyShoulder, {flying: !!s.flight.mode, down: lb && play, now: performance.now()});
-     p1FlyShoulder = shoulder.state;
--    if (play && (shoulder.takeoff || shoulder.chute)) tapKey('Enter');
-+    if (play && !robot && (shoulder.takeoff || shoulder.chute)) tapKey('Enter');
+ let lastThrottle = 0;
+ let skateTouchGrab = false,
+@@ -1068,6 +1079,24 @@ $('resume').onclick = () => {
+   pause(false);
+   canvas.focus();
+ };
++$('arena-rematch').onclick = () => {
++  arenaApi()?.rematch();
++  pause(false);
++  canvas.focus();
++};
++$('arena-colour').onclick = () => {
++  const next = arenaApi()?.colour();
++  if (!next || !openWorld) return;
++  openWorld.progress.paint = next.color;
++  if (ui.progress && ui.progress !== openWorld.progress) ui.progress.paint = next.color;
++  openWorld.save();
++};
++$('arena-leave').onclick = () => leaveArenaFight();
++for (const id of ['ladder', 'versus', 'coop'])
++  $('arena-mode-' + id).onclick = () => {
++    arenaApi()?.choose(id);
++    canvas.focus();
++  };
+ $('wake').onclick = () => {
+   dreams?.bail();
+   pause(false);
+@@ -1451,8 +1480,8 @@ window.addEventListener('keydown', e => {
+     !dreams?.ownsSim()
+   )
+     s.car.vel = [s.car.vel[0], s.car.vel[1] + (form === 'board' ? FLIGHT.ollie : FLIGHT.hop), s.car.vel[2]];
+-  if (e.code === 'KeyF') toggleBoost();
+-  if (e.code === 'KeyR' && !paused && !labBusy(labRide) && !dreams?.active()) {
++  if (e.code === 'KeyF' && !arenaOn()) toggleBoost();
++  if (e.code === 'KeyR' && !paused && !arenaOn() && !labBusy(labRide) && !dreams?.active()) {
+     boostOn = false;
+     telemetry.recover('key', s.car.pos);
+     recover(s);
+@@ -2810,6 +2839,7 @@ function disposeJet(group) {
+ // The robot is its own controller; the board rides the car physics with board tuning, so every
+ // skate-park trick, grind and gap scores for it too.
+ function transform() {
++  if (arenaOn()) return;
+   tennisStop();
+   const r = readout(s),
+     paint = openWorld?.progress?.paint ?? '#f28c28',
+@@ -5184,6 +5214,127 @@ function labFrame(dt) {
+     }
    }
-   if (edge(2)) {
-     if (robot) {
-@@ -6307,7 +6447,7 @@ function frame(now) {
-     if (robot) punchQueued = true;
+ }
++let arenaGrace = 0;
++function arenaApi() {
++  return openWorld?.robotArena?.() ?? null;
++}
++function arenaOn() {
++  return !!arenaApi()?.on?.();
++}
++function arenaPlayers() {
++  return splitOn && race.rivals?.[0] ? 2 : 1;
++}
++function arenaNear(pos = robot?.pos ?? s.car.pos) {
++  return openWorld?.near?.(pos)?.game === 'robot-arena';
++}
++function parkArenaCar() {
++  const y = openWorld?.groundAt?.(ARENA.exit[0], ARENA.exit[2]) ?? 0;
++  if (robot) {
++    robot.pos = [ARENA.exit[0], y, ARENA.exit[2]];
++    robot.vel = [0, 0, 0];
++    robot.yaw = ARENA.exitYaw;
++    if (robotBody) robotBody.visible = false;
++  }
++  placeCar(s.car, [ARENA.exit[0], y + rideHeight(s.car.params) + 0.02, ARENA.exit[2]], ARENA.exitYaw);
++  s.car.vel = [0, 0, 0];
++  s.car.ang = [0, 0, 0];
++}
++function beginArena() {
++  const view = arenaApi();
++  if (!view || view.on() || !started || paused || !race.roam || s.flight.mode) return false;
++  view.enter({
++    players: arenaPlayers(),
++    colour: openWorld.progress.paint,
++    trophy: !!openWorld.progress.arenaTrophy
++  });
++  parkArenaCar();
++  return true;
++}
++function leaveArenaFight() {
++  const view = arenaApi();
++  if (!view?.on()) return;
++  const at = view.leave();
++  const y = openWorld?.groundAt?.(at.pos[0], at.pos[2]) ?? 0;
++  if (robot) {
++    robot.pos = [at.pos[0], y, at.pos[2]];
++    robot.vel = [0, 0, 0];
++    robot.yaw = at.yaw;
++    if (robotBody) robotBody.visible = true;
++  }
++  placeCar(s.car, [at.pos[0], y + rideHeight(s.car.params) + 0.02, at.pos[2]], at.yaw);
++  s.car.vel = [0, 0, 0];
++  s.car.ang = [0, 0, 0];
++  arenaGrace = 1.8;
++  if (paused) pause(false);
++  canvas?.focus();
++}
++function arenaStick(gp) {
++  if (!gp) return null;
++  const m = mapPad('arena', gp),
++    move = cameraMove(arenaCamYaw(), m.moveX, m.moveY);
++  return {
++    x: move.x,
++    z: move.z,
++    jump: m.jumpHeld,
++    punch: m.punch,
++    power: m.boostHeld,
++    shield: m.shield,
++    dash: m.dash,
++    lock: m.aim,
++    blaster: m.fireHeld
++  };
++}
++function arenaInputs() {
++  const pads = typeof navigator === 'undefined' ? [] : (navigator.getGamepads?.() ?? []);
++  const mine = [...pads].find(p => p?.connected && p.index !== split?.pad);
++  let p1 = arenaStick(mine) || {x: 0, z: 0, jump: false, punch: false, power: false, shield: false, dash: false, lock: false, blaster: false};
++  const keyX = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
++  const keyZ = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
++  if (keyX || keyZ || keys.has('Space') || keys.has('KeyQ') || keys.has('KeyF') || keys.has('ShiftLeft') || keys.has('ShiftRight')) {
++    const move = cameraMove(arenaCamYaw(), keyX, keyZ);
++    p1 = {
++      ...p1,
++      x: keyX || keyZ ? move.x : p1.x,
++      z: keyX || keyZ ? move.z : p1.z,
++      jump: p1.jump || keys.has('Space'),
++      punch: p1.punch || keys.has('KeyQ'),
++      power: p1.power || keys.has('KeyF'),
++      shield: p1.shield || keys.has('ShiftLeft') || keys.has('ShiftRight')
++    };
++  }
++  const p2 = split ? arenaStick(pads[split.pad]) : null;
++  return p2 ? [p1, p2] : [p1];
++}
++function rumbleArena(mag) {
++  if (!mag) return;
++  const pads = navigator.getGamepads?.() ?? [];
++  for (const p of pads) {
++    const act = p?.vibrationActuator;
++    if (!act?.playEffect) continue;
++    act.playEffect('dual-rumble', {startDelay: 0, duration: 70, weakMagnitude: mag * 0.65, strongMagnitude: mag}).catch(() => {});
++  }
++}
++function stepArenaFight(dt) {
++  arenaGrace = Math.max(0, arenaGrace - dt);
++  const view = arenaApi();
++  if (!view) return;
++  if (!view.on() && arenaGrace <= 0 && started && !paused && race.roam && !s.flight.mode && inArenaGate(s.car.pos))
++    beginArena();
++  if (!view.on()) return;
++  if (paused || view.state().phase === 'menu') {
++    view.sync(arenaPlayers(), paused);
++    return;
++  }
++  const ev = view.step(dt, arenaInputs());
++  if (ev.cue) audio.arena(ev.cue);
++  if (ev.rumble) rumbleArena(ev.rumble);
++  if (ev.unlocked && openWorld) {
++    const paint = grantArenaTrophy(openWorld.progress);
++    if (ui.progress && ui.progress !== openWorld.progress) ui.progress.arenaTrophy = true;
++    openWorld.save();
++    if (paint) callout('🏆 Champion', 2200);
++  }
++}
+ function enterLocation() {
+   if (!openWorld || paused || !race.roam || labBusy(labRide)) return;
+   if (annexDark(robot ? robot.pos : s.car.pos)) return;
+@@ -5254,6 +5405,10 @@ function enterLocation() {
+     startLab();
+     return;
    }
-   if (labBusy(labRide) && (pad.fire || pad.jump)) labSkipEdge = true;
--  if (pad.boost && !ui.panel() && !useClicked && !leverNear(robot ? robot.pos : s.car.pos)) toggleBoost();
-+  if (pad.boost && !robot && !ui.panel() && !useClicked && !leverNear(s.car.pos)) toggleBoost();
-   useClicked = false;
-   {
-     const b = $('boost'),
-@@ -6452,44 +6592,58 @@ function frame(now) {
++  if (arenaNear(robot?.pos ?? s.car.pos)) {
++    beginArena();
++    return;
++  }
+   const p = openWorld.near(s.car.pos);
+   if (!p) return;
+   if (p.game === 'flying-school' || p.game === 'canyon-run') return;
+@@ -5302,6 +5457,7 @@ function statRows() {
+     ['🪂', 'Sky jumps', num(pr.skyJumps)],
+     ['🎯', 'Best landing', pr.bestLanding == null ? '–' : `${pr.bestLanding.toFixed(1)} m`],
+     ['🎾', 'Tennis wins', num(pr.tennisWins)],
++    ['🤖', 'Arena trophy', pr.arenaTrophy ? 'Champion' : '–'],
+     ['⛳', 'Best golf round', pr.golfRoundBest ? `${pr.golfRoundBest}` : '–'],
+     ['🤠', 'Fastest roundup', pr.roundupBest ? `${pr.roundupBest} s` : '–'],
+     ['🎳', 'Bowling best', pr.bowlingBest != null ? `${pr.bowlingBest}/300` : '–'],
+@@ -5339,6 +5495,7 @@ const ui = createWorldUI({
+     flying: !!s.flight.mode,
+     labTour: !robot && form === 'car' && !skate && tourNear(s.car.pos) && !labBusy(labRide),
+     skyJump: !robot && form === 'car' && !skate ? openWorld?.skyJumpNear(s.car.pos)?.id : null,
++    arena: arenaOn(),
+     skate: !!skateParkAt() && !skate,
+     skating: !!skate
+   }),
+@@ -5517,7 +5674,8 @@ function useButton(all) {
+       return hit && play;
+     },
+     btn = $('interact');
+-  if (edge(0) && !robot && form !== 'board' && !skate) commandFlight('up');
++  if (edge(0) && !arenaOn() && arenaNear() && !robot && form !== 'board' && !skate) beginArena();
++  else if (edge(0) && !robot && form !== 'board' && !skate && !arenaOn()) commandFlight('up');
+   if (edge(1)) {
+     if (s.flight.mode) commandFlight('land');
+     else tapKey('KeyT');
+@@ -5557,7 +5715,7 @@ function useButton(all) {
+   const gp = all[p1Last];
+   if (!gp || btn.hidden) return;
+   const kind = padKind(gp.id),
+-    label = robot ? (kind === 'sn30' ? 'X' : 'Y') : kind === 'sn30' ? 'Y' : 'X';
++    label = arenaNear() && !robot ? 'A' : robot ? (kind === 'sn30' ? 'X' : 'Y') : kind === 'sn30' ? 'Y' : 'X';
+   for (const k of btn.querySelectorAll('kbd'))
+     if (k.textContent === 'E' || k.dataset.pad) {
+       k.dataset.pad = kind;
+@@ -5708,6 +5866,7 @@ function formBarP2(all) {
+   formEl2.innerHTML = `${morph}${f('car', '🚗')}${f('walk', '🚶')}${f('skate', '🛹')}<i></i>${fly}${f('fly', '✈️')}`;
+ }
+ function playingForm(player) {
++  if (arenaOn()) return 'arena';
+   if (player === 2) {
+     const rv = race.rivals[0];
+     if (rv?.session.flight.mode) return 'fly';
+@@ -6135,10 +6294,12 @@ const padLog = (() => {
+ const menuPad = createMenuPad({
+   root: () =>
+     document.querySelector('.overlay:not([hidden])') ??
++    ($('arena-menu')?.hidden ? null : $('arena-menu')) ??
+     ($('result').hidden || !$('result').querySelector('button') ? null : $('result')) ??
+     ($('brief').hidden ? null : $('brief')),
+   back: () => {
+     if (ui.panel()) return ui.close();
++    if (!$('arena-menu')?.hidden) return leaveArenaFight();
+     const card = $('result');
+     if (!card.hidden) return [...card.querySelectorAll('button')].find(b => /drive|close|×|back|ok/i.test(b.textContent))?.click();
+     if (started && paused) pause(false);
+@@ -6489,7 +6650,7 @@ function frame(now) {
+         burning = fl.burner && (!!s.flight.mode || throttleIn > 0);
          if (burning && !was) audio.boost();
        }
-       if (robot && !openWorld?.digging?.()) {
--        const keyWalk = drivingInput(keys, {}),
--          keyboard = keyWalk.throttle !== 0 || keyWalk.steer !== 0,
--          camYaw = (camHeading ?? robot.yaw) + lookYaw;
--        stepRobot(
--          robot,
--          intro.active
--            ? {}
--            : bowlingHold != null
--              ? {throttle: 0, steer: (keyboard ? keyWalk.steer : pad.moveX) * 0.13}
--              : keyboard
--                ? {throttle: keyWalk.throttle, steer: keyWalk.steer, jump: keys.has('Space') || pad.jumpHeld}
--                : {
--                    move: cameraMove(camYaw, pad.moveX, pad.moveY),
--                    jump: keys.has('Space') || pad.jumpHeld,
--                    sprint: pad.sprint
--                  },
--          course.world,
--          1 / 120
--        );
-+        if (intro.active) stepRobot(robot, {}, course.world, 1 / 120);
-+        else if (bowlingHold != null) {
-+          const keyWalk = drivingInput(keys, {}),
-+            keyboard = keyWalk.throttle !== 0 || keyWalk.steer !== 0;
-+          stepRobot(
-+            robot,
-+            {throttle: 0, steer: (keyboard ? keyWalk.steer : pad.moveX) * 0.13},
-+            course.world,
-+            1 / 120
-+          );
-+        } else {
-+          const keyWalk = drivingInput(keys, {}),
-+            keyboard = keyWalk.throttle !== 0 || keyWalk.steer !== 0,
-+            camYaw = (camHeading ?? robot.yaw) + lookYaw;
-+          if (keyboard) {
-+            p1In.move = null;
-+            p1In.throttle = keyWalk.throttle;
-+            p1In.steer = keyWalk.steer;
-+          } else {
-+            cameraMoveInto(p1Move, camYaw, pad.moveX, pad.moveY);
-+            p1In.move = p1Move;
-+            p1In.throttle = 0;
-+            p1In.steer = 0;
-+          }
-+          p1In.sprint = !!pad.sprint;
-+          p1In.jumpHeld = keys.has('Space') || !!pad.jumpHeld;
-+          p1In.punchHeld = !!(pad.punch || keys.has('KeyQ'));
-+          p1In.powerHeld = !!pad.boostHeld;
-+          p1In.shieldHeld = !!(pad.flyHeld || pad.shield);
-+          p1In.dashHeld = !!pad.dash;
-+          p1In.lockHeld = !!(pad.aim || keys.has('ShiftLeft') || keys.has('ShiftRight'));
-+          p1In.fireHeld = !!pad.fireHeld;
-+          p1In.busy = false;
-+          driveWalker(robot, p1In, course.world, 1 / 120, 1, allPads[p1Last], 1);
-+        }
-       }
-       if (split?.p2Form === 'robot' && p2Robot) {
--        const walk = p2RobotPad(allPads[split.pad], (split.heading ?? p2Robot.yaw) + (split.lookYaw || 0));
--        stepRobot(
--          p2Robot,
--          {move: walk.move, jump: walk.jump, sprint: walk.sprint},
--          course.world,
--          1 / 120
-+        p2RobotPad(allPads[split.pad], (split.heading ?? p2Robot.yaw) + (split.lookYaw || 0), p2In);
-+        p2PunchQueued = false;
-+        driveWalker(p2Robot, p2In, course.world, 1 / 120, 2, allPads[split.pad], 2);
-+      }
-+      if (spar.length) stepSpar(spar, 1 / 120);
-+      if (robot && p2Robot && split?.p2Form === 'robot' && bumpRobots(robot, p2Robot, 1 / 120)) {
-+        robotFx.spark(
-+          (robot.pos[0] + p2Robot.pos[0]) * 0.5,
-+          robot.pos[1] + 0.16,
-+          (robot.pos[2] + p2Robot.pos[2]) * 0.5
+-      if (robot && !openWorld?.digging?.()) {
++      if (robot && !openWorld?.digging?.() && !arenaOn()) {
+         const keyWalk = drivingInput(keys, {}),
+           keyboard = keyWalk.throttle !== 0 || keyWalk.steer !== 0,
+           camYaw = (camHeading ?? robot.yaw) + lookYaw;
+@@ -6510,7 +6671,7 @@ function frame(now) {
+           1 / 120
          );
--        if (p2PunchQueued) {
--          p2PunchQueued = false;
--          p2Robot.punch = COMBAT.punchTime;
--          p2Robot.use = COMBAT.punchTime;
--          p2Robot.vel[0] += Math.sin(p2Robot.yaw) * COMBAT.lunge;
--          p2Robot.vel[2] -= Math.cos(p2Robot.yaw) * COMBAT.lunge;
--        } else if (p2Robot.punch > 0) {
--          p2Robot.punch = Math.max(0, p2Robot.punch - 1 / 120);
--          p2Robot.use = p2Robot.punch;
--        }
-+        rumblePad(allPads[p1Last], 0.4, 50);
-+        rumblePad(allPads[split.pad], 0.4, 50);
-+        camShake = Math.max(camShake, 0.02);
-+        camShake2 = Math.max(camShake2, 0.02);
+       }
+-      if (split?.p2Form === 'robot' && p2Robot) {
++      if (split?.p2Form === 'robot' && p2Robot && !arenaOn()) {
+         const walk = p2RobotPad(allPads[split.pad], (split.heading ?? p2Robot.yaw) + (split.lookYaw || 0));
+         stepRobot(
+           p2Robot,
+@@ -6531,6 +6692,7 @@ function frame(now) {
        }
        hotWheelsPre();
        tennisStep(1 / 120, drive);
-@@ -7103,6 +7257,7 @@ function frame(now) {
-       } else if (e.type === 'furball-over') furballOver(e.winner);
-   }
-   fx.update(dt);
-+  robotFx.update(dt);
-   labFrame(dt);
-   poseCar(car, wheels, c);
-   if (openWorld) deliveryFrame(dt, now);
-@@ -7121,8 +7276,38 @@ function frame(now) {
-   if (splitOn && split?.p2Form === 'robot' && p2Robot && p2RobotBody) {
-     p2RobotBody.visible = true;
-     poseRobotBody(p2RobotBody, p2Robot);
--    if (p2Robot.punch > 0) p2RobotBody.userData.arms[1].rotation.x = -1.4;
-   } else if (p2RobotBody?.visible) p2RobotBody.visible = false;
-+  if (robot?.moves) {
-+    robotFx.flame(robot.pos[0], robot.pos[1], robot.pos[2], robot.yaw, robot.moves.thrusting);
-+    robotFx.fuel(0, robot.pos[0], robot.pos[1], robot.pos[2], robot.moves.fuel / MOVES.fuelMax, true);
-+    robotFx.bubble(0, robot.pos[0], robot.pos[1], robot.pos[2], robot.moves.shieldLeft > 0);
-+  } else {
-+    robotFx.fuel(0, 0, 0, 0, 0, false);
-+    robotFx.bubble(0, 0, 0, 0, false);
-+  }
-+  if (splitOn && split?.p2Form === 'robot' && p2Robot?.moves) {
-+    robotFx.flame(p2Robot.pos[0], p2Robot.pos[1], p2Robot.pos[2], p2Robot.yaw, p2Robot.moves.thrusting);
-+    robotFx.fuel(1, p2Robot.pos[0], p2Robot.pos[1], p2Robot.pos[2], p2Robot.moves.fuel / MOVES.fuelMax, true);
-+    robotFx.bubble(1, p2Robot.pos[0], p2Robot.pos[1], p2Robot.pos[2], p2Robot.moves.shieldLeft > 0);
-+  } else {
-+    robotFx.fuel(1, 0, 0, 0, 0, false);
-+    robotFx.bubble(1, 0, 0, 0, false);
-+  }
-+  for (let i = 0; i < spar.length; i++) {
-+    const d = spar[i],
-+      g = sparBodies[i],
-+      shell = g.userData.materials[0];
-+    poseRobotBody(g, d);
-+    g.scale.y = d.down > 0 ? 0.45 : 1;
-+    g.rotation.z = Math.sin(d.phase * 28) * d.wobble * 0.55;
-+    if (d.flash > 0) {
-+      shell.emissive.setHex(0xffe7a0);
-+      shell.emissiveIntensity = 0.9;
-+    } else if (shell.emissiveIntensity) {
-+      shell.emissive.setHex(0);
-+      shell.emissiveIntensity = 0;
-+    }
-+  }
-   // Low chase camera behind the heading; pulled in front of any wall between it and the car.
-   if (cameraCar)
-     camera.position.add(new T.Vector3(r.x - cameraCar[0], r.y - cameraCar[1], r.z - cameraCar[2]));
-@@ -7148,8 +7333,12 @@ function frame(now) {
-   {
-     const held = k => (lookKeys.has(k) ? 1 : 0),
-       stick = !paused && !ui.panel() && (Math.abs(pad.lookX) > 0 || Math.abs(pad.lookY) > 0),
--      foot = !!robot;
--    if (pad.recentre && !paused) {
-+      foot = !!robot,
-+      footLock = robot?.moves?.lockId != null;
-+    if (footLock) {
-+      lookYaw = 0;
-+      lookPitch = 0.12;
-+    } else if (pad.recentre && !paused) {
-       lookYaw = 0;
-       lookPitch = 0;
-       lookIdle = 0;
-@@ -7169,13 +7358,21 @@ function frame(now) {
-       }
-     }
-   }
-+  if (robot?.moves?.lockId != null) {
-+    const lp = robot.moves.lockPos;
-+    camHeading = Math.atan2(lp[0] - r.x, -(lp[2] - r.z));
-+  }
-   const camYaw = camHeading + lookYaw;
-   // The boss fight pulls back and up so the robot and the whole excavator share the frame.
-   // Riding a dinosaur in the dark world (the past) puts the toy up high: the camera pulls back with it.
--  const jumpCamera =
-+  const lockP = robot?.moves?.lockId != null ? robot.moves.lockPos : null,
-+    lockDist = lockP ? Math.hypot(lockP[0] - r.x, lockP[2] - r.z) : 0,
-+    jumpCamera =
-       s.flight.mode === 'chute' && openWorld?.skyDive().active ? skyDiveCamera(c.pos, camYaw) : null,
-     mount = riggedDino?.root.visible ? 2 : toyDino?.visible ? 2.6 : 1,
--    back = (bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount) * (padAim ? 0.62 : 1),
-+    back =
-+      (bossAt ? 2.6 : (1.36 + Math.min(0.24, r.speed * 0.015)) * mount) *
-+      (lockP ? 1.15 + Math.min(1.1, lockDist * 0.22) : 1),
-     eye = [r.x, r.y + 0.12 * mount, r.z];
-   desired.set(
-     r.x - Math.sin(camYaw) * back * Math.cos(lookPitch),
-@@ -7252,7 +7449,15 @@ function frame(now) {
++      stepArenaFight(1 / 120);
+       const schoolPrev = openWorld?.school()?.active ? [...s.car.pos] : null;
+       const skyPlacement = s.car.placement;
+       skyPrev[0] = s.car.pos[0];
+@@ -6541,7 +6703,7 @@ function frame(now) {
+       if (!labHold) annexSim(1 / 120);
+       stepRace(
+         race,
+-        robot || labHold
++        robot || labHold || arenaOn()
+           ? {throttle: 0, steer: 0, brake: true}
+           : {
+               ...skateInput,
+@@ -7284,6 +7446,12 @@ function frame(now) {
      camera.up.set(0, 1, 0);
      target.set(x, y + 0.4, z - 3);
    }
-+  if (lockP && !(tennisEligible() && openWorld.tennis()?.active)) {
-+    target.set((r.x + lockP[0]) * 0.5, (r.y + lockP[1]) * 0.5 + 0.12, (r.z + lockP[2]) * 0.5);
++  if (arenaOn()) {
++    const y = arenaApi().floor;
++    camera.position.set(ARENA.center[0] + ARENA.cam.x, y + ARENA.cam.y, ARENA.center[2] + ARENA.cam.z);
++    camera.up.set(0, 1, 0);
++    target.set(ARENA.center[0], y + ARENA.cam.lookY, ARENA.center[2]);
 +  }
    camera.lookAt(target);
-+  if (camShake > 0.001) {
-+    camera.position.x += Math.sin(now * 0.073) * camShake;
-+    camera.position.y += Math.cos(now * 0.091) * camShake * 0.65;
-+    camShake *= Math.exp(-8 * dt);
-+  }
    if (splitOn) {
      const rs2 = race.rivals[0].session,
-       walking = split?.p2Form === 'robot' && p2Robot,
-@@ -7270,7 +7475,10 @@ function frame(now) {
-     if (pad2 && !paused && !ui.panel()) {
-       const looking = Math.abs(pad2.lookX) > 0 || Math.abs(pad2.lookY) > 0,
-         foot2 = split.p2Form === 'robot';
--      if (pad2.recentre) split.lookYaw = split.lookPitch = split.lookIdle = 0;
-+      if (walking && p2Robot?.moves?.lockId != null) {
-+        split.lookYaw = 0;
-+        split.lookPitch = 0.12;
-+      } else if (pad2.recentre) split.lookYaw = split.lookPitch = split.lookIdle = 0;
-       else if (looking) {
-         split.lookYaw = (split.lookYaw || 0) + pad2.lookX * dt * 1.7;
-         split.lookPitch = Math.max(-0.35, Math.min(1.05, (split.lookPitch || 0) - pad2.lookY * dt * 1.15));
-@@ -7284,9 +7492,13 @@ function frame(now) {
-         }
-       }
+@@ -7347,6 +7515,12 @@ function frame(now) {
      }
--    const hy = split.heading + (split.lookYaw || 0),
--      hp = split.lookPitch || 0,
--      back = (1.36 + Math.min(0.24, r2.speed * 0.015)) * (walking && pad2?.aim ? 0.62 : 1),
-+    const locked2 = walking && p2Robot?.moves?.lockId != null,
-+      lp2 = locked2 ? p2Robot.moves.lockPos : null,
-+      hy = lp2 ? Math.atan2(lp2[0] - r2.x, -(lp2[2] - r2.z)) : split.heading + (split.lookYaw || 0),
-+      hp = lp2 ? 0.12 : split.lookPitch || 0,
-+      back =
-+        (1.36 + Math.min(0.24, r2.speed * 0.015)) *
-+        (lp2 ? 1.15 + Math.min(1.1, Math.hypot(lp2[0] - r2.x, lp2[2] - r2.z) * 0.22) : 1),
-       eye2 = [r2.x, r2.y + 0.12, r2.z];
-     desired2.set(
-       r2.x - Math.sin(hy) * back * Math.cos(hp),
-@@ -7321,7 +7533,13 @@ function frame(now) {
-       camera2.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
-       target2.set(r2.x, r2.y, r2.z).addScaledVector(fw, 3);
-     } else camera2.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
-+    if (lp2) target2.set((r2.x + lp2[0]) * 0.5, (r2.y + lp2[1]) * 0.5 + 0.12, (r2.z + lp2[2]) * 0.5);
+     camera2.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
      camera2.lookAt(target2);
-+    if (camShake2 > 0.001) {
-+      camera2.position.x += Math.sin(now * 0.073) * camShake2;
-+      camera2.position.y += Math.cos(now * 0.091) * camShake2 * 0.65;
-+      camShake2 *= Math.exp(-8 * dt);
++    if (arenaOn()) {
++      const y = arenaApi().floor;
++      camera2.position.set(ARENA.center[0] - ARENA.cam.x, y + ARENA.cam.y, ARENA.center[2] + ARENA.cam.z);
++      camera2.up.set(0, 1, 0);
++      camera2.lookAt(ARENA.center[0], y + ARENA.cam.lookY, ARENA.center[2]);
 +    }
      p2Hud.textContent = `P2 · ${Math.round((!walking && rs2.flight.mode ? rs2.flight.speed : r2.speed) * 3.6)} km/h`;
    }
    p2Hud.hidden = splitLine.hidden = !splitOn;
-diff --git a/web/wwwroot/rc/pad-art.mjs b/web/wwwroot/rc/pad-art.mjs
-index 423fc228..2cfa1125 100644
---- a/web/wwwroot/rc/pad-art.mjs
-+++ b/web/wwwroot/rc/pad-art.mjs
-@@ -22,13 +22,14 @@ const FORM_ACTIONS = {
-   robot: [
-     {act: 'MOVE', ctl: 'stick', why: 'L3 sprint'},
-     {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
--    {act: 'FIRE', ctl: 7},
--    {act: 'AIM', ctl: 6},
--    {act: 'JUMP', ctl: 0},
-+    {act: 'BLAST', ctl: 7},
-+    {act: 'LOCK', ctl: 6},
-+    {act: 'JUMP', ctl: 0, why: 'hold JETPACK'},
-     {act: 'MORPH', ctl: 1},
-     {act: 'PUNCH', ctl: 2},
--    {act: 'BOOST', ctl: 3},
--    {act: 'FLY', ctl: 4}
-+    {act: 'POWER', ctl: 3},
-+    {act: 'SHIELD', ctl: 4},
-+    {act: 'DASH', ctl: 5}
-   ],
-   fly: [
-     {act: 'PITCH', ctl: 'stick', why: 'roll'},
-@@ -90,7 +91,7 @@ export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {l
-   const L = LAYOUT[kind] ?? LAYOUT.xbox,
-     lit = i => pressed.has(i),
-     pulse = k => (glow.has(k) ? ' class="pad-glow"' : ''),
--    out = [`<svg viewBox="${labels ? "-64 -8 456 220" : "-8 -8 316 190"}" width="${width}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui" font-weight="800">`];
-+    out = [`<svg viewBox="${labels ? '-120 -8 540 220' : '-8 -8 316 190'}" width="${width}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui" font-weight="800">`];
-   for (const [i, [x, y, w, h, t]] of Object.entries(L.shoulder))
-     out.push(
-       `<g${pulse(+i)}><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${lit(+i) ? ON : kind === 'sn30' ? '#3aa955' : '#3a3e44'}" stroke="#0008"/><text x="${x + w / 2}" y="${y + h - 3.5}" font-size="10" text-anchor="middle" fill="${lit(+i) ? '#000' : '#fff'}">${t}</text></g>`
-@@ -145,9 +146,11 @@ export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {l
-     for (const {act, ctl, why} of actionsFor(form).filter(a => !skip.includes(a.act))) {
-       const [cx, cy] = at[ctl],
-         [tx, ty] = place[ctl],
--        right = tx > 150;
-+        right = tx > 150,
-+        textX = right ? tx : tx + 54,
-+        anchor = right ? 'start' : 'end';
-       out.push(
--        `<g${pulse(ctl)}><line x1="${cx}" y1="${cy}" x2="${right ? tx - 4 : tx + 54}" y2="${ty - 4}" stroke="#fff8" stroke-width="1.5"/><text x="${tx}" y="${ty}" font-size="17" fill="${act === 'GO' ? ON : '#fff'}">${act}</text>${why ? `<text x="${tx}" y="${ty + 12}" font-size="11" fill="#fffa">${why}</text>` : ''}</g>`
-+        `<g${pulse(ctl)}><line x1="${cx}" y1="${cy}" x2="${right ? tx - 4 : tx + 54}" y2="${ty - 4}" stroke="#fff8" stroke-width="1.5"/><text x="${textX}" y="${ty}" font-size="17" text-anchor="${anchor}" fill="${act === 'GO' ? ON : '#fff'}">${act}</text>${why ? `<text x="${textX}" y="${ty + 12}" font-size="11" text-anchor="${anchor}" fill="#fffa">${why}</text>` : ''}</g>`
-       );
-     }
-   }
-diff --git a/web/wwwroot/rc/robot-body.js b/web/wwwroot/rc/robot-body.js
-index afeb2704..ebe33439 100644
---- a/web/wwwroot/rc/robot-body.js
-+++ b/web/wwwroot/rc/robot-body.js
-@@ -65,15 +65,54 @@ export function poseRobotBody(g, robot) {
-   const swing = moving ? s * 0.7 : 0;
-   legs[0].rotation.x = swing;
-   legs[1].rotation.x = -swing;
--  arms[0].rotation.x = -swing * 0.8;
--  arms[1].rotation.x = swing * 0.8;
-+  arms[0].rotation.set(-swing * 0.8, 0, 0);
-+  arms[1].rotation.set(swing * 0.8, 0, 0);
-   if (robot.climb) {
-     arms[0].rotation.x = arms[1].rotation.x = -2.6;
-   }
-+  const mv = robot.moves;
-+  if (mv && mv.pose && mv.pose !== 'idle') fightPose(g, arms, legs, mv);
-   g.scale.y = robot.crouched ? 0.55 : 1;
-   head.position.y = 0.27 + (moving ? Math.abs(s) * 0.008 : 0);
- }
- 
-+// Anticipation, impact, recovery. t is 0..1 across a strike shorter than 300 ms.
-+function fightPose(g, arms, legs, mv) {
-+  const t = mv.poseT || 0,
-+    wind = t < 0.28 ? t / 0.28 : 0,
-+    hit = t < 0.28 ? 0 : t < 0.55 ? (t - 0.28) / 0.27 : 1,
-+    recover = t < 0.55 ? 0 : (t - 0.55) / 0.45,
-+    s = hit * (1 - recover) - wind * 0.45;
-+  if (mv.pose === 'jab') arms[1].rotation.x = -1.7 * s;
-+  else if (mv.pose === 'jab2') arms[0].rotation.x = -1.7 * s;
-+  else if (mv.pose === 'swing') {
-+    arms[0].rotation.x = -1.1 * s;
-+    arms[1].rotation.x = -1.1 * s;
-+    arms[0].rotation.z = 0.8 * s;
-+    arms[1].rotation.z = -0.8 * s;
-+  } else if (mv.pose === 'upper') {
-+    arms[0].rotation.x = -2.2 * Math.max(0, s);
-+    arms[1].rotation.x = -2.2 * Math.max(0, s);
-+  } else if (mv.pose === 'spin') {
-+    legs[0].rotation.x = 1.1 * s;
-+    legs[1].rotation.x = -1.1 * s;
-+    g.rotation.y += s * Math.PI * 2;
-+  } else if (mv.pose === 'pound') {
-+    arms[0].rotation.x = 1.4 * Math.max(0.2, s + 0.4);
-+    arms[1].rotation.x = 1.4 * Math.max(0.2, s + 0.4);
-+  } else if (mv.pose === 'shield') {
-+    arms[0].rotation.x = -1.2;
-+    arms[1].rotation.x = -1.2;
-+    arms[0].rotation.z = 0.5;
-+    arms[1].rotation.z = -0.5;
-+  } else if (mv.pose === 'dash') g.rotation.x = 0.45 * (1 - t);
-+  else if (mv.pose === 'fly') {
-+    g.rotation.x = 0.3;
-+    arms[0].rotation.x = 0.6;
-+    arms[1].rotation.x = 0.6;
-+  }
-+}
-+
- export function disposeRobotBody(g) {
-   g.removeFromParent();
-   g.traverse(o => o.geometry?.dispose());
-diff --git a/web/wwwroot/rc/robot-fight.test.mjs b/web/wwwroot/rc/robot-fight.test.mjs
+diff --git a/web/wwwroot/rc/open-world/catalog.mjs b/web/wwwroot/rc/open-world/catalog.mjs
+index f2219082..33e64ef7 100644
+--- a/web/wwwroot/rc/open-world/catalog.mjs
++++ b/web/wwwroot/rc/open-world/catalog.mjs
+@@ -16,6 +16,7 @@ import {PORTAL_EVENT, portalHeight} from './portal-course.mjs';
+ import {ROAD_EVENTS} from './road-events.mjs';
+ import {SKY_JUMPS} from './sky-dive.mjs';
+ import {POWER_PLANT} from './power-plant.js';
++import {ARENA_PAINT, ARENA_PLACE} from './robot-arena.mjs';
+ // Authored activities in the real Nellis local metre frame. +x east, +z south.
+ // Gameplay courses and landmark art are fiction; OSM supplies roads and footprints.
+ export const BOUNDS = [-3800, -4600, 3600, 4050]; // north and east grown for Spirit Mountain (spirit-mountain.mjs)
+@@ -40,6 +41,7 @@ export const LOCATIONS = [
+     kind: 'race',
+     event: 'gate-guard'
+   },
++  ARENA_PLACE,
+   {
+     id: 'skatepark',
+     name: 'Neighbourhood Skatepark',
+@@ -831,7 +833,11 @@ export function loadProgress(storage) {
+         ? v.body
+         : 'jet',
+     shell: ['viper', 'eagle', 'hog', 'raptor', 'flanker'].includes(v?.shell) ? v.shell : 'viper',
+-    paint: PAINTS.some(p => p.color === v?.paint) ? v.paint : PAINTS[0].color,
++    arenaTrophy: v?.arenaTrophy === true,
++    paint:
++      PAINTS.some(p => p.color === v?.paint) || (v?.arenaTrophy === true && v?.paint === ARENA_PAINT.color)
++        ? v.paint
++        : PAINTS[0].color,
+     trim: TRIMS.some(p => p.color === v?.trim) ? v.trim : TRIMS[0].color,
+     pattern: LIVERIES.some(l => l.id === v?.pattern) ? v.pattern : 'solid',
+     pumpkins: Number.isInteger(v?.pumpkins) && v.pumpkins > 0 ? v.pumpkins : 0,
+diff --git a/web/wwwroot/rc/open-world/robot-arena.js b/web/wwwroot/rc/open-world/robot-arena.js
 new file mode 100644
-index 00000000..7538d99a
+index 00000000..93689874
 --- /dev/null
-+++ b/web/wwwroot/rc/robot-fight.test.mjs
-@@ -0,0 +1,206 @@
-+import test from 'node:test';
-+import assert from 'node:assert/strict';
-+import {MOVES, createMoves, stepMoves, pickLockTarget, bumpRobots} from './robot-moves.mjs';
-+import {createDummy, bonkSpar, stepSpar} from './robot-spar.mjs';
++++ b/web/wwwroot/rc/open-world/robot-arena.js
+@@ -0,0 +1,357 @@
++// The dome you drive up to, and the toys fighting inside it.
++import * as T from '../../vendor/three.module.js';
++import {addBox} from '../physics/world.mjs';
++import {makeRobotBody, poseRobotBody, disposeRobotBody} from '../robot-body.js';
++import {
++  ARENA,
++  MODE_LABEL,
++  chooseMode,
++  coloursFor,
++  createArena,
++  cycleColour,
++  leaveArena,
++  modeIds,
++  rematch,
++  stepArena
++} from './robot-arena.mjs';
 +
-+const bot = (grounded = true) => ({pos: [0, 0, 0], vel: [0, 0, 0], yaw: 0, grounded});
-+const hold = (extra = {}) => ({punchHeld: false, powerHeld: false, jumpHeld: false, dashHeld: false, lockHeld: false, fireHeld: false, shieldHeld: false, move: null, ...extra});
++const $ = id => (typeof document === 'undefined' ? null : document.getElementById(id));
 +
-+function until(m, r, pred, input, targets = [], dt = 1 / 120) {
-+  let out = null;
-+  for (let i = 0; i < 80 && !pred(); i++) out = stepMoves(m, r, input, targets, targets.length, dt);
-+  return out;
-+}
-+
-+test('X-X-X is jab, jab, swing, and a late tap starts over', () => {
-+  const m = createMoves(),
-+    r = bot(true),
-+    foe = {id: 'foe', pos: [0, 0, -0.3], kind: 'dummy'};
-+  stepMoves(m, r, hold({punchHeld: true}), [foe], 1);
-+  assert.equal(m.action, 'jab');
-+  until(m, r, () => m.action !== 'jab', hold(), [foe]);
-+  assert.equal(m.combo, 1);
-+  stepMoves(m, r, hold({punchHeld: true}), [foe], 1);
-+  assert.equal(m.action, 'jab2');
-+  until(m, r, () => m.action !== 'jab2', hold(), [foe]);
-+  assert.equal(m.combo, 2);
-+  stepMoves(m, r, hold({punchHeld: true}), [foe], 1);
-+  assert.equal(m.action, 'swing');
-+  until(m, r, () => m.action === 'idle', hold(), [foe]);
-+  for (let i = 0; i < 80; i++) stepMoves(m, r, hold(), [], 0);
-+  assert.equal(m.combo, 0, 'the combo window closed');
-+  stepMoves(m, r, hold({punchHeld: true}), [], 0);
-+  assert.equal(m.action, 'jab');
-+});
-+
-+test('a jab connects in front and hit-stop freezes the next sample', () => {
-+  const m = createMoves(),
-+    r = bot(true),
-+    foe = {id: 'foe', pos: [0, 0, -0.3], kind: 'dummy', body: {vel: [0, 0, 0]}};
-+  stepMoves(m, r, hold({punchHeld: true}), [foe], 1);
-+  let hits = 0;
-+  for (let i = 0; i < 40; i++) {
-+    const out = stepMoves(m, r, hold(), [foe], 1);
-+    hits += out.hitCount;
-+    if (m.hitStop > 0) break;
-+  }
-+  assert.ok(hits >= 1, 'the jab reaches the dummy');
-+  assert.ok(m.hitBuf[0].iz < -1, 'knockback is away from the robot');
-+  assert.equal(m.hitBuf[0].blocked, false);
-+  const frozen = stepMoves(m, r, hold(), [foe], 1);
-+  assert.equal(frozen.frozen, true);
-+  assert.ok(m.hitStop >= 0);
-+});
-+
-+test('a shield soaks the hit', () => {
-+  const m = createMoves(),
-+    r = bot(true),
-+    foe = {id: 'foe', pos: [0, 0, -0.3], shield: true};
-+  stepMoves(m, r, hold({punchHeld: true}), [foe], 1);
-+  let blocked = false;
-+  for (let i = 0; i < 40; i++) {
-+    const out = stepMoves(m, r, hold(), [foe], 1);
-+    if (out.hitCount && m.hitBuf[0].blocked) blocked = true;
-+  }
-+  assert.equal(blocked, true);
-+  assert.equal(m.hitBuf[0].ix, 0);
-+  assert.equal(m.hitBuf[0].iz, 0);
-+});
-+
-+test('Y is an uppercut standing still and a spinning kick while moving', () => {
-+  const still = createMoves(),
-+    a = bot(true);
-+  stepMoves(still, a, hold({powerHeld: true, move: {x: 0, z: 0}}), [], 0);
-+  assert.equal(still.action, 'upper');
-+  assert.ok(a.vel[1] > 2);
-+  const go = createMoves(),
-+    b = bot(true);
-+  b.vel[0] = 1;
-+  stepMoves(go, b, hold({powerHeld: true, move: {x: 1, z: 0}}), [], 0);
-+  assert.equal(go.action, 'spin');
-+});
-+
-+test('jetpack fuel lasts about four seconds and refills on the ground in about two', () => {
-+  const m = createMoves(),
-+    r = bot(false);
-+  r.pos[1] = 2;
-+  let t = 0;
-+  while (m.fuel > 0 && t < 6) {
-+    stepMoves(m, r, hold({jumpHeld: true}), [], 0, 0.05);
-+    r.grounded = false;
-+    t += 0.05;
-+  }
-+  assert.ok(t > 3.7 && t < 4.4, `thrust time ${t}`);
-+  assert.equal(m.thrusting, false);
-+  assert.ok(m.fuel <= 0.05);
-+  r.grounded = true;
-+  t = 0;
-+  while (m.fuel < MOVES.fuelMax - 0.05 && t < 4) {
-+    stepMoves(m, r, hold(), [], 0, 0.05);
-+    t += 0.05;
-+  }
-+  assert.ok(t > 1.6 && t < 2.4, `refill time ${t}`);
-+  assert.ok(m.fuel > MOVES.fuelMax - 0.2);
-+});
-+
-+test('holding A on the ground jumps once, and holding it in the air thrusts', () => {
-+  const m = createMoves(),
-+    r = bot(true);
-+  stepMoves(m, r, hold({jumpHeld: true}), [], 0, 1 / 120);
-+  assert.equal(r.grounded, false);
-+  assert.ok(r.vel[1] > 2);
-+  assert.equal(m.thrusting, false, 'the jump frame is not yet thrust');
-+  r.vel[1] = 0.2;
-+  stepMoves(m, r, hold({jumpHeld: true}), [], 0, 1 / 120);
-+  assert.equal(m.thrusting, true);
-+  const before = m.fuel;
-+  stepMoves(m, r, hold({jumpHeld: true}), [], 0, 1 / 120);
-+  assert.ok(m.fuel < before);
-+});
-+
-+test('air X is a ground-pound: dive, then a shockwave on landing', () => {
-+  const m = createMoves(),
-+    r = bot(false),
-+    car = {id: 'car', pos: [0.2, 0, -0.3], kind: 'car', body: {vel: [0, 0, 0]}};
-+  r.pos[1] = 1.2;
-+  stepMoves(m, r, hold(), [], 0);
-+  stepMoves(m, r, hold({punchHeld: true}), [car], 1);
-+  assert.equal(m.action, 'pound');
-+  assert.ok(r.vel[1] <= MOVES.dive);
-+  const air = stepMoves(m, r, hold({punchHeld: true}), [car], 1);
-+  assert.equal(air.shock, false);
-+  r.grounded = true;
-+  r.pos[1] = 0;
-+  const land = stepMoves(m, r, hold({punchHeld: true}), [car], 1);
-+  assert.equal(land.shock, true);
-+  assert.equal(land.landed, true);
-+  assert.ok(land.hitCount >= 1);
-+  assert.ok(Math.hypot(m.hitBuf[0].ix, m.hitBuf[0].iz) > 2);
-+  assert.ok(land.rumble >= 1);
-+});
-+
-+test('a plain landing is soft: dust flag, no shock', () => {
-+  const m = createMoves(),
-+    r = bot(false);
-+  stepMoves(m, r, hold(), [], 0);
-+  r.grounded = true;
-+  const out = stepMoves(m, r, hold(), [], 0);
-+  assert.equal(out.landed, true);
-+  assert.equal(out.shock, false);
-+});
-+
-+test('lock-on picks the nearest target inside range and clears when let go', () => {
-+  const targets = [
-+      {id: 'far', pos: [0, 0, -9]},
-+      {id: 'near', pos: [0.4, 0, -1.2]},
-+      {id: 'mid', pos: [-2, 0, -3]}
-+    ],
-+    origin = [0, 0, 0];
-+  assert.equal(pickLockTarget(origin, targets, 3, MOVES.lockRange), 1);
-+  assert.equal(pickLockTarget(origin, targets, 3, 0.5), -1);
-+  const m = createMoves(),
-+    r = bot(true);
-+  stepMoves(m, r, hold({lockHeld: true}), targets, 3);
-+  assert.equal(m.lockId, 'near');
-+  assert.ok(Math.abs(m.lockPos[2] + 1.2) < 1e-9);
-+  stepMoves(m, r, hold({lockHeld: false}), targets, 3);
-+  assert.equal(m.lockId, null);
-+});
-+
-+test('RB dashes along the stick and strikes recover inside 300 ms', () => {
-+  const m = createMoves(),
-+    r = bot(true);
-+  stepMoves(m, r, hold({dashHeld: true, move: {x: 1, z: 0}}), [], 0);
-+  assert.equal(m.action, 'dash');
-+  assert.ok(r.vel[0] > 4 && Math.abs(r.vel[2]) < 0.2);
-+  for (const t of [MOVES.jab, MOVES.swing, MOVES.upper, MOVES.spin, MOVES.dash, MOVES.shield])
-+    assert.ok(t <= 0.3, t);
-+});
-+
-+test('LB raises a brief shield', () => {
-+  const m = createMoves(),
-+    r = bot(true);
-+  stepMoves(m, r, hold({shieldHeld: true}), [], 0, 1 / 60);
-+  assert.ok(m.shieldLeft > 0.2);
-+  assert.equal(m.pose, 'shield');
-+  for (let i = 0; i < 40; i++) stepMoves(m, r, hold({shieldHeld: true}), [], 0, 1 / 60);
-+  assert.equal(m.shieldLeft, 0, 'it drops even if the button stays down');
-+});
-+
-+test('two robots bump apart and a dummy pops back up', () => {
-+  const a = bot(true),
-+    b = bot(true);
-+  a.moves = createMoves();
-+  b.moves = createMoves();
-+  b.pos[0] = 0.1;
-+  assert.equal(bumpRobots(a, b, 1 / 120), true);
-+  assert.ok(a.vel[0] < 0 && b.vel[0] > 0);
-+  assert.equal(bumpRobots(a, b, 1 / 120), false, 'one spark per contact');
-+  const d = createDummy(101, [0, 0, 0], 0);
-+  bonkSpar(d, 3, -1);
-+  assert.ok(d.flash > 0 && d.wobble > 0 && d.down > 0);
-+  for (let i = 0; i < 120 * 3; i++) stepSpar([d], 1 / 120);
-+  assert.ok(Math.hypot(d.pos[0], d.pos[2]) < 0.2, `home again ${d.pos}`);
-+  assert.equal(d.down, 0);
-+  assert.equal(d.id, 101);
-+});
-diff --git a/web/wwwroot/rc/robot-fx.js b/web/wwwroot/rc/robot-fx.js
-new file mode 100644
-index 00000000..998d36dc
---- /dev/null
-+++ b/web/wwwroot/rc/robot-fx.js
-@@ -0,0 +1,298 @@
-+// Pooled jetpack flame, POW sparks, shockwave, shield bubble and the fuel ring.
-+// Everything is allocated once. update() only writes into those buffers.
-+import * as T from '../vendor/three.module.js';
-+
-+const MAX = 96;
-+
-+function puffTexture() {
++function sign(text) {
 +  const c = document.createElement('canvas');
-+  c.width = c.height = 64;
-+  const g = c.getContext('2d'),
-+    grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
-+  grad.addColorStop(0.45, 'rgba(255,255,255,0.35)');
-+  grad.addColorStop(1, 'rgba(255,255,255,0)');
-+  g.fillStyle = grad;
-+  g.fillRect(0, 0, 64, 64);
-+  return new T.CanvasTexture(c);
-+}
-+
-+function powTexture() {
-+  const c = document.createElement('canvas');
-+  c.width = 128;
-+  c.height = 64;
++  c.width = 1024;
++  c.height = 192;
 +  const g = c.getContext('2d');
-+  g.font = '800 42px system-ui';
++  g.fillStyle = '#1b1218';
++  g.fillRect(0, 0, 1024, 192);
++  g.fillStyle = '#ff4d6a';
++  g.fillRect(0, 0, 1024, 14);
++  g.fillRect(0, 178, 1024, 14);
++  g.fillStyle = '#fff6ea';
++  g.font = '700 92px system-ui';
 +  g.textAlign = 'center';
-+  g.textBaseline = 'middle';
-+  g.lineWidth = 7;
-+  g.strokeStyle = '#1a1204';
-+  g.fillStyle = '#ffe14a';
-+  g.strokeText('POW', 64, 34);
-+  g.fillText('POW', 64, 34);
-+  const tex = new T.CanvasTexture(c);
-+  tex.needsUpdate = true;
-+  return tex;
-+}
-+
-+function makeRing() {
-+  const geo = new T.RingGeometry(0.12, 0.175, 28),
-+    mat = new T.MeshBasicMaterial({
-+      color: 0x5ce1ff,
-+      transparent: true,
-+      opacity: 0.92,
-+      side: T.DoubleSide,
-+      depthWrite: false
-+    }),
-+    mesh = new T.Mesh(geo, mat);
-+  mesh.rotation.x = -Math.PI / 2;
-+  mesh.frustumCulled = false;
-+  mesh.renderOrder = 3;
-+  mesh.visible = false;
++  g.fillText(text, 512, 128, 980);
++  const map = new T.CanvasTexture(c);
++  map.colorSpace = T.SRGBColorSpace;
++  const mesh = new T.Mesh(
++    new T.PlaneGeometry(6.4, 1.2),
++    new T.MeshBasicMaterial({map, side: T.DoubleSide})
++  );
++  mesh.name = 'RobotArenaSign';
 +  return mesh;
 +}
 +
-+export function createRobotFx(scene) {
-+  const pos = new Float32Array(MAX * 3),
-+    col = new Float32Array(MAX * 3),
-+    life = new Float32Array(MAX),
-+    span = new Float32Array(MAX),
-+    vel = new Float32Array(MAX * 3),
-+    size = new Float32Array(MAX),
-+    base = new Float32Array(MAX),
-+    alpha = new Float32Array(MAX);
-+  const geo = new T.BufferGeometry();
-+  geo.setAttribute('position', new T.BufferAttribute(pos, 3));
-+  geo.setAttribute('color', new T.BufferAttribute(col, 3));
-+  geo.setAttribute('aSize', new T.BufferAttribute(size, 1));
-+  geo.setAttribute('aAlpha', new T.BufferAttribute(alpha, 1));
-+  const mat = new T.ShaderMaterial({
-+    uniforms: {map: {value: puffTexture()}, scale: {value: 380}},
-+    transparent: true,
-+    depthWrite: false,
-+    vertexColors: true,
-+    vertexShader:
-+      'attribute float aSize;attribute float aAlpha;varying float vAlpha;varying vec3 vColor;uniform float scale;void main(){vColor=color;vAlpha=aAlpha;vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=aSize*scale/max(.15,-mv.z);gl_Position=projectionMatrix*mv;}',
-+    fragmentShader:
-+      'uniform sampler2D map;varying float vAlpha;varying vec3 vColor;void main(){float a=texture2D(map,gl_PointCoord).a*vAlpha;if(a<.02)discard;gl_FragColor=vec4(vColor,a);}'
-+  });
-+  const points = new T.Points(geo, mat);
-+  points.frustumCulled = false;
-+  points.renderOrder = 4;
-+  scene.add(points);
-+  let cursor = 0;
++export function createRobotArena(scene, world, {heightAt} = {}) {
++  const floor = heightAt ? heightAt(ARENA.center[0], ARENA.center[2]) : 0;
++  const root = new T.Group();
++  root.name = 'RobotArena';
++  root.position.set(ARENA.center[0], floor, ARENA.center[2]);
++  scene.add(root);
 +
-+  function emit(x, y, z, vx, vy, vz, r, g, b, spanS, grow) {
-+    const i = cursor;
-+    cursor = (cursor + 1) % MAX;
-+    pos[i * 3] = x;
-+    pos[i * 3 + 1] = y;
-+    pos[i * 3 + 2] = z;
-+    vel[i * 3] = vx;
-+    vel[i * 3 + 1] = vy;
-+    vel[i * 3 + 2] = vz;
-+    col[i * 3] = r;
-+    col[i * 3 + 1] = g;
-+    col[i * 3 + 2] = b;
-+    life[i] = span[i] = spanS;
-+    base[i] = size[i] = grow;
++  const domeMat = new T.MeshStandardMaterial({
++    color: '#ff4d6a',
++    emissive: '#ff2d55',
++    emissiveIntensity: 0.85,
++    roughness: 0.25,
++    metalness: 0.05,
++    transparent: true,
++    opacity: 0.28,
++    side: T.DoubleSide,
++    depthWrite: false
++  });
++  const dome = new T.Mesh(new T.SphereGeometry(ARENA.outer, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
++  dome.position.y = 0.05;
++  dome.name = 'RobotArenaDome';
++  root.add(dome);
++
++  const deck = new T.Mesh(
++    new T.CircleGeometry(ARENA.radius + 0.35, 32),
++    new T.MeshStandardMaterial({color: '#241820', roughness: 0.85, metalness: 0.05})
++  );
++  deck.rotation.x = -Math.PI / 2;
++  deck.position.y = 0.03;
++  root.add(deck);
++
++  const ring = new T.Mesh(
++    new T.TorusGeometry(ARENA.radius, 0.06, 8, 40),
++    new T.MeshStandardMaterial({
++      color: '#7cf6ff',
++      emissive: '#3ee0ff',
++      emissiveIntensity: 1.4,
++      roughness: 0.2
++    })
++  );
++  ring.rotation.x = Math.PI / 2;
++  ring.position.y = 0.55;
++  root.add(ring);
++
++  const rope = new T.Mesh(
++    new T.TorusGeometry(ARENA.radius, 0.045, 8, 40),
++    ring.material
++  );
++  rope.rotation.x = Math.PI / 2;
++  rope.position.y = 1.05;
++  root.add(rope);
++
++  const board = sign('ROBOT ARENA');
++  board.position.set(0, 2.35, ARENA.outer - 0.15);
++  root.add(board);
++
++  const postMat = new T.MeshStandardMaterial({
++    color: '#d7fbff',
++    emissive: '#8ef6ff',
++    emissiveIntensity: 0.7,
++    roughness: 0.35
++  });
++  for (let i = 0; i < 18; i++) {
++    const a = (i / 18) * Math.PI * 2;
++    const lx = Math.sin(a) * ARENA.outer * 0.96;
++    const lz = Math.cos(a) * ARENA.outer * 0.96;
++    const gate = lz > ARENA.outer - 2.4 && Math.abs(lx) < 2.5;
++    if (!gate) {
++      addBox(world, ARENA.center[0] + lx, ARENA.center[2] + lz, 1.05, 1.05, floor, floor + 1.45);
++      const post = new T.Mesh(new T.CylinderGeometry(0.12, 0.16, 2.4, 8), postMat);
++      post.position.set(lx, 1.2, lz);
++      root.add(post);
++    }
++  }
++  for (const side of [-1.7, 1.7]) {
++    const jamb = new T.Mesh(new T.BoxGeometry(0.28, 2.6, 0.28), postMat);
++    jamb.position.set(side, 1.3, ARENA.outer - 0.2);
++    root.add(jamb);
 +  }
 +
-+  const powTex = powTexture(),
-+    pows = [];
-+  for (let i = 0; i < 4; i++) {
-+    const s = new T.Sprite(
-+      new T.SpriteMaterial({map: powTex, transparent: true, depthWrite: false, opacity: 0})
++  const padMat = new T.MeshStandardMaterial({color: '#3a4550', roughness: 0.6, metalness: 0.2});
++  for (const p of ARENA.platforms) {
++    const box = new T.Mesh(new T.BoxGeometry(p.w, 0.12, p.w), padMat);
++    box.position.set(p.x, p.y, p.z);
++    root.add(box);
++  }
++
++  const lampMat = new T.MeshBasicMaterial({color: '#ffe1a8'});
++  const lamps = [];
++  for (let i = 0; i < 12; i++) {
++    const a = (i / 12) * Math.PI * 2;
++    const lamp = new T.Mesh(new T.SphereGeometry(0.16, 8, 8), lampMat.clone());
++    lamp.position.set(Math.sin(a) * (ARENA.outer - 0.4), 4.6 + (i % 2) * 0.35, Math.cos(a) * (ARENA.outer - 0.4));
++    root.add(lamp);
++    lamps.push(lamp);
++  }
++
++  const bodies = new Map();
++  const scraps = [];
++  const sparks = [];
++  for (let i = 0; i < 24; i++) {
++    const s = new T.Mesh(
++      new T.SphereGeometry(0.05, 6, 6),
++      new T.MeshBasicMaterial({color: '#ffe08a'})
 +    );
 +    s.visible = false;
-+    s.scale.set(0.28, 0.14, 1);
-+    s.userData.life = 0;
-+    s.frustumCulled = false;
-+    scene.add(s);
-+    pows.push(s);
++    root.add(s);
++    sparks.push(s);
 +  }
-+  let powNext = 0;
++  let state = null;
 +
-+  const rings = [makeRing(), makeRing()];
-+  for (const ring of rings) scene.add(ring);
++  function bodyFor(f) {
++    let g = bodies.get(f.id);
++    if (!g) {
++      g = makeRobotBody(f.color);
++      g.scale.setScalar(1.65);
++      root.add(g);
++      bodies.set(f.id, g);
++    }
++    g.userData.materials?.[0]?.color.set(f.color);
++    return g;
++  }
 +
-+  const bubbles = [0, 1].map(() => {
-+    const bubble = new T.Mesh(
-+      new T.SphereGeometry(0.2, 16, 12),
-+      new T.MeshBasicMaterial({color: 0x9ad8ff, transparent: true, opacity: 0.32, depthWrite: false})
-+    );
-+    bubble.visible = false;
-+    bubble.frustumCulled = false;
-+    scene.add(bubble);
-+    return bubble;
-+  });
++  function pose(st) {
++    const live = new Set(st?.fighters?.map(f => f.id) ?? []);
++    for (const [id, g] of bodies) {
++      if (!live.has(id)) {
++        disposeRobotBody(g);
++        bodies.delete(id);
++      }
++    }
++    for (const s of scraps) s.visible = false;
++    if (!st || st.phase === 'off' || st.phase === 'menu') {
++      for (const g of bodies.values()) g.visible = false;
++      return;
++    }
++    let scrap = 0;
++    for (const f of st.fighters) {
++      const g = bodyFor(f);
++      g.visible = !f.ko;
++      if (!f.ko) {
++        poseRobotBody(g, {
++          pos: [f.x, f.y, f.z],
++          yaw: f.yaw,
++          vel: [f.vx, 0, f.vz],
++          walkPhase: f.walkPhase,
++          crouched: false,
++          climb: null
++        });
++        g.position.set(f.x, f.y, f.z);
++        const tall = f.pose === 'victory' ? 1.8 : 1.65;
++        g.scale.set(1.65, tall, 1.65);
++        const arms = g.userData.arms;
++        if (f.pose === 'victory') {
++          arms[0].rotation.z = arms[1].rotation.z = 0;
++          arms[0].rotation.x = arms[1].rotation.x = -2.6;
++        }
++        else if (f.pose === 'windup') arms[1].rotation.x = -1.6;
++        else if (f.pose === 'punch') arms[1].rotation.x = -2.2;
++        else if (f.pose === 'shield') arms[0].rotation.x = arms[1].rotation.x = -1.2;
++      } else {
++        for (const p of f.parts) {
++          let bit = scraps[scrap];
++          if (!bit) {
++            bit = new T.Mesh(new T.BoxGeometry(0.08, 0.08, 0.08), new T.MeshStandardMaterial({color: f.color}));
++            root.add(bit);
++            scraps.push(bit);
++          }
++          bit.visible = true;
++          bit.position.set(p.x, p.y, p.z);
++          bit.material.color.set(f.color);
++          scrap++;
++        }
++      }
++    }
++    sparks.forEach(s => (s.visible = false));
++    st.sparks.forEach((sp, i) => {
++      const s = sparks[i];
++      if (!s) return;
++      s.visible = true;
++      s.position.set(sp.x, sp.y, sp.z);
++      s.scale.setScalar(0.4 + sp.life * 3);
++    });
++  }
 +
-+  const shocks = [0, 1].map(() => {
-+    const shock = new T.Mesh(
-+      new T.RingGeometry(0.28, 0.4, 28),
-+      new T.MeshBasicMaterial({color: 0xffe08a, transparent: true, opacity: 0, side: T.DoubleSide, depthWrite: false})
-+    );
-+    shock.rotation.x = -Math.PI / 2;
-+    shock.visible = false;
-+    shock.frustumCulled = false;
-+    shock.userData.life = 0;
-+    scene.add(shock);
-+    return shock;
-+  });
-+  let shockNext = 0;
-+
-+  const beams = [0, 1].map(() => {
-+    const beam = new T.Mesh(
-+      new T.BoxGeometry(0.025, 0.025, 1),
-+      new T.MeshBasicMaterial({color: 0x8ef6ff, transparent: true, opacity: 0, depthWrite: false})
-+    );
-+    beam.visible = false;
-+    beam.frustumCulled = false;
-+    beam.userData.life = 0;
-+    scene.add(beam);
-+    return beam;
-+  });
-+  let beamNext = 0;
-+  const aim = new T.Vector3();
-+
-+  function pop(x, y, z) {
-+    const s = pows[powNext];
-+    powNext = (powNext + 1) % pows.length;
-+    s.position.set(x, y + 0.08, z);
-+    s.material.opacity = 1;
-+    s.userData.life = 0.22;
-+    s.scale.set(0.2, 0.1, 1);
-+    s.visible = true;
++  function sync(players = state?.players ?? 1, paused = false) {
++    const menu = $('arena-menu');
++    const hud = $('arena-hud');
++    const banner = $('arena-banner');
++    const clock = $('arena-clock');
++    if (!state || state.phase === 'off') {
++      if (menu) menu.hidden = true;
++      if (hud) hud.hidden = true;
++      if (banner) banner.hidden = true;
++      return;
++    }
++    if (state.phase === 'menu') state.players = players >= 2 ? 2 : 1;
++    if (menu) {
++      menu.hidden = paused || state.phase !== 'menu';
++      for (const id of ['ladder', 'versus', 'coop']) {
++        const b = $('arena-mode-' + id);
++        if (b) b.hidden = !modeIds(state.players).includes(id);
++      }
++    }
++    const fighting = state.phase !== 'menu';
++    if (hud) hud.hidden = !fighting;
++    if (banner) {
++      banner.hidden = !state.banner || paused;
++      banner.textContent = state.banner || '';
++    }
++    if (clock) {
++      clock.hidden = !state.timerOn || state.clock == null;
++      if (!clock.hidden) clock.textContent = String(Math.ceil(state.clock));
++    }
++    state.fighters.forEach((f, i) => {
++      const row = $('arena-row-' + i);
++      if (!row) return;
++      row.hidden = false;
++      const face = row.querySelector('.arena-face');
++      const bar = row.querySelector('.arena-bar');
++      const fill = bar?.querySelector('span');
++      const hp = row.querySelector('.arena-hp');
++      const name = row.querySelector('.arena-name');
++      const pct = Math.round((100 * f.hp) / f.max);
++      if (face) face.style.setProperty('--face', f.color);
++      if (bar) {
++        bar.style.setProperty('--hp', String(pct));
++        bar.setAttribute('aria-valuenow', String(pct));
++        bar.setAttribute('aria-label', `${f.name} health`);
++      }
++      if (fill) fill.style.width = pct + '%';
++      if (hp) hp.textContent = String(Math.max(0, Math.ceil(f.hp)));
++      if (name) name.textContent = f.name;
++      row.classList.toggle('ko', f.ko);
++    });
++    for (let i = state.fighters.length; i < 3; i++) {
++      const row = $('arena-row-' + i);
++      if (row) row.hidden = true;
++    }
++    const swatch = $('arena-swatch');
++    const colourName = $('arena-colour-name');
++    const current = coloursFor(state).find(c => c.color === state.colour);
++    if (swatch) swatch.style.background = state.colour;
++    if (colourName && current) colourName.textContent = current.name;
 +  }
 +
 +  return {
-+    flame(x, y, z, yaw, on) {
-+      if (!on) return;
-+      const bx = x - Math.sin(yaw) * 0.05,
-+        bz = z + Math.cos(yaw) * 0.05,
-+        jx = (Math.random() - 0.5) * 0.15,
-+        jz = (Math.random() - 0.5) * 0.15;
-+      emit(bx, y + 0.02, bz, jx, 0.15 + Math.random() * 0.3, jz, 1, 0.45 + Math.random() * 0.2, 0.05, 0.22, 0.08);
-+      emit(bx, y + 0.03, bz, jx * 0.4, 0.35, jz * 0.4, 0.55, 0.55, 0.52, 0.4, 0.1);
++    floor,
++    state: () => state,
++    on: () => !!state && state.phase !== 'off',
++    enter(opts = {}) {
++      state = createArena(opts);
++      sync(opts.players, false);
++      pose(state);
++      return state;
 +    },
-+    spark(x, y, z) {
-+      for (let k = 0; k < 6; k++)
-+        emit(
-+          x,
-+          y,
-+          z,
-+          (Math.random() - 0.5) * 2.2,
-+          0.4 + Math.random() * 1.4,
-+          (Math.random() - 0.5) * 2.2,
-+          1,
-+          0.85,
-+          0.25,
-+          0.18,
-+          0.06
-+        );
-+      pop(x, y, z);
-+    },
-+    dust(x, y, z) {
-+      for (let k = 0; k < 8; k++)
-+        emit(
-+          x,
-+          y + 0.02,
-+          z,
-+          (Math.random() - 0.5) * 1.1,
-+          0.15 + Math.random() * 0.35,
-+          (Math.random() - 0.5) * 1.1,
-+          0.78,
-+          0.72,
-+          0.62,
-+          0.35,
-+          0.07
-+        );
-+    },
-+    shock(x, y, z) {
-+      const s = shocks[shockNext];
-+      shockNext = (shockNext + 1) % shocks.length;
-+      s.position.set(x, y + 0.03, z);
-+      s.scale.set(0.35, 0.35, 0.35);
-+      s.material.opacity = 0.85;
-+      s.userData.life = 0.28;
-+      s.visible = true;
-+    },
-+    blast(x, y, z, tx, ty, tz) {
-+      const beam = beams[beamNext];
-+      beamNext = (beamNext + 1) % beams.length;
-+      const dx = tx - x,
-+        dy = ty - y,
-+        dz = tz - z,
-+        len = Math.hypot(dx, dy, dz) || 0.2;
-+      beam.position.set(x + dx * 0.5, y + dy * 0.5, z + dz * 0.5);
-+      beam.scale.set(1, 1, len);
-+      aim.set(tx, ty, tz);
-+      beam.lookAt(aim);
-+      beam.material.opacity = 0.95;
-+      beam.userData.life = 0.08;
-+      beam.visible = true;
-+    },
-+    fuel(i, x, y, z, amount, show) {
-+      const ring = rings[i];
-+      if (!ring) return;
-+      ring.visible = !!show;
-+      if (!show) return;
-+      ring.position.set(x, y + 0.015, z);
-+      const fuel = amount < 0 ? 0 : amount > 1 ? 1 : amount;
-+      ring.geometry.setDrawRange(0, Math.max(6, Math.floor(fuel * ring.geometry.index.count)));
-+      ring.material.color.setRGB(1 - fuel * 0.55, 0.4 + fuel * 0.5, 0.15 + fuel * 0.85);
-+    },
-+    bubble(i, x, y, z, show) {
-+      const bubble = bubbles[i];
-+      if (!bubble) return;
-+      bubble.visible = !!show;
-+      if (show) bubble.position.set(x, y + 0.15, z);
-+    },
-+    update(dt) {
-+      for (let i = 0; i < MAX; i++) {
-+        if (life[i] <= 0) {
-+          alpha[i] = 0;
-+          continue;
-+        }
-+        life[i] -= dt;
-+        vel[i * 3 + 1] -= 1.4 * dt;
-+        pos[i * 3] += vel[i * 3] * dt;
-+        pos[i * 3 + 1] += vel[i * 3 + 1] * dt;
-+        pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
-+        const age = 1 - Math.max(0, life[i]) / span[i];
-+        size[i] = base[i] * (1 + age * 1.6);
-+        alpha[i] = life[i] > 0 ? 0.85 * (1 - age) : 0;
++    choose(mode) {
++      const ok = state ? chooseMode(state, mode) : false;
++      if (ok) {
++        sync(state.players, false);
++        pose(state);
 +      }
-+      geo.attributes.position.needsUpdate = true;
-+      geo.attributes.color.needsUpdate = true;
-+      geo.attributes.aSize.needsUpdate = true;
-+      geo.attributes.aAlpha.needsUpdate = true;
-+      for (let i = 0; i < pows.length; i++) {
-+        const s = pows[i];
-+        if (s.userData.life <= 0) continue;
-+        s.userData.life -= dt;
-+        s.material.opacity = Math.max(0, s.userData.life / 0.22);
-+        const k = 0.2 + (1 - s.material.opacity) * 0.16;
-+        s.scale.set(k, k * 0.5, 1);
-+        if (s.userData.life <= 0) s.visible = false;
++      return ok;
++    },
++    step(dt, inputs) {
++      if (!state) return {hits: [], cue: null, rumble: 0, unlocked: false, phase: 'off'};
++      const ev = stepArena(state, inputs, dt);
++      pose(state);
++      sync(state.players, false);
++      return ev;
++    },
++    sync,
++    rematch() {
++      const ok = state ? rematch(state) : false;
++      if (ok) {
++        pose(state);
++        sync(state.players, false);
 +      }
-+      for (let i = 0; i < shocks.length; i++) {
-+        const s = shocks[i];
-+        if (s.userData.life <= 0) continue;
-+        s.userData.life -= dt;
-+        const u = 1 - Math.max(0, s.userData.life) / 0.28;
-+        const k = 0.35 + u * 2.4;
-+        s.scale.set(k, k, k);
-+        s.material.opacity = s.userData.life > 0 ? 0.85 * (1 - u) : 0;
-+        if (s.userData.life <= 0) s.visible = false;
-+      }
-+      for (let i = 0; i < beams.length; i++) {
-+        const b = beams[i];
-+        if (b.userData.life <= 0) continue;
-+        b.userData.life -= dt;
-+        b.material.opacity = b.userData.life > 0 ? b.userData.life / 0.08 : 0;
-+        if (b.userData.life <= 0) b.visible = false;
-+      }
-+    }
++      return ok;
++    },
++    colour() {
++      if (!state) return null;
++      const next = cycleColour(state);
++      sync(state.players, false);
++      pose(state);
++      return next;
++    },
++    leave() {
++      const at = state ? leaveArena(state) : {pos: [...ARENA.exit], yaw: ARENA.exitYaw};
++      state = null;
++      pose(null);
++      sync(1, false);
++      return at;
++    },
++    pulse(t) {
++      domeMat.emissiveIntensity = 0.65 + Math.sin(t * 2.2) * 0.25;
++      lamps.forEach((lamp, i) => {
++        lamp.material.color.setHSL((t * 0.05 + i / 12) % 1, 0.75, 0.62);
++        lamp.position.y = 4.6 + (i % 2) * 0.35 + Math.sin(t * 3 + i) * 0.08;
++      });
++    },
++    dispose() {
++      for (const g of bodies.values()) disposeRobotBody(g);
++      bodies.clear();
++      root.removeFromParent();
++      root.traverse(o => {
++        o.geometry?.dispose();
++        if (o.material?.map) o.material.map.dispose();
++        o.material?.dispose?.();
++      });
++    },
++    label: MODE_LABEL
 +  };
 +}
-diff --git a/web/wwwroot/rc/robot-moves.mjs b/web/wwwroot/rc/robot-moves.mjs
+diff --git a/web/wwwroot/rc/open-world/robot-arena.mjs b/web/wwwroot/rc/open-world/robot-arena.mjs
 new file mode 100644
-index 00000000..309ff6eb
+index 00000000..1d4aa82e
 --- /dev/null
-+++ b/web/wwwroot/rc/robot-moves.mjs
-@@ -0,0 +1,483 @@
-+// Shared robot jetpack and fighting moves. Free roam, the Robot Arena and the Jetpack FPS
-+// all call stepMoves. Toy-feel numbers (fiction): a 6-year-old on an 8BitDo, not a measured
-+// aircraft. No per-call allocations: timers, the hit buffer and the result live on the state.
-+//
-+// input (all optional, levels not edges — the state remembers the last sample):
-+//   jumpHeld, punchHeld, powerHeld, shieldHeld, dashHeld, lockHeld, fireHeld, busy
-+//   move: {x, z} camera-relative stick, or null when the keyboard is walking
-+// robot: {pos, vel, yaw, grounded}. Targets: {id, pos, kind, body, shield}.
-+// Caller applies hitBuf impulses. This module moves only the robot (jump, thrust, dash, dive).
-+import {ROBOT} from './physics/robot.mjs';
++++ b/web/wwwroot/rc/open-world/robot-arena.mjs
+@@ -0,0 +1,739 @@
++// Robot Arena: a couch fighting game for a 6-year-old, played where the hub landmark is.
++// The ring, the rounds and the CPU live here so tests can run them without the renderer.
++// Site: a clear pad north of the main gate, inside the base, off the roads
++// (checked against boundary.mjs and assets/world/overview.json, 6 Nov 2026).
 +
-+export const MOVES = Object.freeze({
-+  // Strikes include anticipation, impact and recovery. Each one is under 300 ms.
-+  jab: 0.18,
-+  swing: 0.26,
-+  upper: 0.24,
-+  spin: 0.28,
-+  dash: 0.14,
-+  shield: 0.3,
-+  comboWindow: 0.42,
-+  dashCool: 0.32,
-+  fireCool: 0.28,
-+  fuelMax: 4,
-+  fuelRefill: 2,
-+  thrust: 18,
-+  riseCap: 2.4,
-+  jump: ROBOT.jump,
-+  gravity: ROBOT.gravity,
-+  dive: -7.4,
-+  dashSpeed: 5.2,
-+  lunge: 1.15,
-+  knock: 2.5,
-+  poundKnock: 3.6,
-+  lift: 0.85,
++export const ARENA = Object.freeze({
++  id: 'robot-arena',
++  name: 'Robot Arena',
++  short: 'Robot Arena',
++  center: Object.freeze([-600, 0, -200]),
++  gate: Object.freeze([-600, 0, -192.8]),
++  exit: Object.freeze([-600, 0, -184.2]),
++  exitYaw: Math.PI,
++  radius: 2.55,
++  outer: 7.4,
++  gateReach: 3.2,
++  color: '#ff4d6a',
++  icon: '🤖',
++  health: 100,
++  rounds: 2,
++  intro: 1.05,
++  fightCall: 0.7,
++  koTime: 1.55,
 +  hitStop: 0.05,
-+  lockRange: 7,
-+  hitRange: 0.5,
-+  hitArc: 1.15,
-+  poundRadius: 1.4,
-+  blastRange: 6,
-+  blastArc: 0.45,
-+  blastKnock: 1.7
++  cam: Object.freeze({x: 4.4, y: 1.85, z: 3.6, lookY: 0.32}),
++  platforms: Object.freeze([
++    Object.freeze({x: -1.05, z: -0.35, y: 0.48, w: 0.78}),
++    Object.freeze({x: 1.05, z: -0.35, y: 0.48, w: 0.78}),
++    Object.freeze({x: 0, z: 0.95, y: 0.78, w: 0.86})
++  ])
 +});
 +
-+const HIT_SLOTS = 8;
++export const ARENA_PLACE = Object.freeze({
++  id: ARENA.id,
++  name: ARENA.name,
++  short: ARENA.short,
++  pos: [...ARENA.gate],
++  color: ARENA.color,
++  icon: ARENA.icon,
++  kind: 'activity',
++  game: 'robot-arena'
++});
 +
-+function blankHit() {
-+  return {id: 0, kind: '', body: null, ix: 0, iy: 0, iz: 0, x: 0, y: 0, z: 0, blocked: false};
++// Earned by clearing the ladder. The Garage offers it only after the trophy.
++export const ARENA_PAINT = Object.freeze({name: 'Champion', color: '#f0c14a', earned: 'arena'});
++
++// Same colours the Garage already saves, so a pause-menu change is a real paint.
++export const FIGHTER_COLOURS = Object.freeze([
++  Object.freeze({name: 'Viper Punks', color: '#ed9145'}),
++  Object.freeze({name: 'Arctic', color: '#d7e5e8'}),
++  Object.freeze({name: 'Aggressor', color: '#6a9dbf'}),
++  Object.freeze({name: 'Mudhen', color: '#b5a17b'}),
++  Object.freeze({name: 'Night', color: '#74728d'})
++]);
++
++export const OPPONENTS = Object.freeze([
++  Object.freeze({id: 'sparky', name: 'Sparky', color: '#5ec8ff', tier: 'easy'}),
++  Object.freeze({id: 'bolt', name: 'Bolt', color: '#ff6b4a', tier: 'easy'}),
++  Object.freeze({id: 'titan', name: 'Titan', color: '#c084fc', tier: 'medium'})
++]);
++
++// A combo from full health must leave a kid standing, and every swing is telegraphed.
++export const CPU_BOUNDS = Object.freeze({
++  telegraphMin: 0.5,
++  blockMax: 0.4,
++  comboMax: 2,
++  comboKoFraction: 0.45
++});
++
++export const CPU = Object.freeze({
++  easy: Object.freeze({telegraph: 0.9, block: 0.12, comboMax: 1, damage: 7, blaster: 0.08}),
++  medium: Object.freeze({telegraph: 0.62, block: 0.32, comboMax: 2, damage: 9, blaster: 0.16})
++});
++
++export const MODE_LABEL = Object.freeze({
++  ladder: 'Vs CPU',
++  versus: 'Vs friend',
++  coop: 'Both vs CPU'
++});
++
++const SPEED = 2.05;
++const DASH = 5.4;
++const PUNCH = Object.freeze({damage: 8, range: 0.52});
++const POWER = Object.freeze({damage: 16, range: 0.64});
++const POUND = Object.freeze({damage: 14, radius: 0.85});
++const BLAST = Object.freeze({damage: 7, speed: 4.2});
++
++export function cpuWithinBounds(tier) {
++  const c = CPU[tier];
++  if (!c) return false;
++  const combo = c.damage * c.comboMax;
++  return (
++    c.telegraph >= CPU_BOUNDS.telegraphMin &&
++    c.block <= CPU_BOUNDS.blockMax &&
++    c.block >= 0 &&
++    c.comboMax >= 1 &&
++    c.comboMax <= CPU_BOUNDS.comboMax &&
++    combo < ARENA.health * CPU_BOUNDS.comboKoFraction &&
++    combo < ARENA.health
++  );
 +}
 +
-+export function createMoves() {
++// One random sample in, one decision out. A follow-up that would KO is a step back, not a swing.
++export function cpuDecision(spec, s) {
++  const lethalFollow = s.combo > 0 && (s.foeHp <= spec.damage || s.combo >= spec.comboMax);
++  if (lethalFollow) return {back: true};
++  const threat =
++    s.foePose === 'punch' || s.foePose === 'power' || s.foePose === 'pound' || s.foePose === 'windup';
++  if (threat && s.random < spec.block) return {shield: true};
++  if (s.dist <= 0.72 && !(s.windup > 0)) {
++    const kind = s.random < spec.blaster ? 'blaster' : s.random > 0.72 ? 'power' : 'punch';
++    return {windup: true, kind};
++  }
++  return {approach: true};
++}
++
++export function modeIds(players) {
++  return players >= 2 ? ['ladder', 'versus', 'coop'] : ['ladder'];
++}
++
++export function coloursFor(st) {
++  const list = [...FIGHTER_COLOURS];
++  if (st?.trophy && !list.some(c => c.color === ARENA_PAINT.color)) list.push(ARENA_PAINT);
++  return list;
++}
++
++export function extraPaints(progress) {
++  return progress?.arenaTrophy ? [ARENA_PAINT] : [];
++}
++
++export function grantArenaTrophy(progress) {
++  if (!progress) return null;
++  const first = !progress.arenaTrophy;
++  progress.arenaTrophy = true;
++  return first ? ARENA_PAINT : null;
++}
++
++export function inArenaGate(pos) {
++  if (!pos) return false;
++  return Math.hypot(pos[0] - ARENA.gate[0], pos[2] - ARENA.gate[2]) <= ARENA.gateReach;
++}
++
++export function arenaCamYaw() {
++  return Math.atan2(-ARENA.cam.x, ARENA.cam.z);
++}
++
++export function createArena({players = 1, colour = FIGHTER_COLOURS[0].color, trophy = false, random = Math.random} = {}) {
 +  return {
-+    action: 'idle',
-+    pose: 'idle',
-+    poseT: 0,
-+    combo: 0,
-+    comboLeft: 0,
-+    phase: 0,
-+    dur: 0,
-+    fuel: MOVES.fuelMax,
-+    thrusting: false,
-+    lockId: null,
-+    lockPos: [0, 0, 0],
++    phase: 'menu',
++    mode: null,
++    players: players >= 2 ? 2 : 1,
++    colour,
++    trophy: !!trophy,
++    ladder: 0,
++    round: 1,
++    scores: [0, 0],
++    banner: '',
++    bannerT: 0,
++    cue: null,
++    fighters: [],
++    shots: [],
++    sparks: [],
 +    hitStop: 0,
-+    shieldLeft: 0,
-+    shieldCool: 0,
-+    dashCool: 0,
-+    fireCool: 0,
-+    dashX: 0,
-+    dashZ: 0,
-+    recover: 0,
-+    wasAir: false,
-+    didHit: false,
-+    buffered: 0,
-+    bumpCool: 0,
-+    prev: {punch: false, power: false, dash: false, fire: false, jump: false, shield: false},
-+    hitBuf: Array.from({length: HIT_SLOTS}, blankHit),
-+    out: {
-+      thrust: false,
-+      hitCount: 0,
-+      shock: false,
-+      sx: 0,
-+      sy: 0,
-+      sz: 0,
-+      landed: false,
-+      blast: false,
-+      bx: 0,
-+      by: 0,
-+      bz: 0,
-+      tx: 0,
-+      ty: 0,
-+      tz: 0,
-+      rumble: 0,
-+      frozen: false
-+    }
++    koT: 0,
++    timerOn: false,
++    clock: null,
++    winnerSide: null,
++    rumble: 0,
++    unlockCue: false,
++    random
 +  };
 +}
 +
-+/** Index of the nearest target inside range, or -1. */
-+export function pickLockTarget(origin, targets, count, range = MOVES.lockRange) {
-+  let best = -1,
-+    bestD = range;
-+  for (let i = 0; i < count; i++) {
-+    const t = targets[i];
-+    if (!t?.pos) continue;
-+    const d = Math.hypot(t.pos[0] - origin[0], t.pos[2] - origin[2]);
++function foeOf(st, f) {
++  let best = null,
++    bestD = Infinity;
++  for (const o of st.fighters) {
++    if (o.side === f.side || o.ko) continue;
++    const d = Math.hypot(o.x - f.x, o.z - f.z);
 +    if (d < bestD) {
++      best = o;
 +      bestD = d;
-+      best = i;
 +    }
 +  }
 +  return best;
 +}
 +
-+function clearOut(state) {
-+  const o = state.out;
-+  o.thrust = false;
-+  o.hitCount = 0;
-+  o.shock = false;
-+  o.landed = false;
-+  o.blast = false;
-+  o.rumble = 0;
-+  o.frozen = false;
-+}
-+
-+function begin(state, action, dur) {
-+  state.action = action;
-+  state.pose = action;
-+  state.dur = dur;
-+  state.phase = 0;
-+  state.poseT = 0;
-+  state.didHit = false;
-+  state.buffered = 0;
-+}
-+
-+function moving(robot, input) {
-+  const m = input.move;
-+  if (m && Math.hypot(m.x || 0, m.z || 0) > 0.35) return true;
-+  return Math.hypot(robot.vel[0], robot.vel[2]) > 0.45;
-+}
-+
-+function startPunch(state, robot) {
-+  if (!robot.grounded) {
-+    begin(state, 'pound', 0.3);
-+    robot.vel[1] = Math.min(robot.vel[1], MOVES.dive);
-+    state.combo = 0;
-+    state.comboLeft = 0;
-+    return;
-+  }
-+  const chain = state.combo > 0 && state.comboLeft > 0;
-+  const step = chain ? state.combo + 1 : 1;
-+  if (step >= 3) {
-+    begin(state, 'swing', MOVES.swing);
-+    state.combo = 0;
-+  } else if (step === 2) {
-+    begin(state, 'jab2', MOVES.jab);
-+    state.combo = 2;
-+  } else {
-+    begin(state, 'jab', MOVES.jab);
-+    state.combo = 1;
-+  }
-+  state.comboLeft = 0;
-+}
-+
-+function startPower(state, robot, input) {
-+  if (!robot.grounded) return;
-+  if (moving(robot, input)) begin(state, 'spin', MOVES.spin);
-+  else {
-+    begin(state, 'upper', MOVES.upper);
-+    robot.vel[1] = Math.max(robot.vel[1], 2.6);
-+  }
-+  state.combo = 0;
-+  state.comboLeft = 0;
-+}
-+
-+function startDash(state, robot, input) {
-+  let dx = input.move?.x || 0,
-+    dz = input.move?.z || 0,
-+    mag = Math.hypot(dx, dz);
-+  if (mag < 0.2) {
-+    dx = Math.sin(robot.yaw);
-+    dz = -Math.cos(robot.yaw);
-+    mag = 1;
-+  }
-+  state.dashX = dx / mag;
-+  state.dashZ = dz / mag;
-+  begin(state, 'dash', MOVES.dash);
-+  state.dashCool = MOVES.dashCool;
-+  state.combo = 0;
-+  state.comboLeft = 0;
-+  robot.vel[0] = state.dashX * MOVES.dashSpeed;
-+  robot.vel[2] = state.dashZ * MOVES.dashSpeed;
-+}
-+
-+function endStrike(state) {
-+  const was = state.action;
-+  state.action = 'idle';
-+  state.pose = 'idle';
-+  state.poseT = 0;
-+  if (was === 'jab' || was === 'jab2') state.comboLeft = MOVES.comboWindow;
-+  else {
-+    state.combo = 0;
-+    state.comboLeft = 0;
-+  }
-+}
-+
-+function inArc(robot, t, range, arc) {
-+  const dx = t.pos[0] - robot.pos[0],
-+    dz = t.pos[2] - robot.pos[2],
-+    d = Math.hypot(dx, dz);
-+  if (d > range) return false;
-+  const face = Math.atan2(dx, -dz),
-+    diff = Math.atan2(Math.sin(face - robot.yaw), Math.cos(face - robot.yaw));
-+  return Math.abs(diff) < arc;
-+}
-+
-+function inRadius(robot, t, range) {
-+  return Math.hypot(t.pos[0] - robot.pos[0], t.pos[2] - robot.pos[2]) <= range;
-+}
-+
-+function consider(state, robot, targets, count, test, knock, lift) {
-+  const buf = state.hitBuf;
-+  let n = state.out.hitCount,
-+    solid = false;
-+  for (let i = 0; i < count; i++) {
-+    const t = targets[i];
-+    if (!t?.pos || !test(t)) continue;
-+    if (n >= buf.length) break;
-+    const h = buf[n++],
-+      dx = t.pos[0] - robot.pos[0],
-+      dz = t.pos[2] - robot.pos[2],
-+      d = Math.hypot(dx, dz) || 1;
-+    h.id = t.id;
-+    h.kind = t.kind || '';
-+    h.body = t.body || null;
-+    h.blocked = !!t.shield;
-+    h.ix = h.blocked ? 0 : (dx / d) * knock;
-+    h.iy = h.blocked ? 0 : lift;
-+    h.iz = h.blocked ? 0 : (dz / d) * knock;
-+    h.x = t.pos[0];
-+    h.y = (t.pos[1] || 0) + 0.14;
-+    h.z = t.pos[2];
-+    if (!h.blocked) solid = true;
-+  }
-+  state.out.hitCount = n;
-+  return solid;
-+}
-+
-+function lunge(robot) {
-+  robot.vel[0] += Math.sin(robot.yaw) * MOVES.lunge;
-+  robot.vel[2] -= Math.cos(robot.yaw) * MOVES.lunge;
-+}
-+
-+/**
-+ * One sample. Returns state.out (reused). Hits land in state.hitBuf[0..hitCount).
-+ */
-+export function stepMoves(state, robot, input = {}, targets = [], count = targets.length, dt = 1 / 120) {
-+  const prev = state.prev,
-+    punchEdge = !!input.punchHeld && !prev.punch,
-+    powerEdge = !!input.powerHeld && !prev.power,
-+    dashEdge = !!input.dashHeld && !prev.dash,
-+    fireEdge = !!input.fireHeld && !prev.fire,
-+    jumpEdge = !!input.jumpHeld && !prev.jump,
-+    shieldEdge = !!input.shieldHeld && !prev.shield;
-+  prev.punch = !!input.punchHeld;
-+  prev.power = !!input.powerHeld;
-+  prev.dash = !!input.dashHeld;
-+  prev.fire = !!input.fireHeld;
-+  prev.jump = !!input.jumpHeld;
-+  prev.shield = !!input.shieldHeld;
-+  clearOut(state);
-+
-+  if (state.hitStop > 0) {
-+    state.hitStop -= dt;
-+    if (state.hitStop < 0) state.hitStop = 0;
-+    if (punchEdge) state.buffered = 1;
-+    else if (powerEdge) state.buffered = 2;
-+    state.out.frozen = true;
-+    state.out.thrust = state.thrusting;
-+    return state.out;
-+  }
-+
-+  if (input.busy) {
-+    state.thrusting = false;
-+    if (robot.grounded) state.fuel = Math.min(MOVES.fuelMax, state.fuel + (MOVES.fuelMax / MOVES.fuelRefill) * dt);
-+    state.wasAir = !robot.grounded;
-+    state.pose = 'idle';
-+    return state.out;
-+  }
-+
-+  if (state.action === 'idle' && state.comboLeft > 0) {
-+    state.comboLeft -= dt;
-+    if (state.comboLeft <= 0) {
-+      state.comboLeft = 0;
-+      state.combo = 0;
-+    }
-+  }
-+  state.shieldLeft = Math.max(0, state.shieldLeft - dt);
-+  state.shieldCool = Math.max(0, state.shieldCool - dt);
-+  state.dashCool = Math.max(0, state.dashCool - dt);
-+  state.fireCool = Math.max(0, state.fireCool - dt);
-+
-+  const timed =
-+    state.action === 'jab' ||
-+    state.action === 'jab2' ||
-+    state.action === 'swing' ||
-+    state.action === 'upper' ||
-+    state.action === 'spin' ||
-+    state.action === 'dash';
-+  if (timed) {
-+    state.phase += dt;
-+    state.poseT = state.dur > 0 ? Math.min(1, state.phase / state.dur) : 1;
-+    if (!state.didHit && state.action !== 'dash') {
-+      const u = state.poseT;
-+      if (u >= 0.32 && u <= 0.62) {
-+        state.didHit = true;
-+        const solid = consider(state, robot, targets, count, t => inArc(robot, t, MOVES.hitRange, MOVES.hitArc), MOVES.knock, MOVES.lift);
-+        lunge(robot);
-+        if (solid) {
-+          state.hitStop = MOVES.hitStop;
-+          state.out.rumble = 0.75;
-+        }
-+      }
-+    }
-+    if (state.action === 'dash') {
-+      robot.vel[0] = state.dashX * MOVES.dashSpeed;
-+      robot.vel[2] = state.dashZ * MOVES.dashSpeed;
-+    }
-+    if (state.phase >= state.dur) {
-+      const chain = state.buffered || (punchEdge ? 1 : powerEdge ? 2 : 0);
-+      endStrike(state);
-+      if (chain === 1) startPunch(state, robot);
-+      else if (chain === 2) startPower(state, robot, input);
-+    }
-+  } else if (state.action === 'pound') {
-+    state.phase += dt;
-+    state.poseT = Math.min(1, state.phase / 0.22);
-+    if (!robot.grounded && robot.vel[1] > MOVES.dive) robot.vel[1] = MOVES.dive;
-+  }
-+
-+  const landed = state.wasAir && robot.grounded;
-+  if (landed) {
-+    state.out.landed = true;
-+    if (state.action === 'pound') {
-+      state.out.shock = true;
-+      state.out.sx = robot.pos[0];
-+      state.out.sy = robot.pos[1];
-+      state.out.sz = robot.pos[2];
-+      state.out.rumble = 1;
-+      consider(state, robot, targets, count, t => inRadius(robot, t, MOVES.poundRadius), MOVES.poundKnock, 1.4);
-+      state.hitStop = MOVES.hitStop;
-+      state.action = 'idle';
-+      state.combo = 0;
-+      state.comboLeft = 0;
-+      state.recover = 0.16;
-+      state.pose = 'pound';
-+      state.poseT = 1;
-+    }
-+  }
-+
-+  if (state.action === 'idle') {
-+    if (punchEdge || state.buffered === 1) startPunch(state, robot);
-+    else if (powerEdge || state.buffered === 2) startPower(state, robot, input);
-+    else if (dashEdge && state.dashCool <= 0) startDash(state, robot, input);
-+    else if (shieldEdge && state.shieldCool <= 0) {
-+      state.shieldLeft = MOVES.shield;
-+      state.shieldCool = MOVES.shield + 0.2;
-+    }
-+  }
-+
-+  // A tap leaves the ground. Holding A after that is the jetpack, so the hop itself spends no fuel.
-+  let hopped = false;
-+  if (jumpEdge && robot.grounded && state.action !== 'pound' && state.action !== 'upper') {
-+    robot.vel[1] = MOVES.jump;
-+    robot.grounded = false;
-+    hopped = true;
-+  }
-+
-+  const thrust =
-+    !hopped && !robot.grounded && !!input.jumpHeld && state.fuel > 0 && state.action !== 'pound';
-+  state.thrusting = thrust;
-+  state.out.thrust = thrust;
-+  if (thrust) {
-+    state.fuel = Math.max(0, state.fuel - dt);
-+    robot.vel[1] += MOVES.gravity * dt + 7 * dt;
-+    if (robot.vel[1] > MOVES.riseCap) robot.vel[1] = MOVES.riseCap;
-+    if (state.fuel <= 0) {
-+      state.thrusting = false;
-+      state.out.thrust = false;
-+    }
-+  } else if (robot.grounded) {
-+    state.fuel = Math.min(MOVES.fuelMax, state.fuel + (MOVES.fuelMax / MOVES.fuelRefill) * dt);
-+  }
-+
-+  if (input.lockHeld) {
-+    const i = pickLockTarget(robot.pos, targets, count, MOVES.lockRange);
-+    if (i >= 0) {
-+      const t = targets[i];
-+      state.lockId = t.id;
-+      state.lockPos[0] = t.pos[0];
-+      state.lockPos[1] = t.pos[1] || 0;
-+      state.lockPos[2] = t.pos[2];
-+      const face = Math.atan2(t.pos[0] - robot.pos[0], -(t.pos[2] - robot.pos[2])),
-+        diff = Math.atan2(Math.sin(face - robot.yaw), Math.cos(face - robot.yaw));
-+      robot.yaw += diff * Math.min(1, 12 * dt);
-+    } else state.lockId = null;
-+  } else state.lockId = null;
-+
-+  if (fireEdge && state.fireCool <= 0) {
-+    state.fireCool = MOVES.fireCool;
-+    const reach = MOVES.blastRange,
-+      x = robot.pos[0] + Math.sin(robot.yaw) * reach,
-+      z = robot.pos[2] - Math.cos(robot.yaw) * reach;
-+    state.out.blast = true;
-+    state.out.bx = robot.pos[0];
-+    state.out.by = robot.pos[1] + 0.16;
-+    state.out.bz = robot.pos[2];
-+    let hit = null,
-+      hitD = reach;
-+    for (let i = 0; i < count; i++) {
-+      const t = targets[i];
-+      if (!t?.pos || !inArc(robot, t, reach, MOVES.blastArc)) continue;
-+      const d = Math.hypot(t.pos[0] - robot.pos[0], t.pos[2] - robot.pos[2]);
-+      if (d < hitD) {
-+        hitD = d;
-+        hit = t;
-+      }
-+    }
-+    if (hit) {
-+      state.out.tx = hit.pos[0];
-+      state.out.ty = (hit.pos[1] || 0) + 0.14;
-+      state.out.tz = hit.pos[2];
-+      consider(state, robot, targets, count, t => t === hit, MOVES.blastKnock, 0.4);
-+    } else {
-+      state.out.tx = x;
-+      state.out.ty = robot.pos[1] + 0.16;
-+      state.out.tz = z;
-+    }
-+  }
-+
-+  if (state.action === 'idle') {
-+    if (state.recover > 0) {
-+      state.recover -= dt;
-+      state.pose = 'pound';
-+      state.poseT = Math.max(0, state.recover / 0.16);
-+    } else if (state.shieldLeft > 0) {
-+      state.pose = 'shield';
-+      state.poseT = 1 - state.shieldLeft / MOVES.shield;
-+    } else if (thrust) {
-+      state.pose = 'fly';
-+      state.poseT = 1;
-+    } else {
-+      state.pose = 'idle';
-+      state.poseT = 0;
-+    }
-+  }
-+
-+  state.wasAir = !robot.grounded;
-+  return state.out;
-+}
-+
-+/** Soft body bump. Pushes every call; the spark is once per contact. No damage. */
-+export function bumpRobots(a, b, dt = 1 / 120) {
-+  if (a?.moves) a.moves.bumpCool = Math.max(0, a.moves.bumpCool - dt);
-+  if (!a?.pos || !b?.pos) return false;
-+  const dx = b.pos[0] - a.pos[0],
-+    dz = b.pos[2] - a.pos[2],
-+    d = Math.hypot(dx, dz),
-+    min = 0.22;
-+  if (d >= min || d < 1e-4) return false;
-+  const nx = dx / d,
-+    nz = dz / d,
-+    push = (min - d) * 14,
-+    as = a.moves?.shieldLeft > 0 ? 0.25 : 1,
-+    bs = b.moves?.shieldLeft > 0 ? 0.25 : 1;
-+  a.vel[0] -= nx * push * as;
-+  a.vel[2] -= nz * push * as;
-+  b.vel[0] += nx * push * bs;
-+  b.vel[2] += nz * push * bs;
-+  if (a.moves && a.moves.bumpCool > 0) return false;
-+  if (a.moves) a.moves.bumpCool = 0.28;
-+  return true;
-+}
-diff --git a/web/wwwroot/rc/robot-spar.mjs b/web/wwwroot/rc/robot-spar.mjs
-new file mode 100644
-index 00000000..d9f0ca0f
---- /dev/null
-+++ b/web/wwwroot/rc/robot-spar.mjs
-@@ -0,0 +1,60 @@
-+// Sparring dummies at the skatepark hub. They wobble, flash and spring home. They do not die.
-+// Local offsets are in the residential park frame, a few steps from the spawn (6, 8.7).
-+
-+export const SPAR_LOCAL = Object.freeze([
-+  [9.5, 0.15, 6.2],
-+  [2.6, 0.15, 5.8],
-+  [6.2, 0.15, 3.1]
-+]);
-+
-+export function createDummy(id, pos, yaw = 0) {
++function makeFighter(id, side, name, color, spot, cpu = null) {
 +  return {
 +    id,
-+    home: [pos[0], pos[1], pos[2]],
-+    pos: [pos[0], pos[1], pos[2]],
-+    vel: [0, 0, 0],
-+    yaw,
-+    wobble: 0,
-+    flash: 0,
-+    down: 0,
-+    phase: 0,
++    side,
++    name,
++    color,
++    cpu,
++    hp: ARENA.health,
++    max: ARENA.health,
++    x: spot.x,
++    z: spot.z,
++    y: 0,
++    vx: 0,
++    vz: 0,
++    vy: 0,
++    yaw: spot.yaw,
++    grounded: true,
++    shield: false,
++    combo: 0,
++    comboT: 0,
++    powerCd: 0,
++    blastCd: 0,
++    dashT: 0,
++    dashCd: 0,
++    pose: 'idle',
++    poseT: 0,
++    windup: 0,
++    intent: null,
++    stunned: 0,
++    ko: false,
++    parts: [],
 +    walkPhase: 0,
-+    crouched: false,
-+    climb: null
++    wasPunch: false,
++    wasPower: false,
++    wasDash: false,
++    wasBlast: false,
++    wasJump: false
 +  };
 +}
 +
-+export function createSparRing(toWorld) {
-+  const start = toWorld([6, 0.15, 8.7]);
-+  return SPAR_LOCAL.map((p, i) => {
-+    const at = toWorld(p),
-+      yaw = Math.atan2(start[0] - at[0], -(start[2] - at[2]));
-+    return createDummy(101 + i, at, yaw);
++function lineup(st) {
++  const opp = OPPONENTS[Math.min(st.ladder, OPPONENTS.length - 1)];
++  const south = {x: 0, z: 1.15, yaw: 0},
++    north = {x: 0, z: -1.15, yaw: Math.PI};
++  const list = [makeFighter('p1', 0, 'You', st.colour, st.mode === 'coop' ? {x: -0.45, z: 1.15, yaw: 0} : south)];
++  if (st.mode === 'versus' || st.mode === 'coop')
++    list.push(makeFighter('p2', st.mode === 'versus' ? 1 : 0, 'P2', '#f05aa6', st.mode === 'coop' ? {x: 0.45, z: 1.15, yaw: 0} : north));
++  if (st.mode === 'ladder' || st.mode === 'coop')
++    list.push(makeFighter(opp.id, 1, opp.name, opp.color, north, opp.tier));
++  st.fighters = list;
++  st.shots = [];
++  st.sparks = [];
++}
++
++function cue(st, name) {
++  st.banner = name;
++  st.cue = name;
++}
++
++export function chooseMode(st, mode) {
++  if (!st || st.phase !== 'menu' || !modeIds(st.players).includes(mode)) return false;
++  st.mode = mode;
++  st.ladder = 0;
++  st.round = 1;
++  st.scores = [0, 0];
++  st.winnerSide = null;
++  beginRound(st);
++  return true;
++}
++
++function beginRound(st) {
++  lineup(st);
++  st.phase = 'intro';
++  st.bannerT = ARENA.intro;
++  st.koT = 0;
++  st.hitStop = 0;
++  st.winnerSide = null;
++  st.clock = st.timerOn ? 60 : null;
++  cue(st, `ROUND ${st.round}`);
++}
++
++export function setRoundTimer(st, on) {
++  st.timerOn = !!on;
++  st.clock = st.timerOn && st.phase === 'fight' ? 60 : st.timerOn ? st.clock : null;
++  return st.timerOn;
++}
++
++export function cycleColour(st) {
++  const list = coloursFor(st);
++  const i = Math.max(0, list.findIndex(c => c.color === st.colour));
++  const next = list[(i + 1) % list.length];
++  st.colour = next.color;
++  const p1 = st.fighters.find(f => f.id === 'p1');
++  if (p1) p1.color = next.color;
++  return next;
++}
++
++export function rematch(st) {
++  if (!st?.mode || st.phase === 'off' || st.phase === 'menu') return false;
++  if (st.ladder >= OPPONENTS.length) st.ladder = OPPONENTS.length - 1;
++  st.round = 1;
++  st.scores = [0, 0];
++  st.winnerSide = null;
++  beginRound(st);
++  return true;
++}
++
++export function leaveArena(st) {
++  st.phase = 'off';
++  st.banner = '';
++  st.fighters = [];
++  return {pos: [...ARENA.exit], yaw: ARENA.exitYaw};
++}
++
++function down(st, f) {
++  f.ko = true;
++  f.hp = 0;
++  f.pose = 'parts';
++  f.parts = Array.from({length: 6}, (_, i) => {
++    const a = (i / 6) * Math.PI * 2;
++    return {x: f.x, y: 0.22, z: f.z, vx: Math.cos(a) * 1.5, vy: 2.1 + (i % 3) * 0.35, vz: Math.sin(a) * 1.5};
 +  });
 +}
 +
-+export function bonkSpar(d, ix, iz) {
-+  d.vel[0] += ix;
-+  d.vel[2] += iz;
-+  d.flash = 0.28;
-+  d.wobble = 1;
-+  d.down = 0.34;
++function frontal(from, to) {
++  const dx = from.x - to.x,
++    dz = from.z - to.z,
++    dist = Math.hypot(dx, dz) || 1;
++  return dx * Math.sin(to.yaw) + dz * -Math.cos(to.yaw) > dist * 0.25;
 +}
 +
-+export function stepSpar(list, dt) {
-+  const drag = Math.max(0, 1 - 3.2 * dt);
-+  for (let i = 0; i < list.length; i++) {
-+    const d = list[i];
-+    d.vel[0] += (d.home[0] - d.pos[0]) * 8 * dt;
-+    d.vel[2] += (d.home[2] - d.pos[2]) * 8 * dt;
-+    d.vel[0] *= drag;
-+    d.vel[2] *= drag;
-+    d.pos[0] += d.vel[0] * dt;
-+    d.pos[2] += d.vel[2] * dt;
-+    d.pos[1] = d.home[1] + (d.down > 0 ? -0.05 : 0);
-+    d.down = Math.max(0, d.down - dt);
-+    d.flash = Math.max(0, d.flash - dt);
-+    d.wobble = Math.max(0, d.wobble - dt * 1.3);
-+    d.phase += dt;
++function applyHit(st, from, to, spec) {
++  if (!to || to.ko || to.side === from.side) return false;
++  if (to.shield && frontal(from, to)) return false;
++  if (from.cpu && spec.combo > 1 && to.hp <= spec.damage) return false;
++  to.hp = Math.max(0, to.hp - spec.damage);
++  to.stunned = 0.16;
++  to.vx += Math.sin(from.yaw) * 2.2;
++  to.vz -= Math.cos(from.yaw) * 2.2;
++  st.hitStop = ARENA.hitStop;
++  st.rumble = Math.max(st.rumble, spec.kind === 'power' || spec.kind === 'pound' ? 0.8 : 0.45);
++  st.sparks.push({x: (from.x + to.x) / 2, y: to.y + 0.28, z: (from.z + to.z) / 2, life: 0.22});
++  const ko = to.hp <= 0;
++  if (ko) down(st, to);
++  st.hits.push({
++    t: st.age,
++    from: from.id,
++    id: to.id,
++    damage: spec.damage,
++    kind: spec.kind,
++    combo: spec.combo,
++    ko
++  });
++  return true;
++}
++
++function melee(st, from, spec) {
++  const fx = Math.sin(from.yaw),
++    fz = -Math.cos(from.yaw);
++  for (const to of st.fighters) {
++    if (to.side === from.side || to.ko) continue;
++    const dx = to.x - from.x,
++      dz = to.z - from.z,
++      dist = Math.hypot(dx, dz);
++    if (dist > spec.range || dist < 1e-6) continue;
++    if ((dx * fx + dz * fz) / dist < 0.15) continue;
++    applyHit(st, from, to, spec);
 +  }
 +}
-diff --git a/web/wwwroot/rc/split-p2.mjs b/web/wwwroot/rc/split-p2.mjs
-index 16b67c9e..4fd85b45 100644
---- a/web/wwwroot/rc/split-p2.mjs
-+++ b/web/wwwroot/rc/split-p2.mjs
-@@ -1,5 +1,5 @@
- // Player 2 split-screen: the same standard pad as player 1, on their own controller.
--import {mapPad, cameraMove} from './gamepad.mjs';
-+import {mapPad, cameraMoveInto} from './gamepad.mjs';
- 
- /** Split stays on for a joined rival, including while either player is the walking robot. */
- export function splitScreenOn({split, rival, started, p1Robot, p2Robot}) {
-@@ -15,20 +15,28 @@ export function toggleP2SkateForm(form) {
-   return 'robot';
- }
- 
--/** Left stick walks relative to player 2's camera. A (index 0) jumps, X punches and uses. */
--export function p2RobotPad(gp, camYaw = 0) {
-+/** Left stick walks relative to player 2's camera. Same moves as player 1: A jumps, hold A jets. */
-+export function p2RobotPad(gp, camYaw = 0, out = null) {
-   const m = mapPad('robot', gp),
--    move = cameraMove(camYaw, m.moveX, m.moveY);
--  return {
--    move,
--    throttle: 0,
--    steer: 0,
--    jump: m.jumpHeld,
--    punch: m.punch,
--    use: m.punch,
--    sprint: m.sprint,
--    aim: m.aim
--  };
-+    o = out || {move: {x: 0, z: 0}};
-+  if (!o.move) o.move = {x: 0, z: 0};
-+  cameraMoveInto(o.move, camYaw, m.moveX, m.moveY);
-+  o.throttle = 0;
-+  o.steer = 0;
-+  o.jump = m.jumpHeld;
-+  o.jumpHeld = m.jumpHeld;
-+  o.punch = m.punch;
-+  o.punchHeld = m.punch;
-+  o.use = m.punch;
-+  o.sprint = !!m.sprint;
-+  o.aim = !!m.aim;
-+  o.lockHeld = !!m.aim;
-+  o.powerHeld = !!m.boostHeld;
-+  o.shieldHeld = !!(m.shield || m.flyHeld);
-+  o.dashHeld = !!m.dash;
-+  o.fireHeld = !!m.fireHeld;
-+  o.busy = false;
-+  return o;
- }
- 
- /** Left stick pitch/roll, triggers throttle, right stick is the camera (not the aeroplane). */
++
++function pound(st, from) {
++  for (const to of st.fighters) {
++    if (to.side === from.side || to.ko) continue;
++    if (Math.hypot(to.x - from.x, to.z - from.z) <= POUND.radius)
++      applyHit(st, from, to, {kind: 'pound', damage: POUND.damage, combo: 1});
++  }
++}
++
++function spawnBlast(st, from, damage) {
++  const spec = from.cpu ? CPU[from.cpu] : null;
++  st.shots.push({
++    x: from.x + Math.sin(from.yaw) * 0.3,
++    z: from.z - Math.cos(from.yaw) * 0.3,
++    y: from.y + 0.22,
++    vx: Math.sin(from.yaw) * BLAST.speed,
++    vz: -Math.cos(from.yaw) * BLAST.speed,
++    side: from.side,
++    from: from.id,
++    damage: damage ?? BLAST.damage,
++    combo: 1,
++    cpu: !!from.cpu,
++    cpuDamage: spec?.damage ?? BLAST.damage,
++    life: 0.7
++  });
++}
++
++function releaseIntent(st, f) {
++  const kind = f.intent || 'punch';
++  f.intent = null;
++  const spec = CPU[f.cpu];
++  if (kind === 'punch') {
++    f.combo = (f.comboT > 0 ? f.combo : 0) + 1;
++    f.comboT = 0.75;
++    if (f.combo > 1) {
++      const foe = foeOf(st, f);
++      if (foe && foe.hp <= spec.damage) {
++        f.combo = 0;
++        f.pose = 'idle';
++        return;
++      }
++    }
++    f.pose = 'punch';
++    f.poseT = 0.2;
++    melee(st, f, {kind: 'punch', damage: spec.damage, range: 0.56, combo: f.combo});
++    return;
++  }
++  if (kind === 'power') {
++    f.pose = 'power';
++    f.poseT = 0.26;
++    f.combo = 0;
++    melee(st, f, {kind: 'power', damage: spec.damage + 4, range: 0.66, combo: 1});
++    return;
++  }
++  f.pose = 'blast';
++  f.poseT = 0.16;
++  spawnBlast(st, f, spec.damage);
++}
++
++function cpuInput(st, f) {
++  const spec = CPU[f.cpu];
++  const foe = foeOf(st, f);
++  if (!foe) return {};
++  const dx = foe.x - f.x,
++    dz = foe.z - f.z,
++    dist = Math.hypot(dx, dz) || 1e-6;
++  f.yaw = Math.atan2(dx, -dz);
++  const decision = cpuDecision(spec, {
++    dist,
++    foePose: foe.pose,
++    foeHp: foe.hp,
++    combo: f.combo,
++    random: st.random(),
++    windup: f.windup
++  });
++  const input = {x: 0, z: 0, lock: true};
++  if (decision.back) {
++    input.x = -dx / dist;
++    input.z = -dz / dist;
++    return input;
++  }
++  if (decision.shield) {
++    input.shield = true;
++    return input;
++  }
++  if (dist > 0.5) {
++    input.x = dx / dist;
++    input.z = dz / dist;
++  }
++  if (decision.windup && f.windup <= 0 && !f.intent) {
++    f.intent = decision.kind;
++    f.windup = spec.telegraph;
++    f.pose = 'windup';
++  }
++  return input;
++}
++
++function bounce(f) {
++  const d = Math.hypot(f.x, f.z);
++  if (d <= ARENA.radius) return;
++  const k = ARENA.radius / d;
++  f.x *= k;
++  f.z *= k;
++  const nx = f.x / ARENA.radius,
++    nz = f.z / ARENA.radius,
++    vn = f.vx * nx + f.vz * nz;
++  if (vn > 0) {
++    f.vx -= 1.9 * vn * nx;
++    f.vz -= 1.9 * vn * nz;
++  }
++}
++
++function floors(f) {
++  let floor = 0;
++  for (const p of ARENA.platforms) {
++    if (Math.abs(f.x - p.x) <= p.w / 2 && Math.abs(f.z - p.z) <= p.w / 2 && f.y >= p.y - 0.08 && f.vy <= 0)
++      floor = Math.max(floor, p.y);
++  }
++  return floor;
++}
++
++function stepFighter(st, f, input, dt) {
++  if (f.ko) {
++    for (const p of f.parts) {
++      p.vy -= 14 * dt;
++      p.x += p.vx * dt;
++      p.y += p.vy * dt;
++      p.z += p.vz * dt;
++      if (p.y < 0) {
++        p.y = 0;
++        p.vy = Math.abs(p.vy) * 0.55;
++        p.vx *= 0.82;
++        p.vz *= 0.82;
++      }
++      const d = Math.hypot(p.x, p.z);
++      if (d > ARENA.radius) {
++        p.x *= ARENA.radius / d;
++        p.z *= ARENA.radius / d;
++        p.vx *= -0.6;
++        p.vz *= -0.6;
++      }
++    }
++    return;
++  }
++  input ||= {};
++  f.comboT = Math.max(0, f.comboT - dt);
++  if (f.comboT === 0) f.combo = 0;
++  f.powerCd = Math.max(0, f.powerCd - dt);
++  f.blastCd = Math.max(0, f.blastCd - dt);
++  f.dashCd = Math.max(0, f.dashCd - dt);
++  f.dashT = Math.max(0, f.dashT - dt);
++  f.stunned = Math.max(0, f.stunned - dt);
++  f.shield = !!input.shield && f.grounded && f.stunned <= 0 && f.windup <= 0;
++  if (input.lock) {
++    const foe = foeOf(st, f);
++    if (foe) f.yaw = Math.atan2(foe.x - f.x, -(foe.z - f.z));
++  }
++  const punchEdge = !!input.punch && !f.wasPunch;
++  const powerEdge = !!input.power && !f.wasPower;
++  const dashEdge = !!input.dash && !f.wasDash;
++  const blastEdge = !!input.blaster && !f.wasBlast;
++  f.wasPunch = !!input.punch;
++  f.wasPower = !!input.power;
++  f.wasDash = !!input.dash;
++  f.wasBlast = !!input.blaster;
++
++  if (f.windup > 0) {
++    f.windup -= dt;
++    f.pose = 'windup';
++    if (f.windup <= 0) releaseIntent(st, f);
++  } else if (punchEdge && !f.shield && f.stunned <= 0) {
++    if (!f.grounded) {
++      f.pose = 'pound';
++      f.vy = Math.min(f.vy, -6.5);
++    } else {
++      f.combo = Math.min(3, (f.comboT > 0 ? f.combo : 0) + 1);
++      f.comboT = 0.42;
++      f.pose = 'punch';
++      f.poseT = 0.16;
++      melee(st, f, {kind: 'punch', damage: PUNCH.damage + (f.combo - 1) * 2, range: PUNCH.range, combo: f.combo});
++    }
++  } else if (powerEdge && f.powerCd <= 0 && f.grounded && !f.shield && f.stunned <= 0) {
++    f.powerCd = 1.15;
++    f.pose = 'power';
++    f.poseT = 0.24;
++    melee(st, f, {kind: 'power', damage: POWER.damage, range: POWER.range, combo: 1});
++  } else if (blastEdge && f.blastCd <= 0 && !f.shield && f.stunned <= 0) {
++    f.blastCd = 0.48;
++    f.pose = 'blast';
++    f.poseT = 0.14;
++    spawnBlast(st, f);
++  }
++
++  let ix = input.x || 0,
++    iz = input.z || 0;
++  const mag = Math.hypot(ix, iz);
++  if (mag > 1) {
++    ix /= mag;
++    iz /= mag;
++  }
++  if (f.shield || f.windup > 0) {
++    ix *= 0.2;
++    iz *= 0.2;
++  }
++  if (f.stunned > 0) {
++    ix *= 0.15;
++    iz *= 0.15;
++  }
++  if (!input.lock && mag > 0.2 && f.windup <= 0) f.yaw = Math.atan2(ix, -iz);
++  if (dashEdge && f.dashCd <= 0 && f.grounded && !f.shield) {
++    f.dashT = 0.14;
++    f.dashCd = 0.55;
++    f.vx = Math.sin(f.yaw) * DASH;
++    f.vz = -Math.cos(f.yaw) * DASH;
++  }
++  if (f.dashT <= 0) {
++    f.vx = ix * SPEED;
++    f.vz = iz * SPEED;
++  }
++  if (input.jump && f.grounded && !f.wasJump && f.windup <= 0) {
++    f.vy = 3.5;
++    f.grounded = false;
++  }
++  f.wasJump = !!input.jump;
++  if (!f.grounded) {
++    if (input.jump) f.vy = Math.min(2.4, f.vy + 12 * dt);
++    f.vy -= 14 * dt;
++  }
++  f.x += f.vx * dt;
++  f.z += f.vz * dt;
++  f.y += f.vy * dt;
++  const floor = floors(f);
++  if (f.y <= floor && f.vy <= 0) {
++    const slamming = f.pose === 'pound' && !f.grounded;
++    f.y = floor;
++    f.vy = 0;
++    f.grounded = true;
++    if (slamming) {
++      f.pose = 'idle';
++      pound(st, f);
++    }
++  } else if (f.y > floor + 0.03) f.grounded = false;
++  bounce(f);
++  f.walkPhase += Math.hypot(f.vx, f.vz) * dt * 8;
++  if (f.poseT > 0) f.poseT -= dt;
++  if (f.pose !== 'windup' && f.pose !== 'pound' && f.poseT <= 0)
++    f.pose = f.shield ? 'shield' : Math.hypot(f.vx, f.vz) > 0.35 ? 'walk' : 'idle';
++}
++
++function stepShots(st, dt) {
++  for (const s of st.shots) {
++    s.x += s.vx * dt;
++    s.z += s.vz * dt;
++    s.life -= dt;
++    if (Math.hypot(s.x, s.z) > ARENA.radius) s.life = 0;
++    for (const to of st.fighters) {
++      if (s.life <= 0 || to.side === s.side || to.ko) continue;
++      if (Math.hypot(to.x - s.x, to.z - s.z) > 0.28) continue;
++      const from = st.fighters.find(f => f.id === s.from) || {id: s.from, side: s.side, x: s.x, z: s.z, yaw: 0, cpu: s.cpu};
++      applyHit(st, from, to, {kind: 'blast', damage: s.damage, combo: 1});
++      s.life = 0;
++    }
++  }
++  st.shots = st.shots.filter(s => s.life > 0);
++}
++
++function aliveSides(st) {
++  for (const f of st.fighters) if (f.hp <= 0 && !f.ko) down(st, f);
++  return [...new Set(st.fighters.filter(f => !f.ko && f.hp > 0).map(f => f.side))];
++}
++
++function finishRound(st, winner) {
++  st.winnerSide = winner;
++  if (winner == null) {
++    beginRound(st);
++    return;
++  }
++  st.scores[winner]++;
++  st.phase = 'ko';
++  st.koT = ARENA.koTime;
++  cue(st, 'K.O.!');
++  for (const f of st.fighters) if (!f.ko && f.side === winner) f.pose = 'victory';
++}
++
++function settle(st) {
++  if (st.phase !== 'fight') return;
++  const sides = aliveSides(st);
++  if (sides.length === 1) finishRound(st, sides[0]);
++  else if (sides.length === 0) finishRound(st, null);
++}
++
++function afterKo(st) {
++  const winner = st.winnerSide;
++  if (winner == null) {
++    beginRound(st);
++    return;
++  }
++  if (st.scores[winner] >= ARENA.rounds) {
++    if (winner === 0 && (st.mode === 'ladder' || st.mode === 'coop')) {
++      st.ladder++;
++      if (st.ladder >= OPPONENTS.length) {
++        st.phase = 'trophy';
++        st.trophy = true;
++        st.bannerT = 2.4;
++        cue(st, 'CHAMPION!');
++        st.unlockCue = true;
++        for (const f of st.fighters) if (f.side === 0) f.pose = 'victory';
++        return;
++      }
++      st.scores = [0, 0];
++      st.round = 1;
++      beginRound(st);
++      return;
++    }
++    st.phase = 'match';
++    st.bannerT = 2.2;
++    const name = st.fighters.find(f => f.side === winner)?.name || 'K.O.!';
++    cue(st, name);
++    for (const f of st.fighters) if (f.side === winner) f.pose = 'victory';
++    return;
++  }
++  st.round++;
++  beginRound(st);
++}
++
++function take(st) {
++  const out = {hits: st.hits, cue: st.cue, rumble: st.rumble, unlocked: st.unlockCue, phase: st.phase};
++  st.hits = [];
++  st.cue = null;
++  st.rumble = 0;
++  st.unlockCue = false;
++  return out;
++}
++
++export function stepArena(st, inputs = [], dt = 1 / 60) {
++  st.hits = [];
++  st.age = (st.age || 0) + dt;
++  if (!st || st.phase === 'off' || st.phase === 'menu') return take(st);
++  st.sparks = st.sparks.filter(s => (s.life -= dt) > 0);
++  if (st.hitStop > 0) {
++    st.hitStop = Math.max(0, st.hitStop - dt);
++    return take(st);
++  }
++  if (st.phase === 'intro') {
++    st.bannerT -= dt;
++    if (st.banner === `ROUND ${st.round}` && st.bannerT <= 0) {
++      st.bannerT = ARENA.fightCall;
++      cue(st, 'FIGHT!');
++    } else if (st.banner === 'FIGHT!' && st.bannerT <= 0) {
++      st.phase = 'fight';
++      st.banner = '';
++      if (st.timerOn) st.clock = 60;
++    }
++    return take(st);
++  }
++  if (st.phase === 'ko') {
++    st.koT -= dt;
++    for (const f of st.fighters) if (f.ko) stepFighter(st, f, {}, dt);
++    if (st.koT <= 0) afterKo(st);
++    return take(st);
++  }
++  if (st.phase === 'trophy' || st.phase === 'match') {
++    st.bannerT -= dt;
++    return take(st);
++  }
++  const pad = inputs.length ? inputs : st.fighters.map(() => ({}));
++  let human = 0;
++  for (const f of st.fighters) {
++    const input = f.cpu ? cpuInput(st, f) : pad[human++] || {};
++    stepFighter(st, f, input, dt);
++  }
++  stepShots(st, dt);
++  if (st.timerOn && st.clock != null) {
++    st.clock = Math.max(0, st.clock - dt);
++    if (st.clock === 0 && st.phase === 'fight') {
++      const hp = [0, 0];
++      for (const f of st.fighters) if (!f.ko) hp[f.side] += f.hp;
++      finishRound(st, hp[0] === hp[1] ? null : hp[0] > hp[1] ? 0 : 1);
++    }
++  }
++  settle(st);
++  return take(st);
++}
+diff --git a/web/wwwroot/rc/open-world/runtime.js b/web/wwwroot/rc/open-world/runtime.js
+index e21f1845..694e44c0 100644
+--- a/web/wwwroot/rc/open-world/runtime.js
++++ b/web/wwwroot/rc/open-world/runtime.js
+@@ -61,6 +61,7 @@ import {createTrickOrTreatVisual} from './trick-or-treat.js';
+ import {createBooster} from './booster.js';
+ import {createFlyingSchool} from './flying-school.js';
+ import {createTennisCourt} from './tennis.js';
++import {createRobotArena} from './robot-arena.js';
+ import {createDeliveryVisual} from './deliveries.js';
+ import {deliveryStops} from './deliveries.mjs';
+ import {createClouds} from './clouds.js';
+@@ -428,6 +429,7 @@ export async function loadOpenWorld(search) {
+     booster,
+     flyingSchool,
+     tennis,
++    robotArena,
+     stuntJumps,
+     deliveries,
+     clouds,
+@@ -761,6 +763,9 @@ export async function loadOpenWorld(search) {
+       booster = createBooster(scene, (x, z) => elevationAt(elevation, x, z));
+       flyingSchool = createFlyingSchool(scene, (x, z) => elevationAt(elevation, x, z));
+       tennis = createTennisCourt(scene, (x, z) => elevationAt(elevation, x, z));
++      robotArena = createRobotArena(scene, stream.world, {
++        heightAt: (x, z) => elevationAt(elevation, x, z)
++      });
+       stuntJumps = buildStuntJumps(scene, stream.world, stuntState.heightAt);
+       clouds = createClouds(
+         scene,
+@@ -839,6 +844,7 @@ export async function loadOpenWorld(search) {
+     stopSchool: () => flyingSchool?.stop(),
+     schoolStep: (dt, pilot) => flyingSchool?.step(dt, pilot) ?? [],
+     tennis: () => tennis?.state,
++    robotArena: () => robotArena,
+     startTennis: mode => tennis?.start(mode),
+     stopTennis: () => tennis?.stop(),
+     tennisSwing: player => tennis?.swing(player) ?? false,
+@@ -915,6 +921,7 @@ export async function loadOpenWorld(search) {
+       hotWheels?.update(1 / 60);
+       club?.update(1 / 60, pos, timeGates.era() !== 'past');
+       tennis?.update(playerPos, timeGates.era() !== 'past');
++      robotArena?.pulse(time);
+       activities?.update(time, pos);
+       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
+       bowlingVisual?.update(golf, racing ? selected.id : null);
+@@ -1043,6 +1050,7 @@ export async function loadOpenWorld(search) {
+       booster?.dispose();
+       flyingSchool?.dispose();
+       tennis?.dispose();
++      robotArena?.dispose();
+       stuntJumps?.dispose();
+       deliveries?.dispose();
+       clouds?.dispose();
+diff --git a/web/wwwroot/rc/open-world/ui.js b/web/wwwroot/rc/open-world/ui.js
+index a264cbe9..d3ef29cd 100644
+--- a/web/wwwroot/rc/open-world/ui.js
++++ b/web/wwwroot/rc/open-world/ui.js
+@@ -24,6 +24,7 @@ import {LIVERIES, TRIMS, liveryUnlocked, PUMPKIN_CAR} from '../livery-data.mjs';
+ import {DARK_PLACES} from './dark-world.mjs';
+ import {createDinoInspect} from './inspect.js';
+ import {SKY_HINT} from './sky-dive.mjs';
++import {ARENA_PAINT} from './robot-arena.mjs';
+ import {TOUR_LABEL} from './lab-accident.mjs';
+ const $ = id => document.getElementById(id);
+ // One map, one destination. Controls remain ordinary labelled buttons on touch and keyboard.
+@@ -729,8 +730,12 @@ export function createWorldUI({
+       const event = EVENTS.find(e => e.location === p.id),
+         best = progress.raceWins?.[event?.id];
+       choose.querySelector('small').textContent =
+-        p.id === 'rec' && progress.bowlingBest != null
+-          ? `${progress.bowlingBest}/300`
++        p.id === 'robot-arena'
++          ? progress.arenaTrophy
++            ? '🏆'
++            : ''
++          : p.id === 'rec' && progress.bowlingBest != null
++            ? `${progress.bowlingBest}/300`
+           : p.id === 'golf' && progress.golfBest
+             ? `${progress.golfBest} hits`
+             : p.id === 'lab'
+@@ -805,6 +810,18 @@ export function createWorldUI({
+       }),
+     update(now) {
+       const s = getState();
++      if (progress.arenaTrophy && !$('paint').querySelector(`[data-paint="${ARENA_PAINT.color}"]`)) {
++        const b = document.createElement('button');
++        b.title = ARENA_PAINT.name;
++        b.setAttribute('aria-label', ARENA_PAINT.name);
++        b.dataset.paint = ARENA_PAINT.color;
++        b.style.setProperty('--paint', ARENA_PAINT.color);
++        b.onclick = () => {
++          progress.paint = b.dataset.paint;
++          save();
++        };
++        $('paint').append(b);
++      }
+       $('body').disabled = !s.roam;
+       $('body').querySelector('[value="golf"]').disabled = !progress.discovered.includes('golf');
+       $('shell-row').hidden = progress.body !== 'jet';
+@@ -840,7 +857,8 @@ export function createWorldUI({
+           s.paused ||
+           s.skating ||
+           s.flying ||
+-          (p?.game === 'sky-dive' && !s.skyJump);
++          (p?.game === 'sky-dive' && !s.skyJump) ||
++          s.arena;
+         if (s.labTour) interactLabel(TOUR_LABEL, 'E');
+         else if (s.skyJump) interactLabel(SKY_HINT, null);
+         else if (s.robot && (p?.game === 'bowling' || golf?.kind === 'bowling')) {
+@@ -879,6 +897,8 @@ export function createWorldUI({
+                     ? ['Car Golf · Play', 'E']
+                     : p.game === 'flying-school'
+                       ? ['Flying School · Play', 'E']
++                      : p.game === 'robot-arena'
++                        ? ['Robot Arena', 'A']
+                       : !canEnter(progress, p)
+                         ? [`◇ ${progress.specimens.length}/${SPECIMENS.length} · Map`, 'Tab']
+                         : p.kind === 'discovery'
+diff --git a/web/wwwroot/rc/pad-art.mjs b/web/wwwroot/rc/pad-art.mjs
+index e632173c..d99fc98b 100644
+--- a/web/wwwroot/rc/pad-art.mjs
++++ b/web/wwwroot/rc/pad-art.mjs
+@@ -30,6 +30,17 @@ const FORM_ACTIONS = {
+     {act: 'BOOST', ctl: 3},
+     {act: 'FLY', ctl: 4}
+   ],
++  arena: [
++    {act: 'MOVE', ctl: 'stick', why: 'L3 sprint'},
++    {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
++    {act: 'JET', ctl: 0},
++    {act: 'PUNCH', ctl: 2, why: 'air pound'},
++    {act: 'POWER', ctl: 3},
++    {act: 'SHIELD', ctl: 4},
++    {act: 'DASH', ctl: 5},
++    {act: 'LOCK', ctl: 6},
++    {act: 'BLAST', ctl: 7}
++  ],
+   fly: [
+     {act: 'CLIMB', ctl: 'stick', why: 'turn'},
+     {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
+diff --git a/web/wwwroot/rc/robot-arena.test.mjs b/web/wwwroot/rc/robot-arena.test.mjs
+new file mode 100644
+index 00000000..83782825
+--- /dev/null
++++ b/web/wwwroot/rc/robot-arena.test.mjs
+@@ -0,0 +1,278 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {mapPad} from './gamepad.mjs';
++import {padSvg} from './pad-art.mjs';
++import {insideBase} from './open-world/boundary.mjs';
++import {loadProgress, locationById, saveProgress} from './open-world/catalog.mjs';
++import {
++  ARENA,
++  ARENA_PAINT,
++  CPU,
++  CPU_BOUNDS,
++  OPPONENTS,
++  chooseMode,
++  coloursFor,
++  cpuDecision,
++  cpuWithinBounds,
++  createArena,
++  cycleColour,
++  extraPaints,
++  grantArenaTrophy,
++  inArenaGate,
++  leaveArena,
++  modeIds,
++  rematch,
++  setRoundTimer,
++  stepArena
++} from './open-world/robot-arena.mjs';
++
++const buttons = (down = []) => Array.from({length: 17}, (_, i) => ({value: down.includes(i) ? 1 : 0}));
++const pad = down => ({axes: [0, 0, 0, 0], buttons: buttons(down)});
++
++function toFight(st) {
++  let n = 0;
++  while (st.phase !== 'fight' && n++ < 80) stepArena(st, [], 0.05);
++  assert.equal(st.phase, 'fight');
++}
++
++function winRound(st, side = 1) {
++  toFight(st);
++  for (const f of st.fighters) if (f.side === side) f.hp = 0;
++  const ev = stepArena(st, [], 1 / 60);
++  assert.equal(st.phase, 'ko');
++  assert.equal(ev.cue, 'K.O.!');
++  assert.ok(st.fighters.some(f => f.side === side && f.parts.length === 6));
++  assert.ok(st.fighters.some(f => f.side === 1 - side && f.pose === 'victory'));
++  stepArena(st, [], ARENA.koTime + 0.05);
++}
++
++test('Robot Arena is a hub place inside the base, with a gate you drive into', () => {
++  const p = locationById('robot-arena');
++  assert.equal(p.name, 'Robot Arena');
++  assert.equal(p.short, 'Robot Arena');
++  assert.equal(p.game, 'robot-arena');
++  assert.ok(insideBase(p.pos[0], p.pos[2]));
++  assert.ok(insideBase(ARENA.center[0], ARENA.center[2]));
++  assert.ok(inArenaGate(p.pos));
++  assert.equal(inArenaGate(ARENA.exit), false);
++  assert.ok(Math.hypot(ARENA.exit[0] - ARENA.gate[0], ARENA.exit[2] - ARENA.gate[2]) > ARENA.gateReach);
++});
++
++test('1 player can only pick the CPU ladder; 2 players also get versus and co-op', () => {
++  const one = createArena({players: 1});
++  assert.deepEqual(modeIds(one.players), ['ladder']);
++  assert.equal(chooseMode(one, 'versus'), false);
++  assert.equal(chooseMode(one, 'coop'), false);
++  assert.equal(one.phase, 'menu');
++  assert.equal(chooseMode(one, 'ladder'), true);
++  assert.equal(one.phase, 'intro');
++  assert.equal(one.banner, 'ROUND 1');
++  assert.equal(one.fighters.filter(f => f.cpu).length, 1);
++  assert.equal(one.fighters.length, 2);
++
++  const two = createArena({players: 2});
++  assert.deepEqual(modeIds(two.players), ['ladder', 'versus', 'coop']);
++  assert.equal(chooseMode(two, 'versus'), true);
++  assert.equal(two.fighters.some(f => f.cpu), false);
++  assert.deepEqual(
++    two.fighters.map(f => f.id),
++    ['p1', 'p2']
++  );
++  const coop = createArena({players: 2});
++  chooseMode(coop, 'coop');
++  assert.equal(coop.fighters.length, 3);
++  assert.equal(coop.fighters.filter(f => f.side === 0).length, 2);
++  assert.equal(coop.fighters.filter(f => f.cpu).length, 1);
++});
++
++test('a match is best of 3, then the ladder advances, and clearing it unlocks the paint', () => {
++  const st = createArena();
++  chooseMode(st, 'ladder');
++  assert.equal(st.fighters.find(f => f.cpu).id, OPPONENTS[0].id);
++  winRound(st);
++  assert.equal(st.round, 2);
++  assert.equal(st.scores[0], 1);
++  assert.equal(st.phase, 'intro');
++  assert.equal(st.banner, 'ROUND 2');
++  winRound(st);
++  assert.equal(st.ladder, 1);
++  assert.equal(st.round, 1);
++  assert.equal(st.scores[0], 0);
++  assert.equal(st.fighters.find(f => f.cpu).id, 'bolt');
++  winRound(st);
++  winRound(st);
++  assert.equal(st.ladder, 2);
++  assert.equal(st.fighters.find(f => f.cpu).name, 'Titan');
++  winRound(st);
++  winRound(st);
++  assert.equal(st.phase, 'trophy');
++  assert.equal(st.trophy, true);
++  assert.equal(st.banner, 'CHAMPION!');
++  const progress = loadProgress({getItem: () => null});
++  assert.equal(extraPaints(progress).length, 0);
++  const paint = grantArenaTrophy(progress);
++  assert.equal(paint, ARENA_PAINT);
++  assert.equal(grantArenaTrophy(progress), null);
++  const storage = {saved: null, getItem: () => storage.saved, setItem: (_k, v) => (storage.saved = v)};
++  saveProgress(storage, progress);
++  const loaded = loadProgress(storage);
++  assert.equal(loaded.arenaTrophy, true);
++  assert.equal(loaded.paint, progress.paint);
++  loaded.paint = ARENA_PAINT.color;
++  saveProgress(storage, loaded);
++  assert.equal(loadProgress(storage).paint, ARENA_PAINT.color);
++  const locked = loadProgress({getItem: () => JSON.stringify({paint: ARENA_PAINT.color, arenaTrophy: false})});
++  assert.equal(locked.arenaTrophy, false);
++  assert.notEqual(locked.paint, ARENA_PAINT.color);
++});
++
++test('versus does not unlock the paint, and a loss does not advance the ladder', () => {
++  const vs = createArena({players: 2});
++  chooseMode(vs, 'versus');
++  winRound(vs);
++  winRound(vs);
++  assert.equal(vs.phase, 'match');
++  assert.equal(vs.trophy, false);
++  const progress = loadProgress({getItem: () => null});
++  assert.equal(extraPaints(progress).length, 0);
++
++  const st = createArena();
++  chooseMode(st, 'ladder');
++  toFight(st);
++  st.fighters.find(f => f.id === 'p1').hp = 0;
++  stepArena(st, [], 1 / 60);
++  stepArena(st, [], ARENA.koTime + 0.05);
++  assert.equal(st.scores[1], 1);
++  assert.equal(st.ladder, 0);
++  assert.equal(st.round, 2);
++});
++
++test('CPU tiers stay inside the kid bounds and never combo into a K.O.', () => {
++  for (const tier of ['easy', 'medium']) {
++    assert.equal(cpuWithinBounds(tier), true, tier);
++    const spec = CPU[tier];
++    assert.ok(spec.telegraph >= CPU_BOUNDS.telegraphMin);
++    assert.ok(spec.block <= CPU_BOUNDS.blockMax);
++    assert.ok(spec.damage * spec.comboMax < ARENA.health);
++  }
++  const easy = CPU.easy,
++    medium = CPU.medium;
++  assert.deepEqual(
++    cpuDecision(medium, {dist: 0.4, foePose: 'idle', foeHp: medium.damage, combo: 1, random: 0.9, windup: 0}),
++    {back: true}
++  );
++  assert.equal(
++    cpuDecision(medium, {dist: 0.4, foePose: 'idle', foeHp: medium.damage, combo: 0, random: 0.9, windup: 0}).windup,
++    true
++  );
++  assert.deepEqual(
++    cpuDecision(easy, {dist: 0.4, foePose: 'idle', foeHp: 80, combo: 1, random: 0.9, windup: 0}),
++    {back: true}
++  );
++  assert.equal(
++    cpuDecision(medium, {dist: 0.4, foePose: 'punch', foeHp: 90, combo: 0, random: 0, windup: 0}).shield,
++    true
++  );
++  assert.equal(
++    cpuDecision(medium, {dist: 0.4, foePose: 'punch', foeHp: 90, combo: 0, random: 0.99, windup: 0}).shield,
++    undefined
++  );
++
++  const st = createArena({random: () => 0.5});
++  chooseMode(st, 'ladder');
++  toFight(st);
++  const cpu = st.fighters.find(f => f.cpu);
++  const p1 = st.fighters.find(f => f.id === 'p1');
++  p1.x = cpu.x;
++  p1.z = cpu.z + 0.45;
++  const seen = [];
++  for (let t = 0; t < 10; t += 1 / 60) {
++    if (st.phase !== 'fight') break;
++    const ev = stepArena(st, [{x: 0, z: 0}], 1 / 60);
++    for (const h of ev.hits) if (h.id === 'p1') seen.push(h);
++  }
++  for (let i = 1; i < seen.length; i++) {
++    if (seen[i].ko) assert.ok(seen[i].t - seen[i - 1].t > 0.5, 'the K.O. is not the second hit of a combo');
++  }
++  assert.ok(seen.length === 0 || seen[0].t >= easy.telegraph - 0.08, 'the first swing is telegraphed');
++});
++
++test('the ropes bounce a fighter back inside, and a shield stops a punch from the front', () => {
++  const st = createArena({players: 2});
++  chooseMode(st, 'versus');
++  toFight(st);
++  const p1 = st.fighters.find(f => f.id === 'p1');
++  p1.x = ARENA.radius + 1;
++  p1.z = 0;
++  p1.vx = 4;
++  stepArena(st, [{x: 1, z: 0}, {}], 1 / 30);
++  assert.ok(Math.hypot(p1.x, p1.z) <= ARENA.radius + 1e-6);
++
++  const shield = createArena({players: 2});
++  chooseMode(shield, 'versus');
++  toFight(shield);
++  const a = shield.fighters.find(f => f.id === 'p1');
++  const b = shield.fighters.find(f => f.id === 'p2');
++  a.x = 0;
++  a.z = 0.3;
++  a.yaw = Math.PI;
++  b.x = 0;
++  b.z = -0.05;
++  b.yaw = 0;
++  const ev = stepArena(shield, [{shield: true}, {punch: true}], 1 / 60);
++  assert.equal(a.hp, ARENA.health);
++  assert.equal(ev.hits.length, 0);
++});
++
++test('round timer stays off unless asked, rematch stays in the arena, leave returns to the gate', () => {
++  const st = createArena();
++  chooseMode(st, 'ladder');
++  assert.equal(st.timerOn, false);
++  assert.equal(st.clock, null);
++  toFight(st);
++  stepArena(st, [], 30);
++  assert.equal(st.phase, 'fight');
++  setRoundTimer(st, true);
++  assert.equal(st.clock, 60);
++  st.fighters.find(f => f.cpu).hp = 40;
++  st.clock = 0.02;
++  stepArena(st, [], 0.05);
++  assert.equal(st.phase, 'ko');
++  assert.equal(st.winnerSide, 0);
++
++  const again = createArena();
++  chooseMode(again, 'ladder');
++  winRound(again);
++  assert.equal(rematch(again), true);
++  assert.equal(again.round, 1);
++  assert.deepEqual(again.scores, [0, 0]);
++  assert.equal(again.phase, 'intro');
++  assert.notEqual(again.phase, 'off');
++  const at = leaveArena(again);
++  assert.equal(again.phase, 'off');
++  assert.deepEqual(at.pos, [...ARENA.exit]);
++  assert.equal(rematch(again), false);
++});
++
++test('fighter colour cycles, and Champion appears only with the trophy', () => {
++  const st = createArena({colour: '#ed9145'});
++  assert.equal(coloursFor(st).some(c => c.color === ARENA_PAINT.color), false);
++  const next = cycleColour(st);
++  assert.notEqual(next.color, '#ed9145');
++  assert.equal(st.colour, next.color);
++  st.trophy = true;
++  assert.equal(coloursFor(st).at(-1).name, 'Champion');
++  while (st.colour !== ARENA_PAINT.color) cycleColour(st);
++  assert.equal(st.colour, ARENA_PAINT.color);
++});
++
++test('the coach shows the arena moves on the same pad', () => {
++  const foot = mapPad('arena', pad([2, 3, 4, 5]));
++  assert.equal(foot.punch, true);
++  assert.equal(foot.boostHeld, true);
++  assert.equal(foot.shield, true);
++  assert.equal(foot.dash, true);
++  const art = padSvg('xbox', {pressed: new Set(), axes: [0, 0, 0, 0]}, {form: 'arena'});
++  for (const word of ['JET', 'PUNCH', 'POWER', 'SHIELD', 'DASH', 'LOCK', 'BLAST'])
++    assert.match(art, new RegExp(word));
++});
+diff --git a/web/wwwroot/rc/style.css b/web/wwwroot/rc/style.css
+index b19cc86e..1e601047 100644
+--- a/web/wwwroot/rc/style.css
++++ b/web/wwwroot/rc/style.css
+@@ -275,3 +275,25 @@ button.dex-row {
+ #instruments #dream-coins{left:22px;bottom:28px;top:auto;padding:10px 16px;border-left:3px solid var(--gold);font:600 28px ui-monospace,monospace;font-variant-numeric:tabular-nums;color:var(--gold)}
+ @media(max-width:540px){#instruments #dream-coins{left:10px;bottom:148px;font-size:22px;padding:8px 12px}}
+ @media(prefers-color-scheme:light){#instruments #dream-coins{background:#142a30;color:#f3efdc}}
++#arena-hud{position:absolute;top:64px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;width:min(720px,calc(100vw - 24px));z-index:4;pointer-events:none}
++.arena-row{display:grid;grid-template-columns:40px minmax(0,1fr) 3.4ch minmax(8ch,auto);align-items:center;column-gap:12px;height:52px;padding:0 12px;background:var(--panel);border-left:3px solid var(--gold);border-radius:3px;color:var(--ink)}
++.arena-row.ko{opacity:.45}
++.arena-face{width:36px;height:36px;border-radius:6px;background:radial-gradient(circle at 32% 40%, #081016 3.5px, transparent 4px),radial-gradient(circle at 68% 40%, #081016 3.5px, transparent 4px),linear-gradient(#081016,#081016) center 70% / 58% 4px no-repeat,var(--face,#ed9145);box-shadow:inset 0 0 0 2px #08101666}
++.arena-bar{display:block;height:22px;background:#0c181c;border:1px solid var(--line);border-radius:2px;overflow:hidden}
++.arena-bar>span{display:block;height:100%;width:100%;background:var(--gold)}
++.arena-hp{font:700 28px ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:0;text-align:right}
++.arena-name{font:600 18px system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
++#brief .modes #arena-rematch,#brief .modes #arena-colour,#brief .modes #arena-leave{grid-column:1/-1;text-align:left;font-size:19px;padding:10px 20px;white-space:nowrap}
++#arena-banner{position:fixed;top:22vh;left:50%;transform:translateX(-50%);margin:0;font:800 72px system-ui;letter-spacing:.04em;color:#fff8ef;text-shadow:0 4px 0 #1b0d12;white-space:nowrap;pointer-events:none}
++#arena-clock{position:absolute;top:-28px;right:0;font:700 18px ui-monospace,monospace;color:var(--ink)}
++#arena-menu{position:absolute;left:50%;bottom:16vh;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:6;width:min(280px,calc(100vw - 32px))}
++#arena-menu button{min-height:52px;font-size:22px;text-align:left;padding:10px 16px;background:#10262ce8;border-color:#c9b27a}
++#arena-colour{display:grid;grid-template-columns:22px auto 1fr;align-items:center;column-gap:8px;text-align:left}
++#arena-swatch{width:22px;height:22px;border-radius:3px;background:var(--gold);box-shadow:inset 0 0 0 1px #0006}
++#arena-colour-name{font:700 18px ui-monospace,monospace;letter-spacing:0;text-align:right}
++@media(prefers-color-scheme:light){
++.arena-row{background:#f4f1e8;color:#1b2422}
++.arena-bar{background:#d5ddd8;border-color:#1b242244}
++#arena-banner{color:#1b1208;text-shadow:0 2px 0 #fff}
++#arena-menu button{background:#f7f4ec;color:#1b2422;border-color:#1b242233}
++}
