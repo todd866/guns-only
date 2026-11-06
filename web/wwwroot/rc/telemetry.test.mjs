@@ -447,6 +447,29 @@ test('works-and-doing events: boot, capped URL-free errors, deduped visits, side
   );
 });
 
+test('boot frame trace records one summary row with p50, p95, max, and frames over 50 ms', async () => {
+  const rows = [];
+  const t = createRCTelemetry({
+    storage: {getItem: () => null},
+    locationObject: {hostname: 'guns-only.com', search: '?trace=boot'},
+    outbox: noIdbOutbox(),
+    fetchImpl: async (_url, options) => {
+      rows.push(...JSON.parse(options.body).rows);
+      return {status: 200, ok: true};
+    }
+  });
+  assert.equal(t.bootFrames({p50: null, p95: null, max: null, over50: 0, count: 0}), false);
+  t.bootFrames({p50: 16.24, p95: 40.45, max: 70.19, over50: 3, count: 120});
+  await t.flush({force: true});
+  const row = rows.find(entry => entry.code === 'boot_frames');
+  assert.ok(row);
+  assert.equal(row.p50_ms, 16.24);
+  assert.equal(row.p95_ms, 40.45);
+  assert.equal(row.max_ms, 70.19);
+  assert.equal(row.over_50, 3);
+  assert.equal(row.samples, 120);
+});
+
 test('garage changes and Halloween pumpkin smashes are recorded, sprees thinned after thirty', async () => {
   const rows = [];
   const t = createRCTelemetry({

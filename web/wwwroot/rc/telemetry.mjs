@@ -24,6 +24,7 @@ const EVENT_CODES = new Set([
   'garage',
   'playmate',
   'boot',
+  'boot_frames',
   'error',
   'visit',
   'activity_start',
@@ -266,6 +267,19 @@ export function createRCTelemetry({
   function boot({assets, ms} = {}) {
     record('boot', {assets: short(assets, 16), ms: finite(ms) === null ? null : Math.round(finite(ms))});
   }
+  // ?trace=boot: one summary of the opening ten seconds. Empty traces record nothing.
+  function bootFrames({p50, p95, max, over50, count} = {}) {
+    const samples = Math.round(finite(count, 0));
+    if (!samples) return false;
+    const ms = value => Math.round(finite(value, 0) * 100) / 100;
+    return record('boot_frames', {
+      p50_ms: ms(p50),
+      p95_ms: ms(p95),
+      max_ms: ms(max),
+      over_50: Math.round(finite(over50, 0)),
+      samples
+    });
+  }
   let errors = 0;
   function error(kind, message) {
     if (++errors > ERROR_LIMIT) return;
@@ -458,6 +472,7 @@ export function createRCTelemetry({
     skateStart,
     skateEnd,
     boot,
+    bootFrames,
     error,
     visit,
     discover,

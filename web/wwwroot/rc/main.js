@@ -103,7 +103,9 @@ import {padSvg, padKind} from './pad-art.mjs';
 import {createCoach} from './coach.mjs';
 import {createTag, setTagOn, stepTag, TAG, hudLine, resultHead, resultStats, tagTelemetry} from './tag.mjs';
 import {joinPadIndex, joinCardVisible, menuPlayersButton, joinHideUntilAfterLeave} from './join.mjs';
-import {frameSeconds} from './frame-time.mjs';
+import {frameSeconds, cameraGlide} from './frame-time.mjs';
+import {createBootTrace} from './boot-trace.mjs';
+import {warmPresentation} from './presentation-warm.mjs';
 import {poseCar} from './vehicle-pose.mjs';
 import {makeVehicleBody} from './vehicle-bodies.js';
 import * as T from '../vendor/three.module.js';
@@ -434,8 +436,9 @@ let marshalSession = null,
 // Default on district tracks (key-to-steer latency measured equal to classic, 7-13 ms); ?gfx=classic
 // keeps the old renderer, ?gfx=ao adds screen-space AO.
 let polish = null;
+let polishReady = Promise.resolve();
 if (track && new URLSearchParams(location.search).get('gfx') !== 'classic')
-  setupPolish({renderer, scene, camera, indoor: isIndoor(track), world: !!openWorld})
+  polishReady = setupPolish({renderer, scene, camera, indoor: isIndoor(track), world: !!openWorld})
     .then(p => {
       polish = p;
       polish.resize(innerWidth, innerHeight);
@@ -445,8 +448,12 @@ if (track && new URLSearchParams(location.search).get('gfx') !== 'classic')
         sun.intensity *= 0.85;
         renderer.toneMappingExposure = 0.82;
       }
+      return p;
     })
-    .catch(e => console.warn('polish off', e));
+    .catch(e => {
+      console.warn('polish off', e);
+      return null;
+    });
 const mats = new Map();
 function material(c, glow = false) {
   const key = c + glow;
@@ -735,16 +742,22 @@ for (const z of [-0.25, 0.25])
     wheels.push({pivot, wheel, front: z < 0});
   }
 // Validated original assets are the normal entry; prototype remains an explicit diagnostic fallback.
-// Start stays disabled in the HTML until the page below is wired, so an early click is never lost.
+// Start stays disabled in the HTML until the opening warm-up releases it, so an early click is never lost.
+// The establishing shot stays put until that release: shader compile, texture upload, and the
+// asset swap used to land in the first moving frames.
+let openingHeld = true;
+let openingShown = 0;
+let restQueued = false;
+let openingReleasedAt = 0;
 function readyModes() {
   for (const id of ['start', 'menu-race', 'menu-furball']) $(id).disabled = false;
   if (!race.roam) $('start').textContent = '▶ Go';
 }
-if (new URLSearchParams(location.search).get('assets') === 'prototype') queueMicrotask(readyModes);
+let assetsReady = Promise.resolve();
 if (new URLSearchParams(location.search).get('assets') !== 'prototype') {
   assetState = 'loading';
   $('start').disabled = true;
-  import('./assets.js')
+  assetsReady = import('./assets.js')
     .then(async ({loadBuggyAsset, loadHangarAsset, loadStaticAsset}) => {
       const [buggy, hangar] = await Promise.all([
         loadBuggyAsset('./assets/buggy.glb'),
@@ -800,7 +813,9 @@ if (new URLSearchParams(location.search).get('assets') !== 'prototype') {
       assetState = 'blender';
       telemetry.boot({assets: 'blender', ms: performance.now()});
       ui.apply();
-      openWorld?.loadBackground?.();
+      // Remaining districts parse GLBs on the main thread. They wait until the opening
+      // glide has settled, so that parse does not hitch the camera move.
+      restQueued = !!openWorld;
       if (openWorld && new URLSearchParams(location.search).get('detail') !== 'off')
         nearDetail = createNearDetail(scene, openWorld.stream.world);
     })
@@ -813,8 +828,7 @@ if (new URLSearchParams(location.search).get('assets') !== 'prototype') {
       const warning = document.createElement('p');
       warning.textContent = 'Asset loading failed; prototype fallback is available.';
       $('brief').append(warning);
-    })
-    .finally(readyModes);
+    });
 }
 // Gates are inflatable toy-race arches: the next one glows, the rest stay quiet.
 const archMat = new T.MeshStandardMaterial({color: '#ff7a2f', roughness: 0.55}),
@@ -883,6 +897,23 @@ try {
 } catch {}
 const telemetryTrack = openWorld ? `hub:${openWorld.selected.id}` : track;
 const telemetry = createRCTelemetry({track: telemetryTrack, mode});
+const bootTrace =
+  entry.get('trace') === 'boot'
+    ? createBootTrace({
+        log: ms => console.log('[boot]', Math.round(ms * 10) / 10),
+        onSummary(summary) {
+          console.log(
+            '[boot] summary',
+            `p50=${summary.p50 ?? '—'}`,
+            `p95=${summary.p95 ?? '—'}`,
+            `max=${summary.max ?? '—'}`,
+            `over50=${summary.over50}`,
+            `n=${summary.count}`
+          );
+          telemetry.bootFrames(summary);
+        }
+      })
+    : null;
 let nearDetail = null,
   lastTelemetryFlush = performance.now(),
   lastTelemetrySample = 0,
@@ -5466,6 +5497,17 @@ const menuPad = createMenuPad({
 });
 const frameMs = [];
 function frame(now) {
+  // Two presented frames stay on the establishing shot so a leftover driver stall does not
+  // move the camera. The glide, the session, and adaptive resolution start after that.
+  if (openingHeld && openingShown >= 2) {
+    openingHeld = false;
+    openingReleasedAt = now;
+    adaptive.frames = [];
+    adaptive.since = 0;
+    adaptive.calm = 0;
+    last = now;
+  }
+  if (openingHeld) openingShown++;
   // Sound starts on a click or key; a household on controllers never makes one, so any pad
   // press wakes it too (the browser allows it once the page has had any real interaction).
   if (audio.ctx?.state !== 'running' && Array.from(navigator.getGamepads?.() ?? []).some(p => p?.buttons.some(b => b.pressed)))
@@ -5538,7 +5580,7 @@ function frame(now) {
     }
     if (on) b.textContent = s.flight.mode ? '🔥 ZOOM · F' : '🔥 BOOST · F';
   }
-  if (!started && !$('start').disabled) {
+  if (!started && !$('start').disabled && !openingHeld) {
     started = true;
     paused = false;
     $('brief').hidden = true;
@@ -5548,11 +5590,14 @@ function frame(now) {
   const timeScale = openWorld?.stuntScale(s.car, Math.max(0, now - last) / 1000, stuntEnabled()) ?? 1,
     dt = frameSeconds(now, last) * timeScale;
   openWorld?.skyTourFrame(paused || ui.panel() ? 0 : dt, skyEligible(), mode);
-  telemetry.observeFrame(Math.max(0, now - last), !paused && countdown <= 0 && !document.hidden);
-  frameMs.push(Math.max(0, now - last));
+  const frameDelta = Math.max(0, now - last);
+  telemetry.observeFrame(frameDelta, !paused && countdown <= 0 && !document.hidden);
+  frameMs.push(frameDelta);
   if (frameMs.length > 600) frameMs.shift();
+  bootTrace?.frame(frameDelta, now);
   {
-    const r = !paused && started ? stepAdaptiveResolution(adaptive, now - last) : null;
+    // Boot hitches are shader and upload stalls, not a reason to drop the pixel ratio.
+    const r = !paused && started && !openingHeld ? stepAdaptiveResolution(adaptive, frameDelta) : null;
     if (r) {
       renderer.setPixelRatio(r);
       polish?.setPixelRatio?.(r);
@@ -6264,7 +6309,13 @@ function frame(now) {
   }
   camera.fov += ((bossAt ? 70 : 60 + Math.min(5, r.speed * 0.3)) - camera.fov) * Math.min(1, dt * 3);
   camera.updateProjectionMatrix();
-  camera.position.lerp(desired, 1 - Math.exp(-dt * 7));
+  camera.position.lerp(desired, cameraGlide(openingHeld, dt, 7));
+  // Distant districts parse on the main thread. Wait until the opening glide is over,
+  // then start them from a timer so the parse is not inside this frame.
+  if (restQueued && !openingHeld && performance.now() - openingReleasedAt > 2500 && camera.position.distanceTo(desired) < 0.5) {
+    restQueued = false;
+    setTimeout(() => openWorld?.loadBackground?.(), 0);
+  }
   // Sweep the smoothed position too: damping must not carry the camera through a wall.
   const actualRay = [camera.position.x - eye[0], camera.position.y - eye[1], camera.position.z - eye[2]],
     actualDistance = Math.hypot(...actualRay);
@@ -6296,7 +6347,7 @@ function frame(now) {
       fw = new T.Vector3(0, 0, -1).applyQuaternion(q),
       cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
     desired.set(r.x, r.y, r.z).addScaledVector(fw, -2.3).addScaledVector(cu, 0.55);
-    camera.position.lerp(desired, 1 - Math.exp(-dt * 9));
+    camera.position.lerp(desired, cameraGlide(openingHeld, dt, 9));
     camera.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
     target.set(r.x, r.y, r.z).addScaledVector(fw, 3);
   } else camera.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
@@ -6742,4 +6793,25 @@ window.__gunsOnlyRC = {
   nearDetail: () => nearDetail?.stats() ?? null,
   checkpoints: () => cps.map(c => [c[0], c[1]])
 };
-requestAnimationFrame(frame);
+// Compile and upload before the establishing shot moves. District GLBs stay queued
+// until the glide settles, and adaptive resolution does not sample the warm-up.
+async function openWhenSettled() {
+  // No animation frame until the asset swap, polish passes, and texture uploads are done.
+  // Starting the loop earlier put shader compiles and GLB parsing into the opening glide.
+  try {
+    await Promise.all([assetsReady, polishReady]);
+    await warmPresentation(renderer, scene, camera);
+    const draw = () => (polish ? polish.render() : renderer.render(scene, camera));
+    draw();
+    draw();
+  } catch (error) {
+    console.warn('opening warm', error);
+  }
+  adaptive.frames = [];
+  adaptive.since = 0;
+  adaptive.calm = 0;
+  last = performance.now();
+  readyModes();
+  requestAnimationFrame(frame);
+}
+openWhenSettled();
