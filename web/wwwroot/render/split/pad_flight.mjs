@@ -2,7 +2,11 @@
 // Ultimate 2 prints Xbox letters; SN30 Pro prints SNES letters. The same
 // Gamepad index is a different letter, so darts follow the printed A.
 // Deadzone is wider than a desk stick: a couch pad rests noisy.
+// The rows come from the one shared flight layout (rc/flight_layout.mjs).
 import {padKind} from "../../rc/pad-art.mjs";
+import {FLIGHT_PAD, faceIndex, leverAxis, pedalAxis} from "../../rc/flight_layout.mjs";
+
+export {faceIndex};
 
 export const TV = Object.freeze({deadzone: 0.2, expo: 1.4, triggerDead: 0.08});
 
@@ -46,14 +50,6 @@ function buttonValue(pad, index) {
   return clamp(Math.max(finite(button.value), pressed), 0, 1);
 }
 
-/** Printed letter → standard-mapping index. */
-export function faceIndex(id, letter) {
-  const snes = padKind(id) === "sn30";
-  if (letter === "A") return snes ? 1 : 0;
-  if (letter === "B") return snes ? 0 : 1;
-  return 0;
-}
-
 const IDLE = Object.freeze({
   connected: false,
   index: -1,
@@ -82,16 +78,16 @@ const IDLE = Object.freeze({
 export function readFlightPad(pad, prev = {}) {
   if (!padUsable(pad)) return IDLE;
   const id = String(pad.id || "");
-  const roll = tvStick(pad.axes?.[0]);
+  const roll = tvStick(pad.axes?.[FLIGHT_PAD.LS_X]);
   // Browser Y is positive when the stick is pulled. Pull raises the nose.
-  const pitch = tvStick(pad.axes?.[1] ?? 0);
-  const rt = tvTrigger(buttonValue(pad, 7));
-  const lt = tvTrigger(buttonValue(pad, 6));
-  const lb = buttonValue(pad, 4) > 0.5;
-  const rb = buttonValue(pad, 5) > 0.5;
+  const pitch = tvStick(pad.axes?.[FLIGHT_PAD.LS_Y] ?? 0);
+  const rt = tvTrigger(buttonValue(pad, FLIGHT_PAD.RT));
+  const lt = tvTrigger(buttonValue(pad, FLIGHT_PAD.LT));
+  const lb = buttonValue(pad, FLIGHT_PAD.LB) > 0.5;
+  const rb = buttonValue(pad, FLIGHT_PAD.RB) > 0.5;
   const dartDown = buttonValue(pad, faceIndex(id, "A")) > 0.5;
   const balloonDown = buttonValue(pad, faceIndex(id, "B")) > 0.5;
-  const startDown = buttonValue(pad, 9) > 0.5;
+  const startDown = buttonValue(pad, FLIGHT_PAD.START) > 0.5;
   return {
     connected: true,
     index: Math.max(0, Math.trunc(finite(pad.index))),
@@ -99,8 +95,8 @@ export function readFlightPad(pad, prev = {}) {
     kind: padKind(id),
     roll,
     pitch,
-    rudder: (rb ? 1 : 0) - (lb ? 1 : 0),
-    throttleRate: rt - lt,
+    rudder: pedalAxis(lb, rb),
+    throttleRate: leverAxis(rt, lt),
     rt,
     lt,
     dartDown,

@@ -9,12 +9,13 @@ import {
 } from "../cobra_control_profile.js";
 import {
   COBRA_GROUNDED_COLLECTIVE,
-  COBRA_GAMEPAD_CYCLE_TARGET_BUTTON,
-  COBRA_GAMEPAD_FIRE_BUTTON,
   advanceCobraPilotControls,
   cobraCyclicCommand,
   cobraAnalogControlAxes,
   cobraGamepadCombatState,
+  cobraGamepadControlAxes,
+  cobraGamepadCycleTargetButton,
+  cobraGamepadFireButton,
   createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
@@ -258,19 +259,23 @@ test("opposed digital inputs cancel before the slew integrator runs", () => {
   assert.equal(after.yaw, 0);
 });
 
-test("gamepad bumpers own targeting and gunner consent without stealing collective triggers", () => {
-  assert.equal(COBRA_GAMEPAD_CYCLE_TARGET_BUTTON, 4, "LB cycles the gunner mark");
-  assert.equal(COBRA_GAMEPAD_FIRE_BUTTON, 5, "RB holds gunner consent");
-  assert.notEqual(COBRA_GAMEPAD_FIRE_BUTTON, 7,
+test("printed A fires and printed B cycles the mark — the shared weapon buttons", () => {
+  // The owner's rule (6 Nov 2026): A/B are the same weapons on every surface.
+  // Letters follow the print: the SN30 swaps the physical indices.
+  assert.equal(cobraGamepadFireButton({ id: "8BitDo Ultimate 2" }), 0);
+  assert.equal(cobraGamepadCycleTargetButton({ id: "8BitDo Ultimate 2" }), 1);
+  assert.equal(cobraGamepadFireButton({ id: "8Bitdo SN30 Pro" }), 1);
+  assert.equal(cobraGamepadCycleTargetButton({ id: "8Bitdo SN30 Pro" }), 0);
+  assert.notEqual(cobraGamepadFireButton({ id: "" }), 7,
     "RT remains collective; combat cannot steal the lever");
 
-  function pad({ lb = 0, rb = 0, lt = 0, rt = 0 } = {}) {
+  function pad({ a = 0, b = 0, rt = 0 } = {}) {
     return {
       connected: true,
+      id: "8BitDo Ultimate 2",
       buttons: {
-        4: { pressed: lb > 0.5, value: lb },
-        5: { pressed: rb > 0.5, value: rb },
-        6: { pressed: lt > 0.5, value: lt },
+        0: { pressed: a > 0.5, value: a },
+        1: { pressed: b > 0.5, value: b },
         7: { pressed: rt > 0.5, value: rt },
       },
     };
@@ -281,18 +286,37 @@ test("gamepad bumpers own targeting and gunner consent without stealing collecti
     cycleTarget: false,
     cycleTargetPressed: false,
   });
-  const firing = cobraGamepadCombatState(pad({ rb: 1, rt: 1 }));
+  const firing = cobraGamepadCombatState(pad({ a: 1, rt: 1 }));
   assert.equal(firing.fire, true);
   assert.equal(firing.cycleTargetPressed, false);
-  const firstCycle = cobraGamepadCombatState(pad({ lb: 1 }));
+  const firstCycle = cobraGamepadCombatState(pad({ b: 1 }));
   assert.equal(firstCycle.cycleTargetPressed, true);
-  const heldCycle = cobraGamepadCombatState(pad({ lb: 1 }), firstCycle);
+  const heldCycle = cobraGamepadCombatState(pad({ b: 1 }), firstCycle);
   assert.equal(heldCycle.cycleTargetPressed, false,
-    "a held bumper must not spin through every mark");
-  const released = cobraGamepadCombatState(pad({ lb: 0 }), heldCycle);
+    "a held button must not spin through every mark");
+  const released = cobraGamepadCombatState(pad({ b: 0 }), heldCycle);
   assert.equal(released.cycleTargetPressed, false);
-  const secondCycle = cobraGamepadCombatState(pad({ lb: 1 }), released);
+  const secondCycle = cobraGamepadCombatState(pad({ b: 1 }), released);
   assert.equal(secondCycle.cycleTargetPressed, true);
+});
+
+test("the gamepad flies the shared rows: LS cyclic, LB/RB pedals, RT/LT collective", () => {
+  const pad = {
+    connected: true,
+    id: "8BitDo Ultimate 2",
+    axes: [0.5, 1, -0.9, 0.4], // right stick deflected: it must NOT be pedals
+    buttons: {
+      4: { pressed: true, value: 1 }, // LB — left pedal
+      5: { pressed: false, value: 0 },
+      6: { pressed: false, value: 0 },
+      7: { pressed: false, value: 0.8 }, // RT — collective up
+    },
+  };
+  const axes = cobraGamepadControlAxes(pad, 0);
+  assert.equal(axes.yaw, -1, "LB is the left pedal; the right stick is reserved for look");
+  assert.ok(Math.abs(axes.collectiveRate - 0.8) < 1e-9, "RT pulls the collective");
+  assert.equal(axes.forwardCyclic, -1, "pulling the stick is aft cyclic — nose up");
+  assert.equal(axes.rightCyclic, 0.5);
 });
 
 test("Hold the Bridge consumes the production pilot input module", async () => {

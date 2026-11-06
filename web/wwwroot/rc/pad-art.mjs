@@ -45,7 +45,18 @@ const FORM_ACTIONS = {
 FORM_ACTIONS.board = FORM_ACTIONS.car.map(a => (a.ctl === 0 ? {...a, act: 'OLLIE'} : a));
 FORM_ACTIONS.plane = FORM_ACTIONS.fly;
 FORM_ACTIONS.gunship = FORM_ACTIONS.fly;
-FORM_ACTIONS.chopper = FORM_ACTIONS.fly;
+// The chopper flies the same rows helicopter-correctly (owner, 6 Nov 2026):
+// the stick tilts (cyclic), RT/LT climb and descend (collective), LB/RB yaw.
+FORM_ACTIONS.chopper = [
+  {act: 'TILT', ctl: 'stick', why: 'cyclic'},
+  {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
+  {act: 'CLIMB', ctl: 7},
+  {act: 'DOWN', ctl: 6},
+  {act: 'FLY', ctl: 0},
+  {act: 'LAND', ctl: 1},
+  {act: 'YAW', ctl: 4},
+  {act: 'YAW', ctl: 5}
+];
 FORM_ACTIONS.chute = FORM_ACTIONS.fly;
 FORM_ACTIONS.toy = FORM_ACTIONS.car;
 

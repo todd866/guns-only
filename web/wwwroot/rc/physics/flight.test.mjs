@@ -348,6 +348,63 @@ test('take-off and land each do one thing, and the chute keeps the stick', () =>
   assert.ok(s.car.grounded, `${s.car.pos}`);
 });
 
+// The chopper (owner, 6 Nov 2026): same pad rows, helicopter-correct. The
+// ctl here is what main.js hands over for form 'chopper': aviation pitch
+// (pull = +1 = nose up = slow), collective on the triggers, pedals on yaw.
+const heli = (over = {}) => ({flight: {heli: true, assist: 'kid', ...over}});
+
+test('the chopper: the collective is the vertical and kid auto-hovers hands-off', () => {
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 3, heli());
+  const y = s.car.pos[1];
+  const at = [s.car.pos[0], s.car.pos[2]];
+  run(s, 2, heli());
+  assert.equal(s.flight.mode, 'fly', 'kid hands-off does not land');
+  assert.ok(Math.abs(s.car.pos[1] - y) < 0.8, `kid holds height (${y} -> ${s.car.pos[1]})`);
+  assert.ok(
+    Math.hypot(s.car.pos[0] - at[0], s.car.pos[2] - at[1]) < 2,
+    'kid auto-hover stops the drift'
+  );
+  run(s, 1.5, heli({collective: 1}));
+  assert.ok(s.car.pos[1] > y + 2, `collective up climbs (${y} -> ${s.car.pos[1]})`);
+  // Kid: full collective down cannot strike the ground — the floor defends itself.
+  run(s, 4, heli({collective: -1}));
+  assert.equal(s.flight.mode, 'fly', 'kid never strikes the ground');
+  assert.ok(s.car.pos[1] > 1.5, `kid floor held (${s.car.pos[1]})`);
+});
+
+test('the chopper: push the cyclic to go, pull to slow, pedals yaw, pilot lands on the lever', () => {
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 2, heli());
+  const from = [s.car.pos[0], s.car.pos[2]];
+  run(s, 2, heli({pitch: -1})); // push forward: nose down, go
+  const went = Math.hypot(s.car.pos[0] - from[0], s.car.pos[2] - from[1]);
+  assert.ok(went > 10, `forward cyclic goes (${went.toFixed(1)} m)`);
+  run(s, 2.5, heli({pitch: 1})); // pull back: nose up, slow then back
+  assert.ok(s.flight.speed < 2, `aft cyclic slows (${s.flight.speed.toFixed(1)} m/s)`);
+  const yaw0 = carYaw(s.car);
+  run(s, 1, heli({yaw: 1}));
+  const right = turned(yaw0, carYaw(s.car));
+  assert.ok(Math.abs(right) > 0.5, `right pedal yaws (${right.toFixed(2)})`);
+  const yaw1 = carYaw(s.car);
+  run(s, 1, heli({yaw: -1}));
+  const left = turned(yaw1, carYaw(s.car));
+  assert.equal(Math.sign(left), -Math.sign(right), 'the pedals oppose');
+  // Pilot: the lever stays where it is left, and full down is a vertical landing.
+  const p = roam(field());
+  toggleFlight(p.flight, p.car);
+  run(p, 2, heli({assist: 'pilot', collective: 1}));
+  const lever = p.flight.lever;
+  assert.ok(lever > 0.9, `the lever walked up (${lever})`);
+  run(p, 1, heli({assist: 'pilot'}));
+  assert.ok(Math.abs(p.flight.lever - lever) < 1e-9, 'a pilot keeps the lever hands-off');
+  for (let i = 0; i < 20 * 120 && p.flight.mode; i++)
+    stepSession(p, heli({assist: 'pilot', collective: -1}), 1 / 120);
+  assert.equal(p.flight.mode, null, 'full collective down reaches the skids');
+});
+
 test('a barrel roll and a loop finish level and above the floor', () => {
   for (const trick of ['roll', 'loop']) {
     const s = roam(field());

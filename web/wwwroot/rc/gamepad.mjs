@@ -4,6 +4,7 @@
 // The left stick is never both steering and throttle. Where RT is the throttle,
 // pushing the stick up does nothing to the speed.
 import {applyFeel} from './control-feel.mjs';
+import {FLIGHT_PAD, leverAxis, pedalAxis} from './flight_layout.mjs';
 
 export const STICK_DEAD = 0.15;
 
@@ -14,7 +15,8 @@ export function stickAxis(v) {
 
 const clampAxis = v => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
 
-// plane / gunship / chopper / chute share the arcade row: stick up climbs, shoulders yaw.
+// plane / gunship / chute share the arcade row: stick up climbs, shoulders yaw.
+// The chopper keeps the same rows but helicopter-correct: triggers are the vertical.
 export function normalizeForm(form) {
   if (form === 'robot' || form === 'foot' || form === 'walk') return 'robot';
   if (form === 'board' || form === 'skate') return 'board';
@@ -87,12 +89,28 @@ export function mapPad(form, p, feel) {
     out.sprint = down(p, 10);
     return applyFeel(out, raw, feel);
   }
-  if (f === 'chopper' || f === 'fly') {
+  if (f === 'chopper') {
+    // The helicopter flies the same rows, helicopter-correctly (owner, 6 Nov
+    // 2026): the left stick is the cyclic — pitch is AVIATION pull-positive
+    // here (pull back = nose up = slow; push = go), never a climb — RT/LT walk
+    // the collective (the vertical), LB/RB are the pedals. A flies up, B lands.
+    // No loop, and LB must stay a pedal: it cannot be the take-off/chute tap.
+    out.pitch = -ly + 0; // + 0 so a centred stick is 0, not -0
+    out.roll = lx;
+    out.yaw = pedalAxis(down(p, FLIGHT_PAD.LB), down(p, FLIGHT_PAD.RB));
+    out.power = leverAxis(rt, lt);
+    out.climb = out.power;
+    out.jumpHeld = down(p, 0);
+    out.boostHeld = down(p, 2);
+    out.flyHeld = false;
+    return applyFeel(out, raw, feel);
+  }
+  if (f === 'fly') {
     // Stick up climbs. LB/RB are fine yaw, not roll and not take-off. A flies up, Y loops, B lands.
     out.pitch = ly;
     out.roll = lx;
-    out.yaw = (down(p, 5) ? 1 : 0) - (down(p, 4) ? 1 : 0);
-    out.power = rt - lt;
+    out.yaw = pedalAxis(down(p, FLIGHT_PAD.LB), down(p, FLIGHT_PAD.RB));
+    out.power = leverAxis(rt, lt);
     out.climb = ly;
     out.jumpHeld = down(p, 0);
     out.loopHeld = down(p, 3);

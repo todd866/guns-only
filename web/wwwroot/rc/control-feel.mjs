@@ -80,8 +80,15 @@ export function applyFeel(out, raw, feel) {
     out.steer = 0;
   } else if (out.form === 'fly' || out.form === 'chopper') {
     const scale = flightScales();
-    out.pitch = shape(raw.ly) * scale.pitch;
-    out.climb = out.pitch;
+    if (out.form === 'chopper') {
+      // Helicopter rows (owner, 6 Nov 2026): the stick is the cyclic, aviation
+      // pull-positive, and never the vertical — out.climb stays the collective
+      // that mapPad put on the triggers.
+      out.pitch = -shape(raw.ly) * scale.pitch + 0; // + 0: centred is 0, not -0
+    } else {
+      out.pitch = shape(raw.ly) * scale.pitch;
+      out.climb = out.pitch;
+    }
     out.roll = shape(raw.lx) * scale.roll;
     out.steer = 0;
   } else {

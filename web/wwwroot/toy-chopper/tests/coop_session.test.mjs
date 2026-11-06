@@ -80,20 +80,53 @@ test("soft lock is live while flying and marks both halves", () => {
   assert.ok(typeof s.lock.x === "number");
 });
 
-test("LB hold-steady damps the chopper for a clean shot", () => {
+test("kid auto-hover: released sticks damp the chopper for a clean shot", () => {
   const s = createCoopSession();
   startMission(s, "balloon-fort", 0);
+  assert.equal(s.assist, "kid", "kid is the default assist");
   const p1 = pad(0);
   run(s, [p1], 4); // solo: pilot + auto-aim
   p1.axes[0] = 0.9; // bank hard
   run(s, [p1], 1.2);
   const banked = Math.abs(s.chopper.bank);
   assert.ok(banked > 0.1, "chopper banked");
-  p1.axes[0] = 0;
-  press(p1, 4); // LB
+  p1.axes[0] = 0; // hands off — no button needed
   run(s, [p1], 1.5);
-  assert.ok(Math.abs(s.chopper.bank) < banked / 3, "hold-steady levelled it");
+  assert.ok(Math.abs(s.chopper.bank) < banked / 3, "auto-hover levelled it");
+  assert.ok(Math.abs(s.chopper.lever - 0.5) < 0.1, "height holds: the lever eases to hover");
   assert.ok(s.mission.stats.holdSteadyS > 1);
+});
+
+test("pilot assist: the collective is a lever that stays where you leave it", () => {
+  const s = createCoopSession();
+  startMission(s, "balloon-fort", 0);
+  s.assist = "pilot";
+  const p1 = pad(0);
+  run(s, [p1], 4);
+  press(p1, 7); // RT: collective up
+  run(s, [p1], 0.8);
+  press(p1, 7, 0);
+  const lever = s.chopper.lever;
+  assert.ok(lever > 0.6, "RT raised the collective");
+  run(s, [p1], 1.5); // hands off — a pilot gets no auto-hover
+  assert.ok(Math.abs(s.chopper.lever - lever) < 1e-9, "the lever held");
+  assert.equal(s.mission.stats.holdSteadyS, 0);
+});
+
+test("LB/RB are the pedals, the same buttons as every flying surface", () => {
+  const s = createCoopSession();
+  startMission(s, "balloon-fort", 0);
+  const p1 = pad(0);
+  run(s, [p1], 4);
+  const heading = s.chopper.heading;
+  press(p1, 5); // RB: right pedal
+  run(s, [p1], 1);
+  assert.ok(s.chopper.heading < heading - 0.5, "right pedal yaws right");
+  press(p1, 5, 0);
+  press(p1, 4); // LB: left pedal
+  const mid = s.chopper.heading;
+  run(s, [p1], 1);
+  assert.ok(s.chopper.heading > mid + 0.5, "left pedal yaws left");
 });
 
 test("balloon lob shows an arc preview while B is held", () => {

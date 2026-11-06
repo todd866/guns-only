@@ -6541,20 +6541,37 @@ function frame(now) {
       const keyClimb = Number(keys.has('ArrowUp') || keys.has('KeyW')) - Number(keys.has('ArrowDown') || keys.has('KeyS')),
         keyBank = Number(keys.has('ArrowRight') || keys.has('KeyD')) - Number(keys.has('ArrowLeft') || keys.has('KeyA')),
         padPitch = invertFlight ? -pad.pitch : pad.pitch,
+        heliForm = form === 'chopper',
         att = stickAttitude({x: pad.roll || keyBank, y: padPitch || keyClimb}),
-        pilotFlight = mode !== 'kid' && !winged() && form !== 'chopper' && !skate && form !== 'board',
-        fl = {
-          arcade: !pilotFlight,
-          pilot: pilotFlight,
-          pitch: att.pitch,
-          roll: att.roll,
-          yaw: pad.yaw || 0,
-          power:
-            pad.power ||
-            Number(keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyX')) - Number(keys.has('KeyZ')),
-          flyUp: !!pad.jumpHeld && !robot && form !== 'board' && !skate,
-          trick: pad.loopHeld ? (Math.abs(att.roll) > 0.35 ? 'roll' : 'loop') : null
-        };
+        pilotFlight = mode !== 'kid' && !winged() && !heliForm && !skate && form !== 'board',
+        fl = heliForm
+          ? {
+              // The chopper flies the same rows helicopter-correctly (owner,
+              // 6 Nov 2026): gamepad.mjs already hands the cyclic over aviation
+              // pull-positive, so 'Pull back to climb' (a plane preference)
+              // does not apply — a chopper's pull is always nose up. Keys stay
+              // up-is-up: W/↑ raise the collective. Kid/Big Kid is Kid/Pilot.
+              heli: true,
+              assist: mode === 'kid' ? 'kid' : 'pilot',
+              pitch: pad.pitch || 0,
+              roll: pad.roll || keyBank,
+              yaw: pad.yaw || 0,
+              collective: pad.power || keyClimb,
+              flyUp: !!pad.jumpHeld && !robot,
+              trick: null
+            }
+          : {
+              arcade: !pilotFlight,
+              pilot: pilotFlight,
+              pitch: att.pitch,
+              roll: att.roll,
+              yaw: pad.yaw || 0,
+              power:
+                pad.power ||
+                Number(keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyX')) - Number(keys.has('KeyZ')),
+              flyUp: !!pad.jumpHeld && !robot && form !== 'board' && !skate,
+              trick: pad.loopHeld ? (Math.abs(att.roll) > 0.35 ? 'roll' : 'loop') : null
+            };
       if (s.flight.mode === 'chute') fl.steer = att.roll || pad.yaw || keyBank || 0;
       fl.burner = boostOn && race.roam && !skate;
       fl.lift = skyEligible() && s.flight.mode === 'fly' ? openWorld.cloudLift(s.car.pos) : 0;

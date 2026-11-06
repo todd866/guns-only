@@ -110,7 +110,7 @@ test('on foot the left stick moves on the camera and the right stick only looks'
 });
 
 test('flying uses the left stick to climb and turn, and the shoulders to yaw', () => {
-  for (const form of ['fly', 'plane', 'gunship', 'chopper', 'chute']) {
+  for (const form of ['fly', 'plane', 'gunship', 'chute']) {
     const air = mapPad(form, pad([0, -1, 0, -0.8], [0, 3], {analog: {7: 0.5, 6: 0}}));
     assert.equal(air.throttle, 0, `${form} stick is not the throttle`);
     assert.equal(air.pitch, 1, `${form} stick up climbs`);
@@ -130,7 +130,25 @@ test('flying uses the left stick to climb and turn, and the shoulders to yaw', (
   const yaw = mapPad('fly', pad([0, 0, 0, 0], [5]));
   assert.equal(yaw.yaw, 1, 'RB yaws right');
   assert.equal(yaw.roll, 0, 'RB is not a roll');
+});
+
+test('the chopper flies the same rows, helicopter-correctly', () => {
+  // Pull the stick back (browser axis 1 positive): nose up, aviation sign.
+  const pulled = mapPad('chopper', pad([0, 1, 0, 0], [], {analog: {7: 0.5}}));
+  assert.equal(pulled.pitch, 1, 'pull back raises the nose (and slows)');
+  assert.equal(pulled.climb, 0.5, 'RT is collective up — the stick is never the vertical');
+  assert.equal(pulled.power, 0.5);
+  assert.equal(pulled.throttle, 0);
+  const pushed = mapPad('chopper', pad([0, -1], [], {analog: {6: 1}}));
+  assert.equal(pushed.pitch, -1, 'push forward to go');
+  assert.equal(pushed.climb, -1, 'LT is collective down');
+  const pedals = mapPad('chopper', pad([0, 0], [4]));
+  assert.equal(pedals.yaw, -1, 'LB is the left pedal');
+  assert.equal(pedals.flyHeld, false, 'a pedal tap must never be the take-off/chute tap');
+  assert.equal(mapPad('chopper', pad([0, 0], [5])).yaw, 1, 'RB is the right pedal');
+  assert.equal(mapPad('chopper', pad([0, 0], [0])).jumpHeld, true, 'A flies up');
   assert.equal(mapPad('chopper', pad([0, 0], [1])).morphHeld, true, 'B lands');
+  assert.equal(mapPad('chopper', pad([0, 0], [3])).loopHeld, false, 'a chopper does not loop');
 });
 
 test('LB taps between flight and the chute, and a hold does not land you', () => {

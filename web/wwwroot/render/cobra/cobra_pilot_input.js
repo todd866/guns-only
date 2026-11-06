@@ -1,4 +1,5 @@
 import { advanceCobraCollectiveLever } from "./cobra_control_profile.js";
+import { FLIGHT_PAD, faceIndex, leverAxis, pedalAxis } from "../../rc/flight_layout.mjs";
 
 const DEFAULT_COLLECTIVE_FULL_TRAVEL_PER_SECOND = 0.40;
 const DEFAULT_CYCLIC_FULL_TRAVEL_PER_SECOND = 2.5;
@@ -138,34 +139,48 @@ function buttonHeld(gamepad, index) {
 }
 
 /**
- * Standard mapping: LB cycles the gunner mark, RB holds gunner consent. Triggers stay collective.
- * A held bumper must not spin through every mark — only the rising edge cycles.
+ * One pad layout across guns-only, the helicopters and RC (owner, 6 Nov 2026;
+ * rc/flight_layout.mjs): printed A holds gunner consent — the same button that
+ * is guns everywhere else — and printed B cycles the gunner mark, the same
+ * target job as guns-only's B padlock. The letters follow the pad's print
+ * (the SN30 swaps them). A held face button must not spin through every mark —
+ * only the rising edge cycles. Y keeps the turnaround action (cobra_turnaround.js).
  */
-export const COBRA_GAMEPAD_CYCLE_TARGET_BUTTON = 4;
-export const COBRA_GAMEPAD_FIRE_BUTTON = 5;
+export function cobraGamepadFireButton(gamepad) {
+  return faceIndex(String(gamepad?.id ?? ""), "A");
+}
+export function cobraGamepadCycleTargetButton(gamepad) {
+  return faceIndex(String(gamepad?.id ?? ""), "B");
+}
 
 export function cobraGamepadCombatState(gamepad, previous = null) {
-  const cycleTarget = buttonHeld(gamepad, COBRA_GAMEPAD_CYCLE_TARGET_BUTTON);
+  const cycleTarget = buttonHeld(gamepad, cobraGamepadCycleTargetButton(gamepad));
   return Object.freeze({
-    fire: buttonHeld(gamepad, COBRA_GAMEPAD_FIRE_BUTTON),
+    fire: buttonHeld(gamepad, cobraGamepadFireButton(gamepad)),
     cycleTarget,
     cycleTargetPressed: cycleTarget && previous?.cycleTarget !== true,
   });
 }
 
 /**
- * Standard-mapping gamepad projection for the Cobra: left stick cyclic, right-stick X pedals,
- * right trigger pulls collective and left trigger pushes it. Missing pads fail neutral.
+ * Standard-mapping gamepad projection for the Cobra, on the shared flight rows
+ * (rc/flight_layout.mjs): left stick cyclic, LB/RB pedals (right pedal yaws
+ * right), right trigger pulls collective and left trigger pushes it. The right
+ * stick is RESERVED for look: the authority camera is body-fixed (forward =
+ * nose-forward, the optical-centre contract above syncAuthorityCamera), so
+ * binding it is a deliberate camera change, not an input remap — the same
+ * treatment as guns-only's reserved LB/RB rudder channel. Missing pads fail
+ * neutral.
  */
 export function cobraGamepadControlAxes(gamepad, deadzone = DEFAULT_AXIS_DEADZONE) {
   if (!gamepad || gamepad.connected === false) {
     return cobraAnalogControlAxes({ deadzone });
   }
   return cobraAnalogControlAxes({
-    rightCyclic: gamepad.axes?.[0] ?? 0,
-    forwardCyclic: -(gamepad.axes?.[1] ?? 0),
-    yaw: gamepad.axes?.[2] ?? 0,
-    collectiveRate: buttonValue(gamepad, 7) - buttonValue(gamepad, 6),
+    rightCyclic: gamepad.axes?.[FLIGHT_PAD.LS_X] ?? 0,
+    forwardCyclic: -(gamepad.axes?.[FLIGHT_PAD.LS_Y] ?? 0),
+    yaw: pedalAxis(buttonHeld(gamepad, FLIGHT_PAD.LB), buttonHeld(gamepad, FLIGHT_PAD.RB)),
+    collectiveRate: leverAxis(buttonValue(gamepad, FLIGHT_PAD.RT), buttonValue(gamepad, FLIGHT_PAD.LT)),
     deadzone,
   });
 }

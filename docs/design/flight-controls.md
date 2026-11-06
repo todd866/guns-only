@@ -16,6 +16,38 @@ layout everywhere.
 | Toy gunship (toy-gunship/orbit.mjs) | The pilot steers the ORBIT (radius/alt/speed), not the plane | Intentional (the gunner needs a steady scene). Left alone. |
 | Toy chopper / cobra (toy-chopper, render/cobra) | Helicopter models | Choppers keep helicopter behaviour (task rule). Left alone, except the toy fight chopper's slide/yaw signs, aligned with the aviation convention below. |
 
+## Helicopters joined the layout (owner, 6 Nov 2026 follow-up)
+
+"Should work the same across guns-only, helicopter and rc." Every helicopter
+now flies the SAME rows, mapped helicopter-correctly, from one shared module,
+`rc/flight_layout.mjs` (indices + pedal/lever arithmetic + printed-letter
+faceIndex). `pad_flight.mjs`, `rc/gamepad.mjs` and `cobra_pilot_input.js` all
+import it; `rc/flight_layout.test.mjs` reads one synthetic pad through all
+three mappers and asserts the same buttons mean the same thing.
+
+- Left stick = cyclic. Pull back = nose up = slow (then back); push to go.
+  Aviation pull-positive at every seam; a chopper's pull is never subject to
+  the plane's 'Pull back to climb' preference.
+- RT/LT = collective up/down — a held lever, the vertical. The stick never
+  climbs a helicopter.
+- LB/RB = pedals. On the co-op chopper they replace the old d-pad pedals and
+  the LB hold-steady button; in the cobra they replace right-stick-X yaw.
+- Right stick = look. The cobra's authority camera is body-fixed (forward =
+  nose-forward), so its right stick is RESERVED for look the way guns-only's
+  LB/RB were reserved for rudder: binding it is a deliberate camera change.
+- A/B = the same weapon jobs, by printed letter: A is guns (cobra: gunner
+  consent, was RB), B is the second/target job (cobra: cycle mark, was LB —
+  the same job as guns-only's B padlock). Y keeps the cobra turnaround action.
+- Same assist levels. Kid: auto-hover when the sticks are released, height
+  hold, no ground strikes (the RC chopper's floor defends itself; the co-op
+  chopper damps to hover and recentres the lever). Pilot: the lever and the
+  drift are yours; full down is a vertical landing. RC maps Kid/Big Kid to
+  Kid/Pilot; the co-op session carries `assist` ('kid' default).
+- RC Odyssey's chopper form left the arcade plane flyer for its own
+  `heliFly` (`rc/physics/flight.mjs`, `FLIGHT.heli`): collective vertical,
+  tilt-to-go, bank turns so one stick still steers, pedals yaw. A flies up
+  and B lands, as on every RC form.
+
 ## The shared aeroplane: rc/physics/airplane.mjs
 
 Pure functions, `node:test`-covered (`airplane.test.mjs`), no DOM. Aviation

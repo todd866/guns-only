@@ -38,6 +38,10 @@ export function createCoopSession() {
     now: 0,
     briefUntil: 0,
     wobbleS: 0,
+    // Same two assist levels as every flying surface (owner, 6 Nov 2026).
+    // Kid (default): hands off, the chopper auto-hovers and holds height.
+    // Pilot: the lever and the drift are yours.
+    assist: "kid",
     holdSteady: false,
     lock: null,            // {id, x, y, z} for both halves' markers
     lobPreview: null,
@@ -162,9 +166,21 @@ function stepThreats(session, dt) {
   }
 }
 
+// Released sticks: nothing on the cyclic, pedals or collective.
+function sticksReleased(p1) {
+  return (
+    Math.abs(p1.pitch || 0) < 0.08 &&
+    Math.abs(p1.roll || 0) < 0.08 &&
+    (p1.rudder || 0) === 0 &&
+    Math.abs(p1.throttleRate || 0) < 0.05
+  );
+}
+
 function pilotCommand(session, p1) {
   if (session.holdSteady) {
-    // LB hold-steady: damp everything toward a clean hover for the gunner.
+    // Kid auto-hover (owner, 6 Nov 2026): released sticks damp everything
+    // toward a clean, height-holding hover — the gunner's steady shot without
+    // a button. LB/RB are the pedals now, like every other flying surface.
     const c = session.chopper;
     return {
       pitch: -c.pitch * 2.2,
@@ -173,26 +189,11 @@ function pilotCommand(session, p1) {
       throttleRate: (0.5 - c.lever) * 2,
     };
   }
-  const pedal = ((p1.padRight ? 1 : 0) - (p1.padLeft ? 1 : 0));
   return {
     pitch: p1.pitch,
     roll: p1.roll,
-    rudder: pedal,
+    rudder: p1.rudder,
     throttleRate: p1.throttleRate,
-  };
-}
-
-function readPilotExtras(pad, read) {
-  const value = (i) => {
-    const b = pad?.buttons?.[i];
-    if (!b) return 0;
-    return Math.max(b.pressed === true ? 1 : 0, Number(b.value) || 0);
-  };
-  return {
-    ...read,
-    holdSteady: value(4) > 0.5,          // LB
-    padLeft: value(14) > 0.5,            // d-pad pedals
-    padRight: value(15) > 0.5,
   };
 }
 
@@ -235,7 +236,7 @@ export function stepCoop(session, {dt, pads, now} = {}) {
   if (session.phase === "title" || session.phase === "result") return session;
   noteJoin(session, live);
   const p1raw = padByIndex(live, session.p1Pad ?? live[0]?.index);
-  const p1 = readPilotExtras(p1raw, readFlightPad(p1raw, session._prev.p1));
+  const p1 = readFlightPad(p1raw, session._prev.p1);
   const p2 = session.split
     ? readGunnerPad(padByIndex(live, session.p2Pad), session._prev.p2)
     : readGunnerPad(null, session._prev.p2);
@@ -259,7 +260,7 @@ export function stepCoop(session, {dt, pads, now} = {}) {
   }
   if (step === 0) return session;
 
-  session.holdSteady = p1.holdSteady === true;
+  session.holdSteady = session.assist !== "pilot" && p1.connected && sticksReleased(p1);
   if (session.holdSteady) session.mission.stats.holdSteadyS += step;
 
   // Fly the one shared chopper; wobble adds a shudder the pilot must ride out.
