@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Toy Chopper — co-op</title>
+<style>
+  :root {
+    --bg: #10141a; --ink: #f2f6fb; --dim: #9fb0c3; --card: #1b222cdd;
+    --chip: #223041e6; --accent: #ffd34d; --good: #5dde6a; --pop: #ff4f8d;
+    --focus: #ffd34d;
+  }
+  [data-theme="light"] {
+    --bg: #bfe3ff; --ink: #14202e; --dim: #43596f; --card: #ffffffd9;
+    --chip: #ffffffe6; --accent: #b86e00; --good: #1d8a2c; --pop: #d41e62;
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg);
+    font-family: system-ui, sans-serif; color: var(--ink); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #overlay { pointer-events: none; }
+  .chip { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    background: var(--chip); border-radius: 999px; padding: 6px 16px; font-weight: 800;
+    font-size: 15px; white-space: nowrap; }
+  .caption { position: absolute; bottom: 7%; left: 50%; transform: translateX(-50%);
+    background: var(--card); border-radius: 10px; padding: 7px 14px; font-weight: 800;
+    font-size: 18px; color: var(--accent); white-space: nowrap; }
+  .seat { position: absolute; top: 10px; font-size: 12px; font-weight: 800; color: var(--dim);
+    background: var(--chip); padding: 3px 10px; border-radius: 999px; }
+  #seat1 { left: 12px; } #seat2 { right: 12px; }
+  .join { position: absolute; right: 12px; bottom: 12px; background: var(--card);
+    border-radius: 12px; padding: 10px 14px; font-weight: 800; font-size: 15px; }
+  .join b { color: var(--accent); }
+  .menu { position: absolute; inset: 0; display: grid; place-items: center; background: #0007; }
+  .panel { background: var(--card); border-radius: 16px; padding: 18px 22px; min-width: 420px; }
+  .panel h1 { margin: 0 0 2px; font-size: 22px; }
+  .panel .sub { margin: 0 0 12px; color: var(--dim); font-size: 13px; font-weight: 700; }
+  .panel button { display: flex; width: 100%; justify-content: space-between; gap: 18px;
+    margin: 6px 0; padding: 10px 14px; font: 800 15px system-ui; border-radius: 10px;
+    border: 2px solid transparent; background: var(--chip); color: var(--ink); text-align: left; }
+  .panel button:disabled { opacity: 0.45; }
+  .panel button.pad-focus { border-color: var(--focus); }
+  .panel .row { display: flex; justify-content: space-between; gap: 18px; font-size: 13px;
+    font-weight: 700; color: var(--dim); margin: 4px 0; }
+  .stars { color: var(--accent); }
+  #coach { position: absolute; right: 4%; bottom: 10%; background: var(--card);
+    border-radius: 14px; padding: 10px; }
+  #coach .hint { text-align: center; font-weight: 800; font-size: 14px; margin-top: 2px; }
+  .pad-glow { animation: glow 0.9s ease-in-out infinite alternate; }
+  @keyframes glow { from { opacity: 1; } to { opacity: 0.35; } }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="three"></canvas>
+<canvas id="overlay"></canvas>
+<div id="chip" class="chip" hidden></div>
+<div id="caption" class="caption" hidden></div>
+<div id="seat1" class="seat" hidden>PILOT ✈</div>
+<div id="seat2" class="seat" hidden>GUNNER 🎯</div>
+<div id="join" class="join" hidden>Press <b>START ▶</b> to join as door gunner</div>
+<div id="coach" hidden></div>
+
+<div id="title" class="menu">
+  <div class="panel">
+    <h1>🚁 Toy Chopper</h1>
+    <p class="sub">Dad flies · kid pops · nobody loses</p>
+    <div id="map"></div>
+    <div id="shelf" class="row"></div>
+    <div class="row"><span>P1 ✈ stick fly · ⇄ pedals · LB hold steady</span><span>P2 🎯 stick aim · A dart · B balloon · RB zoom</span></div>
+  </div>
+</div>
+
+<div id="pause" class="menu" hidden>
+  <div class="panel">
+    <h1>Paused</h1>
+    <button data-act="resume">▶ Keep flying</button>
+    <button data-act="restart">↺ Restart mission</button>
+    <button data-act="map">🗺 Toy world map</button>
+  </div>
+</div>
+
+<div id="result" class="menu" hidden>
+  <div class="panel">
+    <h1 id="result-title">Mission clear!</h1>
+    <div id="result-stars"></div>
+    <div id="result-new" class="row"></div>
+    <button data-act="next">➜ Next mission</button>
+    <button data-act="again">↺ Fly it again</button>
+    <button data-act="map">🗺 Toy world map</button>
+  </div>
+</div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>
