@@ -36,7 +36,10 @@ const EVENT_CODES = new Set([
   'flight',
   'discover',
   'dream_enter',
-  'dream_exit'
+  'dream_exit',
+  'offtrack',
+  'respawn',
+  'lap_place'
 ]);
 const ERROR_LIMIT = 8;
 const short = (value, n = 40) => String(value ?? 'unknown').slice(0, n);
@@ -314,6 +317,12 @@ export function createRCTelemetry({
   function mapOpen(at) {
     record('map_open', {...where(at)});
   }
+  function kidRace({type, offset, place, lap} = {}) {
+    if (type === 'offtrack' || type === 'respawn')
+      return record(type, {offset: finite(offset)});
+    if (type === 'lap_place') return record('lap_place', {lap: finite(lap), place: finite(place)});
+    return false;
+  }
   function recover(how, at) {
     record('recover', {how: ['key', 'button', 'auto'].includes(how) ? how : 'unknown', ...where(at)});
   }
@@ -489,6 +498,7 @@ export function createRCTelemetry({
     activityStart,
     activityEnd,
     mapOpen,
+    kidRace,
     recover,
     heartbeat,
     choice,

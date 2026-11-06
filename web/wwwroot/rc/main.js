@@ -178,6 +178,7 @@ import {nextStep, readStep, STORAGE} from './audio-mix.mjs';
 import {JET_KINDS, fitJetShell, paintNoseArt, artTier, NOSE_ART} from './jets.js';
 import {createRCTelemetry} from './telemetry.mjs';
 import {resultPanel, bindResultPanel, ordinal} from './result-panel.mjs';
+import {kidRaceLaps, kidFinishTitle, writeKidResult, difficultyFrom, readKidResults} from './physics/kid-racing.mjs';
 import {createWorldSky} from './open-world/sky.js';
 import {loadOpenWorld} from './open-world/runtime.js';
 import {createWorldUI} from './open-world/ui.js';
@@ -237,10 +238,21 @@ function raceRetreatCeremony(options = {}) {
     return true;
   }
 }
+function raceLapCount(course, options) {
+  const m = options.mode ?? mode;
+  const authored = eventLaps(course.event);
+  if (m !== 'kid') return authored;
+  const chosen = Number.isFinite(options.laps)
+    ? options.laps
+    : Number.isFinite(course.event?.laps)
+      ? course.event.laps
+      : null;
+  return kidRaceLaps(authored, chosen, course.event?.kind);
+}
 function createRace(course, options = {}) {
   const roam = options.roam || options.furball;
   return createRaceBase(
-    {...course, laps: eventLaps(course.event)},
+    {...course, laps: raceLapCount(course, options)},
     {
       ...options,
       params: vehicleParams(bodyKind === 'jet' ? 'buggy' : bodyKind),
@@ -1256,6 +1268,20 @@ function setMode(m) {
   } catch {}
   mode = race.mode = s.mode = s.assist.mode = m;
   s.autoUnstick = m === 'kid';
+  const kidRace = m === 'kid' && !race.roam && !race.furball;
+  race.pickups.kidGentle = kidRace;
+  race.pickups.kidOdds = kidRace;
+  if (kidRace && race.kidDifficulty == null) {
+    try {
+      race.kidDifficulty = difficultyFrom(readKidResults(localStorage));
+    } catch {
+      race.kidDifficulty = difficultyFrom([]);
+    }
+  }
+  $('menu-race').title =
+    m === 'kid'
+      ? 'Line up on the grid: two laps, seven rivals'
+      : 'Line up on the grid: three laps, seven rivals';
   $('mode').textContent = m === 'kid' ? 'Kid · B' : 'Big Kid · B';
   $('menu-kid').textContent = m === 'kid' ? 'Kid' : 'Big Kid';
   $('menu-kid').setAttribute('aria-pressed', String(m === 'kid'));
@@ -6561,6 +6587,12 @@ function frame(now) {
         } catch {}
         race.retreatMarkSeen = false;
       }
+      if (race.kidBoing) {
+        race.kidBoing = false;
+        callout('Boing!');
+      }
+      if (race.kidFeed?.length)
+        for (const e of race.kidFeed.splice(0, race.kidFeed.length)) telemetry.kidRace(e);
       hotWheelsPost();
       skyJumpStep();
       skateStep(skateInput);
@@ -7417,6 +7449,13 @@ function frame(now) {
         : 'FREE DRIVE'
       : `${race.rivals.length ? `P${place()}/${race.rivals.length + 1} · ` : ''}${s.laps > 1 ? `LAP ${s.lap}/${s.laps}` : `${Math.min(s.gate + 1, cps.length)}/${cps.length}`}`;
   if (!$('banner').dataset.callout) $('banner').hidden = !retreatActive(race);
+  {
+    const wrong = $('wrong-way');
+    const showWrong =
+      !paused && mode === 'kid' && !race.roam && !race.furball && !!race.kidArrow && !s.finished;
+    wrong.hidden = !showWrong;
+    if (showWrong) $('wrong-way-arrow').textContent = race.kidArrow === 'right' ? '➡' : '⬅';
+  }
   $('secret').hidden = !course.secrets.length;
   $('secret').textContent = openWorld
     ? `◇ ${openWorld.progress.specimens.length}/${SPECIMENS.length} badges${expedition(openWorld.progress).complete ? ' ★' : ''}`
@@ -7467,7 +7506,14 @@ function frame(now) {
     const at = place(),
       ranked = race.rivals.length,
       teamLine = partner?.finished ? teamCard(at, placeOf(race, partner)) : null;
+    const kidCheer = mode === 'kid' && !!ranked && !teamLine && !race.furball && !race.roam;
     result.classList.toggle('team-card', !!teamLine);
+    result.classList.toggle('kid-cheer', kidCheer);
+    if (kidCheer) {
+      try {
+        writeKidResult(localStorage, at);
+      } catch {}
+    }
     result.innerHTML = resultPanel({
       badge: teamLine ? null : ranked ? `${at}<sup>${ordinal(at).slice(String(at).length)}</sup>` : null,
       title: teamLine
@@ -7475,8 +7521,11 @@ function frame(now) {
         : openWorld?.selected.location === 'lab' && expedition(openWorld.progress).complete
           ? 'Dreamland done!'
           : ranked
-            ? finishTitle(at)
+            ? kidCheer
+              ? kidFinishTitle(at)
+              : finishTitle(at)
             : 'Lap done!',
+      cheer: kidCheer,
       order: teamLine || !ranked ? [] : finishOrder(),
       you: at,
       stats: [
