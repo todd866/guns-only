@@ -10,12 +10,12 @@ export function stickAxis(v) {
   return Math.abs(v) < STICK_DEAD ? 0 : (Math.sign(v) * (Math.abs(v) - STICK_DEAD)) / (1 - STICK_DEAD);
 }
 
-// plane / gunship / toy-in-the-air share the jet row. Chopper strafes instead of pitching.
+// plane / gunship / chopper / chute share the arcade row: stick up climbs, shoulders yaw.
 export function normalizeForm(form) {
   if (form === 'robot' || form === 'foot' || form === 'walk') return 'robot';
   if (form === 'board' || form === 'skate') return 'board';
   if (form === 'chopper') return 'chopper';
-  if (form === 'fly' || form === 'plane' || form === 'gunship') return 'fly';
+  if (form === 'fly' || form === 'plane' || form === 'gunship' || form === 'chute') return 'fly';
   return 'car';
 }
 
@@ -26,7 +26,7 @@ const down = (p, i) => button(p, i) > 0.5;
  * One pad, one form. Sticks are analog (−1..1). Face buttons are held, not edges.
  * Left stick Y is positive when the stick is pushed up (the API's axis 1 is the other way).
  * Right stick Y is positive when the stick is pushed up: look up, no inversion.
- * Flight pitch is positive for nose up, which is the stick pulled back.
+ * Flight pitch is positive for nose up. Stick up climbs; invert is applied later.
  */
 export function mapPad(form, p) {
   const f = normalizeForm(form),
@@ -65,7 +65,8 @@ export function mapPad(form, p) {
       yaw: 0,
       power: 0,
       strafe: 0,
-      climb: 0
+      climb: 0,
+      loopHeld: false
     };
   if (f === 'robot') {
     out.fireHeld = rt > 0.5;
@@ -76,21 +77,16 @@ export function mapPad(form, p) {
     out.sprint = down(p, 10);
     return out;
   }
-  if (f === 'chopper') {
-    out.strafe = lx;
-    out.climb = rt - lt;
-    out.roll = Math.max(-1, Math.min(1, (down(p, 5) ? 1 : 0) - (down(p, 4) ? 1 : 0)));
-    out.boostHeld = down(p, 2);
-    out.jumpHeld = false;
-    return out;
-  }
-  if (f === 'fly') {
-    // Pull (stick toward the player, API axis 1 positive) raises the nose.
-    out.pitch = -ly;
-    out.roll = Math.max(-1, Math.min(1, lx + (down(p, 5) ? 1 : 0) - (down(p, 4) ? 1 : 0)));
+  if (f === 'chopper' || f === 'fly') {
+    // Stick up climbs. LB/RB are fine yaw, not roll and not take-off. A flies up, Y loops, B lands.
+    out.pitch = ly;
+    out.roll = lx;
+    out.yaw = (down(p, 5) ? 1 : 0) - (down(p, 4) ? 1 : 0);
     out.power = rt - lt;
+    out.climb = ly;
+    out.jumpHeld = down(p, 0);
+    out.loopHeld = down(p, 3);
     out.boostHeld = down(p, 2);
-    out.jumpHeld = false;
     return out;
   }
   // Car and skateboard: left stick steers only. RT goes, LT brakes then reverses.
@@ -164,6 +160,7 @@ const IDLE = {
   power: 0,
   strafe: 0,
   climb: 0,
+  loopHeld: false,
   joined: null
 };
 
@@ -220,7 +217,8 @@ export function createGamepadInput() {
       yaw: stronger(a.yaw, b.yaw),
       power: stronger(a.power, b.power),
       strafe: stronger(a.strafe, b.strafe),
-      climb: stronger(a.climb, b.climb)
+      climb: stronger(a.climb, b.climb),
+      loopHeld: a.loopHeld || b.loopHeld
     }));
     const out = {
       ...m,

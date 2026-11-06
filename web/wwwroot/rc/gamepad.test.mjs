@@ -109,25 +109,28 @@ test('on foot the left stick moves on the camera and the right stick only looks'
   assert.equal(foot.boostHeld, false);
 });
 
-test('flying uses the left stick to pitch and roll and the triggers as the throttle', () => {
-  for (const form of ['fly', 'plane', 'gunship']) {
-    const air = mapPad(form, pad([1, 1, 0.8, -0.8], [4], {analog: {7: 0.5, 6: 0}}));
+test('flying uses the left stick to climb and turn, and the shoulders to yaw', () => {
+  for (const form of ['fly', 'plane', 'gunship', 'chopper', 'chute']) {
+    const air = mapPad(form, pad([0, -1, 0, -0.8], [0, 3], {analog: {7: 0.5, 6: 0}}));
     assert.equal(air.throttle, 0, `${form} stick is not the throttle`);
-    assert.equal(air.pitch, 1, `${form} pull raises the nose`);
-    assert.equal(air.roll, 0, `${form} stick-right and LB cancel`);
-    assert.equal(air.power, 0.5);
+    assert.equal(air.pitch, 1, `${form} stick up climbs`);
+    assert.equal(air.roll, 0, `${form} stick up does not bank`);
+    assert.equal(air.climb, 1, `${form} stick up is climb`);
+    assert.equal(air.power, 0.5, `${form} RT is throttle`);
+    assert.equal(air.jumpHeld, true, `${form} A flies up`);
+    assert.equal(air.loopHeld, true, `${form} Y is the loop`);
     assert.ok(air.lookY > 0.5, `${form} right stick looks up`);
-    assert.equal(air.jumpHeld, false);
+    assert.equal(air.yaw, 0);
   }
-  const roll = mapPad('fly', pad([0, 0, 0, 0], [5]));
-  assert.equal(roll.roll, 1, 'RB rolls right');
-  assert.equal(mapPad('fly', pad([0, 0], [4])).roll, -1, 'LB rolls left');
-  const chopper = mapPad('chopper', pad([0.6, -1, 0, 0], [], {analog: {7: 1, 6: 0}}));
-  assert.equal(chopper.pitch, 0);
-  assert.ok(chopper.strafe > 0.4, 'chopper left stick strafes');
-  assert.equal(chopper.moveY, 1, 'chopper stick up moves');
-  assert.equal(chopper.climb, 1, 'RT climbs');
-  assert.equal(chopper.throttle, 0);
+  const down = mapPad('fly', pad([1, 1, 0.8, 0.8], [4], {analog: {7: 0, 6: 0.4}}));
+  assert.equal(down.pitch, -1, 'stick down dives');
+  assert.equal(down.roll, 1, 'stick right banks and turns');
+  assert.equal(down.yaw, -1, 'LB yaws left and does not roll');
+  assert.ok(down.power < 0, 'LT is the air-brake');
+  const yaw = mapPad('fly', pad([0, 0, 0, 0], [5]));
+  assert.equal(yaw.yaw, 1, 'RB yaws right');
+  assert.equal(yaw.roll, 0, 'RB is not a roll');
+  assert.equal(mapPad('chopper', pad([0, 0], [1])).morphHeld, true, 'B lands');
 });
 
 test('LB taps between flight and the chute, and a hold does not land you', () => {

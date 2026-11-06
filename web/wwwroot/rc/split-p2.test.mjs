@@ -42,23 +42,29 @@ test('pad 2 robot walks on the camera, jumps on A, and X punches and uses', () =
   assert.equal(p2RobotPad(null).jump, false);
 });
 
-test('flightGamepadInput pitches and rolls on the left stick for both players', () => {
+test('flightGamepadInput climbs on stick up and banks on stick right for both players', () => {
   const gp = {axes: [1, 1, 0.5, -0.5], buttons: Array.from({length: 17}, () => ({value: 0}))};
   gp.buttons[7] = {value: 0.6};
   const poll = {boost: true};
   assert.deepEqual(flightGamepadInput(gp, poll, 'bigKid'), {
-    pitch: 1,
+    arcade: true,
+    pitch: -1,
     roll: 1,
     yaw: 0,
     power: 0.6,
+    flyUp: false,
     burner: true,
-    assist: false
+    trick: null
   });
   const kid = flightGamepadInput(gp, poll, 'kid');
-  assert.equal(kid.pitch, 1);
+  assert.equal(kid.pitch, -1, 'stick down dives');
+  assert.equal(kid.roll, 1, 'stick right banks');
   assert.equal(kid.power, 0.6);
-  assert.equal(kid.assist, true);
+  assert.equal(kid.arcade, true);
   assert.equal(kid.easy, undefined, 'the right stick is the camera, not an easy-fly steer');
+  const inverted = flightGamepadInput(gp, poll, 'kid', {invert: true});
+  assert.equal(inverted.pitch, 1, 'invert flight: stick down climbs');
+  assert.equal(inverted.roll, 1, 'invert does not flip the bank');
 });
 
 test('rivalHumanInput passes flight while airborne', () => {
@@ -76,8 +82,23 @@ test('rivalHumanInput passes flight while airborne', () => {
     });
   assert.ok(out.flight);
   assert.equal(out.throttle, 0);
-  assert.equal(out.flight.pitch, 1, 'stick pulled back raises the nose');
+  assert.equal(out.flight.arcade, true);
+  assert.equal(out.flight.pitch, -1, 'stick down dives');
   assert.equal(out.flight.burner, true);
+  const chute = rivalHumanInput({
+    paused: false,
+    uiPanel: false,
+    pad2: {throttle: 0, steer: 0, moveX: 0, brake: false, drift: false, boost: false},
+    gp: {axes: [1, 0, 0, 0], buttons: face([])},
+    mode: 'bigKid',
+    session: {flight: {mode: 'chute'}, car: {}},
+    fire: false,
+    tagBoost: 1,
+    p2Form: 'car',
+    invert: true
+  });
+  assert.ok(chute.flight.steer > 0.5, 'the chute keeps the stick');
+  assert.equal(chute.flight.arcade, true);
 });
 
 test('rivalHumanInput holds the car while player 2 is the robot', () => {
