@@ -31,29 +31,22 @@ const FORM_ACTIONS = {
     {act: 'FLY', ctl: 4}
   ],
   fly: [
-    {act: 'PITCH', ctl: 'stick', why: 'roll'},
+    {act: 'CLIMB', ctl: 'stick', why: 'turn'},
     {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
     {act: 'GO', ctl: 7},
-    {act: 'SLOW', ctl: 6},
-    {act: 'MORPH', ctl: 1},
-    {act: 'BOOST', ctl: 2},
-    {act: 'ROLL', ctl: 4},
-    {act: 'ROLL', ctl: 5}
-  ],
-  chopper: [
-    {act: 'MOVE', ctl: 'stick'},
-    {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
-    {act: 'UP', ctl: 7},
-    {act: 'DOWN', ctl: 6},
-    {act: 'MORPH', ctl: 1},
-    {act: 'BOOST', ctl: 2},
-    {act: 'ROLL', ctl: 4},
-    {act: 'ROLL', ctl: 5}
+    {act: 'BRAKE', ctl: 6},
+    {act: 'FLY', ctl: 0},
+    {act: 'LAND', ctl: 1},
+    {act: 'LOOP', ctl: 3},
+    {act: 'YAW', ctl: 4},
+    {act: 'YAW', ctl: 5}
   ]
 };
 FORM_ACTIONS.board = FORM_ACTIONS.car.map(a => (a.ctl === 0 ? {...a, act: 'OLLIE'} : a));
 FORM_ACTIONS.plane = FORM_ACTIONS.fly;
 FORM_ACTIONS.gunship = FORM_ACTIONS.fly;
+FORM_ACTIONS.chopper = FORM_ACTIONS.fly;
+FORM_ACTIONS.chute = FORM_ACTIONS.fly;
 FORM_ACTIONS.toy = FORM_ACTIONS.car;
 
 export function actionsFor(form = 'car') {

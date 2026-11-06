@@ -1,5 +1,6 @@
 // Player 2 split-screen: the same standard pad as player 1, on their own controller.
 import {mapPad, cameraMove} from './gamepad.mjs';
+import {stickAttitude} from './physics/flight.mjs';
 
 /** Split stays on for a joined rival, including while either player is the walking robot. */
 export function splitScreenOn({split, rival, started, p1Robot, p2Robot}) {
@@ -31,20 +32,24 @@ export function p2RobotPad(gp, camYaw = 0) {
   };
 }
 
-/** Left stick pitch/roll, triggers throttle, right stick is the camera (not the aeroplane). */
-export function flightGamepadInput(gp, poll, mode) {
-  const m = mapPad('fly', gp);
+/** Left stick climb/turn, triggers throttle, shoulders yaw. Right stick stays the camera. */
+export function flightGamepadInput(gp, poll, mode, {invert = false} = {}) {
+  void mode;
+  const m = mapPad('fly', gp),
+    att = stickAttitude({x: m.roll, y: m.pitch}, {invert});
   return {
-    pitch: m.pitch,
-    roll: m.roll,
-    yaw: 0,
+    arcade: true,
+    pitch: att.pitch,
+    roll: att.roll,
+    yaw: m.yaw,
     power: m.power,
-    burner: !!poll?.boost,
-    assist: mode === 'kid'
+    flyUp: !!m.jumpHeld,
+    burner: !!(m.rt > 0.55 || poll?.boost),
+    trick: m.loopHeld ? (Math.abs(m.roll) > 0.35 ? 'roll' : 'loop') : null
   };
 }
 
-export function rivalHumanInput({paused, uiPanel, pad2, gp, mode, session, fire, tagBoost, p2Form}) {
+export function rivalHumanInput({paused, uiPanel, pad2, gp, mode, session, fire, tagBoost, p2Form, invert = false}) {
   if (paused || uiPanel) return {throttle: 0, steer: 0, brake: true};
   // The walker is its own body. Hold the hidden car so the stick does not drive it.
   if (p2Form === 'robot')
@@ -61,7 +66,7 @@ export function rivalHumanInput({paused, uiPanel, pad2, gp, mode, session, fire,
       boardSpin: p2Form === 'board'
     };
   if (!flying) return base;
-  const fl = flightGamepadInput(gp, pad2, mode);
-  if (session.flight.mode === 'chute') fl.steer = pad2?.moveX || pad2?.steer || 0;
+  const fl = flightGamepadInput(gp, pad2, mode, {invert});
+  if (session.flight.mode === 'chute') fl.steer = fl.roll || fl.yaw || pad2?.moveX || pad2?.steer || 0;
   return {...base, throttle: 0, brake: false, flight: fl};
 }

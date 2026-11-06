@@ -1,8 +1,9 @@
-// Free-drive flight (owner, 2026-10-30): F toggles the afterburner (owner: a toggle, not held); Enter lifts the car
-// off and flies it; Enter again pops a parachute that floats it back to the ground. Never in races.
-// Controls follow the guns-only jet: ↑ push (nose down), ↓ pull, ←/→ roll, A/D rudder, W/S power.
-// This is an arcade flyer, not an aerodynamic model: the car goes where its nose points, banking
-// turns it, and it cannot stall. Wheels are ignored while airborne; the world still stops it.
+// Free-drive flight. Never in races. Two layers:
+// - Arcade (owner, 6 Nov 2026), what the pad drives: stick up climbs (invert is a pause-menu
+//   option), stick left/right banks and turns together, hands off levels and holds altitude,
+//   and a floor pulls up before the ground. A takes off or flies up; B lands. No stall, no spin.
+// - The jet integrator (pitch/roll rates) stays for the older tests and scripted lessons.
+//   Positive pitch is nose up in both. Wheels are ignored while airborne; the world still stops it.
 import {
   add,
   sub,
@@ -70,6 +71,25 @@ export const FLIGHT = Object.freeze({
     takeoffPitch: 0.3,
     floor: 3,
     lookAhead: 0.7
+  }),
+  // The pad flyer. Bank is capped so a full stick cannot flip or spin the toy; speed never
+  // drops through `slow`, so it cannot stall. `floor` is the height the pull-up defends.
+  arcade: Object.freeze({
+    cruise: 24,
+    slow: 12,
+    boost: 42,
+    bank: 0.62,
+    bankRate: 5,
+    turn: 2.1,
+    yawRate: 0.85,
+    climb: 0.42,
+    pitchRate: 3.2,
+    levelRate: 4,
+    takeoffPitch: 0.38,
+    floor: 4,
+    lookAhead: 0.85,
+    hold: 2.4,
+    trickTime: 0.95
   })
 });
 
@@ -85,6 +105,49 @@ const groundAt = (world, x, y, z) => {
   const h = world?.raycast?.([x, y + 60, z], [0, -1, 0], 320);
   return h ? y + 60 - h.dist : null;
 };
+
+/**
+ * Left stick to a climb/bank command. `y` is positive when the stick is pushed up.
+ * Default is non-inverted: up climbs (positive pitch). `invert` flips pitch only.
+ */
+export function stickAttitude(stick = {}, {invert = false} = {}) {
+  const x = Number.isFinite(stick.x) ? Math.max(-1, Math.min(1, stick.x)) : 0,
+    y = Number.isFinite(stick.y) ? Math.max(-1, Math.min(1, stick.y)) : 0;
+  return {pitch: invert ? -y : y, roll: x};
+}
+
+/**
+ * One-way take-off. From the ground or the chute this enters fly and climbs.
+ * Already flying, it just flies up (a climb pulse) and does not open the chute.
+ */
+export function takeoffFlight(f, car, {roam = true} = {}) {
+  if (!roam) return f.mode;
+  if (f.mode !== 'fly') {
+    if (!f.mode) f.flights = (f.flights ?? 0) + 1;
+    f.mode = 'fly';
+    f.speed = Math.max(f.speed || 0, FLIGHT.minSpeed + 2, car.forwardSpeed ?? 0);
+    f.heading = null;
+    f.trick = null;
+    f.retro = false;
+    f.holdY = null;
+    car.vel = add(car.vel, [0, FLIGHT.takeoff, 0]);
+  }
+  f.climb = Math.max(f.climb || 0, FLIGHT.climbFor);
+  car.ang = [0, 0, 0];
+  return 'fly';
+}
+
+/** One-way landing. Flying opens the chute; the chute stays in the landing until touchdown. */
+export function landFlight(f, car, {roam = true} = {}) {
+  void car;
+  if (!roam || f.mode !== 'fly') return f.mode;
+  f.mode = 'chute';
+  f.chutes = (f.chutes ?? 0) + 1;
+  f.climb = 0;
+  f.trick = null;
+  f.holdY = null;
+  return 'chute';
+}
 
 /** Enter: ground → flying → parachute. Only in free drive. Returns the new mode. */
 export function toggleFlight(f, car, {roam = true} = {}) {
@@ -113,16 +176,97 @@ function touchdown(f, car) {
   car.vel = [car.vel[0] * 0.7, Math.max(-1, car.vel[1]), car.vel[2] * 0.7];
 }
 
+// Arcade: heading, a capped bank and a capped pitch. Released sticks level the wings, zero
+// the pitch and hold height. The floor looks here and ahead and pulls up before the ground.
+// A barrel roll or a loop is a timed pose that ends level; it cannot be held inverted.
+function arcadeFly(f, car, ctl, world, dt) {
+  const A = FLIGHT.arcade;
+  if (f.heading == null) {
+    f.heading = -yawOf(car.q);
+    f.pitch = 0;
+    f.bank = 0;
+  }
+  const yawIn = Math.max(-1, Math.min(1, ctl.yaw || 0));
+  let pitchIn = Math.max(-1, Math.min(1, ctl.pitch || 0)),
+    rollIn = Math.max(-1, Math.min(1, ctl.roll || 0));
+  if (ctl.flyUp) pitchIn = Math.max(pitchIn, 1);
+  if (ctl.trick && !f.trick)
+    f.trick = {kind: ctl.trick === 'roll' ? 'roll' : 'loop', t: 0, dir: rollIn < -0.2 ? -1 : 1};
+  const throttle = Math.max(-1, Math.min(1, ctl.power || 0)),
+    target =
+      ctl.brake || throttle < -0.15
+        ? A.slow
+        : ctl.burner
+          ? A.boost
+          : throttle > 0.15
+            ? A.cruise + (A.boost - A.cruise) * Math.min(1, throttle)
+            : A.cruise;
+  f.speed += (target - f.speed) * FLIGHT.accel * dt;
+  f.speed = Math.max(A.slow, Math.min(A.boost, f.speed));
+  f.power = Math.max(0, Math.min(1, (f.speed - A.slow) / (A.boost - A.slow)));
+  if (f.trick) {
+    f.trick.t += dt;
+    const u = f.trick.t / A.trickTime;
+    if (u >= 1) {
+      f.trick = null;
+      f.bank = Math.atan2(Math.sin(f.bank), Math.cos(f.bank));
+      f.pitch = Math.atan2(Math.sin(f.pitch), Math.cos(f.pitch));
+    } else if (f.trick.kind === 'roll') f.bank = f.trick.dir * u * Math.PI * 2;
+    else f.pitch = Math.sin(u * Math.PI * 2) * 1.05;
+  } else {
+    const handsOff = Math.abs(pitchIn) < 0.08 && Math.abs(rollIn) < 0.08,
+      wantBank = rollIn * A.bank,
+      wantPitch = pitchIn * A.climb;
+    f.bank += (wantBank - f.bank) * Math.min(1, A.bankRate * dt);
+    f.pitch += (wantPitch - f.pitch) * Math.min(1, (handsOff ? A.levelRate : A.pitchRate) * dt);
+  }
+  f.heading -= yawIn * A.yawRate * dt;
+  f.heading -= Math.sin(f.bank) * A.turn * dt;
+  f.climb = Math.max(0, (f.climb || 0) - dt);
+  if (f.climb > 0) f.pitch = Math.max(f.pitch, A.takeoffPitch * Math.min(1, f.climb / FLIGHT.climbFor));
+  car.q = quatNorm(
+    quatMul(
+      quatMul(quatAxisAngle([0, 1, 0], f.heading), quatAxisAngle([1, 0, 0], f.pitch)),
+      quatAxisAngle([0, 0, 1], -f.bank)
+    )
+  );
+  const h = [-Math.sin(f.heading), -Math.cos(f.heading)],
+    across = Math.cos(Math.max(-1.2, Math.min(1.2, f.pitch))) * f.speed,
+    handsOff = !f.trick && Math.abs(pitchIn) < 0.08 && Math.abs(rollIn) < 0.08 && !(f.climb > 0);
+  let vy = Math.sin(Math.max(-1.2, Math.min(1.2, f.pitch))) * f.speed;
+  if (handsOff) {
+    if (f.holdY == null) f.holdY = car.pos[1];
+    vy += (f.holdY - car.pos[1]) * A.hold;
+  } else if (!f.trick) f.holdY = null;
+  const ahead = A.lookAhead * f.speed,
+    g = Math.max(
+      groundAt(world, car.pos[0], car.pos[1], car.pos[2]) ?? -1e9,
+      groundAt(world, car.pos[0] + h[0] * ahead, car.pos[1], car.pos[2] + h[1] * ahead) ?? -1e9
+    );
+  if (g > -1e9) {
+    const need = (g + A.floor - car.pos[1]) * A.hold;
+    if (need > 0) {
+      vy = Math.max(vy, Math.min(10, need));
+      if (!f.trick) f.pitch = Math.max(f.pitch, Math.min(A.climb, 0.3));
+      f.holdY = null;
+    }
+  }
+  vy = Math.max(-12, Math.min(12, vy));
+  car.vel = [h[0] * across, vy, h[1] * across];
+}
+
 /**
  * Steps the car while it flies or floats. Returns false when the car is on its wheels, so the
  * caller runs the normal car step. `ctl` = { pitch, roll, yaw, power, burner } in -1..1; the easy
- * flyer takes { easy: true, steer, climb, burner } instead.
+ * flyer takes { easy: true, steer, climb, burner }; the pad flyer takes { arcade: true } plus the
+ * stickAttitude pitch/roll (positive pitch climbs).
  */
 export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
   if (!f.mode) return false;
   const fwd = rotate(car.q, [0, 0, -1]),
     right = rotate(car.q, [1, 0, 0]);
-  if (f.mode === 'fly' && ctl.easy) {
+  if (f.mode === 'fly' && ctl.arcade) arcadeFly(f, car, ctl, world, dt);
+  else if (f.mode === 'fly' && ctl.easy) {
     const E = FLIGHT.easy;
     if (f.heading == null) {
       f.heading = -yawOf(car.q);

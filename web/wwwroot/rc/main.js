@@ -39,8 +39,8 @@ import {
   stepLoop
 } from './open-world/hot-wheels.mjs';
 import {createRetreat, stepRetreat, RETREAT} from './physics/retreat.mjs';
-import {DRIVE_KEYS, drivingInput, flightInput, trickInput} from './driving-input.mjs';
-import {createFlight, toggleFlight, FLIGHT} from './physics/flight.mjs';
+import {DRIVE_KEYS, drivingInput, trickInput} from './driving-input.mjs';
+import {createFlight, toggleFlight, takeoffFlight, landFlight, stickAttitude, FLIGHT} from './physics/flight.mjs';
 import {SCHOOL} from './open-world/flying-school.mjs';
 import {SKY_STEER_HINT, skyLandingText, skyDiveCamera} from './open-world/sky-dive.mjs';
 import {createSkyDiveReport} from './open-world/sky-dive.js';
@@ -121,7 +121,7 @@ import {drawDetailedMinimap} from './open-world/minimap.js';
 import {createCup, loadCup, saveCup, recordCupRace, nextCupEvent, cupStandings} from './grand-prix.mjs';
 import {createRaceMenu, CUP_COURSES} from './race-menu.js';
 import {createAlienMarshal} from './alien-marshal.js';
-import {createGamepadInput, cameraMove, flyShoulder} from './gamepad.mjs';
+import {createGamepadInput, cameraMove} from './gamepad.mjs';
 import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput} from './split-p2.mjs';
 import {attachDreams} from './open-world/dreams/runner.js';
 import {createMenuPad} from './gamepad-menu.mjs';
@@ -1287,6 +1287,24 @@ function setMuted(m, report = true) {
 $('mute').onclick = () => setMuted(!muted);
 $('menu-mute').onclick = () => setMuted(!muted);
 setMuted(muted, false);
+// Invert flight: off, stick up climbs. On, stick up dives. Pitch only.
+let invertFlight = false;
+try {
+  invertFlight = localStorage.getItem('guns-only.rc.invertFlight') === '1';
+} catch {}
+function setInvertFlight(on) {
+  invertFlight = !!on;
+  const el = $('menu-invert');
+  el.setAttribute('aria-pressed', String(invertFlight));
+  el.setAttribute('aria-label', invertFlight ? 'Invert flight on' : 'Invert flight off');
+  const val = el.querySelector('.sound-val');
+  if (val) val.textContent = invertFlight ? 'on' : 'off';
+  try {
+    localStorage.setItem('guns-only.rc.invertFlight', invertFlight ? '1' : '0');
+  } catch {}
+}
+$('menu-invert').onclick = () => setInvertFlight(!invertFlight);
+setInvertFlight(invertFlight);
 // Effects and Engine: off / low / normal, remembered here. The header mute still silences both.
 let effectsStep = 'normal',
   engineStep = 'normal';
@@ -1456,33 +1474,8 @@ window.addEventListener('keydown', e => {
     const pastRide = openWorld?.era?.() === 'past' && form === 'car',
       flier = !!DINO_KINDS[herd().herd[herd().mount]?.kind]?.flies;
     if (pastRide && !flier && !s.flight.mode) beep(`🦖 ${dinoName()} can't fly!`, 'sad');
-    else if (
-      race.roam &&
-      !skate &&
-      !adventure?.underground(s.car.pos) &&
-      !labUnderground(s.car.pos) &&
-      !annexDark(s.car.pos) &&
-      !labBusy(labRide) &&
-      !dreams?.active()
-    ) {
-      const was = s.flight.mode,
-        m = toggleFlight(s.flight, s.car, {roam: true});
-      if (m !== was) {
-        audio.boost();
-        callout(
-          winged()
-            ? m === 'fly'
-              ? '🪶 Fly! [return] land'
-              : '🪶 Going down!'
-            : m === 'fly'
-              ? mode === 'kid'
-                ? '✈ Flying! [down] climb · [up] dive · [return] parachute'
-                : '✈ Flying! [return] parachute'
-              : '🪂 PARACHUTE',
-          2400
-        );
-      }
-    } else fireQueued = true;
+    else if (s.flight.mode || canStartFlight()) commandFlight(s.flight.mode === 'fly' ? 'land' : 'up');
+    else fireQueued = true;
   }
   if (e.code === 'KeyB') setMode(mode === 'kid' ? 'bigKid' : 'kid');
   if (e.code === 'KeyM') setMuted(!muted);
@@ -1783,6 +1776,25 @@ const SPARK = ['#4fc3ff', '#ffa020', '#d84bff'];
 // Flight HUD (owner, 2026-10-30), in the guns-only F-22's language: a horizon and pitch ladder
 // that roll with the car, a heading tape, speed and height boxes, and power with the burner.
 // Hidden on the ground; landing hands back to driving with a callout.
+// Chase camera behind the flight heading. World-up, so a barrel roll does not roll the view.
+function levelFlightCam(pos, q, lookYaw = 0, lookPitch = 0, back = 2.6) {
+  const quat = new T.Quaternion(q[0], q[1], q[2], q[3]),
+    fw = new T.Vector3(0, 0, -1).applyQuaternion(quat),
+    heading = Math.atan2(fw.x, -fw.z) + lookYaw,
+    nose = Math.asin(Math.max(-1, Math.min(1, fw.y)));
+  return {
+    eye: [
+      pos[0] - Math.sin(heading) * back,
+      pos[1] + 0.85 + Math.sin(lookPitch) * 0.55 - nose * 0.3,
+      pos[2] + Math.cos(heading) * back
+    ],
+    at: [
+      pos[0] + Math.sin(heading) * 3,
+      pos[1] + 0.25 + nose * 2 + Math.sin(lookPitch) * 0.35,
+      pos[2] - Math.cos(heading) * 3
+    ]
+  };
+}
 const hud = $('flight-hud'),
   hg = hud.getContext('2d');
 let hudMode = null;
@@ -1928,7 +1940,7 @@ function drawFlightHud() {
     hg.textAlign = 'left';
   } else hg.fillText('🪂 CHUTE', px, py + 12);
   hg.textAlign = 'center';
-  hg.fillText(mode === 'fly' ? '⏎ parachute · F zoom' : 'floating down…', cx, H * 0.86);
+  hg.fillText(mode === 'fly' ? 'A up · B land' : 'Landing', cx, H * 0.86);
 }
 // Cold-gas retro thrusters under the car for the last second of a parachute landing (physics/flight.mjs):
 // four white puffs pointing down, with a hiss when they light.
@@ -5460,14 +5472,37 @@ const coachEls = [1, 2].map(n => {
 let coachLast = 0,
   coachDrawn = 0,
   p1Last = null;
-// Standard face: B morphs (T), X boosts on a car and punches on foot, Y is drift on a car
-// and boost / the on-screen Skate button on foot. LB starts flight; a short tap in the air
-// opens the chute, a hold rolls. They go through the same key handlers (T, Return).
+// Standard face: B morphs on the ground and lands in the air. A jumps a car, ollies a
+// board, and takes off or flies up once you're in the air (or from a car in free drive).
+// Y drifts on the ground and loops in the air. LB/RB yaw while flying. They share the
+// keyboard handlers (T morph, Return take-off / land).
 const padHeld = {},
   p2PadHeld = {};
-let useClicked = false,
-  p1FlyShoulder = null,
-  p2FlyShoulder = null;
+let useClicked = false;
+function canStartFlight() {
+  return !!(
+    race.roam &&
+    !skate &&
+    !robot &&
+    form !== 'board' &&
+    !adventure?.underground(s.car.pos) &&
+    !labUnderground(s.car.pos) &&
+    !annexDark(s.car.pos) &&
+    !labBusy(labRide) &&
+    !dreams?.active()
+  );
+}
+function commandFlight(which) {
+  if (which === 'land') {
+    if (s.flight.mode !== 'fly') return;
+  } else if (!s.flight.mode && !canStartFlight()) return;
+  const was = s.flight.mode,
+    m = which === 'land' ? landFlight(s.flight, s.car, {roam: true}) : takeoffFlight(s.flight, s.car, {roam: true});
+  if (m !== was) {
+    audio.boost();
+    callout(winged() ? (m === 'fly' ? '🪶 Fly' : '🪶 Landing') : m === 'fly' ? '✈ Flying' : '🪂 Landing', 1600);
+  }
+}
 const tapKey = code => {
   canvas.dispatchEvent(new KeyboardEvent('keydown', {code, key: code, bubbles: true}));
   canvas.dispatchEvent(new KeyboardEvent('keyup', {code, key: code, bubbles: true}));
@@ -5482,12 +5517,10 @@ function useButton(all) {
       return hit && play;
     },
     btn = $('interact');
-  if (edge(1)) tapKey('KeyT');
-  {
-    const lb = mine.some(p => p.buttons[4]?.value > 0.5),
-      shoulder = flyShoulder(p1FlyShoulder, {flying: !!s.flight.mode, down: lb && play, now: performance.now()});
-    p1FlyShoulder = shoulder.state;
-    if (play && (shoulder.takeoff || shoulder.chute)) tapKey('Enter');
+  if (edge(0) && !robot && form !== 'board' && !skate) commandFlight('up');
+  if (edge(1)) {
+    if (s.flight.mode) commandFlight('land');
+    else tapKey('KeyT');
   }
   if (edge(2)) {
     if (robot) {
@@ -5512,16 +5545,12 @@ function useButton(all) {
         p2PadHeld[i] = down;
         return hit && play;
       };
-    if (p2Edge(1)) p2ToggleMorph();
+    if (p2Edge(0) && split.p2Form !== 'robot' && split.p2Form !== 'board') p2Fly('up');
+    if (p2Edge(1)) {
+      if (race.rivals[0].session.flight.mode) p2Fly('land');
+      else p2ToggleMorph();
+    }
     if (p2Edge(2) && split.p2Form === 'robot') p2PunchQueued = true;
-    const lb2 = gp2?.connected && (gp2.buttons[4]?.value ?? 0) > 0.5,
-      shoulder2 = flyShoulder(p2FlyShoulder, {
-        flying: !!race.rivals[0].session.flight.mode,
-        down: lb2 && play,
-        now: performance.now()
-      });
-    p2FlyShoulder = shoulder2.state;
-    if (play && (shoulder2.takeoff || shoulder2.chute)) p2ToggleFlight();
   }
   formBar(all);
   formBarP2(all);
@@ -5536,7 +5565,7 @@ function useButton(all) {
     }
 }
 // Player 1's forms, always on screen: the one you're in is lit, with the pad button that
-// changes it (B morph, LB fly) drawn as printed on that pad.
+// changes it (B morph / land, A take off) drawn as printed on that pad.
 const formEl = Object.assign(document.createElement('div'), {id: 'forms', hidden: true}),
   formEl2 = Object.assign(document.createElement('div'), {id: 'forms-p2', hidden: true});
 formEl.setAttribute('aria-label', 'Change: car, walk, skate, fly');
@@ -5544,23 +5573,25 @@ formEl2.setAttribute('aria-label', 'Player 2: car, walk, skate, fly');
 document.body.append(formEl, formEl2);
 let formKey = '',
   formKey2 = '';
-function p2ToggleFlight() {
+function p2Fly(which) {
   const rv = race.rivals[0];
+  if (!rv) return;
+  const rs = rv.session;
   if (
-    !rv ||
-    !race.roam ||
-    split?.p2Form === 'board' ||
-    split?.p2Form === 'robot' ||
-    adventure?.underground(s.car.pos) ||
-    labUnderground(s.car.pos) ||
-    annexDark(rv.session.car.pos) ||
-    dreams?.active() ||
-    labBusy(labRide)
+    !rs.flight.mode &&
+    (!race.roam ||
+      split?.p2Form === 'board' ||
+      split?.p2Form === 'robot' ||
+      adventure?.underground(s.car.pos) ||
+      labUnderground(s.car.pos) ||
+      annexDark(rs.car.pos) ||
+      dreams?.active() ||
+      labBusy(labRide))
   )
     return;
-  const rs = rv.session,
-    was = rs.flight.mode,
-    m = toggleFlight(rs.flight, rs.car, {roam: true});
+  if (which === 'land' && rs.flight.mode !== 'fly') return;
+  const was = rs.flight.mode,
+    m = which === 'land' ? landFlight(rs.flight, rs.car, {roam: true}) : takeoffFlight(rs.flight, rs.car, {roam: true});
   if (m !== was) audio.boost();
 }
 function p2ShowBoard(on, paint) {
@@ -5650,7 +5681,7 @@ function formBar(all) {
   formKey = key;
   const cap = (t, cls) => `<kbd class="cap ${cls}" data-pad="${kind}">${t}</kbd>`,
     morph = kind === 'sn30' ? cap('A', 'face') : cap('B', 'face'),
-    fly = kind === 'sn30' ? cap('L', 'bump') : cap('LB', 'bump'),
+    fly = kind === 'sn30' ? cap('B', 'face') : cap('A', 'face'),
     f = (k, icon) => `<span class="form${k === now ? ' on' : ''}">${icon}</span>`;
   formEl.innerHTML = `${morph}${f('car', '🚗')}${f('walk', '🚶')}${f('skate', '🛹')}<i></i>${fly}${f('fly', '✈️')}`;
 }
@@ -5672,7 +5703,7 @@ function formBarP2(all) {
   formKey2 = key;
   const cap = (t, cls) => `<kbd class="cap ${cls}" data-pad="${kind}">${t}</kbd>`,
     morph = kind === 'sn30' ? cap('A', 'face') : cap('B', 'face'),
-    fly = kind === 'sn30' ? cap('L', 'bump') : cap('LB', 'bump'),
+    fly = kind === 'sn30' ? cap('B', 'face') : cap('A', 'face'),
     f = (k, icon) => `<span class="form${k === now ? ' on' : ''}">${icon}</span>`;
   formEl2.innerHTML = `${morph}${f('car', '🚗')}${f('walk', '🚶')}${f('skate', '🛹')}<i></i>${fly}${f('fly', '✈️')}`;
 }
@@ -6247,7 +6278,8 @@ function frame(now) {
           session: rv.session,
           fire: f,
           tagBoost: tb,
-          p2Form: split?.p2Form ?? 'car'
+          p2Form: split?.p2Form ?? 'car',
+          invert: invertFlight
         });
       };
       // Keep the two toys together: the world only streams around player 1.
@@ -6433,17 +6465,23 @@ function frame(now) {
       const skateInput = skate
         ? {...drive, drift: drive.drift || skateTouchGrab || performance.now() < skateGrabUntil}
         : drive;
-      // A winged dinosaur flies with the proximity assist in every mode (no levelling, a late save).
-      const keyFl = flightInput(keys),
+      // Arcade for every flying form: stick up climbs unless Invert flight is on.
+      // Arrows and W/S climb, arrows and A/D bank-and-turn. LB/RB (pad.yaw) is fine yaw.
+      const keyClimb = Number(keys.has('ArrowUp') || keys.has('KeyW')) - Number(keys.has('ArrowDown') || keys.has('KeyS')),
+        keyBank = Number(keys.has('ArrowRight') || keys.has('KeyD')) - Number(keys.has('ArrowLeft') || keys.has('KeyA')),
+        att = stickAttitude({x: pad.roll || keyBank, y: pad.pitch || keyClimb}, {invert: invertFlight}),
         fl = {
-          pitch: keyFl.pitch || pad.pitch || 0,
-          roll: keyFl.roll || pad.roll || 0,
-          yaw: keyFl.yaw || 0,
-          power: keyFl.power || pad.power || 0,
-          assist: mode === 'kid' || winged(),
-          proximity: winged()
+          arcade: true,
+          pitch: att.pitch,
+          roll: att.roll,
+          yaw: pad.yaw || 0,
+          power:
+            pad.power ||
+            Number(keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyX')) - Number(keys.has('KeyZ')),
+          flyUp: !!pad.jumpHeld && !robot && form !== 'board' && !skate,
+          trick: pad.loopHeld ? (Math.abs(att.roll) > 0.35 ? 'roll' : 'loop') : null
         };
-      if (s.flight.mode === 'chute') fl.steer = drive.steer || pad.moveX || 0;
+      if (s.flight.mode === 'chute') fl.steer = att.roll || pad.yaw || keyBank || 0;
       fl.burner = boostOn && race.roam && !skate;
       fl.lift = skyEligible() && s.flight.mode === 'fly' ? openWorld.cloudLift(s.car.pos) : 0;
       {
@@ -7227,21 +7265,15 @@ function frame(now) {
       r.y + (portrait ? portraitAim : mount > 1 ? 0.35 * mount : 0.18),
       r.z - Math.cos(camYaw) * 1.05
     );
-  // Flying, the camera rides behind the car along its own nose and rolls with it, like a jet's
-  // chase view, so the HUD horizon matches the real one. On the ground the camera stays level.
-  if (s.flight.mode === 'fly') {
-    const q = new T.Quaternion(c.q[0], c.q[1], c.q[2], c.q[3]),
-      fw = new T.Vector3(0, 0, -1).applyQuaternion(q),
-      cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
-    if (Math.abs(lookYaw) + Math.abs(lookPitch) > 1e-3) {
-      fw.applyAxisAngle(cu, -lookYaw);
-      fw.applyAxisAngle(new T.Vector3().crossVectors(fw, cu).normalize(), -lookPitch);
-    }
-    desired.set(r.x, r.y, r.z).addScaledVector(fw, -2.3).addScaledVector(cu, 0.55);
-    camera.position.lerp(desired, cameraGlide(openingHeld, dt, 9));
-    camera.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
-    target.set(r.x, r.y, r.z).addScaledVector(fw, 3);
-  } else camera.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
+  // Flying, the camera sits behind the heading and stays upright. It does not roll with
+  // the wings. The right stick still orbits and springs back with the ground camera.
+  if (s.flight.mode) {
+    const chase = levelFlightCam([r.x, r.y, r.z], c.q, lookYaw, lookPitch);
+    desired.fromArray(chase.eye);
+    camera.position.lerp(desired, cameraGlide(openingHeld, dt, 6));
+    target.fromArray(chase.at);
+  }
+  camera.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
   // A steady court view from behind your baseline, low like a TV end view: both players and the ball
   // read at toy size (an overhead view from 18 m up shrank the 1 m robots and the ball to dots).
   if (tennisEligible() && openWorld.tennis()?.active) {
@@ -7307,20 +7339,13 @@ function frame(now) {
     else camera2.position.lerp(desired2, 1 - Math.exp(-dt * 7));
     camera2.fov = 60 + Math.min(5, r2.speed * 0.3);
     target2.set(r2.x + Math.sin(hy) * 1.05, r2.y + 0.18, r2.z - Math.cos(hy) * 1.05);
-    if (!walking && rs2.flight.mode === 'fly') {
-      const c2 = rs2.car,
-        q = new T.Quaternion(c2.q[0], c2.q[1], c2.q[2], c2.q[3]),
-        fw = new T.Vector3(0, 0, -1).applyQuaternion(q),
-        cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
-      if (Math.abs(split.lookYaw || 0) + Math.abs(split.lookPitch || 0) > 1e-3) {
-        fw.applyAxisAngle(cu, -(split.lookYaw || 0));
-        fw.applyAxisAngle(new T.Vector3().crossVectors(fw, cu).normalize(), -(split.lookPitch || 0));
-      }
-      desired2.set(r2.x, r2.y, r2.z).addScaledVector(fw, -2.3).addScaledVector(cu, 0.55);
-      camera2.position.lerp(desired2, 1 - Math.exp(-dt * 9));
-      camera2.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
-      target2.set(r2.x, r2.y, r2.z).addScaledVector(fw, 3);
-    } else camera2.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
+    if (!walking && rs2.flight.mode) {
+      const chase2 = levelFlightCam([r2.x, r2.y, r2.z], rs2.car.q, split.lookYaw || 0, split.lookPitch || 0);
+      desired2.fromArray(chase2.eye);
+      camera2.position.lerp(desired2, 1 - Math.exp(-dt * 6));
+      target2.fromArray(chase2.at);
+    }
+    camera2.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
     camera2.lookAt(target2);
     p2Hud.textContent = `P2 · ${Math.round((!walking && rs2.flight.mode ? rs2.flight.speed : r2.speed) * 3.6)} km/h`;
   }
