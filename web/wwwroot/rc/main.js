@@ -116,6 +116,7 @@ import {createMenuPad} from './gamepad-menu.mjs';
 import {padSvg, padKind} from './pad-art.mjs';
 import {createCoach} from './coach.mjs';
 import {createTag, setTagOn, stepTag, TAG, hudLine, resultHead, resultStats, tagTelemetry} from './tag.mjs';
+import {createTeamRace, teamCard, p2LapChip} from './team-race.mjs';
 import {joinPadIndex, joinCardVisible, menuPlayersButton, joinHideUntilAfterLeave} from './join.mjs';
 import {frameSeconds, cameraGlide} from './frame-time.mjs';
 import {createBootTrace} from './boot-trace.mjs';
@@ -1058,6 +1059,7 @@ $('menu-race').onclick = () => {
     visitRace(p.event || p.track ? p : locationById('ramp'));
     return;
   }
+  team.on = false;
   telemetry.firstInput('button');
   audio.start();
   started = true;
@@ -1093,6 +1095,9 @@ function legendStart() {
     callout('🏔️ Find Spirit Mountain!', 5000);
   }
 }
+const team = createTeamRace(),
+  p2Lap = Object.assign(document.createElement('div'), {id: 'p2-lap', hidden: true});
+document.body.append(p2Lap);
 const tag = createTag(),
   tagHud = [0, 1].map(i => {
     const el = Object.assign(document.createElement('div'), {className: `tag-chip ${i ? 'right' : 'left'}`, hidden: true});
@@ -1107,7 +1112,33 @@ const tagHead = tagResult.querySelector('h2'),
 $('menu-tag').onclick = () => {
   setTagOn(tag, !tag.on);
   $('menu-tag').setAttribute('aria-pressed', String(tag.on));
-  if (tag.on) callout('🏷️ Tag! Least IT time wins', 2800);
+  if (tag.on) {
+    team.on = false;
+    callout('🏷️ Tag! Least IT time wins', 2800);
+  }
+};
+$('menu-team').onclick = () => {
+  if (!splitOn || !race.rivals.length || !raceReady()) return;
+  if (tag.on) {
+    setTagOn(tag, false);
+    $('menu-tag').setAttribute('aria-pressed', 'false');
+  }
+  telemetry.firstInput('button');
+  audio.start();
+  started = true;
+  $('brief').hidden = true;
+  $('result').hidden = true;
+  $('result').classList.remove('team-card');
+  pause(false);
+  const before = race;
+  startRace();
+  team.on = race !== before && !race.roam && !race.furball;
+  if (team.on) {
+    const rv = race.rivals[0];
+    if (rv) rv.human = () => ({throttle: 0, steer: 0, brake: true, drift: false, fire: false});
+    if (split) split.placed = true;
+  }
+  canvas.focus();
 };
 $('menu-players').onclick = () => {
   const t = performance.now(),
@@ -2256,6 +2287,7 @@ function callout(text, ms = 1600) {
 // The RACE ring sits on the start line during free drive; driving into it lines everyone up.
 let roamArmedAt = 30;
 function goRoam() {
+  team.on = false;
   if (openWorld && !race.roam) {
     location.href = rcLink({track: 'hub', at: nearestLocation(s.car.pos).id}, location.search);
     return;
@@ -2286,6 +2318,7 @@ function freeDrive() {
   goRoam();
 }
 function goFurball() {
+  team.on = false;
   race = createRace(course, {
     mode,
     opponents: Math.max(3, rivalCount),
@@ -2314,6 +2347,7 @@ function furballOver(w) {
     winner: w === s
   });
   result.hidden = false;
+  result.classList.remove('team-card');
   result.innerHTML = resultPanel({
     badge: w === s ? 'WIN' : down ? 'OUT' : null,
     badgeTitle: 'Furball result',
@@ -3511,6 +3545,7 @@ function skateCard(id, run = null) {
     near = openWorld?.near(s.car.pos),
     race =
       near && !near.game && near.kind !== 'discovery' && canEnter(openWorld.progress, near) ? near : null;
+  result.classList.remove('team-card');
   result.innerHTML = goalCard({
     park: SKATE_PARKS[id].park,
     goals: saved.goals,
@@ -5539,6 +5574,18 @@ function tagFrame(dt) {
     el.hidden = false;
   }
 }
+function teamFrame() {
+  const menu = $('menu-team');
+  if (menu.hidden === splitOn) menu.hidden = !splitOn;
+  if (!splitOn) {
+    team.on = false;
+    p2Lap.hidden = true;
+    return;
+  }
+  const show = team.on && started && !race.roam && !race.furball && $('result').hidden && race.rivals[0];
+  p2Lap.hidden = !show;
+  if (show) p2Lap.textContent = p2LapChip(race.rivals[0].session);
+}
 const p2Hud = Object.assign(document.createElement('div'), {id: 'p2-hud', hidden: true}),
   splitLine = Object.assign(document.createElement('div'), {id: 'split-line', hidden: true});
 document.body.append(p2Hud, splitLine);
@@ -5688,8 +5735,12 @@ function frame(now) {
       }
       // Fell through the world (the ground only streams in round player 1): straight back up.
       // Flying spreads the pair out and lifts player 1, so loosen the tether and skip the fall check.
-      const airborne = !!s.flight.mode || !!rv.session.flight.mode;
-      if (!split.placed || Math.hypot(a[0] - b[0], a[2] - b[2]) > (airborne ? 400 : 120) || (!airborne && b[1] < a[1] - 20)) {
+      const airborne = !!s.flight.mode || !!rv.session.flight.mode,
+        teamRacing = team.on && !race.roam && !race.furball;
+      if (
+        !teamRacing &&
+        (!split.placed || Math.hypot(a[0] - b[0], a[2] - b[2]) > (airborne ? 400 : 120) || (!airborne && b[1] < a[1] - 20))
+      ) {
         split.placed = true;
         rv.session.car.pos = [a[0] + 2.5, a[1] + 0.4, a[2]];
         rv.session.car.vel = [0, 0, 0];
@@ -5744,6 +5795,7 @@ function frame(now) {
   }
   last = now;
   tagFrame(dt);
+  teamFrame();
   if (!paused && !ui.panel() && countdown > 0) {
     countdown -= dt;
     const n = Math.ceil(countdown);
@@ -6618,7 +6670,9 @@ function frame(now) {
     (prof.tris += renderer.info.render.triangles),
     prof.add(performance.now() - prof.renderStart, prof.renderStart - (prof.simStart ?? prof.renderStart)));
   if (skate || street) skateHud.update(skate || street, now);
-  if (s.finished && !reported) {
+  const partner = team.on && !race.roam && !race.furball ? race.rivals[0]?.session : null;
+  // Team place is the better finish, so the card waits until player 2 is in too.
+  if (s.finished && !reported && !(partner && !partner.finished)) {
     reported = true;
     openWorld?.finish(s.time, s.lapTimes);
     telemetry.raceFinish({
@@ -6638,16 +6692,19 @@ function frame(now) {
     const result = $('result');
     result.hidden = false;
     const at = place(),
-      ranked = race.rivals.length;
+      ranked = race.rivals.length,
+      teamLine = partner?.finished ? teamCard(at, placeOf(race, partner)) : null;
+    result.classList.toggle('team-card', !!teamLine);
     result.innerHTML = resultPanel({
-      badge: ranked ? `${at}<sup>${ordinal(at).slice(String(at).length)}</sup>` : null,
-      title:
-        openWorld?.selected.location === 'lab' && expedition(openWorld.progress).complete
+      badge: teamLine ? null : ranked ? `${at}<sup>${ordinal(at).slice(String(at).length)}</sup>` : null,
+      title: teamLine
+        ? teamLine
+        : openWorld?.selected.location === 'lab' && expedition(openWorld.progress).complete
           ? 'Dreamland done!'
           : ranked
             ? finishTitle(at)
             : 'Lap done!',
-      order: ranked ? finishOrder() : [],
+      order: teamLine || !ranked ? [] : finishOrder(),
       you: at,
       stats: [
         ['Time', format(s.time)],
@@ -6662,6 +6719,9 @@ function frame(now) {
     $('again').onclick = () => {
       telemetry.choice('again');
       s = (race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures})).player;
+      if (team.on && race.rivals[0])
+        race.rivals[0].human = () => ({throttle: 0, steer: 0, brake: true, drift: false, fire: false});
+      if (team.on && split) split.placed = true;
       reported = false;
       Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
       startCountdown();
@@ -6695,7 +6755,7 @@ function frame(now) {
         button.onclick = () => (location.href = cupURL(next, cup.id));
         $('again').classList.remove('primary');
         result.querySelector('.result-actions').prepend(button);
-      } else {
+      } else if (!teamLine) {
         result.querySelector('h1').textContent =
           CUP_COURSES[Number(cup.id)].cup + ' Cup · ' + cupStandings(cup).find(r => r.id === 'YOU').rank;
       }
