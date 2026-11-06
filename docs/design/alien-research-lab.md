@@ -1,13 +1,42 @@
-# The Annex: Saucer Springs' alien research lab
+# The Deep Time Lab (the Fossil Vault): the way into the dark world
 
 Status: design only (6 Nov 2026). Nothing built. Owner: Ian. Build later; this records the
 intent so it can be picked up cold.
 
 ## One line
 
-Under the Cold-Weather Test Hangar is the base's real secret, a deep alien research lab. A
-routine test goes wrong, portals tear open, and the toys have to get from the bottom of the
-lab back to daylight.
+Under the Cold-Weather Test Hangar is the base's real secret: a fossil dig that broke through
+into the past. The base built a lab around **the Seam**, a crack where it is still dinosaur
+time on the other side. Test day, the Seam bursts (**the Breach**), the lab floods with the
+past, and the toys go **down** through it into the dark world.
+
+## Cover story: USAF secret squirrel (Ian, 6 Nov 2026)
+
+- On paper: **Detachment 3, Saucer Springs AFB**, the "Cold-Weather Test Squadron". The snow
+  race at the Cold-Weather Test Hangar is the public face.
+- In reality: **Program COLD SEAM** (classified). The Seam, the Vault, the lab and Hangar Zero
+  all belong to it.
+- Telltale details everywhere: badge readers, "NEED TO KNOW" doors, a visitor sign-out
+  clipboard, redacted whiteboards (black bars over diagrams of RC cars), a brass plaque
+  reading "This facility does not exist", Det 3 squadron patch (a toy saucer over a
+  snowflake), coffee mugs stencilled COLD SEAM, a robot security guard who checks
+  "clearances" (a sticker you earn).
+- The announcer is a Det 3 duty officer: clipped military radio voice before the accident,
+  very much less clipped after.
+
+## Lore (Ian, 6 Nov 2026: "this is how you get to the dark world")
+
+- Decades of fossil digging under the Cold Lab hit a pocket where the rock is warm, there are
+  jungle sounds, and the footprints are fresh. The base sealed it, and the "Cold" Lab exists
+  to keep the Seam cold and stable.
+- The lab studies both sides: the present's aliens (the good aliens who woke the toys, and
+  the bad aliens' signal) and the past (dinosaurs, western, blocky ground). The Seam is why
+  the bad aliens are interested.
+- Test day, the toys are the first things sent through on purpose. The holding machine
+  overloads and the Breach opens.
+- After the level, a stable **Seam Gate** stays in the Vault: the main crossing between the
+  light and dark worlds. The dig (open-world/dig.mjs) stays the secret way across. Dark and
+  light worlds remain separate worlds crossed by portals (owner ruling 31 Oct 2026).
 
 ## Why here
 
@@ -35,13 +64,34 @@ lab back to daylight.
 4. **Wake up in the wreck.** The lab is changed. Lights are dead or flickering, the tram is
    off its rails, corridors have collapsed into ramps, and pipes vent steam and cold.
    Portals flicker in and out. "Get to the surface."
-5. **The climb.** Five zones, each teaching one form or idea (below), going up through the
-   lab's levels to the hangar doors.
-6. **The surface.** You burst out of the hangar doors into daylight. Base sirens are going,
-   and the sky over Saucer Springs has a portal in it, which opens up the open world's next
-   chapter. You unlock the **Portal Hop** power.
+5. **The descent.** Five zones, each teaching one form or idea (below), going DOWN through the
+   lab. Each level is more overgrown: concrete and steel, then vines through vents, then sand
+   pouring down stairwells, then ferns, mud and amber light.
+   On the ride in, through a slit window: **Hangar Zero**, a sealed bay where Det 3 has spent
+   years reverse-engineering a **recovered flying saucer**, half under tarps, with scaffolding
+   and robots on clipboards.
+6. **Through the Seam.** The last door opens onto the dark world: daylight, dinosaurs, the
+   blocky past. A stable Seam Gate stays behind. Returning through it lands you back in the
+   Vault.
 
-## Zones (bottom to top)
+## The reward: the saucer (Ian, 6 Nov 2026: "it should eventually unlock a flying saucer that you can fly")
+
+- After the first trip through the Seam and back, Det 3 "loses" the saucer to you: Hangar
+  Zero's roof opens and it's yours.
+- A new vehicle beside car, robot, board and plane: **hover** (holds height, slides like an
+  air-hockey puck), **climb/dive**, **tractor beam** (pick up and carry things: crates,
+  pumpkins, a willing friend's car in co-op), **cloak shimmer** for a few seconds.
+- It flies **between worlds**: the Seam Gate is big enough for it, and in the dark world it's
+  the only thing that flies apart from the winged dinosaurs.
+- Controls on the pads: same layout as the plane (LB/L to take off and land, sticks to fly),
+  bottom face = beam on/off, top face = cloak. The forms bar gains 🛸.
+- Tech: a new flight profile in physics/flight (hover mode with altitude hold) and a saucer
+  body in vehicle-bodies.js. The tractor beam reuses pickup/attach logic (bowling and delivery
+  already carry things).
+- Gate: unlocked after the first round trip through the Seam; summon from the Vault or
+  Hangar Zero; later from anywhere via the Places menu.
+
+## Zones (top to bottom; read the table as the order you meet them)
 
 | # | Zone | Teaches | Hazards and set pieces | Co-op hook |
 |---|------|---------|------------------------|------------|
@@ -49,7 +99,7 @@ lab back to daylight.
 | 2 | Specimen Hall | Walk (robot form) through gaps | Tanks cracked open, sleepy aliens wake and follow you (harmless, they bump and giggle) | One distracts the aliens, the other sneaks past |
 | 3 | Cryo Storage | Skate (board form) on ice | Ice floors, cold vents that freeze you for 2 s, sliding crates | Push a crate together to bridge a gap |
 | 4 | Reactor Shaft | Fly (flight form), vertical | Rising updraft column, rotating shields, power cells to collect | One powers the fan from a switch, the other flies the shaft |
-| 5 | Loading Docks and lift | Everything, timed | Freight lift up to the hangar while portals spit gremlins; a rolling door closes | Both must be on the lift; the lift waits for the second player |
+| 5 | The Seam | Everything, timed | A collapsing gantry down into the Breach while the past pours in (sand, vines, a curious dinosaur); the Seam narrows | Both must cross; the gate waits for the second player |
 
 Each zone ends at a **checkpoint terminal**, a robot scientist sheltering behind a desk. Reaching
 it rescues them and saves progress, and they ride along on your car (stacking robots on the
@@ -126,12 +176,12 @@ until P2 robot exists.
    slice).
 2. Zones 1–2 with checkpoints and hoppers.
 3. Zones 3–4, The Big One.
-4. Zone 5 lift finale, the surface reveal, the Portal Hop unlock.
-5. Polish: announcer lines, lived-in props, sound, first-visit gating.
+4. Zone 5 Seam finale, the dark-world arrival, the stable Seam Gate.
+5. Hangar Zero and the flyable saucer (hover, beam, cloak, crossing the Seam).
+6. Polish: Det 3 props and signage, announcer lines, sound, first-visit gating.
 
 ## Open questions
 
 - Gate: badge count, Old Silver Mine finish, or open from the start? (Jake wants it now.)
-- Portal Hop power: short-range teleport in the open world, or a way into the alien-world
-  courses?
-- Should the portal in the sky after the escape change the open world permanently?
+- Saucer in split screen: one pilot with the other riding in the beam, or two saucers?
+- Does the saucer let you visit the alien-world courses (open-world/alien-world.mjs)?
