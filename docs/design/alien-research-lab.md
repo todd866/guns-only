@@ -182,6 +182,23 @@ In RC Odyssey (kid version, same heart):
       can be a new layer of the map;
     - the "real or dream?" game: the static shimmer means you're seeing its picture; no
       shimmer means it's real.
+  - **Power-up mushrooms** (STILLWATER's gifts; its own glowing-fungus look, not red-and-white
+    caps). Drive over one; the spores and its field do the rest:
+    - 🍄‍🟫 *Puffcap*: the car swells to monster-truck size for 15 s (it's the field bending the
+      feed and the toy together), smashing through crates;
+    - *Tinycap*: shrink to fit mouse holes, vents and toy-train tracks (secret routes);
+    - *Bouncecap*: springy tyres, triple jumps and wall bounces;
+    - *Glowcap*: headlights become a searchlight that reveals hidden doors and "real or dream?"
+      tricks;
+    - *Driftcap*: everything goes slow-motion except you;
+    - *Friendcap*: a puff of spores that makes nearby creatures (aliens, dinosaurs) follow you
+      for a while, as a parade;
+    - *Echocap*: a ghost copy of your car repeats your last 10 s, so it can hold a switch for
+      solo co-op puzzles.
+    They grow along STILLWATER's quest trails and its garden, respawn slowly, and work in both
+    worlds once its network has spread there. In split screen each player keeps their own
+    power-up. Item framework: reuse the existing pickup system (race pickups / modifiers in
+    physics/race.mjs) with a fungus pickup type.
   - Tech: the EM tell is a post-process edge shimmer and static audio layer toggled by distance
     to STILLWATER's field; fungus is instanced emissive caps with a spore particle puff, and
     a "calmed" flag on creatures inside a spore radius.
