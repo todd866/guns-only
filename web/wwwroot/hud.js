@@ -37,6 +37,7 @@ import {
 } from "./render/hud/contact_visibility.js?v=__RELEASE_BUILD__";
 import { patternOwnsPower, sortiePowerCommand } from "./render/hud/sortie_power.js";
 import { patternEnergyWord } from "./render/hud/approach_energy.js";
+import { presentText } from "./render/toy/toy_pass.js";
 import { approachNextCue } from "./render/hud/approach_next_cue.js";
 import {
   carrierAoARelevant,
@@ -383,6 +384,7 @@ class CombatHud {
     this.legendVisible = false;
     this.touchMode = false;
     this.presentationProfile = "standard";
+    this.toyMode = false;
     this.controlBindings = null;
     this.safeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
     // Rectangles claimed by contact labels this frame; draw() clears it each pass. Initialized
@@ -583,6 +585,15 @@ class CombatHud {
     this.audioEnabled = Boolean(enabled);
     setFlightAudioEnabled(this.audioEnabled);
     return this.audioEnabled;
+  }
+
+  setToyMode(enabled) {
+    this.toyMode = enabled === true;
+    return this.toyMode;
+  }
+
+  toyLine(text) {
+    return this.toyMode === true ? presentText(text, true) : text;
   }
 
   showFlightTestSyncMarker(markerId, nowSeconds) {
@@ -2385,7 +2396,9 @@ class CombatHud {
       const x = this.safeInsets.left + 18;
       const y = this.safeInsets.top + 17;
       ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      const tally = `KILLS ${String(kills).padStart(2, "0")}`;
+      const tally = this.toyMode === true
+        ? `SPLATS ${String(kills).padStart(2, "0")}`
+        : `KILLS ${String(kills).padStart(2, "0")}`;
       const tallyWidth = ctx.measureText(tally).width + 18;
       this.glassPanel(x, y, tallyWidth, 23, GREEN);
       ctx.fillStyle = GREEN;
@@ -2425,7 +2438,7 @@ class CombatHud {
       ctx.font = "800 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText("SPLASH", cueX + 12, cueY + height / 2);
+      ctx.fillText(this.toyMode === true ? "Splat!" : "SPLASH", cueX + 12, cueY + height / 2);
       ctx.shadowBlur = 0;
       ctx.fillStyle = GREEN_DIM;
       ctx.textAlign = "right";
@@ -2435,9 +2448,13 @@ class CombatHud {
         Number(state.opponent_replacement_s) || 0);
       const nextEngagement = Math.max(2,
         Math.floor(Number(state.engagement_number) || Math.max(1, kills)) + 1);
-      const detail = replacementPending
-        ? `BANDIT ${nextEngagement} IN ${replacementSeconds.toFixed(1)} SEC · KILLS ${kills}`
-        : `IMPACT PHYSICS RUNNING · KILLS ${kills}`;
+      const detail = this.toyMode === true
+        ? (replacementPending
+          ? `TOY ${nextEngagement} IN ${replacementSeconds.toFixed(1)} SEC · SPLATS ${kills}`
+          : `TUMBLE · BOUNCE · BACK UP · SPLATS ${kills}`)
+        : (replacementPending
+          ? `BANDIT ${nextEngagement} IN ${replacementSeconds.toFixed(1)} SEC · KILLS ${kills}`
+          : `IMPACT PHYSICS RUNNING · KILLS ${kills}`);
       ctx.fillText(detail, cueX + width - 12, cueY + height / 2);
     }
     ctx.restore();
@@ -5544,25 +5561,25 @@ class CombatHud {
     if (geometry.showDetail) {
       ctx.fillStyle = GREEN_DIM;
       ctx.font = "750 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText(this.fitText(`OBJECTIVE · ${cue.objective}`, textWidth),
+      ctx.fillText(this.fitText(this.toyLine(`OBJECTIVE · ${cue.objective}`), textWidth),
         centerX, geometry.y + 11);
       ctx.fillStyle = accent;
       ctx.shadowColor = cue.level === "warning"
         ? "rgba(255, 70, 93, 0.48)" : "rgba(77, 255, 136, 0.28)";
       ctx.shadowBlur = 6;
       ctx.font = "850 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText(this.fitText(cue.status, textWidth), centerX, geometry.y + 29);
+      ctx.fillText(this.fitText(this.toyLine(cue.status), textWidth), centerX, geometry.y + 29);
       ctx.shadowBlur = 0;
       ctx.font = "800 8.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText(this.fitText(actionLine, textWidth), centerX, geometry.y + 46);
+      ctx.fillText(this.fitText(this.toyLine(actionLine), textWidth), centerX, geometry.y + 46);
     } else {
       ctx.fillStyle = GREEN_DIM;
       ctx.font = `${geometry.dense ? "700 7px" : "750 7.5px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-      ctx.fillText(this.fitText(`OBJ · ${cue.objective} · ${cue.status}`, textWidth),
+      ctx.fillText(this.fitText(this.toyLine(`OBJ · ${cue.objective} · ${cue.status}`), textWidth),
         centerX, geometry.y + (geometry.dense ? 10 : 12));
       ctx.fillStyle = accent;
       ctx.font = `${geometry.dense ? "800 9px" : "850 10px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-      ctx.fillText(this.fitText(actionLine, textWidth),
+      ctx.fillText(this.fitText(this.toyLine(actionLine), textWidth),
         centerX, geometry.y + geometry.height - (geometry.dense ? 10 : 12));
     }
     ctx.restore();
@@ -6173,7 +6190,7 @@ class CombatHud {
     for (const line of lines) {
       const row = document.createElement("div");
       row.className = "key-legend-line";
-      renderHint(row, bracketizeLegendLine(line));
+      renderHint(row, bracketizeLegendLine(this.toyLine(line)));
       this._quicklookRoot.append(row);
     }
   }

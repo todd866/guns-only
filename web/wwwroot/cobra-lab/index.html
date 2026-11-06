@@ -136,7 +136,7 @@
           </dl>
           <ol class="mission-flow" aria-label="Mission phases">
             <li><strong>1 · INGRESS</strong><span>Follow Lead.</span></li>
-            <li><strong>2 · DESTROY</strong><span>Kill the gun pit.</span></li>
+            <li><strong id="brief-phase-destroy">2 · DESTROY</strong><span id="brief-phase-destroy-detail">Kill the gun pit.</span></li>
             <li><strong>3 · CLEAR</strong><span>Cover the lift.</span></li>
             <li><strong>4 · HOLD</strong><span>Keep the majority.</span></li>
             <li><strong>5 · RTB</strong><span>Land at Ember.</span></li>
@@ -157,6 +157,11 @@
           <p id="pause-detail" class="mission-summary">Controls and clock held.</p>
           <button id="pause-resume" class="mission-action mission-action--primary pause-primary" type="button">Resume</button>
           <button id="pause-sound" class="mission-action pause-sound" type="button" aria-pressed="true">Sound on</button>
+          <label class="mission-toy" title="Foam darts, water balloons, paint bombs. Off brings the realistic set back.">
+            <svg class="mission-toy-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="7.2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="9.4" cy="10.6" r="0.8" fill="currentColor"/><circle cx="14.6" cy="10.6" r="0.8" fill="currentColor"/><path d="M8.8 14.2c1 .9 2.1 1.3 3.2 1.3s2.2-.4 3.2-1.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <span>Toy mode</span>
+            <input id="setting-toy-mode" type="checkbox" role="switch" checked>
+          </label>
           <div class="mission-actions pause-actions">
             <button id="pause-restart" class="mission-action" type="button">Restart</button>
             <button id="pause-exit" class="mission-action" type="button">Aircraft</button>
@@ -174,7 +179,7 @@
             <div><dt>Points</dt><dd id="debrief-points">0 / 4</dd></div>
             <div><dt>Hostiles</dt><dd id="debrief-kills">0</dd></div>
             <div><dt>Rounds</dt><dd id="debrief-rounds">0</dd></div>
-            <div><dt>Friendly kills</dt><dd id="debrief-friendly-kills">0</dd></div>
+            <div><dt id="debrief-friendly-label">Friendly kills</dt><dd id="debrief-friendly-kills">0</dd></div>
             <div><dt>Rearms</dt><dd id="debrief-rearms">0</dd></div>
             <div><dt>Bird swaps</dt><dd id="debrief-swaps">0</dd></div>
             <div><dt>Battle time</dt><dd id="debrief-battle-time">0 s</dd></div>

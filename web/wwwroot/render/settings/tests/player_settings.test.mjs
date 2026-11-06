@@ -102,6 +102,16 @@ test("first visit inherits reduced motion while an explicit saved choice always 
     true, "an explicit opt-in must remain durable when the OS default differs");
 });
 
+test("toy mode defaults on and an explicit off is kept", () => {
+  assert.equal(DEFAULT_PLAYER_SETTINGS.toyMode, true);
+  assert.equal(normalisePlayerSettings({}).toyMode, true);
+  assert.equal(normalisePlayerSettings({ toyMode: false }).toyMode, false);
+  assert.equal(normalisePlayerSettings({ toyMode: "yes" }).toyMode, true);
+  assert.equal(loadPlayerSettings(storageWith({ audio: false })).toyMode, true,
+    "saves from before the switch existed come up in toy mode");
+  assert.equal(loadPlayerSettings(storageWith({ toyMode: false })).toyMode, false);
+});
+
 test("touch rudder stick is an explicit opt-in that survives normalisation", () => {
   assert.equal(DEFAULT_PLAYER_SETTINGS.touchRudderStick, false);
   assert.equal(normalisePlayerSettings({}).touchRudderStick, false);

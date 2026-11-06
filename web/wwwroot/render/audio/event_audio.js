@@ -11,6 +11,7 @@ import {
   whiteNoiseBuffer,
 } from "./engine_audio.js";
 import { isAgedF22, resolvePropulsionCharacter } from "./audio_character.js";
+import { TOY_GUN_BED, toyAudioCue } from "../toy/toy_pass.js";
 
 const GUN_REPORT_NOISE_POOL_SIZE = 12;
 const SPEED_OF_SOUND_MPS = 343;
@@ -1644,40 +1645,60 @@ export function updateCombatCueVoices(voices, audioContext, state, { enabled = t
   );
 
   if (enabled && aim9Launched) {
-    scheduleAim9Launch(
-      audioContext,
-      voices.destination,
-      now,
-      voices.aim9LaunchCount,
-    );
+    if (voices.toyMode === true) {
+      playToyCue(
+        audioContext,
+        voices.destination,
+        voices.aim9LaunchCount % 2 === 0 ? "balloon" : "missile",
+        now,
+      );
+    } else {
+      scheduleAim9Launch(
+        audioContext,
+        voices.destination,
+        now,
+        voices.aim9LaunchCount,
+      );
+    }
     voices.aim9LaunchCount += 1;
   }
 
   if (enabled && hits > (voices.lastHits || 0)) {
     const n = Math.min(4, hits - voices.lastHits);
     for (let i = 0; i < n; i++) {
-      scheduleHitImpact(
-        audioContext,
-        voices.destination,
-        now + i * 0.03,
-        false,
-        targetScale,
-      );
+      if (voices.toyMode === true) {
+        playToyCue(audioContext, voices.destination, "hit", now + i * 0.03);
+      } else {
+        scheduleHitImpact(
+          audioContext,
+          voices.destination,
+          now + i * 0.03,
+          false,
+          targetScale,
+        );
+      }
     }
   }
   if (enabled && opponentHits > (voices.lastOpponentHits || 0)) {
     const n = Math.min(3, opponentHits - voices.lastOpponentHits);
     for (let i = 0; i < n; i++) {
-      scheduleHitImpact(audioContext, voices.destination, now + i * 0.04, true, 1);
+      if (voices.toyMode === true) {
+        playToyCue(audioContext, voices.destination, "bonk", now + i * 0.04);
+      } else {
+        scheduleHitImpact(audioContext, voices.destination, now + i * 0.04, true, 1);
+      }
     }
   }
   if (enabled && voices.lastOpponentAlive !== false && alive === false) {
-    voices.pendingDestroyBooms.push(scheduleDestroyBoom(
-      audioContext,
-      voices.destination,
-      now + boomDelaySeconds(targetRangeM),
-      targetScale,
-    ));
+    const at = now + boomDelaySeconds(targetRangeM);
+    voices.pendingDestroyBooms.push(voices.toyMode === true
+      ? playToyCue(audioContext, voices.destination, "destroy", at)
+      : scheduleDestroyBoom(
+        audioContext,
+        voices.destination,
+        at,
+        targetScale,
+      ));
   }
   voices.lastHits = hits;
   voices.lastOpponentHits = opponentHits;
@@ -1686,6 +1707,45 @@ export function updateCombatCueVoices(voices, audioContext, state, { enabled = t
   voices.lastAim9InFlight = aim9InFlight;
   voices.lastAim9StateCode = aim9StateCode;
   if (lifecycleIdentity !== null) voices.lastCombatLifecycleIdentity = lifecycleIdentity;
+}
+
+export function playToyCue(audioContext, destination, cueId, at) {
+  const cue = toyAudioCue(cueId);
+  const endTime = at + (cue?.durationS ?? 0.05) + 0.02;
+  if (!cue || !audioContext || !destination) {
+    return { noise: null, osc: null, endTime: at };
+  }
+  const osc = audioContext.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(cue.toneHz, at);
+  if (cue.altHz) {
+    osc.frequency.linearRampToValueAtTime(cue.altHz, at + cue.durationS * 0.5);
+    osc.frequency.linearRampToValueAtTime(cue.toneHz, at + cue.durationS);
+  }
+  const env = audioContext.createGain();
+  env.gain.setValueAtTime(0.0001, at);
+  env.gain.exponentialRampToValueAtTime(Math.max(0.0002, cue.gain), at + 0.008);
+  env.gain.exponentialRampToValueAtTime(0.0001, at + Math.max(0.02, cue.durationS));
+  osc.connect(env).connect(destination);
+  osc.start(at);
+  osc.stop(at + cue.durationS + 0.02);
+  let noise = null;
+  if (cue.noise > 0) {
+    noise = audioContext.createBufferSource();
+    noise.buffer = shortNoiseBuffer(audioContext, 0x544f5953, Math.min(0.12, cue.durationS + 0.02));
+    const filter = audioContext.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = cue.filterHz;
+    filter.Q.value = 0.8;
+    const noiseEnv = audioContext.createGain();
+    noiseEnv.gain.setValueAtTime(0.0001, at);
+    noiseEnv.gain.exponentialRampToValueAtTime(cue.noise, at + 0.006);
+    noiseEnv.gain.exponentialRampToValueAtTime(0.0001, at + Math.max(0.02, cue.durationS));
+    noise.connect(filter).connect(noiseEnv).connect(destination);
+    noise.start(at);
+    noise.stop(at + cue.durationS + 0.02);
+  }
+  return { noise, osc, endTime };
 }
 
 function scheduleAim9Launch(audioContext, destination, at, launchIndex) {
@@ -1779,7 +1839,8 @@ export function fireGunReports(voices, audioContext, state, {
 } = {}) {
   if (!voices || !audioContext || !voices.destination) return;
   const now = audioContext.currentTime;
-  const profile = resolveGunSoundProfile(state);
+  const toyMode = voices.toyMode === true;
+  const profile = toyMode ? TOY_GUN_BED : resolveGunSoundProfile(state);
   const firing = enabled
     && triggerHeld
     && state?.gun_firing === true
@@ -1828,13 +1889,18 @@ export function fireGunReports(voices, audioContext, state, {
   let reports = 0;
   while (now - voices.lastGunAt >= reportInterval && reports < 6) {
     voices.lastGunAt += reportInterval;
-    scheduleGunReport(
-      audioContext,
-      voices,
-      voices.lastGunAt,
-      profile,
-      voices.gunShotIndex++,
-    );
+    if (toyMode) {
+      playToyCue(audioContext, voices.destination, "gun", voices.lastGunAt);
+      voices.gunShotIndex += 1;
+    } else {
+      scheduleGunReport(
+        audioContext,
+        voices,
+        voices.lastGunAt,
+        profile,
+        voices.gunShotIndex++,
+      );
+    }
     reports += 1;
   }
   if (reports === 6 && now - voices.lastGunAt >= reportInterval) {

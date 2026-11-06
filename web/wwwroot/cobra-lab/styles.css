@@ -744,5 +744,53 @@ button.primary {
   .objective-hud { max-width: none; }
 }
 
+.mission-toy {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin-top: 8px;
+  color: inherit;
+  text-align: left;
+  font: 650 15px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.mission-toy-mark { width: 22px; height: 22px; }
+.mission-toy input {
+  appearance: none;
+  position: relative;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  border: 1px solid rgba(20, 48, 28, 0.35);
+  border-radius: 13px;
+  background: #d7eef8;
+  cursor: pointer;
+}
+.mission-toy input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #5d7a68;
+}
+.mission-toy input:checked { border-color: #3cbf45; background: #143024; }
+.mission-toy input:checked::after { left: 20px; background: #3cbf45; }
+.mission-toy input:focus-visible { outline: 2px solid #1f7a34; outline-offset: 2px; }
+html.toy-mode .mission-card {
+  background: #e7f6ff;
+  color: #14301c;
+}
+html.toy-mode .pause-card p { color: inherit; }
+@media (prefers-color-scheme: dark) {
+  html.toy-mode .mission-card {
+    background: #16384a;
+    color: #e9f7ff;
+  }
+}
+
 #flight-pause { position:fixed; top:calc(env(safe-area-inset-top,0px) + 10px); left:calc(env(safe-area-inset-left,0px) + 10px); z-index:12; pointer-events:auto; min-height:44px; margin-left:12px; align-self:center; }
 body[data-brief="true"] #flight-pause, body[data-paused="true"] #flight-pause, body[data-terminal="true"] #flight-pause { visibility:hidden; }

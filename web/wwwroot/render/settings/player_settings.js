@@ -49,6 +49,9 @@ export const DEFAULT_PLAYER_SETTINGS = Object.freeze({
   highContrast: false,
   reducedMotion: false,
   largeText: false,
+  // Toy mode is the kids' presentation: foam darts, paint and toys. Off restores the
+  // realistic phrases, samples and effects, which stay in the tree either way.
+  toyMode: true,
   tiltSensitivity: 1,
   // Combat feedback (Build 71): symbology at full opacity blocks the view of the bandit behind
   // it. Default slightly translucent; 1.0 remains available for bright daylight displays.
@@ -92,6 +95,7 @@ export function normalisePlayerSettings(value = {}) {
     highContrast: bool(value?.highContrast, DEFAULT_PLAYER_SETTINGS.highContrast),
     reducedMotion: bool(value?.reducedMotion, DEFAULT_PLAYER_SETTINGS.reducedMotion),
     largeText: bool(value?.largeText, DEFAULT_PLAYER_SETTINGS.largeText),
+    toyMode: bool(value?.toyMode, DEFAULT_PLAYER_SETTINGS.toyMode),
     tiltSensitivity: Math.max(0.65, Math.min(1.6,
       finite(value?.tiltSensitivity, DEFAULT_PLAYER_SETTINGS.tiltSensitivity))),
     hudBrightness: Math.max(0.5, Math.min(1.0,

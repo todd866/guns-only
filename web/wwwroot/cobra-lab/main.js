@@ -57,8 +57,15 @@ import {
 } from "../render/cobra/cobra_ember_path.js?v=__RELEASE_BUILD__";
 import { createGuidancePath } from "../render/scene/guidance_path.js?v=__RELEASE_BUILD__";
 import {
+  cueToySound,
   updateFlightAudio,
 } from "../render/audio/flight_audio.js?v=__RELEASE_BUILD__";
+import {
+  FRIENDLY_SPLAT_CAPTION,
+  TOY_PALETTE,
+  presentCaption,
+  presentText,
+} from "../render/toy/toy_pass.js?v=__RELEASE_BUILD__";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
@@ -318,6 +325,7 @@ if (missionBriefExit) {
 const pauseMenu = document.querySelector("#pause-menu");
 const pauseResume = document.querySelector("#pause-resume");
 const pauseSound = document.querySelector("#pause-sound");
+const settingsToyMode = document.querySelector("#setting-toy-mode");
 const pauseRestart = document.querySelector("#pause-restart");
 const pauseExit = document.querySelector("#pause-exit");
 const PLAY_MODE = document.body?.dataset?.shell !== "lab";
@@ -369,6 +377,7 @@ let goldenPath = null;
 let formationLead = null;
 let formationLeadPose = null;
 let formationRadio = null;
+let lastToyMedicCaption = "";
 const formationRadioPresenter = createCobraFormationRadioPresenter();
 let ah1gPresence = null;
 let presenceDeltaSeconds = 0;
@@ -434,6 +443,50 @@ const hudCanvas = document.querySelector("#hud-canvas");
 const hud = createHud(hudCanvas);
 let playerSettings = loadPlayerSettings(safeLocalStorage());
 hud.setAudioEnabled(playerSettings.audio);
+hud.setToyMode(playerSettings.toyMode !== false);
+
+const TOY_CHROME = [
+  ".brand",
+  "#mission-brief-title",
+  "#mission-brief-summary",
+  "#brief-phase-destroy",
+  "#brief-phase-destroy-detail",
+  "#debrief-friendly-label",
+];
+
+function toyLine(text) {
+  return presentText(text, playerSettings.toyMode !== false);
+}
+
+function paintToyChrome() {
+  const on = playerSettings.toyMode !== false;
+  document.documentElement.classList.toggle("toy-mode", on);
+  hud.setToyMode(on);
+  if (settingsToyMode) settingsToyMode.checked = on;
+  for (const selector of TOY_CHROME) {
+    const node = document.querySelector(selector);
+    if (!node) continue;
+    if (!node.dataset.realistic) node.dataset.realistic = node.textContent;
+    node.textContent = presentText(node.dataset.realistic, on);
+  }
+  if (!document.documentElement.dataset.realisticTitle) {
+    document.documentElement.dataset.realisticTitle = document.title;
+  }
+  document.title = presentText(document.documentElement.dataset.realisticTitle, on);
+  if (scene?.background?.set && scene.fog?.color?.set) {
+    scene.background.set(on ? TOY_PALETTE.sky : sceneProfile.fog.color);
+    scene.fog.color.set(on ? TOY_PALETTE.fog : sceneProfile.fog.color);
+  }
+}
+
+function setCobraToyMode(enabled) {
+  playerSettings = savePlayerSettings({
+    ...playerSettings,
+    toyMode: Boolean(enabled),
+  }, safeLocalStorage());
+  paintToyChrome();
+  return playerSettings.toyMode;
+}
 const hudPresentationCtx = hudCanvas.getContext("2d", { alpha: true });
 const hudFrameKit = createCobraHudFrame(THREE);
 const hudStateScratch = {};
@@ -468,6 +521,7 @@ function setCobraAudioEnabled(enabled, { arm = false } = {}) {
 }
 
 syncCobraSoundControls();
+settingsToyMode?.addEventListener("change", () => setCobraToyMode(settingsToyMode.checked));
 
 // One-sun doctrine for the canyon scene: the sky shader, the scene light rig, the fog and the
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
@@ -479,6 +533,7 @@ const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(sceneProfile.fog.color);
 scene.fog = new THREE.FogExp2(sceneProfile.fog.color, sceneProfile.fog.density);
+paintToyChrome();
 
 const DEFAULT_CAMERA_FOV_DEG = 58;
 const COBRA_LOW_SPEED_LENS = Object.freeze({
@@ -1122,7 +1177,7 @@ function drawTacticalMaps(timeMs) {
     }),
     turnaround: authorityState?.turnaround,
   });
-  const caption = objectiveCaption;
+  const caption = presentCaption(objectiveCaption, playerSettings.toyMode !== false);
   if (tacticalMapOpen) {
     const box = sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);
     const headerPx = COBRA_MAP_CAPTION_PX.full;
@@ -1423,7 +1478,9 @@ function rebuildPresentation() {
     surfaceTextures,
     roleGeometries,
   });
-  groundWarPresentation = createCobraGroundWarPresentation(THREE);
+  groundWarPresentation = createCobraGroundWarPresentation(THREE, {
+    toyMode: () => playerSettings.toyMode !== false,
+  });
   emberGuidancePath = createGuidancePath(THREE, {
     maxGates: 16,
     // Airborne soft volumes (owner 2026-08-10): look-through haze you fly through —
@@ -1872,10 +1929,10 @@ function showMissionDebrief(war, status) {
     durationSeconds: evidence.battleSeconds, rounds: evidence.roundsExpended,
     kills: evidence.hostileKills, recovered: status === "victory" || status === "defeat" });
   debrief.dataset.outcome = presentation.tone;
-  setText(debriefKicker, presentation.kicker);
-  setText(debriefTitle, title);
+  setText(debriefKicker, toyLine(presentation.kicker));
+  setText(debriefTitle, toyLine(title));
   const groundFireDetail = groundFireDebriefDetail(authorityState?.battle_damage);
-  setText(debriefBody, [reason, groundFireDetail].filter(Boolean).join(" "));
+  setText(debriefBody, toyLine([reason, groundFireDetail].filter(Boolean).join(" ")));
   setText(debriefPoints, `${evidence.friendlyPoints} / ${evidence.heldPoints}`);
   setOptionalDebriefFact(debriefKills, String(evidence.hostileKills), evidence.hostileKills > 0);
   setOptionalDebriefFact(
@@ -1944,8 +2001,8 @@ function updateObjectiveHud(war) {
     turnaround: authorityState?.turnaround,
   });
   if (copy) {
-    setText(objectiveLine, copy.line);
-    setText(objectiveDetail, copy.detail);
+    setText(objectiveLine, toyLine(copy.line));
+    setText(objectiveDetail, toyLine(copy.detail));
   }
 }
 
@@ -2113,11 +2170,16 @@ function drawHud(timeMs, deltaSeconds) {
     padlockTargetId: selectedUnit ? selectedId : "",
     padlockTargetUnit: selectedUnit,
   }));
+  const medicCaption = groundWarPresentation?.friendlySplatCaption || "";
+  if (medicCaption && medicCaption !== lastToyMedicCaption) cueToySound("siren");
+  lastToyMedicCaption = medicCaption;
   drawCobraRotorcraftHud(
     hudPresentationCtx,
     cobraRotorcraftHudModel(authorityState, {
       lead: formationLeadPose,
-      radio: formationRadio,
+      radio: medicCaption
+        ? { speaker: "MEDIC", text: FRIENDLY_SPLAT_CAPTION }
+        : formationRadio,
     }),
     {
       width: hudViewport.width,
@@ -2125,6 +2187,7 @@ function drawHud(timeMs, deltaSeconds) {
       pixelRatio: hudViewport.pixelRatio,
       safeInsets: HUD_SAFE_INSETS,
       projectWorldPoint: projectSimPointToScreen,
+      toyMode: playerSettings.toyMode !== false,
     },
   );
   // Jet gun reports stay off — Cobra tip fire is not the F-22 M61 voice.
@@ -2132,6 +2195,7 @@ function drawHud(timeMs, deltaSeconds) {
     muted: missionBriefOpen || missionPaused || missionTerminal
       || onboarding?.isOpen() === true || hud.audioEnabled === false,
     triggerHeld: false,
+    toyMode: playerSettings.toyMode !== false,
     nowSeconds: timeMs / 1000,
   });
 }

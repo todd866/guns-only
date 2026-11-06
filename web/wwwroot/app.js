@@ -272,6 +272,11 @@ import {
   resetControlBindings,
   savePlayerSettings,
 } from "./render/settings/player_settings.js?v=__RELEASE_BUILD__";
+import {
+  TOY_PALETTE,
+  downedToyPose,
+  presentText,
+} from "./render/toy/toy_pass.js?v=__RELEASE_BUILD__";
 import {keyCap} from "./render/input/key_hints.js?v=__RELEASE_BUILD__";
 import {
   appendBindingKey,
@@ -658,6 +663,7 @@ const settingsTouchRudderStick = document.querySelector("#setting-touch-rudder-s
 const settingsHighContrast = document.querySelector("#setting-high-contrast");
 const settingsReducedMotion = document.querySelector("#setting-reduced-motion");
 const settingsLargeText = document.querySelector("#setting-large-text");
+const settingsToyMode = document.querySelector("#setting-toy-mode");
 const settingsTelemetrySharing = document.querySelector("#setting-telemetry-sharing");
 const settingsTiltSensitivity = document.querySelector("#setting-tilt-sensitivity");
 const settingsTiltSensitivityValue = document.querySelector("#setting-tilt-sensitivity-value");
@@ -762,7 +768,10 @@ function updateMissionRadio(state) {
   if (sequence > 0 && sequence !== lastRapierRadioSequence && text) {
     lastRapierRadioSequence = sequence;
     if (rapierRadioText)
-      rapierRadioText.textContent = `${speaker || "R/T"}: ${text}`;
+      rapierRadioText.textContent = presentText(
+        `${speaker || "R/T"}: ${text}`,
+        playerSettings.toyMode !== false,
+      );
   }
 
   const active = radioValue(state, "active") === true;
@@ -3401,6 +3410,32 @@ function renderSettingsBindings() {
   settingsBindings.replaceChildren(...nodes, reportRow);
 }
 
+function paintToyChrome() {
+  const on = playerSettings.toyMode !== false;
+  const brand = document.querySelector(".ready-menu-brand");
+  if (brand) {
+    if (!brand.dataset.realistic) brand.dataset.realistic = brand.textContent;
+    brand.textContent = presentText(brand.dataset.realistic, on);
+  }
+  const readyTitleNode = document.querySelector("#ready-title");
+  if (readyTitleNode) {
+    if (!readyTitleNode.dataset.realistic) readyTitleNode.dataset.realistic = readyTitleNode.textContent;
+    const realistic = readyTitleNode.dataset.realistic;
+    const current = readyTitleNode.textContent;
+    if (current === realistic || current === presentText(realistic, true)) {
+      readyTitleNode.textContent = presentText(realistic, on);
+    }
+  }
+  if (!document.documentElement.dataset.realisticTitle) {
+    document.documentElement.dataset.realisticTitle = document.title;
+  }
+  document.title = presentText(document.documentElement.dataset.realisticTitle, on);
+}
+
+function toyLine(text) {
+  return presentText(text, playerSettings.toyMode !== false);
+}
+
 function applyPlayerSettings() {
   // See-through symbology: the pilot must be able to read the bandit THROUGH the HUD.
   if (hudCanvas) {
@@ -3416,7 +3451,10 @@ function applyPlayerSettings() {
   setFlightAudioEnabled(playerSettings.audio);
   setCasevacAudioEnabled(playerSettings.audio);
   activeView?.hud.setAudioEnabled(playerSettings.audio);
+  activeView?.hud.setToyMode?.(playerSettings.toyMode !== false);
   activeView?.hud.setControlBindings?.(playerSettings.bindings);
+  document.documentElement.classList.toggle("toy-mode", playerSettings.toyMode !== false);
+  paintToyChrome();
   if (settingsAudio) settingsAudio.checked = playerSettings.audio;
   if (settingsMusic) {
     settingsMusic.checked = playerSettings.music !== false;
@@ -3439,6 +3477,7 @@ function applyPlayerSettings() {
   if (settingsHighContrast) settingsHighContrast.checked = playerSettings.highContrast;
   if (settingsReducedMotion) settingsReducedMotion.checked = playerSettings.reducedMotion;
   if (settingsLargeText) settingsLargeText.checked = playerSettings.largeText;
+  if (settingsToyMode) settingsToyMode.checked = playerSettings.toyMode !== false;
   if (settingsTiltSensitivity) {
     settingsTiltSensitivity.value = String(playerSettings.tiltSensitivity);
     settingsTiltSensitivity.setAttribute("aria-valuetext", `${playerSettings.tiltSensitivity.toFixed(2)}×`);
@@ -3461,6 +3500,7 @@ function commitPlayerSettings(next) {
     highContrast: playerSettings.highContrast,
     reducedMotion: playerSettings.reducedMotion,
     largeText: playerSettings.largeText,
+    toyMode: playerSettings.toyMode,
     tiltSensitivity: playerSettings.tiltSensitivity,
   });
 }
@@ -3532,7 +3572,7 @@ function announceFlightState(state) {
     : urgentLso || String(state.transition_cue || "");
   if (!announcement || announcement === lastAccessibilityAnnouncement) return;
   lastAccessibilityAnnouncement = announcement;
-  flightAnnouncer.textContent = announcement;
+  flightAnnouncer.textContent = toyLine(announcement);
 }
 
 settingsBindings?.addEventListener("click", (event) => {
@@ -3607,6 +3647,9 @@ settingsReducedMotion?.addEventListener("change", () => commitPlayerSettings({
 }));
 settingsLargeText?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, largeText: settingsLargeText.checked,
+}));
+settingsToyMode?.addEventListener("change", () => commitPlayerSettings({
+  ...playerSettings, toyMode: settingsToyMode.checked,
 }));
 settingsTiltSensitivity?.addEventListener("input", () => commitPlayerSettings({
   ...playerSettings, tiltSensitivity: Number(settingsTiltSensitivity.value),
@@ -5407,9 +5450,9 @@ function renderPauseUi(state = latestState) {
     const exercise = practiceExercise(selectedPracticeExercise);
     const result = practiceResult(state);
     readyReplay.hidden = true;
-    readyKicker.textContent = `F-22 practice · ${exercise.limit}`;
-    readyTitle.textContent = finished ? result?.title || "Exercise ended" : exercise.title;
-    readyBrief.textContent = finished ? result?.brief || exercise.brief : exercise.brief;
+    readyKicker.textContent = toyLine(`F-22 practice · ${exercise.limit}`);
+    readyTitle.textContent = toyLine(finished ? result?.title || "Exercise ended" : exercise.title);
+    readyBrief.textContent = toyLine(finished ? result?.brief || exercise.brief : exercise.brief);
     if (readySortieLabel) readySortieLabel.textContent = "Objective";
     if (readyConfigLabel) readyConfigLabel.textContent = finished ? "Evidence" : "Aircraft";
     readySortie.textContent = exercise.title;
@@ -5418,15 +5461,15 @@ function renderPauseUi(state = latestState) {
       : "F-22A public-data surrogate · full flight and landing physics";
     const key = (action) => controlCodeLabel(playerSettings.bindings[action]);
     const practiceControls = mobileControls
-      ? "Left stick power/yaw · right stick pitch/roll · GUNS fires · Pause opens controls"
+      ? toyLine("Left stick power/yaw · right stick pitch/roll · GUNS fires · Pause opens controls")
       : `${key("pull")}/${key("push")} pitch · ${key("rollLeft")}/${key("rollRight")} roll · ${key("powerUp")}/${key("powerDown")} power · ${key("fire")} fire · ${key("gearToggle")} gear · H controls · Esc pause`;
     // The control legend is hidden on touch; the result correction is not a legend, so it has
     // its own always-visible row (loop audit #5).
-    paintReadyControls(finished ? "" : `${exercise.cue}\n${practiceControls}`);
+    paintReadyControls(finished ? "" : toyLine(`${exercise.cue}\n${practiceControls}`));
     if (readyControls) readyControls.hidden = finished;
     if (readyCorrection && finished) {
-      readyCorrection.textContent = sortieResultCopy(state)?.safetyCorrection
-        || result?.correction || exercise.correction;
+      readyCorrection.textContent = toyLine(sortieResultCopy(state)?.safetyCorrection
+        || result?.correction || exercise.correction);
       readyCorrection.hidden = !readyCorrection.textContent;
     }
     readyStartLabel.textContent = finished ? "Repeat practice" : "Start practice";
@@ -5479,11 +5522,11 @@ function renderPauseUi(state = latestState) {
         campaignProfile = saveCampaignProfile(applied.profile);
       }
     }
-    readyKicker.textContent = casevac ? result.kicker : ledger?.kicker || result.kicker;
-    readyTitle.textContent = result.title;
-    readyBrief.textContent = ledger
+    readyKicker.textContent = toyLine(casevac ? result.kicker : ledger?.kicker || result.kicker);
+    readyTitle.textContent = toyLine(result.title);
+    readyBrief.textContent = toyLine(ledger
       ? `${result.brief} ${ledger.clearanceText}.`
-      : result.brief;
+      : result.brief);
     if (readySortieLabel) {
       // Preserve the established carrier-debrief assignment contract, then apply the orthogonal
       // CASEVAC vocabulary. CASEVAC never inherits a combat-shaped generic "Sortie" label.
@@ -5568,11 +5611,11 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     readyReplay.hidden = true;
     readyKicker.textContent = "Kestrel Gorge · F-22A";
     readyTitle.textContent = "Fly the valley";
-    readyBrief.textContent = "Follow the valley north. Weapons unlock at the exit: launch your two missiles, then track the aircraft ahead and hit it with the gun.";
+    readyBrief.textContent = toyLine("Follow the valley north. Weapons unlock at the exit: launch your two missiles, then track the aircraft ahead and hit it with the gun.");
     readySortie.textContent = "Return to the runway, land and stop.";
-    readyConfig.textContent = mobileControls
+    readyConfig.textContent = toyLine(mobileControls
       ? "FOX 2 launches two missiles, one at a time, then becomes GUNS."
-      : `${fireBinding} launches two missiles, one at a time, then fires guns.`;
+      : `${fireBinding} launches two missiles, one at a time, then fires guns.`);
     paintReadyControls(mobileControls
       ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll"
       : `ARROWS fly · W/S power · ${rtbBinding} return to base · H controls`);
@@ -5585,28 +5628,28 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = "Configuration";
     readyReplay.hidden = true;
-    readyKicker.textContent = brief.kicker;
-    readyTitle.textContent = brief.title;
-    readyBrief.textContent = brief.brief;
+    readyKicker.textContent = toyLine(brief.kicker);
+    readyTitle.textContent = toyLine(brief.title);
+    readyBrief.textContent = toyLine(brief.brief);
     readySortie.textContent = brief.sortie;
-    readyConfig.textContent = isTopGunProgram()
+    readyConfig.textContent = toyLine(isTopGunProgram()
       ? `${topGunSeatLabel()} · M61 + AIM-9 · anime-1986 presentation`
       : selectedBeat === 5
       ? "F-35C reduced-order public-data surrogate · recovery only · angled deck"
       : selectedBeat === 6
         ? "Maintenance profile · axial deck"
-        : brief.configuration || "Guns hot · air start";
+        : brief.configuration || "Guns hot · air start");
     if (readyControls) {
       const keyboardControls = brief.controls
         || "Arrows fly · W/S power · F guns · V padlock · Tab target\nH opens controls · R restarts";
       const casevacReady = selectedBeat === 13 || isCasevacState(state);
-      paintReadyControls(mobileControls
+      paintReadyControls(toyLine(mobileControls
         ? casevacReady
           ? "LEFT STICK forward/reverse/translate · RIGHT STICK yaw · VERT climb/descend · ABORT requests return\nMedevac has no target, padlock, or gun controls"
           : "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · TARGET changes contact · PADLOCK tracks · FIRE shoots\nController: LS fly · RS look · RT fire · A padlock · LB/RB power"
         : casevacReady
           ? keyboardControls
-          : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`);
+          : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`));
     }
     const exploreBase = selectedProgramNodeId === "area-51";
     readyStartLabel.textContent = exploreBase ? "Explore" : `Fly ${brief.title}`;
@@ -9494,6 +9537,14 @@ class FlightView {
 
   updateBanditDestruction(alive, nowSeconds, forceSplash = false, eventPosition = null) {
     const effect = this.banditDestruction;
+    if (playerSettings.toyMode !== false) {
+      effect.visible = false;
+      if (effect.userData?.debris) effect.userData.debris.visible = false;
+      for (const puff of effect.userData?.smoke ?? []) puff.visible = false;
+      if (effect.userData?.flash) effect.userData.flash.intensity = 0;
+      this.banditWasAlive = alive;
+      return;
+    }
     if (this.packEffectsActive()) {
       // Authored one-shots belong to ordered simulation events. Health/alive edges are retained
       // only for legacy fallback state and must not create a second, causally unseeded explosion.
@@ -9769,12 +9820,17 @@ class FlightView {
     if (damageAnchor) damageAnchor.getWorldPosition(this.banditDamagePosition);
     else this.banditDamagePosition.copy(this.banditPosition);
 
-    if (banditAlive && Number.isFinite(banditHealth) && banditHealth < 0.999) {
+    const toyMode = playerSettings.toyMode !== false;
+    if (!toyMode && banditAlive && Number.isFinite(banditHealth) && banditHealth < 0.999) {
       this.banditDamageSmoke.emit(this.banditDamagePosition, nowSeconds);
     }
-    if (playerAlive && Number.isFinite(playerHealth) && playerHealth < 0.999) {
+    if (!toyMode && playerAlive && Number.isFinite(playerHealth) && playerHealth < 0.999) {
       this.playerDamagePosition.copy(this.playerPosition).addScaledVector(this.playerForward, -3.8);
       this.playerDamageSmoke.emit(this.playerDamagePosition, nowSeconds);
+    }
+    if (toyMode) {
+      this.banditDamageSmoke.clear();
+      this.playerDamageSmoke.clear();
     }
     const pixelRatio = this.renderer.getPixelRatio();
     this.banditDamageSmoke.update(nowSeconds, this.fogColor, fogDensity, pixelRatio);
@@ -10380,6 +10436,10 @@ class FlightView {
       );
       const baseFogDensity = fogDensityForVisibility(reportedVisibilityM);
       this.fogColor.copy(this.fogLow).lerp(this.fogHigh, atmosphereMix);
+      if (playerSettings.toyMode !== false) {
+        this.toySkyColor ??= new THREE.Color(TOY_PALETTE.sky);
+        this.fogColor.lerp(this.toySkyColor, 0.55);
+      }
       // Layer/cell definitions describe the weather around the aircraft; local cloud fraction
       // only says whether the eye point is presently in condensate. Never hide nearby clouds just
       // because the pilot is flying through one of the holes between them.
@@ -10555,6 +10615,7 @@ class FlightView {
       music: playerSettings.music !== false,
       interfaceSounds: playerSettings.interfaceSounds !== false,
       scene: readyScreen?.classList.contains("visible") ? "title" : "flight",
+      toyMode: playerSettings.toyMode !== false,
       nowSeconds,
     });
     updateCasevacAudio(state, {
@@ -10578,6 +10639,18 @@ class FlightView {
     if (opponentPresent) {
       targetRoot.position.copy(this.banditPosition);
       targetRoot.quaternion.copy(this.banditQuaternion);
+      if (playerSettings.toyMode !== false && !banditAlive) {
+        if (this.toyDownedAt == null) this.toyDownedAt = nowSeconds;
+        const pose = downedToyPose(nowSeconds - this.toyDownedAt);
+        targetRoot.position.y += pose.y;
+        targetRoot.rotateX(pose.pitch);
+        targetRoot.rotateZ(pose.roll);
+        targetRoot.rotateY(pose.yaw);
+      } else {
+        this.toyDownedAt = null;
+      }
+    } else {
+      this.toyDownedAt = null;
     }
     const wingmanRoot = this.presentationAssets.wingmanSlot.root;
     const wingmanPresent = opponentPresent

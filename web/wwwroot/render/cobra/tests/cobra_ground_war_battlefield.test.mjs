@@ -740,3 +740,42 @@ test("authority reset and idempotent disposal clear every battlefield resource e
       `${resource.constructor.name} must be released exactly once`);
   }
 });
+
+test("toy mode sends a toy ambulance for a splatted army man and paint instead of fire", () => {
+  const { THREE } = fakeThree();
+  const presentation = createCobraGroundWarPresentation(THREE, { toyMode: true });
+  const friendly = unit("friendly.squad", "friendly", 0, 0, { role: "infantry" });
+  const hostile = unit("hostile.truck", "hostile", 20, 4, { role: "soft-vehicle" });
+  const destroyed = (unitRecord) => ({
+    tick: 4,
+    kind: "unit-destroyed",
+    unit_id: unitRecord.id,
+    faction: unitRecord.faction,
+    x_m: unitRecord.x_m,
+    y_m: unitRecord.y_m,
+    z_m: unitRecord.z_m,
+  });
+  presentation.sync({
+    combat_live: true,
+    sites: [],
+    events: [destroyed(friendly), destroyed(hostile)],
+    units: [
+      { ...friendly, alive: false, health: 0 },
+      { ...hostile, alive: false, health: 0 },
+    ],
+  });
+  const ambulance = findByName(presentation.group, "TOY_AMBULANCE_friendly.squad");
+  assert.ok(ambulance?.visible, "the toy ambulance comes out for a splatted army man");
+  assert.ok(findByName(presentation.group, "TOY_STRETCHER_friendly.squad"));
+  assert.ok(findByName(presentation.group, "TOY_REINFORCEMENTS_friendly.squad"));
+  assert.equal(findByPrefix(presentation.group, "COBRA_WRECK_FIRE_").length, 0);
+  assert.equal(findByPrefix(presentation.group, "COBRA_WRECK_SMOKE_").length, 0);
+  assert.ok(findByName(presentation.group, "TOY_PAINT_hostile.truck")?.visible);
+  assert.equal(presentation.friendlySplats.friendlySplats, 1);
+  assert.equal(presentation.friendlySplats.penalty, false);
+  assert.equal(presentation.friendlySplats.scoreDelta, 0);
+  assert.equal(presentation.friendlySplatCaption, "Medic! ...He's fine.");
+  const army = findByName(presentation.group, "GROUND_UNIT_friendly.squad");
+  assert.ok(Math.abs(army.rotation.z - Math.PI / 2) < 0.001, "he falls over stiff");
+  presentation.dispose();
+});

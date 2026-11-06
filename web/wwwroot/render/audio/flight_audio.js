@@ -38,6 +38,7 @@ import {
   createContactAcousticVoices,
   createEventVoices,
   fireGunReports,
+  playToyCue,
   updateAirframeCueVoices,
   updateBuffetVoice,
   updateCatapultVoice,
@@ -943,6 +944,7 @@ function updateFlightAudioLocal(state, {
   music = false,
   interfaceSounds = false,
   scene = "flight",
+  toyMode = false,
 } = {}) {
   if (disabled) return;
   try {
@@ -1043,6 +1045,7 @@ function updateFlightAudioLocal(state, {
     updateCatapultVoice(eventVoices, context, audioState, { enabled: live });
     updateRcsVoice(eventVoices, context, audioState, { enabled: live });
     updateTrapVoice(eventVoices, context, audioState, { enabled: live });
+    if (eventVoices) eventVoices.toyMode = toyMode === true;
     updateCombatCueVoices(eventVoices, context, audioState, { enabled: live });
     fireGunReports(eventVoices, context, audioState, {
       enabled: priority.sharedGunEnabled,
@@ -1114,6 +1117,16 @@ export function updateFlightAudio(state, options = {}) {
 
 /// UI click and hover ticks. No-ops until the shared graph exists, and stays silent under mute
 /// because the tick is scheduled on the same master the silent-QA clamp already owns.
+export function cueToySound(id) {
+  if (!context || !eventVoices?.destination || disabled || !enabled || silentQa) return false;
+  try {
+    playToyCue(context, eventVoices.destination, id, context.currentTime);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function cueInterfaceSound(kind = "click") {
   if (!context || !feelVoices || disabled || !enabled || silentQa) return false;
   try {

@@ -755,3 +755,39 @@ html.shell-theme-bezel #pause-button {
   font-size: 13px;
   font-weight: 700;
 }
+
+/* Toy mode keeps the same settings row and lifts the card toward a kids' sky. */
+html.toy-mode #settings-screen :is(
+  .settings-card,
+  .settings-toggle,
+  .settings-range,
+  .settings-actions,
+  .settings-binding th,
+  .settings-binding td,
+  .settings-card button
+) {
+  background: #e7f6ff;
+  color: #14301c;
+}
+html.toy-mode #settings-screen .settings-glyph,
+html.toy-mode #settings-screen .settings-disclosure > summary {
+  color: #1f7a34;
+}
+@media (prefers-color-scheme: dark) {
+  html.toy-mode #settings-screen :is(
+    .settings-card,
+    .settings-toggle,
+    .settings-range,
+    .settings-actions,
+    .settings-binding th,
+    .settings-binding td,
+    .settings-card button
+  ) {
+    background: #16384a;
+    color: #e9f7ff;
+  }
+  html.toy-mode #settings-screen .settings-glyph,
+  html.toy-mode #settings-screen .settings-disclosure > summary {
+    color: #8ee09a;
+  }
+}

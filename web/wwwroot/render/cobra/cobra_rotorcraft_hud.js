@@ -2,6 +2,7 @@ import { gunnerStatusText } from "./cobra_gunner_status.js";
 import { cobraObjectiveSiteId } from "./cobra_objective_site.js";
 import { cobraMissionCountdown, cobraObjectiveCopy } from "./cobra_objective_copy.js";
 import { fighterHudLayout } from "../hud/fighter_layout.js";
+import { presentHudModel } from "../toy/toy_pass.js";
 
 const MPS_TO_KT = 3600 / 1852;
 const MPS_TO_FPM = 196.850394;
@@ -773,8 +774,10 @@ export function drawCobraRotorcraftHud(ctx, model, {
   safeInsets = null,
   projectWorldPoint = null,
   colorScheme = "dark",
+  toyMode = false,
 } = {}) {
   if (!model || !ctx) return;
+  model = presentHudModel(model, toyMode === true);
   const layout = fighterHudLayout({ width, height, safeInsets: safeInsets ?? {} });
   const centerY = layout.instrumentCenterY;
   const tapeHalf = layout.tapeHeight / 2;
