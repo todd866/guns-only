@@ -274,3 +274,15 @@ button.dex-row {
 #instruments #dream-coins{left:22px;bottom:28px;top:auto;padding:10px 16px;border-left:3px solid var(--gold);font:600 28px ui-monospace,monospace;font-variant-numeric:tabular-nums;color:var(--gold)}
 @media(max-width:540px){#instruments #dream-coins{left:10px;bottom:148px;font-size:22px;padding:8px 12px}}
 @media(prefers-color-scheme:light){#instruments #dream-coins{background:#142a30;color:#f3efdc}}
+#wrong-way{position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:6;pointer-events:none;color:var(--gold);filter:drop-shadow(0 2px 0 #0b1a1e)}
+#wrong-way b{display:block;font:800 88px/0.8 system-ui;text-align:center}
+#result.kid-cheer{max-width:min(94vw,700px);overflow:hidden;container-type:inline-size}
+#result.kid-cheer h1{margin:0;min-width:0;font:800 18px/1.05 system-ui;color:var(--gold);letter-spacing:0;white-space:nowrap}
+@container(min-width:540px){#result.kid-cheer h1{font-size:clamp(32px,4.2vw,48px)}}
+#result.kid-cheer .result-head{min-width:0}
+#result.kid-cheer .result-actions button{min-width:0}
+#result.kid-cheer .confetti{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:2}
+#result.kid-cheer > :not(.confetti){position:relative;z-index:3}
+#result.kid-cheer .result-stats div{background:color-mix(in srgb, var(--ink) 14%, var(--panel))}
+#result.kid-cheer .confetti i{position:absolute;top:-18px;width:11px;height:18px;border-radius:2px;animation-name:kid-confetti;animation-timing-function:linear;animation-iteration-count:infinite}
+@keyframes kid-confetti{to{transform:translateY(280px) rotate(200deg);opacity:.25}}
