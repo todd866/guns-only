@@ -5297,6 +5297,10 @@ const padLog = (() => {
         at: new Date().toISOString(), mode, track: telemetryTrack, paused, panel: !!ui.panel(), started,
         vehicle: robot ? 'robot' : skate ? 'skate' : s.flight.mode ? 'flight' : 'car',
         split: split ? {p2Pad: split.pad, on: splitOn} : null, p1Pad,
+        covering: ['#brief', '#result', '.overlay', '#intro', '#tag-result', '#coach1', '#coach2', '#keys-panel']
+          .flatMap(q => [...document.querySelectorAll(q)])
+          .filter(el => !el.hidden && el.offsetParent !== null)
+          .map(el => el.id || el.className),
         tag: tagTelemetry(tag),
         place: openWorld ? nearestLocation(s.car.pos).short : null, speed: Math.round(Math.hypot(...(s.car.vel ?? [0, 0, 0])) * 3.6), who
       }));
@@ -5306,8 +5310,16 @@ const padLog = (() => {
 })();
 // Menus answer the controller too: the open dialog, else the pause/start menu.
 const menuPad = createMenuPad({
-  root: () => document.querySelector('.overlay:not([hidden])') ?? ($('brief').hidden ? null : $('brief')),
-  back: () => (ui.panel() ? ui.close() : started && paused ? pause(false) : null)
+  root: () =>
+    document.querySelector('.overlay:not([hidden])') ??
+    ($('result').hidden || !$('result').querySelector('button') ? null : $('result')) ??
+    ($('brief').hidden ? null : $('brief')),
+  back: () => {
+    if (ui.panel()) return ui.close();
+    const card = $('result');
+    if (!card.hidden) return [...card.querySelectorAll('button')].find(b => /drive|close|×|back|ok/i.test(b.textContent))?.click();
+    if (started && paused) pause(false);
+  }
 });
 const frameMs = [];
 function frame(now) {
