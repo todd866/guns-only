@@ -5112,7 +5112,8 @@ function coachFrame(all, p1, p2, now) {
   players.forEach(({pad: gp, input, speed, on}, i) => {
     const el = coachEls[i];
     if (!gp || !input) return void (el.hidden = true);
-    const c = coaches[i]({dt, speed, throttle: input.throttle, lt: gp.buttons[6]?.value ?? 0, rt: gp.buttons[7]?.value ?? 0, active: on, joined: !!input.joined});
+    const busyNow = gp.buttons.some(b => b.value > 0.5) || gp.axes.some(a => Math.abs(a) > 0.3);
+    const c = coaches[i]({dt, speed, throttle: input.throttle, lt: gp.buttons[6]?.value ?? 0, rt: gp.buttons[7]?.value ?? 0, active: on, joined: !!input.joined, touched: busyNow});
     el.hidden = !c.show;
     el.classList.toggle('left', splitOn && i === 0);
     el.classList.toggle('right', i === 1);

@@ -8,9 +8,12 @@ export function createCoach() {
     good = 0,
     intro = 0,
     showing = false;
-  return ({dt, speed, throttle = 0, lt = 0, rt = 0, active = true, joined = false}) => {
+  let away = 0;
+  return ({dt, speed, throttle = 0, lt = 0, rt = 0, active = true, joined = false, touched = true}) => {
     if (joined) intro = 8;
-    if (!active) return {show: false, glow: new Set(), why: null};
+    // Struggling means trying: a pad nobody has touched for 15 s is someone not playing.
+    away = touched ? 0 : away + dt;
+    if (!active || away > 15) return {show: (showing = false), glow: new Set(), why: null};
     intro = Math.max(0, intro - dt);
     still = speed < 0.6 && Math.abs(throttle) < 0.2 ? still + dt : 0;
     pushing = speed < 0.6 && throttle > 0.3 ? pushing + dt : 0;

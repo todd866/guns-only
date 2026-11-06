@@ -16,3 +16,10 @@ test('the controller drawing appears when a kid is stuck and leaves once they dr
   assert.equal(run(createCoach(), 1, {speed: 5, joined: true}).show, true, 'a new pad is introduced');
   assert.equal(run(c, 40, {speed: 0, active: false}).show, false, 'paused: hidden');
 });
+
+test('nobody holding the pad: no drawing over their half', () => {
+  const c = createCoach();
+  assert.equal(run(c, 30, {speed: 0, touched: true}).show, true, 'trying and stuck: shown');
+  assert.equal(run(c, 170, {speed: 0, touched: false}).show, false, 'put down for 15 s: hidden');
+  assert.equal(run(c, 30, {speed: 0, touched: true}).show, true, 'picked up and stuck again: back');
+});
