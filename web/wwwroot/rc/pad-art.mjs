@@ -42,7 +42,7 @@ export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {l
   const L = LAYOUT[kind],
     lit = i => pressed.has(i),
     pulse = k => (glow.has(k) ? ' class="pad-glow"' : ''),
-    out = [`<svg viewBox="-64 -6 456 200" width="${width}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui" font-weight="800">`];
+    out = [`<svg viewBox="${labels ? "-64 -6 456 200" : "-8 -8 316 190"}" width="${width}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui" font-weight="800">`];
   for (const [i, [x, y, w, h, t]] of Object.entries(L.shoulder))
     out.push(
       `<g${pulse(+i)}><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${lit(+i) ? ON : kind === 'sn30' ? '#3aa955' : '#3a3e44'}" stroke="#0008"/><text x="${x + w / 2}" y="${y + h - 3.5}" font-size="10" text-anchor="middle" fill="${lit(+i) ? '#000' : '#fff'}">${t}</text></g>`

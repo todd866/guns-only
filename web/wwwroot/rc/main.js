@@ -5184,7 +5184,11 @@ function syncJoinUi(all, now) {
   if (!show) return;
   const gp = all[joinPadIndex(live, p1Pad)];
   if (!gp) return;
-  joinCard.querySelector('.join-pad').innerHTML = padSvg(padKind(gp.id), {pressed: new Set(), axes: [...gp.axes]}, {labels: false, glow: new Set([9]), width: 260, skip: []});
+  // Built once per pad, not per frame, so Start's pulse animation actually runs.
+  if (joinCard.dataset.pad !== gp.id) {
+    joinCard.dataset.pad = gp.id;
+    joinCard.querySelector('.join-pad').innerHTML = padSvg(padKind(gp.id), {}, {labels: false, glow: new Set([9]), width: 260});
+  }
 }
 // Finding each other: a light beam over each car, seen only from the OTHER player's camera
 // (layer 1 = player 1's beam, drawn by camera2; layer 2 = player 2's, drawn by camera), and
@@ -5371,8 +5375,13 @@ const p2Hud = Object.assign(document.createElement('div'), {id: 'p2-hud', hidden
 document.body.append(p2Hud, splitLine);
 function splitInput(all, now) {
   const live = all.filter(p => p?.connected);
-  p1Pad ??= live.find(p => p.buttons.some(b => b.value > 0.5))?.index ?? null;
   const starts = new Set(live.filter(p => p.buttons[9]?.value > 0.5).map(p => p.index));
+  // Nobody has played yet and one of two pads presses Start on the join card: the OTHER pad
+  // is player 1, so the kid pressing Start joins instead of becoming player 1 by accident.
+  if (p1Pad == null && !split && started && live.length > 1 && race.rivals.length)
+    for (const i of starts)
+      if (!startHeld.has(i) && $('join-card') && !$('join-card').hidden) p1Pad = live.find(p => p.index !== i).index;
+  p1Pad ??= live.find(p => p.buttons.some(b => b.value > 0.5))?.index ?? null;
   if (!split && started && p1Pad != null && race.rivals.length)
     for (const i of starts)
       if (i !== p1Pad && !startHeld.has(i)) joinWithPad(i);
