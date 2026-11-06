@@ -1311,6 +1311,16 @@ window.addEventListener('pagehide', () => {
 // Two chase cameras side by side. The polish pass is one-camera, so split renders plainly.
 globalThis.__rcTv = {get pointers() { return pointers; }, get race() { return race; }, get split() { return split; }, get splitOn() { return splitOn; }};
 function renderSplit() {
+  if (split?.solo) {
+    const cam = split.solo === 1 ? camera : camera2,
+      keep = cam.aspect;
+    cam.aspect = innerWidth / innerHeight;
+    cam.updateProjectionMatrix();
+    renderer.render(scene, cam);
+    cam.aspect = keep;
+    cam.updateProjectionMatrix();
+    return;
+  }
   const w = innerWidth,
     h = innerHeight,
     half = Math.floor(w / 2),
@@ -5338,6 +5348,17 @@ function splitInput(all, now) {
     if (race.rivals[0]) delete race.rivals[0].human;
     split = null;
   }
+  // Who's actually playing: if one player leaves the pad for a minute, the other gets the
+  // whole screen until they press something again.
+  if (split) {
+    const t = performance.now(),
+      busy = p => p?.connected && (p.buttons.some(b => b.value > 0.5) || p.axes.some(a => Math.abs(a) > 0.3));
+    if (all.some(p => p && p.index !== split.pad && busy(p)) || split.p1At == null) split.p1At = t;
+    if (busy(all[split.pad]) || split.p2At == null) split.p2At = t;
+    const idle1 = t - split.p1At > 60000,
+      idle2 = t - split.p2At > 60000;
+    split.solo = idle1 && !idle2 ? 2 : idle2 && !idle1 ? 1 : 0;
+  }
   const p1 = pollGamepad(split ? all.filter(p => p && p.index !== split.pad) : all),
     p2 = split ? pollP2([all[split.pad]]) : null;
   if (p2?.fire) split.fire = true;
@@ -5369,7 +5390,13 @@ const padLog = (() => {
       navigator.sendBeacon('/pad-log', JSON.stringify({
         at: new Date().toISOString(), mode, track: telemetryTrack, paused, panel: !!ui.panel(), started,
         vehicle: robot ? 'robot' : skate ? 'skate' : s.flight.mode ? 'flight' : 'car',
-        split: split ? {p2Pad: split.pad, on: splitOn} : null, p1Pad,
+        split: split
+          ? (() => {
+              const c2 = race.rivals[0]?.session;
+              return {p2Pad: split.pad, on: splitOn, solo: split.solo ?? 0, p2Speed: c2 ? Math.round(Math.hypot(c2.car.vel[0], c2.car.vel[2]) * 3.6) : null, p2Form: c2?.flight.mode ? 'flight' : split.p2Form ?? 'car'};
+            })()
+          : null,
+        p1Pad,
         covering: ['#brief', '#result', '.overlay', '#intro', '#tag-result', '#coach1', '#coach2', '#keys-panel']
           .flatMap(q => [...document.querySelectorAll(q)])
           .filter(el => !el.hidden && el.offsetParent !== null)
@@ -6276,7 +6303,8 @@ function frame(now) {
     p2Hud.textContent = `P2 · ${Math.round((rs2.flight.mode ? rs2.flight.speed : r2.speed) * 3.6)} km/h`;
   }
   p2Hud.hidden = splitLine.hidden = !splitOn;
-  document.body.classList.toggle('split', splitOn);
+  document.body.classList.toggle('split', splitOn && !split?.solo);
+  splitLine.hidden ||= !!split?.solo;
   digCamera(now);
   if (intro.active) intro.update(dt, camera);
   underwater();
