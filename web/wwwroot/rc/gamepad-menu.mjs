@@ -31,9 +31,10 @@ function direction(pads) {
   }
   return null;
 }
-// createMenuPad({root, back}) → poll(pads, now) returns true when it used the input.
+// createMenuPad({root, back, initial}) → poll(pads, now) returns true when it used the input.
 // root(): the open menu element or null. back(): close it / resume.
-export function createMenuPad({root, back, doc = globalThis.document}) {
+// initial(): the control to highlight first. Omitted means the first control.
+export function createMenuPad({root, back, doc = globalThis.document, initial}) {
   let held = '',
     nextAt = 0,
     a = false,
@@ -68,7 +69,11 @@ export function createMenuPad({root, back, doc = globalThis.document}) {
     }
     const list = items(r);
     let here = list.find(i => i.el === current);
-    if (!here && list.length) mark((here = list[0]).el);
+    if (!here && list.length) {
+      const seed = typeof initial === 'function' ? initial() : null;
+      const seeded = seed ? list.find(i => i.el === seed) : null;
+      mark((here = seeded ?? list[0]).el);
+    }
     const key = dir ? dir.join() : '';
     if (key && (key !== held || now >= nextAt) && here) {
       const to = nearest(list, here, dir);

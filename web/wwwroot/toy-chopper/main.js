@@ -14,6 +14,7 @@ import {friendlyDownFrame} from "./targets.mjs";
 import {AIM, gunnerDirection, headingArrowAngle} from "./gunner.mjs";
 import {addHit, confettiBurst, createJuice, rumblePulse, stepJuice} from "./juice.mjs";
 import {createCoopSession, leaveToTitle, startMission, stepCoop} from "./coop_session.mjs";
+import {attachHold, goHome} from "../tv/return.mjs";
 
 const query = new URLSearchParams(location.search);
 const theme = query.get("theme") === "light" ? "light" : "dark";
@@ -207,6 +208,7 @@ function actFor(act) {
     if (next && campaignRows(progress)[index + 1].open) beginMission(next.id);
     else { leaveToTitle(session); paintTitle(); }
   } else if (act === "map") { leaveToTitle(session); paintTitle(); }
+  else if (act === "games") goHome();
 }
 for (const panel of [panels.pause, panels.result]) {
   panel.addEventListener("click", (event) => {
@@ -545,8 +547,10 @@ if (shotMode) {
 }
 
 let last = performance.now();
+const tvHold = attachHold(() => padsSource());
 function frame(nowMs) {
   requestAnimationFrame(frame);
+  tvHold();
   const dt = Math.max(0, Math.min(0.05, (nowMs - last) / 1000));
   last = nowMs;
   const pads = padsSource();

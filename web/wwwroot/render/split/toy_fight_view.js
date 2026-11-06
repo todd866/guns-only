@@ -6,6 +6,7 @@ import {createCoach} from "../../rc/coach.mjs";
 import {createMenuPad} from "../../rc/gamepad-menu.mjs";
 import {joinCardVisible, menuPlayersButton} from "../../rc/join.mjs";
 import {padKind, padSvg} from "../../rc/pad-art.mjs";
+import {attachHold, goHome} from "../../tv/return.mjs";
 import {downedToyPose} from "../toy/toy_pass.js";
 import {ARMY_COLOR} from "./toy_cast.mjs";
 import {RESPAWN_S} from "./toy_score.mjs";
@@ -55,6 +56,10 @@ function onRows(host, session, publish) {
   host.addEventListener("click", (event) => {
     const button = event.target.closest("button");
     if (!button || button.dataset.act === undefined) return;
+    if (button.dataset.act === "games") {
+      goHome();
+      return;
+    }
     applyMenu(session, button.dataset.act);
     publish();
   });
@@ -358,8 +363,12 @@ export function mountToyFight({
   const readPads = () => Array.from(pads?.() ?? navigator.getGamepads?.() ?? []);
   let raf = 0;
   let last = 0;
+  let frameNow = 0;
+  const tvHold = attachHold(readPads, {now: () => frameNow});
   const frame = (time) => {
     raf = requestAnimationFrame(frame);
+    frameNow = time;
+    tvHold();
     const dt = last ? Math.min(0.05, (time - last) / 1000) : 0;
     last = time;
     const live = readPads();

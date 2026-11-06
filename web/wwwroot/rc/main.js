@@ -134,6 +134,7 @@ import {
 import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput} from './split-p2.mjs';
 import {attachDreams} from './open-world/dreams/runner.js';
 import {createMenuPad} from './gamepad-menu.mjs';
+import {attachHold, goHome} from '../tv/return.mjs';
 import {padSvg, padKind} from './pad-art.mjs';
 import {createCoach} from './coach.mjs';
 import {createTag, setTagOn, stepTag, TAG, hudLine, resultHead, resultStats, tagTelemetry} from './tag.mjs';
@@ -1410,6 +1411,7 @@ function exit() {
   else location.href = '../';
 }
 $('exit').onclick = exit;
+$('menu-games').onclick = () => goHome();
 window.addEventListener('keydown', e => {
   if (document.querySelector('.rc-race-menu[open]')) return;
   if (e.code === 'Escape') {
@@ -6301,7 +6303,9 @@ dreams = attachDreams({
     }
   }
 });
+const tvHold = attachHold(() => navigator.getGamepads?.() ?? []);
 function frame(now) {
+  tvHold();
   // Two presented frames stay on the establishing shot so a leftover driver stall does not
   // move the camera. The glide, the session, and adaptive resolution start after that.
   if (openingHeld && openingShown >= 2) {

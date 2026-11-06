@@ -125,6 +125,7 @@ export function pauseRows(playersLabel) {
     });
   }
   rows.push({act: "tomenu", symbol: "✈", value: "TOYS", datum: "menu", title: "Pick mode"});
+  rows.push({act: "games", symbol: "🏠", value: "Games", datum: "", title: "Games"});
   return rows;
 }
 
