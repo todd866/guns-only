@@ -102,6 +102,7 @@ import {createMenuPad} from './gamepad-menu.mjs';
 import {padSvg, padKind} from './pad-art.mjs';
 import {createCoach} from './coach.mjs';
 import {createTag, setTagOn, stepTag, TAG, hudLine, resultHead, resultStats, tagTelemetry} from './tag.mjs';
+import {joinPadIndex, joinCardVisible, menuPlayersButton, joinHideUntilAfterLeave} from './join.mjs';
 import {frameSeconds} from './frame-time.mjs';
 import {poseCar} from './vehicle-pose.mjs';
 import {makeVehicleBody} from './vehicle-bodies.js';
@@ -1048,6 +1049,15 @@ $('menu-tag').onclick = () => {
   setTagOn(tag, !tag.on);
   $('menu-tag').setAttribute('aria-pressed', String(tag.on));
   if (tag.on) callout('🏷️ Tag! Least IT time wins', 2800);
+};
+$('menu-players').onclick = () => {
+  const t = performance.now(),
+    live = Array.from(navigator.getGamepads?.() ?? []).filter(p => p?.connected);
+  if (split) leaveSplit(t);
+  else {
+    const i = joinPadIndex(live, p1Pad);
+    if (i != null) joinWithPad(i);
+  }
 };
 $('menu-furball').onclick = () => {
   if (!raceReady()) return;
@@ -5133,7 +5143,49 @@ const camera2 = new T.PerspectiveCamera(63, 1, 0.06, 210),
 let split = null,
   p1Pad = null,
   startHeld = new Set(),
-  splitOn = false;
+  splitOn = false,
+  joinHideUntil = 0;
+const playersUrl2 = new URLSearchParams(location.search).get('players') === '2',
+  joinCard = Object.assign(document.createElement('div'), {id: 'join-card', hidden: true});
+joinCard.innerHTML = '<div class="join-pad" aria-hidden="true"></div><p class="join-cta">START ▶ join</p>';
+document.body.append(joinCard);
+function joinWithPad(padIndex) {
+  if (split || !started || padIndex == null || padIndex === p1Pad || !race.rivals.length) return;
+  split = {pad: padIndex, heading: null, placed: false, fire: false, p2Form: 'car'};
+  callout('👥 2 players!', 3000);
+  telemetry.choice?.('split', 'join');
+}
+function leaveSplit(now) {
+  if (!split) return;
+  if (race.rivals[0]) delete race.rivals[0].human;
+  split = null;
+  joinHideUntil = joinHideUntilAfterLeave(now);
+  callout('👤 1 player', 2000);
+}
+function syncJoinUi(all, now) {
+  const live = all.filter(p => p?.connected),
+    {hidden, label} = menuPlayersButton({split, live, p1Pad}),
+    menuBtn = $('menu-players');
+  menuBtn.hidden = hidden;
+  if (!hidden) menuBtn.textContent = label;
+  const show = joinCardVisible({
+    split,
+    started,
+    paused,
+    panelOpen: !!ui.panel(),
+    now,
+    joinHideUntil,
+    playersUrl2,
+    hasRival: !!race.rivals.length,
+    live,
+    p1Pad
+  });
+  joinCard.hidden = !show;
+  if (!show) return;
+  const gp = all[joinPadIndex(live, p1Pad)];
+  if (!gp) return;
+  joinCard.querySelector('.join-pad').innerHTML = padSvg(padKind(gp.id), {pressed: new Set(), axes: [...gp.axes]}, {labels: false, glow: new Set([9]), width: 260, skip: []});
+}
 // Finding each other: a light beam over each car, seen only from the OTHER player's camera
 // (layer 1 = player 1's beam, drawn by camera2; layer 2 = player 2's, drawn by camera), and
 // an edge arrow with the distance when the partner is off screen. LB/L jumps you to them.
@@ -5323,31 +5375,12 @@ function splitInput(all, now) {
   const starts = new Set(live.filter(p => p.buttons[9]?.value > 0.5).map(p => p.index));
   if (!split && started && p1Pad != null && race.rivals.length)
     for (const i of starts)
-      if (i !== p1Pad && !startHeld.has(i)) {
-        split = {pad: i, heading: null, placed: false, fire: false, p2Form: 'car'};
-        callout('Player 2 joined!', 3000);
-        telemetry.choice?.('split', 'join');
-      }
+      if (i !== p1Pad && !startHeld.has(i)) joinWithPad(i);
   startHeld = starts;
-  // ?players=2: the TV stays two-player; any second connected pad is player 2, even after a reload.
-  if (!split && started && race.rivals.length && new URLSearchParams(location.search).get('players') === '2' && live.length > 1) {
-    let saved = null;
-    try {
-      saved = localStorage.getItem('guns-only.rc.tv.p1');
-    } catch {}
-    const one = live.find(p => p.id === saved)?.index ?? p1Pad ?? live[0].index,
-      two = live.find(p => p.index !== one);
-    if (two) {
-      p1Pad = one;
-      split = {pad: two.index, heading: null, placed: false, fire: false, p2Form: 'car'};
-      try {
-        localStorage.setItem('guns-only.rc.tv.p1', all[one]?.id ?? '');
-      } catch {}
-    }
-  }
   if (split && !all[split.pad]?.connected) {
     if (race.rivals[0]) delete race.rivals[0].human;
     split = null;
+    joinHideUntil = joinHideUntilAfterLeave(now);
   }
   // Who's actually playing: if one player leaves the pad for a minute, the other gets the
   // whole screen until they press something again.
@@ -5398,7 +5431,7 @@ const padLog = (() => {
             })()
           : null,
         p1Pad,
-        covering: ['#brief', '#result', '.overlay', '#intro', '#tag-result', '#coach1', '#coach2', '#keys-panel']
+        covering: ['#brief', '#result', '.overlay', '#intro', '#tag-result', '#coach1', '#coach2', '#keys-panel', '#join-card']
           .flatMap(q => [...document.querySelectorAll(q)])
           .filter(el => !el.hidden && el.offsetParent !== null)
           .map(el => el.id || el.className),
@@ -5430,6 +5463,7 @@ function frame(now) {
     audio.start();
   const allPads = Array.from(navigator.getGamepads?.() ?? []),
     {p1: pad, p2: pad2} = splitInput(allPads, now);
+  syncJoinUi(allPads, now);
   splitOn = splitScreenOn({split, rival: race.rivals[0], started, p1Robot: !!robot});
   {
     const rv = splitOn ? race.rivals[0] : null,
