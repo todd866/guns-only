@@ -18,6 +18,7 @@ import {
   parkPoint
 } from './residential-frame.mjs';
 import {ARRIVAL_START} from './arrival-frame.mjs';
+import {labEntry} from './lab-accident.mjs';
 import {createPortalTransition} from './portal-transition.mjs';
 import {buildActivities} from './activities.js';
 import {elevationAt} from './elevation.mjs';
@@ -168,7 +169,8 @@ export async function loadOpenWorld(search) {
           : explicitEntry
             ? EVENTS[0]
             : defaultEvent)),
-    rawAt = locationById(q.get('from') ?? q.get('at')),
+    labIn = labEntry(search),
+    rawAt = locationById(labIn ? 'coldlab' : (q.get('from') ?? q.get('at'))),
     safeAt = rawAt && canVisit(progress, rawAt) ? rawAt : null,
     at =
       safeAt ??
@@ -341,6 +343,7 @@ export async function loadOpenWorld(search) {
     course.start = {pos: [...RESIDENTIAL_START.pos], yaw: RESIDENTIAL_START.yaw};
   if (!q.has('event') && at.game === 'canyon-run')
     course.start = canyonArrival((x, z) => elevationAt(elevation, x, z));
+  if (labIn) course.start = {pos: [...labIn.pos], yaw: labIn.yaw};
   // World challenge coins sit at landmarks, outside the rings. Discovery and coins are distinct.
   const eventBounds = course.outOfBounds;
   course.outOfBounds = pos => (pos[0] > 9000 && pos[1] < -3) || !!eventBounds?.(pos);
@@ -597,6 +600,7 @@ export async function loadOpenWorld(search) {
     selected,
     locked,
     at,
+    labShortcut: !!labIn,
     search,
     activity: () => golf,
     canRace,

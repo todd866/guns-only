@@ -24,6 +24,7 @@ import {LIVERIES, TRIMS, liveryUnlocked, PUMPKIN_CAR} from '../livery-data.mjs';
 import {DARK_PLACES} from './dark-world.mjs';
 import {createDinoInspect} from './inspect.js';
 import {SKY_HINT} from './sky-dive.mjs';
+import {TOUR_LABEL} from './lab-accident.mjs';
 const $ = id => document.getElementById(id);
 // One map, one destination. Controls remain ordinary labelled buttons on touch and keyboard.
 export function createWorldUI({
@@ -834,13 +835,14 @@ export function createWorldUI({
         const p = world.near(s.pos),
           golf = world.activity();
         $('interact').hidden =
-          (!p && !s.skate && (!golf || golf.done)) ||
+          (!p && !s.labTour && !s.skate && (!golf || golf.done)) ||
           !s.roam ||
           s.paused ||
           s.skating ||
           s.flying ||
           (p?.game === 'sky-dive' && !s.skyJump);
-        if (s.skyJump) interactLabel(SKY_HINT, null);
+        if (s.labTour) interactLabel(TOUR_LABEL, 'E');
+        else if (s.skyJump) interactLabel(SKY_HINT, null);
         else if (s.robot && (p?.game === 'bowling' || golf?.kind === 'bowling')) {
           const ready = approachLane(s.pos);
           $('interact').hidden ||= !!golf?.launched;
