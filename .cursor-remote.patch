@@ -1,0 +1,1057 @@
+diff --git a/web/wwwroot/rc/chase-camera.mjs b/web/wwwroot/rc/chase-camera.mjs
+new file mode 100644
+index 00000000..c035fa96
+--- /dev/null
++++ b/web/wwwroot/rc/chase-camera.mjs
+@@ -0,0 +1,42 @@
++// Chase camera vs walls. The old pull stopped ~5 cm short of a close face, inside
++// the near clip, so the wall texture filled the picture. Back up, and if the
++// face is too close to back away from, lift the eye off it.
++
++const hypot = (x, y, z) => Math.hypot(x, y, z);
++
++/**
++ * @param {number[]} eye car eye
++ * @param {number[]} want desired camera position
++ * @param {(origin:number[], dir:number[], max:number) => {dist:number}|null} raycast
++ * @returns {number[]}
++ */
++export function pullChaseCamera(eye, want, raycast, {gap = 0.45, lift = 0.7} = {}) {
++  const dx = want[0] - eye[0],
++    dy = want[1] - eye[1],
++    dz = want[2] - eye[2],
++    dist = hypot(dx, dy, dz);
++  if (!(dist > 1e-4) || typeof raycast !== 'function') return [want[0], want[1], want[2]];
++  const dir = [dx / dist, dy / dist, dz / dist];
++  const hit = raycast(eye, dir, dist);
++  let x = want[0],
++    y = want[1],
++    z = want[2];
++  if (hit && hit.dist > 0 && hit.dist < dist) {
++    const along = Math.min(dist, Math.max(0.05, hit.dist - gap));
++    x = eye[0] + dir[0] * along;
++    y = eye[1] + dir[1] * along;
++    z = eye[2] + dir[2] * along;
++    if (hit.dist - along < gap) y += lift;
++  }
++  // One-sided faces miss once the camera has crossed them. A ray back toward
++  // the car that hits immediately means the lens is in the surface: step toward
++  // the car and up.
++  const back = raycast([x, y, z], [-dir[0], -dir[1], -dir[2]], gap);
++  if (back && back.dist < gap * 0.85) {
++    const push = gap - back.dist;
++    x -= dir[0] * push;
++    y += lift - dir[1] * push;
++    z -= dir[2] * push;
++  }
++  return [x, y, z];
++}
+diff --git a/web/wwwroot/rc/chase-camera.test.mjs b/web/wwwroot/rc/chase-camera.test.mjs
+new file mode 100644
+index 00000000..983e399d
+--- /dev/null
++++ b/web/wwwroot/rc/chase-camera.test.mjs
+@@ -0,0 +1,26 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {pullChaseCamera} from './chase-camera.mjs';
++
++// Wall at z = -0.2, outward normal +z, so a ray from the car (z = 0) looking
++// back (negative z) hits it. The wanted camera is 1.5 m behind the car.
++const wall = (origin, dir, max) => {
++  if (dir[2] >= -1e-6 || origin[2] <= -0.2) return null;
++  const dist = (origin[2] - -0.2) / -dir[2];
++  if (dist < 0 || dist > max) return null;
++  return {dist};
++};
++
++test('a close wall pulls the camera off the texture instead of parking on it', () => {
++  const eye = [0, 0.5, 0];
++  const want = [0, 0.55, -1.5];
++  const got = pullChaseCamera(eye, want, wall);
++  assert.ok(got[2] > -0.2, `camera stays on the car side of the wall (z ${got[2]})`);
++  assert.ok(-0.2 - got[2] > 0.15 || got[1] > eye[1] + 0.4, 'clearance or a lift, not 5 cm of texture');
++  assert.ok(got[1] > 0.9, `lifts off the face (y ${got[1]})`);
++});
++
++test('open air leaves the chase camera where it was asked', () => {
++  const want = [1, 2, 3];
++  assert.deepEqual(pullChaseCamera([0, 0.5, 0], want, () => null), want);
++});
+diff --git a/web/wwwroot/rc/coach.mjs b/web/wwwroot/rc/coach.mjs
+index 0951c5b5..21fc9f85 100644
+--- a/web/wwwroot/rc/coach.mjs
++++ b/web/wwwroot/rc/coach.mjs
+@@ -1,28 +1,18 @@
+-// When does a player need the controller drawing? Pure, per player, fed every frame.
+-// Shows when they sit still, hold both triggers (go + reverse cancel), push into a wall,
+-// or have just picked the pad up; hides after a few seconds of real driving.
++// Controller drawing. One show per form (car / walk / skate / fly), then it
++// stays away until the form changes. The old "sat still / pushing a wall"
++// rule brought it back every few seconds in split screen. Hidden during a
++// race countdown and while that player is not driving.
+ export function createCoach() {
+-  let still = 0,
+-    both = 0,
+-    pushing = 0,
+-    good = 0,
+-    intro = 0,
+-    showing = false;
+-  let away = 0;
+-  return ({dt, speed, throttle = 0, lt = 0, rt = 0, active = true, joined = false, touched = true}) => {
+-    if (joined) intro = 8;
+-    // Struggling means trying: a pad nobody has touched for 15 s is someone not playing.
+-    away = touched ? 0 : away + dt;
+-    if (!active || away > 15) return {show: (showing = false), glow: new Set(), why: null};
+-    intro = Math.max(0, intro - dt);
+-    still = speed < 0.6 && Math.abs(throttle) < 0.2 ? still + dt : 0;
+-    pushing = speed < 0.6 && throttle > 0.3 ? pushing + dt : 0;
+-    both = lt > 0.3 && rt > 0.3 ? both + dt : 0;
+-    good = speed > 2.2 && both === 0 ? good + dt : 0;
+-    const why = both > 1.2 ? 'both' : pushing > 2 ? 'stuck' : still > 2.5 ? 'still' : intro > 0 ? 'intro' : null;
+-    if (why) showing = true;
+-    else if (good > 3) showing = false;
+-    const glow = new Set(why === 'both' ? [7, 'stick'] : why === 'stuck' ? [6, 13] : why === 'still' ? ['stick', 7, 12] : []);
+-    return {show: showing, glow, why};
++  let formSeen;
++  let left = 0;
++  return ({dt = 0, form = 'car', countdown = false, active = true} = {}) => {
++    if (countdown || !active) return {show: false, glow: new Set(), why: null};
++    if (form !== formSeen) {
++      formSeen = form;
++      left = 3;
++    }
++    if (left > 0) left = Math.max(0, left - dt);
++    const show = left > 0;
++    return {show, glow: new Set(), why: show ? 'form' : null};
+   };
+ }
+diff --git a/web/wwwroot/rc/coach.test.mjs b/web/wwwroot/rc/coach.test.mjs
+index ffe0e83d..e9db510f 100644
+--- a/web/wwwroot/rc/coach.test.mjs
++++ b/web/wwwroot/rc/coach.test.mjs
+@@ -1,25 +1,32 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+ import {createCoach} from './coach.mjs';
+-const run = (c, n, f) => { let r; for (let i = 0; i < n; i++) r = c({dt: 0.1, ...f}); return r; };
+-test('the controller drawing appears when a kid is stuck and leaves once they drive', () => {
++
++const run = (c, n, f) => {
++  let r;
++  for (let i = 0; i < n; i++) r = c({dt: 0.1, ...f});
++  return r;
++};
++
++test('each form is drawn once, then hidden after about 3 s', () => {
++  const c = createCoach();
++  assert.equal(c({dt: 0.1, form: 'car'}).show, true);
++  assert.equal(run(c, 20, {form: 'car'}).show, true, 'still up inside 3 s');
++  assert.equal(run(c, 15, {form: 'car'}).show, false, 'gone after 3 s');
++  assert.equal(run(c, 200, {form: 'car', speed: 0, throttle: 0}).show, false, 'sitting still does not bring it back');
++  assert.equal(c({dt: 0.1, form: 'skate'}).show, true, 'a new form shows again');
++  assert.equal(c({dt: 0.1, form: 'skate'}).why, 'form');
++});
++
++test('the drawing stays hidden through a race countdown', () => {
+   const c = createCoach();
+-  assert.equal(run(c, 10, {speed: 3}).show, false, 'driving: hidden');
+-  const sat = run(c, 30, {speed: 0, throttle: 0});
+-  assert.equal(sat.show, true, 'sitting still 3 s: shown');
+-  assert.ok(sat.glow.has('stick'), 'GO pulses');
+-  assert.equal(run(c, 20, {speed: 3, throttle: 1}).show, true, 'still shown after 2 s of driving');
+-  assert.equal(run(c, 20, {speed: 3, throttle: 1}).show, false, 'gone after 4 s of driving');
+-  const both = run(c, 15, {speed: 0.2, throttle: 1, lt: 1, rt: 1});
+-  assert.equal(both.why, 'both', 'both triggers held');
+-  assert.ok(both.glow.has(7));
+-  assert.equal(run(createCoach(), 1, {speed: 5, joined: true}).show, true, 'a new pad is introduced');
+-  assert.equal(run(c, 40, {speed: 0, active: false}).show, false, 'paused: hidden');
++  assert.equal(c({dt: 0.1, form: 'car', countdown: true}).show, false);
++  assert.equal(run(c, 40, {form: 'car', countdown: true}).show, false);
++  assert.equal(c({dt: 0.1, form: 'car', countdown: false}).show, true, 'after GO the unseen form may show once');
+ });
+ 
+-test('nobody holding the pad: no drawing over their half', () => {
++test('a player who is not driving does not get the drawing', () => {
+   const c = createCoach();
+-  assert.equal(run(c, 30, {speed: 0, touched: true}).show, true, 'trying and stuck: shown');
+-  assert.equal(run(c, 170, {speed: 0, touched: false}).show, false, 'put down for 15 s: hidden');
+-  assert.equal(run(c, 30, {speed: 0, touched: true}).show, true, 'picked up and stuck again: back');
++  assert.equal(run(c, 10, {form: 'car', active: false}).show, false);
++  assert.equal(c({dt: 0.1, form: 'car', active: true}).show, true);
+ });
+diff --git a/web/wwwroot/rc/hunt.test.mjs b/web/wwwroot/rc/hunt.test.mjs
+index 1d525b36..0185e790 100644
+--- a/web/wwwroot/rc/hunt.test.mjs
++++ b/web/wwwroot/rc/hunt.test.mjs
+@@ -83,3 +83,13 @@ test('hunt off scores nothing and logs nothing', () => {
+ });
+ 
+ test('fmtHunt', () => assert.equal(fmtHunt(65.2), '1:06'));
++
++test('the round clock does not move while a menu is open', () => {
++  const h = createHunt();
++  setHuntOn(h, true);
++  stepHunt(h, 3, true);
++  assert.equal(h.roundLeft, HUNT.round);
++  assert.equal(hudLine(h), '🎃 0/10 · 3:00');
++  stepHunt(h, 3, false);
++  assert.equal(hudLine(h), '🎃 0/10 · 2:57');
++});
+diff --git a/web/wwwroot/rc/index.html b/web/wwwroot/rc/index.html
+index 058114fa..7062bc52 100644
+--- a/web/wwwroot/rc/index.html
++++ b/web/wwwroot/rc/index.html
+@@ -32,6 +32,7 @@
+ <div id="keys-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Controls" hidden><div class="panel-heading"><h2>CONTROLS</h2><button id="keys-close" aria-label="Close controls">×</button></div><dl class="touch-keys"><dt>Left pad</dt><dd>Steer</dd><dt>Go / Rev lever</dt><dd>Drive and reverse · let go to coast</dd><dt>Brake</dt><dd>Brake</dd><dt>Fire</dt><dd>Fire pickup</dd><dt>⏸</dt><dd>Menu: recover, Kid mode, sound</dd><dt>⌖ Places</dt><dd>Map, routes and jumps</dd></dl><dl class="key-list"><dt>X / W / ↑</dt><dd>Accelerate</dd><dt>S / ↓</dt><dd>Brake / reverse</dd><dt>A D / ← →</dt><dd>Steer</dd><dt>Z</dt><dd>Brake</dd><dt>↑ + S / ↓ + W</dt><dd>Wheelie / stoppie</dd><dt>Space</dt><dd>Jump (car hop, skateboard ollie, robot jump)</dd><dt>return</dt><dd>Fly · again: parachute · ↑ push ↓ pull ←→ roll A D rudder W S power · Kid: auto pull-up near the ground</dd><dt>Shift / RB</dt><dd>Hold through a turn: drift · let go: turbo</dd><dt>Q</dt><dd>Fire pickup · punch</dd><dt>Q (riding, long ago)</dt><dd>Shoot an electric arrow</dd><dt>F / pad Y</dt><dd>Boost on / off (free drive) · in the air: afterburner</dd><dt>🛹 in the air</dt><dd>Q flip · E grab (hold) · ←/→ spin · tap ↑ or ↓ first for Impossible / Shove-It, Nosegrab / Tailgrab</dd><dt>🛹 grind</dt><dd>Ollie onto a gold line · hold a direction as you land: ↑ Nosegrind, ↓ 5-0, ↑← Crooked, ↓← Smith, ↓→ Feeble · ←/→ balance · Space off</dd><dt>Y</dt><dd>Say something (type a word · in the past, say your dinosaur's name and it comes)</dd><dt>C</dt><dd>Look around: the arrows turn the camera, C again to drive (or drag with the mouse)</dd><dt>R</dt><dd>Recover</dd><dt>E</dt><dd>Go in · on foot: use your item</dd><dt>Tab / G</dt><dd>Map / garage</dd><dt>Esc / M</dt><dd>Pause / mute</dd></dl></div>
+ 
+ <div id="skate" hidden aria-label="Skate run"><div class="skate-top"><strong id="skate-score">0</strong><span id="skate-letters" title="Collect S-K-A-T-E"><i>S</i><i>K</i><i>A</i><i>T</i><i>E</i></span></div><output id="skate-clock" title="Run time left">2:00</output><div id="skate-combo" hidden><span id="skate-tricks"></span><strong id="skate-points"></strong></div><div id="skate-pop" hidden></div></div>
++<div id="leave-race" class="overlay" role="dialog" aria-modal="true" aria-label="Leave this race?" hidden><p>Leave this race?</p><div class="leave-actions"><button id="leave-yes" type="button">A Leave</button><button id="leave-no" type="button">B Stay</button></div></div>
+ <div id="countdown" hidden>3</div><div id="banner" hidden>🎺 Bugle time! Rivals stop — you keep driving</div><div id="result" role="status" aria-live="polite" hidden></div><div id="touch" aria-label="Driving controls">
+ <div id="touch-left-actions"><button id="touch-fire" class="touch-action touch-fire" aria-label="Fire pickup">Fire</button><button id="touch-brake" class="touch-action" aria-label="Brake">Brake</button><div id="touch-throttle-lever" role="slider" tabindex="0" aria-orientation="vertical" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0" aria-label="Throttle, brake and reverse — release to coast"><span class="touch-lever-fill" aria-hidden="true"></span><span id="touch-throttle-puck" class="touch-lever-puck" aria-hidden="true"></span><span class="touch-lever-mark touch-lever-forward" aria-hidden="true">▲ Go</span><span class="touch-lever-mark touch-lever-reverse" aria-hidden="true">▼ Rev</span></div></div>
+ <div id="touch-stick" class="touch-stick" role="slider" tabindex="0" aria-orientation="horizontal" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0" aria-label="Steering — slide left or right"><span class="touch-stick-ring" aria-hidden="true"></span><span id="touch-stick-puck" class="touch-stick-puck" aria-hidden="true"></span></div></div>
+diff --git a/web/wwwroot/rc/main.js b/web/wwwroot/rc/main.js
+index 4d03ac25..f6da5eb7 100644
+--- a/web/wwwroot/rc/main.js
++++ b/web/wwwroot/rc/main.js
+@@ -116,17 +116,19 @@ import {ITEMS} from './physics/items.mjs';
+ import {bodyAt, waterHeight} from './physics/water.mjs';
+ import {vehicleParams, legendCarParams, mountParams, LEGEND_CARS} from './physics/vehicles.mjs';
+ import {createAdaptiveResolution, stepAdaptiveResolution} from './adaptive-resolution.mjs';
+-import {createPlaymates, stepPlaymates} from './physics/playmate.mjs';
++import {createPlaymates, stepPlaymates, dismissPlaymate} from './physics/playmate.mjs';
+ import {drawDetailedMinimap} from './open-world/minimap.js';
+ import {createCup, loadCup, saveCup, recordCupRace, nextCupEvent, cupStandings} from './grand-prix.mjs';
+ import {createRaceMenu, CUP_COURSES} from './race-menu.js';
+ import {createAlienMarshal} from './alien-marshal.js';
+ import {createGamepadInput} from './gamepad.mjs';
+-import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput} from './split-p2.mjs';
++import {splitScreenOn, toggleP2SkateForm, p2RobotPad, rivalHumanInput, screenHeld} from './split-p2.mjs';
+ import {attachDreams} from './open-world/dreams/runner.js';
+ import {createMenuPad} from './gamepad-menu.mjs';
+ import {padSvg, padKind} from './pad-art.mjs';
+ import {createCoach} from './coach.mjs';
++import {raceStartDecision, armTimed, takePending} from './race-guard.mjs';
++import {pullChaseCamera} from './chase-camera.mjs';
+ import {createTag, setTagOn, stepTag, TAG, hudLine, resultHead, resultStats, tagTelemetry} from './tag.mjs';
+ import {createHunt, setHuntOn, stepHunt, collect as collectHunt, hudLine as huntHudLine, resultHead as huntResultHead, resultStats as huntResultStats, huntTelemetry} from './hunt.mjs';
+ import {createTeamRace, teamCard, p2LapChip} from './team-race.mjs';
+@@ -1078,8 +1080,11 @@ function raceReady() {
+   return false;
+ }
+ function visitRace(place, kind = 'race') {
+-  const url = openWorld.eventURL(place, kind);
+-  if (url) location.href = url;
++  const go = () => {
++    const url = openWorld.eventURL(place, kind);
++    if (url) location.href = url;
++  };
++  if (!queueRace(go, 'event')) return;
+ }
+ $('menu-race').onclick = () => {
+   if (!raceReady()) return;
+@@ -1165,8 +1170,10 @@ function paintHunt() {
+   }
+ }
+ $('menu-tag').onclick = () => {
+-  setTagOn(tag, !tag.on);
+-  $('menu-tag').setAttribute('aria-pressed', String(tag.on));
++  const arm = armTimed(tag, !tag.on, menusHold());
++  if (arm === 'off') setTagOn(tag, false);
++  else if (arm === 'on') setTagOn(tag, true);
++  $('menu-tag').setAttribute('aria-pressed', String(tag.on || !!tag.pending));
+   if (tag.on) {
+     team.on = false;
+     if (hunt.on) {
+@@ -1178,8 +1185,10 @@ $('menu-tag').onclick = () => {
+   }
+ };
+ $('menu-hunt').onclick = () => {
+-  setHuntOn(hunt, !hunt.on);
+-  $('menu-hunt').setAttribute('aria-pressed', String(hunt.on));
++  const arm = armTimed(hunt, !hunt.on, menusHold());
++  if (arm === 'off') setHuntOn(hunt, false);
++  else if (arm === 'on') setHuntOn(hunt, true);
++  $('menu-hunt').setAttribute('aria-pressed', String(hunt.on || !!hunt.pending));
+   if (hunt.on) {
+     if (tag.on) {
+       setTagOn(tag, false);
+@@ -1208,13 +1217,14 @@ $('menu-team').onclick = () => {
+   $('result').classList.remove('team-card');
+   pause(false);
+   const before = race;
+-  startRace();
+-  team.on = race !== before && !race.roam && !race.furball;
+-  if (team.on) {
+-    const rv = race.rivals[0];
+-    if (rv) rv.human = () => ({throttle: 0, steer: 0, brake: true, drift: false, fire: false});
+-    if (split) split.placed = true;
+-  }
++  startRace(() => {
++    team.on = race !== before && !race.roam && !race.furball;
++    if (team.on) {
++      const rv = race.rivals[0];
++      if (rv) rv.human = () => ({throttle: 0, steer: 0, brake: true, drift: false, fire: false});
++      if (split) split.placed = true;
++    }
++  });
+   canvas.focus();
+ };
+ $('menu-players').onclick = () => {
+@@ -2410,6 +2420,7 @@ function callout(text, ms = 1600) {
+ let roamArmedAt = 30;
+ function goRoam() {
+   team.on = false;
++  raceArmed = false;
+   if (openWorld && !race.roam) {
+     location.href = rcLink({track: 'hub', at: nearestLocation(s.car.pos).id}, location.search);
+     return;
+@@ -2427,6 +2438,7 @@ function toMenu() {
+ }
+ // Free drive on this track from anywhere (a race, a Furball, a result card).
+ function freeDrive() {
++  raceArmed = false;
+   telemetry.raceQuit('drive');
+   if (openWorld) {
+     location.href = rcLink({track: 'hub', at: nearestLocation(s.car.pos).id}, location.search);
+@@ -2440,19 +2452,21 @@ function freeDrive() {
+   goRoam();
+ }
+ function goFurball() {
+-  team.on = false;
+-  race = createRace(course, {
+-    mode,
+-    opponents: Math.max(3, rivalCount),
+-    features: trackFeatures,
+-    furball: true
+-  });
+-  s = race.player;
+-  paintKillMarks();
+-  reported = false;
+-  Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
+-  startCountdown();
+-  callout('FURBALL!');
++  queueRace(() => {
++    team.on = false;
++    race = createRace(course, {
++      mode,
++      opponents: Math.max(3, rivalCount),
++      features: trackFeatures,
++      furball: true
++    });
++    s = race.player;
++    paintKillMarks();
++    reported = false;
++    Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
++    commitCountdown();
++    callout('FURBALL!');
++  }, 'event');
+ }
+ function furballOver(w) {
+   if (reported) return;
+@@ -2485,6 +2499,7 @@ function furballOver(w) {
+   $('again').onclick = () => {
+     telemetry.choice('again');
+     result.hidden = true;
++    raceArmed = false;
+     goFurball();
+     pause(false);
+   };
+@@ -2594,13 +2609,16 @@ function drawLives(now, dt) {
+     v.n = n;
+   });
+ }
+-function startRace() {
+-  if (!raceReady() || openWorld?.setRacing(true) === false) return;
+-  race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures});
+-  s = race.player;
+-  reported = false;
+-  Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
+-  startCountdown();
++function startRace(after) {
++  queueRace(() => {
++    if (!raceReady() || openWorld?.setRacing(true) === false) return;
++    race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures});
++    s = race.player;
++    reported = false;
++    Object.assign(sfx, {gate: 0, coins: 0, held: false, air: 0, retreat: false, finished: false});
++    commitCountdown();
++    after?.();
++  }, raceLive() && inStartArea() ? 'start-area' : 'event');
+ }
+ function drawRoam() {
+   gates.forEach(g => {
+@@ -2719,10 +2737,75 @@ function drawMap() {
+ let reported = false;
+ // 3-2-1-GO: nobody moves until GO (Re-Volt start).
+ let countdown = -1,
+-  lastBeep = 0;
++  lastBeep = 0,
++  raceArmed = false,
++  leaveAction = null,
++  leaveWasPaused = false,
++  brakeWas = false;
++function raceLive() {
++  return raceArmed && !race.roam && !s.finished;
++}
++function inStartArea() {
++  const p = course.start?.pos;
++  if (!p) return false;
++  const c = robot ? robot.pos : s.car.pos;
++  return Math.hypot(c[0] - p[0], c[2] - p[2]) < 12;
++}
++function menusHold() {
++  const leave = $('leave-race');
++  return screenHeld({
++    paused,
++    panel: ui?.panel?.(),
++    brief: started && !$('brief').hidden,
++    dialog: !!document.querySelector('dialog[open]'),
++    leave: !!leave && !leave.hidden
++  });
++}
++function askLeave(action) {
++  if (!$('leave-race').hidden) return;
++  leaveAction = action;
++  leaveWasPaused = paused;
++  paused = true;
++  document.body.classList.add('paused');
++  $('brief').hidden = true;
++  $('leave-race').hidden = false;
++  $('leave-yes').focus();
++}
++function closeLeave(run) {
++  $('leave-race').hidden = true;
++  const action = leaveAction;
++  leaveAction = null;
++  if (run) action?.();
++  if (!leaveWasPaused) {
++    paused = false;
++    document.body.classList.remove('paused');
++    if (started) $('brief').hidden = true;
++    canvas.focus();
++  }
++}
++function queueRace(run, trigger = 'event') {
++  const decision = raceStartDecision({live: raceLive(), trigger, confirmed: trigger === 'confirmed'});
++  if (decision === 'ignore') return false;
++  if (decision === 'confirm') {
++    askLeave(() => queueRace(run, 'confirmed'));
++    return false;
++  }
++  run();
++  return true;
++}
++$('leave-yes').onclick = () => closeLeave(true);
++$('leave-no').onclick = () => closeLeave(false);
+ function startCountdown() {
++  queueRace(
++    () => commitCountdown(),
++    raceLive() && inStartArea() ? 'start-area' : 'event'
++  );
++}
++function commitCountdown() {
++  telemetry.raceQuit('leave');
+   if (openWorld?.selected.id === 'alley-cat') callout('🎳 Alley Cat race!', 4500);
+   telemetry.raceStart({kind: race.furball ? 'furball' : 'race', track: telemetryTrack, mode});
++  raceArmed = true;
+   countdown = 2.999;
+   lastBeep = 4;
+ }
+@@ -5674,17 +5757,37 @@ function coachFrame(all, p1, p2, now) {
+     ],
+     draw = now - coachDrawn > 66;
+   if (draw) coachDrawn = now;
+-  players.forEach(({pad: gp, input, speed, on}, i) => {
++  players.forEach(({pad: gp, input}, i) => {
+     const el = coachEls[i];
+     if (!gp || !input) return void (el.hidden = true);
+-    const busyNow = gp.buttons.some(b => b.value > 0.5) || gp.axes.some(a => Math.abs(a) > 0.3);
+-    const c = coaches[i]({dt, speed, throttle: input.throttle, lt: gp.buttons[6]?.value ?? 0, rt: gp.buttons[7]?.value ?? 0, active: on, joined: !!input.joined, touched: busyNow});
++    const toy =
++      i === 0
++        ? s.flight.mode
++          ? 'fly'
++          : robot
++            ? 'walk'
++            : form === 'board'
++              ? 'skate'
++              : 'car'
++        : rv0?.session.flight.mode
++          ? 'fly'
++          : split?.p2Form === 'board'
++            ? 'skate'
++            : split?.p2Form === 'robot'
++              ? 'walk'
++              : 'car';
++    const c = coaches[i]({
++      dt,
++      form: toy,
++      countdown: countdown > 0,
++      active: started && !menusHold() && (i === 0 || splitOn)
++    });
+     el.hidden = !c.show;
+     el.classList.toggle('left', splitOn && i === 0);
+     el.classList.toggle('right', i === 1);
+     if (c.show && draw) {
+       const pressed = new Set(gp.buttons.flatMap((b, k) => (b.value > 0.5 ? [k] : [])));
+-      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 440, skip: []});
++      el.innerHTML = padSvg(padKind(gp.id), {pressed, axes: [...gp.axes]}, {glow: c.glow, width: 200, skip: []});
+     }
+   });
+ }
+@@ -5902,6 +6005,7 @@ function huntFrame(dt) {
+   const menu = $('menu-hunt');
+   if (menu.hidden === splitOn) menu.hidden = !splitOn;
+   if (!splitOn) {
++    hunt.pending = false;
+     if (hunt.on) {
+       setHuntOn(hunt, false);
+       menu.setAttribute('aria-pressed', 'false');
+@@ -5910,18 +6014,24 @@ function huntFrame(dt) {
+     huntResult.hidden = true;
+     return;
+   }
++  const held = menusHold();
++  if (takePending(hunt, held)) {
++    setHuntOn(hunt, true);
++    menu.setAttribute('aria-pressed', 'true');
++  }
+   if (!hunt.on) {
+     huntHud.forEach(el => (el.hidden = true));
+     huntResult.hidden = true;
+     return;
+   }
+-  stepHunt(hunt, dt, paused || ui.panel());
++  stepHunt(hunt, dt, held);
+   paintHunt();
+ }
+ function tagFrame(dt) {
+   const menu = $('menu-tag');
+   if (menu.hidden === splitOn) menu.hidden = !splitOn;
+   if (!splitOn) {
++    tag.pending = false;
+     if (tag.on) {
+       setTagOn(tag, false);
+       menu.setAttribute('aria-pressed', 'false');
+@@ -5930,6 +6040,11 @@ function tagFrame(dt) {
+     tagResult.hidden = true;
+     return;
+   }
++  const held = menusHold();
++  if (takePending(tag, held)) {
++    setTagOn(tag, true);
++    menu.setAttribute('aria-pressed', 'true');
++  }
+   if (!tag.on) {
+     tagHud.forEach(h => (h.hidden = true));
+     tagResult.hidden = true;
+@@ -5938,7 +6053,7 @@ function tagFrame(dt) {
+   const a = splitAnchor(),
+     b = splitFollower(),
+     dist = Math.hypot(a[0] - b[0], a[2] - b[2]),
+-    ev = stepTag(tag, dt, dist, paused || ui.panel());
++    ev = stepTag(tag, dt, dist, held);
+   if (ev.tagged) callout('🏷️ Tagged!', 900);
+   const showResult = tag.resultLeft > 0;
+   tagResult.hidden = !showResult;
+@@ -6057,10 +6172,12 @@ const padLog = (() => {
+ // Menus answer the controller too: the open dialog, else the pause/start menu.
+ const menuPad = createMenuPad({
+   root: () =>
++    (!$('leave-race').hidden ? $('leave-race') : null) ??
+     document.querySelector('.overlay:not([hidden])') ??
+     ($('result').hidden || !$('result').querySelector('button') ? null : $('result')) ??
+     ($('brief').hidden ? null : $('brief')),
+   back: () => {
++    if (!$('leave-race').hidden) return closeLeave(false);
+     if (ui.panel()) return ui.close();
+     const card = $('result');
+     if (!card.hidden) return [...card.querySelectorAll('button')].find(b => /drive|close|×|back|ok/i.test(b.textContent))?.click();
+@@ -6195,6 +6312,7 @@ function frame(now) {
+         return rivalHumanInput({
+           paused,
+           uiPanel: !!ui.panel(),
++          held: menusHold(),
+           pad2: pad2 ?? {throttle: 0, steer: 0, brake: false, drift: false, boost: false},
+           gp: p2Gp,
+           mode,
+@@ -6292,7 +6410,7 @@ function frame(now) {
+   tagFrame(dt);
+   huntFrame(dt);
+   teamFrame();
+-  if (!paused && !ui.panel() && countdown > 0) {
++  if (!menusHold() && countdown > 0) {
+     countdown -= dt;
+     const n = Math.ceil(countdown);
+     if (n < lastBeep) {
+@@ -6305,7 +6423,7 @@ function frame(now) {
+     }
+     acc = 0;
+   }
+-  if (!paused && !ui.panel() && countdown <= 0 && (!openWorld || openWorld.stream.ready(s.car.pos))) {
++  if (!menusHold() && countdown <= 0 && (!openWorld || openWorld.stream.ready(s.car.pos))) {
+     const dreamInput = () => {
+       const clamp = v => Math.max(-1, Math.min(1, v)),
+         d = drivingInput(keys, {
+@@ -6626,6 +6744,21 @@ function frame(now) {
+       }
+       if (!s.assist.balance) trickCalled = false;
+       if (race.roam && !race.furball && race.rivals.length) {
++        const brakeDown = !!pad.brake;
++        if (brakeDown && !brakeWas && playmates.active) {
++          const gone = dismissPlaymate(playmates, now / 1000);
++          if (gone?.timeout) {
++            gone.timeout.rival.follow = null;
++            openWorld.navigate(null, s.car.pos);
++            callout(`${gone.timeout.rival.callsign}: maybe next time! 👋`);
++            telemetry.playmate({
++              dest: gone.timeout.dest.id,
++              result: 'ignored',
++              closed: gone.timeout.closed
++            });
++          }
++        }
++        brakeWas = brakeDown;
+         const e = stepPlaymates(playmates, {
+           player: s,
+           rivals: race.rivals,
+@@ -7077,16 +7210,9 @@ function frame(now) {
+     r.z + Math.cos(camYaw) * back * Math.cos(lookPitch)
+   );
+   if (jumpCamera) desired.fromArray(jumpCamera.eye);
+-  const ray = [desired.x - eye[0], desired.y - eye[1], desired.z - eye[2]],
+-    dist = Math.hypot(...ray),
+-    hit = course.world.raycast(
+-      eye,
+-      ray.map(v => v / dist),
+-      dist
+-    );
+-  if (hit) {
+-    const k = Math.max(0.15, hit.dist - 0.12) / dist;
+-    desired.set(eye[0] + ray[0] * k, eye[1] + ray[1] * k, eye[2] + ray[2] * k);
++  {
++    const pulled = pullChaseCamera(eye, [desired.x, desired.y, desired.z], (o, d, m) => course.world.raycast(o, d, m));
++    desired.set(pulled[0], pulled[1], pulled[2]);
+   }
+   camera.fov += ((bossAt ? 70 : 60 + Math.min(5, r.speed * 0.3)) - camera.fov) * Math.min(1, dt * 3);
+   camera.updateProjectionMatrix();
+@@ -7098,18 +7224,13 @@ function frame(now) {
+     setTimeout(() => openWorld?.loadBackground?.(), 0);
+   }
+   // Sweep the smoothed position too: damping must not carry the camera through a wall.
+-  const actualRay = [camera.position.x - eye[0], camera.position.y - eye[1], camera.position.z - eye[2]],
+-    actualDistance = Math.hypot(...actualRay);
+-  if (actualDistance > 0.01) {
+-    const obstruction = course.world.raycast(
++  {
++    const pulled = pullChaseCamera(
+       eye,
+-      actualRay.map(v => v / actualDistance),
+-      actualDistance
++      [camera.position.x, camera.position.y, camera.position.z],
++      (o, d, m) => course.world.raycast(o, d, m)
+     );
+-    if (obstruction) {
+-      const k = Math.max(0.08, obstruction.dist - 0.08) / actualDistance;
+-      camera.position.set(eye[0] + actualRay[0] * k, eye[1] + actualRay[1] * k, eye[2] + actualRay[2] * k);
+-    }
++    camera.position.set(pulled[0], pulled[1], pulled[2]);
+   }
+   const portrait = camera.aspect < 0.8,
+     portraitAim = -0.3 - Math.max(0, 740 - innerHeight) * 0.003;
+@@ -7129,6 +7250,12 @@ function frame(now) {
+       cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
+     desired.set(r.x, r.y, r.z).addScaledVector(fw, -2.3).addScaledVector(cu, 0.55);
+     camera.position.lerp(desired, cameraGlide(openingHeld, dt, 9));
++    {
++      const pulled = pullChaseCamera(eye, [camera.position.x, camera.position.y, camera.position.z], (o, d, m) =>
++        course.world.raycast(o, d, m)
++      );
++      camera.position.set(pulled[0], pulled[1], pulled[2]);
++    }
+     camera.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
+     target.set(r.x, r.y, r.z).addScaledVector(fw, 3);
+   } else camera.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
+@@ -7160,18 +7287,23 @@ function frame(now) {
+     const back = 1.36 + Math.min(0.24, r2.speed * 0.015),
+       eye2 = [r2.x, r2.y + 0.12, r2.z];
+     desired2.set(r2.x - Math.sin(split.heading) * back, r2.y + 0.55, r2.z + Math.cos(split.heading) * back);
+-    const ray2 = [desired2.x - eye2[0], desired2.y - eye2[1], desired2.z - eye2[2]],
+-      dist2 = Math.hypot(...ray2),
+-      hit2 = dist2 > 0.01 && course.world.raycast(eye2, ray2.map(v => v / dist2), dist2);
+-    if (hit2) {
+-      const k = Math.max(0.15, hit2.dist - 0.12) / dist2;
+-      desired2.set(eye2[0] + ray2[0] * k, eye2[1] + ray2[1] * k, eye2[2] + ray2[2] * k);
++    {
++      const pulled = pullChaseCamera(eye2, [desired2.x, desired2.y, desired2.z], (o, d, m) =>
++        course.world.raycast(o, d, m)
++      );
++      desired2.set(pulled[0], pulled[1], pulled[2]);
+     }
+     // Carry the camera with the car first (as player 1's does), then smooth only the swing.
+     if (split.car) camera2.position.add(new T.Vector3(r2.x - split.car[0], r2.y - split.car[1], r2.z - split.car[2]));
+     split.car = [r2.x, r2.y, r2.z];
+     if (camera2.position.distanceTo(desired2) > 30) camera2.position.copy(desired2);
+     else camera2.position.lerp(desired2, 1 - Math.exp(-dt * 7));
++    {
++      const pulled = pullChaseCamera(eye2, [camera2.position.x, camera2.position.y, camera2.position.z], (o, d, m) =>
++        course.world.raycast(o, d, m)
++      );
++      camera2.position.set(pulled[0], pulled[1], pulled[2]);
++    }
+     camera2.fov = 60 + Math.min(5, r2.speed * 0.3);
+     target2.set(r2.x + Math.sin(split.heading) * 1.05, r2.y + 0.18, r2.z - Math.cos(split.heading) * 1.05);
+     if (!walking && rs2.flight.mode === 'fly') {
+@@ -7181,6 +7313,12 @@ function frame(now) {
+         cu = new T.Vector3(0, 1, 0).applyQuaternion(q);
+       desired2.set(r2.x, r2.y, r2.z).addScaledVector(fw, -2.3).addScaledVector(cu, 0.55);
+       camera2.position.lerp(desired2, 1 - Math.exp(-dt * 9));
++      {
++        const pulled = pullChaseCamera(eye2, [camera2.position.x, camera2.position.y, camera2.position.z], (o, d, m) =>
++          course.world.raycast(o, d, m)
++        );
++        camera2.position.set(pulled[0], pulled[1], pulled[2]);
++      }
+       camera2.up.lerp(cu, 1 - Math.exp(-dt * 6)).normalize();
+       target2.set(r2.x, r2.y, r2.z).addScaledVector(fw, 3);
+     } else camera2.up.lerp(new T.Vector3(0, 1, 0), 1 - Math.exp(-dt * 6)).normalize();
+@@ -7329,6 +7467,7 @@ function frame(now) {
+     pause(true);
+     $('again').onclick = () => {
+       telemetry.choice('again');
++      raceArmed = false;
+       s = (race = createRace(course, {mode, opponents: rivalCount, features: trackFeatures})).player;
+       if (team.on && race.rivals[0])
+         race.rivals[0].human = () => ({throttle: 0, steer: 0, brake: true, drift: false, fire: false});
+diff --git a/web/wwwroot/rc/physics/playmate.mjs b/web/wwwroot/rc/physics/playmate.mjs
+index 1a42ae42..33f0a962 100644
+--- a/web/wwwroot/rc/physics/playmate.mjs
++++ b/web/wwwroot/rc/physics/playmate.mjs
+@@ -14,6 +14,9 @@ export const PLAYMATE = Object.freeze({
+   // Telemetry 2026-10-30: two of three invites were ignored and hung about for minutes. A rival
+   // whose challenge isn't taken up (the player gets no closer for this long) gives up early.
+   ignored: 45,
++  // B, or an ignored challenge, stays quiet. Telemetry 6 Nov 2026: four prompts,
++  // three ignored, and the next one was already on the way.
++  quiet: 300,
+   top: {kid: 10.5, bigKid: 12.5},
+   ease: 40,
+   easeTo: 0.72,
+@@ -116,7 +119,8 @@ export function stepPlaymates(state, {player, rivals, mode = 'kid', world, time,
+     const ignored = a.idle > PLAYMATE.ignored;
+     if (playerIn || rivalIn || a.time > PLAYMATE.timeout || ignored) {
+       state.active = null;
+-      state.next = lerp(PLAYMATE.gap, state.rng());
++      state.next = ignored ? PLAYMATE.quiet : lerp(PLAYMATE.gap, state.rng());
++      if (ignored) state.quietUntil = time + PLAYMATE.quiet;
+       if (!playerIn && !rivalIn)
+         return {
+           timeout: {
+@@ -133,6 +137,14 @@ export function stepPlaymates(state, {player, rivals, mode = 'kid', world, time,
+     return null;
+   }
+   if (!ready || !rivals.length) return null;
++  if (Number.isFinite(state.quietUntil) && time < state.quietUntil) {
++    state.next = state.quietUntil - time;
++    return null;
++  }
++  if (Number.isFinite(state.quietUntil)) {
++    state.quietUntil = null;
++    state.next = Math.min(0, state.next);
++  }
+   state.next -= dt;
+   if (state.next > 0) return null;
+   const dest = pickDestination(world.places, pos, state.rng),
+@@ -153,3 +165,14 @@ export function stepPlaymates(state, {player, rivals, mode = 'kid', world, time,
+   state.races++;
+   return {start: {rival, dest, spawn}};
+ }
++
++/** B on the prompt: same as an ignored challenge, then five quiet minutes. */
++export function dismissPlaymate(state, time) {
++  const a = state.active;
++  if (!a) return null;
++  state.active = null;
++  state.next = PLAYMATE.quiet;
++  state.quietUntil = time + PLAYMATE.quiet;
++  const closed = Math.max(0, Math.round((a.startLeft ?? 0) - (a.bestLeft ?? a.startLeft ?? 0)));
++  return {timeout: {dest: a.dest, rival: a.rival, ignored: true, closed}};
++}
+diff --git a/web/wwwroot/rc/physics/playmate.test.mjs b/web/wwwroot/rc/physics/playmate.test.mjs
+index 4a53af0d..ba708c81 100644
+--- a/web/wwwroot/rc/physics/playmate.test.mjs
++++ b/web/wwwroot/rc/physics/playmate.test.mjs
+@@ -2,7 +2,7 @@ import test from 'node:test';
+ import assert from 'node:assert/strict';
+ import {createWorld} from './world.mjs';
+ import {createRace, stepRace} from './race.mjs';
+-import {createPlaymates, stepPlaymates, PLAYMATE} from './playmate.mjs';
++import {createPlaymates, stepPlaymates, dismissPlaymate, PLAYMATE} from './playmate.mjs';
+ import {placeCar} from './car.mjs';
+ 
+ const seeded =
+@@ -102,3 +102,53 @@ test('the playmate drives the route and wins if the player dawdles; a quick play
+     assert.equal(finish.dest, place);
+   }
+ });
++
++test('B dismisses a prompt and it stays quiet for five minutes', () => {
++  const {race, world} = setting(),
++    pm = createPlaymates(seeded());
++  pm.next = 0;
++  placeCar(race.player.car, [0, 0.2, -20], 0);
++  pm.trail = [
++    {p: [0, 0.2, 0], t: 0},
++    {p: [0, 0.2, -20], t: 1}
++  ];
++  let start = null;
++  for (let i = 0; i < 30 && !start; i++) {
++    stepRace(race, {throttle: 1, steer: 0}, 1 / 120);
++    const e = stepPlaymates(pm, {
++      player: race.player,
++      rivals: race.rivals,
++      world,
++      time: i / 120,
++      dt: 1 / 120,
++      ready: true
++    });
++    if (e?.start) start = e.start;
++  }
++  assert.ok(start, 'prompt is up');
++  const gone = dismissPlaymate(pm, 10);
++  assert.equal(gone.timeout.ignored, true);
++  assert.equal(pm.active, null);
++  let again = null;
++  for (let s = 0; s < PLAYMATE.quiet - 1; s++) {
++    const e = stepPlaymates(pm, {
++      player: race.player,
++      rivals: race.rivals,
++      world,
++      time: 10 + s,
++      dt: 1,
++      ready: true
++    });
++    if (e?.start) again = e.start;
++  }
++  assert.equal(again, null, 'no re-prompt inside five minutes');
++  const later = stepPlaymates(pm, {
++    player: race.player,
++    rivals: race.rivals,
++    world,
++    time: 10 + PLAYMATE.quiet + 1,
++    dt: 1,
++    ready: true
++  });
++  assert.ok(later?.start, 'a prompt may return after five minutes');
++});
+diff --git a/web/wwwroot/rc/race-guard.mjs b/web/wwwroot/rc/race-guard.mjs
+new file mode 100644
+index 00000000..07fc100f
+--- /dev/null
++++ b/web/wwwroot/rc/race-guard.mjs
+@@ -0,0 +1,46 @@
++// A live race must not be replaced by driving back through the start.
++// Starting a different event asks first. Pure so the TV sequence can be tested
++// without the page: five starts in one session was raceStart quitting the
++// previous one with reason "replaced".
++
++/** @returns {'start'|'ignore'|'confirm'|'replace'} */
++export function raceStartDecision({live = false, trigger = 'event', confirmed = false} = {}) {
++  if (!live) return 'start';
++  if (trigger === 'start-area') return 'ignore';
++  if (confirmed || trigger === 'confirmed') return 'replace';
++  return 'confirm';
++}
++
++/**
++ * True on the frame the car comes back into the start disc after having left it.
++ * The opening grid (already inside, never left) is not a re-entry.
++ */
++export function startAreaReentry(state, inside) {
++  const was = !!state.inside;
++  if (!inside) state.left = true;
++  state.inside = !!inside;
++  return !!(state.left && inside && !was);
++}
++
++/** Arm a timed mode. An open menu defers the clock; it does not start underneath. */
++export function armTimed(state, on, held) {
++  if (!on) {
++    state.pending = false;
++    return 'off';
++  }
++  if (held) {
++    state.pending = true;
++    return 'deferred';
++  }
++  state.pending = false;
++  return 'on';
++}
++
++/** Start a deferred mode on the first frame the menu is gone. */
++export function takePending(state, held) {
++  if (state.pending && !held) {
++    state.pending = false;
++    return true;
++  }
++  return false;
++}
+diff --git a/web/wwwroot/rc/race-guard.test.mjs b/web/wwwroot/rc/race-guard.test.mjs
+new file mode 100644
+index 00000000..79f9d1f4
+--- /dev/null
++++ b/web/wwwroot/rc/race-guard.test.mjs
+@@ -0,0 +1,37 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {raceStartDecision, startAreaReentry, armTimed, takePending} from './race-guard.mjs';
++
++test('a running race ignores the start area and asks before a different event', () => {
++  assert.equal(raceStartDecision({live: false, trigger: 'event'}), 'start');
++  assert.equal(raceStartDecision({live: false, trigger: 'start-area'}), 'start');
++  assert.equal(raceStartDecision({live: true, trigger: 'start-area'}), 'ignore');
++  assert.equal(raceStartDecision({live: true, trigger: 'event'}), 'confirm');
++  assert.equal(raceStartDecision({live: true, trigger: 'event', confirmed: true}), 'replace');
++  assert.equal(raceStartDecision({live: true, trigger: 'confirmed'}), 'replace');
++});
++
++test('five start-area crossings in one race never replace it', () => {
++  const watch = {inside: false, left: false};
++  const starts = [];
++  // Grid: already inside, then leave, then come back five times (r1..r5 on the TV).
++  assert.equal(startAreaReentry(watch, true), false);
++  for (let n = 0; n < 5; n++) {
++    assert.equal(startAreaReentry(watch, false), false);
++    assert.equal(startAreaReentry(watch, true), true);
++    const decision = raceStartDecision({live: true, trigger: 'start-area'});
++    if (decision === 'start' || decision === 'replace') starts.push(n);
++  }
++  assert.deepEqual(starts, []);
++});
++
++test('hunt or tag armed under an open menu does not start until the menu closes', () => {
++  const mode = {pending: false};
++  assert.equal(armTimed(mode, true, true), 'deferred');
++  assert.equal(mode.pending, true);
++  assert.equal(takePending(mode, true), false, 'menu still open: clock stays off');
++  assert.equal(takePending(mode, false), true, 'menu closed: start now');
++  assert.equal(mode.pending, false);
++  assert.equal(armTimed(mode, false, false), 'off');
++  assert.equal(armTimed(mode, true, false), 'on');
++});
+diff --git a/web/wwwroot/rc/split-p2.mjs b/web/wwwroot/rc/split-p2.mjs
+index 3637f23a..054be1d3 100644
+--- a/web/wwwroot/rc/split-p2.mjs
++++ b/web/wwwroot/rc/split-p2.mjs
+@@ -49,8 +49,20 @@ export function flightGamepadInput(gp, poll, mode) {
+   };
+ }
+ 
+-export function rivalHumanInput({paused, uiPanel, pad2, gp, mode, session, fire, tagBoost, p2Form}) {
+-  if (paused || uiPanel) return {throttle: 0, steer: 0, brake: true};
++/** Pause, the brief, the map, or the leave-race row holds both players. */
++export function screenHeld({paused = false, panel = false, brief = false, dialog = false, leave = false} = {}) {
++  return !!(paused || panel || brief || dialog || leave);
++}
++
++/** Full-viewport centre for a panel. Split screen must not park it in player 1's half. */
++export function overlayAnchor(viewportWidth, panelWidth) {
++  const width = Math.min(panelWidth, Math.max(0, viewportWidth - 48));
++  const left = (viewportWidth - width) / 2;
++  return {left, width, center: left + width / 2};
++}
++
++export function rivalHumanInput({paused, uiPanel, held = false, pad2, gp, mode, session, fire, tagBoost, p2Form}) {
++  if (paused || uiPanel || held) return {throttle: 0, steer: 0, brake: true};
+   // The walker is its own body. Hold the hidden car so the stick does not drive it.
+   if (p2Form === 'robot')
+     return {throttle: 0, steer: 0, brake: true, drift: false, fire: false, boost: tagBoost, boardSpin: false};
+diff --git a/web/wwwroot/rc/split-p2.test.mjs b/web/wwwroot/rc/split-p2.test.mjs
+index 3ad7267f..de562b0d 100644
+--- a/web/wwwroot/rc/split-p2.test.mjs
++++ b/web/wwwroot/rc/split-p2.test.mjs
+@@ -1,6 +1,7 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+-import {splitScreenOn, toggleP2SkateForm, p2RobotPad, flightGamepadInput, rivalHumanInput} from './split-p2.mjs';
++import {readFileSync} from 'node:fs';
++import {splitScreenOn, toggleP2SkateForm, p2RobotPad, flightGamepadInput, rivalHumanInput, screenHeld, overlayAnchor} from './split-p2.mjs';
+ 
+ test('split stays on while either player is a robot', () => {
+   const base = {split: {pad: 1}, rival: {}, started: true, p1Robot: false, p2Robot: false};
+@@ -100,3 +101,38 @@ test('rivalHumanInput holds the car while player 2 is the robot', () => {
+   assert.equal(out.boardSpin, false);
+   assert.equal(out.flight, undefined);
+ });
++
++test('a pause, brief, map or leave row stops player 2 as well as player 1', () => {
++  const driving = {
++    paused: false,
++    uiPanel: false,
++    pad2: {throttle: 1, steer: 0.2, brake: false, drift: false},
++    gp: null,
++    mode: 'kid',
++    session: {flight: {mode: null}},
++    fire: false,
++    tagBoost: 1,
++    p2Form: 'car'
++  };
++  assert.equal(rivalHumanInput(driving).throttle, 1);
++  for (const flag of ['paused', 'uiPanel', 'held']) {
++    const out = rivalHumanInput({...driving, [flag]: true});
++    assert.equal(out.throttle, 0, flag);
++    assert.equal(out.brake, true, flag);
++  }
++  assert.equal(screenHeld({brief: true}), true);
++  assert.equal(screenHeld({panel: 'map'}), true);
++  assert.equal(screenHeld({dialog: true}), true);
++  assert.equal(screenHeld({leave: true}), true);
++  assert.equal(screenHeld({}), false);
++});
++
++test('split pause and map sit on the full screen centre', () => {
++  const box = overlayAnchor(1920, 640);
++  assert.equal(box.center, 960);
++  assert.ok(box.left > 500, 'not pinned to the left half');
++  const css = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
++  assert.match(css, /body\.split :is\(#brief,#result,\.overlay,#tag-result,#hunt-result,dialog\.rc-race-menu\)\{[^}]*position:fixed/);
++  assert.match(css, /body\.split :is\(#brief,#result,\.overlay,#tag-result,#hunt-result,dialog\.rc-race-menu\)\{[^}]*left:50%/);
++  assert.match(css, /body\.split :is\(#brief,#result,\.overlay,#tag-result,#hunt-result,dialog\.rc-race-menu\)\{[^}]*translate\(-50%,-50%\)/);
++});
+diff --git a/web/wwwroot/rc/style.css b/web/wwwroot/rc/style.css
+index f3abc21d..28afe1c2 100644
+--- a/web/wwwroot/rc/style.css
++++ b/web/wwwroot/rc/style.css
+@@ -274,3 +274,13 @@ button.dex-row {
+ #instruments #dream-coins{left:22px;bottom:28px;top:auto;padding:10px 16px;border-left:3px solid var(--gold);font:600 28px ui-monospace,monospace;font-variant-numeric:tabular-nums;color:var(--gold)}
+ @media(max-width:540px){#instruments #dream-coins{left:10px;bottom:148px;font-size:22px;padding:8px 12px}}
+ @media(prefers-color-scheme:light){#instruments #dream-coins{background:#142a30;color:#f3efdc}}
++/* Split: pause, brief, map and results sit on the whole TV, not in player 1's half. */
++body.split :is(#brief,#result,.overlay,#tag-result,#hunt-result,dialog.rc-race-menu){position:fixed;left:50%;top:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);width:min(720px,calc(100vw - 48px));max-width:calc(100vw - 48px);z-index:30}
++body.split.paused::before,body.split.modal-open::before{content:"";position:fixed;inset:0;background:#07141ad6;z-index:8;pointer-events:none}
++body.split #leave-race,#leave-race{display:flex;align-items:center;gap:16px;width:max-content;max-width:calc(100vw - 48px);padding:14px 18px}
++#leave-race p{margin:0;font:700 22px system-ui;white-space:nowrap}
++#leave-race .leave-actions{display:flex;gap:8px}
++#leave-race button{min-height:44px;min-width:108px;font-weight:700}
++#leave-race #leave-yes{background:var(--gold);border-color:var(--gold);color:#1b2a2e}
++.coach{max-width:220px}
++@media(prefers-color-scheme:light){#leave-race{background:#142a30;color:#f3efdc}}
+diff --git a/web/wwwroot/rc/tag.test.mjs b/web/wwwroot/rc/tag.test.mjs
+index a970cda5..7603fe7b 100644
+--- a/web/wwwroot/rc/tag.test.mjs
++++ b/web/wwwroot/rc/tag.test.mjs
+@@ -38,3 +38,13 @@ test('hud line', () => {
+ });
+ 
+ test('fmtTag', () => assert.equal(fmtTag(65.2), '1:06'));
++
++test('the round clock does not move while a menu is open', () => {
++  const t = createTag();
++  setTagOn(t, true, () => 0);
++  stepTag(t, 3, 99, true);
++  assert.equal(t.roundLeft, TAG.round);
++  assert.equal(t.p1It, 0);
++  stepTag(t, 3, 99, false);
++  assert.ok(t.roundLeft < TAG.round);
++});
