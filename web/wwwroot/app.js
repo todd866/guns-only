@@ -174,6 +174,7 @@ import {
   gamepadLookDelta,
   standardGamepadState,
 } from "./render/input/dual_stick_input.js";
+import {installToyFight} from "./render/split/toy_fight_view.js";
 import { mobileControlProfile } from "./render/input/mobile_control_profile.js";
 import {
   syncPlayerGunTargetSelection,
@@ -13083,3 +13084,14 @@ try {
   }
 } catch { /* Storage may be unavailable; keep the cover. */ }
 boot().catch(showFatal);
+
+installToyFight({
+  setPaused(on) {
+    try { setPauseReason("toy-fight", on); }
+    catch (error) { console.warn("toy fight pause", error); }
+  },
+  telemetry(fields) {
+    recorder.context("split", fields);
+    recorder.event("lifecycle", "toy_fight", fields);
+  },
+});

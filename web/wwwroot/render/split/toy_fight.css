@@ -1,0 +1,174 @@
+/* Toy-fight instruments. Dark matches the shell. Light is the other scheme. */
+:root {
+  --toy-ink: #f4f7f2;
+  --toy-datum: #c9d4c4;
+  --toy-panel: #1c241c;
+  --toy-line: #3d5240;
+  --toy-accent: #8ee08a;
+  --toy-gauge: #2a3328;
+  --toy-sky: #1a221c;
+  --toy-call: #f6f3c8;
+}
+html[data-theme="light"] {
+  --toy-ink: #1c2418;
+  --toy-datum: #3e5344;
+  --toy-panel: #f3f6ef;
+  --toy-line: #b7c6b4;
+  --toy-accent: #1f7a32;
+  --toy-gauge: #d5e0d2;
+  --toy-sky: #d7ecff;
+  --toy-call: #1c2418;
+}
+@media (prefers-color-scheme: light) {
+  html:not([data-theme="dark"]) .toy-fight {
+    --toy-ink: #1c2418;
+    --toy-datum: #3e5344;
+    --toy-panel: #f3f6ef;
+    --toy-line: #b7c6b4;
+    --toy-accent: #1f7a32;
+    --toy-gauge: #d5e0d2;
+    --toy-sky: #d7ecff;
+    --toy-call: #1c2418;
+  }
+}
+
+.toy-open {
+  flex: none;
+  width: 148px;
+  min-height: 44px;
+  grid-template-columns: 1.4em 1fr 2.6em;
+  font-size: 18px;
+}
+.toy-open .gauge { display: none; }
+
+.toy-fight {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  color: var(--toy-ink);
+  background: var(--toy-sky);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.toy-fight[hidden],
+.toy-menu[hidden],
+.toy-panel[hidden],
+.toy-half[hidden],
+.toy-rows[hidden],
+.toy-call[hidden] { display: none; }
+.toy-fight canvas {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.toy-ui {
+  grid-area: 1 / 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  pointer-events: none;
+  position: relative;
+}
+.toy-fight.solo .toy-ui { grid-template-columns: 1fr; }
+.toy-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%);
+  background: var(--toy-ink);
+  opacity: 0.85;
+}
+.toy-fight.solo .toy-divider { display: none; }
+.toy-half {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 18px 18px 22px;
+  min-width: 0;
+}
+.toy-call {
+  align-self: center;
+  margin-bottom: auto;
+  margin-top: 18vh;
+  font: 800 72px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--toy-call);
+  text-shadow: 0 2px 0 var(--toy-panel);
+}
+.toy-rows, .toy-menu, .toy-panel {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.toy-menu, .toy-panel {
+  pointer-events: auto;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  place-self: center;
+  width: min(560px, calc(100vw - 32px));
+  z-index: 2;
+}
+.toy-half .toy-rows { pointer-events: none; width: min(100%, 520px); }
+.toy-row {
+  display: grid;
+  grid-template-columns: 1.6em minmax(7em, 1.4fr) 5.2em 5.6em;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 12px;
+  border: 2px solid var(--toy-line);
+  background: var(--toy-panel);
+  color: var(--toy-ink);
+  font: 700 22px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-align: left;
+  cursor: pointer;
+}
+.toy-half .toy-row { cursor: default; }
+.toy-row .val { text-align: right; font-variant-numeric: tabular-nums; }
+.toy-row .datum { font-size: 18px; color: var(--toy-datum); }
+.toy-row .gauge { min-height: 16px; letter-spacing: 1px; }
+.toy-row .gauge.bar {
+  height: 16px;
+  background: var(--toy-gauge);
+  position: relative;
+}
+.toy-row .gauge.bar::before {
+  content: "";
+  display: block;
+  height: 100%;
+  width: calc(var(--fill, 0) * 100%);
+  background: var(--toy-accent);
+}
+.toy-row.pad-focus, .toy-row:focus-visible {
+  outline: none;
+  border-color: var(--toy-accent);
+}
+.toy-join {
+  position: absolute;
+  right: max(14px, env(safe-area-inset-right));
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: min(300px, 46vw);
+  padding: 14px 16px;
+  background: var(--toy-panel);
+  border: 2px solid var(--toy-accent);
+  color: var(--toy-ink);
+  pointer-events: none;
+}
+.toy-join[hidden] { display: none; }
+.toy-join .join-cta {
+  margin: 0;
+  font: 800 26px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.toy-coach { line-height: 0; align-self: flex-start; }
+.toy-coach[hidden] { display: none; }

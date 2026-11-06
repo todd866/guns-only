@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Toy fight preview</title>
+  <link rel="stylesheet" href="../../toy_fight.css">
+  <style>html, body { margin: 0; height: 100%; background: #111; }</style>
+</head>
+<body>
+<script type="module">
+import {mountToyFight} from "../../toy_fight_view.js";
+import {applyMenu} from "../../toy_session.mjs";
+
+const params = new URLSearchParams(location.search);
+const theme = params.get("theme") === "light" ? "light" : "dark";
+document.documentElement.dataset.theme = theme;
+
+function pad(index, id, axes) {
+  const buttons = Array.from({length: 16}, () => ({pressed: false, value: 0}));
+  return {connected: true, mapping: "standard", index, id, axes, buttons};
+}
+
+const pads = [
+  pad(0, "8BitDo Ultimate 2", [0.35, -0.15, 0, 0]),
+  pad(1, "8BitDo SN30 Pro", [-0.2, 0.4, 0, 0]),
+];
+
+const ui = mountToyFight({
+  theme,
+  pads: () => pads,
+  setPaused() {},
+  telemetry() {},
+});
+ui.open();
+if (params.get("scene") === "fight") {
+  ui.session.mode = params.get("mode") === "coop" ? "coop" : "dogfight";
+  ui.session.craft = params.get("craft") === "chopper" ? "chopper" : "jet";
+  ui.session.split = true;
+  ui.session.p1Pad = 0;
+  ui.session.p2Pad = 1;
+  applyMenu(ui.session, "fly");
+  const p1 = ui.session.crafts.find((craft) => craft.seat === "p1");
+  const p2 = ui.session.crafts.find((craft) => craft.seat === "p2");
+  if (p1) Object.assign(p1, {x: -4, y: 7, z: 2, heading: 0.4});
+  if (p2) Object.assign(p2, {x: 5, y: 8, z: -4, heading: 2.4});
+}
+window.__toyFight = ui;
+window.__toyReady = true;
+</script>
+</body>
+</html>
