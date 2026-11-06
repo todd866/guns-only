@@ -3,6 +3,7 @@ import {WATER_BODIES, basinTriangles} from '../physics/water.mjs';
 import {MINE_BOUNDS, mineWorldTris} from './mine.mjs';
 import {sewerWorldTris} from './sewer.mjs';
 import {labWorldTris} from './lab-accident.mjs';
+import {annexWorldTris} from './annex.mjs';
 import {subtractBox} from './district-entrances.mjs';
 import {groundTriangles, terrainStep} from './elevation.mjs';
 import {inMountain, mountainSurface, damTris, townTris} from './spirit-mountain.mjs';
@@ -93,6 +94,8 @@ export function createStream({
   for (const t of sewerWorldTris()) authored.addTri(t.a, t.b, t.c, t.surface, t.gate);
   // Det 3's test chamber under the Cold Lab (lab-accident.mjs). Underground, so the snow above stays.
   for (const t of labWorldTris()) authored.addTri(t.a, t.b, t.c, t.surface, t.gate);
+  // Zones 1–2 of the descent, in the same local frame (annex.mjs). The north door stays shut until the ride ends.
+  for (const t of annexWorldTris()) authored.addTri(t.a, t.b, t.c, t.surface, t.gate);
   // Spirit Mountain's dam: a solid wall with a drivable crest.
   for (const [a, b, c] of damTris()) authored.addTri(a, b, c, 'concrete', 'era-dam'); // a gate: in the past the dam isn't built (dark-world.mjs)
   for (const [a, b, c] of townTris()) authored.addTri(a, b, c, 'concrete'); // the drowned town under the reservoir
