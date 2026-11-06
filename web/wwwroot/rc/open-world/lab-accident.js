@@ -125,8 +125,7 @@ export function createLabView(scene, root = document.body) {
     labWorld([0, 0.06, 0]),
     new T.Quaternion().setFromAxisAngle(new T.Vector3(1, 0, 0), Math.PI / 2)
   );
-  // Sealed exits: red slabs. North is the way on (stage 2). South is the tram door.
-  box(5.4, LAB.height - 0.2, 0.35, labWorld([0, LAB.height / 2, -(LAB.radius - 0.3)]), null, COL.door);
+  // South stays the tram door. North is a separate slab so the descent can open it.
   box(5.4, LAB.height - 0.2, 0.35, labWorld([0, LAB.height / 2, LAB.radius - 0.4]), null, COL.door);
   // Beam machine: posts, ring, base.
   box(0.35, 3.4, 0.35, labWorld([-1.5, 1.7, 0]), null, COL.steel);
@@ -165,6 +164,13 @@ export function createLabView(scene, root = document.body) {
   );
   shell.name = 'Det3Shell';
   group.add(shell);
+  const northDoor = new T.Mesh(
+    new T.BoxGeometry(5.4, LAB.height - 0.2, 0.35),
+    new T.MeshStandardMaterial({color: COL.door, roughness: 0.55})
+  );
+  northDoor.name = 'Det3NorthDoor';
+  northDoor.position.set(...labWorld([0, LAB.height / 2, -(LAB.radius - 0.3)]));
+  group.add(northDoor);
 
   const glassMat = new T.MeshStandardMaterial({
     color: COL.glass,
@@ -430,6 +436,7 @@ export function createLabView(scene, root = document.body) {
       }
       const blink = 0.25 + 0.75 * Math.abs(Math.sin(wave * 4));
       for (const s of signs) s.material.emissiveIntensity = s.userData.blink ? blink : 0.45;
+      northDoor.visible = state.phase !== 'free';
       const on = state.phase !== 'idle' && state.phase !== 'free';
       el.hidden = !on;
       el.classList.toggle('on', on);

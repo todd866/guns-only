@@ -135,7 +135,7 @@ body.driving:not(.race-mode) header nav #atlas,body.driving:not(.race-mode) head
    (always visible, no expander); Effects and Engine on one row; one credits line. */
 #brief .modes{grid-template-columns:repeat(3,minmax(0,1fr))}
 #brief .modes #resume,#brief .modes #start{grid-column:1/-1;text-align:center}
-#brief .modes button:not(#resume):not(#start){text-align:center;font-size:15px;padding:10px 6px;white-space:nowrap}
+#brief .modes button:not(#resume):not(#start):not(#wake){text-align:center;font-size:15px;padding:10px 6px;white-space:nowrap}
 #brief .pause-settings{margin-top:12px}
 #brief .pause-settings .settings{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 #brief .pause-settings .settings button{min-height:40px;padding:6px 4px;font-size:13px;white-space:nowrap}
