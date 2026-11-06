@@ -240,7 +240,7 @@ place('waterpark','Sunrise Splash Waterpark','leisure',-545,3388,'Existing autho
  'Specimen at the splash-pad edge; coins in the river bend and on slide approaches.',
  'The route works dry and wet; water slowing agrees with visible water. A missed jump reaches a driveable bank.')
 
-place('lab','Area 51½ · Dreamland','secret',2500,-1200,'Existing authored anchor','Unlock/finale scaffold; lab adventure to build',
+place('lab','Dreamland','secret',2500,-1200,'Existing authored anchor','Unlock/finale scaffold; lab adventure to build',
  'The destination hinted at across the base: a cheerful secret lab, friendly aliens and a saucer. Finding specimens opens the gate, then the finale uses everything learned.',
  'Eastern service road ends at a visible inner fence. Locked gate has a specimen display and a safe turnaround. Unlocked doors remain physically open.',
  ['Janet apron','Bunker door','Observation lab','Containment floor','Tram platform','Saucer chamber','Night courtyard','Road exit'],

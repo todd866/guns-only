@@ -9,7 +9,7 @@ Written for the next implementing agent (Opus 5.5) to action. Author: Claude Fab
 The product is now two games with two pipelines, two renderers, two release paths and two frame
 bars, sharing one vendored copy of three.js r160 and almost nothing else:
 
-| | Flight (Guns Only, F-22) | RC (Saucer Springs / Area 51½) |
+| | Flight (Guns Only, F-22) | RC (Saucer Springs / RC Odyssey) |
 | --- | --- | --- |
 | Branch that ships | `main` (CI `verify.yml`, `bin/check`, `bin/deploy-web`) | `feature/rc-next`, **162 commits ahead of `main`, never merged** (`bin/deploy-rc`, no CI) |
 | Live build | Build 402 (`55285d61`) per `docs/STATUS.md` on rc-next; `docs/STATUS.md` on `main` still says 394 | RC build `8d3dedd5` is the branch head; last known live RC from rc-next was `005796e1` (30 Oct) |

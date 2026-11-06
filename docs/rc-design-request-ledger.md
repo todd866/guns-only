@@ -4,6 +4,14 @@ This ledger is the traceable scope for the RC game. It separates owner direction
 inherited design proposals and from the current implementation scaffold. A passing test or
 render is evidence that a scaffold works; it is not approval that the finished design is right.
 
+## Owner direction — 6 November 2026: Dreamland at Bride Lake
+
+The game is **RC Odyssey**; "Area 51½" is retired as a name everywhere. The secret area is
+**Dreamland**, and like the real Area 51 (Groom Lake, about 130 km from Nellis) it is **not on the
+base**: it sits at **Bride Lake**, a dry lakebed out in the desert beyond Saucer Springs AFB — a nod
+to Groom Lake. Reach it by a long desert road off the base, or as a "Janet" flight from the base
+flightline. Keep everything on the base itself free of Dreamland signage except the Janet gate.
+
 ## Current opening direction — 24 October 2026
 
 Start in the residential neighbourhood's small skatepark. The school, homes and connecting
@@ -53,7 +61,7 @@ redesign has not been deployed or visually accepted.
 | Dirtbike track | Whoops, berms, tabletops, mud | Whoops activity specified; physical venue placement remains to verify. |
 | Boneyard | Covered retired B-52/F-4/C-130 rows, wing kicker shortcuts | Wing Walker specified; full route and safe fallback need review. |
 | Waterpark | Lazy river, splash pads, driveable slides, slowing/spraying water | Splash Down specified; physical world integration and water handling need review. |
-| Area 51½ secret zone | Inner fence, bunker, lab, friendly aliens in tubes, saucer under tarp, Janet/Dreamland signs | Specimen unlock/Dreamland finale scaffold exists. Validate that the road, fence, entrance and exit are physically part of the AFB. |
+| Dreamland secret zone | Inner fence, bunker, lab, friendly aliens in tubes, saucer under tarp, Janet/Dreamland signs | Specimen unlock/Dreamland finale scaffold exists. **Superseded 6 Nov 2026:** Dreamland is not on the AFB; it sits at Bride Lake out in the desert (see below). |
 
 ## Activities, progression and modes
 

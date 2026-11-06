@@ -1,4 +1,4 @@
-# Area 51½ — build plan (2026-10-21)
+# RC Odyssey — build plan (2026-10-21)
 
 Current product/level specification: [Saucer Springs master design](design/saucer-springs/master-design.md). The separate-scene and 30-second hub proposals below are historical and superseded by the connected large-world/portal design.
 
@@ -47,7 +47,7 @@ The car engine is a plain ES module under `web/wwwroot/rc/physics/`. The fixed s
   step in JS.
 - The flight shell already hosts the RC page in an iframe with clean pause ownership.
 
-**Replacement:** Area 51½ takes the Weekend Ride (YZF-R1) slot on the sortie selector. The bike
+**Replacement:** RC Odyssey takes the Weekend Ride (YZF-R1) slot on the sortie selector. The bike
 leaves the menu; its C# stays in the tree, frozen like the other modes. The prototype's
 `stepCar` is deleted once the new car drives the existing base route.
 
@@ -100,7 +100,7 @@ contract.
 2. **School:** gym (slippery floor), locker hallway, cafeteria, playground slide.
 3. **Flight Line:** reuses the hangar/aircraft kit at the new car scale.
 4. **HQ Offices**, then **Commissary**.
-5. **Area 51½ secret lab**, unlocked by specimens.
+5. **Dreamland secret lab**, unlocked by specimens.
 
 Each district is its own level, picked from a cartoon base map (Re-Volt's track select).
 
@@ -161,7 +161,7 @@ Free roam between districts waits until the districts themselves are fun.
   with gates.
 - **M3 Race: done 2026-10-21.** AI rivals with corner braking, kid rubber-banding and bumping;
   pickups (Afterburner, Water Balloon, Hydraulic Leak, Chaff); the retreat event.
-- **M4 Shell:** Area 51½ replaces Weekend Ride on the selector; base-map track select.
+- **M4 Shell:** RC Odyssey replaces Weekend Ride on the selector; base-map track select.
 - **M5 School: built 2026-10-21.** LITTLE NELLIE ELEMENTARY (`?track=school`,
   `tools/rc/blender/districts/school.py`): lobby, locker hallway, science pocket (ALIEN BIOLOGY 101
   specimen), library shortcut, gym (gymfloor, parachute), cafeteria table tunnel, rubber-mulch
@@ -171,11 +171,11 @@ Free roam between districts waits until the districts themselves are fun.
 
 ## Next direction: free roam, Forza Horizon style (owner, 2026-10-21)
 
-Forza Horizon 5 is the target player's favourite game, so Area 51½ becomes a small open world:
+Forza Horizon 5 is the target player's favourite game, so RC Odyssey becomes a small open world:
 
 - **Hub (`hub.glb`):** all of Little Nellie AFB, compressed like FH5's Mexico (about 30 s across at toy
   speed). Base roads link the housing streets, the BX car park and doors, the school, the flight line
-  apron and the Area 51½ fence. Free driving, no laps.
+  apron and the Dreamland fence. Free driving, no laps.
 - **Events:** glowing rings, as `EVENT_<id>` empties. Street races run on hub roads; their gates are
   `RACE_<id>_GATE_NN`, with their own `RACE_<id>_AI_NNN` line. Door events load an interior track
   (`?track=bx|school|housing`), and finishing returns you to the hub at that door (`?track=hub&from=bx`).

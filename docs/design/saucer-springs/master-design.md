@@ -85,11 +85,11 @@ Reference course names identify the intended driving experience. The working Sau
 | Star | Wario Stadium | **Whoops Stadium** — Desert Dirtbike Track | A longer stadium-style dirt loop built from berms, jumps and a memorable large leap. |
 | Star | Sherbet Land | **Ice Patrol** — Recreation Ice Rink | The recreation ice rink provides long low-grip turns, islands and penguin-shaped maintenance bots. |
 | Star | Royal Raceway | **Clubhouse Grand Prix** — Sunrise Vista Golf Course | A grand sweeping road course with a large jump and a landmark clubhouse you can explore during free drive. |
-| Star | Bowser’s Castle | **Containment Circuit** — Area 51½ · Dreamland | The secret lab supplies imposing architecture and timed mechanical obstacles, with friendly aliens watching through glass. |
+| Star | Bowser’s Castle | **Containment Circuit** — Dreamland | The secret lab supplies imposing architecture and timed mechanical obstacles, with friendly aliens watching through glass. |
 | Special | D.K.’s Jungle Parkway | **Canopy Run** — Tropical Survival Garden | A tropical survival conservatory provides the lush creek, dock, bridge jump and winding canopy route. |
 | Special | Yoshi Valley | **Boneyard Maze** — Desert Boneyard | Many narrow choices through retired aircraft converge before the finish. Route discovery is the skill. |
 | Special | Banshee Boardwalk | **After Hours Boardwalk** — Sunrise Splash Waterpark | The wavepool’s after-hours service boardwalk gives the narrow night route, creaking timber and surprise silhouettes. |
-| Special | Rainbow Road | **Night Wave Portal** — Area 51½ · Dreamland | The finale is Rainbow Road through an alien portal: a luminous floating track in strange space, entered by driving through the Dreamland portal and exited through the same visible connection back to the base. |
+| Special | Rainbow Road | **Night Wave Portal** — Dreamland | The finale is Rainbow Road through an alien portal: a luminous floating track in strange space, entered by driving through the Dreamland portal and exited through the same visible connection back to the base. |
 
 
 ### Luigi Raceway → Gate Guard Raceway
@@ -1009,7 +1009,7 @@ The base wavepool is Koopa Troopa Beach: a broad sand loop, moving water across 
 **Done when:** Wave timing and wet-sand grip agree visually. Both shortcuts work without bypassing gates; misses return to the beach. Drive from golf into the park, race, then drive out without reloading.
 
 
-## 22. Area 51½ · Dreamland
+## 22. Dreamland
 
 **Site:** (2500, -1200) · Existing authored anchor. **Current state:** Unlock/finale scaffold; lab adventure to build.
 

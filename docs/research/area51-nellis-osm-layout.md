@@ -1,4 +1,4 @@
-# Nellis AFB from OpenStreetMap: layout for the Area 51½ open world
+# Nellis AFB from OpenStreetMap: layout for the RC Odyssey open world
 
 Fetched 2026-10-21 from Overpass (OSM base timestamp 2026-10-21T12:42Z). METERED_LINK absent. One 8.3 MB query after a 502 "at capacity" retry; the public endpoint needs a real User-Agent (plain curl gets 406).
 Files in `~/.local/state/area51-nellis/`: `osm-raw.json` (13,868 elements, geometry inline), `nellis.geojson` (3,173 features, lon/lat, with `origin` and `projection` members). `q.ql` is the query. The build script is throwaway.
