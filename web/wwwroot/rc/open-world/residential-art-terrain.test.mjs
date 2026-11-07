@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import * as T from '../../vendor/three.module.js';
 import {createWorld} from '../physics/world.mjs';
 import {buildResidentialArt} from './residential-art.js';
+import {createResidentialTerrain} from './residential-terrain.mjs';
+import {RESIDENTIAL_BOUNDS} from './residential-frame.mjs';
 
 test('residential art follows graded terrain without adding a flat grass collider', () => {
   const scene = new T.Scene(),
@@ -50,8 +53,9 @@ test('residential art follows graded terrain without adding a flat grass collide
     },
     {terrain}
   );
-  const grass = art.root.children.find(mesh => mesh.name === 'Residential_grass');
-  const ys = [...grass.geometry.attributes.position.array].filter((_, i) => i % 3 === 1);
+  const grass = art.root.children.filter(mesh => mesh.name.startsWith('Residential_grass'));
+  assert.ok(grass.length, 'graded lawn is drawn');
+  const ys = grass.flatMap(mesh => [...mesh.geometry.attributes.position.array].filter((_, i) => i % 3 === 1));
   assert.ok(Math.min(...ys) < -0.9 && Math.max(...ys) > 0.9, 'grass vertices retain the grade');
   assert.ok(
     Math.abs(world.raycast([-4, 1, -4], [0, -1, 0], 4)?.point[1] + 0.475) < 1e-9,
@@ -144,7 +148,49 @@ test('the rendered neighbourhood installs an open junction on graded terrain', (
     assert.equal(hit?.surface, 'asphalt');
     assert.ok(Math.abs(hit.point[1] - terrain.heightAt(0, z) - 0.025) < 1e-6);
   }
-  assert.ok(art.root.children.some(m => m.name === 'Residential_asphalt'));
+  assert.ok(art.root.children.some(m => m.name.startsWith('Residential_asphalt')));
   art.dispose();
   assert.equal(scene.children.length, 0);
+});
+
+test('a long kerb is split into blocks a skatepark view can drop', () => {
+  const grid = JSON.parse(readFileSync(new URL('../assets/world/residential-terrain.json', import.meta.url)));
+  const terrain = createResidentialTerrain(grid, {bounds: RESIDENTIAL_BOUNDS});
+  const scene = new T.Scene();
+  const art = buildResidentialArt(
+    scene,
+    createWorld(8),
+    {
+      roads: [
+        {
+          kind: 'residential',
+          points: [
+            [-3400, -900],
+            [-2500, -900]
+          ]
+        }
+      ],
+      buildings: []
+    },
+    {terrain}
+  );
+  const sidewalks = art.root.children.filter(m => m.name.startsWith('Residential_sidewalk'));
+  assert.ok(sidewalks.length > 1, `kerb blocks ${sidewalks.length}`);
+  for (const mesh of sidewalks) {
+    const radius = mesh.geometry.boundingSphere.radius;
+    assert.ok(radius < 400, `${mesh.name} radius ${radius}`);
+  }
+  const eye = [-3023, 0, -776];
+  art.update(80, eye);
+  const shown = sidewalks.filter(m => m.visible);
+  assert.ok(shown.length < sidewalks.length, 'fog hides kerb blocks the car cannot see');
+  let near = 0;
+  for (const mesh of sidewalks) {
+    if (mesh.userData.detail === 'far') continue;
+    const s = mesh.geometry.boundingSphere;
+    if (Math.hypot(s.center.x - eye[0], s.center.z - eye[2]) - s.radius < 720)
+      near += mesh.geometry.attributes.position.count / 3;
+  }
+  assert.ok(near < 80000, `sidewalk triangles inside the fog ${near}`);
+  art.dispose();
 });

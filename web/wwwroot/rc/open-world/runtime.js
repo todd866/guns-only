@@ -679,14 +679,15 @@ export async function loadOpenWorld(search) {
     route: () => (deliveries?.state.active && !deliveries.state.paused ? deliveries.state.route : route),
     target: () =>
       deliveries?.state.active && !deliveries.state.paused ? deliveries.state.destination : target,
-    loadBackground() {
-      districts.loadRest().catch(error => console.warn('RC district unavailable:', error));
+    loadBackground(warm) {
+      districts.loadRest(warm).catch(error => console.warn('RC district unavailable:', error));
     },
     async attach(scene) {
       await heroesReady;
       terrain = createTerrain(scene, terrainData, BOUNDS);
       await districts.attach(scene);
       residential.attach(scene);
+      residential.update?.(680, at.pos);
       residentialPark.attach(scene);
       schoolyard.attach(scene);
       residentialYards.attach(scene);
@@ -716,6 +717,7 @@ export async function loadOpenWorld(search) {
       residentialSchool = buildResidentialSchool(scene, residentialData, {terrain: residentialTerrain});
       highSchool = buildHighSchool(scene, stream.world, residentialData, {terrain: residentialTerrain});
       await residentialDetails.attach(scene); // Authored venues as data (docs/rc-placements.md): the kit and a placement file, batched per prop. A missing or bad file never blocks the world.
+      residentialDetails.update?.(680, at.pos);
       try {
         const kit = await preparePlacementKit('kit/props.glb');
         const data = await loadPlacements(
@@ -920,6 +922,10 @@ export async function loadOpenWorld(search) {
       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
       bowlingVisual?.update(golf, racing ? selected.id : null);
       bowlingAlley?.update(golf?.kind === 'bowling' ? golf : null, playerPos);
+      const eye = camera ? [camera.position.x, camera.position.y, camera.position.z] : pos,
+        fogFar = farmScene?.fog?.far ?? 680;
+      residential.update?.(fogFar, eye);
+      residentialDetails.update?.(fogFar, eye);
       const key = pos.map((v, i) => (i === 1 ? 0 : Math.floor(v / 64))).join(',');
       if (key !== lastTile || stream.errors.size) {
         lastTile = key;

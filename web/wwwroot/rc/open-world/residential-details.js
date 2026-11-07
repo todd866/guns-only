@@ -133,9 +133,6 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
       scene.add(root);
       return root;
     }
-    const trunkMesh = new T.InstancedMesh(geometry.trunk, trunkMaterial, trees.length);
-    trunkMesh.name = 'ResidentialTreeTrunks';
-    trunkMesh.castShadow = trunkMesh.receiveShadow = true;
     const matrix = new T.Matrix4(),
       color = new T.Color();
     const transforms = trees.map((tree, i) => {
@@ -151,17 +148,38 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
         scale: new T.Vector3(width, height / crownHeight, depth)
       };
     });
+    // 256 m blocks. One instanced draw for every tree in the neighbourhood has a bounds the
+    // camera sits inside, so all 581 trunks and crowns shade and shadow even past the fog.
+    // 64 m blocks cut those triangles and then spent the saving on hundreds of extra draws.
+    const TREE_BLOCK = 256;
+    const blocks = new Map();
     trees.forEach((tree, i) => {
-      const transform = transforms[i];
-      matrix.compose(transform.position, transform.rotation, transform.scale);
-      trunkMesh.setMatrixAt(i, matrix);
+      const key = `${Math.floor(tree.point[0] / TREE_BLOCK)}:${Math.floor(tree.point[2] / TREE_BLOCK)}`;
+      if (!blocks.has(key)) blocks.set(key, []);
+      blocks.get(key).push(i);
     });
-    // One branched geometry/material keeps the canopy readable at toy scale;
-    // colour variation is per-instance where supported by the renderer.
-    trunkMesh.instanceMatrix.needsUpdate = true;
-    if (trunkMesh.instanceColor) trunkMesh.instanceColor.needsUpdate = true;
-    root.add(trunkMesh);
-    meshes.push(trunkMesh);
+    const addInstances = (geo, material, name, indices, shadow, tint) => {
+      const mesh = new T.InstancedMesh(geo, material, indices.length);
+      mesh.name = name;
+      mesh.castShadow = mesh.receiveShadow = shadow;
+      indices.forEach((i, slot) => {
+        const transform = transforms[i];
+        matrix.compose(transform.position, transform.rotation, transform.scale);
+        mesh.setMatrixAt(slot, matrix);
+        if (tint) {
+          color.set(canopyColors[Math.floor(i / 3) % canopyColors.length]);
+          mesh.setColorAt(slot, color);
+        }
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.computeBoundingSphere();
+      root.add(mesh);
+      meshes.push(mesh);
+      return mesh;
+    };
+    for (const indices of blocks.values())
+      addInstances(geometry.trunk, trunkMaterial, 'ResidentialTreeTrunks', indices, true, false);
     // Three crown meshes share one atlas/material. Each tree occupies exactly
     // one instance; absent variants never submit degenerate zero-scale geometry.
     const leaf = await new T.TextureLoader().loadAsync(
@@ -180,26 +198,25 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
       alphaTest: 0.45,
       side: T.DoubleSide
     });
-    geometry.canopies.forEach((canopy, variant) => {
-      const indices = trees.map((_, i) => i).filter(i => i % geometry.canopies.length === variant);
-      const crownMesh = new T.InstancedMesh(canopy, crownMaterial, indices.length);
-      crownMesh.name = `ResidentialTreeCanopy${variant + 1}`;
-      crownMesh.castShadow = crownMesh.receiveShadow = true;
-      indices.forEach((i, slot) => {
-        const transform = transforms[i];
-        matrix.compose(transform.position, transform.rotation, transform.scale);
-        crownMesh.setMatrixAt(slot, matrix);
-        color.set(canopyColors[Math.floor(i / 3) % canopyColors.length]);
-        crownMesh.setColorAt?.(slot, color);
+    for (const indices of blocks.values())
+      geometry.canopies.forEach((canopy, variant) => {
+        const chosen = indices.filter(i => i % geometry.canopies.length === variant);
+        if (chosen.length)
+          addInstances(canopy, crownMaterial, `ResidentialTreeCanopy${variant + 1}`, chosen, true, true);
       });
-      crownMesh.instanceMatrix.needsUpdate = true;
-      if (crownMesh.instanceColor) crownMesh.instanceColor.needsUpdate = true;
-      crownMesh.computeBoundingSphere();
-      root.add(crownMesh);
-      meshes.push(crownMesh);
-    });
     scene.add(root);
     return root;
+  };
+  const update = (fogFar, eye) => {
+    if (!root) return;
+    const limit = (Number(fogFar) > 0 ? Number(fogFar) : 680) + 48,
+      ex = eye?.[0] ?? 0,
+      ez = eye?.[2] ?? 0;
+    for (const mesh of root.children) {
+      const s = mesh.boundingSphere;
+      if (!s) continue;
+      mesh.visible = Math.hypot(s.center.x - ex, s.center.z - ez) - s.radius < limit;
+    }
   };
   const dispose = () => {
     disposed = true;
@@ -213,5 +230,5 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
     crownMaterial?.dispose();
     root = null;
   };
-  return {attach, dispose};
+  return {attach, update, dispose};
 }

@@ -7448,7 +7448,30 @@ function frame(now) {
   // then start them from a timer so the parse is not inside this frame.
   if (restQueued && !openingHeld && performance.now() - openingReleasedAt > 2500 && camera.position.distanceTo(desired) < 0.5) {
     restQueued = false;
-    setTimeout(() => openWorld?.loadBackground?.(), 0);
+    setTimeout(() => {
+      openWorld?.loadBackground?.(async root => {
+        const meshes = [];
+        root.traverse(object => {
+          if (object.isMesh) meshes.push(object);
+        });
+        const shown = meshes.map(mesh => mesh.visible),
+          byMaterial = new Map();
+        for (const mesh of meshes) {
+          mesh.visible = false;
+          if (!byMaterial.has(mesh.material)) byMaterial.set(mesh.material, []);
+          byMaterial.get(mesh.material).push(mesh);
+        }
+        // One new shader program per frame. Compiling a whole district at once stalled driving.
+        for (const group of byMaterial.values()) {
+          for (const mesh of group) mesh.visible = true;
+          await warmPresentation(renderer, root, camera);
+          await new Promise(resolve => requestAnimationFrame(() => resolve()));
+        }
+        meshes.forEach((mesh, index) => {
+          mesh.visible = shown[index];
+        });
+      });
+    }, 0);
   }
   const portrait = camera.aspect < 0.8,
     portraitAim = -0.3 - Math.max(0, 740 - innerHeight) * 0.003;
