@@ -3,7 +3,7 @@
 import {dot, cross, scale, sub, add, rotate, unrotate} from './math.mjs';
 import {carUp, carForward} from './car.mjs';
 import {createDrift, stepDrift, DRIFT} from './drift.mjs';
-import {stepQuarterReturn} from './quarter-return.mjs';
+import {stepQuarterReturn, stepReentry} from './quarter-return.mjs';
 import {SURFACES} from './world.mjs';
 
 // Wheelie and stoppie balance: nose angle held (radians), the spring rate, and wheelie power.
@@ -41,6 +41,13 @@ export function assistInput(a, car, raw, dt, world) {
     a.drift = createDrift();
     a.drift.held = !!raw.drift;
     a.quarter = {};
+  }
+  if (stepReentry((a.quarter ??= {}), car, world, dt)) {
+    out.throttle = 0;
+    out.brake = false;
+    out.steer = 0;
+    out.torque = [0, 0, 0];
+    return out;
   }
   const speed = Math.abs(car.forwardSpeed);
   out.steerLimit = p.maxSteer / (1 + m.steerFalloff * speed);

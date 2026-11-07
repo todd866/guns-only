@@ -168,7 +168,8 @@ import {
 import {TRACK_FEATURES, placeFeatures} from './physics/features.mjs';
 import {modifiers, MISSILES, beamDir, LASER} from './physics/pickups.mjs';
 import {heldMissilePose} from './pickup-visuals.mjs';
-import {BUGGY, carYaw, createCar, placeCar, rideHeight} from './physics/car.mjs';
+import {BUGGY, carUp, carYaw, createCar, placeCar, rideHeight} from './physics/car.mjs';
+import {vertCamera} from './physics/vert-camera.mjs';
 import {addBox} from './physics/world.mjs';
 import {courseFromGlb} from './physics/district.mjs';
 import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
@@ -7268,14 +7269,28 @@ function frame(now) {
   cameraCar = [r.x, r.y, r.z];
   // A vert air points the nose at the sky, so its heading means nothing: hold the heading the car
   // launched on, rise with it and look at it through the turn, then ease back once it lands.
+  // Riding the wall does the same: the nose is up the ramp, so the camera stays on the approach
+  // and lifts until the coping is readable.
   const vertArc = s.assist.quarter?.arc?.vert ? s.assist.quarter.arc : null,
+    upNow = carUp(s.car),
+    onWall = s.car.wheels.some(
+      w =>
+        w.contact &&
+        w.contactNormal &&
+        w.contactNormal[1] < 0.75 &&
+        (w.surface === 'bowl' || w.surface === 'quarter' || w.surface === 'vert' || w.surface === 'hip')
+    ),
+    ridingVert = onWall && upNow[1] < 0.72,
+    view = vertCamera({upY: upNow[1], onWall, vert: !!vertArc}),
     bossAt = robot && adventure?.bossFrame(robot.pos),
     wantYaw = vertArc
       ? vertArc.yaw + Math.PI
-      : bossAt
-        ? Math.atan2(bossAt[0] - r.x, -(bossAt[2] - r.z))
-        : r.yaw;
-  if (camHeading === null || (!vertArc && !camEasing)) camHeading = wantYaw;
+      : ridingVert
+        ? (camHeading ?? r.yaw)
+        : bossAt
+          ? Math.atan2(bossAt[0] - r.x, -(bossAt[2] - r.z))
+          : r.yaw;
+  if (camHeading === null || (!vertArc && !ridingVert && !camEasing)) camHeading = wantYaw;
   else {
     const d = Math.atan2(Math.sin(wantYaw - camHeading), Math.cos(wantYaw - camHeading));
     camHeading += d * Math.min(1, dt * (vertArc ? 10 : 4));
@@ -7318,6 +7333,7 @@ function frame(now) {
     r.z + Math.cos(camYaw) * back * Math.cos(lookPitch)
   );
   if (jumpCamera) desired.fromArray(jumpCamera.eye);
+  else desired.y += view.rise;
   const ray = [desired.x - eye[0], desired.y - eye[1], desired.z - eye[2]],
     dist = Math.hypot(...ray),
     hit = course.world.raycast(
@@ -7355,11 +7371,11 @@ function frame(now) {
   const portrait = camera.aspect < 0.8,
     portraitAim = -0.3 - Math.max(0, 740 - innerHeight) * 0.003;
   if (jumpCamera) target.fromArray(jumpCamera.look);
-  else if (vertArc) target.set(r.x, r.y + 0.1, r.z);
+  else if (vertArc) target.set(r.x, r.y + 0.1 + view.rise * 0.35, r.z);
   else
     target.set(
       r.x + Math.sin(camYaw) * 1.05,
-      r.y + (portrait ? portraitAim : mount > 1 ? 0.35 * mount : 0.18),
+      r.y + (portrait ? portraitAim : mount > 1 ? 0.35 * mount : 0.18) + Math.sin(view.pitch) * 1.15,
       r.z - Math.cos(camYaw) * 1.05
     );
   // Flying, the camera sits behind the heading and stays upright. It does not roll with
@@ -7421,9 +7437,22 @@ function frame(now) {
       hp = split.lookPitch || 0,
       back = (1.36 + Math.min(0.24, r2.speed * 0.015)) * (walking && pad2?.aim ? 0.62 : 1),
       eye2 = [r2.x, r2.y + 0.12, r2.z];
+    const p2Up = carUp(rs2.car),
+      p2Wall = rs2.car.wheels.some(
+        w =>
+          w.contact &&
+          w.contactNormal &&
+          w.contactNormal[1] < 0.75 &&
+          (w.surface === 'bowl' || w.surface === 'quarter' || w.surface === 'vert' || w.surface === 'hip')
+      ),
+      p2View = vertCamera({
+        upY: p2Up[1],
+        onWall: p2Wall,
+        vert: !!rs2.assist.quarter?.arc?.vert
+      });
     desired2.set(
       r2.x - Math.sin(hy) * back * Math.cos(hp),
-      r2.y + 0.55 + Math.sin(hp) * back,
+      r2.y + 0.55 + Math.sin(hp) * back + (walking ? 0 : p2View.rise),
       r2.z + Math.cos(hy) * back * Math.cos(hp)
     );
     const ray2 = [desired2.x - eye2[0], desired2.y - eye2[1], desired2.z - eye2[2]],
@@ -7439,7 +7468,11 @@ function frame(now) {
     if (camera2.position.distanceTo(desired2) > 30) camera2.position.copy(desired2);
     else camera2.position.lerp(desired2, 1 - Math.exp(-dt * 7));
     camera2.fov = 60 + Math.min(5, r2.speed * 0.3);
-    target2.set(r2.x + Math.sin(hy) * 1.05, r2.y + 0.18, r2.z - Math.cos(hy) * 1.05);
+    target2.set(
+      r2.x + Math.sin(hy) * 1.05,
+      r2.y + 0.18 + (walking ? 0 : Math.sin(p2View.pitch) * 1.15),
+      r2.z - Math.cos(hy) * 1.05
+    );
     if (!walking && rs2.flight.mode) {
       const chase2 = levelFlightCam([r2.x, r2.y, r2.z], rs2.car.q, split.lookYaw || 0, split.lookPitch || 0);
       desired2.fromArray(chase2.eye);

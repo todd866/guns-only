@@ -1,6 +1,6 @@
 // Place a native metre district course in the open world.  This module deliberately
 // knows nothing about the location catalog: callers provide the resolved placement.
-import {createWorld} from '../physics/world.mjs';
+import {createWorld, sealTransitionNormals} from '../physics/world.mjs';
 
 const finite = (v, label) => {
   if (!Number.isFinite(v)) throw new TypeError(`${label} must be finite`);
@@ -30,6 +30,7 @@ export function placeDistrictCourse(course, placement) {
   const vector = ([x, y, z]) => [c * x + s * z, y, -s * x + c * z];
   const world = createWorld();
   for (const t of course.world.tris) world.addTri(point(t.a), point(t.b), point(t.c), t.surface);
+  sealTransitionNormals(world);
   const marker = m => ({...m, pos: point(m.pos), forward: vector(m.forward)});
   const gates = (course.gates ?? []).map(marker);
   // courseFromGlb exposes grid entries as {pos, yaw}; they are not full markers.

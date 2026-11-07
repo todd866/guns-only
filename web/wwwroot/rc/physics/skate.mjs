@@ -450,6 +450,11 @@ export function stepSkate(sk, session, input, dt, frame) {
       }
     }
   }
+  if (session.assist?.quarter?.bailed) {
+    session.assist.quarter.bailed = false;
+    sk.air = null;
+    bail(sk);
+  }
   if (session.recoveries !== (sk.recoveries ??= session.recoveries)) {
     sk.recoveries = session.recoveries;
     sk.air = null;

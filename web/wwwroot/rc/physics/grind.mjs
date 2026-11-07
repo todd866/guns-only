@@ -164,7 +164,10 @@ export function grindName({x = 0, y = 0} = {}) {
 function capture(s, raw) {
   const state = s.skateRide,
     c = s.car;
-  if (state.cooldown > 0 || raw.brake || c.speed < 0.7 || carUp(c)[1] < 0.65) return;
+  const lipNearby = state.rails.some(r => r.kind === 'coping' || r.kind === 'edge');
+  if (state.cooldown > 0 || raw.brake || c.speed < 0.7) return;
+  // A vert wall tips the deck off world-up. Coping still snaps; a flat rail does not.
+  if (carUp(c)[1] < 0.65 && !lipNearby) return;
   // Free skate's curbs line every road: there you ollie onto a grind, as THPS2's grind button.
   if (state.park.airCapture && c.contacts > 0) return;
   const forward = horizontal(carForward(c)),
@@ -180,19 +183,20 @@ function capture(s, raw) {
       if (t < 0 || t > 1) continue;
       const point = add(seg.a, scale(d, t)),
         distance = Math.hypot(c.pos[0] - point[0], c.pos[2] - point[2]);
+      const coping = r.kind === 'coping' || r.kind === 'edge';
+      if (!coping && carUp(c)[1] < 0.65) continue;
       const clearance = c.pos[1] - grindHeight(c) - point[1];
-      if (distance > 0.4 || Math.abs(clearance) > 0.3 || (c.contacts > 0 && clearance < -0.12)) continue;
+      const reach = coping ? 0.85 : 0.4;
+      if (distance > reach || Math.abs(clearance) > (coping ? 0.42 : 0.3) || (c.contacts > 0 && clearance < -0.12))
+        continue;
       // Freestanding tubes catch a landing from above, never a car passing underneath downhill.
       if (r.kind === 'rail' && clearance < -0.04) continue;
       const tangent = horizontal(seg.dir),
         alignment = Math.abs(dot(forward, tangent)),
         moving = dot(travel, tangent);
       const sideways = alignment < Math.cos(Math.PI / 4) && c.contacts === 0 && raw.drift;
-      if (
-        Math.abs(moving) < Math.cos((40 * Math.PI) / 180) ||
-        (alignment < Math.cos((40 * Math.PI) / 180) && !sideways)
-      )
-        continue;
+      const alignLim = Math.cos(((coping ? 65 : 40) * Math.PI) / 180);
+      if (Math.abs(moving) < alignLim || (alignment < alignLim && !sideways)) continue;
       const speed = Math.abs(dot(c.vel, seg.dir)),
         direction = moving < 0 ? -1 : 1;
       // Crossing a lip upwards belongs to the air/transfer, not the rail.
