@@ -3,7 +3,7 @@ import {RESIDENTIAL_PARK} from './residential-frame.mjs';
 import * as T from '../../vendor/three.module.js';
 import {GLTFLoader} from '../../vendor/three/addons/loaders/GLTFLoader.js';
 import {courseFromGlb} from '../physics/district.mjs';
-import {createWorld} from '../physics/world.mjs';
+import {createWorld, sealTransitionNormals} from '../physics/world.mjs';
 import {placeDistrictCourse} from './district-placement.mjs';
 import {clipDistrictTriangle} from './district-entrances.mjs';
 import {DISTRICT_ZONES, districtOffset} from './district-zones.mjs';
@@ -42,6 +42,7 @@ export async function prepareDistricts(world, {eager = [...Object.keys(DISTRICT_
       const apron = districtApron(id);
       world.addQuad(...apron.vertices, apron.surface);
     } else for (const q of perimeterSkirts(course.world)) world.addQuad(...q, 'concrete'); // never under the slab (park-skirt.mjs)
+    sealTransitionNormals(world);
     course.world = world;
     const entry = {id, zone, clip, placement, buffer, course};
     entries.push(entry);

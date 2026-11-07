@@ -3,6 +3,7 @@
 import {createCar, stepCar, placeCar, rideHeight, carYaw, BUGGY, RECOVERY_ROLL_MPS} from './car.mjs';
 import {createAssist, assistInput, MODES} from './assists.mjs';
 import {stepSkateRide} from './grind.mjs';
+import {stepWallRide} from './car-tricks.mjs';
 import {createFlight, stepFlight} from './flight.mjs';
 import {stepWater} from './water.mjs';
 import {stepUnstick} from './unstick.mjs';
@@ -65,9 +66,10 @@ export function stepSession(s, raw, dt = 1 / 120) {
   s.prevPos = before;
   // Free-drive flight takes the car off its wheels; the normal step resumes on touchdown.
   if (!s.roam && s.flight.mode) s.flight.mode = null;
+  s.carForm = !!raw.carForm;
   if (stepFlight(s.flight, s.car, raw.flight, s.course.world, dt)) {
     /* flying or under the chute */
-  } else if (!stepSkateRide(s, raw, dt)) {
+  } else if (!stepSkateRide(s, raw, dt) && !stepWallRide(s, raw, dt)) {
     // Wedged: extra drive, a righting torque and a hop. R still teleports; this does not.
     const nudge = stepUnstick(s, raw, dt);
     const assisted = assistInput(

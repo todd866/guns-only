@@ -237,13 +237,14 @@ function nameAir(a) {
     name = `${turns} ${grab ?? 'Spin'}`;
     points += {180: 150, 360: 400, 540: 750}[turns] ?? 1000;
   }
-  // A flip or grab from the board already names this air; a bare "Air" beside it is noise.
-  if (!(a.board && !grab && name === (assisted ? 'Backside Air' : 'Air'))) tricks.push([name, points]);
+  // A flip or grab already named this air. A bare "Air", and a second name from the same
+  // rotation, would say the trick twice.
+  if (!(a.board && !grab)) tricks.push([name, points]);
   if (a.special && !assisted && spin >= 900) tricks.push(['The 900', 9000]);
   else if (a.special && !assisted && spin >= 540) tricks.push(['Orbital 540', 3500]);
   else if (a.special && a.grab >= 0.75 && a.time >= 1 && a.rise >= 1) tricks.push(['Christ Air', 3000]);
-  if (Math.abs(a.roll) >= 5.2) tricks.push(['Barrel Roll', 750]);
-  if (Math.abs(a.pitch) >= 5.2) tricks.push([a.pitch > 0 ? 'Backflip' : 'Frontflip', 800]);
+  if (!a.board && Math.abs(a.roll) >= 5.2) tricks.push(['Barrel Roll', 750]);
+  if (!a.board && Math.abs(a.pitch) >= 5.2) tricks.push([a.pitch > 0 ? 'Backflip' : 'Frontflip', 800]);
   return tricks;
 }
 
@@ -345,6 +346,11 @@ export function stepSkate(sk, session, input, dt, frame) {
   }
 
   sk.balance = null;
+  if (session.wallPlant) {
+    addTrick(sk, session.wallPlant.name, session.wallPlant.points);
+    session.wallPlant = null;
+  }
+  const wall = session.wallRide;
   if (grind) {
     if (sk.air) {
       landAir(sk, sk.air, at, up);
@@ -362,6 +368,24 @@ export function stepSkate(sk, session, input, dt, frame) {
       grind.special = true;
     }
     sk.balance = {...grind.balance, kind: 'grind'};
+    sk.manual = 0;
+    sk.manualTrick = false;
+    sk.lastGround = at;
+    sk.ground = 0;
+    sk.landed = {time: 0, linked: true};
+  } else if (wall) {
+    if (sk.air) {
+      landAir(sk, sk.air, at, up);
+      sk.air = null;
+    }
+    if (sk.wallId !== wall.id) {
+      sk.wallId = wall.id;
+      sk.wallRate = addTrick(sk, wall.name, wall.points ?? 200);
+    }
+    const points = 140 * dt * sk.wallRate;
+    sk.combo.base += points;
+    chargeSpecial(sk, points * sk.combo.tricks.length);
+    sk.balance = {...wall.balance, kind: 'wall'};
     sk.manual = 0;
     sk.manualTrick = false;
     sk.lastGround = at;
@@ -392,25 +416,39 @@ export function stepSkate(sk, session, input, dt, frame) {
       a.grab += dt;
     }
     sk.ground = 0;
-    sk.manual = 0;
-    sk.manualTrick = false;
+    if (!(session.carForm && (input.wheelie || input.stoppie))) {
+      sk.manual = 0;
+      sk.manualTrick = false;
+    }
     if (sk.landed) sk.landed.time += dt;
-  } else if (sk.air) {
+  } else if (sk.air && !(session.carForm && car.contacts > 0 && (input.wheelie || input.stoppie))) {
     sk.ground += dt;
-    if (car.contacts >= 2 && sk.ground >= 0.05) {
+    if ((car.contacts >= 2 && sk.ground >= 0.05) || (session.carForm && car.contacts >= 2 && up[1] > 0.85)) {
       const a = sk.air;
       sk.air = null;
       landAir(sk, a, at, up);
     }
   } else {
+    // A wheelie or stoppie is the landing. Score the air, then keep the combo on one axle.
+    if (sk.air) {
+      const a = sk.air;
+      sk.air = null;
+      landAir(sk, a, at, up);
+    }
     sk.lastGround = at;
     const front = car.wheels[0].contact || car.wheels[1].contact,
       rear = car.wheels[2].contact || car.wheels[3].contact;
     const flat = car.wheels.some(w => w.contact && w.contactNormal?.[1] > 0.95);
     const manual = session.skateRide?.manual;
+    const noseUp = up[1] < 0.97 && up[1] > 0.45;
+    const rearManual =
+      (rear && !front && flat && car.speed > 1) || (!!session.carForm && !!input.wheelie && noseUp && car.speed > 1);
+    const frontManual =
+      (!!session.carForm && front && !rear && flat && car.speed > 1) ||
+      (!!session.carForm && !!input.stoppie && up[1] < 0.97 && car.speed > 1);
     if (
       manual ||
-      (!session.skateRide?.manualBlocked && !sk.manualLost && rear && !front && flat && car.speed > 1)
+      (!session.skateRide?.manualBlocked && !sk.manualLost && (rearManual || frontManual))
     ) {
       if (!sk.manual) sk.manualBalance = createBalance();
       sk.manual += dt;
@@ -423,14 +461,18 @@ export function stepSkate(sk, session, input, dt, frame) {
       }
       if (balanced && sk.manual >= SKATE.manualMin) {
         if (!sk.manualTrick) {
-          sk.manualRate = addTrick(sk, 'Manual', 60 + 120 * SKATE.manualMin);
+          const trickName = !session.carForm ? 'Manual' : front && !rear ? 'Stoppie' : 'Wheelie';
+          sk.manualRate = addTrick(sk, trickName, 60 + 120 * SKATE.manualMin);
           sk.manualTrick = true;
         }
         const points = 120 * dt * sk.manualRate;
         sk.combo.base += points;
         chargeSpecial(sk, points * sk.combo.tricks.length);
         sk.landed = {time: 0, linked: true};
-        sk.balance = {...b, kind: 'manual'};
+        sk.balance = {
+          ...b,
+          kind: !session.carForm ? 'manual' : front && !rear ? 'stoppie' : 'wheelie'
+        };
       }
     } else {
       sk.manual = 0;
@@ -438,7 +480,8 @@ export function stepSkate(sk, session, input, dt, frame) {
       if (front || !rear) sk.manualLost = false;
     }
     const l = sk.landed;
-    if (sk.combo && sk.manual < SKATE.manualMin) {
+    // Holding a wheelie or stoppie is the link. The timer waits until the nose is up.
+    if (sk.combo && sk.manual < SKATE.manualMin && !(input.wheelie || input.stoppie)) {
       if (l) l.time += dt;
       if (l && !l.kept && l.transition && input.drift && l.time <= SKATE.revert) {
         l.kept = true;
@@ -450,12 +493,21 @@ export function stepSkate(sk, session, input, dt, frame) {
       }
     }
   }
+  if (session.assist?.quarter?.bailed) {
+    session.assist.quarter.bailed = false;
+    sk.air = null;
+    bail(sk);
+  }
   if (session.recoveries !== (sk.recoveries ??= session.recoveries)) {
     sk.recoveries = session.recoveries;
     sk.air = null;
     bail(sk);
   }
-  if (sk.left <= 0 && !sk.air && !sk.manual && !session.skateRide?.manual && !grind) {
+  if (session.carForm && !grind && !wall && car.wallImpact > 3 && (sk.combo || sk.air)) {
+    sk.air = null;
+    bail(sk);
+  }
+  if (sk.left <= 0 && !sk.air && !sk.manual && !session.skateRide?.manual && !grind && !wall) {
     bank(sk);
     sk.over = true;
     sk.events.push({type: 'over', score: sk.score});

@@ -171,7 +171,8 @@ import {
 import {TRACK_FEATURES, placeFeatures} from './physics/features.mjs';
 import {modifiers, MISSILES, beamDir, LASER} from './physics/pickups.mjs';
 import {heldMissilePose} from './pickup-visuals.mjs';
-import {BUGGY, carYaw, createCar, placeCar, rideHeight} from './physics/car.mjs';
+import {BUGGY, carUp, carYaw, createCar, placeCar, rideHeight} from './physics/car.mjs';
+import {vertCamera} from './physics/vert-camera.mjs';
 import {addBox} from './physics/world.mjs';
 import {courseFromGlb} from './physics/district.mjs';
 import {GLTFLoader} from '../vendor/three/addons/loaders/GLTFLoader.js';
@@ -209,7 +210,7 @@ import {
   eventLaps,
   BOUNDS
 } from './open-world/catalog.mjs';
-import {setSkateRails} from './physics/grind.mjs';
+import {setSkateRails, railNearby} from './physics/grind.mjs';
 import {PLAZA, PLAZA_PARK, plazaLocal, plazaWorld} from './open-world/town-plaza.mjs';
 import {PLAYGROUND, PLAYGROUND_PARK, playgroundLocal, playgroundWorld} from './open-world/playground.mjs';
 import {MARSEILLE_PARK, marseilleLocal, marseilleWorld} from './open-world/marseille.mjs';
@@ -226,6 +227,7 @@ import {
 import {curbRails, residentialCurbRails, parkRails, STREET_RAILS} from './open-world/street-rails.mjs';
 import {SEWER_PARK, sewerWorld} from './open-world/sewer.mjs';
 import {createBoardTricks, stepBoardTricks, dirOf, boardPose} from './physics/board-tricks.mjs';
+import {createCarTricks, carTrickCommand, carTrickSettle, carStick} from './physics/car-tricks.mjs';
 import {
   SKATESTREET,
   SKATESTREET_PARK,
@@ -1454,7 +1456,11 @@ window.addEventListener('keydown', e => {
       else if (robot && paiuteCampPress()) {
         /* greeted or shared a gift */
       } else if (robot) useQueued = true;
-      else if (!(form === 'board' && boardTricks.air > 0)) enterLocation();
+      else if (
+        !(form === 'board' && boardTricks.air > 0) &&
+        !(form === 'car' && !s.flight.mode && s.car.contacts === 0)
+      )
+        enterLocation();
     }
     return;
   }
@@ -1509,7 +1515,7 @@ window.addEventListener('keydown', e => {
     !robot &&
     race.roam &&
     !e.target.closest?.('button,input,select,textarea') &&
-    s.skateRide?.active
+    (s.skateRide?.active || s.wallRide)
   )
     hopQueued = true;
   else if (
@@ -1529,9 +1535,14 @@ window.addEventListener('keydown', e => {
     telemetry.recover('key', s.car.pos);
     recover(s);
   }
+  if (e.code === 'KeyV' && !paused) keys.add('KeyV');
   if (e.code === 'KeyQ' && !paused) {
     if (bowRiding()) bowLoose();
-    else if (form === 'board' && boardTricks.air > 0) flipQueued = dirOf(stick());
+    else if (
+      (form === 'board' && boardTricks.air > 0) ||
+      (form === 'car' && !robot && !s.flight.mode && s.car.contacts === 0)
+    )
+      flipQueued = dirOf(stick());
     else {
       fireQueued = true;
       punchQueued = true;
@@ -2225,7 +2236,7 @@ function drawPickups(now) {
   });
   if ((pk.zaps ?? []).some(z => z.owner === s.car && z.life > 0.19)) audio.fire();
   // Drift sparks off both rear wheels: blue, then orange, then purple as the mini-turbo charges.
-  const tier = s.assist.driftTier || 0;
+  const tier = s.assist.driftTier || s.assist.grindSparks || 0;
   if (tier) {
     const col = SPARK[tier - 1],
       c = s.car,
@@ -2835,7 +2846,9 @@ let punchQueued = false,
   useQueued = false,
   street = null,
   boardTricks = createBoardTricks(),
+  carTricks = createCarTricks(),
   flipQueued = null,
+  grindUntil = 0,
   hopQueued = false,
   lastGrind = null,
   robot = null,
@@ -2904,6 +2917,7 @@ function transform() {
     paint = openWorld?.progress?.paint ?? '#f28c28',
     carParams = roamCarParams;
   if (form === 'car') {
+    endStreet();
     robot = createRobot([r.x, r.y - rideHeight(s.car.params) + 0.01, r.z], r.yaw);
     if (!robotBody) {
       robotBody = makeRobotBody(paint);
@@ -3864,7 +3878,8 @@ function climbLadder(l) {
   if (street) refreshStreetRails();
 }
 function startStreet() {
-  if (street || skate || !race.roam || form !== 'board') return;
+  if (street || skate || !race.roam || !openWorld || robot || s.flight.mode) return;
+  if (form !== 'board' && form !== 'car') return;
   skateHud ??= createSkateHud({scene, T});
   street = createStreetSkate();
   refreshStreetRails();
@@ -4957,6 +4972,49 @@ function boardStep(input) {
       }
     }
 }
+let carTrickTold = false;
+function carStep(input, live = {}) {
+  if (robot || form !== 'car') return;
+  if (!race.roam || s.flight.mode) {
+    if (street) endStreet();
+    return;
+  }
+  if (!skate && !street && openWorld) {
+    startStreet();
+    if (street && !carTrickTold) {
+      carTrickTold = true;
+      callout('🚗 [space] jump · [Q] flip · [E] grab · [V] grind', 4200);
+    }
+  }
+  if (
+    street &&
+    !skate &&
+    !s.skateRide?.active &&
+    !s.wallRide &&
+    street.railsAt &&
+    Math.hypot(s.car.pos[0] - street.railsAt[0], s.car.pos[2] - street.railsAt[1]) > STREET_RAILS.rebuild
+  )
+    refreshStreetRails();
+  const tk = skate || street;
+  if (!tk) return;
+  const air = s.car.contacts === 0 && !s.flight.mode;
+  const grab = air && (keys.has('KeyE') || live.grabHeld) ? dirOf(carStick(live, stick())) : null;
+  for (const ev of carTrickSettle(carTricks, s.car, {air, grab}, 1 / 120, mode)) {
+    if (ev.type === 'trick') scoreTrick(tk, ev.name, ev.points);
+    else {
+      bailRun(tk);
+      skateHud?.event({type: 'bail'});
+      audio.impact(4);
+      s.car.vel = [s.car.vel[0] * 0.3, s.car.vel[1], s.car.vel[2] * 0.3];
+    }
+  }
+  if (street && !skate)
+    for (const e of stepSkate(street, s, {...input, ...trickInput(keys), carForm: true}, 1 / 120, streetFrame)) {
+      skateHud?.event(e);
+      if (e.type === 'bail') audio.impact(4);
+      else if (e.type === 'land' && e.tricks > 1) audio.coin();
+    }
+}
 function endSkate(reason = 'left') {
   if (skate)
     telemetry.skateEnd({
@@ -5610,6 +5668,7 @@ function useButton(all) {
   if (edge(0) && !robot && form !== 'board' && !skate) commandFlight('up');
   if (edge(1)) {
     if (s.flight.mode) commandFlight('land');
+    else if (form === 'car' && !robot && railNearby(s.skateRide, s.car.pos)) grindUntil = performance.now() + 700;
     else tapKey('KeyT');
   }
   if (edge(2)) {
@@ -6424,7 +6483,11 @@ function frame(now) {
     if (robot) punchQueued = true;
   }
   if (labBusy(labRide) && (pad.fire || pad.jump)) labSkipEdge = true;
-  if (pad.boost && !ui.panel() && !useClicked && !leverNear(robot ? robot.pos : s.car.pos)) toggleBoost();
+  if (pad.boost && !ui.panel() && !useClicked) {
+    const trickAir = form === 'car' && !robot && !s.flight.mode && s.car.contacts === 0;
+    if (trickAir) flipQueued = dirOf(carStick(pad, stick()));
+    else if (!leverNear(robot ? robot.pos : s.car.pos)) toggleBoost();
+  }
   useClicked = false;
   {
     const b = $('boost'),
@@ -6529,15 +6592,10 @@ function frame(now) {
           steerRate: mode === 'kid' ? KID_STEER_RATE : undefined
         }),
         throttleIn = drive.throttle;
-      if (
-        pad.jump &&
-        !robot &&
-        race.roam &&
-        s.car.grounded &&
-        !s.flight.mode &&
-        !dreams?.ownsSim()
-      ) {
-        s.car.vel = [s.car.vel[0], s.car.vel[1] + (form === 'board' ? FLIGHT.ollie : FLIGHT.hop), s.car.vel[2]];
+      if (pad.jump && !robot && race.roam && !s.flight.mode && !dreams?.ownsSim()) {
+        if (s.skateRide?.active || s.wallRide) hopQueued = true;
+        else if (s.car.grounded)
+          s.car.vel = [s.car.vel[0], s.car.vel[1] + (form === 'board' ? FLIGHT.ollie : FLIGHT.hop), s.car.vel[2]];
         pad.jump = false;
       }
       if (
@@ -6653,6 +6711,20 @@ function frame(now) {
       skyPrev[1] = s.car.pos[1];
       skyPrev[2] = s.car.pos[2];
       const tagBoost = tag.on && tag.it === 1 && !tag.resultLeft ? TAG.itBoost : 1;
+      const carOn = form === 'car' && !robot && !s.flight.mode;
+      const trickDir = carStick(pad, stick());
+      const carDrive = carOn
+        ? carTrickCommand(
+            carTricks,
+            {
+              air: s.car.contacts === 0,
+              flip: flipQueued,
+              grab: s.car.contacts === 0 && (keys.has('KeyE') || pad.grabHeld) ? dirOf(trickDir) : null
+            },
+            1 / 120
+          )
+        : null;
+      if (carOn) flipQueued = null;
       const labHold = labBusy(labRide);
       if (!labHold) annexSim(1 / 120);
       stepRace(
@@ -6664,7 +6736,13 @@ function frame(now) {
               ...trickInput(keys),
               boardSpin: form === 'board',
               hop: hopQueued,
-              grindDir: form === 'board' ? stick() : null,
+              carForm: carOn,
+              grind:
+                carOn &&
+                (pad.grindHeld || keys.has('KeyV') || performance.now() < grindUntil) &&
+                railNearby(s.skateRide, s.car.pos),
+              grindDir: form === 'board' ? stick() : carOn ? trickDir : null,
+              carTrick: carDrive,
               fire: fireQueued,
               flight: fl,
               boost: (fl.burner && !s.flight.mode ? FLIGHT.burnerBoost : 1) * tagBoost
@@ -6685,6 +6763,7 @@ function frame(now) {
         for (const e of race.kidFeed.splice(0, race.kidFeed.length)) telemetry.kidRace(e);
       hotWheelsPost();
       skyJumpStep();
+      carStep(skateInput, pad);
       skateStep(skateInput);
       boardStep(skateInput);
       if (openWorld)
@@ -7289,14 +7368,28 @@ function frame(now) {
   cameraCar = [r.x, r.y, r.z];
   // A vert air points the nose at the sky, so its heading means nothing: hold the heading the car
   // launched on, rise with it and look at it through the turn, then ease back once it lands.
+  // Riding the wall does the same: the nose is up the ramp, so the camera stays on the approach
+  // and lifts until the coping is readable.
   const vertArc = s.assist.quarter?.arc?.vert ? s.assist.quarter.arc : null,
+    upNow = carUp(s.car),
+    onWall = s.car.wheels.some(
+      w =>
+        w.contact &&
+        w.contactNormal &&
+        w.contactNormal[1] < 0.75 &&
+        (w.surface === 'bowl' || w.surface === 'quarter' || w.surface === 'vert' || w.surface === 'hip')
+    ),
+    ridingVert = onWall && upNow[1] < 0.72,
+    view = vertCamera({upY: upNow[1], onWall, vert: !!vertArc}),
     bossAt = robot && adventure?.bossFrame(robot.pos),
     wantYaw = vertArc
       ? vertArc.yaw + Math.PI
-      : bossAt
-        ? Math.atan2(bossAt[0] - r.x, -(bossAt[2] - r.z))
-        : r.yaw;
-  if (camHeading === null || (!vertArc && !camEasing)) camHeading = wantYaw;
+      : ridingVert
+        ? (camHeading ?? r.yaw)
+        : bossAt
+          ? Math.atan2(bossAt[0] - r.x, -(bossAt[2] - r.z))
+          : r.yaw;
+  if (camHeading === null || (!vertArc && !ridingVert && !camEasing)) camHeading = wantYaw;
   else {
     const d = Math.atan2(Math.sin(wantYaw - camHeading), Math.cos(wantYaw - camHeading));
     camHeading += d * Math.min(1, dt * (vertArc ? 10 : 4));
@@ -7339,6 +7432,7 @@ function frame(now) {
     r.z + Math.cos(camYaw) * back * Math.cos(lookPitch)
   );
   if (jumpCamera) desired.fromArray(jumpCamera.eye);
+  else desired.y += view.rise;
   const chase = resolveChaseCamera({
     eye,
     desired: [desired.x, desired.y, desired.z],
@@ -7359,11 +7453,11 @@ function frame(now) {
   const portrait = camera.aspect < 0.8,
     portraitAim = -0.3 - Math.max(0, 740 - innerHeight) * 0.003;
   if (jumpCamera) target.fromArray(jumpCamera.look);
-  else if (vertArc) target.set(r.x, r.y + 0.1, r.z);
+  else if (vertArc) target.set(r.x, r.y + 0.1 + view.rise * 0.35, r.z);
   else
     target.set(
       r.x + Math.sin(camYaw) * 1.05,
-      r.y + (portrait ? portraitAim : mount > 1 ? 0.35 * mount : 0.18),
+      r.y + (portrait ? portraitAim : mount > 1 ? 0.35 * mount : 0.18) + Math.sin(view.pitch) * 1.15,
       r.z - Math.cos(camYaw) * 1.05
     );
   // Flying, the camera sits behind the heading and stays upright. It does not roll with
@@ -7425,9 +7519,22 @@ function frame(now) {
       hp = split.lookPitch || 0,
       back = (1.36 + Math.min(0.24, r2.speed * 0.015)) * (walking && pad2?.aim ? 0.62 : 1),
       eye2 = [r2.x, r2.y + 0.12, r2.z];
+    const p2Up = carUp(rs2.car),
+      p2Wall = rs2.car.wheels.some(
+        w =>
+          w.contact &&
+          w.contactNormal &&
+          w.contactNormal[1] < 0.75 &&
+          (w.surface === 'bowl' || w.surface === 'quarter' || w.surface === 'vert' || w.surface === 'hip')
+      ),
+      p2View = vertCamera({
+        upY: p2Up[1],
+        onWall: p2Wall,
+        vert: !!rs2.assist.quarter?.arc?.vert
+      });
     desired2.set(
       r2.x - Math.sin(hy) * back * Math.cos(hp),
-      r2.y + 0.55 + Math.sin(hp) * back,
+      r2.y + 0.55 + Math.sin(hp) * back + (walking ? 0 : p2View.rise),
       r2.z + Math.cos(hy) * back * Math.cos(hp)
     );
     // Carry the camera with the car first (as player 1's does), then smooth only the swing.
@@ -7446,7 +7553,11 @@ function frame(now) {
     desired2.fromArray(chase2.aim);
     camera2.position.fromArray(chase2.position);
     camera2.fov = 60 + Math.min(5, r2.speed * 0.3);
-    target2.set(r2.x + Math.sin(hy) * 1.05, r2.y + 0.18, r2.z - Math.cos(hy) * 1.05);
+    target2.set(
+      r2.x + Math.sin(hy) * 1.05,
+      r2.y + 0.18 + (walking ? 0 : Math.sin(p2View.pitch) * 1.15),
+      r2.z - Math.cos(hy) * 1.05
+    );
     if (!walking && rs2.flight.mode) {
       const chase2 = levelFlightCam([r2.x, r2.y, r2.z], rs2.car.q, split.lookYaw || 0, split.lookPitch || 0);
       desired2.fromArray(chase2.eye);

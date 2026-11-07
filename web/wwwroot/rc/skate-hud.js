@@ -141,7 +141,10 @@ export function createSkateHud({scene, T}) {
       if (sk.balance) {
         balance.style.setProperty('--needle', `${50 + Math.max(-1, Math.min(1, sk.balance.value)) * 48}%`);
         balance.classList.toggle('danger', Math.abs(sk.balance.value) > 0.7);
-        balance.setAttribute('aria-label', `${sk.balance.kind === 'grind' ? 'Grind' : 'Manual'} balance`);
+        balance.setAttribute(
+          'aria-label',
+          `${{grind: 'Grind', wall: 'Wall ride', wheelie: 'Wheelie', stoppie: 'Stoppie', manual: 'Manual'}[sk.balance.kind] ?? 'Manual'} balance`
+        );
         balance.setAttribute('aria-valuenow', String(Math.round(sk.balance.value * 100)));
       }
       const combo = comboText(sk);

@@ -39,8 +39,10 @@ test('each form draws the controls that form actually uses', () => {
   assert.match(car, />GO</);
   assert.match(car, /BRAKE/);
   assert.match(car, /JUMP/);
-  assert.match(car, /MORPH/);
-  assert.match(car, /BOOST/);
+  assert.match(car, /GRIND/);
+  assert.match(car, /FLIP/);
+  assert.match(car, /GRAB/);
+  assert.match(car, /near a rail/);
   assert.match(deck, /OLLIE/);
   assert.match(foot, /MOVE/);
   assert.match(foot, /FIRE/);

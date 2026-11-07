@@ -6,10 +6,14 @@ import {sub, cross, dot, norm, scale, add, len} from './math.mjs';
 export const SURFACES = {
   // Fictional shallow splash-pad response; safe at RC scale, no buoyancy or drowning.
   // Authored quarter pipes use the normal concrete tyre response plus a play assist.
-  quarter: {grip: 1.0, roll: 0.02},
-  bowl: {grip: 1.0, roll: 0.02},
-  vert: {grip: 1.0, roll: 0.02},
-  hip: {grip: 1.0, roll: 0.02},
+  // Rolling drag is zero: a held throttle was stalling halfway up the bowl once
+  // spring load climbed. Pump, not friction, changes speed on these surfaces.
+  // Rolling drag is zero: a held throttle was stalling halfway up the bowl once
+  // spring load climbed. Pump, not friction, changes speed on these surfaces.
+  quarter: {grip: 1.0, roll: 0},
+  bowl: {grip: 1.0, roll: 0},
+  vert: {grip: 1.0, roll: 0},
+  hip: {grip: 1.0, roll: 0},
   snow: {grip: 0.68, roll: 0.08},
   ice: {grip: 0.38, roll: 0.015},
   water: {grip: 0.65, roll: 0.18},
@@ -41,6 +45,77 @@ export const SURFACES = {
 // Riding these is intentional even near vertical: not a wall strike (car.mjs), and
 // quarter-return.mjs gives each an arcade response.
 export const TRANSITION_SURFACES = new Set(['quarter', 'bowl', 'vert', 'hip']);
+
+const SEAM_BLEND = 0.18;
+function distToSeg(p, a, b) {
+  const ab = sub(b, a),
+    denom = dot(ab, ab) || 1e-12,
+    t = Math.max(0, Math.min(1, dot(sub(p, a), ab) / denom));
+  return len(sub(p, add(a, scale(ab, t))));
+}
+// At a shared edge, both faces report the same averaged normal, so a flat deck
+// meeting a transition does not kick. A few centimetres away the face normal returns.
+function contactNormal(t, point) {
+  if (!t.seams?.length) return t.n;
+  let n = t.n;
+  for (const s of t.seams) {
+    const w = 1 - distToSeg(point, s.a, s.b) / SEAM_BLEND;
+    if (w <= 0) continue;
+    n = norm(add(scale(n, 1 - w), scale(s.avg, w)));
+  }
+  return len(n) > 0.5 ? n : t.n;
+}
+// Average collision normals across edges where a transition meets another face.
+// Safe to call again after more triangles are inserted; only the transition
+// neighbourhood is walked, so a streamed world can reseal as districts arrive.
+export function sealTransitionNormals(world) {
+  const tris = world?.tris;
+  if (!tris?.length) return;
+  for (const t of tris) t.seams = null;
+  const key = v => `${Math.round(v[0] * 512)},${Math.round(v[1] * 512)},${Math.round(v[2] * 512)}`;
+  const hot = new Set(),
+    verts = new Set();
+  tris.forEach((t, i) => {
+    if (!TRANSITION_SURFACES.has(t.surface)) return;
+    hot.add(i);
+    verts.add(key(t.a));
+    verts.add(key(t.b));
+    verts.add(key(t.c));
+  });
+  if (!hot.size) return;
+  tris.forEach((t, i) => {
+    if (!hot.has(i) && (verts.has(key(t.a)) || verts.has(key(t.b)) || verts.has(key(t.c)))) hot.add(i);
+  });
+  const edges = new Map();
+  const addEdge = (a, b, i) => {
+    const ka = key(a),
+      kb = key(b),
+      k = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+    let e = edges.get(k);
+    if (!e) edges.set(k, (e = {a, b, ids: []}));
+    e.ids.push(i);
+  };
+  for (const i of hot) {
+    const t = tris[i];
+    addEdge(t.a, t.b, i);
+    addEdge(t.b, t.c, i);
+    addEdge(t.c, t.a, i);
+  }
+  for (const e of edges.values()) {
+    const ids = [...new Set(e.ids)];
+    for (let i = 0; i < ids.length; i++)
+      for (let j = i + 1; j < ids.length; j++) {
+        const A = tris[ids[i]],
+          B = tris[ids[j]];
+        if (!TRANSITION_SURFACES.has(A.surface) && !TRANSITION_SURFACES.has(B.surface)) continue;
+        if (dot(A.n, B.n) > 0.992) continue;
+        const avg = norm(add(A.n, B.n));
+        if (len(avg) < 0.5) continue;
+        (A.seams ??= []).push({a: e.a, b: e.b, avg});
+        (B.seams ??= []).push({a: e.a, b: e.b, avg});
+      }
+  }
+}
 
 export function createWorld(cell = 4) {
   const tris = [],
@@ -116,7 +191,8 @@ export function createWorld(cell = 4) {
         if (v < 0 || u + v > 1) return;
         const dist = dot(t.e2, q) * inv;
         if (dist < 0 || dist > maxDist || (best && dist >= best.dist)) return;
-        best = {dist, point: add(origin, scale(dir, dist)), normal: t.n, surface: t.surface};
+        const point = add(origin, scale(dir, dist));
+        best = {dist, point, normal: contactNormal(t, point), face: t.n, surface: t.surface};
       }
     );
     return best;
@@ -137,7 +213,11 @@ export function createWorld(cell = 4) {
         if (len(sub(closestOnTri(proj, t), proj)) > 1e-6) return;
         out.push({point: cp, normal: t.n, depth: r - planeDist, surface: t.surface});
       } else if (dl < r) {
-        out.push({point: cp, normal: dl > 1e-9 ? scale(d, 1 / dl) : t.n, depth: r - dl, surface: t.surface});
+        const geom = dl > 1e-9 ? scale(d, 1 / dl) : t.n;
+        // The seam blend is a raycast shade so the two faces agree at the edge.
+        // Using it as a hull normal turns a flat triangle into a phantom wall and
+        // launches the car. Push out along the face the sphere actually touches.
+        out.push({point: cp, normal: geom, depth: r - dl, surface: t.surface});
       }
     });
     return out;

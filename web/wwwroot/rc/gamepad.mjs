@@ -78,7 +78,10 @@ export function mapPad(form, p, feel) {
       power: 0,
       strafe: 0,
       climb: 0,
-      loopHeld: false
+      loopHeld: false,
+      flipHeld: false,
+      grabHeld: false,
+      grindHeld: false
     };
   if (f === 'robot') {
     out.fireHeld = rt > 0.5;
@@ -123,7 +126,16 @@ export function mapPad(form, p, feel) {
   out.drift = down(p, 3) || down(p, 5);
   out.jumpHeld = !air && down(p, 0);
   out.boostHeld = down(p, 2);
-  return applyFeel(out, raw, feel);
+  // Standard face, shared by the car's tricks: A jump, B grind, X flip, Y grab.
+  // Y still drifts on the ground (RB too). The caller picks flip versus boost from the air state.
+  out.flipHeld = down(p, 2);
+  out.grabHeld = down(p, 3);
+  out.grindHeld = down(p, 1);
+  // applyFeel clears moveY on a car (the stick is not the throttle). Keep the trick direction.
+  const felt = applyFeel(out, raw, feel);
+  felt.trickX = lx;
+  felt.trickY = ly;
+  return felt;
 }
 
 /** Left stick into a world XZ move, relative to the camera's yaw (the way it is looking). */
@@ -189,6 +201,11 @@ const IDLE = {
   strafe: 0,
   climb: 0,
   loopHeld: false,
+  flipHeld: false,
+  grabHeld: false,
+  grindHeld: false,
+  trickX: 0,
+  trickY: 0,
   joined: null
 };
 
@@ -247,7 +264,12 @@ export function createGamepadInput() {
         power: stronger(a.power, b.power),
         strafe: stronger(a.strafe, b.strafe),
         climb: stronger(a.climb, b.climb),
-        loopHeld: a.loopHeld || b.loopHeld
+        loopHeld: a.loopHeld || b.loopHeld,
+        flipHeld: a.flipHeld || b.flipHeld,
+        grabHeld: a.grabHeld || b.grabHeld,
+        grindHeld: a.grindHeld || b.grindHeld,
+        trickX: stronger(a.trickX || 0, b.trickX || 0),
+        trickY: stronger(a.trickY || 0, b.trickY || 0)
       };
       const rate = a.steerRate ?? b.steerRate;
       if (rate != null) row.steerRate = rate;

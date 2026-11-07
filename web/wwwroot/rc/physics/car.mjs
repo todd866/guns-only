@@ -16,6 +16,7 @@ import {
   quatIntegrate,
   quatIdentity,
   quatAxisAngle,
+  quatNorm,
   yawOf
 } from './math.mjs';
 import {SURFACES, TRANSITION_SURFACES} from './world.mjs';
@@ -139,6 +140,61 @@ export function placeCar(car, pos, yaw, rollMps = 0) {
   }
   car.speed = len(car.vel);
   car.forwardSpeed = dot(car.vel, rotate(car.q, [0, 0, -1]));
+  car.lipHold = 0;
+  car.vertAir = 0;
+}
+
+// Body axes in world: +X right, +Y up, +Z back (forward is −Z).
+function quatFromBasis(x, y, z) {
+  const m00 = x[0],
+    m10 = x[1],
+    m20 = x[2],
+    m01 = y[0],
+    m11 = y[1],
+    m21 = y[2],
+    m02 = z[0],
+    m12 = z[1],
+    m22 = z[2],
+    tr = m00 + m11 + m22;
+  let qx, qy, qz, qw;
+  if (tr > 0) {
+    const s = Math.sqrt(tr + 1) * 2;
+    qw = 0.25 * s;
+    qx = (m21 - m12) / s;
+    qy = (m02 - m20) / s;
+    qz = (m10 - m01) / s;
+  } else if (m00 > m11 && m00 > m22) {
+    const s = Math.sqrt(1 + m00 - m11 - m22) * 2;
+    qw = (m21 - m12) / s;
+    qx = 0.25 * s;
+    qy = (m01 + m10) / s;
+    qz = (m02 + m20) / s;
+  } else if (m11 > m22) {
+    const s = Math.sqrt(1 + m11 - m00 - m22) * 2;
+    qw = (m02 - m20) / s;
+    qx = (m01 + m10) / s;
+    qy = 0.25 * s;
+    qz = (m12 + m21) / s;
+  } else {
+    const s = Math.sqrt(1 + m22 - m00 - m11) * 2;
+    qw = (m10 - m01) / s;
+    qx = (m02 + m20) / s;
+    qy = (m12 + m21) / s;
+    qz = 0.25 * s;
+  }
+  return quatNorm([qx, qy, qz, qw]);
+}
+// Snap the deck onto a surface, keeping the direction the car is already travelling.
+export function alignCar(car, up) {
+  const n = norm(up);
+  if (len(n) < 0.5) return;
+  let fwd = sub(rotate(car.q, [0, 0, -1]), scale(n, dot(rotate(car.q, [0, 0, -1]), n)));
+  if (len(fwd) < 0.2) fwd = sub([car.vel[0], 0, car.vel[2]], scale(n, dot([car.vel[0], 0, car.vel[2]], n)));
+  if (len(fwd) < 0.05) return;
+  fwd = norm(fwd);
+  const right = norm(cross(fwd, n));
+  if (len(right) < 0.5) return;
+  car.q = quatFromBasis(right, n, norm(cross(right, n)));
 }
 
 const applyInvInertia = (car, v) =>
@@ -165,10 +221,28 @@ export function stepCar(car, input, world, dt = 1 / 120) {
   car.steer += Math.max(-maxD, Math.min(maxD, sd));
   car.impact = 0;
   car.wallImpact = 0;
+  settleOntoGround(car, world);
   const h = dt / SUBSTEPS;
   for (let i = 0; i < SUBSTEPS; i++) substep(car, input, world, h);
   car.speed = len(car.vel);
   car.forwardSpeed = dot(car.vel, rotate(car.q, [0, 0, -1]));
+  // The bowl curves under the chassis before the wheels leave the flat. Hold
+  // the car on the flat the wheels are on, or one frame reads as upright on a slope.
+  if (car.transferSettle && car.contacts >= 2) {
+    const wheels = car.wheels.filter(w => w.contact && w.contactNormal);
+    const flat = wheels.length >= 2 && wheels.every(w => w.contactNormal[1] > 0.95);
+    const speed = Math.hypot(car.vel[0], car.vel[2]);
+    if (flat && speed > 0.3) {
+      const back = [-car.vel[0] / speed, 0, -car.vel[2] / speed];
+      for (let n = 0; n < 6; n++) {
+        const support = world.raycast([car.pos[0], car.pos[1] + 0.3, car.pos[2]], [0, -1, 0], 2);
+        if (!support || support.normal[1] >= 0.9) break;
+        car.pos[0] += back[0] * 0.025;
+        car.pos[2] += back[2] * 0.025;
+      }
+    }
+  }
+  car.transferSettle = false;
   keepAboveGround(car, world);
 }
 
@@ -195,7 +269,45 @@ function keepAboveGround(car, world) {
   if (car.vel[1] < 0) car.vel[1] = 0;
 }
 
+function airborneTransition(car, surface, normalY) {
+  return (car.lipHold > 0 || car.vertAir > 0) && TRANSITION_SURFACES.has(surface) && normalY < 0.82;
+}
+// A spawn sits a couple of centimetres above the springs. Pull that down in one
+// step so the first move is on the ground. Leave real hops and lip airs alone.
+function settleOntoGround(car, world) {
+  if (car.lipHold > 0 || car.vertAir > 0 || car.vel[1] > 0.8) return;
+  const hit = world.raycast([car.pos[0], car.pos[1] + 0.05, car.pos[2]], [0, -1, 0], 0.45);
+  // Slopes report a shorter vertical gap than the suspension ride height. Settling
+  // there plants the hull. Only a flat spawn needs the pull-down.
+  if (!hit || hit.normal[1] < 0.96) return;
+  const target = hit.point[1] + rideHeight(car.params),
+    gap = car.pos[1] - target;
+  if (gap > 0.004 && gap < 0.045) {
+    car.pos[1] = target;
+    if (car.vel[1] < 0) car.vel[1] = 0;
+  }
+}
 function substep(car, input, world, dt) {
+  if (car.lipHold > 0) car.lipHold = Math.max(0, car.lipHold - dt);
+  if (car.vertAir > 0) {
+    car.vertAir = Math.max(0, car.vertAir - dt);
+    const below = world.raycast([car.pos[0], car.pos[1] + 0.05, car.pos[2]], [0, -1, 0], 2);
+    // Slide off the steep column toward the bowl so the drop meets the same wall's
+    // lower face instead of falling through the shell.
+    if (below && car.vel[1] < 1 && TRANSITION_SURFACES.has(below.surface) && below.normal[1] < 0.8 && below.dist < 0.9) {
+      const h = Math.hypot(below.normal[0], below.normal[2]) || 1;
+      car.pos[0] += (below.normal[0] / h) * 0.004;
+      car.pos[2] += (below.normal[2] / h) * 0.004;
+    }
+    if (below && below.dist < 0.4 && (below.normal[1] > 0.82 || !TRANSITION_SURFACES.has(below.surface)))
+      car.vertAir = 0;
+    if (car.pos[1] < 0.02) {
+      car.vertAir = 0;
+      car.lipHold = 0;
+      const floor = world.raycast([car.pos[0], 2, car.pos[2]], [0, -1, 0], 4);
+      if (floor) car.pos[1] = floor.point[1] + 0.25;
+    }
+  }
   const p = car.params,
     m = p.mass,
     up = rotate(car.q, [0, 1, 0]),
@@ -224,7 +336,9 @@ function substep(car, input, world, dt) {
       attach = add(car.pos, rotate(car.q, wp.at)),
       reach = p.restLength + p.wheelRadius;
     const hit = world.raycast(attach, scale(up, -1), reach);
-    if (!hit) {
+    // Face normal, not the seam shade: the shade can be 40° on a flat triangle.
+    const face = hit?.face || hit?.normal;
+    if (!hit || airborneTransition(car, hit.surface, face[1])) {
       ws.contact = false;
       ws.compression = 0;
       ws.surface = null;
@@ -238,27 +352,30 @@ function substep(car, input, world, dt) {
       vAttach = pointVelocity(car, attach);
     const rate = -dot(vAttach, up);
     const surf = SURFACES[hit.surface] || SURFACES.concrete;
-    const bump = compression > p.bumpAt,
+    const glued = TRANSITION_SURFACES.has(hit.surface) && ((input.throttle ?? 0) >= 0.48 || car.forwardSpeed > 7);
+    const bump = !glued && compression > p.bumpAt,
       bounce = surf.bounce ?? 1;
     // A bouncy surface (trampoline) is a stiffer, nearly undamped spring under the wheel.
-    const springF = Math.max(
-      0,
-      p.spring * bounce * compression +
-        (bump
-          ? p.bumpSpring * (compression - p.bumpAt) +
-            ((surf.bumpDamper ?? 1) * p.bumpDamper * Math.max(0, rate)) / bounce
-          : 0) +
-        ((surf.damper ?? 1) * p.damper * rate) / (bounce * bounce)
-    );
+    const springF = glued
+      ? Math.max(0, p.spring * compression + p.damper * 8 * Math.max(0, rate))
+      : Math.max(
+          0,
+          p.spring * bounce * compression +
+            (bump
+              ? p.bumpSpring * (compression - p.bumpAt) +
+                ((surf.bumpDamper ?? 1) * p.bumpDamper * Math.max(0, rate)) / bounce
+              : 0) +
+            ((surf.damper ?? 1) * p.damper * rate) / (bounce * bounce)
+        );
     ws.contact = true;
     ws.compression = compression;
     ws.surface = hit.surface;
     ws.contactPoint = hit.point;
-    ws.contactNormal = hit.normal;
+    ws.contactNormal = face;
     addForce(scale(up, springF), attach);
 
     // Tyre: forces in the contact plane, applied part-way up toward the CoM (roll centre).
-    const n = hit.normal;
+    const n = face;
     const steerQ = wp.front ? quatAxisAngle(up, -car.steer) : null;
     let wf = steerQ ? rotate(steerQ, fwd) : fwd;
     wf = norm(sub(wf, scale(n, dot(wf, n))));
@@ -302,6 +419,43 @@ function substep(car, input, world, dt) {
   car.q = quatIntegrate(car.q, car.ang, dt);
 
   solveHull(car, world);
+  stickTransition(car, input, world, dt);
+}
+
+// Held throttle on a bowl or quarter: stay on the curve, no suspension pogo, a little
+// speed on the way down, and enough push that the wall does not stall the car.
+function stickTransition(car, input, world, dt) {
+  const wheels = car.wheels.filter(
+    w => w.contact && w.contactNormal && (w.surface === 'bowl' || w.surface === 'vert')
+  );
+  if (wheels.length < 2 || car.lipHold > 0 || car.vertAir > 0) return;
+  // Braking and coasting keep the real suspension. Gluing a fast brake
+  // tipped the car off the bowl on the hip run-out.
+  if ((input.throttle ?? 0) < 0.48 || input.brake) return;
+  const n = norm(wheels.reduce((s, w) => add(s, w.contactNormal), [0, 0, 0]));
+  if (n[1] < 0.05) return;
+  alignCar(car, n);
+  const origin = add(car.pos, scale(n, 0.35));
+  const hit = world.raycast(origin, scale(n, -1), 1.1);
+  if (hit && (TRANSITION_SURFACES.has(hit.surface) || hit.surface === 'concrete')) {
+    const err = dot(sub(car.pos, hit.point), n) - rideHeight(car.params);
+    if (err < 0.22 && err > -0.08) car.pos = add(car.pos, scale(n, -err * 0.8));
+  }
+  car.vel = sub(car.vel, scale(n, dot(car.vel, n)));
+  car.ang = scale(n, dot(car.ang, n));
+  const throttle = input.throttle ?? 0;
+  if (throttle > 0.2) {
+    const downhill = [n[0] * n[1], n[1] * n[1] - 1, n[2] * n[1]];
+    const dl = Math.hypot(...downhill);
+    if (dl > 0.15 && dot(car.vel, downhill) > 0) car.vel = add(car.vel, scale(downhill, (4.2 * dt) / dl));
+  }
+  let fwd = sub(rotate(car.q, [0, 0, -1]), scale(n, dot(rotate(car.q, [0, 0, -1]), n)));
+  if (len(fwd) > 0.2) {
+    fwd = norm(fwd);
+    // Anti-stall only. A steady push under 5.5 m/s carried a part-throttle
+    // run up the west quarter onto the secret tape.
+    if (throttle > 0.48 && fwd[1] > 0.15 && dot(car.vel, fwd) < 2.2) car.vel = add(car.vel, scale(fwd, 8 * dt));
+  }
 }
 
 // Hull contacts. Gather every contact first, push out once per surface, then solve impulses
@@ -322,6 +476,9 @@ function solveHull(car, world) {
   }
   car.hullContacts = contacts;
   if (!contacts.length) return;
+  for (let i = contacts.length - 1; i >= 0; i--)
+    if (airborneTransition(car, contacts[i].surface, contacts[i].normal[1])) contacts.splice(i, 1);
+  if (!contacts.length) return;
   const push = [];
   for (const ct of contacts) {
     const same = push.find(f => dot(f.normal, ct.normal) > 0.99);
@@ -333,7 +490,7 @@ function solveHull(car, world) {
     ct.r = sub(ct.point, car.pos);
     ct.kN = 1 / m + dot(ct.normal, cross(applyInvInertia(car, cross(ct.r, ct.normal)), ct.r));
     const vn = dot(pointVelocity(car, ct.point), ct.normal);
-    ct.bias = vn < -0.5 ? -p.restitution * vn : 0;
+    ct.bias = TRANSITION_SURFACES.has(ct.surface) || vn >= -0.5 ? 0 : -p.restitution * vn;
     ct.jn = 0;
     ct.jt = [0, 0, 0];
     car.impact = Math.max(car.impact, -vn);

@@ -6,16 +6,29 @@ export const padKind = (id = '') => (/sn30|snes|sf30|nes30/i.test(id) ? 'sn30' :
 
 // One short label per control, the same words the pad actually does in that form.
 // `ctl` is a Gamepad API index, or 'stick' / 'stickR' for the two sticks.
+const DRIVE = [
+  {act: 'STEER', ctl: 'stick'},
+  {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
+  {act: 'GO', ctl: 7},
+  {act: 'BRAKE', ctl: 6},
+  {act: 'JUMP', ctl: 0},
+  {act: 'MORPH', ctl: 1},
+  {act: 'BOOST', ctl: 2},
+  {act: 'DRIFT', ctl: 3},
+  {act: 'DRIFT', ctl: 5},
+  {act: 'FLY', ctl: 4}
+];
 const FORM_ACTIONS = {
+  // A jump, X flip, Y grab, B grind. RB still drifts. B morphs when no rail is close.
   car: [
     {act: 'STEER', ctl: 'stick'},
     {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
     {act: 'GO', ctl: 7},
     {act: 'BRAKE', ctl: 6},
     {act: 'JUMP', ctl: 0},
-    {act: 'MORPH', ctl: 1},
-    {act: 'BOOST', ctl: 2},
-    {act: 'DRIFT', ctl: 3},
+    {act: 'GRIND', ctl: 1, why: 'near a rail'},
+    {act: 'FLIP', ctl: 2, why: 'in the air'},
+    {act: 'GRAB', ctl: 3, why: 'in the air'},
     {act: 'DRIFT', ctl: 5},
     {act: 'FLY', ctl: 4}
   ],
@@ -42,7 +55,7 @@ const FORM_ACTIONS = {
     {act: 'YAW', ctl: 5}
   ]
 };
-FORM_ACTIONS.board = FORM_ACTIONS.car.map(a => (a.ctl === 0 ? {...a, act: 'OLLIE'} : a));
+FORM_ACTIONS.board = DRIVE.map(a => (a.ctl === 0 ? {...a, act: 'OLLIE'} : a));
 FORM_ACTIONS.plane = FORM_ACTIONS.fly;
 FORM_ACTIONS.gunship = FORM_ACTIONS.fly;
 // The chopper flies the same rows helicopter-correctly (owner, 6 Nov 2026):
