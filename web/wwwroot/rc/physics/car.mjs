@@ -276,6 +276,10 @@ function airborneTransition(car, surface, normalY) {
 // step so the first move is on the ground. Leave real hops and lip airs alone.
 function settleOntoGround(car, world) {
   if (car.lipHold > 0 || car.vertAir > 0 || car.vel[1] > 0.8) return;
+  // The 4–45 mm window is a spawn sitting on its springs. A stoppie lifts the
+  // body by about that much once the nose is down, and pulling it flat ends the trick.
+  // An upright car, including one already rolling, still gets the pull-down.
+  if (rotate(car.q, [0, 1, 0])[1] < 0.98) return;
   const hit = world.raycast([car.pos[0], car.pos[1] + 0.05, car.pos[2]], [0, -1, 0], 0.45);
   // Slopes report a shorter vertical gap than the suspension ride height. Settling
   // there plants the hull. Only a flat spawn needs the pull-down.
