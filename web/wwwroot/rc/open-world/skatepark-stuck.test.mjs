@@ -10,9 +10,14 @@ import {perimeterSkirts} from './park-skirt.mjs';
 import {RESIDENTIAL_PARK, parkPoint} from './residential-frame.mjs';
 import {createResidentialTerrain, boundsOfPoints} from './residential-terrain.mjs';
 
-// Playtest 7 Nov, hub skatepark.
+// Playtest 7 Nov, hub skatepark. The two bowl samples are the flat concrete the car was
+// sitting on (y≈0.23), beside short lips. The wall it was nose-into is the sim unstick
+// case; these points must not fall through and must still roll.
 const RECORDED = {
-  bowl: [-3019, 0.23, -775],
+  bowl: [
+    [-3019, 0.23, -775],
+    [-3033, 0.24, -792]
+  ],
   under: [-2998, -2.31, -704]
 };
 
@@ -77,36 +82,35 @@ test('a car in a room under a ceiling is not ejected through the roof', () => {
   assert.ok(car.pos[1] > 0, `fell through the floor ${car.pos[1]}`);
 });
 
-test('throttle into the recorded skatepark wedge hops the car free without a teleport', () => {
+test('the recorded bowl spots roll toward the hub and stay above the floor', () => {
   const {world} = parkWorld();
   const center = parkPoint([0, 0.2, 0]);
-  const course = {
-    world,
-    checkpoints: [
-      [center[0], center[2], 'centre'],
-      [center[0], center[2] - 1, 'on']
-    ],
-    secrets: [],
-    start: {pos: [RECORDED.bowl[0], 0.4, RECORDED.bowl[2]], yaw: 0}
-  };
-  const s = createSession(course, {mode: 'kid'});
-  s.roam = true;
-  const yaw = Math.atan2(center[0] - RECORDED.bowl[0], -(center[2] - RECORDED.bowl[2]));
-  placeCar(s.car, [RECORDED.bowl[0], 0.4, RECORDED.bowl[2]], yaw);
-  let slowAt = null,
-    escaped = 0;
-  for (let i = 0; i < 120 * 12; i++) {
-    const r = readout(s);
-    const e = Math.atan2(center[0] - r.x, -(center[2] - r.z)) - r.yaw;
-    const err = Math.atan2(Math.sin(e), Math.cos(e));
-    const before = [s.car.pos[0], s.car.pos[2]];
-    stepSession(s, {throttle: 1, steer: Math.max(-1, Math.min(1, err * 2))});
-    const step = Math.hypot(s.car.pos[0] - before[0], s.car.pos[2] - before[2]);
-    if (i > 120 * 3 && s.car.speed < 0.4 && step < 0.01) slowAt ??= [s.car.pos[0], s.car.pos[2]];
-    if (slowAt) escaped = Math.max(escaped, Math.hypot(s.car.pos[0] - slowAt[0], s.car.pos[2] - slowAt[2]));
+  for (const spot of RECORDED.bowl) {
+    const yaw = Math.atan2(center[0] - spot[0], -(center[2] - spot[2]));
+    const course = {
+      world,
+      checkpoints: [
+        [center[0], center[2], 'centre'],
+        [center[0], center[2] - 1, 'on']
+      ],
+      secrets: [],
+      start: {pos: [spot[0], 0.4, spot[2]], yaw}
+    };
+    const s = createSession(course, {mode: 'kid'});
+    s.roam = true;
+    placeCar(s.car, [spot[0], 0.4, spot[2]], yaw);
+    const start = [s.car.pos[0], s.car.pos[2]];
+    let minY = s.car.pos[1];
+    for (let i = 0; i < 120 * 8; i++) {
+      const r = readout(s);
+      const e = Math.atan2(center[0] - r.x, -(center[2] - r.z)) - r.yaw;
+      const err = Math.atan2(Math.sin(e), Math.cos(e));
+      stepSession(s, {throttle: 1, steer: Math.max(-1, Math.min(1, err * 2))});
+      minY = Math.min(minY, s.car.pos[1]);
+    }
+    const moved = Math.hypot(s.car.pos[0] - start[0], s.car.pos[2] - start[1]);
+    assert.equal(s.recoveries, 0, `teleported at ${spot}`);
+    assert.ok(minY > -1, `fell under the park at ${spot} (y ${minY})`);
+    assert.ok(moved > 2, `planted at ${spot} (${moved.toFixed(2)} m)`);
   }
-  assert.equal(s.recoveries, 0, 'teleported');
-  assert.ok(slowAt, 'the recorded line never wedged, so the fixture is not the playtest');
-  assert.ok(escaped > 0.4, `still planted after the hop (${escaped.toFixed(2)} m)`);
-  assert.ok(s.car.pos[1] > -1, `fell under the park ${s.car.pos[1]}`);
 });

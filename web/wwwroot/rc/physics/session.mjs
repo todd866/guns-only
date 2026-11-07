@@ -78,8 +78,12 @@ export function stepSession(s, raw, dt = 1 / 120) {
       s.course.world
     );
     if (nudge) {
-      assisted.boost = Math.max(assisted.boost ?? 1, nudge.boost);
-      assisted.torque = add(assisted.torque ?? [0, 0, 0], nudge.torque);
+      if ((nudge.boost ?? 1) > 1) assisted.boost = Math.max(assisted.boost ?? 1, nudge.boost);
+      // Nose into a wall: the hop is along the face normal. Leaving the throttle on drives
+      // straight back into the concrete and cancels it.
+      if (nudge.throttle != null) assisted.throttle = nudge.throttle;
+      if (nudge.steer != null) assisted.steer = nudge.steer;
+      assisted.torque = add(assisted.torque ?? [0, 0, 0], nudge.torque ?? [0, 0, 0]);
     }
     stepCar(s.car, assisted, s.course.world, dt);
   }
