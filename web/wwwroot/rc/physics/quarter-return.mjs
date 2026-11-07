@@ -372,7 +372,12 @@ export function stepReentry(state, car, world, dt) {
     state.airborne = 0;
     return true;
   }
-  if (car.pos[1] < -0.05) {
+  // Hub bowls sit near y = 0, so a body below that with nothing under it has
+  // fallen through the shell. Grass around the neighbourhood park is below zero
+  // on purpose; a car standing on it is not a fall.
+  const under =
+    world && world.raycast([car.pos[0], car.pos[1] + 0.15, car.pos[2]], [0, -1, 0], 0.6);
+  if (car.pos[1] < -0.05 && !under) {
     state.bail = 0.4;
     state.arc = null;
     car.vertAir = 0;
