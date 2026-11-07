@@ -98,6 +98,7 @@ import {
   expedition
 } from './catalog.mjs';
 import {WORLD_LINKS, buildRoadGraph, roadRoute, recoveryPoint} from './navigation.mjs';
+import {APPROACH} from './spirit-mountain.mjs';
 export async function loadOpenWorld(search) {
   const q = new URLSearchParams(search),
     get = async name => {
@@ -148,7 +149,7 @@ export async function loadOpenWorld(search) {
   overview.bounds = [...BOUNDS];
   overview.residential = residentialData;
   overview.roads = residentialRoads(overview.roads, residentialData);
-  overview.roads.push(...WORLD_LINKS);
+  overview.roads.push(...WORLD_LINKS, APPROACH);
   let storage;
   try {
     storage = localStorage;

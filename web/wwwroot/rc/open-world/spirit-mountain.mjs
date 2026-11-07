@@ -1,15 +1,33 @@
-// Spirit Mountain (docs/design/adventure): the climbable mountain north of Dreamland, Forza
+// Spirit Mountain (docs/design/adventure): the climbable mountain west of the neighbourhood, Forza
 // Horizon-style. One height function serves the rendered ground and wheel collision alike
 // (elevation.mjs adds it to the playable terrain). Three parts:
 //   natural(x,z): a broad bell (230 m) with ridges and two valleys cut deep enough to fly through;
-//   the road: switchbacks generated up the south face by following the slope at a steady grade,
+//   the road: switchbacks generated up the face toward the houses (local +z) at a steady grade,
 //     with hairpins wide enough for a kid's car;
 //   the carve: the ground is the road's height on a shelf either side of it, blended back to the
 //     natural slope, so the road is the terrain itself (no separate collision ribbon).
+//
+// Placed 7 Nov so the trailhead is about 1.2 km of road from the neighbourhood skatepark (the drive
+// had been several minutes). Local +z is the face you arrive on. Yaw −π/2 turns that face east, so
+// the mass sits in the empty desert west of the houses and clear of the canyon. Ridges stay
+// phase-locked to the original centre (2300, −3250) in local metres: the climb is the same road, moved.
 import {NATURAL_WATER} from '../physics/water.mjs';
+const YAW = -Math.PI / 2,
+  RADIUS = 1250,
+  FOOT_LX = Math.sin(0.15) * (RADIUS - 40),
+  FOOT_LZ = Math.cos(0.15) * (RADIUS - 40),
+  TRAIL_AHEAD = 350,
+  // Westernmost node still on the skatepark's road component (navigation quantises at 0.2 m).
+  JOIN = [-3497.5, -869.65],
+  SPAN = 280,
+  TRAIL_X = JOIN[0] - SPAN,
+  TRAIL_Z = JOIN[1],
+  CENTRE_X = TRAIL_X - (FOOT_LZ + TRAIL_AHEAD),
+  CENTRE_Z = TRAIL_Z + FOOT_LX;
 export const MOUNTAIN = Object.freeze({
-  centre: [2300, -3250],
-  radius: 1250,
+  centre: [CENTRE_X, CENTRE_Z],
+  yaw: YAW,
+  radius: RADIUS,
   peak: 230,
   grade: 0.08,
   hairpinGrade: 0.05,
@@ -44,11 +62,25 @@ const M = MOUNTAIN,
   [CX, CZ] = M.centre;
 export const MOUNTAIN_BOUNDS = Object.freeze([CX - M.radius, CZ - M.radius, CX + M.radius, CZ + M.radius]);
 const smooth = t => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+const [COS, SIN] = [Math.cos(M.yaw), Math.sin(M.yaw)];
+/** Local metres (yaw 0 was world +x east, +z south) to world [x, y, z]. */
+export const toWorld = (lx, lz, y = 0) => [CX + lx * COS - lz * SIN, y, CZ + lx * SIN + lz * COS];
+/** World x, z to local metres in the mountain's frame. */
+export const toLocal = (x, z) => {
+  const dx = x - CX,
+    dz = z - CZ;
+  return [dx * COS + dz * SIN, -dx * SIN + dz * COS];
+};
+/** World [x, z] of a point `dx` east and `dz` south of `at`, in the mountain's own frame. */
+export const mountainOffset = (at, dx, dz) => {
+  const [lx, lz] = toLocal(at[0], at[1]);
+  const [x, , z] = toWorld(lx + dx, lz + dz);
+  return [x, z];
+};
 
 /** The mountain before the road: 0 outside its footprint. */
 export function naturalHeight(x, z) {
-  const dx = x - CX,
-    dz = z - CZ,
+  const [dx, dz] = toLocal(x, z),
     r = Math.hypot(dx, dz);
   if (r >= M.radius) return 0;
   const phi = Math.atan2(dx, dz),
@@ -56,7 +88,7 @@ export function naturalHeight(x, z) {
   let h = M.peak * ((1 + Math.cos(Math.PI * t)) / 2) ** 1.3;
   h +=
     14 * Math.sin(4 * phi + 1) * Math.sin(Math.PI * t) +
-    5 * Math.sin(x / 37) * Math.sin(z / 53) * Math.sin(Math.PI * t);
+    5 * Math.sin((dx + 2300) / 37) * Math.sin((dz - 3250) / 53) * Math.sin(Math.PI * t);
   // Valleys: V-shaped, deepening outward from near the summit, fading at the foot.
   for (const v of M.valleys) {
     const ax = Math.sin(v.angle),
@@ -84,8 +116,7 @@ export function naturalHeight(x, z) {
 /** Position in the lake valley's frame: along its axis from the centre, and across it. */
 export function valleyFrame(x, z) {
   const v = M.valleys[M.lake.valley],
-    dx = x - CX,
-    dz = z - CZ,
+    [dx, dz] = toLocal(x, z),
     ax = Math.sin(v.angle),
     az = Math.cos(v.angle);
   return {along: dx * ax + dz * az, across: dx * az - dz * ax};
@@ -94,61 +125,71 @@ export const valleyPoint = (along, across, y = 0) => {
   const v = M.valleys[M.lake.valley],
     ax = Math.sin(v.angle),
     az = Math.cos(v.angle);
-  return [CX + ax * along + az * across, y, CZ + az * along - ax * across];
+  return toWorld(ax * along + az * across, az * along - ax * across, y);
 };
-const grad = (x, z, e = 1) => [
-  (naturalHeight(x + e, z) - naturalHeight(x - e, z)) / (2 * e),
-  (naturalHeight(x, z + e) - naturalHeight(x, z - e)) / (2 * e)
-];
+const gradLocal = (lx, lz, e = 1) => {
+  const h = (a, b) => {
+    const [x, , z] = toWorld(a, b);
+    return naturalHeight(x, z);
+  };
+  return [(h(lx + e, lz) - h(lx - e, lz)) / (2 * e), (h(lx, lz + e) - h(lx, lz - e)) / (2 * e)];
+};
 
-/** The switchback road, bottom to top: [{ x, z, y, piece }] every ~4 m. piece numbers each leg. */
+/** The switchback road, bottom to top: [{ x, z, y, piece }] every ~4 m. piece numbers each leg.
+ *  Generated in the mountain's frame (local +x is "east") and stored in world metres, so a yaw
+ *  moves the climb without retracing it. */
 export const ROAD = (() => {
   const pts = [],
     S = M.step;
-  let x = CX + Math.sin(0.15) * (M.radius - 40),
-    z = CZ + Math.cos(0.15) * (M.radius - 40),
+  let lx = Math.sin(0.15) * (M.radius - 40),
+    lz = Math.cos(0.15) * (M.radius - 40);
+  let [x, , z] = toWorld(lx, lz),
     y = naturalHeight(x, z),
     dir = 1,
     piece = 0;
   pts.push({x, z, y, piece});
   for (let guard = 0; guard < 4000; guard++) {
-    const r = Math.hypot(x - CX, z - CZ);
+    const r = Math.hypot(lx, lz);
     if (r < M.summit) break;
-    const [gx, gz] = grad(x, z),
+    const [gx, gz] = gradLocal(lx, lz),
       g = Math.hypot(gx, gz),
       ux = gx / g,
       uz = gz / g;
-    // Along the contour, in this leg's direction (east is dir 1), turned uphill just enough to
-    // climb at the grade and to track the ground (error feedback keeps the cut shallow).
+    // Along the contour, in this leg's direction (local east is dir 1), turned uphill just enough
+    // to climb at the grade and to track the ground (error feedback keeps the cut shallow).
     let tx = -uz,
       tz = ux;
     if (tx * dir < 0) {
       tx = -tx;
       tz = -tz;
     }
-    const want = (M.grade + (0.15 * (y - naturalHeight(x, z))) / S) / Math.max(g, 1e-6),
+    const [hx, , hz] = toWorld(lx, lz),
+      want = (M.grade + (0.15 * (y - naturalHeight(hx, hz))) / S) / Math.max(g, 1e-6),
       s = Math.max(-0.6, Math.min(0.97, want)),
       c = Math.sqrt(1 - s * s);
-    x += (tx * c + ux * s) * S;
-    z += (tz * c + uz * s) * S;
+    const prevLx = lx,
+      prevLz = lz;
+    lx += (tx * c + ux * s) * S;
+    lz += (tz * c + uz * s) * S;
+    [x, , z] = toWorld(lx, lz);
     y += g > M.grade ? M.grade * S : Math.max(-M.grade * S, Math.min(M.grade * S, naturalHeight(x, z) - y));
     pts.push({x, z, y, piece});
-    const phi = Math.atan2(x - CX, z - CZ);
+    const phi = Math.atan2(lx, lz);
     if (phi * dir > M.legSpan * Math.min(1, r / 500 + 0.35)) {
-      // Hairpin: a half circle turning uphill, climbing gently.
-      const prev = pts.at(-2),
-        mx = x - prev.x,
-        mz = z - prev.z;
-      const cx = x + ux * M.hairpinRadius,
-        cz = z + uz * M.hairpinRadius,
-        a0 = Math.atan2(x - cx, z - cz),
+      // Hairpin: a half circle turning uphill, climbing gently. The arc is in the local frame.
+      const mx = lx - prevLx,
+        mz = lz - prevLz,
+        clx = lx + ux * M.hairpinRadius,
+        clz = lz + uz * M.hairpinRadius,
+        a0 = Math.atan2(lx - clx, lz - clz),
         n = Math.ceil((Math.PI * M.hairpinRadius) / S);
       // Turn the way the car is already going: the arc's starting tangent must point forward.
       const turn = Math.cos(a0) * mx - Math.sin(a0) * mz >= 0 ? 1 : -1;
       for (let i = 1; i <= n; i++) {
         const a = a0 + (turn * Math.PI * i) / n;
-        x = cx + Math.sin(a) * M.hairpinRadius;
-        z = cz + Math.cos(a) * M.hairpinRadius;
+        lx = clx + Math.sin(a) * M.hairpinRadius;
+        lz = clz + Math.cos(a) * M.hairpinRadius;
+        [x, , z] = toWorld(lx, lz);
         y += (M.hairpinGrade * Math.PI * M.hairpinRadius) / n;
         pts.push({x, z, y, piece: i < n / 2 ? piece : piece + 1});
       }
@@ -159,6 +200,24 @@ export const ROAD = (() => {
   return Object.freeze(pts);
 })();
 export const SUMMIT = Object.freeze({at: [ROAD.at(-1).x, ROAD.at(-1).z], y: ROAD.at(-1).y});
+
+/** The place marker: flat desert, 350 m short of the climb's foot. */
+export const TRAILHEAD = Object.freeze([TRAIL_X, TRAIL_Z]);
+/** Desert road from the neighbourhood's west edge to the foot. Not part of ROAD: the climb's
+ *  length and grade cover the switchbacks only. kind is a drivable road, not a path. */
+export const APPROACH = (() => {
+  const foot = [ROAD[0].x, ROAD[0].z],
+    span = Math.hypot(foot[0] - JOIN[0], foot[1] - JOIN[1]),
+    n = Math.max(1, Math.ceil(span / 8)),
+    points = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    points.push(
+      Object.freeze(i === n ? foot : [JOIN[0] + (foot[0] - JOIN[0]) * t, JOIN[1] + (foot[1] - JOIN[1]) * t])
+    );
+  }
+  return Object.freeze({kind: 'service', points: Object.freeze(points)});
+})();
 
 // Segments hashed into 32 m cells for nearest-road queries.
 const CELL = 32,

@@ -7,7 +7,9 @@ import {
   mountainHeight,
   naturalHeight,
   mountainSurface,
-  roadNear
+  roadNear,
+  toWorld,
+  valleyPoint
 } from './spirit-mountain.mjs';
 
 const seg = i => Math.hypot(ROAD[i].x - ROAD[i - 1].x, ROAD[i].z - ROAD[i - 1].z);
@@ -51,10 +53,14 @@ test('legs stay apart: no point of the road is near a different leg except throu
 });
 
 test('the ground is continuous (no cliffs from the carve) along a line across the switchbacks', () => {
-  let prev = mountainHeight(MOUNTAIN.centre[0], MOUNTAIN.centre[1] + 1200),
+  const at = lz => {
+    const [x, , z] = toWorld(40, lz);
+    return mountainHeight(x, z);
+  };
+  let prev = at(1200),
     worst = 0;
-  for (let z = MOUNTAIN.centre[1] + 1200; z > MOUNTAIN.centre[1]; z -= 1) {
-    const h = mountainHeight(MOUNTAIN.centre[0] + 40, z);
+  for (let lz = 1200; lz > 0; lz -= 1) {
+    const h = at(lz);
     worst = Math.max(worst, Math.abs(h - prev));
     prev = h;
   }
@@ -63,14 +69,14 @@ test('the ground is continuous (no cliffs from the carve) along a line across th
 
 test('valleys deep enough to fly through, and nothing outside the footprint', () => {
   const v = MOUNTAIN.valleys[0],
-    at = r => [MOUNTAIN.centre[0] + Math.sin(v.angle) * r, MOUNTAIN.centre[1] + Math.cos(v.angle) * r];
-  const [x, z] = at(700),
-    side = [x + Math.cos(v.angle) * v.width, z - Math.sin(v.angle) * v.width];
-  assert.ok(naturalHeight(...side) - naturalHeight(x, z) > 40, 'the valley floor is 40 m+ below its sides');
-  assert.equal(mountainHeight(MOUNTAIN.centre[0] + MOUNTAIN.radius + 5, MOUNTAIN.centre[1]), 0);
+    [x, , z] = valleyPoint(700, 0),
+    [sx, , sz] = valleyPoint(700, v.width),
+    [ox, , oz] = toWorld(MOUNTAIN.radius + 5, 0);
+  assert.ok(naturalHeight(sx, sz) - naturalHeight(x, z) > 40, 'the valley floor is 40 m+ below its sides');
+  assert.equal(mountainHeight(ox, oz), 0);
 });
 
-import {LAKE, damSpan, valleyPoint} from './spirit-mountain.mjs';
+import {LAKE, damSpan} from './spirit-mountain.mjs';
 test('the dam holds a deep reservoir over a flat drowned-town floor, clear of the road', () => {
   const d = damSpan(),
     L = MOUNTAIN.lake;
