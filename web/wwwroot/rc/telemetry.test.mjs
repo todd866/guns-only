@@ -521,6 +521,81 @@ test('form switches and flight mode changes are recorded with a coarse position'
   );
 });
 
+test('a native rcgame origin uploads the same anonymous rows to https://guns-only.com/telemetry and still honours opt-out', async () => {
+  const rows = [];
+  let url = '';
+  let pageFetches = 0;
+  const native = {protocol: 'rcgame:', hostname: 'local', search: ''};
+  const t = createRCTelemetry({
+    storage: {getItem: () => null},
+    locationObject: native,
+    outbox: noIdbOutbox(),
+    fetchImpl: async (next, options) => {
+      url = next;
+      rows.push(...JSON.parse(options.body).rows);
+      return {status: 204, ok: true};
+    }
+  });
+  assert.equal(t.enabled, true);
+  t.firstInput('button');
+  await t.flush({force: true});
+  assert.equal(url, 'https://guns-only.com/telemetry');
+  assert.ok(rows.some(row => row.code === 'first_input' && row.type === 'rc'));
+  assert.ok(rows.every(row => !('ua' in row) && !('user' in row) && !('url' in row)));
+
+  const bridged = [];
+  const viaApp = createRCTelemetry({
+    storage: {getItem: () => null},
+    locationObject: native,
+    outbox: noIdbOutbox(),
+    nativePost: async body => {
+      bridged.push(body);
+      return 204;
+    },
+    fetchImpl: async () => {
+      pageFetches += 1;
+      return {status: 200, ok: true};
+    }
+  });
+  viaApp.firstInput('button');
+  await viaApp.flush({force: true});
+  assert.equal(pageFetches, 0);
+  assert.equal(JSON.parse(bridged[0]).rows.some(row => row.code === 'first_input'), true);
+
+  let opted = 0;
+  const off = createRCTelemetry({
+    storage: {getItem: () => 'disabled'},
+    locationObject: {...native, search: ''},
+    outbox: noIdbOutbox(),
+    nativePost: async () => {
+      opted += 1;
+      return 204;
+    },
+    fetchImpl: async () => {
+      opted += 1;
+      return {status: 200, ok: true};
+    }
+  });
+  off.firstInput('button');
+  await off.flush({force: true});
+  assert.equal(off.enabled, false);
+  assert.equal(opted, 0);
+
+  const queryOff = createRCTelemetry({
+    storage: {getItem: () => null},
+    locationObject: {...native, search: '?telemetry=off'},
+    outbox: noIdbOutbox(),
+    fetchImpl: async () => {
+      opted += 1;
+      return {status: 200, ok: true};
+    }
+  });
+  queryOff.firstInput('button');
+  await queryOff.flush({force: true});
+  assert.equal(queryOff.enabled, false);
+  assert.equal(opted, 0);
+});
+
 test('a first discovery is recorded with what and what kind', async () => {
   const rows = [];
   const t = createRCTelemetry({

@@ -360,8 +360,9 @@ if !args.contains("--metal") && !args.contains("--shot") {   // (--snapshot is a
     snapshotGame(root: web, to: args[i + 1], wait: args.firstIndex(of: "--wait").flatMap { Double(args[$0 + 1]) } ?? 15, clickStart: args.contains("--click-start"))
   }
   let app = NSApplication.shared
-  app.setActivationPolicy(.regular); installMenu()
+  app.setActivationPolicy(.regular)
   let game = GameWindow(root: web)
+  installMenu(target: game)
   app.activate(ignoringOtherApps: true)
   withExtendedLifetime(game) { app.run() }
   exit(0)
