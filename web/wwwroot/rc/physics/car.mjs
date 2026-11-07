@@ -423,6 +423,40 @@ function substep(car, input, world, dt) {
 
   solveHull(car, world);
   stickTransition(car, input, world, dt);
+  holdVertLane(car, input, world);
+}
+// Concrete floor between verts. A straight run that has yawed along the pipe
+// walks out the end; one frame of drive at that yaw is enough. Leave a run
+// that is already headed at a wall alone, or the approach into the pipe stops.
+function holdVertLane(car, input, world) {
+  if (Math.abs(input.steer || 0) > 0.15 || (input.throttle ?? 0) < 0.4) return;
+  if (car.lipHold > 0 || car.vertAir > 0 || carUp(car)[1] < 0.85) return;
+  let best = null;
+  for (const dir of [
+    [1, 0, 0],
+    [-1, 0, 0],
+    [0, 0, 1],
+    [0, 0, -1]
+  ]) {
+    const hit = world.raycast([car.pos[0], car.pos[1] + 0.2, car.pos[2]], dir, 3.2);
+    if (!hit || hit.surface !== 'vert') continue;
+    if (!best || hit.dist < best.dist) best = hit;
+  }
+  if (!best) return;
+  const dx = best.point[0] - car.pos[0],
+    dz = best.point[2] - car.pos[2],
+    across = Math.hypot(dx, dz) || 1,
+    ax = dx / across,
+    az = dz / across,
+    lx = -az,
+    lz = ax,
+    acrossSpeed = car.vel[0] * ax + car.vel[2] * az,
+    alongSpeed = car.vel[0] * lx + car.vel[2] * lz;
+  if (Math.abs(alongSpeed) <= Math.abs(acrossSpeed) || Math.abs(alongSpeed) < 0.35) return;
+  car.vel[0] -= lx * alongSpeed;
+  car.vel[2] -= lz * alongSpeed;
+  car.q = quatAxisAngle([0, 1, 0], -Math.atan2(ax, -az));
+  car.ang = [0, 0, 0];
 }
 
 // Held throttle on a bowl or quarter: stay on the curve, no suspension pogo, a little
@@ -432,11 +466,42 @@ function stickTransition(car, input, world, dt) {
     w => w.contact && w.contactNormal && (w.surface === 'bowl' || w.surface === 'vert')
   );
   if (wheels.length < 2 || car.lipHold > 0 || car.vertAir > 0) return;
-  // Braking and coasting keep the real suspension. Gluing a fast brake
-  // tipped the car off the bowl on the hip run-out.
-  if ((input.throttle ?? 0) < 0.48 || input.brake) return;
   const n = norm(wheels.reduce((s, w) => add(s, w.contactNormal), [0, 0, 0]));
   if (n[1] < 0.05) return;
+  // Crossing a deck lip into the bowl: the face normal points along the run,
+  // and projecting onto that plane stops the car on the coping. Let the drop
+  // keep its speed. A climb is already leant into the wall, so it still sticks.
+  const up = carUp(car),
+    speedH = Math.hypot(car.vel[0], car.vel[2]),
+    along = speedH > 0.2 ? (car.vel[0] * n[0] + car.vel[2] * n[2]) / speedH : 0;
+  if (
+    Math.abs(input.steer || 0) < 0.2 &&
+    wheels.some(w => w.surface === 'vert') &&
+    n[1] < 0.9
+  ) {
+    const lip = [-n[2], 0, n[0]],
+      lh = Math.hypot(lip[0], lip[2]) || 1,
+      slide = (car.vel[0] * lip[0] + car.vel[2] * lip[2]) / lh;
+    car.vel[0] -= (lip[0] / lh) * slide;
+    car.vel[2] -= (lip[2] / lh) * slide;
+  }
+  if (up[1] > 0.82 && n[1] < 0.72 && along > 0.5 && speedH > 3.2 && car.vel[1] < 1) {
+    // Long enough to clear the lip and still be a scored drop, not a hop off the seam.
+    car.lipHold = 0.55;
+    if (car.vel[1] < 3.6) car.vel[1] = 3.6;
+    return;
+  }
+  // A braked landing has to stay on the face. The full position glue tipped a
+  // fast brake off the hip run-out, so a brake only keeps the deck aligned and
+  // sheds speed into the surface.
+  if (input.brake) {
+    alignCar(car, n);
+    const into = dot(car.vel, n);
+    if (into < 0) car.vel = sub(car.vel, scale(n, into));
+    return;
+  }
+  // Coasting keeps the real suspension.
+  if ((input.throttle ?? 0) < 0.48) return;
   alignCar(car, n);
   const origin = add(car.pos, scale(n, 0.35));
   const hit = world.raycast(origin, scale(n, -1), 1.1);

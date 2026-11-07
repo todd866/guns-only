@@ -40,6 +40,21 @@ function safeTransfer(world, pos, vel) {
     }
   return vel;
 }
+// Height of the flat deck beyond this lip, above the car. The hub bowl's deck is
+// a few decimetres up. A pool coping is still about a metre above when the face
+// is steep enough to pop, and that air has to reach it.
+function deckAbove(world, car, inward) {
+  const h = Math.hypot(inward[0], inward[2]) || 1,
+    out = [-inward[0] / h, 0, -inward[2] / h];
+  for (const step of [0.35, 0.7, 1.05]) {
+    const origin = [car.pos[0] + out[0] * step, car.pos[1] + 2, car.pos[2] + out[2] * step],
+      hit = world.raycast(origin, [0, -1, 0], 2.6);
+    if (!hit) continue;
+    const ny = hit.face?.[1] ?? hit.normal[1];
+    if (ny > 0.85 && !TRANSITION_SURFACES.has(hit.surface)) return origin[1] - hit.dist - car.pos[1];
+  }
+  return 2;
+}
 export function stepQuarterReturn(state, car, raw, dt, world) {
   const wheels = car.wheels.filter(w => w.contact && TRANSITION_SURFACES.has(w.surface) && w.contactNormal);
   if (!state.arc) {
@@ -157,18 +172,25 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
             const across = a.inward[0] * car.vel[0] + a.inward[2] * car.vel[2];
             car.vel[0] -= a.inward[0] * across;
             car.vel[2] -= a.inward[2] * across;
-            // Hub bowl only. A vert ramp keeps its along-lip speed; capping it
-            // turned the hangar line upside down.
-            if (bowl && !a.vert) {
+            // Hub bowl only: its deck is right there. A coping with a metre of
+            // deck still above it, and a vert ramp, keep their along-lip speed.
+            const room = world && a.inward ? deckAbove(world, car, a.inward) : 0;
+            const hubBowl = bowl && !a.vert && room < 0.75;
+            if (hubBowl) {
               const along = Math.hypot(car.vel[0], car.vel[2]);
               if (along > 1.2) {
                 car.vel[0] *= 1.2 / along;
                 car.vel[2] *= 1.2 / along;
               }
             }
-            // The bowl lip is already near the deck, so the pop stays short enough
-            // to come back down the same wall and still chain wall to wall.
-            const [lo, hi] = a.vert ? [5.5, 8] : bowl ? [3.4, 4.2] : [5.5, 8];
+            // The hub lip is already near the deck, so that pop stays short enough
+            // to come back down the same wall. A deep coping clears its lip at
+            // 5.5. Flat-out on a vert is a two-second hang; under 9.5 m/s it
+            // never gets there, which is what the old seam kick was faking.
+            // Part throttle stays lower, or the hangar's off-centre tape stops
+            // being a full-speed line.
+            const flatOut = (raw.throttle ?? 0) >= 0.9 || a.speed > 10;
+            const [lo, hi] = a.vert ? (flatOut ? [9.5, 11] : [5.5, 8]) : !hubBowl ? [5.5, 8] : [3.4, 4.2];
             car.vel[1] = clamp(Math.max(car.vel[1], 0), lo, hi);
             state.arc = {
               kind: 'return',
@@ -184,9 +206,10 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
               bowl: bowl && !a.vert
             };
             car.lipHold = 0.22;
-            // Long enough to clear the coping, short enough that the same wall
-            // can catch the descent. A 0.95 s ignore fell through to the floor.
-            car.vertAir = bowl ? 0.42 : 0.95;
+            // The hub bowl's ignore is short so the same wall can catch the
+            // descent; 0.95 s fell through that floor. A full vert hang has to
+            // stay off the face it just left until the parabola comes back.
+            car.vertAir = a.vert ? (flatOut ? 1.85 : 0.95) : 0.42;
             car.pos = add(car.pos, scale(a.inward, 0.07));
           } else {
             const tangent = sub([car.vel[0], 0, car.vel[2]], scale(a.inward, dot(car.vel, a.inward)));
@@ -232,13 +255,14 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
   // and into the flat floor, where the impact dumped the speed.
   if (arc.vert && arc.inward && car.vel[1] < 0.8 && world) {
     const below = world.raycast([car.pos[0], car.pos[1] + 0.15, car.pos[2]], [0, -1, 0], 8);
-    const overFace = below && TRANSITION_SURFACES.has(below.surface) && below.normal[1] < 0.93;
-    if (overFace && below.dist < 2.2) {
+    // A gentle bank is not the wall. Cancelling the fall there left the car
+    // hovering down a brick slope instead of finishing the air.
+    const overFace = below && TRANSITION_SURFACES.has(below.surface) && below.normal[1] < 0.72;
+    if (overFace && below.dist < 1.4) {
       const n = below.normal,
         vn = n[0] * car.vel[0] + n[1] * car.vel[1] + n[2] * car.vel[2];
       if (vn < 0) {
         car.vel[0] -= n[0] * vn;
-        car.vel[1] -= n[1] * vn;
         car.vel[2] -= n[2] * vn;
       }
       const along = arc.inward[0] * car.vel[0] + arc.inward[2] * car.vel[2];
@@ -287,10 +311,12 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
         }
         car.pos = [car.pos[0], ground.point[1] + rideHeight(car.params) + 0.004, car.pos[2]];
         // Only steer back down the launch wall when that direction still meets
-        // the bowl. Past the far wall the same shove exits the park.
+        // the bowl. Past the far wall the same shove exits the park. A vert
+        // ramp needs it too: the air's yaw otherwise lands facing along the
+        // coping, and a straight run walks off the end.
         const dir = [arc.inward[0], 0, arc.inward[2]],
           ahead = world.raycast(add(car.pos, [0, 0.25, 0]), dir, 6);
-        if (arc.bowl && ahead && TRANSITION_SURFACES.has(ahead.surface)) {
+        if (ahead && TRANSITION_SURFACES.has(ahead.surface)) {
           const yaw = Math.atan2(arc.inward[0], -arc.inward[2]);
           car.q = quatAxisAngle([0, 1, 0], -yaw);
           alignCar(car, ground.normal);
@@ -373,11 +399,17 @@ export function stepReentry(state, car, world, dt) {
     return true;
   }
   // Hub bowls sit near y = 0, so a body below that with nothing under it has
-  // fallen through the shell. Grass around the neighbourhood park is below zero
-  // on purpose; a car standing on it is not a fall.
+  // fallen through the shell. Grass around the neighbourhood park, and venues
+  // whose datum is below zero, are down there on purpose. A hop still has a
+  // surface within a few metres. The old 0.6 m ray only meant "standing on it",
+  // so every air below zero looked like a fall. Nothing for 8 m is a fall.
+  // A ceiling on the roof, with no floor under the wheels, is the shell itself.
   const under =
-    world && world.raycast([car.pos[0], car.pos[1] + 0.15, car.pos[2]], [0, -1, 0], 0.6);
-  if (car.pos[1] < -0.05 && !under) {
+    world && world.raycast([car.pos[0], car.pos[1] + 0.15, car.pos[2]], [0, -1, 0], 8);
+  const ceiling =
+    world && world.raycast([car.pos[0], car.pos[1] + 0.02, car.pos[2]], [0, 1, 0], 0.35);
+  const throughShell = !!(ceiling && ceiling.dist < 0.2 && (!under || under.dist > 0.5));
+  if (car.pos[1] < -0.05 && (!under || throughShell)) {
     state.bail = 0.4;
     state.arc = null;
     car.vertAir = 0;

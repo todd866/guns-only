@@ -236,7 +236,10 @@ for (const throttle of [0.45, 0.65, 1])
       const up = carUp(session.car),
         p = session.car.pos;
       const support = course.world.raycast([p[0], p[1] + 0.3, p[2]], [0, -1, 0], 2);
-      const aligned = support ? up.reduce((sum, x, i) => sum + x * support.normal[i], 0) : up[1];
+      // The seam shade leans up to 40° on a flat triangle. The wheels ride the
+      // geometric face; that shade used to be the phantom wall that kicked the car.
+      const face = support?.face ?? support?.normal;
+      const aligned = face ? up.reduce((sum, x, i) => sum + x * face[i], 0) : up[1];
       assert.ok(up[1] > 0.75 && aligned > 0.85, 'landing follows the bowl surface while braking');
       stableFrames = session.car.grounded && session.car.contacts >= 2 ? stableFrames + 1 : 0;
       longestStable = Math.max(longestStable, stableFrames);
