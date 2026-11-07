@@ -152,8 +152,18 @@ export const GRIND_POINTS = Object.freeze({
   Overcrook: 220,
   Smith: 200,
   Feeble: 200,
-  Boardslide: 150
+  Boardslide: 150,
+  // The car says these out loud. Same meter as the board's grinds.
+  'Rail Slide': 100,
+  'Wheelie Grind': 160,
+  'Belly Slide': 180
 });
+/** Kid words for the car. Sideways is a belly slide; stick up or down is the two-wheel grind. */
+export function carGrindName({x = 0, y = 0} = {}, sideways = false) {
+  if (sideways || (Math.abs(x) >= 0.5 && Math.abs(x) >= Math.abs(y))) return 'Belly Slide';
+  if (Math.abs(y) >= 0.5) return 'Wheelie Grind';
+  return 'Rail Slide';
+}
 export function grindName({x = 0, y = 0} = {}) {
   const h = Math.abs(x) >= 0.5 ? Math.sign(x) : 0,
     v = Math.abs(y) >= 0.5 ? Math.sign(y) : 0;
@@ -164,6 +174,8 @@ export function grindName({x = 0, y = 0} = {}) {
 function capture(s, raw) {
   const state = s.skateRide,
     c = s.car;
+  // The car grinds on B (or V). The board still snaps when it lands on a rail.
+  if (raw.carForm && !raw.grind) return;
   const lipNearby = state.rails.some(r => r.kind === 'coping' || r.kind === 'edge');
   if (state.cooldown > 0 || raw.brake || c.speed < 0.7) return;
   // A vert wall tips the deck off world-up. Coping still snaps; a flat rail does not.
@@ -194,7 +206,11 @@ function capture(s, raw) {
       const tangent = horizontal(seg.dir),
         alignment = Math.abs(dot(forward, tangent)),
         moving = dot(travel, tangent);
-      const sideways = alignment < Math.cos(Math.PI / 4) && c.contacts === 0 && raw.drift;
+      const wantBelly =
+        raw.carForm &&
+        Math.abs(raw.grindDir?.x ?? 0) >= 0.5 &&
+        Math.abs(raw.grindDir?.x ?? 0) >= Math.abs(raw.grindDir?.y ?? 0);
+      const sideways = alignment < Math.cos(Math.PI / 4) && c.contacts === 0 && (raw.drift || wantBelly);
       const alignLim = Math.cos(((coping ? 65 : 40) * Math.PI) / 180);
       if (Math.abs(moving) < alignLim || (alignment < alignLim && !sideways)) continue;
       const speed = Math.abs(dot(c.vel, seg.dir)),
@@ -205,15 +221,17 @@ function capture(s, raw) {
         best = {rail: r, distance, along: seg.start + t * seg.length, speed, direction, sideways};
     }
   if (!best) return;
-  const name = best.sideways
-    ? 'Boardslide'
-    : raw.grindDir
-      ? grindName(raw.grindDir)
-      : raw.steer < -0.3
-        ? 'Nosegrind'
-        : raw.steer > 0.3
-          ? '5-0'
-          : '50-50';
+  const name = raw.carForm
+    ? carGrindName(raw.grindDir, best.sideways)
+    : best.sideways
+      ? 'Boardslide'
+      : raw.grindDir
+        ? grindName(raw.grindDir)
+        : raw.steer < -0.3
+          ? 'Nosegrind'
+          : raw.steer > 0.3
+            ? '5-0'
+            : '50-50';
   state.active = {
     rail: best.rail,
     distance: best.along,
@@ -230,8 +248,25 @@ function capture(s, raw) {
   s.assist.drift = {...createDrift(), held: state.held};
 }
 
+/** True when a grind line is close enough that B means "slide" rather than "morph". */
+export function railNearby(state, pos, reach = 2.4) {
+  if (!state?.rails || !pos) return false;
+  for (const r of state.rails)
+    for (const seg of r.segments) {
+      const d = sub(seg.b, seg.a);
+      const h2 = d[0] ** 2 + d[2] ** 2;
+      if (h2 < 0.001) continue;
+      const rel = sub(pos, seg.a);
+      const t = Math.max(0, Math.min(1, (rel[0] * d[0] + rel[2] * d[2]) / h2));
+      const point = add(seg.a, scale(d, t));
+      if (Math.hypot(pos[0] - point[0], pos[2] - point[2]) <= reach && Math.abs(pos[1] - point[1]) <= 1.4) return true;
+    }
+  return false;
+}
+
 export function stepSkateRide(s, raw, dt) {
   const state = s.skateRide;
+  if (s.assist && !s.wallRide) s.assist.grindSparks = 0;
   if (!state) return false;
   const car = s.car,
     held = !!(raw.hop || raw.drift),
@@ -267,10 +302,15 @@ export function stepSkateRide(s, raw, dt) {
     const next = railPoint(g.rail, g.distance, g.direction);
     car.pos = add(next.point, [0, grindHeight(car), 0]);
     car.vel = scale(next.tangent, g.speed);
-    attitude(car, next.tangent, g.sideways);
+    attitude(car, next.tangent, g.sideways || g.name === 'Belly Slide', g.name === 'Wheelie Grind' ? 0.42 : 0);
     clearContacts(car);
     car.speed = car.forwardSpeed = g.speed;
     for (const w of car.wheels) w.spin += (g.speed / car.params.wheelRadius) * dt;
+    // Sparks off the chassis. The wheels are off the ground, so the visual reads these points.
+    if (s.assist) s.assist.grindSparks = 1;
+    car.params.wheels.forEach((w, i) => {
+      car.wheels[i].contactPoint = add(car.pos, rotate(car.q, w.at));
+    });
     return true;
   }
   // The held grab becomes a rear-wheel manual on level ground; release rolls onto all four.
@@ -278,6 +318,7 @@ export function stepSkateRide(s, raw, dt) {
   const flat =
     ground?.normal[1] > 0.98 && Math.abs(car.pos[1] - ground.point[1] - rideHeight(car.params)) < 0.18;
   if (
+    !raw.carForm &&
     !state.manual &&
     !state.manualBlocked &&
     raw.drift &&

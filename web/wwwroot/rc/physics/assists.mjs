@@ -5,6 +5,7 @@ import {carUp, carForward} from './car.mjs';
 import {createDrift, stepDrift, DRIFT} from './drift.mjs';
 import {stepQuarterReturn, stepReentry} from './quarter-return.mjs';
 import {SURFACES} from './world.mjs';
+import {applyCarLanding, carTrickTorque} from './car-tricks.mjs';
 
 // Wheelie and stoppie balance: nose angle held (radians), the spring rate, and wheelie power.
 export const BALANCE = Object.freeze({
@@ -42,6 +43,7 @@ export function assistInput(a, car, raw, dt, world) {
     a.drift.held = !!raw.drift;
     a.quarter = {};
   }
+  if (raw.carTrick) applyCarLanding(car, world, raw.carTrick);
   if (stepReentry((a.quarter ??= {}), car, world, dt)) {
     out.throttle = 0;
     out.brake = false;
@@ -84,6 +86,10 @@ export function assistInput(a, car, raw, dt, world) {
   if (quarter) {
     torque = add(torque, quarter);
     a.airTime = 0;
+  } else if (raw.carTrick?.axis && car.contacts === 0) {
+    // The trick owns pitch and roll. The landing assist rights the car as it comes down.
+    a.airTime = 0;
+    torque = add(torque, carTrickTorque(car, raw.carTrick));
   } else if (m.airLevel && car.contacts === 0 && !(raw.wheelie || raw.stoppie)) {
     // Road seams and kerb tops can briefly report zero contacts. Keep normal
     // levelling immediate, but wait for a sustained airborne state before
@@ -239,7 +245,8 @@ export function assistInput(a, car, raw, dt, world) {
 
   a.skateAir = raw.skate && car.contacts === 0 ? (a.skateAir ?? 0) + dt : 0;
   // The skateboard form spins on steer alone, as in THPS2; cars need the grab (drift) held.
-  a.skateSpinning = a.skateAir > 0.12 && (raw.drift || raw.boardSpin) && Math.abs(raw.steer || 0) > 0.25;
+  a.skateSpinning =
+    !raw.carForm && a.skateAir > 0.12 && (raw.drift || raw.boardSpin) && Math.abs(raw.steer || 0) > 0.25;
   if (a.skateSpinning) {
     // A held grab and steer spins in the air; the wheels-down assist still owns pitch/roll.
     torque[1] = ((-raw.steer * 9 - car.ang[1]) * 8) / car.invInertia[1];
