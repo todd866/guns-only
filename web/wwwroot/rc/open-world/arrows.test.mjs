@@ -130,6 +130,7 @@ function runtime() {
     storage = {getItem: k => saved.get(k), setItem: (k, v) => saved.set(k, v)},
     rider = new T.Group(),
     car = createCar(BUGGY, [enemy.pos[0], rideHeight(BUGGY), enemy.pos[2] + 12], 0);
+  car.contacts = 4;
   gang.enemies = [enemy];
   round.steers = [];
   rider.position.set(car.pos[0], 2, car.pos[2]);
@@ -148,7 +149,7 @@ function runtime() {
     paused: false,
     era: 'past',
     race: {roam: true},
-    s: {car},
+    s: {car, flight: {mode: null}},
     toyDino: {visible: true, userData: {rider}},
     riggedDino: null,
     readout: () => ({yaw: 0}),
@@ -157,6 +158,7 @@ function runtime() {
     beep: (...args) => calls.push(['beep', ...args]),
     audio: {zap: () => calls.push(['zap']), creature: (...args) => calls.push(['creature', ...args])},
     form: 'car',
+    robot: null,
     boardTricks: {air: 0},
     fireQueued: false,
     punchQueued: false,
