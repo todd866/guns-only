@@ -3,6 +3,7 @@ import {
   mountainHeight,
   MOUNTAIN_BOUNDS,
   ROAD,
+  APPROACH,
   MOUNTAIN,
   LAKE,
   damTris,
@@ -130,18 +131,18 @@ export function createMountainView(scene, ground = mountainHeight) {
   // The road ribbon (and centre dashes), following the generated road.
   const roadMat = new T.MeshStandardMaterial({color: '#3e4448', roughness: 0.9}),
     lineMat = new T.MeshStandardMaterial({color: '#e8d27a', roughness: 0.6});
-  const ribbon = (half, y, keep) => {
+  const ribbonOf = (points, half, lift, keep) => {
     const v = [],
       idx = [];
-    for (let i = 0; i < ROAD.length; i++) {
-      const a = ROAD[Math.max(0, i - 1)],
-        b = ROAD[Math.min(ROAD.length - 1, i + 1)],
+    for (let i = 0; i < points.length; i++) {
+      const a = points[Math.max(0, i - 1)],
+        b = points[Math.min(points.length - 1, i + 1)],
         len = Math.hypot(b.x - a.x, b.z - a.z) || 1,
         nx = (-(b.z - a.z) / len) * half,
         nz = ((b.x - a.x) / len) * half,
-        p = ROAD[i];
+        p = points[i];
       const base = ground(p.x, p.z) - mountainHeight(p.x, p.z) + p.y; // the road's own height plus the desert under it
-      v.push(p.x + nx, base + y, p.z + nz, p.x - nx, base + y, p.z - nz);
+      v.push(p.x + nx, base + lift, p.z + nz, p.x - nx, base + lift, p.z - nz);
       if (i && keep(i)) {
         const k = (i - 1) * 2;
         idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
@@ -153,6 +154,15 @@ export function createMountainView(scene, ground = mountainHeight) {
     g.computeVertexNormals();
     return g;
   };
+  const ribbon = (half, lift, keep) => ribbonOf(ROAD, half, lift, keep);
+  const approachPts = APPROACH.points.map(([x, z]) => ({x, z, y: mountainHeight(x, z)}));
+  const approach = new T.Mesh(ribbonOf(approachPts, MOUNTAIN.roadHalf, 0.03, () => true), roadMat);
+  approach.receiveShadow = true;
+  approach.name = 'MountainApproach';
+  root.add(approach);
+  const approachLine = new T.Mesh(ribbonOf(approachPts, 0.07, 0.045, i => i % 3 === 0), lineMat);
+  approachLine.name = 'MountainApproachLine';
+  root.add(approachLine);
   const road = new T.Mesh(
     ribbon(MOUNTAIN.roadHalf, 0.03, () => true),
     roadMat

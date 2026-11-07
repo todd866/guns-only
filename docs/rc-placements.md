@@ -173,9 +173,9 @@ school) or catalogue location is within 60 m. Every item uses `y: null`, so it f
 ### The farmstead example: where and why
 
 `example-farmstead.json` (56 items) sits in the **dark-world valley** (`open-world/spirit-mountain.mjs`, east valley, `valleyPoint(along, across)`).
-It covers valley-frame along 560–590 and across −39 to −57, and its world centre is about **(2830.5, −3023.1)**. Items are stored as world metres, converted with
-`valleyPoint` and present on this branch, so `placements.js` needs no valley frame. Yaws are the valley axis (−18.4° aligns a prop's
-length along the valley).
+It covers valley-frame along 560–590 and across −39 to −57, and its world centre is about **(−5097.7, −1217.4)**. Items are stored as world metres, converted with
+`valleyPoint` and present on this branch, so `placements.js` needs no valley frame. Yaws include the mountain's yaw: 71.6° aligns a fence's
+length along the valley.
 
 The brief suggested along 440–530 and across ±40–150. On this branch's `mountainHeight` that rectangle is mostly bank, 10–45 m above the
 floor, and up to about 140 m at across 150. The flat floor (within 1.5 m of the lake floor, y = 8) is along ≥ 520 and |across| ≤ 60. The farm

@@ -15,10 +15,11 @@ import {VENUE_LOCATIONS, VENUE_EVENTS} from './expansion-venues.mjs';
 import {PORTAL_EVENT, portalHeight} from './portal-course.mjs';
 import {ROAD_EVENTS} from './road-events.mjs';
 import {SKY_JUMPS} from './sky-dive.mjs';
+import {TRAILHEAD} from './spirit-mountain.mjs';
 import {POWER_PLANT} from './power-plant.js';
 // Authored activities in the real Nellis local metre frame. +x east, +z south.
 // Gameplay courses and landmark art are fiction; OSM supplies roads and footprints.
-export const BOUNDS = [-3800, -4600, 3600, 4050]; // north and east grown for Spirit Mountain (spirit-mountain.mjs)
+export const BOUNDS = [-6800, -4600, 3600, 4050]; // west grown so Spirit Mountain is a short drive from the neighbourhood
 export const LOCATIONS = [
   ...SKY_JUMPS.filter(j => j.place !== false).map(j => ({
     id: j.id,
@@ -175,7 +176,7 @@ export const LOCATIONS = [
     id: 'mountain',
     name: 'Spirit Mountain',
     short: 'Spirit Mtn',
-    pos: [2480, 0, -1700], // the trailhead on flat ground, 350 m short of the road's foot
+    pos: [TRAILHEAD[0], 0, TRAILHEAD[1]], // flat ground, 350 m short of the road's foot
     color: '#d9b47a',
     icon: '▲',
     kind: 'discovery'

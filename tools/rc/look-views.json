@@ -7,6 +7,6 @@
     "housing-street":  {"query": "track=hub", "pos": [-1285, 0, -1132],     "yaw": 0,      "label": "Base Housing street, looking north"},
     "housing-corner":  {"query": "track=hub", "pos": [-1285, 0, -1132],     "yaw": 2.4,    "label": "Base Housing, looking back south-east"},
     "bx-apron":        {"query": "track=hub", "pos": [-546, 0, 791],        "yaw": 0.8,    "label": "The BX apron"},
-    "desert-mountain": {"query": "track=hub", "pos": [2480, 0, -900],       "yaw": 0,      "label": "Desert road, Spirit Mountain on the far horizon"}
+    "desert-mountain": {"query": "track=hub", "pos": [-3520, 0, -869.65],   "yaw": -1.5707963267948966, "label": "Desert road, Spirit Mountain ahead"}
   }
 }
