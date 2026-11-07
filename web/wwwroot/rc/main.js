@@ -144,6 +144,7 @@ import {createHunt, setHuntOn, stepHunt, collect as collectHunt, hudLine as hunt
 import {createTeamRace, teamCard, p2LapChip} from './team-race.mjs';
 import {joinPadIndex, joinCardVisible, menuPlayersButton, joinHideUntilAfterLeave} from './join.mjs';
 import {frameSeconds, cameraGlide} from './frame-time.mjs';
+import {resolveChaseCamera} from './physics/chase-camera.mjs';
 import {createBootTrace} from './boot-trace.mjs';
 import {warmPresentation} from './presentation-warm.mjs';
 import {poseCar} from './vehicle-pose.mjs';
@@ -6381,19 +6382,8 @@ function frame(now) {
       // A walker is the body that counts, otherwise the parked car gets hauled back alone.
       const anchor = robot ? robot.pos : s.car.pos,
         follower = split?.p2Form === 'robot' && p2Robot ? p2Robot.pos : rv.session.car.pos;
-      // Pushing and going nowhere for 3 s (nose in a hill, wedged on a wall): back on the road.
-      const rs = rv.session.car;
-      split.stuck =
-        split.p2Form === 'robot'
-          ? 0
-          : !paused && pad2 && pad2.throttle > 0.3 && Math.hypot(rs.vel?.[0] ?? 0, rs.vel?.[2] ?? 0) < 0.5
-            ? (split.stuck ?? 0) + 1 / 60
-            : 0;
-      if (split.stuck > 3) {
-        split.stuck = 0;
-        recover(rv.session);
-        split.heading = null;
-      }
+      // Pushing and going nowhere is handled by the physical unstick in stepSession.
+      // R remains the manual fallback. This used to teleport the second car.
       // Fell through the world (the ground only streams in round player 1): straight back up.
       // Flying spreads the pair out and lifts player 1, so loosen the tether and skip the fall check.
       const airborne = !!s.flight.mode || !!rv.session.flight.mode,
@@ -7349,39 +7339,22 @@ function frame(now) {
     r.z + Math.cos(camYaw) * back * Math.cos(lookPitch)
   );
   if (jumpCamera) desired.fromArray(jumpCamera.eye);
-  const ray = [desired.x - eye[0], desired.y - eye[1], desired.z - eye[2]],
-    dist = Math.hypot(...ray),
-    hit = course.world.raycast(
-      eye,
-      ray.map(v => v / dist),
-      dist
-    );
-  if (hit) {
-    const k = Math.max(0.15, hit.dist - 0.12) / dist;
-    desired.set(eye[0] + ray[0] * k, eye[1] + ray[1] * k, eye[2] + ray[2] * k);
-  }
+  const chase = resolveChaseCamera({
+    eye,
+    desired: [desired.x, desired.y, desired.z],
+    current: [camera.position.x, camera.position.y, camera.position.z],
+    world: course.world,
+    glide: cameraGlide(openingHeld, dt, 7)
+  });
+  desired.fromArray(chase.aim);
   camera.fov += ((bossAt ? 70 : 60 + Math.min(5, r.speed * 0.3)) - camera.fov) * Math.min(1, dt * 3);
   camera.updateProjectionMatrix();
-  camera.position.lerp(desired, cameraGlide(openingHeld, dt, 7));
+  camera.position.fromArray(chase.position);
   // Distant districts parse on the main thread. Wait until the opening glide is over,
   // then start them from a timer so the parse is not inside this frame.
   if (restQueued && !openingHeld && performance.now() - openingReleasedAt > 2500 && camera.position.distanceTo(desired) < 0.5) {
     restQueued = false;
     setTimeout(() => openWorld?.loadBackground?.(), 0);
-  }
-  // Sweep the smoothed position too: damping must not carry the camera through a wall.
-  const actualRay = [camera.position.x - eye[0], camera.position.y - eye[1], camera.position.z - eye[2]],
-    actualDistance = Math.hypot(...actualRay);
-  if (actualDistance > 0.01) {
-    const obstruction = course.world.raycast(
-      eye,
-      actualRay.map(v => v / actualDistance),
-      actualDistance
-    );
-    if (obstruction) {
-      const k = Math.max(0.08, obstruction.dist - 0.08) / actualDistance;
-      camera.position.set(eye[0] + actualRay[0] * k, eye[1] + actualRay[1] * k, eye[2] + actualRay[2] * k);
-    }
   }
   const portrait = camera.aspect < 0.8,
     portraitAim = -0.3 - Math.max(0, 740 - innerHeight) * 0.003;
@@ -7457,18 +7430,21 @@ function frame(now) {
       r2.y + 0.55 + Math.sin(hp) * back,
       r2.z + Math.cos(hy) * back * Math.cos(hp)
     );
-    const ray2 = [desired2.x - eye2[0], desired2.y - eye2[1], desired2.z - eye2[2]],
-      dist2 = Math.hypot(...ray2),
-      hit2 = dist2 > 0.01 && course.world.raycast(eye2, ray2.map(v => v / dist2), dist2);
-    if (hit2) {
-      const k = Math.max(0.15, hit2.dist - 0.12) / dist2;
-      desired2.set(eye2[0] + ray2[0] * k, eye2[1] + ray2[1] * k, eye2[2] + ray2[2] * k);
-    }
     // Carry the camera with the car first (as player 1's does), then smooth only the swing.
     if (split.car) camera2.position.add(new T.Vector3(r2.x - split.car[0], r2.y - split.car[1], r2.z - split.car[2]));
     split.car = [r2.x, r2.y, r2.z];
-    if (camera2.position.distanceTo(desired2) > 30) camera2.position.copy(desired2);
-    else camera2.position.lerp(desired2, 1 - Math.exp(-dt * 7));
+    const chase2 = resolveChaseCamera({
+      eye: eye2,
+      desired: [desired2.x, desired2.y, desired2.z],
+      current:
+        camera2.position.distanceTo(desired2) > 30
+          ? [desired2.x, desired2.y, desired2.z]
+          : [camera2.position.x, camera2.position.y, camera2.position.z],
+      world: course.world,
+      glide: 1 - Math.exp(-dt * 7)
+    });
+    desired2.fromArray(chase2.aim);
+    camera2.position.fromArray(chase2.position);
     camera2.fov = 60 + Math.min(5, r2.speed * 0.3);
     target2.set(r2.x + Math.sin(hy) * 1.05, r2.y + 0.18, r2.z - Math.cos(hy) * 1.05);
     if (!walking && rs2.flight.mode) {

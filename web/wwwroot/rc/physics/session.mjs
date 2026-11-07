@@ -5,7 +5,8 @@ import {createAssist, assistInput, MODES} from './assists.mjs';
 import {stepSkateRide} from './grind.mjs';
 import {createFlight, stepFlight} from './flight.mjs';
 import {stepWater} from './water.mjs';
-import {len, sub} from './math.mjs';
+import {stepUnstick} from './unstick.mjs';
+import {add, len, sub} from './math.mjs';
 
 export function createSession(course, {mode = 'kid', params = BUGGY} = {}) {
   const {pos, yaw} = course.start;
@@ -66,25 +67,33 @@ export function stepSession(s, raw, dt = 1 / 120) {
   if (!s.roam && s.flight.mode) s.flight.mode = null;
   if (stepFlight(s.flight, s.car, raw.flight, s.course.world, dt)) {
     /* flying or under the chute */
-  } else if (!stepSkateRide(s, raw, dt))
-    stepCar(
+  } else if (!stepSkateRide(s, raw, dt)) {
+    // Wedged: extra drive, a righting torque and a hop. R still teleports; this does not.
+    const nudge = stepUnstick(s, raw, dt);
+    const assisted = assistInput(
+      s.assist,
       s.car,
-      assistInput(s.assist, s.car, s.skateRide ? {...raw, skate: true} : raw, dt, s.course.world),
-      s.course.world,
-      dt
+      s.skateRide ? {...raw, skate: true} : raw,
+      dt,
+      s.course.world
     );
+    if (nudge) {
+      if ((nudge.boost ?? 1) > 1) assisted.boost = Math.max(assisted.boost ?? 1, nudge.boost);
+      // Nose into a wall: the hop is along the face normal. Leaving the throttle on drives
+      // straight back into the concrete and cancels it.
+      if (nudge.throttle != null) assisted.throttle = nudge.throttle;
+      if (nudge.steer != null) assisted.steer = nudge.steer;
+      assisted.torque = add(assisted.torque ?? [0, 0, 0], nudge.torque ?? [0, 0, 0]);
+    }
+    stepCar(s.car, assisted, s.course.world, dt);
+  }
   // Water: buoyancy everywhere it is deep enough, boat handling once the car floats.
   if (!s.flight.mode) stepWater(s.car, raw, dt, s.mode);
   s.travel += len(sub(s.car.pos, before));
   if (s.car.wallImpact > 1.5) s.hits++;
-  // Wedged against a pole or a rival with the throttle held: after 2.5 s, hop back to the last
-  // steerpoint (free in kid mode). Six-year-olds do not reverse out of corners.
+  // Still counted so Big Kid can be told about R. The hop above is what actually frees the car.
   const pushing = Math.abs(raw.throttle || 0) > 0.4 && s.car.speed < 0.3 && s.car.grounded;
   s.stuckTime = pushing ? s.stuckTime + dt : 0;
-  if (s.autoUnstick && s.stuckTime > 2.5) {
-    s.stuckTime = 0;
-    recover(s);
-  }
   if (s.course.outOfBounds?.(s.car.pos)) recover(s);
   if (s.running) s.time += dt;
   const [x, , z] = s.car.pos,

@@ -169,6 +169,30 @@ export function stepCar(car, input, world, dt = 1 / 120) {
   for (let i = 0; i < SUBSTEPS; i++) substep(car, input, world, h);
   car.speed = len(car.vel);
   car.forwardSpeed = dot(car.vel, rotate(car.q, [0, 0, -1]));
+  keepAboveGround(car, world);
+}
+
+// One-sided ground: once the body is more than a hull-radius behind the face, wheel
+// rays and sphere contacts both miss and the car freefalls (playtest y=-8). Put it
+// back on that skin. A real room (sewer, a deck you drove under) has a ceiling well
+// below the overhead floor, and is left alone. A cavity directly under a thin slab is
+// the same fall, so that one comes back up too.
+function keepAboveGround(car, world) {
+  const [x, y, z] = car.pos;
+  const overhead = world.raycast([x, y + 12, z], [0, -1, 0], 12);
+  if (!overhead || overhead.normal[1] < 0.55 || overhead.point[1] <= y + 0.06) return;
+  const gap = overhead.point[1] - y;
+  const below = world.raycast([x, y - 0.02, z], [0, -1, 0], 8);
+  const ceiling = world.raycast([x, y, z], [0, 1, 0], gap);
+  const thickness = ceiling ? overhead.point[1] - (y + ceiling.dist) : Infinity;
+  const room = ceiling && thickness > 0.35;
+  if (room) return;
+  const fellThrough = !below && gap < 12;
+  // Inside a thin slab (the underside is on the body), not driving under a deck.
+  const clippedSlab = !!ceiling && ceiling.dist < 0.15 && thickness < 0.35 && gap < 0.5;
+  if (!fellThrough && !clippedSlab) return;
+  car.pos[1] = overhead.point[1] + rideHeight(car.params);
+  if (car.vel[1] < 0) car.vel[1] = 0;
 }
 
 function substep(car, input, world, dt) {
@@ -296,6 +320,7 @@ function solveHull(car, world) {
       else if (ct.depth > twin.depth) Object.assign(twin, ct);
     }
   }
+  car.hullContacts = contacts;
   if (!contacts.length) return;
   const push = [];
   for (const ct of contacts) {
