@@ -5,7 +5,7 @@
 // toward the next ramp is still a transfer. The hip stays a bounded hop.
 // An oblique launch off a quarter or the hip is a transfer: a bounded hop that faces
 // along its travel and meets the face below. No repeat boosts.
-import {dot, cross, add, sub, scale, norm, rotate, unrotate} from './math.mjs';
+import {dot, cross, add, sub, scale, norm, rotate, unrotate, quatAxisAngle} from './math.mjs';
 import {alignCar, carForward, carUp, rideHeight} from './car.mjs';
 import {TRANSITION_SURFACES} from './world.mjs';
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -81,17 +81,26 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
         hip = wheels.some(w => w.surface === 'hip');
       if (n[1] < 0.72 && n[1] > 0.01 && car.vel[1] > 1) {
         const kind = bowl ? 'return' : !hip && dot(forward, inward) < -0.9 ? 'face' : 'transfer';
-        state.armed = {
-          kind,
-          vert,
-          hip,
-          inward,
-          normalY: n[1],
-          yaw: Math.atan2(-inward[0], inward[2]),
-          speed: Math.max(0, car.forwardSpeed),
-          age: 0
-        };
-      } else if (hip && (!state.armed || state.armed.hip) && car.vel[1] > 0.4 && car.forwardSpeed > 2.5) {
+        // The bowl collider meets the hip at the lip. A hip transfer stays a
+        // transfer; rewriting it into a bowl vert strips the carry into the bowl.
+        // Any other line is re-read, so a quarter that straightens becomes a return.
+        // A head-on quarter stays a return even if the lip's normal turns.
+        // A hip transfer stays a transfer when the bowl collider takes over.
+        const keep =
+          state.armed?.kind === 'face' ||
+          (state.armed?.kind === 'transfer' && (state.armed.hip || kind === 'return'));
+        if (!keep)
+          state.armed = {
+            kind,
+            vert,
+            hip,
+            inward,
+            normalY: n[1],
+            yaw: Math.atan2(-inward[0], inward[2]),
+            speed: Math.max(0, car.forwardSpeed),
+            age: 0
+          };
+      } else if (hip && (!state.armed || state.armed.hip) && car.vel[1] > 0.15 && car.forwardSpeed > 2.5) {
         // The hip's low corner is gentle: rolled over at speed it still launches a real transfer.
         state.armed = {kind: 'transfer', hip: true, inward, normalY: n[1], yaw: 0, speed: car.forwardSpeed, age: 0};
       }
@@ -109,9 +118,9 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
       if (wheels.length >= 2 && car.vel[1] > 0) state.armed.age = 0;
       else state.armed.age += dt;
       const commit = (raw.throttle ?? 0) >= 0.48 || state.armed.speed > 7 || car.forwardSpeed > 7;
-      // Authored quarters go near vertical. The hub bowl's steepest face is only
-      // about 55°, then a flat deck: that seam is the coping, so a bowl lets go sooner.
-      const lipCut = state.armed.kind === 'return' && !state.armed.vert ? 0.65 : 0.4;
+      // The hub bowl's lip is the upper wall, under the flat deck. Letting go
+      // only once the face is past 70° rides some lines over the coping and out.
+      const lipCut = state.armed.kind === 'return' && !state.armed.vert ? 0.5 : 0.4;
       const lip = !!(
         nNow &&
         commit &&
@@ -133,15 +142,33 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
           state.arc = {kind: 'transfer', yaw: Math.atan2(car.vel[0], -car.vel[2]), time: 0};
           car.lipHold = 0.18;
         } else {
-          const returning = a.kind === 'return' || a.speed >= Math.min(5.8, car.params.topSpeed * 0.41),
+          const committed = (raw.throttle ?? 0) >= 0.48 || a.speed > 7 || car.forwardSpeed > 7;
+          // A light car at a trickle can exceed 41% of its own top speed and
+          // still be the slow run that should roll onto the deck.
+          const returning =
+              a.kind === 'return' ||
+              (committed && a.speed >= Math.min(5.8, car.params.topSpeed * 0.41)),
             bowl = a.kind === 'return';
           const nearVert = (a.normalY ?? 1) < 0.5 || !!a.vert || (bowl && (a.normalY ?? 1) < 0.7);
           if (returning && nearVert && a.inward && (a.inward[0] || a.inward[2])) {
-            // Vert lock: drop the component aimed across the ramp. Along-lip speed stays.
+            // Vert lock: drop the into-wall speed so the pop is straight up.
+            // A small along-lip remainder stays, or a carve at the corner is
+            // frozen over the hip's gap box and scores a second transfer.
             const across = a.inward[0] * car.vel[0] + a.inward[2] * car.vel[2];
             car.vel[0] -= a.inward[0] * across;
             car.vel[2] -= a.inward[2] * across;
-            const [lo, hi] = a.vert ? [5.5, 8] : bowl ? [4.4, 5.6] : [5.5, 8];
+            // Hub bowl only. A vert ramp keeps its along-lip speed; capping it
+            // turned the hangar line upside down.
+            if (bowl && !a.vert) {
+              const along = Math.hypot(car.vel[0], car.vel[2]);
+              if (along > 1.2) {
+                car.vel[0] *= 1.2 / along;
+                car.vel[2] *= 1.2 / along;
+              }
+            }
+            // The bowl lip is already near the deck, so the pop stays short enough
+            // to come back down the same wall and still chain wall to wall.
+            const [lo, hi] = a.vert ? [5.5, 8] : bowl ? [3.4, 4.2] : [5.5, 8];
             car.vel[1] = clamp(Math.max(car.vel[1], 0), lo, hi);
             state.arc = {
               kind: 'return',
@@ -151,10 +178,15 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
               time: 0,
               inward: a.inward,
               apex: car.vel[1] / 9.81,
-              vert: true
+              vert: true,
+              // The half-pipe pose and the lip snap are for the hub bowl.
+              // A vert ramp (the hangar) keeps the quarter return.
+              bowl: bowl && !a.vert
             };
             car.lipHold = 0.22;
-            car.vertAir = 0.95;
+            // Long enough to clear the coping, short enough that the same wall
+            // can catch the descent. A 0.95 s ignore fell through to the floor.
+            car.vertAir = bowl ? 0.42 : 0.95;
             car.pos = add(car.pos, scale(a.inward, 0.07));
           } else {
             const tangent = sub([car.vel[0], 0, car.vel[2]], scale(a.inward, dot(car.vel, a.inward)));
@@ -186,6 +218,7 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
   }
   const arc = state.arc;
   if (!arc) return null;
+  if (arc.kind === 'transfer') car.transferSettle = true;
   arc.time += dt;
   arc.supported = car.contacts >= 2 ? (arc.supported ?? 0) + dt : 0;
   if ((arc.time > 0.16 && arc.supported > 0.22) || arc.time > 3) {
@@ -194,18 +227,37 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
     car.lipHold = 0;
     return null;
   }
-  // After the pop, drift back toward the same wall so the landing is that transition,
-  // not a straight drop onto the coping. The launch frame itself stays across-free.
-  if (arc.vert && arc.inward && car.vel[1] < 0.5) {
-    const want = 3.4,
-      have = arc.inward[0] * car.vel[0] + arc.inward[2] * car.vel[2],
-      blend = 1 - Math.exp(-8 * dt);
-    car.vel[0] += arc.inward[0] * (want - have) * blend;
-    car.vel[2] += arc.inward[2] * (want - have) * blend;
+  // After the pop the launch frame stays across-free. Once falling, ease back
+  // onto the same face. A hard 3.4 m/s shove carried the bowl air off the wall
+  // and into the flat floor, where the impact dumped the speed.
+  if (arc.vert && arc.inward && car.vel[1] < 0.8 && world) {
+    const below = world.raycast([car.pos[0], car.pos[1] + 0.15, car.pos[2]], [0, -1, 0], 8);
+    const overFace = below && TRANSITION_SURFACES.has(below.surface) && below.normal[1] < 0.93;
+    if (overFace && below.dist < 2.2) {
+      const n = below.normal,
+        vn = n[0] * car.vel[0] + n[1] * car.vel[1] + n[2] * car.vel[2];
+      if (vn < 0) {
+        car.vel[0] -= n[0] * vn;
+        car.vel[1] -= n[1] * vn;
+        car.vel[2] -= n[2] * vn;
+      }
+      const along = arc.inward[0] * car.vel[0] + arc.inward[2] * car.vel[2];
+      if (along < 3) {
+        const blend = 1 - Math.exp(-5 * dt);
+        car.vel[0] += arc.inward[0] * (3 - along) * blend;
+        car.vel[2] += arc.inward[2] * (3 - along) * blend;
+      }
+    } else {
+      const want = 1.6,
+        have = arc.inward[0] * car.vel[0] + arc.inward[2] * car.vel[2],
+        blend = 1 - Math.exp(-4 * dt);
+      car.vel[0] += arc.inward[0] * (want - have) * blend;
+      car.vel[2] += arc.inward[2] * (want - have) * blend;
+    }
   }
   let yaw = arc.yaw;
   if (arc.kind === 'return') {
-    const t = clamp(arc.time / 0.65, 0, 1);
+    const t = clamp(arc.time / (arc.bowl ? 0.65 : 0.45), 0, 1);
     yaw += Math.PI * arc.turn * t * t * (3 - 2 * t);
   }
   // A transfer faces along its travel, so it meets the landing face nose-down the slope.
@@ -220,7 +272,32 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
       targetUp = ground.normal;
       aligning = true;
       const clearance = (clear = ground.dist - 0.3 - rideHeight(car.params));
-      if (arc.returning && clearance < 0.8 && !arc.vert) {
+      // A tilted deck touches one wheel first. The bowl test counts that as the
+      // end of the air and then misses the real four-wheel landing. Set the
+      // whole car down once it is close and already above a gentle face.
+      if (arc.vert && clearance < 0.16 && ground.normal[1] > 0.82 && arc.inward) {
+        alignCar(car, ground.normal);
+        car.ang = [0, 0, 0];
+        const nrm = ground.normal,
+          vn = dot(car.vel, nrm);
+        if (vn < 0) {
+          car.vel[0] -= nrm[0] * vn;
+          car.vel[1] -= nrm[1] * vn;
+          car.vel[2] -= nrm[2] * vn;
+        }
+        car.pos = [car.pos[0], ground.point[1] + rideHeight(car.params) + 0.004, car.pos[2]];
+        // Only steer back down the launch wall when that direction still meets
+        // the bowl. Past the far wall the same shove exits the park.
+        const dir = [arc.inward[0], 0, arc.inward[2]],
+          ahead = world.raycast(add(car.pos, [0, 0.25, 0]), dir, 6);
+        if (arc.bowl && ahead && TRANSITION_SURFACES.has(ahead.surface)) {
+          const yaw = Math.atan2(arc.inward[0], -arc.inward[2]);
+          car.q = quatAxisAngle([0, 1, 0], -yaw);
+          alignCar(car, ground.normal);
+          const spd = Math.max(3.4, Math.hypot(car.vel[0], car.vel[2]));
+          car.vel = [arc.inward[0] * spd, 0.15, arc.inward[2] * spd];
+        }
+      } else if (arc.returning && clearance < 0.8 && !arc.vert) {
         // Soften the last part of the descent and carry the saved approach energy
         // down the transition. This prevents a toy-suspension bounce from undoing
         // the turn; gravity and the real ramp still determine contact and position.
@@ -238,7 +315,7 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
   // the way a skater's frontside or backside air does. Steer chooses the side; the wheels stay
   // facing the ramp throughout, so it lands rolling.
   // The landing alignment takes over only in the last metre above the ramp.
-  if (arc.vert && arc.inward && !arc.kick && (car.vel[1] > 0 || !aligning || clear > 1.1)) {
+  if (arc.bowl && arc.vert && arc.inward && !arc.kick && (car.vel[1] > 0 || !aligning || clear > 1.1)) {
     const s0 = clamp((arc.time - arc.apex * 0.45) / (arc.apex * 0.85), 0, 1),
       k = s0 * s0 * (3 - 2 * s0),
       side = scale(cross([0, 1, 0], arc.inward), arc.turn);
@@ -304,6 +381,23 @@ export function stepReentry(state, car, world, dt) {
   }
   if (car.contacts === 0) {
     state.airborne = (state.airborne ?? 0) + dt;
+    // A steep deck over a transition bails before air-levelling can hide the angle
+    // and before the car flies off the lip into a wedge. An arc owns its own landing.
+    if (!state.arc && state.airborne > 0.04 && world) {
+      const below = world.raycast([car.pos[0], car.pos[1] + 0.05, car.pos[2]], [0, -1, 0], 1.15);
+      if (
+        below &&
+        below.dist < 1.05 &&
+        TRANSITION_SURFACES.has(below.surface) &&
+        // Upright over a steep wall is a fly-by, not a re-entry. The bad case
+        // is a pitched deck (up.y around 0.6) aimed into the face.
+        carUp(car)[1] < 0.75 &&
+        dot(carUp(car), below.normal) < 0
+      ) {
+        state.bail = 0.42;
+        state.armed = null;
+      }
+    }
     return false;
   }
   const was = state.airborne ?? 0;
@@ -312,7 +406,10 @@ export function stepReentry(state, car, world, dt) {
   const wheels = car.wheels.filter(w => w.contact && w.contactNormal);
   if (!wheels.some(w => TRANSITION_SURFACES.has(w.surface))) return false;
   const n = norm(wheels.reduce((s, w) => add(s, w.contactNormal), [0, 0, 0]));
-  if (dot(carUp(car), n) >= REENTRY) {
+  // Within about 75° the deck snaps down and keeps its speed. Only a deck
+  // that is sideways or worse bails. The 45° bowl case is caught in the air,
+  // before the wheels touch; a hip landing is often steeper than 45° and must ride.
+  if (dot(carUp(car), n) >= 0.25) {
     alignCar(car, n);
     const vn = dot(car.vel, n);
     if (vn < 0) car.vel = sub(car.vel, scale(n, vn));

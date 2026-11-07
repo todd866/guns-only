@@ -221,14 +221,47 @@ export function stepCar(car, input, world, dt = 1 / 120) {
   car.steer += Math.max(-maxD, Math.min(maxD, sd));
   car.impact = 0;
   car.wallImpact = 0;
+  settleOntoGround(car, world);
   const h = dt / SUBSTEPS;
   for (let i = 0; i < SUBSTEPS; i++) substep(car, input, world, h);
   car.speed = len(car.vel);
   car.forwardSpeed = dot(car.vel, rotate(car.q, [0, 0, -1]));
+  // The bowl curves under the chassis before the wheels leave the flat. Hold
+  // the car on the flat the wheels are on, or one frame reads as upright on a slope.
+  if (car.transferSettle && car.contacts >= 2) {
+    const wheels = car.wheels.filter(w => w.contact && w.contactNormal);
+    const flat = wheels.length >= 2 && wheels.every(w => w.contactNormal[1] > 0.95);
+    const speed = Math.hypot(car.vel[0], car.vel[2]);
+    if (flat && speed > 0.3) {
+      const back = [-car.vel[0] / speed, 0, -car.vel[2] / speed];
+      for (let n = 0; n < 6; n++) {
+        const support = world.raycast([car.pos[0], car.pos[1] + 0.3, car.pos[2]], [0, -1, 0], 2);
+        if (!support || support.normal[1] >= 0.9) break;
+        car.pos[0] += back[0] * 0.025;
+        car.pos[2] += back[2] * 0.025;
+      }
+    }
+  }
+  car.transferSettle = false;
 }
 
 function airborneTransition(car, surface, normalY) {
   return (car.lipHold > 0 || car.vertAir > 0) && TRANSITION_SURFACES.has(surface) && normalY < 0.82;
+}
+// A spawn sits a couple of centimetres above the springs. Pull that down in one
+// step so the first move is on the ground. Leave real hops and lip airs alone.
+function settleOntoGround(car, world) {
+  if (car.lipHold > 0 || car.vertAir > 0 || car.vel[1] > 0.8) return;
+  const hit = world.raycast([car.pos[0], car.pos[1] + 0.05, car.pos[2]], [0, -1, 0], 0.45);
+  // Slopes report a shorter vertical gap than the suspension ride height. Settling
+  // there plants the hull. Only a flat spawn needs the pull-down.
+  if (!hit || hit.normal[1] < 0.96) return;
+  const target = hit.point[1] + rideHeight(car.params),
+    gap = car.pos[1] - target;
+  if (gap > 0.004 && gap < 0.045) {
+    car.pos[1] = target;
+    if (car.vel[1] < 0) car.vel[1] = 0;
+  }
 }
 function substep(car, input, world, dt) {
   if (car.lipHold > 0) car.lipHold = Math.max(0, car.lipHold - dt);
@@ -279,7 +312,9 @@ function substep(car, input, world, dt) {
       attach = add(car.pos, rotate(car.q, wp.at)),
       reach = p.restLength + p.wheelRadius;
     const hit = world.raycast(attach, scale(up, -1), reach);
-    if (!hit || airborneTransition(car, hit.surface, hit.normal[1])) {
+    // Face normal, not the seam shade: the shade can be 40° on a flat triangle.
+    const face = hit?.face || hit?.normal;
+    if (!hit || airborneTransition(car, hit.surface, face[1])) {
       ws.contact = false;
       ws.compression = 0;
       ws.surface = null;
@@ -312,11 +347,11 @@ function substep(car, input, world, dt) {
     ws.compression = compression;
     ws.surface = hit.surface;
     ws.contactPoint = hit.point;
-    ws.contactNormal = hit.normal;
+    ws.contactNormal = face;
     addForce(scale(up, springF), attach);
 
     // Tyre: forces in the contact plane, applied part-way up toward the CoM (roll centre).
-    const n = hit.normal;
+    const n = face;
     const steerQ = wp.front ? quatAxisAngle(up, -car.steer) : null;
     let wf = steerQ ? rotate(steerQ, fwd) : fwd;
     wf = norm(sub(wf, scale(n, dot(wf, n))));
@@ -367,10 +402,12 @@ function substep(car, input, world, dt) {
 // speed on the way down, and enough push that the wall does not stall the car.
 function stickTransition(car, input, world, dt) {
   const wheels = car.wheels.filter(
-    w => w.contact && w.contactNormal && (w.surface === 'bowl' || w.surface === 'quarter' || w.surface === 'vert')
+    w => w.contact && w.contactNormal && (w.surface === 'bowl' || w.surface === 'vert')
   );
   if (wheels.length < 2 || car.lipHold > 0 || car.vertAir > 0) return;
-  if ((input.throttle ?? 0) < 0.48 && car.forwardSpeed < 7) return;
+  // Braking and coasting keep the real suspension. Gluing a fast brake
+  // tipped the car off the bowl on the hip run-out.
+  if ((input.throttle ?? 0) < 0.48 || input.brake) return;
   const n = norm(wheels.reduce((s, w) => add(s, w.contactNormal), [0, 0, 0]));
   if (n[1] < 0.05) return;
   alignCar(car, n);
@@ -391,7 +428,9 @@ function stickTransition(car, input, world, dt) {
   let fwd = sub(rotate(car.q, [0, 0, -1]), scale(n, dot(rotate(car.q, [0, 0, -1]), n)));
   if (len(fwd) > 0.2) {
     fwd = norm(fwd);
-    if (throttle > 0.48 && fwd[1] > 0.15 && dot(car.vel, fwd) < 5.5) car.vel = add(car.vel, scale(fwd, 8 * dt));
+    // Anti-stall only. A steady push under 5.5 m/s carried a part-throttle
+    // run up the west quarter onto the secret tape.
+    if (throttle > 0.48 && fwd[1] > 0.15 && dot(car.vel, fwd) < 2.2) car.vel = add(car.vel, scale(fwd, 8 * dt));
   }
 }
 

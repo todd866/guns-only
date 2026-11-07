@@ -8,6 +8,8 @@ export const SURFACES = {
   // Authored quarter pipes use the normal concrete tyre response plus a play assist.
   // Rolling drag is zero: a held throttle was stalling halfway up the bowl once
   // spring load climbed. Pump, not friction, changes speed on these surfaces.
+  // Rolling drag is zero: a held throttle was stalling halfway up the bowl once
+  // spring load climbed. Pump, not friction, changes speed on these surfaces.
   quarter: {grip: 1.0, roll: 0},
   bowl: {grip: 1.0, roll: 0},
   vert: {grip: 1.0, roll: 0},
@@ -190,7 +192,7 @@ export function createWorld(cell = 4) {
         const dist = dot(t.e2, q) * inv;
         if (dist < 0 || dist > maxDist || (best && dist >= best.dist)) return;
         const point = add(origin, scale(dir, dist));
-        best = {dist, point, normal: contactNormal(t, point), surface: t.surface};
+        best = {dist, point, normal: contactNormal(t, point), face: t.n, surface: t.surface};
       }
     );
     return best;
@@ -212,12 +214,10 @@ export function createWorld(cell = 4) {
         out.push({point: cp, normal: t.n, depth: r - planeDist, surface: t.surface});
       } else if (dl < r) {
         const geom = dl > 1e-9 ? scale(d, 1 / dl) : t.n;
-        out.push({
-          point: cp,
-          normal: t.seams ? contactNormal(t, cp) : geom,
-          depth: r - dl,
-          surface: t.surface
-        });
+        // The seam blend is a raycast shade so the two faces agree at the edge.
+        // Using it as a hull normal turns a flat triangle into a phantom wall and
+        // launches the car. Push out along the face the sphere actually touches.
+        out.push({point: cp, normal: geom, depth: r - dl, surface: t.surface});
       }
     });
     return out;
