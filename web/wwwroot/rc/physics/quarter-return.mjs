@@ -175,7 +175,9 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
             // Hub bowl only: its deck is right there. A coping with a metre of
             // deck still above it, and a vert ramp, keep their along-lip speed.
             const room = world && a.inward ? deckAbove(world, car, a.inward) : 0;
-            const hubBowl = bowl && !a.vert && room < 0.75;
+            // The hub apron is a few decimetres above the lip. A brick bank's
+            // coping is further, and the short hub pop never makes its air.
+            const hubBowl = bowl && !a.vert && room < 0.62;
             if (hubBowl) {
               const along = Math.hypot(car.vel[0], car.vel[2]);
               if (along > 1.2) {
