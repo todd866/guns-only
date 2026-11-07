@@ -1,4 +1,4 @@
-import {renderHint} from '../key-hints.js';
+import {hintInput, renderHint} from '../key-hints.js';
 import {approachLane, canSwitchBowlingLane} from './bowling.mjs';
 import {VEHICLE_NAMES} from '../vehicle-bodies.js';
 import {BASE_BOUNDARY} from './boundary.mjs';
@@ -777,21 +777,14 @@ export function createWorldUI({
   };
   let nextDraw = 0,
     interactText = '';
-  // The key is a keycap that touch layouts hide; tapping the prompt does the same thing.
+  // The key is a keycap (or the pad button, once the pad was last used). Tapping the prompt does the same thing.
   function interactLabel(text, key) {
-    if (interactText === text + key) return;
-    interactText = text + key;
-    const button = $('interact');
-    if (key == null) {
-      renderHint(button, text);
-      return;
-    }
-    if (text.startsWith('🎳')) renderHint(button, key ? `${text} [${key}]` : text);
-    else {
-      const cap = document.createElement('kbd');
-      cap.textContent = key;
-      button.replaceChildren(text + ' ', cap);
-    }
+    const hint = hintInput();
+    const body = key ? `${text} [${key}]` : text;
+    const mark = `${body}|${hint.source}|${hint.kind}|${hint.form}`;
+    if (interactText === mark) return;
+    interactText = mark;
+    renderHint($('interact'), body);
   }
   return {
     progress,

@@ -3,6 +3,10 @@ import {createTelemetryOutbox, drainTelemetryOutbox} from '../render/telemetry/t
 
 export const RC_TELEMETRY_CONSENT_KEY = 'guns-only.telemetry-sharing.v1';
 export const RC_TELEMETRY_ENDPOINT = '/telemetry';
+// The native app's page is rcgame://local, which cannot use the site-relative path.
+// The Mac app posts this absolute URL itself (WKScriptMessageHandler rcTelemetry) so a
+// custom-scheme page is not blocked by CORS. Same anonymous rows, same opt-out.
+export const RC_TELEMETRY_PUBLIC_ENDPOINT = 'https://guns-only.com/telemetry';
 export const RC_TELEMETRY_FLUSH_INTERVAL_MS = 15_000;
 export const RC_TELEMETRY_BUFFER_LIMIT = 240;
 
@@ -60,6 +64,18 @@ function canonicalHost(locationObject) {
   return hostname === 'guns-only.com' || hostname === 'www.guns-only.com';
 }
 
+function nativeOrigin(locationObject) {
+  const protocol = String(locationObject?.protocol ?? globalThis.location?.protocol ?? '')
+    .replace(/:$/, '')
+    .toLowerCase();
+  return protocol === 'rcgame';
+}
+
+function webkitTelemetryPost() {
+  const handler = globalThis.webkit?.messageHandlers?.rcTelemetry;
+  return typeof handler?.postMessage === 'function' ? body => handler.postMessage(body) : null;
+}
+
 function sessionId(randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto)) {
   try {
     const id = typeof randomUUID === 'function' ? randomUUID() : Math.random().toString(36).slice(2);
@@ -94,6 +110,7 @@ export function createRCTelemetry({
   locationObject = globalThis.location,
   navigatorObject = globalThis.navigator,
   endpoint = RC_TELEMETRY_ENDPOINT,
+  nativePost,
   fetchImpl = globalThis.fetch?.bind(globalThis),
   now = () => performance.now(),
   randomUUID,
@@ -113,15 +130,19 @@ export function createRCTelemetry({
   }
   const query = new URLSearchParams(locationObject?.search ?? '');
   const consent = () => readConsent(safeStorage) && query.get('telemetry') !== 'off';
-  const injectedTransport = arguments[0]?.fetchImpl !== undefined || arguments[0]?.outbox !== undefined;
+  const native = nativeOrigin(locationObject);
+  const resolvedEndpoint = native && endpoint === RC_TELEMETRY_ENDPOINT ? RC_TELEMETRY_PUBLIC_ENDPOINT : endpoint;
+  const bridge = () => (typeof nativePost === 'function' ? nativePost : webkitTelemetryPost());
+  const injectedTransport =
+    arguments[0]?.fetchImpl !== undefined || arguments[0]?.outbox !== undefined || arguments[0]?.nativePost !== undefined;
   // ?telemetry=local: a home TV build served from the laptop posts to that laptop's own
   // /telemetry sink (never the public endpoint), so play on the TV is still recorded.
   const localSink = query.get('telemetry') === 'local' && /^(127\.0\.0\.1|localhost)$/.test(locationObject?.hostname ?? '');
   const uploadAllowed =
     consent() &&
     query.get('telemetry') !== 'off' &&
-    (injectedTransport || localSink || canonicalHost(locationObject)) &&
-    typeof fetchImpl === 'function';
+    (injectedTransport || localSink || canonicalHost(locationObject) || native) &&
+    (typeof fetchImpl === 'function' || typeof bridge() === 'function');
   if (indexedDB === undefined) {
     try {
       indexedDB = globalThis.indexedDB ?? null;
@@ -131,7 +152,8 @@ export function createRCTelemetry({
   }
   const durableOutbox =
     outbox ??
-    ((injectedTransport || localSink || canonicalHost(locationObject)) && typeof fetchImpl === 'function'
+    ((injectedTransport || localSink || canonicalHost(locationObject) || native) &&
+    (typeof fetchImpl === 'function' || typeof bridge() === 'function')
       ? createTelemetryOutbox({indexedDB, dbName: 'guns-rc-telemetry-outbox'})
       : null);
   const startedAt = now();
@@ -404,7 +426,14 @@ export function createRCTelemetry({
   }
   async function send(payload) {
     if (!allowed()) return 0;
-    const response = await fetchImpl(endpoint, {
+    if (native) {
+      const post = bridge();
+      if (post) {
+        const status = Number(await post(payload));
+        return Number.isFinite(status) && status > 0 ? status : 204;
+      }
+    }
+    const response = await fetchImpl(resolvedEndpoint, {
       method: 'POST',
       headers: {'content-type': 'application/json'},
       body: payload,

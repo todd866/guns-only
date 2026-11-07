@@ -81,7 +81,9 @@ import {stunOutlaw, OUTLAWS} from './open-world/outlaws.mjs';
 import {stunSteer} from './open-world/meadow.mjs';
 import {createPortraits} from './open-world/portraits.js';
 import {ask, typing} from './open-world/type-prompt.js';
-import {renderHint} from './key-hints.js';
+import {hintInput, renderHint, setHintInput} from './key-hints.js';
+import {createCouchPause} from './couch-pause.mjs';
+import {installPadBridge} from './pad-bridge.mjs';
 import {say, nameFrom} from './open-world/typed.mjs';
 import {createAdventure} from './open-world/adventure.js';
 import {createIntro} from './open-world/intro.js';
@@ -1413,6 +1415,7 @@ function exit() {
 $('exit').onclick = exit;
 $('menu-games').onclick = () => goHome();
 window.addEventListener('keydown', e => {
+  if (!e.repeat) setHintInput({source: 'key'});
   if (document.querySelector('.rc-race-menu[open]')) return;
   if (e.code === 'Escape') {
     e.preventDefault();
@@ -1557,15 +1560,32 @@ window.addEventListener('keyup', e => {
   if (e.code === 'KeyE' && golfHold != null) golfRelease();
   if (e.code === 'KeyE' && tennisHold != null) tennisRelease();
 });
-// Couch/TV (Ian, 6 Nov 2026): the TV window loses focus whenever someone types on the laptop, which froze the
-// game mid-play. With a controller connected, keep playing on blur; keyboard-only play still pauses.
+// Couch/TV: a click on the laptop blurs this window, and WebKit then reports no pads, so asking
+// getGamepads() inside the blur handler always looked like keyboard-only and froze the kid's game.
+// Couch mode sticks until the last pad disconnects. Start still toggles pause in the frame loop.
+const couchPause = createCouchPause();
+let nativePadLive = false;
+installPadBridge({
+  onNative(pads) {
+    couchPause.see(pads);
+    const live = pads.some(pad => pad?.connected);
+    if (live) nativePadLive = true;
+    else if (nativePadLive) {
+      nativePadLive = false;
+      if (couchPause.lostPad(pads) === 'pause') pause(true);
+    }
+  }
+});
 window.addEventListener('blur', () => {
-  if (Array.from(navigator.getGamepads?.() ?? []).some(p => p?.connected)) return;
-  pause(true);
+  if (couchPause.blur() === 'pause') pause(true);
+});
+window.addEventListener('gamepadconnected', () => couchPause.see([{connected: true}]));
+window.addEventListener('gamepaddisconnected', () => {
+  if (couchPause.lostPad(Array.from(navigator.getGamepads?.() ?? [])) === 'pause') pause(true);
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    pause(true);
+    if (couchPause.hide() === 'pause') pause(true);
     telemetry.flush({force: true});
   }
 });
@@ -5623,15 +5643,6 @@ function useButton(all) {
   }
   formBar(all);
   formBarP2(all);
-  const gp = all[p1Last];
-  if (!gp || btn.hidden) return;
-  const kind = padKind(gp.id),
-    label = robot ? (kind === 'sn30' ? 'X' : 'Y') : kind === 'sn30' ? 'Y' : 'X';
-  for (const k of btn.querySelectorAll('kbd'))
-    if (k.textContent === 'E' || k.dataset.pad) {
-      k.dataset.pad = kind;
-      if (k.textContent !== label) k.textContent = label;
-    }
 }
 // Player 1's forms, always on screen: the one you're in is lit, with the pad button that
 // changes it (B morph / land, A take off) drawn as printed on that pad.
@@ -6323,6 +6334,18 @@ function frame(now) {
     audio.start();
   const allPads = Array.from(navigator.getGamepads?.() ?? []),
     {p1: pad, p2: pad2} = splitInput(allPads, now);
+  couchPause.see(allPads);
+  if (
+    allPads.some(
+      p =>
+        p?.connected &&
+        ((p.buttons ?? []).some(b => (b?.value ?? 0) > 0.5 || b?.pressed) ||
+          (p.axes ?? []).some(a => Math.abs(a ?? 0) > 0.3))
+    )
+  ) {
+    const gp = allPads.find(p => p?.connected && p.index !== split?.pad) ?? allPads.find(p => p?.connected);
+    setHintInput({source: 'pad', kind: padKind(gp?.id), form: playingForm(1)});
+  }
   syncJoinUi(allPads, now);
   splitOn = splitScreenOn({
     split,
@@ -6419,7 +6442,15 @@ function frame(now) {
     if (b.hidden === on) {
       b.hidden = !on;
     }
-    if (on) b.textContent = s.flight.mode ? '🔥 ZOOM · F' : '🔥 BOOST · F';
+    if (on) {
+      const text = s.flight.mode ? '🔥 Zoom · [F]' : '🔥 Boost · [F]';
+      const hint = hintInput();
+      const mark = `${text}|${hint.source}|${hint.kind}|${hint.form}`;
+      if (b.dataset.hint !== mark) {
+        b.dataset.hint = mark;
+        renderHint(b, text);
+      }
+    }
   }
   if (!started && !$('start').disabled && !openingHeld) {
     started = true;
