@@ -1,4 +1,5 @@
 import {CANYON} from './open-world/canyon.mjs';
+import {TRAILHEAD} from './open-world/spirit-mountain.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BASE_BOUNDARY, boundarySegmentsWithin, insideBase} from './open-world/boundary.mjs';
@@ -25,6 +26,12 @@ test('boundary source preserves exact OSM IDs and destinations', () => {
     }
     if (p.id === 'skatepark' || p.id === 'schoolyard') {
       assert.ok(inResidential(p.pos), `${p.id} lies in the authored residential extension`);
+      continue;
+    }
+    if (p.id === 'mountain') {
+      // A short drive west of the neighbourhood skatepark, outside the OSM base.
+      assert.deepEqual([p.pos[0], p.pos[2]], [...TRAILHEAD]);
+      assert.ok(!insideBase(p.pos[0], p.pos[2]), 'Spirit Mountain is the desert west of the park');
       continue;
     }
     assert.ok(insideBase(p.pos[0], p.pos[2]), `${p.id} outside source union`);
