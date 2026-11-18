@@ -1,6 +1,6 @@
 // Hub skatepark frame budget. Headless Chromium on a real GPU (never a visible window).
 // Prints draw calls, triangles, CPU submit time and driving hitches for the neighbourhood start.
-//   node tools/rc/hub-perf.mjs
+//   node tools/rc/hub-perf.mjs          (HUB_LOOK=classic compares against the pre-Pixar look)
 // Software renderers are refused unless --allow-software, and those numbers are labelled.
 import path from 'node:path';
 import {pathToFileURL, fileURLToPath} from 'node:url';
@@ -40,7 +40,7 @@ page.on('console', message => {
 });
 page.on('pageerror', error => logs.push(`pageerror: ${error.message}`));
 try {
-  await page.goto(`http://127.0.0.1:${port}/rc/?track=hub&audioQa=silent&telemetry=off`, {
+  await page.goto(`http://127.0.0.1:${port}/rc/?track=hub&audioQa=silent&telemetry=off${process.env.HUB_LOOK ? '&look=' + process.env.HUB_LOOK : ''}`, {
     waitUntil: 'domcontentloaded',
     timeout: 60000
   });

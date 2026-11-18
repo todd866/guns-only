@@ -50,3 +50,25 @@ test('the BX interior gets no leaves or grass, and unloaded ground is retried', 
   assert.equal(planCell(cx, cz, ground('concrete')).items.length, 0);
   assert.equal(planCell(1, 1, () => null).hits, 0, 'no hits: the runtime leaves the cell to plan again');
 });
+
+test('the Pixar look adds toy clutter on paving only; classic plans are unchanged', () => {
+  const toyKinds = new Set(['chalkStar', 'chalkSun', 'chalkSmile', 'chalkHop', 'cap', 'crayon']);
+  const toy = [],
+    plain = [];
+  for (let c = 0; c < 60; c++) {
+    const a = planCell(c, -c, ground('concrete')).items,
+      b = planCell(c, -c, ground('concrete'), {toy: true}).items;
+    plain.push(...a);
+    toy.push(...b);
+    assert.deepEqual(
+      b.filter(i => !toyKinds.has(i.kind)),
+      a,
+      'toy clutter never moves the classic detail'
+    );
+  }
+  assert.ok(!plain.some(i => toyKinds.has(i.kind)));
+  for (const k of ['cap', 'crayon']) assert.ok(toy.some(i => i.kind === k), k);
+  assert.ok(toy.some(i => i.kind.startsWith('chalk')), 'chalk');
+  for (const s of ['grass', 'asphalt', 'bowl'])
+    assert.ok(!planCell(5, 5, ground(s), {toy: true}).items.some(i => toyKinds.has(i.kind)), s);
+});

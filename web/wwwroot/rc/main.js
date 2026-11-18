@@ -936,7 +936,7 @@ if (new URLSearchParams(location.search).get('assets') !== 'prototype') {
       // glide has settled, so that parse does not hitch the camera move.
       restQueued = !!openWorld;
       if (openWorld && new URLSearchParams(location.search).get('detail') !== 'off')
-        nearDetail = createNearDetail(scene, openWorld.stream.world);
+        nearDetail = createNearDetail(scene, openWorld.stream.world, {toy: pixarLook});
     })
     .catch(error => {
       assetState = 'failed';

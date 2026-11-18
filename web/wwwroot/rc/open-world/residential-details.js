@@ -11,7 +11,60 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
     disposed = false;
   const meshes = [];
   const heightAt = options.terrain?.heightAt ?? (() => 0);
+  // Owner, 18 Nov 2026: the Pixar (Toy Story) look. Crowns become a few chunky, lumpy clumps
+  // with a baked sky-to-shade gradient instead of alpha-tested leaf cards: solid silhouettes read
+  // as toy-world trees and draw no overdraw. ?look=classic keeps the cards.
+  const pixar = options.look === 'pixar';
 
+  // One crown from lumpy blobs: each an 80-triangle icosphere pushed in and out by a smooth
+  // per-vertex wobble. Normals point away from the whole crown's centre (the stylised-foliage
+  // trick), so light wraps the canopy as one soft ball rather than shading every blob apart.
+  // Vertex colours bake a toy palette: sunlit yellow-green on top, cool deep green underneath.
+  const clumpCrown = blobs => {
+    const parts = [];
+    let cx = 0,
+      cy = 0,
+      cz = 0,
+      w = 0;
+    for (const [[x, y, z], r] of blobs) (cx += x * r), (cy += y * r), (cz += z * r), (w += r);
+    (cx /= w), (cy /= w), (cz /= w);
+    const top = Math.max(...blobs.map(([[, y], r]) => y + r)),
+      bottom = Math.min(...blobs.map(([[, y], r]) => y - r));
+    const lit = new T.Color('#9fd04a'),
+      mid = new T.Color('#4f9a2c'),
+      deep = new T.Color('#24561f'),
+      c = new T.Color();
+    blobs.forEach(([[x, y, z], r], b) => {
+      const g = new T.IcosahedronGeometry(r, 1),
+        pos = g.attributes.position,
+        col = [],
+        nrm = [];
+      for (let i = 0; i < pos.count; i++) {
+        const vx = pos.getX(i),
+          vy = pos.getY(i),
+          vz = pos.getZ(i);
+        const wob = 1 + 0.09 * Math.sin(vx * 3.1 + b * 1.7) * Math.cos(vz * 2.7 - b) + 0.05 * Math.sin(vy * 4.3 + b);
+        const px = x + vx * wob,
+          py = y + vy * wob * 0.92,
+          pz = z + vz * wob;
+        pos.setXYZ(i, px, py, pz);
+        const n = new T.Vector3(px - cx, (py - cy) * 1.2, pz - cz).normalize();
+        nrm.push(n.x, n.y, n.z);
+        const h = Math.min(1, Math.max(0, (py - bottom) / (top - bottom)));
+        h < 0.5 ? c.copy(deep).lerp(mid, h * 2) : c.copy(mid).lerp(lit, (h - 0.5) * 2);
+        col.push(c.r, c.g, c.b);
+      }
+      g.setAttribute('normal', new T.Float32BufferAttribute(nrm, 3));
+      g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+      g.deleteAttribute('uv');
+      parts.push(g);
+    });
+    const merged = mergeGeometries(parts, false);
+    parts.forEach(part => part.dispose());
+    merged.computeBoundingBox();
+    merged.computeBoundingSphere();
+    return merged;
+  };
   const treeGeometry = () => {
     const trunkParts = [];
     const add = (geometry, position, quaternion = null, scale = [1, 1, 1], target = trunkParts) => {
@@ -36,7 +89,7 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
       [0.42, 0.64, -0.48],
       [-0.38, 0.68, 0.5]
     ];
-    for (const [dx, dy, dz] of branchDirs) {
+    for (const [dx, dy, dz] of pixar ? branchDirs.filter((_, i) => i % 2 === 0) : branchDirs) {
       const dir = new T.Vector3(dx, dy, dz).normalize();
       const q = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 1, 0), dir);
       add(branch, [dir.x * 0.68, 2.72 + dir.y * 0.7, dir.z * 0.68], q, [1, 0.92, 1]);
@@ -70,7 +123,27 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
     };
     // Three distinct silhouettes keep the same atlas and instance budget while
     // making the irrigated street canopy read as a planted neighbourhood.
-    const canopies = [
+    const canopies = pixar
+      ? [
+          clumpCrown([
+            [[0, 5.2, 0], 1.55],
+            [[-1.05, 4.55, 0.25], 1.1],
+            [[0.95, 4.6, -0.35], 1.15],
+            [[0.1, 4.35, 0.95], 0.95]
+          ]),
+          clumpCrown([
+            [[0, 5.55, 0], 1.25],
+            [[-0.55, 4.6, 0.3], 1.05],
+            [[0.6, 4.65, -0.25], 1.05],
+            [[0.05, 6.35, 0.05], 0.85]
+          ]),
+          clumpCrown([
+            [[-0.35, 5.05, 0], 1.45],
+            [[0.95, 4.75, 0.2], 1.2],
+            [[-1.05, 4.4, -0.45], 0.95]
+          ])
+        ]
+      : [
       makeCrown([
         [[0, 5.45, 0], 1.08, 0.94],
         [[-0.9, 4.7, 0.05], 0.86, 0.86],
@@ -107,7 +180,7 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
         ],
         [2.9, 1.85]
       )
-    ];
+        ];
     trunk.dispose();
     branch.dispose();
     const trunkGeometry = mergeGeometries(trunkParts, false);
@@ -119,8 +192,8 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
   };
   const geometry = treeGeometry();
   const crownHeight = Math.max(...geometry.canopies.map(canopy => canopy.boundingBox.max.y));
-  const canopyColors = ['#ffffff', '#eff6d9', '#dce6c9'];
-  const trunkMaterial = new T.MeshStandardMaterial({color: '#765842', roughness: 0.96});
+  const canopyColors = pixar ? ['#ffffff', '#f1f7d2', '#e2efc4', '#fff0c8'] : ['#ffffff', '#eff6d9', '#dce6c9'];
+  const trunkMaterial = new T.MeshStandardMaterial({color: pixar ? '#8a5f3c' : '#765842', roughness: 0.96});
   let crownMaterial = null;
 
   const attach = async scene => {
@@ -182,6 +255,17 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
       addInstances(geometry.trunk, trunkMaterial, 'ResidentialTreeTrunks', indices, true, false);
     // Three crown meshes share one atlas/material. Each tree occupies exactly
     // one instance; absent variants never submit degenerate zero-scale geometry.
+    if (pixar) {
+      crownMaterial = new T.MeshStandardMaterial({vertexColors: true, roughness: 0.82});
+      for (const indices of blocks.values())
+        geometry.canopies.forEach((canopy, variant) => {
+          const chosen = indices.filter(i => i % geometry.canopies.length === variant);
+          if (chosen.length)
+            addInstances(canopy, crownMaterial, `ResidentialTreeCanopy${variant + 1}`, chosen, true, true);
+        });
+      scene.add(root);
+      return root;
+    }
     const leaf = await new T.TextureLoader().loadAsync(
       new URL('../assets/foliage/deciduous-cluster.webp', import.meta.url).href
     );

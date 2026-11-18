@@ -226,7 +226,8 @@ export async function loadOpenWorld(search) {
     terrain: residentialTerrain
   });
   const residentialDetails = prepareResidentialDetails(stream.world, residentialData, {
-    terrain: residentialTerrain
+    terrain: residentialTerrain,
+    look: ['classic', 'pixel'].includes(q.get('look')) ? q.get('look') : 'pixar'
   });
   const residential = prepareResidential(
     stream.world,

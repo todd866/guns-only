@@ -1,4 +1,4 @@
-// Look experiment: today's hub vs ?look=pixel, same spots, headless real GPU at 1920x1080 (the TV).
+// Look experiment: today's hub vs another ?look=, same spots, headless real GPU at 1920x1080 (the TV).
 // Screenshots plus draw calls, triangles and frame times for each. Never a visible window.
 //   node tools/rc/look-compare.cjs [outDir]
 const path = require('node:path'),
@@ -37,6 +37,12 @@ const {chromium} = require(
       await page.screenshot({path: `${out}/${look}-drive.png`});
       await page.waitForTimeout(4000);
       await set(7, 0);
+      // Toy height under the park trees: canopy undersides and trunk junctions are what the chase
+      // camera sees. TREE_YAW / TREE_AT override the spot.
+      const at = JSON.parse(process.env.TREE_AT || '[-3021.6, 0.6, -779]');
+      await page.evaluate(([p, yaw]) => window.__gunsOnlyRC.place(p, yaw), [at, Number(process.env.TREE_YAW ?? Math.PI)]);
+      await page.waitForTimeout(2500);
+      await page.screenshot({path: `${out}/${look}-trees.png`});
       const frames = await page.evaluate(() => window.__gunsOnlyRC.frames());
       const shadow = await page.evaluate(() => window.__gunsOnlyRC.board?.().shadow);
       const gpu = await page.evaluate(() => {
@@ -44,7 +50,16 @@ const {chromium} = require(
           e = gl.getExtension('WEBGL_debug_renderer_info');
         return gl.getParameter(e ? e.UNMASKED_RENDERER_WEBGL : gl.RENDERER);
       });
-      report[look] = {frames, shadow, gpu, canvas: await page.evaluate(() => [document.querySelector('#view').width, document.querySelector('#view').height])};
+      const scene = await page.evaluate(() => {
+        let crownTris = 0, trunkTris = 0;
+        window.__gunsOnlyRC.scene().traverse(o => {
+          if (!o.isInstancedMesh || !/^ResidentialTree/.test(o.name)) return;
+          const g = o.geometry, t = ((g.index ? g.index.count : g.attributes.position.count) / 3) * o.count;
+          /Canopy/.test(o.name) ? (crownTris += t) : (trunkTris += t);
+        });
+        return {crownTris, trunkTris, ...window.__gunsOnlyRC.renderer()};
+      });
+      report[look] = {scene, frames, shadow, gpu, canvas: await page.evaluate(() => [document.querySelector('#view').width, document.querySelector('#view').height])};
       console.log(look, JSON.stringify(report[look]));
       await context.close();
     }
