@@ -413,6 +413,12 @@ for (const [id, x0, x1, z0, z1, h] of [
   wedge(x0 + 0.6, x1 - 0.6, z0 - 1, z0, 0.08, h);
   wedge(x0 + 0.6, x1 - 0.6, z1, z1 + 1, h, 0.08);
 }
+// The fountain line is still near 10 m/s after the manual pad and runs off the
+// north edge into a diagonal concrete face. The bank stays shallower than 40°
+// and has no lip wall, so the clock runs out on the slope, inside the square.
+feature('north-runout', 'bank', () => {
+  top([-24, 0.08, 26.5], [-14, 0.08, 26.5], [-14, 2.6, 31], [-24, 2.6, 31], 'bank');
+});
 for (const [id, x0, x1, z0, z1] of [
   ['entry-row', -5, -3, -25, -18],
   ['fountain-row', -22, -20, -23, -17],
