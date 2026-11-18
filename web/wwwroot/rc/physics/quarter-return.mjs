@@ -205,7 +205,8 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
               vert: true,
               // The half-pipe pose and the lip snap are for the hub bowl.
               // A vert ramp (the hangar) keeps the quarter return.
-              bowl: bowl && !a.vert
+              bowl: bowl && !a.vert,
+              hub: hubBowl
             };
             car.lipHold = 0.22;
             // The hub bowl's ignore is short so the same wall can catch the
@@ -257,14 +258,19 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
   // and into the flat floor, where the impact dumped the speed.
   if (arc.vert && arc.inward && car.vel[1] < 0.8 && world) {
     const below = world.raycast([car.pos[0], car.pos[1] + 0.15, car.pos[2]], [0, -1, 0], 8);
-    // A gentle bank is not the wall. Cancelling the fall there left the car
-    // hovering down a brick slope instead of finishing the air.
-    const overFace = below && TRANSITION_SURFACES.has(below.surface) && below.normal[1] < 0.72;
-    if (overFace && below.dist < 1.4) {
+    // Hub bowl only. The deck is a few decimetres up, so the short pop has to
+    // be gathered onto the floor; catching it on the steep face ends the air
+    // high on the wall and the revert window closes. A gentle bank is not that
+    // floor: cancelling the fall there left a brick slope hovering.
+    const hub = !!arc.hub;
+    const overFace =
+      below && TRANSITION_SURFACES.has(below.surface) && below.normal[1] < (hub ? 0.93 : 0.72);
+    if (overFace && below.dist < (hub ? 2.2 : 1.4)) {
       const n = below.normal,
         vn = n[0] * car.vel[0] + n[1] * car.vel[1] + n[2] * car.vel[2];
       if (vn < 0) {
         car.vel[0] -= n[0] * vn;
+        if (hub) car.vel[1] -= n[1] * vn;
         car.vel[2] -= n[2] * vn;
       }
       const along = arc.inward[0] * car.vel[0] + arc.inward[2] * car.vel[2];
