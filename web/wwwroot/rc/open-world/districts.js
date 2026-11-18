@@ -29,9 +29,12 @@ export async function prepareDistricts(world, {eager = [...Object.keys(DISTRICT_
     if (typeof document === 'undefined' || typeof Worker !== 'function') return Promise.resolve(courseFromGlb(buffer));
     return new Promise((resolve, reject) => {
       const worker = new Worker(new URL('./district-course-worker.js', import.meta.url), {type: 'module'}),
+        // A worker that cannot start (a packaging or origin problem) must never cost the kid the
+        // district: parse it here instead, a slower frame but the same collision.
         fail = error => {
           worker.terminate();
-          reject(error instanceof Error ? error : Error(error?.message || 'district course worker failed'));
+          console.warn('district course worker failed; parsing on the main thread', error?.message ?? error);
+          resolve(courseFromGlb(buffer));
         };
       worker.onmessage = event => {
         worker.terminate();

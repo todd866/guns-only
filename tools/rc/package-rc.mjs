@@ -13,6 +13,10 @@ const WWW = path.join(ROOT, 'web/wwwroot'), RC = path.join(WWW, 'rc'), VENDOR = 
 const SHARED_DIRS = [
   { name: 'telemetry', dir: path.join(WWW, 'render/telemetry'), files: new Set(['telemetry_batch.js', 'telemetry_outbox.js']) },
   { name: 'visual', dir: path.join(WWW, 'render/visual/shared'), any: true },
+  // MacBook key caps, shared with the flight shell (14298e08); rc/key-hints.js re-exports them.
+  { name: 'input', dir: path.join(WWW, 'render/input'), files: new Set(['key_hints.js']) },
+  // Hold Start to leave for the TV launcher (only live when the game was opened from it).
+  { name: 'tv', dir: path.join(WWW, 'tv'), files: new Set(['return.mjs']) },
 ];
 const sharedDirOf = (target, roots = SHARED_DIRS.map(d => d.dir)) => {
   const i = roots.findIndex(r => inside(target, r)); if (i < 0) return null;
@@ -131,10 +135,14 @@ export function findEsbuild() {
 // Three sources resolve art with new URL('../assets/..', import.meta.url). Bundled, import.meta.url is
 // no longer inside open-world/, so point them at the page base (<base href="/rc/">) instead.
 const META_URL = /new URL\((['"`])\.\.\/assets\/([^)]*?)import\.meta\.url\)/g;
-export function rewriteMetaUrl(src) {
-  let n = 0;
-  const out = src.replace(META_URL, (_m, q, rest) => { n++; return `new URL(${q}assets/${rest}document.baseURI)`; });
-  return { src: out, rewrites: n, found: (src.match(/import\.meta\.url/g) ?? []).length };
+// A module worker beside its caller (`new URL('./x-worker.js', import.meta.url)`). Bundle mode makes
+// it its own esbuild entry, written flat at rc/<name>, and points the URL there from the page base.
+const META_WORKER = /new URL\((['"`])\.\/([\w-]+-worker\.js)\1,\s*import\.meta\.url\)/g;
+export function rewriteMetaUrl(src, { workers = false } = {}) {
+  let n = 0; const found = (src.match(/import\.meta\.url/g) ?? []).length, entries = [];
+  let out = src.replace(META_URL, (_m, q, rest) => { n++; return `new URL(${q}assets/${rest}document.baseURI)`; });
+  if (workers) out = out.replace(META_WORKER, (_m, q, f) => { n++; entries.push(f); return `new URL(${q}${f}${q}, document.baseURI)`; });
+  return { src: out, rewrites: n, found, workers: entries };
 }
 // Every output reachable from the entry by static imports (what the browser must fetch to start).
 export function staticChunks(metafile, entryOutput) {
@@ -171,10 +179,13 @@ export function packageRcBundle(out = path.join(ROOT, '.rc-dist')) {
     });
     let bytes = 0, files = 0, rewrites = 0, found = 0; const guard = [];
     const copyOut = file => { const dest = path.join(out, 'rc', path.relative(RC, file)); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(file, dest); bytes += fs.statSync(dest).size; files++; };
+    const workerEntries = [];
     for (const file of walk(RC)) {
       if (!CODE.test(file) || path.relative(RC, file) === 'index.html') { copyOut(file); continue; }
+      if (path.relative(RC, file).split(path.sep)[0] === 'fixtures') continue;   // Node-only regeneration scripts
       const dest = path.join(tRc, path.relative(RC, file)); fs.mkdirSync(path.dirname(dest), { recursive: true });
-      const r = rewriteMetaUrl(fs.readFileSync(file, 'utf8')); rewrites += r.rewrites; found += r.found;
+      const r = rewriteMetaUrl(fs.readFileSync(file, 'utf8'), { workers: true }); rewrites += r.rewrites; found += r.found;
+      for (const w of r.workers) workerEntries.push(posix(path.join(path.relative(RC, path.dirname(file)), w)));
       fs.writeFileSync(dest, r.src); guard.push([file, dest, r.src]);
     }
     for (const [file, dest, src] of guard) {
@@ -187,7 +198,7 @@ export function packageRcBundle(out = path.join(ROOT, '.rc-dist')) {
     }
     if (rewrites !== found) throw Error(`import.meta.url: ${found} occurrences but ${rewrites} rewritten; teach rewriteMetaUrl the new pattern`);
     const outRc = path.join(out, 'rc'), metaFile = path.join(tmp, 'meta.json');
-    const r = spawnSync(esbuild, ['main.js', '--bundle', '--splitting', '--format=esm', '--minify', '--target=es2022', `--outdir=${outRc}`,
+    const r = spawnSync(esbuild, ['main.js', ...new Set(workerEntries), '--bundle', '--splitting', '--format=esm', '--minify', '--target=es2022', `--outdir=${outRc}`,
       '--entry-names=[name]', '--chunk-names=chunks/[name]-[hash]', `--metafile=${metaFile}`, '--log-level=warning', '--legal-comments=none'],
       { cwd: tRc, encoding: 'utf8' });
     if (r.status !== 0) throw Error(`esbuild failed: ${r.stderr || r.stdout}`);

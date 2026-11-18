@@ -1417,6 +1417,18 @@ function exit() {
   else location.href = '../';
 }
 $('exit').onclick = exit;
+// The TV launcher (/tv/) is staged, not shipped (owner gate, 6 Nov 2026), and the Mac app and the
+// RC site do not carry it. Leaving to it from a game that was not opened there strands a kid on a
+// missing page, so Games and the Start hold exist only after a visit that came from /tv/.
+const fromTv = (() => {
+  try {
+    if (document.referrer && /\/tv\/?$/.test(new URL(document.referrer).pathname)) sessionStorage.setItem('rc.fromTv', '1');
+    return sessionStorage.getItem('rc.fromTv') === '1';
+  } catch {
+    return false;
+  }
+})();
+$('menu-games').hidden = !fromTv;
 $('menu-games').onclick = () => goHome();
 window.addEventListener('keydown', e => {
   if (!e.repeat) setHintInput({source: 'key'});
@@ -6398,7 +6410,7 @@ dreams = attachDreams({
     }
   }
 });
-const tvHold = attachHold(() => navigator.getGamepads?.() ?? []);
+const tvHold = fromTv ? attachHold(() => navigator.getGamepads?.() ?? []) : () => false;
 function frame(now) {
   tvHold();
   // Two presented frames stay on the establishing shot so a leftover driver stall does not

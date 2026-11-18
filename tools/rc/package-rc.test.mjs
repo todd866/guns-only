@@ -51,7 +51,10 @@ test('bundle mode: one entry, split chunks, no vendor, no import.meta.url', { sk
   packageRcBundle(out);
   const all = files(out), js = all.filter(f => /\.m?js$/.test(f)).map(f => path.relative(path.join(out, 'rc'), f).split(path.sep).join('/'));
   assert.ok(js.includes('main.js')); assert.ok(js.some(f => f.startsWith('chunks/')), 'code-split chunks');
-  assert.ok(js.every(f => f === 'main.js' || f.startsWith('chunks/')), `unbundled scripts shipped: ${js.filter(f => f !== 'main.js' && !f.startsWith('chunks/'))}`);
+  // Module workers are their own entries (the district collision parser, off the driving frame).
+  const entry = f => f === 'main.js' || f.startsWith('chunks/') || /^[\w-]+-worker\.js$/.test(f);
+  assert.ok(js.every(entry), `unbundled scripts shipped: ${js.filter(f => !entry(f))}`);
+  assert.ok(js.includes('district-course-worker.js'), 'the district worker ships as an entry');
   assert.ok(!fs.existsSync(path.join(out, 'rc/vendor')) && !fs.existsSync(path.join(out, 'rc/shared')), 'vendor/shared are bundled in');
   assert.ok(!all.some(f => /\.test\.m?js$/.test(f)), 'test files shipped');
   assert.ok(js.some(f => /^chunks\/assets-/.test(f)) && js.some(f => /^chunks\/art-review-/.test(f)) && js.some(f => /^chunks\/asset-collision-/.test(f)), 'dynamic imports became chunks');
