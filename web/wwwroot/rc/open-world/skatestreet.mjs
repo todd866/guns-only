@@ -26,7 +26,12 @@ const rounded = (x, z, cx, cz, hx, hz, r) => {
 };
 export function streetBowlHeight(x, z) {
   const notch = z < -10.5 ? 2.3 * Math.exp(-(((x + 23) / 4.5) ** 2)) : 0;
-  const deep = rounded(x, z - notch, -22.5, -10.5, 12.5, 12.5, 6);
+  let deep = rounded(x, z - notch, -22.5, -10.5, 12.5, 12.5, 6);
+  // The rounded south corner lets a southbound pop keep its along-lip speed and
+  // land on the mezzanine. A north-facing quarter takes that speed out. It fades
+  // before the west skirt and before the drop lane, so neither becomes a corner.
+  const fade = clamp((x + 33.6) / 2.2, 0, 1) * clamp((-30.6 - x) / 2.2, 0, 1);
+  if (fade > 0) deep = (1 - fade) * deep + fade * Math.max(deep, -17.2 - z);
   const shallow = rounded(x, z, 0, -10.5, 10, 10.5, 5);
   let y = Math.min(
     0.04 + 3.2 * arc(clamp(1 + deep / 3.2, 0, 1)),
