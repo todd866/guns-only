@@ -24,7 +24,8 @@ const fs = require('node:fs'),
     console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail !== undefined ? ' ' + JSON.stringify(detail) : ''}`);
   };
   try {
-    server = await require('./serve-static.cjs')(path.join(root, 'web/wwwroot'), 19877);
+    // PAD_QA_ROOT checks a packaged build, e.g. the Mac app's Contents/Resources/web.
+    server = await require('./serve-static.cjs')(process.env.PAD_QA_ROOT || path.join(root, 'web/wwwroot'), 19877);
     browser = await chromium.launch({headless: true, channel: 'chromium', args: ['--mute-audio']});
     const context = await browser.newContext({viewport: {width: 1280, height: 720}});
     await context.addInitScript(() => {
@@ -87,9 +88,12 @@ const fs = require('node:fs'),
     // Hold A: crouch, no pop on the press. Release: pop.
     await set(0, 1);
     let poppedEarly = false;
+    report.holdTrace = [];
     for (let i = 0; i < 6; i++) {
       await wait(75, 1);
-      poppedEarly ||= (await board()).air;
+      const b = await board();
+      report.holdTrace.push({air: b.air, y: +b.y.toFixed(3), speed: +b.speed.toFixed(2), wheels: b.wheels?.map(Number).join('')});
+      poppedEarly ||= b.air;
     }
     check('holding A does not pop yet', !poppedEarly);
     let t0 = await now();
