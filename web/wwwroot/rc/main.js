@@ -459,6 +459,16 @@ const adaptive = createAdaptiveResolution({
   min: Math.min(devicePixelRatio, 1)
 });
 renderer.setPixelRatio(adaptive.ratio);
+// ?look=pixel: the look experiment (owner, 18 Nov 2026, after "graphics suck and frame rate sucks"):
+// A Short Hike style, a fixed ~300-line render upscaled with crisp pixels. Adaptive resolution
+// stays out of it so the comparison is the look, not the scaler.
+const pixelLook = new URLSearchParams(location.search).get('look') === 'pixel';
+const PIXEL_LINES = 300;
+const pixelRatio = () => Math.min(1, PIXEL_LINES / Math.max(1, innerHeight));
+if (pixelLook) {
+  canvas.style.imageRendering = 'pixelated';
+  renderer.setPixelRatio(pixelRatio());
+}
 renderer.info.autoReset = false;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = T.PCFSoftShadowMap;
@@ -1691,6 +1701,10 @@ function renderSplit(sc = scene) {
   camera.updateProjectionMatrix();
 }
 function resize() {
+  if (pixelLook) {
+    renderer.setPixelRatio(pixelRatio());
+    polish?.setPixelRatio?.(pixelRatio());
+  }
   renderer.setSize(innerWidth, innerHeight, false);
   polish?.resize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
@@ -6594,7 +6608,7 @@ function frame(now) {
   bootTrace?.frame(frameDelta, now);
   {
     // Boot hitches are shader and upload stalls, not a reason to drop the pixel ratio.
-    const r = !paused && started && !openingHeld ? stepAdaptiveResolution(adaptive, frameDelta) : null;
+    const r = !pixelLook && !paused && started && !openingHeld ? stepAdaptiveResolution(adaptive, frameDelta) : null;
     if (r) {
       renderer.setPixelRatio(r);
       polish?.setPixelRatio?.(r);
