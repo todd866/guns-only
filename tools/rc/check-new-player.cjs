@@ -19,7 +19,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   assert.equal(report.arrival.audioSilent,true);assert.equal(report.arrival.world.event,'district-skatepark');assert.ok(report.arrival.x<-2900&&report.arrival.z<-700,'Fresh player starts in the residential skatepark');assert.ok(!report.arrival.world.discovered.includes('bx'));
   await page.screenshot({path:out+'/arrival.png'});
   // A newcomer can leave the small pad with ordinary controls, then recover locally.
-  await page.evaluate(()=>{window.qaPad.buttons[6].value=.5;});await page.waitForTimeout(4000);await page.evaluate(()=>{window.qaPad.buttons[6].value=0;});
+  // Reverse until 5 m from the pad or 10 s: sim time follows rendered frames, so a loaded Mac covers less ground per wall-clock second.
+  await page.evaluate(()=>{window.qaPad.buttons[6].value=.5;});for(let i=0;i<20;i++){await page.waitForTimeout(500);const p=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());if(Math.hypot(p.x-report.arrival.x,p.z-report.arrival.z)>5)break;}await page.evaluate(()=>{window.qaPad.buttons[6].value=0;});
   report.freeExit=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());
   assert.ok(Math.hypot(report.freeExit.x-report.arrival.x,report.freeExit.z-report.arrival.z)>5,'Free drive crosses the pad edge without an invisible barrier');
   assert.equal(report.freeExit.recoveries,0,'Leaving the park does not force a rescue');
@@ -56,12 +57,12 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
    }requestAnimationFrame(frame);
   });
   for(let waited=0;waited<420;waited+=10){await page.waitForTimeout(10000);const state=await page.evaluate(()=>({s:window.__gunsOnlyRC.snapshot(),done:window.qaDrive?.done}));console.log(JSON.stringify({seconds:waited+10,lap:state.s.lap,gate:state.s.gate,travel:Math.round(state.s.travel),recoveries:state.s.recoveries}));if(state.done)break;if(state.s.recoveries>0)throw Error('Starter race required automatic recovery');}
-  assert.ok(await page.evaluate(()=>window.qaDrive?.done),'Three laps must finish through controller input');
+  assert.ok(await page.evaluate(()=>window.qaDrive?.done),'The kid race (two laps) must finish through controller input');
   report.performance=await page.evaluate(()=>{const f=window.qaDrive.frames.slice().sort((a,b)=>a-b);return {count:f.length,p50:f[Math.floor(f.length*.5)],p95:f[Math.floor(f.length*.95)],max:f.at(-1)};});
   assert.ok(report.performance.count>1000,'Measure sustained driving, not just the loading screen');
   assert.ok(report.performance.p95<33.34,`Starter race frame pacing exceeded 33ms: ${JSON.stringify(report.performance)}`);
   report.finished=await page.evaluate(()=>window.__gunsOnlyRC.snapshot());report.samples=await page.evaluate(()=>window.qaDrive.samples);report.fireInputs=await page.evaluate(()=>window.qaDrive.fireInputs);assert.ok(report.fireInputs>0,'The journey collects and uses ordinary race items');
-  assert.equal(report.finished.finished,true);assert.equal(report.finished.recoveries,0);assert.equal(report.finished.lapTimes.length,3);
+  assert.equal(report.finished.finished,true);assert.equal(report.finished.recoveries,0);assert.equal(report.finished.lapTimes.length,2,'kid races are two laps (raceLapCount, 6 Nov kid racing)');
   assert.ok(report.samples.some(s=>s.near>0),'Rivals must be visible during the race');
   await page.screenshot({path:out+'/finish.png'});
   assert.ok(await page.evaluate(()=>JSON.parse(localStorage.getItem('guns-only.rc.world.v1')).raceWins['district-skatepark']>0),'Race finish is saved');
@@ -79,6 +80,6 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   await page.locator('#pause').click();await page.locator('#start').click();await ready();
   await page.locator('#atlas').click();await page.locator('#world-event').selectOption('district-bx');await page.locator('#world-race').click();await ready();
   assert.equal(await page.evaluate(()=>window.__gunsOnlyRC.snapshot().world.event),'district-bx');
-  assert.deepEqual(errors,[]);report.passed=true;console.log('Fresh skatepark → nearby race → three laps → explore → housing and BX races passed');
+  assert.deepEqual(errors,[]);report.passed=true;console.log('Fresh skatepark → nearby race → two kid laps → explore → housing and BX races passed');
  }finally{if(page&&!report.passed){report.lastState=await page.evaluate(()=>window.__gunsOnlyRC?.snapshot()).catch(()=>null);report.samples=await page.evaluate(()=>window.qaDrive?.samples).catch(()=>null);await page.screenshot({path:out+'/failure.png'}).catch(()=>{});}report.errors=errors;fs.writeFileSync(out+'/journey.json',JSON.stringify(report,null,2));await browser?.close();server?.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});
