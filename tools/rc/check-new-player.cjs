@@ -9,7 +9,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   let base=process.argv[3];if(!base){server=await require('./serve-static.cjs')(path.resolve(process.env.RC_QA_ROOT||root+'/web/wwwroot'),19867);base='http://127.0.0.1:19867';}
   browser=await chromium.launch({headless:true,channel:'chromium',args:['--mute-audio']});
   const context=await browser.newContext({viewport:{width:1280,height:720}});
-  await context.addInitScript(()=>{window.qaPad={connected:true,mapping:'standard',axes:[0,0],buttons:Array.from({length:10},()=>({value:0,pressed:false}))};Object.defineProperty(navigator,'getGamepads',{value:()=>[window.qaPad]});});
+  await context.addInitScript(()=>{window.qaPad={connected:true,mapping:'standard',axes:[0,0],buttons:Array.from({length:10},()=>({value:0,pressed:false}))};Object.defineProperty(navigator,'getGamepads',{configurable:true,writable:true,value:()=>[window.qaPad]});});
   page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base+'/rc/?audioQa=silent&telemetry=off');
   const ready=()=>page.waitForFunction(()=>window.__gunsOnlyRC?.snapshot().assets==='blender'&&!window.__gunsOnlyRC.snapshot().paused,null,{timeout:90000});

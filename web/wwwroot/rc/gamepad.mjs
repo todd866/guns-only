@@ -120,21 +120,34 @@ export function mapPad(form, p, feel) {
     out.boostHeld = down(p, 2);
     return applyFeel(out, raw, feel);
   }
-  // Car and skateboard: left stick steers only. RT goes, LT brakes then reverses.
-  out.steer = lx;
+  // Car and skateboard: left stick (or the d-pad) steers only. RT goes, LT brakes then reverses.
+  // The d-pad is THPS2's trick pad: it steers and gives every trick its direction.
+  const dx = Number(down(p, 15)) - Number(down(p, 14)),
+    dy = Number(down(p, 12)) - Number(down(p, 13));
+  out.steer = lx || dx;
   out.throttle = rt > 0 ? rt : lt > 0 ? -lt : 0;
-  out.drift = down(p, 3) || down(p, 5);
   out.jumpHeld = !air && down(p, 0);
   out.boostHeld = down(p, 2);
-  // Standard face, shared by the car's tricks: A jump, B grind, X flip, Y grab.
-  // Y still drifts on the ground (RB too). The caller picks flip versus boost from the air state.
+  // One trick face for board and car, THPS2's PlayStation layout in Xbox letters (owner, 18 Nov
+  // 2026): A (✕) ollie, X (□) flip, B (○) grab, Y (△) grind. The caller picks flip versus boost,
+  // and grab versus morph, from the air state.
   out.flipHeld = down(p, 2);
-  out.grabHeld = down(p, 3);
-  out.grindHeld = down(p, 1);
+  out.grabHeld = down(p, 1);
+  out.grindHeld = down(p, 3);
+  if (f === 'board') {
+    // THPS2's L1/R1 spin in the air; RB at touchdown is the revert (the old hop button).
+    out.spin = Number(down(p, 5)) - Number(down(p, 4));
+    out.drift = down(p, 4) || down(p, 5);
+  } else {
+    // The car keeps Y and RB as drift on the ground; Y near a rail is the grind.
+    out.drift = down(p, 3) || down(p, 5);
+  }
   // applyFeel clears moveY on a car (the stick is not the throttle). Keep the trick direction.
   const felt = applyFeel(out, raw, feel);
-  felt.trickX = lx;
-  felt.trickY = ly;
+  if (!lx && dx) felt.steer = dx; // applyFeel shapes the stick only; the d-pad is full lock
+  felt.trickX = lx || dx;
+  felt.trickY = ly || dy;
+  if (f === 'board') felt.spin = out.spin;
   return felt;
 }
 
@@ -206,6 +219,7 @@ const IDLE = {
   grindHeld: false,
   trickX: 0,
   trickY: 0,
+  spin: 0,
   joined: null
 };
 
@@ -269,7 +283,8 @@ export function createGamepadInput() {
         grabHeld: a.grabHeld || b.grabHeld,
         grindHeld: a.grindHeld || b.grindHeld,
         trickX: stronger(a.trickX || 0, b.trickX || 0),
-        trickY: stronger(a.trickY || 0, b.trickY || 0)
+        trickY: stronger(a.trickY || 0, b.trickY || 0),
+        spin: stronger(a.spin || 0, b.spin || 0)
       };
       const rate = a.steerRate ?? b.steerRate;
       if (rate != null) row.steerRate = rate;

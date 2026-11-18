@@ -190,3 +190,27 @@ one continuous world and all geometry, names, signs and jokes remain original.
 ### Residential season and setting (24 October 2026)
 
 Keep the neighbourhood recognisable through its routes, school, civic centre and small skatepark, transplanted into the American Southwest. Late spring/early summer: full leafy shade trees, irrigated lawns and playing fields, warm buildings and desert mountain backdrop. Assume sufficient irrigation across the residential district; keep its lawns and verges green rather than restricting greenery to small garden patches. Reference photographs taken in winter establish architecture only; do not reproduce bare winter vegetation. Personal source locations and photographs remain in the ignored private reference directory.
+
+### THPS2 pad layout for the board and car (18 November 2026)
+
+Owner: "better integration for gamepads like my 8bitdo controllers, and I want to more closely
+mimic the controls in THPS2 when skateboarding." Sourced layout (PlayStation THPS2, per a
+gameswelt.de walkthrough: Triangle grind/slide, Square flip, Circle grab, X crouch and ollie,
+L2 nollie/fakie, R2 switch, L1/L2 spin; Giant Bomb and the same guide: manual = up then down,
+entered in the air, nose manual = down then up). In Xbox letters as the 8BitDo Ultimate 2 prints them:
+
+| THPS2 | Pad | Board | Car |
+|---|---|---|---|
+| X hold, release | A | crouch, pop on release (a tap is the old ollie, a 0.5 s crouch pops 30% higher) | jump |
+| Square + dir | X | flip | flip |
+| Circle + dir | B | grab (on the ground B still changes form) | grab |
+| Triangle + dir | Y | grind (kid mode keeps the board's auto-snap) | grind near a rail; drift on the ground |
+| L1/R1 | LB/RB | spin in the air; RB at touchdown reverts | drift |
+| d-pad | d-pad | steers and aims every trick | same |
+| up,down / down,up | d-pad or stick | manual (the board's held-grab manual) | wheelie / stoppie |
+
+Deliberate differences: RT/LT stay go/brake instead of nollie/switch (our board does not roll by
+itself, and the pad header rule is that the stick is never the throttle). RB held in the air still
+also counts as a grab in park scoring ("360 Indy"), because skate.mjs treats the old revert button
+as a grab; a pure spin needs a skate.mjs change after the venue retune merges. Big Kid "Y to grind"
+also waits for that merge (grind.mjs). Evidence: tools/rc/check-pad-board.cjs, 11/11 on Apple M5.

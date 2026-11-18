@@ -227,6 +227,7 @@ import {
 import {curbRails, residentialCurbRails, parkRails, STREET_RAILS} from './open-world/street-rails.mjs';
 import {SEWER_PARK, sewerWorld} from './open-world/sewer.mjs';
 import {createBoardTricks, stepBoardTricks, dirOf, boardPose} from './physics/board-tricks.mjs';
+import {stepOllie, stepManual} from './pad-skate.mjs';
 import {createCarTricks, carTrickCommand, carTrickSettle, carStick} from './physics/car-tricks.mjs';
 import {
   SKATESTREET,
@@ -2848,6 +2849,11 @@ let punchQueued = false,
   boardTricks = createBoardTricks(),
   carTricks = createCarTricks(),
   flipQueued = null,
+  // THPS2 pad timing (pad-skate.mjs): the board's crouch/pop and the latched manual.
+  ollieState = null,
+  boardPop = null,
+  manualPad = null,
+  padManual = {wheelie: false, stoppie: false},
   grindUntil = 0,
   hopQueued = false,
   lastGrind = null,
@@ -4919,7 +4925,14 @@ function refreshStreetRails() {
   railLines.geometry.setAttribute('position', new T.Float32BufferAttribute(v, 3));
   railLines.visible = true;
 }
-function boardStep(input) {
+// Read-only trick log for headless pad QA (tools/rc/check-pad-board.cjs). Never drives the game.
+const qaTricks = [],
+  qaTrickLog = e => {
+    qaTricks.push({type: e.type, name: e.name ?? e.kind ?? null, t: Math.round(performance.now())});
+    if (qaTricks.length > 60) qaTricks.shift();
+  };
+const withPadManual = t => ({wheelie: t.wheelie || padManual.wheelie, stoppie: t.stoppie || padManual.stoppie});
+function boardStep(input, live = {}) {
   if (form !== 'board') {
     flipQueued = null;
     return;
@@ -4938,11 +4951,12 @@ function boardStep(input) {
     {
       air: s.car.contacts === 0 && !s.flight.mode,
       flip: flipQueued,
-      grab: keys.has('KeyE') ? dirOf(stick()) : null
+      grab: keys.has('KeyE') || live.grabHeld ? dirOf(carStick(live, stick())) : null
     },
     1 / 120,
     mode
   )) {
+    qaTrickLog(ev);
     if (!tk) continue;
     if (ev.type === 'trick') scoreTrick(tk, ev.name, ev.points);
     else {
@@ -4955,6 +4969,7 @@ function boardStep(input) {
   flipQueued = null;
   if (street && !skate)
     for (const e of stepSkate(street, s, input, 1 / 120, streetFrame)) {
+      qaTrickLog(e);
       skateHud.event(e);
       if (e.type === 'bail') audio.impact(4);
       else if (e.type === 'land' && e.tricks > 1) audio.coin();
@@ -5009,7 +5024,7 @@ function carStep(input, live = {}) {
     }
   }
   if (street && !skate)
-    for (const e of stepSkate(street, s, {...input, ...trickInput(keys), carForm: true}, 1 / 120, streetFrame)) {
+    for (const e of stepSkate(street, s, {...input, ...withPadManual(trickInput(keys)), carForm: true}, 1 / 120, streetFrame)) {
       skateHud?.event(e);
       if (e.type === 'bail') audio.impact(4);
       else if (e.type === 'land' && e.tricks > 1) audio.coin();
@@ -5668,21 +5683,30 @@ function useButton(all) {
   if (edge(0) && !robot && form !== 'board' && !skate) commandFlight('up');
   if (edge(1)) {
     if (s.flight.mode) commandFlight('land');
-    else if (form === 'car' && !robot && railNearby(s.skateRide, s.car.pos)) grindUntil = performance.now() + 700;
-    else tapKey('KeyT');
+    // B is the grab in the air (THPS2's circle); it changes form only on the ground.
+    else if (!robot && s.car.contacts === 0 && (form === 'board' || form === 'car')) {
+      /* grab: read from pad.grabHeld in the sim step */
+    } else tapKey('KeyT');
   }
   if (edge(2)) {
     if (robot) {
       punchQueued = true;
       useQueued = true;
     }
-    if (!btn.hidden) {
+    // In the air X is the flip (THPS2's square). A skate park's own Skate button is on screen
+    // exactly where the kid flips, so the press must not open the card mid-air.
+    const tricking = !robot && !s.flight.mode && s.car.contacts === 0 && (form === 'board' || form === 'car');
+    if (!btn.hidden && !tricking) {
       btn.click();
       if (!robot) useClicked = true;
     }
   }
   // On foot, Y is still boost and the on-screen Skate / go-in button.
-  if (edge(3) && robot && !btn.hidden) {
+  const yEdge = edge(3);
+  // Y is the grind (THPS2's triangle). The board snaps on by itself; the car takes a tap near a rail.
+  if (yEdge && !robot && form === 'car' && !s.flight.mode && railNearby(s.skateRide, s.car.pos))
+    grindUntil = performance.now() + 700;
+  if (yEdge && robot && !btn.hidden) {
     btn.click();
     useClicked = true;
   }
@@ -6483,8 +6507,29 @@ function frame(now) {
     if (robot) punchQueued = true;
   }
   if (labBusy(labRide) && (pad.fire || pad.jump)) labSkipEdge = true;
+  // THPS2 on the pad (owner, 18 Nov 2026): on the board A crouches while held and pops on release,
+  // higher the longer the crouch; up-down / down-up flicks latch a manual / nose manual.
+  {
+    const boarding = form === 'board' && !robot && !s.flight.mode;
+    const o = stepOllie(boarding ? ollieState : null, boarding && pad.jumpHeld && !paused && !ui.panel(), now / 1000);
+    ollieState = boarding ? o.state : null;
+    if (boarding) {
+      if (o.pop) boardPop = o.pop;
+      pad.jump = false;
+    }
+    const tricking = !robot && !s.flight.mode && (form === 'board' || form === 'car');
+    const m = stepManual(manualPad, {
+      y: tricking && !paused ? pad.trickY || 0 : 0,
+      now: now / 1000,
+      ollie: !!o.pop || (!boarding && !!pad.jump),
+      airborne: s.car.contacts === 0,
+      speed: Math.abs(s.car.forwardSpeed ?? s.car.speed ?? 0)
+    });
+    manualPad = m.state;
+    padManual = {wheelie: tricking && m.wheelie, stoppie: tricking && m.stoppie};
+  }
   if (pad.boost && !ui.panel() && !useClicked) {
-    const trickAir = form === 'car' && !robot && !s.flight.mode && s.car.contacts === 0;
+    const trickAir = (form === 'car' || form === 'board') && !robot && !s.flight.mode && s.car.contacts === 0;
     if (trickAir) flipQueued = dirOf(carStick(pad, stick()));
     else if (!leverNear(robot ? robot.pos : s.car.pos)) toggleBoost();
   }
@@ -6586,7 +6631,10 @@ function frame(now) {
       }
       const drive = drivingInput(keys, {
           ...pad,
-          steer: touchState.steer || pad.steer,
+          // On the board in the air LB/RB spin (THPS2's L1/R1).
+          steer: touchState.steer || (form === 'board' && s.car.contacts === 0 && pad.spin ? pad.spin : pad.steer),
+          // The board's manual is the held grab on flat ground (grind.mjs); the pad's up-down flick holds it.
+          drift: pad.drift || (form === 'board' && (padManual.wheelie || padManual.stoppie)),
           throttle: touchState.throttle || pad.throttle,
           brake: touchState.brake || pad.brake,
           steerRate: mode === 'kid' ? KID_STEER_RATE : undefined
@@ -6597,6 +6645,13 @@ function frame(now) {
         else if (s.car.grounded)
           s.car.vel = [s.car.vel[0], s.car.vel[1] + (form === 'board' ? FLIGHT.ollie : FLIGHT.hop), s.car.vel[2]];
         pad.jump = false;
+      }
+      if (boardPop) {
+        if (!robot && race.roam && !s.flight.mode && !dreams?.ownsSim()) {
+          if (s.skateRide?.active || s.wallRide) hopQueued = true;
+          else if (s.car.grounded) s.car.vel = [s.car.vel[0], s.car.vel[1] + FLIGHT.ollie * boardPop, s.car.vel[2]];
+        }
+        boardPop = null;
       }
       if (
         pad2?.jump &&
@@ -6733,7 +6788,7 @@ function frame(now) {
           ? {throttle: 0, steer: 0, brake: true}
           : {
               ...skateInput,
-              ...trickInput(keys),
+              ...withPadManual(trickInput(keys)),
               boardSpin: form === 'board',
               hop: hopQueued,
               carForm: carOn,
@@ -6741,7 +6796,7 @@ function frame(now) {
                 carOn &&
                 (pad.grindHeld || keys.has('KeyV') || performance.now() < grindUntil) &&
                 railNearby(s.skateRide, s.car.pos),
-              grindDir: form === 'board' ? stick() : carOn ? trickDir : null,
+              grindDir: form === 'board' ? carStick(pad, stick()) : carOn ? trickDir : null,
               carTrick: carDrive,
               fire: fireQueued,
               flight: fl,
@@ -6765,7 +6820,7 @@ function frame(now) {
       skyJumpStep();
       carStep(skateInput, pad);
       skateStep(skateInput);
-      boardStep(skateInput);
+      boardStep(skateInput, pad);
       if (openWorld)
         for (const session of [s, ...race.rivals.map(r => r.session)]) openWorld.step(session.car, 1 / 120);
       skyTourStep(skyPlacement, 1 / 120);
@@ -6952,7 +7007,7 @@ function frame(now) {
       openWorld.traffic(race);
       if ((s.assist.balanceTime ?? 0) > 0.6 && !trickCalled) {
         trickCalled = true;
-        callout(s.assist.balance > 0 ? 'WHEELIE!' : 'STOPPIE!');
+        callout(form === 'board' ? 'MANUAL!' : s.assist.balance > 0 ? 'WHEELIE!' : 'STOPPIE!');
       }
       if (!s.assist.balance) trickCalled = false;
       if (race.roam && !race.furball && race.rivals.length) {
@@ -7814,6 +7869,17 @@ window.__gunsOnlyRC = {
     loot: {batteries: dexState().batteries, parts: dexState().parts}
   }),
   form: () => form,
+  board: () => ({
+    form,
+    air: s.car.contacts === 0,
+    y: s.car.pos[1],
+    speed: s.car.speed,
+    manual: !!s.skateRide?.manual,
+    padManual: {...padManual},
+    noseUp: +(2 * (s.car.q[1] * s.car.q[2] - s.car.q[3] * s.car.q[0])).toFixed(3),
+    wheels: s.car.wheels.map(w => !!w.contact),
+    tricks: qaTricks.slice()
+  }),
   qaEra: era => openWorld?.qaEra?.(era),
   roundup: () =>
     openWorld?.meadow?.()?.round && {

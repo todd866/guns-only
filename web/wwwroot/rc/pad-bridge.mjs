@@ -29,7 +29,12 @@ export function installPadBridge({
   try {
     Object.defineProperty(navigatorObject, 'getGamepads', {configurable: true, writable: true, value: wrap});
   } catch {
-    navigatorObject.getGamepads = wrap;
+    // A locked getGamepads (an embedder or test stub) keeps the plain API; never break boot over it.
+    try {
+      navigatorObject.getGamepads = wrap;
+    } catch {
+      return;
+    }
   }
   navigatorObject.__rcPadsInstalled = true;
   if (bridged.length) onNative?.(bridged);

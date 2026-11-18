@@ -12,7 +12,7 @@ export const CAR_FLIP = Object.freeze({
   left: {name: 'Barrel Roll', axis: 'roll', turn: 1, points: 400},
   right: {name: 'Barrel Roll', axis: 'roll', turn: -1, points: 400}
 });
-// Y in the air. Up and down spin the whole car; the others are toy gags.
+// B in the air (THPS2's grab button). Up and down spin the whole car; the others are toy gags.
 export const CAR_GRAB = Object.freeze({
   none: {name: 'Honk', points: 150},
   left: {name: 'Wiggle', points: 200},
@@ -33,7 +33,7 @@ export function createCarTricks() {
   return {air: 0, flip: null, grab: null};
 }
 
-/** Face buttons and the keyboard twins. A jump, X flip, Y grab, B grind. */
+/** Face buttons and the keyboard twins. A jump, X flip, B grab, Y grind (THPS2's face). */
 export function carTrickHeld({pad = {}, keys} = {}) {
   const down = code => !!keys?.has?.(code);
   return {

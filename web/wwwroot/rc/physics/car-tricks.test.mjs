@@ -248,7 +248,7 @@ test('the car wall-rides a vertical face and a hop plants off', () => {
   assert.ok(events.some(e => e.name === 'Wall Ride' || e.name === 'Wall Plant'));
 });
 
-test('standard pad: A jumps, X flips, Y grabs, B grinds, with keyboard twins', () => {
+test('standard pad, THPS2 face: A jumps, X flips, B grabs, Y grinds, with keyboard twins', () => {
   const buttons = down => Array.from({length: 17}, (_, i) => ({value: down.includes(i) ? 1 : 0}));
   const pad = (down, axes = [0, 0, 0, 0]) => ({
     connected: true,
@@ -262,13 +262,13 @@ test('standard pad: A jumps, X flips, Y grabs, B grinds, with keyboard twins', (
   assert.equal(a.grindHeld, false);
   const x = mapPad('car', pad([2]));
   assert.equal(x.flipHeld, true, 'X flips');
-  const y = mapPad('car', pad([3], [0.8, 0]));
-  assert.equal(y.grabHeld, true, 'Y grabs');
-  const b = mapPad('car', pad([1]));
-  assert.equal(b.grindHeld, true, 'B grinds');
+  const b = mapPad('car', pad([1], [0.8, 0]));
+  assert.equal(b.grabHeld, true, 'B grabs');
+  const y = mapPad('car', pad([3]));
+  assert.equal(y.grindHeld, true, 'Y grinds');
   const keys = new Set(['Space', 'KeyQ', 'KeyE', 'KeyV']);
   assert.deepEqual(carTrickHeld({pad: {}, keys}), {jump: true, flip: true, grab: true, grind: true});
-  assert.deepEqual(carTrickHeld({pad: b, keys: new Set()}), {
+  assert.deepEqual(carTrickHeld({pad: y, keys: new Set()}), {
     jump: false,
     flip: false,
     grab: false,

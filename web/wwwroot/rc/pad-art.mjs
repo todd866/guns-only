@@ -19,18 +19,20 @@ const DRIVE = [
   {act: 'FLY', ctl: 4}
 ];
 const FORM_ACTIONS = {
-  // A jump, X flip, Y grab, B grind. RB still drifts. B morphs when no rail is close.
+  // THPS2's face in Xbox letters, shared with the board: A jump, X flip, B grab, Y grind.
+  // On the ground X boosts, Y and RB drift, B morphs. Up-then-down on the d-pad is a wheelie.
   car: [
     {act: 'STEER', ctl: 'stick'},
     {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
     {act: 'GO', ctl: 7},
     {act: 'BRAKE', ctl: 6},
     {act: 'JUMP', ctl: 0},
-    {act: 'GRIND', ctl: 1, why: 'near a rail'},
+    {act: 'GRAB', ctl: 1, why: 'in the air'},
     {act: 'FLIP', ctl: 2, why: 'in the air'},
-    {act: 'GRAB', ctl: 3, why: 'in the air'},
+    {act: 'GRIND', ctl: 3, why: 'near a rail'},
     {act: 'DRIFT', ctl: 5},
-    {act: 'FLY', ctl: 4}
+    {act: 'FLY', ctl: 4},
+    {act: 'WHEELIE', ctl: 12, why: 'up then down'}
   ],
   robot: [
     {act: 'MOVE', ctl: 'stick', why: 'L3 sprint'},
@@ -55,7 +57,21 @@ const FORM_ACTIONS = {
     {act: 'YAW', ctl: 5}
   ]
 };
-FORM_ACTIONS.board = DRIVE.map(a => (a.ctl === 0 ? {...a, act: 'OLLIE'} : a));
+// The board is THPS2 on the PlayStation, in Xbox letters (owner, 18 Nov 2026): hold A to crouch,
+// let go to ollie; X flip, B grab, Y grind, LB/RB spin; up then down is a manual.
+FORM_ACTIONS.board = [
+  {act: 'STEER', ctl: 'stick'},
+  {act: 'LOOK', ctl: 'stickR', why: 'R3 centre'},
+  {act: 'GO', ctl: 7},
+  {act: 'BRAKE', ctl: 6},
+  {act: 'OLLIE', ctl: 0, why: 'hold, let go'},
+  {act: 'GRAB', ctl: 1, why: 'in the air'},
+  {act: 'FLIP', ctl: 2, why: 'in the air'},
+  {act: 'GRIND', ctl: 3, why: 'near a rail'},
+  {act: 'SPIN', ctl: 4},
+  {act: 'SPIN', ctl: 5},
+  {act: 'MANUAL', ctl: 12, why: 'up then down'}
+];
 FORM_ACTIONS.plane = FORM_ACTIONS.fly;
 FORM_ACTIONS.gunship = FORM_ACTIONS.fly;
 // The chopper flies the same rows helicopter-correctly (owner, 6 Nov 2026):
@@ -145,11 +161,13 @@ export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {l
         7: [L.shoulder[7][0] + L.shoulder[7][2], L.shoulder[7][1] + 8, 1],
         6: [L.shoulder[6][0], L.shoulder[6][1] + 9, -1],
         2: [...L.face[2], 1],
-        4: [L.shoulder[4][0], L.shoulder[4][1] + 9, -1]
+        4: [L.shoulder[4][0], L.shoulder[4][1] + 9, -1],
+        12: [L.dpad[0] - 9, L.dpad[1], -1]
       },
       place = {
         stick: [-58, kind === 'xbox' ? 78 : 150],
         stickR: [304, 176],
+        12: [-58, kind === 'xbox' ? 122 : 104],
         6: [-58, 8],
         4: [-58, 34],
         7: [304, 8],
@@ -164,7 +182,7 @@ export function padSvg(kind, {pressed = new Set(), axes = [0, 0, 0, 0]} = {}, {l
         [tx, ty] = place[ctl],
         right = tx > 150;
       out.push(
-        `<g${pulse(ctl)}><line x1="${cx}" y1="${cy}" x2="${right ? tx - 4 : tx + 54}" y2="${ty - 4}" stroke="#fff8" stroke-width="1.5"/><text x="${tx}" y="${ty}" font-size="17" fill="${act === 'GO' ? ON : '#fff'}">${act}</text>${why ? `<text x="${tx}" y="${ty + 12}" font-size="11" fill="#fffa">${why}</text>` : ''}</g>`
+        `<g${pulse(ctl)}><line x1="${cx}" y1="${cy}" x2="${right ? tx - 4 : tx + Math.max(54, act.length * 12.5)}" y2="${ty - 4}" stroke="#fff8" stroke-width="1.5"/><text x="${tx}" y="${ty}" font-size="17" fill="${act === 'GO' ? ON : '#fff'}">${act}</text>${why ? `<text x="${tx}" y="${ty + 12}" font-size="11" fill="#fffa">${why}</text>` : ''}</g>`
       );
     }
   }
