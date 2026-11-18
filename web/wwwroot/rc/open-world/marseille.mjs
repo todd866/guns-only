@@ -49,7 +49,16 @@ export function marseilleHeight(x, z) {
       const edge = r - dist;
       if (edge > 0) h = Math.min(h, edge >= 1.5 ? 1.5 : edge);
     }
-    y = Math.min(y, -h);
+    // Where the snake meets this channel the hard min is a ridge. The lap catches
+    // that edge once, around (-15.8, 5.6). Round only that patch into the concrete.
+    const ridge =
+      cx < 0
+        ? 0.58 *
+          clamp(1 - Math.abs(x + 15.7) / 1.8, 0, 1) *
+          clamp(1 - Math.abs(z - 5.55) / 1.15, 0, 1)
+        : 0;
+    if (ridge > 0.05) y = smoothMin(y, -h, ridge);
+    else y = Math.min(y, -h);
   }
   if (x > -11 && x < 5 && Math.abs(z + 6) < 3.6) {
     const hip = x < -4.5 ? -2.4 + ((x + 11) / 6.5) * 2.05 : -0.35 - ((x + 4.5) / 9.5) * 1.85;
