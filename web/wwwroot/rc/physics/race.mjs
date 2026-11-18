@@ -482,6 +482,24 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
         ? furballInput(race, rival, () => driveInput(race, rival))
         : driveInput(race, rival);
     stepSession(rival.session, withEffects(race, rival.session.car, input), dt);
+    // The physical unstick (unstick.mjs) frees a car that wants to leave the wall. A bot whose
+    // line runs behind the wall it is pinned on steers straight back in: Alley Cat car 7 crept
+    // along the lane end at 0.1 m/s for 200 s (18 Nov 2026). Bots only, after 5 s of trying
+    // with under 2 m made: the same R a kid would press. The player is never moved.
+    if (!rival.human && !rival.session.finished && !rival.session.roam && !rival.session.flight.mode) {
+      const rc = rival.session.car,
+        a = (rival.progress ??= {pos: [...rc.pos], t: 0});
+      const trying = Math.abs(input?.throttle || 0) > 0.4;
+      a.t = trying ? a.t + dt : 0;
+      if (!trying || Math.hypot(rc.pos[0] - a.pos[0], rc.pos[2] - a.pos[2]) > 2) {
+        a.pos = [...rc.pos];
+        if (trying) a.t = 0;
+      } else if (a.t > 5) {
+        recover(rival.session);
+        a.pos = [...rc.pos];
+        a.t = 0;
+      }
+    }
     // A rival that clips a steerpoint (airborne over it, or wide) is credited once it is clearly on
     // its way to the next one; otherwise it races on beside you scored as gates behind and never
     // finishes. Rivals only: the player's gates stay strict.
