@@ -229,6 +229,7 @@ import {curbRails, residentialCurbRails, parkRails, STREET_RAILS} from './open-w
 import {SEWER_PARK, sewerWorld} from './open-world/sewer.mjs';
 import {createBoardTricks, stepBoardTricks, dirOf, boardPose} from './physics/board-tricks.mjs';
 import {stepOllie, stepManual} from './pad-skate.mjs';
+import {createContactShadow} from './contact-shadow.js';
 import {createRumbler} from './rumble.mjs';
 // Controller rumble: a tick on a landed trick and a rail, a thump on a wall, a big one on a bail.
 const padRumble = createRumbler();
@@ -464,8 +465,8 @@ renderer.setPixelRatio(adaptive.ratio);
 // A Short Hike style, a fixed ~300-line render upscaled with crisp pixels. Adaptive resolution
 // stays out of it so the comparison is the look, not the scaler.
 const pixelLook = new URLSearchParams(location.search).get('look') === 'pixel';
-// ?look=pixar: the owner's chosen direction (18 Nov 2026), lighting and grade first.
-const pixarLook = new URLSearchParams(location.search).get('look') === 'pixar';
+// The Pixar look is the default (owner, 18 Nov 2026); ?look=classic shows the old one for comparison.
+const pixarLook = new URLSearchParams(location.search).get('look') !== 'classic' && !pixelLook;
 const PIXEL_LINES = 300;
 const pixelRatio = () => Math.min(1, PIXEL_LINES / Math.max(1, innerHeight));
 if (pixelLook) {
@@ -4979,6 +4980,8 @@ function refreshStreetRails() {
   railLines.visible = true;
 }
 // Read-only trick log for headless pad QA (tools/rc/check-pad-board.cjs). Never drives the game.
+let playerShadow = null;
+const rivalShadows = [];
 const qaTricks = [],
   qaTrickLog = e => {
     qaTricks.push({type: e.type, name: e.name ?? e.kind ?? null, t: Math.round(performance.now())});
@@ -7461,10 +7464,19 @@ function frame(now) {
   fx.update(dt);
   labFrame(dt);
   poseCar(car, wheels, c);
+  // Soft contact shadows (the Pixar look, 18 Nov 2026): the dark footprint under each toy.
+  playerShadow ??= createContactShadow(scene);
+  playerShadow.update(c.pos, carYaw(c), s.course.world, !robot && (car.visible || form === 'board'));
   if (openWorld) deliveryFrame(dt, now);
   syncRivals();
   race.rivals.forEach((rv, i) => {
     const p2OwnBody = splitOn && i === 0 && (split?.p2Form === 'board' || split?.p2Form === 'robot');
+    (rivalShadows[i] ??= createContactShadow(scene)).update(
+      rv.session.car.pos,
+      carYaw(rv.session.car),
+      rv.session.course.world,
+      !p2OwnBody && rivalVis[i].group.visible !== false
+    );
     if (!p2OwnBody) poseCar(rivalVis[i].group, rivalVis[i].wheels, rv.session.car);
     rivalLod(rivalVis[i], rv.session.car, splitOn && i === 0 ? rv.session.car : c);
     if (p2OwnBody) rivalVis[i].group.visible = false;
@@ -7932,6 +7944,7 @@ window.__gunsOnlyRC = {
   }),
   form: () => form,
   board: () => ({
+    shadow: playerShadow && {visible: playerShadow.mesh.visible, y: playerShadow.mesh.position.y, opacity: playerShadow.mesh.material.opacity},
     form,
     air: s.car.contacts === 0,
     y: s.car.pos[1],
