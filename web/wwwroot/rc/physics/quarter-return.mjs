@@ -323,7 +323,10 @@ export function stepQuarterReturn(state, car, raw, dt, world) {
         // ramp needs it too: the air's yaw otherwise lands facing along the
         // coping, and a straight run walks off the end.
         const dir = [arc.inward[0], 0, arc.inward[2]],
-          ahead = world.raycast(add(car.pos, [0, 0.25, 0]), dir, 6);
+          // A straight quarter's far wall can sit just past 6 m from the landing
+          // toe. Missing it left the air's yaw on the car, and the channel drove
+          // out the open end. Ten metres still stops at the park's far side.
+          ahead = world.raycast(add(car.pos, [0, 0.25, 0]), dir, 10);
         if (ahead && TRANSITION_SURFACES.has(ahead.surface)) {
           const yaw = Math.atan2(arc.inward[0], -arc.inward[2]);
           car.q = quatAxisAngle([0, 1, 0], -yaw);

@@ -563,8 +563,20 @@ function solveHull(car, world) {
     ct.jt = [0, 0, 0];
     car.impact = Math.max(car.impact, -vn);
     // Riding an upward-facing quarter transition is intentional, even near vertical.
-    if (Math.abs(ct.normal[1]) < 0.5 && !(TRANSITION_SURFACES.has(ct.surface) && ct.normal[1] > 0.05))
-      car.wallImpact = Math.max(car.wallImpact, -vn);
+    // A geometric face makes a deck lip a true wall. If the flat top is within a
+    // curb of the contact, roll onto it instead of spearing the edge.
+    if (Math.abs(ct.normal[1]) < 0.5 && !(TRANSITION_SURFACES.has(ct.surface) && ct.normal[1] > 0.05)) {
+      const over = world.raycast([ct.point[0], ct.point[1] + 0.45, ct.point[2]], [0, -1, 0], 0.55);
+      const rise = over ? over.point[1] - ct.point[1] : 9;
+      if (over && over.normal[1] > 0.82 && rise >= -0.02 && rise <= 0.32 && carUp(car)[1] > 0.4 && vn < 0) {
+        car.vel[0] -= ct.normal[0] * vn;
+        car.vel[2] -= ct.normal[2] * vn;
+        ct.bias = 0;
+        const deck = over.point[1] + rideHeight(car.params);
+        if (car.pos[1] < deck) car.pos[1] = deck;
+        if (car.vel[1] < 0.2) car.vel[1] = 0.2;
+      } else car.wallImpact = Math.max(car.wallImpact, -vn);
+    }
   }
   for (let it = 0; it < 6; it++)
     for (const ct of contacts) {

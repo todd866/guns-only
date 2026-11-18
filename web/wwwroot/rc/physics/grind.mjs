@@ -178,13 +178,6 @@ function capture(s, raw) {
   if (raw.carForm && !raw.grind) return;
   const lipNearby = state.rails.some(r => r.kind === 'coping' || r.kind === 'edge');
   if (state.cooldown > 0 || raw.brake || c.speed < 0.7) return;
-  // A held climb that is already armed is the lip air. Snapping the coping here
-  // used to be the seam kick throwing the car off the rail; on the surface the
-  // same line just rides the coping and the gap never happens.
-  if ((raw.throttle ?? 0) >= 0.48 && s.assist?.quarter?.armed && c.vel[1] > -0.2) return;
-  // A return that has just left the lip is still inside the coping's snap
-  // radius. Taking the rail there ends the air on the brick and the round bowl.
-  if (s.assist?.quarter?.arc?.kind === 'return' && (s.assist.quarter.arc.time ?? 0) < 0.85) return;
   // A vert wall tips the deck off world-up. Coping still snaps; a flat rail does not.
   if (carUp(c)[1] < 0.65 && !lipNearby) return;
   // Free skate's curbs line every road: there you ollie onto a grind, as THPS2's grind button.
@@ -223,9 +216,7 @@ function capture(s, raw) {
       const speed = Math.abs(dot(c.vel, seg.dir)),
         direction = moving < 0 ? -1 : 1;
       // Crossing a lip upwards belongs to the air/transfer, not the rail.
-      // A sloped coping can hide that rise inside the rail's own slope, so a
-      // hard launch (the brick bank, the round bowl) was snapped into a grind.
-      if (c.vel[1] > 2.5 || c.vel[1] - seg.dir[1] * direction * speed > 0.5) continue;
+      if (c.vel[1] - seg.dir[1] * direction * speed > 0.5) continue;
       if (!best || distance < best.distance)
         best = {rail: r, distance, along: seg.start + t * seg.length, speed, direction, sideways};
     }
