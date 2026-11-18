@@ -20,14 +20,14 @@ const {chromium} = require(
   const browser = await chromium.launch({headless: true, channel: 'chromium', args: ['--mute-audio']});
   const report = {};
   try {
-    for (const look of ['today', 'pixel']) {
+    for (const look of (process.env.LOOKS || 'today,pixar').split(',')) {
       const context = await browser.newContext({viewport: {width: 1920, height: 1080}});
       await context.addInitScript(() => {
         window.qaPad = {id: 'qa', index: 0, connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({length: 17}, () => ({value: 0, pressed: false}))};
         Object.defineProperty(navigator, 'getGamepads', {configurable: true, writable: true, value: () => [window.qaPad]});
       });
       const page = await context.newPage();
-      await page.goto(`http://127.0.0.1:19881/rc/?audioQa=silent&telemetry=off${look === 'pixel' ? '&look=pixel' : ''}`);
+      await page.goto(`http://127.0.0.1:19881/rc/?audioQa=silent&telemetry=off${look === 'today' ? '' : '&look=' + look}`);
       await page.waitForFunction(() => window.__gunsOnlyRC?.snapshot().assets === 'blender' && !window.__gunsOnlyRC.snapshot().paused, null, {timeout: 120000});
       await page.waitForTimeout(3000);
       await page.screenshot({path: `${out}/${look}-start.png`});

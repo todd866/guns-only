@@ -180,6 +180,7 @@ import {
   LIGHTING,
   isIndoor,
   applyLighting,
+  PIXAR_WORLD,
   followSun,
   clearcoat,
   studioEnvironment,
@@ -463,6 +464,8 @@ renderer.setPixelRatio(adaptive.ratio);
 // A Short Hike style, a fixed ~300-line render upscaled with crisp pixels. Adaptive resolution
 // stays out of it so the comparison is the look, not the scaler.
 const pixelLook = new URLSearchParams(location.search).get('look') === 'pixel';
+// ?look=pixar: the owner's chosen direction (18 Nov 2026), lighting and grade first.
+const pixarLook = new URLSearchParams(location.search).get('look') === 'pixar';
 const PIXEL_LINES = 300;
 const pixelRatio = () => Math.min(1, PIXEL_LINES / Math.max(1, innerHeight));
 if (pixelLook) {
@@ -524,6 +527,15 @@ if (track) {
     sun.shadow.camera.updateProjectionMatrix();
     sun.userData.dir.set(-0.95, 1, 0.7).normalize();
     sun.color.set(0xffe4bf);
+    if (pixarLook) {
+      hemi.color.set(PIXAR_WORLD.hemi[0]);
+      hemi.groundColor.set(PIXAR_WORLD.hemi[1]);
+      hemi.intensity = PIXAR_WORLD.hemi[2];
+      sun.color.set(PIXAR_WORLD.sun[0]);
+      sun.intensity = PIXAR_WORLD.sun[1];
+      sun.userData.dir.set(...PIXAR_WORLD.sunDir).normalize();
+      renderer.toneMappingExposure = PIXAR_WORLD.exposure;
+    }
   }
   scene.environment = studioEnvironment(renderer);
   scene.environmentIntensity = 0.6;
@@ -542,7 +554,7 @@ let marshalSession = null,
 let polish = null;
 let polishReady = Promise.resolve();
 if (track && new URLSearchParams(location.search).get('gfx') !== 'classic')
-  polishReady = setupPolish({renderer, scene, camera, indoor: isIndoor(track), world: !!openWorld})
+  polishReady = setupPolish({renderer, scene, camera, indoor: isIndoor(track), world: !!openWorld, look: pixarLook ? 'pixar' : null})
     .then(p => {
       polish = p;
       polish.resize(innerWidth, innerHeight);
