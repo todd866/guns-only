@@ -138,7 +138,7 @@ const fs = require('node:fs'),
     await set(5, 0);
     await wait(1200);
     ev = await since(t0);
-    check('RB spins in the air', ev.some(e => /\d{3}|Spin|180|360/.test(e.name || '')), ev.map(e => e.name));
+    check('RB spins in the air, a spin not a grab', ev.some(e => /^\d{3} Spin$/.test(e.name || '')), ev.map(e => e.name));
     // Manual: up then down on the d-pad while rolling on flat ground. The bowl is all vert, so the
     // place hook only picks the spot (the arrival pad); the board then rolls on ordinary RT.
     await set(7, 0);

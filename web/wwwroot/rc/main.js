@@ -228,6 +228,20 @@ import {curbRails, residentialCurbRails, parkRails, STREET_RAILS} from './open-w
 import {SEWER_PARK, sewerWorld} from './open-world/sewer.mjs';
 import {createBoardTricks, stepBoardTricks, dirOf, boardPose} from './physics/board-tricks.mjs';
 import {stepOllie, stepManual} from './pad-skate.mjs';
+import {createRumbler} from './rumble.mjs';
+// Controller rumble: a tick on a landed trick and a rail, a thump on a wall, a big one on a bail.
+const padRumble = createRumbler();
+const rumbleHud = h => {
+  if (!h || h.rumbles) return h;
+  const event = h.event.bind(h);
+  h.event = e => {
+    if (e?.type === 'bail') padRumble('bail');
+    else if (e?.type === 'land' && (Number(e.tricks) > 0 || e.tricks?.length > 0)) padRumble('land');
+    return event(e);
+  };
+  h.rumbles = true;
+  return h;
+};
 import {createCarTricks, carTrickCommand, carTrickSettle, carStick} from './physics/car-tricks.mjs';
 import {
   SKATESTREET,
@@ -2901,6 +2915,7 @@ function soundEvents(r, c) {
   if (held && !sfx.held) audio.pickup();
   sfx.held = held;
   if (c.wallImpact > 1.5) audio.impact(c.wallImpact);
+  if (c.wallImpact > 3) padRumble('wall');
   if (!c.contacts) sfx.air += 1 / 60;
   else {
     if (sfx.air > 0.25) audio.landing(Math.abs(c.vel[1]) + 2);
@@ -3840,7 +3855,7 @@ function startSkateRun(id) {
   }
   const def = SKATE_PARKS[id];
   skateHud?.stop();
-  skateHud ??= createSkateHud({scene, T});
+  skateHud ??= rumbleHud(createSkateHud({scene, T}));
   skatePark = id;
   skate = createSkate(def.park, skateSaved(id).goals);
   setSkateRails(s, def.park, def.world);
@@ -3898,7 +3913,7 @@ function climbLadder(l) {
 function startStreet() {
   if (street || skate || !race.roam || !openWorld || robot || s.flight.mode) return;
   if (form !== 'board' && form !== 'car') return;
-  skateHud ??= createSkateHud({scene, T});
+  skateHud ??= rumbleHud(createSkateHud({scene, T}));
   street = createStreetSkate();
   refreshStreetRails();
   skateHud.start(street, streetFrame);
@@ -5716,7 +5731,7 @@ function useButton(all) {
   // On foot, Y is still boost and the on-screen Skate / go-in button.
   const yEdge = edge(3);
   // Y is the grind (THPS2's triangle). The board snaps on by itself; the car takes a tap near a rail.
-  if (yEdge && !robot && form === 'car' && !s.flight.mode && railNearby(s.skateRide, s.car.pos))
+  if (yEdge && !robot && (form === 'car' || form === 'board') && !s.flight.mode && railNearby(s.skateRide, s.car.pos))
     grindUntil = performance.now() + 700;
   if (yEdge && robot && !btn.hidden) {
     btn.click();
@@ -6646,7 +6661,11 @@ function frame(now) {
           // On the board in the air LB/RB spin (THPS2's L1/R1).
           steer: touchState.steer || (form === 'board' && s.car.contacts === 0 && pad.spin ? pad.spin : pad.steer),
           // The board's manual is the held grab on flat ground (grind.mjs); the pad's up-down flick holds it.
-          drift: pad.drift || (form === 'board' && (padManual.wheelie || padManual.stoppie)),
+          // In the air LB/RB only spin (THPS2's L1/R1). The park's grab-and-revert button is the held
+          // drift, read on the ground; RB still held at touchdown is the revert.
+          drift:
+            (form === 'board' && s.car.contacts === 0 && pad.spin ? false : pad.drift) ||
+            (form === 'board' && (padManual.wheelie || padManual.stoppie)),
           throttle: touchState.throttle || pad.throttle,
           brake: touchState.brake || pad.brake,
           steerRate: mode === 'kid' ? KID_STEER_RATE : undefined
@@ -6805,9 +6824,11 @@ function frame(now) {
               hop: hopQueued,
               carForm: carOn,
               grind:
-                carOn &&
+                (carOn || form === 'board') &&
                 (pad.grindHeld || keys.has('KeyV') || performance.now() < grindUntil) &&
                 railNearby(s.skateRide, s.car.pos),
+              // THPS2: a grind takes the grind button. Kid mode keeps the board's auto-snap.
+              grindButton: form === 'board' && mode !== 'kid',
               grindDir: form === 'board' ? carStick(pad, stick()) : carOn ? trickDir : null,
               carTrick: carDrive,
               fire: fireQueued,
@@ -7305,7 +7326,10 @@ function frame(now) {
   {
     const g = s.skateRide?.active;
     audio.grinding(!!g && !paused, g?.speed ?? 0);
-    if (g && g.id !== lastGrind) audio.landing(2.5);
+    if (g && g.id !== lastGrind) {
+      audio.landing(2.5);
+      padRumble('grind');
+    }
     lastGrind = g?.id ?? null;
   }
   {

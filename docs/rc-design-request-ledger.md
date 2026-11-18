@@ -209,8 +209,10 @@ entered in the air, nose manual = down then up). In Xbox letters as the 8BitDo U
 | d-pad | d-pad | steers and aims every trick | same |
 | up,down / down,up | d-pad or stick | manual (the board's held-grab manual) | wheelie / stoppie |
 
-Deliberate differences: RT/LT stay go/brake instead of nollie/switch (our board does not roll by
-itself, and the pad header rule is that the stick is never the throttle). RB held in the air still
-also counts as a grab in park scoring ("360 Indy"), because skate.mjs treats the old revert button
-as a grab; a pure spin needs a skate.mjs change after the venue retune merges. Big Kid "Y to grind"
-also waits for that merge (grind.mjs). Evidence: tools/rc/check-pad-board.cjs, 11/11 on Apple M5.
+Deliberate difference: RT/LT stay go/brake instead of nollie/switch (our board does not roll by
+itself, and the pad header rule is that the stick is never the throttle). LB/RB in the air only
+spin ("360 Spin"); the park's grab-and-revert button is read on the ground, so RB held through
+touchdown still reverts. Big Kid needs Y to grind (THPS2); kid mode keeps the board's auto-snap.
+Rumble: a tick on a landed trick and a rail, a thump on a wall, a big one on a bail (rumble.mjs;
+the Mac app plays it through GameController haptics, a browser through vibrationActuator; pads
+without motors are skipped). Evidence: tools/rc/check-pad-board.cjs, 11/11 on Apple M5.

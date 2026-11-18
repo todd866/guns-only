@@ -1,4 +1,5 @@
 import AppKit
+import CoreHaptics
 import GameController
 import WebKit
 
@@ -40,6 +41,36 @@ final class GameFiles: NSObject, WKURLSchemeHandler {
     task.didReceive(r); task.didReceive(data); task.didFinish()
   }
   func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
+}
+
+// Controller rumble from the page (rumble.mjs): {pad, strong, weak, ms}. GameController haptics,
+// one engine per pad, made on first use. A pad that reports no haptics is skipped quietly.
+final class RumbleRelay: NSObject, WKScriptMessageHandler {
+  private var engines: [ObjectIdentifier: CHHapticEngine] = [:]
+  func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    guard let body = message.body as? [String: Any] else { return }
+    let strong = Float((body["strong"] as? Double) ?? 0.6), weak = Float((body["weak"] as? Double) ?? 0.3)
+    let seconds = ((body["ms"] as? Double) ?? 120) / 1000, only = body["pad"] as? Int
+    let pads = GCController.controllers().filter { $0.extendedGamepad != nil }
+    for (index, controller) in pads.enumerated() where only == nil || only == index {
+      guard let haptics = controller.haptics else { continue }
+      let key = ObjectIdentifier(controller)
+      if engines[key] == nil, let engine = haptics.createEngine(withLocality: .default) {
+        engine.resetHandler = { [weak engine] in try? engine?.start() }
+        try? engine.start()
+        engines[key] = engine
+      }
+      guard let engine = engines[key] else { continue }
+      let event = CHHapticEvent(eventType: .hapticContinuous, parameters: [
+        CHHapticEventParameter(parameterID: .hapticIntensity, value: max(strong, weak)),
+        CHHapticEventParameter(parameterID: .hapticSharpness, value: strong > weak ? 0.3 : 0.8)
+      ], relativeTime: 0, duration: seconds)
+      if let pattern = try? CHHapticPattern(events: [event], parameters: []),
+         let player = try? engine.makePlayer(with: pattern) {
+        try? player.start(atTime: CHHapticTimeImmediate)
+      }
+    }
+  }
 }
 
 // Posts the page's anonymous telemetry batch to the public endpoint. rcgame:// cannot fetch
@@ -90,7 +121,7 @@ final class GameWindow: NSObject, WKUIDelegate, NSWindowDelegate {
   private var playActivity: NSObjectProtocol?
   init(root: URL, offscreen: Bool = false) {
     files = GameFiles(root: root)
-    let relay = TelemetryRelay()
+    let relay = TelemetryRelay(), rumbleRelay = RumbleRelay()
     let config = WKWebViewConfiguration()
     config.setURLSchemeHandler(files, forURLScheme: "rcgame")
     config.mediaTypesRequiringUserActionForPlayback = []
@@ -99,6 +130,7 @@ final class GameWindow: NSObject, WKUIDelegate, NSWindowDelegate {
     // throttles requestAnimationFrame in an inactive app down to nothing.
     config.preferences.inactiveSchedulingPolicy = .none
     config.userContentController.addScriptMessageHandler(relay, contentWorld: .page, name: "rcTelemetry")
+    config.userContentController.add(rumbleRelay, name: "rcRumble")
     let frame = NSRect(x: 0, y: 0, width: 1440, height: 900)
     web = WKWebView(frame: frame, configuration: config)
     web.isInspectable = true

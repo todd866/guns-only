@@ -175,7 +175,7 @@ function capture(s, raw) {
   const state = s.skateRide,
     c = s.car;
   // The car grinds on B (or V). The board still snaps when it lands on a rail.
-  if (raw.carForm && !raw.grind) return;
+  if ((raw.carForm || raw.grindButton) && !raw.grind) return;
   const lipNearby = state.rails.some(r => r.kind === 'coping' || r.kind === 'edge');
   if (state.cooldown > 0 || raw.brake || c.speed < 0.7) return;
   // A held climb that is already armed is the lip air. Snapping the coping here
