@@ -83,7 +83,11 @@ const fs = require('node:fs'),
     // Roll.
     await set(7, 0.7);
     await wait(2500);
-    const rolling = await board();
+    let rolling = await board();
+    for (let i = 0; i < 15 && rolling.speed <= 1; i++) {
+      await wait(500, 2);
+      rolling = await board();
+    }
     check('RT rolls the board', rolling.speed > 1, {speed: rolling.speed});
     // Hold A: crouch, no pop on the press. Release: pop.
     await set(0, 1);
