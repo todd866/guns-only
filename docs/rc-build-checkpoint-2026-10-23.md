@@ -32,7 +32,7 @@ Known scope limits to keep honest: authored art is functional low-poly game geom
 
 ## Follow-up: open-world-first entry (23 October, afternoon)
 
-User corrections: no startup choice screen; Saucer Springs is the immediately driveable starting point. Remove Area 51½ and Liberty Loop naming, keep aliens a much later discovery, reduce HUD/menu text, improve housing course presentation.
+User corrections: no startup choice screen; Saucer Springs is the immediately driveable starting point. Remove RC Odyssey and Liberty Loop naming, keep aliens a much later discovery, reduce HUD/menu text, improve housing course presentation.
 
 Draft now auto-starts after assets are ready. Legacy base/housing/BX/school links enter the connected world; failed world loads expose Retry rather than a tiny prototype. Pause retains optional course/garage/map shortcuts. Public collectibles are ordinary badges. Lab requires 15 badges and the eight Home Base/Flightline races; alien world additionally requires Dreamland completion. Secret map entries, marshal transformation and portal visuals respect those gates. Exploration minimap shows surrounding roads instead of the selected small race ribbon. Housing is renamed Base Housing, with tighter corners, kerb markings and regenerated ambient-occlusion shading.
 

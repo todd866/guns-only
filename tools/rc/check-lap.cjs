@@ -1,4 +1,4 @@
-// Area 51½ real-keyboard lap in headless Chromium (background, no visible window).
+// RC Odyssey real-keyboard lap in headless Chromium (background, no visible window).
 // node tools/rc/check-lap.cjs <outdir>   env: PLAYWRIGHT_MODULE, CHROMIUM_PATH, Q (query string). Run under heavy-slot.
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const {spawn}=require('node:child_process');const fs=require('node:fs');

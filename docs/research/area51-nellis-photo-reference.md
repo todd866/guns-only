@@ -1,4 +1,4 @@
-# Area 51½ — Nellis photo reference board
+# RC Odyssey — Nellis photo reference board
 
 Local copies (private, not in repo): `~/.local/state/area51-reference/` (28 images). Commons API/CDN rate-limits hard (HTTP 429); re-fetch slowly. **af.mil / nellis.af.mil / DVIDS return 403 to scripted fetch**, so official PD photos are listed by page URL only and must be saved by hand in a browser.
 

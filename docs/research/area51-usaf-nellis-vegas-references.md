@@ -1,4 +1,4 @@
-# Area 51½: USAF / Nellis / Vegas reference research (2026-10-21)
+# RC Odyssey: USAF / Nellis / Vegas reference research (2026-10-21)
 
 Method note: web search only. Items marked (GK) are general knowledge I could not source in this pass; verify before relying on them. Meme-page tropes are widely known but several (Chief's rocks, "Shirt", drink water) were NOT confirmed by search.
 
@@ -28,7 +28,7 @@ Tags: KS = kid-safe, PL = parent-layer, AV = avoid.
 21. **BX / commissary / Burger King** - "Base Exchange" shop where you buy cosmetic stickers; "Burger Kingdom" -> generic "Whopper-ish" burger box pickup. KS+PL. Shop/pickup; no real brand names (GK).
 22. **Dorm/quarters inspection** - white-glove "Spotless!" bonus on clean lap. KS+PL. Announcer line (GK).
 23. **"Drink water" / dry heat** - "It's a dry heat!" sweaty sun sign; water-bottle pickup removes overheat. KS+PL. Pickup/sign.
-24. **Vegas neon + Fremont-style canopy + Strip silhouette** - neon tunnel section, generic hotel-skyline silhouettes (no real casino logos). KS. Track feature. Welcome sign: designer Betty Willis never copyrighted it and wanted it public domain [9]; still a county-owned registered landmark; use a re-drawn stylised version, "Welcome to Fabulous Area 51½".
+24. **Vegas neon + Fremont-style canopy + Strip silhouette** - neon tunnel section, generic hotel-skyline silhouettes (no real casino logos). KS. Track feature. Welcome sign: designer Betty Willis never copyrighted it and wanted it public domain [9]; still a county-owned registered landmark; use a re-drawn stylised version, "Welcome to Fabulous Dreamland".
 25. **Jackpot crate** - mystery crate with cherries (no slots, no coins-as-gambling), "Cherry Crate!" pickup; Elvis-impersonator chapel as a "tiny wedding for toy cars" sight gag; tumbleweed hazard; Hoover Dam and Red Rock as backdrop. KS. Pickup/track hazards. Slot-machine reels, roulette, card suits, chips: AV for a six-year-old.
 
 Also: Space Force jokes ("Space Force: also on base, parking is just higher up") KS+PL; PCS season = moving-box pickup; shaving waiver = mustache-wearing driver (PL); "Aim High... Fly-Fight-Win" = generic motto, use own variation ("Aim High, Drive Low"); AV: first sergeant gags that mock real roles are fine mildly, but drop alcohol/combat gallows humor.

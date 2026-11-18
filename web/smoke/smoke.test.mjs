@@ -898,7 +898,7 @@ test("the published Cobra Hold the Bridge route boots authority and takes a Tab 
   }
 });
 
-// Weekend Ride left the front door for Area 51½ on 2026-10-21; it stays a preview route.
+// Weekend Ride left the front door for RC Odyssey on 2026-10-21; it stays a preview route.
 test("the published Weekend Ride preview route boots and accepts throttle input", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 

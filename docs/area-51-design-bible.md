@@ -1,4 +1,4 @@
-# Area 51½: design history and implementation reference
+# RC Odyssey: design history and implementation reference
 
 Started 2026-10-22. The current build specification is [Saucer Springs master design](design/saucer-springs/master-design.md), with its [interactive MK64 correspondence map](design/saucer-springs/index.html). That 23 October design supersedes conflicting plans here: 16 mapped courses, four battle arenas, a drive-through alien portal for Rainbow Road, and a friendly alien marshal on a saucer replacing the robot MP. This file preserves the earlier design and implementation history. Direction history lives in `area-51-and-a-half.md`; engine and pipeline notes live in
 `area-51-build-plan.md`.
@@ -66,7 +66,7 @@ the main flight-game picker remain separate follow-up work.
 | **Dirtbike track** ✎ | open desert inside the fence (SE) | Whoops, berms, tabletops, mud | **Whoops** race (Re-Volt style jumps) |
 | **Boneyard** ✎ | open desert inside the fence | Rows of retired jets (B-52s, F-4s, C-130s) under covers. **Kicker ramps launch you across their wings: a skill shortcut**, and falling off lands you on the desert road | **Wing Walker** (wing-hop ALT route) |
 | **Waterpark** ✎ | by the base pool | Lazy river, splash pads, slides you can drive down, shallow water that slows and sprays | **Splash Down** (slides as jumps, water as slow zones) |
-| **Area 51½ (secret)** ✎ | behind an inner fence toward the weapons storage area | Bunker doors, lab, friendly aliens in tubes, a saucer under a tarp | Unlocks after every specimen is found; **night race** |
+| **Dreamland (secret)** ✎ | behind an inner fence toward the weapons storage area | Bunker doors, lab, friendly aliens in tubes, a saucer under a tarp | Unlocks after every specimen is found; **night race** |
 
 ## 2a. Meme-page humour (from the owner's follows, 2026-10-22)
 
@@ -101,7 +101,7 @@ viper_punk_memes, guardreserve_mafia, fighter_pilots_of_amc, plus amc_memery).
   waterpark as the beach). Copying Nintendo layouts or names is out: they are protected, and
   Nintendo enforces.
 - **Original Half-Life:** the *vibe* of the secret lab: a test chamber, a tram ride, hazard-stripe
-  science, something escaping a containment field, with "Area 51½" as a cheerful kid-safe take.
+  science, something escaping a containment field, with "Dreamland" as a cheerful kid-safe take.
   No Valve names, creatures or logos, and nothing scary or violent; the aliens are friendly.
 - **Pixar *Planes*:** the look of the real hardware (see Art rule).
 
@@ -127,7 +127,7 @@ races (BX, School, HQ and other venues) occupy the connected world and are physi
 | 12 | Grand Tour | whole base | point-to-point | ≈ 6 km | the FH5 showcase race |
 | 14 | Wing Walker | boneyard | circuit | ≈ 600 m | kicker jumps across parked wings |
 | 15 | Splash Down | waterpark | circuit | ≈ 400 m | slides, splash pads, lazy river |
-| 13 | Dreamland Night | Area 51½ | circuit (night) | ≈ 500 m | unlocked last |
+| 13 | Dreamland Night | Dreamland | circuit (night) | ≈ 500 m | unlocked last |
 
 ## 3a. Cars are toy jets
 
@@ -246,7 +246,7 @@ Landmarks are hand-built:
 - hospital
 - chapel
 - rec centre (rink and bowling)
-- Area 51½ bunker
+- Dreamland bunker
 - gate booth
 - water tower
 
@@ -306,7 +306,7 @@ Done: an HDRI sky (Goegap, CC0). To do:
    mode, median session length, and Again rate.
    The admin view and difficulty tuning remain follow-up work once aggregates are available.
 3. [ ] **Menu tidy** (≈ 2%). Guns Only picker: three plain cards (F-22, Cobra, RC), drop the
-   Military/Civilian tabs (Area 51½ is currently stranded alone under Civilian). RC brief:
+   Military/Civilian tabs (RC Odyssey is currently stranded alone under Civilian). RC brief:
    "Drive" not "Take the transmitter"; Drive / Race / Furball / tracks / mute in one compact row;
    joke labels (Tumbleweed, RTB, Knock it off) move to tooltips. Invoke instrument-ux first.
 4. [ ] **Difficulty: no instant wins** (≈ 1%). Owner: "it's no fun if I just instantly win."
@@ -336,7 +336,7 @@ Done: an HDRI sky (Goegap, CC0). To do:
 5. [ ] **Skatepark** (≈ 6%), then the **roller rink** (≈ 6%)
 6. [ ] **Petting Zoo** (≈ 8%)
 7. [ ] **Golf course and Car Golf**, **dirtbike track**, **baseball**, **bowling** (≈ 5% each)
-8. [ ] **Night cycle and night wave**, then **Area 51½ secret zone** (≈ 10%)
+8. [ ] **Night cycle and night wave**, then **Dreamland secret zone** (≈ 10%)
 9. [ ] **Garage**: the second to fifth cars and liveries (≈ 8%)
 10. [ ] Remaining aircraft types, ground vehicles and landmarks (ongoing)
 

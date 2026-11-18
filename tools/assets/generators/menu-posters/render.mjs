@@ -57,7 +57,7 @@ const POSTERS = {
   // reproducible without pretending a photoreal raster was hand-authored SVG.
   "aircraft-fireboss": { w: 1200, h: 1200, q: 88,
     rasterizer: "committed-raster", src: "sources/aircraft-fireboss" },
-  // Area 51½: an in-engine frame rendered by tools/rc/card-art.cjs (headless, HUD hidden).
+  // RC Odyssey: an in-engine frame rendered by tools/rc/card-art.cjs (headless, HUD hidden).
   "saucer-springs": { w: 900, h: 1120, q: 85,
     rasterizer: "committed-raster", src: "sources/saucer-springs" },
   "area51-rc": { w: 900, h: 1600, q: 82,
