@@ -47,6 +47,27 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     court: '#d7965f',
     tree: '#5f874f'
   };
+  // A Toy Story street: painted siding in butter, mint, sky, salmon and cream, white trim, glass that
+  // reflects the sky, slate and terracotta roofs and front doors you would draw with a crayon.
+  // Every wall and roof shade rides in vertex colours, so the extra variants cost no draw calls.
+  if (pixar)
+    Object.assign(colours, {
+      trim: '#fbf5e6',
+      glass: '#6fa9cc',
+      stucco1: '#f4e1b0',
+      stucco2: '#cfe7d3',
+      stucco3: '#c3dbf0',
+      stucco4: '#f3c9b5',
+      stucco5: '#f7f0e0',
+      brick1: '#c96a4e',
+      brick2: '#bd8060',
+      roof1: '#4f6c8c',
+      roof2: '#a9533c',
+      roof3: '#5f6e5c',
+      roof4: '#7d4a3b',
+      door1: '#2c8073',
+      door2: '#cf4637'
+    });
   const brickMaps = () => {
     const size = 128,
       pixels = new Uint8Array(size * size * 4);
@@ -116,7 +137,7 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
                   ? '#ffffff'
                 : colours[key] || key,
           vertexColors: shared,
-          roughness: key === 'glass' ? 0.3 : 0.88,
+          roughness: key === 'glass' ? (pixar ? 0.12 : 0.3) : 0.88,
           // Ground layers are centimetres apart across a kilometre-scale view.
           // Bias paved overlays in depth, without lifting their wheel surfaces.
           polygonOffset: ['asphalt', 'sidewalk', 'concrete'].includes(key),
@@ -353,14 +374,22 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
       holes.map(r => r.map(p => new T.Vector2(...p)))
     );
     const wallKey = house
-      ? index % 3 === 0
+      ? pixar
+        ? index % 4 === 0
+          ? 'brick' + ((index % 2) + 1)
+          : 'stucco' + ((index % 5) + 1)
+        : index % 3 === 0
         ? 'stucco' + ((index % 2) + 1)
         : 'brick' + ((index % 2) + 1)
       : kind === 'school'
-        ? 'brick'
-        : 'stucco';
+        ? pixar
+          ? 'brick1'
+          : 'brick'
+        : pixar
+          ? 'stucco' + ((index % 5) + 1)
+          : 'stucco';
     const doors = heroSchool ? doorSpans(rings) : null; // the high school's door openings (high-school.mjs)
-    const roofKey = house ? 'roof' + ((index % 3) + 1) : 'roof',
+    const roofKey = house ? 'roof' + ((index % (pixar ? 4 : 3)) + 1) : 'roof',
       profile = house ? roofProfile(outer, h, index) : null;
     let front = null;
     for (const [ringIndex, ring] of rings.entries()) {
