@@ -74,7 +74,8 @@ export function prepareResidentialDetails(world, data = {}, options = {}) {
       g.applyMatrix4(matrix);
       target.push(g);
     };
-    const trunk = new T.CylinderGeometry(0.16, 0.24, 3.7, 7);
+    // Pixar: a rounder, slimmer trunk with a flared foot; at toy height the near trunk fills the frame.
+    const trunk = pixar ? new T.CylinderGeometry(0.11, 0.2, 3.7, 11, 1, true) : new T.CylinderGeometry(0.16, 0.24, 3.7, 7);
     trunk.userData.canopy = false;
     add(trunk, [0, 1.85, 0]);
     const branch = new T.CylinderGeometry(0.06, 0.11, 1.85, 6);

@@ -232,7 +232,7 @@ export async function loadOpenWorld(search) {
   const residential = prepareResidential(
     stream.world,
     {...residentialData, roads: [...residentialData.roads, RESIDENTIAL_LINK]},
-    {terrain: residentialTerrain}
+    {terrain: residentialTerrain, look: ['classic', 'pixel'].includes(q.get('look')) ? q.get('look') : 'pixar'}
   );
   addMarseilleCollision(stream.world);
   // These independent startup jobs overlap network and parsing work. The stream remains the

@@ -16,6 +16,9 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
   const materials = new Map();
   const terrain = options.terrain;
   const heightAt = terrain?.heightAt ?? (() => 0);
+  // Owner, 18 Nov 2026: the Pixar (Toy Story) look. Sidewalks were flat untextured near-white slabs
+  // that glared at toy height; they get warm cast concrete. Turf loses its pixel-scale noise.
+  const pixar = options.look === 'pixar';
   let currentBaseY = null;
   const project = p => [p[0], p[1] + (currentBaseY == null ? heightAt(p[0], p[2]) : currentBaseY), p[2]];
   const colours = {
@@ -82,10 +85,12 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
         family = key.replace(/#v$/, '').replace(/\d+$/, '');
       const texture = ['asphalt', 'concrete', 'stucco', 'roof'].includes(family)
         ? createSurfaceMaps(family)
+        : pixar && key === 'sidewalk'
+          ? createSurfaceMaps('concrete')
         : family === 'brick'
           ? brickMaps()
           : key === 'grass'
-            ? residentialGrass()
+            ? residentialGrass({soft: pixar})
             : null;
       // A neutral material tile carries grain; the house palette carries paint.
       // Multiplying a warm coloured tile by another colour made every house brown.
@@ -105,8 +110,10 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
             ? '#ffffff'
             : /\d$/.test(key)
               ? colours[key]
-              : texture
-                ? '#ffffff'
+              : pixar && key === 'sidewalk'
+                ? '#fff1d8'
+                : texture
+                  ? '#ffffff'
                 : colours[key] || key,
           vertexColors: shared,
           roughness: key === 'glass' ? 0.3 : 0.88,
