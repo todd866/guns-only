@@ -401,7 +401,6 @@ function setStatusSymbol(element, status) {
 
 function setLabel(element, label) {
   if (!element) return;
-  if (element.getAttribute("aria-label") !== label) element.setAttribute("aria-label") !== undefined && element.setAttribute("aria-label", label);
   if (element.getAttribute("aria-label") !== label) element.setAttribute("aria-label", label);
   if (element.title !== label) element.title = label;
 }

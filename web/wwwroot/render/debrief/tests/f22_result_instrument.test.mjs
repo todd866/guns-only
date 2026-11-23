@@ -422,4 +422,39 @@ test("landed debrief surfaces physical touchdown telemetry, 7-gate overhead grad
   assert.equal(model.overheadGates[2].passed, false);
   assert.equal(model.correction.text, "Reduce the descent rate before touchdown.");
   assert.equal(model.correction.practiceExercise, "recovery");
+
+  const makeEl = () => {
+    const attrs = new Map();
+    const children = [];
+    const el = {
+      hidden: false,
+      title: "",
+      textContent: "",
+      className: "",
+      dataset: {},
+      ownerDocument: null,
+      children,
+      getAttribute(name) { return attrs.has(name) ? attrs.get(name) : null; },
+      setAttribute(name, value) {
+        if (arguments.length < 2) throw new TypeError("Failed to execute 'setAttribute': 2 arguments required.");
+        attrs.set(name, String(value));
+      },
+      replaceChildren(...nodes) { children.splice(0, children.length, ...nodes); },
+      querySelector() { return makeEl(); },
+    };
+    el.ownerDocument = { createElement: () => makeEl() };
+    return el;
+  };
+  const elements = new Map();
+  const root = {
+    hidden: true,
+    querySelector(selector) {
+      if (!elements.has(selector)) elements.set(selector, makeEl());
+      return elements.get(selector);
+    },
+  };
+  paintF22ResultInstrument(root, model);
+  assert.equal(root.hidden, false);
+  assert.equal(elements.get("#f22-touchdown").textContent, "315 fpm · 135 kt · RWY 318 m · CL -2 m");
+  assert.equal(elements.get("#f22-gates").children.length, 7);
 });
