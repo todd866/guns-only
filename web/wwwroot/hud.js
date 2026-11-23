@@ -2723,7 +2723,7 @@ class CombatHud {
   drawApproachNextCue(state) {
     if (this._debug) this._debug.approachNextCue = null;
     const cue = approachNextCue(state);
-    if (!cue) return false;
+    if (!cue || this.annunciationBottom(state) > 0) return false;
     const layout = this.getLayout();
     const y = layout.heading.bottom + 10;
     if (!(Number.isFinite(y) && y + 10 < layout.ladderSafe.top)) return false;
