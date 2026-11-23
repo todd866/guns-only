@@ -783,12 +783,30 @@ button.primary {
 html.toy-mode .mission-card {
   background: #e7f6ff;
   color: #14301c;
+  --muted: #395542;
+  --warm: #8c5a08;
+  --line: rgba(20, 48, 28, 0.24);
+}
+html.toy-mode .mission-card :is(.mission-brief-facts dd, .mission-brief-controls dd, .mission-evidence dd, .mission-correction) {
+  color: #14301c;
+}
+html.toy-mode .mission-card--brief > .mission-actions {
+  background: linear-gradient(to bottom, rgba(231, 246, 255, 0), #e7f6ff 10px);
 }
 html.toy-mode .pause-card p { color: inherit; }
 @media (prefers-color-scheme: dark) {
   html.toy-mode .mission-card {
     background: #16384a;
     color: #e9f7ff;
+    --muted: #9aa392;
+    --warm: #d4b56a;
+    --line: rgba(180, 210, 160, 0.22);
+  }
+  html.toy-mode .mission-card :is(.mission-brief-facts dd, .mission-brief-controls dd, .mission-evidence dd, .mission-correction) {
+    color: #edf1e8;
+  }
+  html.toy-mode .mission-card--brief > .mission-actions {
+    background: linear-gradient(to bottom, rgba(22, 56, 74, 0), #16384a 10px);
   }
 }
 
