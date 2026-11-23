@@ -82,44 +82,47 @@ export function createF22CanopyGlass(THREE) {
   frameGroup.renderOrder = 3;
 
   const frameMat = new THREE.MeshBasicMaterial({
-    color: 0x161c22,
+    color: 0x1b222a,
     transparent: true,
-    opacity: 0.92,
+    opacity: 0.9,
     depthWrite: true,
   });
   const trimMat = new THREE.MeshBasicMaterial({
-    color: 0x2a3640,
+    color: 0x33414e,
     transparent: true,
-    opacity: 0.72,
+    opacity: 0.65,
     depthWrite: false,
   });
 
-  const coaming = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.08, 0.34), frameMat);
+  const coaming = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.055, 0.28), frameMat);
   coaming.name = "F22_CANOPY_COAMING";
-  coaming.position.set(0, -0.54, -1.16);
-  coaming.rotation.x = 0.22;
+  coaming.position.set(0, -0.57, -1.16);
+  coaming.rotation.x = 0.15;
 
-  const coamingLip = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.015, 0.04), trimMat);
+  const coamingLip = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.012, 0.03), trimMat);
   coamingLip.name = "F22_CANOPY_COAMING_LIP";
-  coamingLip.position.set(0, -0.495, -1.01);
+  coamingLip.position.set(0, -0.538, -1.03);
 
-  const railLeft = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.045, 1.55), frameMat);
+  const railLeft = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.032, 1.55), frameMat);
   railLeft.name = "F22_CANOPY_RAIL_LEFT";
-  railLeft.position.set(-0.68, -0.39, -0.46);
-  railLeft.rotation.set(0.11, -0.09, 0.0);
+  railLeft.position.set(-0.72, -0.43, -0.48);
+  railLeft.rotation.set(0.09, -0.11, 0.0);
 
-  const railRight = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.045, 1.55), frameMat);
+  const railRight = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.032, 1.55), frameMat);
   railRight.name = "F22_CANOPY_RAIL_RIGHT";
-  railRight.position.set(0.68, -0.39, -0.46);
-  railRight.rotation.set(0.11, 0.09, 0.0);
+  railRight.position.set(0.72, -0.43, -0.48);
+  railRight.rotation.set(0.09, 0.11, 0.0);
 
+  // Full semicircular arch anchored down at the left/right sill rails so it frames the peripheral
+  // sky cleanly instead of ending mid-air at the top corners.
   const bowArch = new THREE.Mesh(
-    new THREE.TorusGeometry(0.66, 0.018, 6, 22, Math.PI * 0.9),
+    new THREE.TorusGeometry(0.71, 0.016, 8, 36, Math.PI),
     trimMat,
   );
   bowArch.name = "F22_CANOPY_BOW_ARCH";
-  bowArch.position.set(0, 0.14, -0.66);
-  bowArch.rotation.set(-0.34, 0, Math.PI * 0.05);
+  bowArch.scale.set(1.04, 1.18, 1.0);
+  bowArch.position.set(0, -0.42, -0.68);
+  bowArch.rotation.set(-0.22, 0, 0);
 
   frameGroup.add(coaming, coamingLip, railLeft, railRight, bowArch);
   group.add(shell, darkAxis, lightAxis, reflection, frameGroup);

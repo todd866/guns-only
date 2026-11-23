@@ -81,6 +81,15 @@ html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-pip[data-filled
   border-color: var(--flow-accent);
 }
 
+html[data-theme="light"]:is(.front-door-a, .front-door-b, .front-door-c) .front-door-pip {
+  border-color: rgba(20, 28, 36, .34);
+}
+
+html[data-theme="light"]:is(.front-door-a, .front-door-b, .front-door-c) .front-door-pip[data-filled="true"] {
+  background: var(--console-accent, #166534);
+  border-color: var(--console-accent, #166534);
+}
+
 html:is(.front-door-a, .front-door-b, .front-door-c) .front-door-more {
   flex: 0 0 auto;
   align-self: flex-start;
@@ -150,16 +159,31 @@ html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-
   z-index: 4;
   top: 12px;
   right: 12px;
-  width: min(148px, 32vw);
+  width: min(142px, 30vw);
 }
 
 html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-choice {
+  height: auto;
   aspect-ratio: 1;
   min-height: 0;
   border-radius: 999px;
-  padding: 10px;
-  filter: brightness(.88) saturate(.95);
+  padding: 12px 14px;
+  align-items: center;
+  text-align: center;
+  filter: brightness(.9) saturate(.96);
   box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+}
+
+html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-choice > .sortie-number {
+  font-size: 10px;
+}
+
+html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-choice > strong {
+  font-size: 17px;
+}
+
+html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="f22"]) .sortie-choice {
+  padding-bottom: 132px;
 }
 
 html.front-door-a #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-contract {
@@ -235,10 +259,22 @@ html.front-door-c #ready-screen[data-mode="program"] .sortie-option:has(.sortie-
 }
 
 html.front-door-c #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-choice {
+  height: auto;
   aspect-ratio: 1;
+  min-height: 0;
   border-radius: 999px;
-  padding: 8px;
-  filter: brightness(.86) saturate(.92);
+  padding: 10px 12px;
+  align-items: center;
+  text-align: center;
+  filter: brightness(.9) saturate(.95);
+}
+
+html.front-door-c #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-choice > .sortie-number {
+  font-size: 10px;
+}
+
+html.front-door-c #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-choice > strong {
+  font-size: 17px;
 }
 
 html.front-door-c #ready-screen[data-mode="program"] .sortie-option:has(.sortie-choice[data-aircraft="rc"]) .sortie-contract {
