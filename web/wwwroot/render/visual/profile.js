@@ -113,16 +113,27 @@ function tierExtension(extension, tierId) {
 function normalizePostProcessing(profile, tier) {
   const tierId = tier.id;
   const defaults = tierId === "mobile"
-    ? { enabled: false, antialiasing: "none", bloomEnabled: false }
+    ? { enabled: false, antialiasing: "none", bloomEnabled: false, samples: 0, paintedFinish: false }
     : tierId === "desktop"
-      ? { enabled: true, antialiasing: "smaa", bloomEnabled: true }
-      : { enabled: true, antialiasing: "fxaa", bloomEnabled: false };
+      ? { enabled: true, antialiasing: "smaa", bloomEnabled: true, samples: 4, paintedFinish: true }
+      : { enabled: true, antialiasing: "fxaa", bloomEnabled: false, samples: 2, paintedFinish: true };
   const raw = tierExtension(record(profile.extensions).postProcessing, tierId);
   const bloom = record(raw.bloom);
+  const finish = record(raw.paintedFinish);
   return {
     enabled: bool(raw.enabled, defaults.enabled),
     hdr: bool(raw.hdr, true),
     antialiasing: enumeration(raw.antialiasing, ANTIALIASING_MODES, defaults.antialiasing),
+    // Multisample count for the composer target. 0 disables MSAA; the runtime still clamps this
+    // to the context's MAX_SAMPLES.
+    samples: integer(raw.samples, defaults.samples, 0, 8),
+    // Grain and split-tone after OutputPass in display space.
+    paintedFinish: {
+      enabled: bool(finish.enabled, defaults.paintedFinish),
+      grain: number(finish.grain, 0.016, 0, 0.08),
+      splitTone: number(finish.splitTone, 1, 0, 1),
+      vignette: number(finish.vignette, 0.16, 0, 0.6),
+    },
     bloom: {
       enabled: bool(bloom.enabled ?? raw.bloomEnabled, defaults.bloomEnabled),
       selection: "luminance_threshold",

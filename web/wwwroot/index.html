@@ -1384,6 +1384,12 @@
 
     #ready-screen:not([data-mode="program"]) .ready-card { width: min(520px, 100%); }
 
+    /* The pad's menu highlight (rc/gamepad-menu.mjs): the control the stick is on. */
+    #ready-screen .pad-focus, #settings-screen .pad-focus {
+      outline: 2px solid #edbd6a;
+      outline-offset: 2px;
+    }
+
     .ready-menu-header {
       display: flex;
       align-items: baseline;
@@ -3055,6 +3061,7 @@
 
     #ready-screen .sortie-choice[data-aircraft="f22"] {
       background-image: image-set(url("./art/jet-f22-generated-v4.webp") type("image/webp"));
+      background-position: center 40%;
     }
 
     #ready-screen .sortie-choice[data-aircraft="rapier"] {
@@ -4163,6 +4170,31 @@
       font: 450 13px/1.4 var(--flow-font-display);
     }
     .f22-detail[hidden] { display: none; }
+    .f22-gates {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+    }
+    .f22-gate-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid var(--flow-line);
+      font: 700 11px/1.2 var(--flow-font-data);
+      color: var(--flow-ink-muted);
+      background: var(--flow-panel);
+    }
+    .f22-gate-chip[data-passed="true"] {
+      color: var(--flow-accent);
+      border-color: rgba(122, 240, 165, .36);
+    }
+    .f22-gate-chip[data-passed="false"] {
+      color: #ff8a7a;
+      border-color: rgba(255, 138, 122, .36);
+    }
     .f22-actions {
       display: flex;
       flex-wrap: wrap;
@@ -4218,33 +4250,33 @@
     :root {
       --console-font: "Avenir Next", "Segoe UI", Arial, sans-serif;
       --console-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      --console-ink: #fff9ef;
-      --console-muted: #d5d9df;
-      --console-accent: #f4cf83;
-      --console-good: #9aefba;
-      --console-bad: #ff9c8d;
-      --console-line: #63707c;
-      --console-panel: #141b23;
-      --console-raised: #24303b;
-      --console-surface: linear-gradient(180deg, rgba(30, 39, 49, .97), rgba(10, 15, 21, .98));
-      --console-key: linear-gradient(180deg, #526170, #303d49 48%, #1a242e);
-      --console-shadow: inset 0 1px 0 #a3aeb8, 0 16px 40px rgb(0 0 0 / .45);
-      --console-backdrop: radial-gradient(ellipse at 50% 35%, transparent 20%, rgb(2 5 9 / .52) 100%),
-        linear-gradient(rgb(3 7 12 / .18), rgb(3 7 12 / .32));
-      --console-radius: 4px;
+      --console-ink: #f6f8f1;
+      --console-muted: #c2ced0;
+      --console-accent: #f0c259;
+      --console-good: #7df0a5;
+      --console-bad: #ff8e7e;
+      --console-line: #495d5a;
+      --console-panel: #101718;
+      --console-raised: #1c2829;
+      --console-surface: linear-gradient(180deg, rgba(24, 34, 35, .97), rgba(11, 17, 18, .98));
+      --console-key: linear-gradient(180deg, #3e5152, #233133 50%, #162022);
+      --console-shadow: inset 0 1px 0 rgba(215, 232, 224, .22), 0 18px 42px rgb(0 0 0 / .48);
+      --console-backdrop: radial-gradient(ellipse at 50% 35%, transparent 20%, rgb(2 6 8 / .52) 100%),
+        linear-gradient(rgb(4 9 11 / .2), rgb(4 9 11 / .34));
+      --console-radius: 5px;
     }
     :root[data-theme="light"] {
-      --console-ink: #141c24;
-      --console-muted: #4b5866;
-      --console-accent: #b87b14;
-      --console-good: #0e7a46;
-      --console-bad: #c43225;
-      --console-line: #b8c2cc;
-      --console-panel: #f4f1ea;
-      --console-raised: #e8e3d9;
-      --console-surface: linear-gradient(180deg, rgba(248, 245, 238, .98), rgba(235, 230, 220, .99));
-      --console-key: linear-gradient(180deg, #ffffff, #ebe6dc 48%, #dcd5c8);
-      --console-shadow: inset 0 1px 0 #ffffff, 0 14px 36px rgb(20 28 36 / .18);
+      --console-ink: #121d1a;
+      --console-muted: #42554e;
+      --console-accent: #a67208;
+      --console-good: #0d7a42;
+      --console-bad: #c02d20;
+      --console-line: #b2bfb8;
+      --console-panel: #f2f5f1;
+      --console-raised: #e4ebe3;
+      --console-surface: linear-gradient(180deg, rgba(247, 250, 246, .98), rgba(231, 237, 230, .99));
+      --console-key: linear-gradient(180deg, #ffffff, #e8efe7 50%, #d8e1d7);
+      --console-shadow: inset 0 1px 0 #ffffff, 0 14px 36px rgb(16 28 24 / .16);
     }
     :is(#ready-screen, #settings-screen, #feedback-report) {
       --flow-font-display: var(--console-font);
@@ -4391,6 +4423,7 @@
     :root #ready-screen #ready-start.console-primary:disabled { color: var(--console-muted); border-color: var(--console-line); background: var(--console-panel); box-shadow: none; cursor: default; }
     :root #ready-screen .console-actions { display: flex; flex-wrap: wrap; gap: 0; width: 100%; max-width: none; padding: 0; margin: 0; border: 0; background: none; }
     :root #ready-screen .console-actions button:not(.console-primary) {
+      position: relative;
       display: flex;
       flex: 1 0 5rem;
       flex-direction: column;
@@ -4415,6 +4448,15 @@
       overflow-wrap: anywhere;
       text-shadow: none;
       cursor: pointer;
+    }
+    :root #ready-screen .console-actions button:not(.console-primary) .shell-action-key {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      font-size: 10px;
+      line-height: 1;
+      opacity: .78;
+      pointer-events: none;
     }
     :root #ready-screen .console-actions button:first-child { border-left: 0; }
     :root #ready-screen .console-actions button:not(.console-primary):hover { background: var(--console-raised); }
@@ -4457,10 +4499,11 @@
       border: 1px solid var(--console-line);
       border-radius: var(--console-radius);
     }
-    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]::before { opacity: 1; background: linear-gradient(transparent 28%, rgb(4 8 13 / .4) 55%, rgb(4 8 13 / .98)); }
+    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]::before { opacity: 1; background: linear-gradient(transparent 24%, rgb(4 8 13 / .52) 54%, rgb(4 8 13 / .96)); }
     :root #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] { border-color: var(--console-accent); box-shadow: 0 0 0 2px var(--console-accent); }
-    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number { color: var(--console-muted); font: 600 16px/1.2 var(--console-font); letter-spacing: 0; }
-    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong { color: var(--console-ink); font: 650 30px/1.05 var(--console-font); letter-spacing: 0; }
+    /* Photo mission cards carry a dark lower scrim in both themes, so card ink stays crisp white. */
+    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number { color: rgba(232, 238, 245, .86); font: 600 16px/1.2 var(--console-font); letter-spacing: 0; text-shadow: 0 1px 2px rgb(0 0 0 / .72); }
+    :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong { color: #f7f5ee; font: 650 30px/1.05 var(--console-font); letter-spacing: 0; text-shadow: 0 1px 3px rgb(0 0 0 / .78); }
     :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
       display: block;
       position: relative;
@@ -4471,10 +4514,11 @@
       margin: 0;
       clip: auto;
       overflow: visible;
-      color: var(--console-muted);
+      color: rgba(232, 238, 245, .86);
       font: 500 15px/1.3 var(--console-font);
       letter-spacing: 0;
       text-transform: none;
+      text-shadow: 0 1px 2px rgb(0 0 0 / .72);
       white-space: normal;
     }
     :root #ready-screen[data-f22-result] .f22-result { gap: 0; border: 0; border-radius: 0; background: none; font: 600 24px/1.2 var(--console-data); }
@@ -4629,6 +4673,12 @@
     <path vector-effect="non-scaling-stroke" d="M4.2 4.8h6.1c.8 0 1.7.7 1.7 1.6V19.4c0-.7-.8-1.2-1.7-1.2H4.2V4.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
     <path vector-effect="non-scaling-stroke" d="M19.8 4.8h-6.1c-.8 0-1.7.7-1.7 1.6V19.4c0-.7.8-1.2 1.7-1.2h6.1V4.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
     <path vector-effect="non-scaling-stroke" d="M14.4 8.2h3.2M14.4 11h3.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="shell-toy" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="7.2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <circle cx="9.4" cy="10.6" r="0.8" fill="currentColor"/>
+    <circle cx="14.6" cy="10.6" r="0.8" fill="currentColor"/>
+    <path vector-effect="non-scaling-stroke" d="M8.8 14.2c1 .9 2.1 1.3 3.2 1.3s2.2-.4 3.2-1.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
   </symbol>
   <symbol id="shell-jet" viewBox="0 0 24 24">
     <path vector-effect="non-scaling-stroke" d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -5124,6 +5174,16 @@
               <button class="f22-datum f22-info" id="f22-opponent-info" type="button" aria-expanded="false" aria-controls="f22-opponent-detail" aria-label="Opponent and next milestone"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-info"/></svg></button>
             </div>
             <p class="f22-detail" id="f22-opponent-detail" hidden></p>
+            <div class="f22-row" id="f22-row-touchdown" hidden>
+              <span class="f22-tag" aria-hidden="true">TD</span>
+              <span class="f22-value" id="f22-touchdown"></span>
+              <span class="f22-datum"></span>
+            </div>
+            <div class="f22-row" id="f22-row-gates" hidden>
+              <span class="f22-tag" aria-hidden="true">PAT</span>
+              <div class="f22-gates" id="f22-gates"></div>
+              <span class="f22-datum" id="f22-gates-summary"></span>
+            </div>
             <div class="f22-row" id="f22-row-correction">
               <svg class="shell-icon f22-tag-sym" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-chevron"/></svg>
               <span class="f22-value f22-correction" id="f22-correction"></span>
@@ -5223,6 +5283,7 @@ Waves · score · land for bonus · [H] controls · [R] restarts · [space] agai
           <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-captions"/></svg></span><span>Radio captions</span><input id="setting-radio-captions" type="checkbox" role="switch"></label>
         </div>
         <div class="settings-section" role="group" aria-label="Picture">
+          <label class="settings-toggle" title="Foam darts, water balloons, paint bombs. Off brings the realistic set back."><span class="settings-glyph" aria-hidden="true" title="Toy mode"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-toy"/></svg></span><span>Toy mode</span><input id="setting-toy-mode" type="checkbox" role="switch" checked></label>
           <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true" title="Picture"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-eye"/></svg></span><span>High-contrast HUD</span><input id="setting-high-contrast" type="checkbox" role="switch"></label>
           <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-pause"/></svg></span><span>Reduce motion</span><input id="setting-reduced-motion" type="checkbox" role="switch"></label>
           <label class="settings-toggle"><span class="settings-glyph" aria-hidden="true"><svg class="shell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#shell-text"/></svg></span><span>Larger interface text</span><input id="setting-large-text" type="checkbox" role="switch"></label>

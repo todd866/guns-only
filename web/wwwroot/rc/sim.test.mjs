@@ -203,11 +203,8 @@ test('a rubber trampoline throws the car higher than concrete', () => {
   assert.ok(rubber > concrete + 0.1, `rubber ${rubber.toFixed(2)} concrete ${concrete.toFixed(2)}`);
 });
 
-test('kid mode unsticks a car wedged against a wall with the throttle held; Big Kid does not', () => {
-  for (const [mode, unsticks] of [
-    ['kid', true],
-    ['bigKid', false]
-  ]) {
+test('a car wedged on a wall is shoved off it, without a teleport, in both modes', () => {
+  for (const mode of ['kid', 'bigKid']) {
     const w = createWorld();
     w.addQuad([-20, 0, -20], [-20, 0, 20], [20, 0, 20], [20, 0, -20], 'asphalt');
     addBox(w, 0, -3, 4, 0.3, 0, 1);
@@ -224,7 +221,15 @@ test('kid mode unsticks a car wedged against a wall with the throttle held; Big 
       {mode}
     );
     s.gate = 1;
-    run(s, {throttle: 1}, 120 * 5);
-    assert.equal(s.recoveries > 0, unsticks, `${mode} recoveries ${s.recoveries}`);
+    let nearest = Infinity,
+      freed = -Infinity;
+    for (let i = 0; i < 120 * 6; i++) {
+      stepSession(s, {throttle: 1});
+      nearest = Math.min(nearest, s.car.pos[2]);
+      if (i > 120 * 2) freed = Math.max(freed, s.car.pos[2]);
+    }
+    assert.equal(s.recoveries, 0, `${mode} teleported`);
+    assert.ok(nearest < -1.5, `${mode} never reached the wall (${nearest})`);
+    assert.ok(freed > nearest + 0.35, `${mode} stayed planted on the wall (nearest ${nearest}, later ${freed})`);
   }
 });

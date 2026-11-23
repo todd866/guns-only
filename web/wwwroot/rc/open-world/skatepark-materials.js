@@ -104,12 +104,12 @@ export function finishSkateparkSurface(geometry, material, paintTexture = null) 
     return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
   };
   const joint = material.name === 'floor' || material.name === 'path';
-  const base = {
-    floor: [173, 170, 163],
-    concrete: [151, 157, 159],
-    edge: [190, 182, 165],
-    path: [142, 149, 145]
-  }[material.name];
+  // Pixar look (owner, 18 Nov 2026): sun-warmed sandy concrete, not cool grey. ?look=classic keeps the old.
+  const classic = typeof location !== 'undefined' && new URLSearchParams(location.search).get('look') === 'classic';
+  const base = (classic
+    ? {floor: [173, 170, 163], concrete: [151, 157, 159], edge: [190, 182, 165], path: [142, 149, 145]}
+    : {floor: [196, 182, 162], concrete: [181, 171, 156], edge: [214, 196, 166], path: [170, 160, 143]})[material.name];
+  const broad = classic ? 1 : 3;
   for (let y = 0; y < size; y++)
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4,
@@ -117,7 +117,7 @@ export function finishSkateparkSurface(geometry, material, paintTexture = null) 
         grain = (n - 0.5) * 14;
       const edge = Math.min(x, y, size - 1 - x, size - 1 - y),
         seam = joint && edge < 2 ? 40 : joint && edge < 4 ? 10 : 0;
-      const mottling = 3 * Math.sin(x * 0.028) * Math.sin(y * 0.033) + 2 * Math.sin((x + y) * 0.071);
+      const mottling = broad * (3 * Math.sin(x * 0.028) * Math.sin(y * 0.033) + 2 * Math.sin((x + y) * 0.071));
       // Sparse dark pinholes and subtle aggregate, rather than high-contrast gravel.
       const pore = n < 0.025 ? 12 : 0,
         v = grain + mottling - seam - pore;

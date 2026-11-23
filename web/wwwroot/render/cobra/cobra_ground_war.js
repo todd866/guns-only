@@ -4,6 +4,13 @@
  */
 
 import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=__RELEASE_BUILD__";
+import {
+  FRIENDLY_SPLAT_CAPTION,
+  TOY_PALETTE,
+  friendlySplatFrame,
+  groundTargetDress,
+  noteFriendlySplat,
+} from "../toy/toy_pass.js";
 import { mergeGeometries } from "../../vendor/three/addons/utils/BufferGeometryUtils.js";
 
 export const COBRA_GROUND_WAR_PRESENTATION_SCHEMA =
@@ -678,7 +685,10 @@ function siteControlColor(localControl) {
  *   dispose(): void,
  * }}
  */
-export function createCobraGroundWarPresentation(THREE, { nowMs = () => performance.now() } = {}) {
+export function createCobraGroundWarPresentation(THREE, {
+  nowMs = () => performance.now(),
+  toyMode: toyModeOption = false,
+} = {}) {
   const group = new THREE.Group();
   group.name = "COBRA_GROUND_WAR_PRESENTATION";
   group.userData.schema = COBRA_GROUND_WAR_PRESENTATION_SCHEMA;
@@ -705,6 +715,21 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
   const contestedSiteMeshes = new Map();
   /** @type {Map<string, ReturnType<typeof createWreckEffects>>} */
   const wreckMeshes = new Map();
+  const paintMeshes = new Map();
+  const medicMeshes = new Map();
+  const countedFriendlySplats = new Set();
+  let toyMode = false;
+  let friendlySplatRecord = {
+    friendlySplats: 0,
+    lastCaption: null,
+    scoreDelta: 0,
+    penalty: false,
+  };
+  let friendlySplatCaption = null;
+  const readToyMode = () => (typeof toyModeOption === "function"
+    ? toyModeOption() === true
+    : toyModeOption === true);
+  const paletteHex = (value) => Number.parseInt(String(value).replace("#", ""), 16);
   /** @type {import("../../vendor/three.module.js").Object3D[]} */
   const transientEffects = [];
   /** @type {Map<string, "fired"|"impacted-miss"|"impacted-hit">} */
@@ -799,6 +824,125 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
     return mesh;
   }
 
+  function tracerPaint(faction) {
+    if (!toyMode) return faction === "friendly" ? TRACER_FRIENDLY : TRACER_HOSTILE;
+    return faction === "friendly"
+      ? paletteHex(TOY_PALETTE.armyGreen)
+      : paletteHex(TOY_PALETTE.dart);
+  }
+
+  function addToyDress(mesh, dress) {
+    if (dress?.face) {
+      const face = new THREE.Mesh(
+        new THREE.SphereGeometry(0.28, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0xffe1b5, roughness: 0.55 }),
+      );
+      face.name = "TOY_FACE";
+      face.position.set(0, 2.15, 0.35);
+      mesh.add(face);
+    }
+    if (dress?.windUpKey) {
+      const key = new THREE.Mesh(
+        new THREE.BoxGeometry(0.55, 0.12, 0.12),
+        new THREE.MeshStandardMaterial({
+          color: paletteHex(TOY_PALETTE.brass),
+          metalness: 0.65,
+          roughness: 0.35,
+        }),
+      );
+      key.name = "TOY_KEY";
+      key.position.set(0, 1.15, -0.7);
+      mesh.add(key);
+    }
+    if (dress?.rubberWheels) {
+      const rubber = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+      for (const [x, z] of [[-1.15, 1.05], [1.15, 1.05], [-1.15, -1.05], [1.15, -1.05]]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.2, 8), rubber);
+        wheel.name = "TOY_WHEEL";
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(x, 0.32, z);
+        mesh.add(wheel);
+      }
+    }
+  }
+
+  function ensureToyPaint(unit) {
+    let entry = paintMeshes.get(unit.id);
+    if (entry) return entry;
+    const group = new THREE.Group();
+    group.name = `TOY_PAINT_${unit.id}`;
+    const colors = TOY_PALETTE.paint.map(paletteHex);
+    for (let index = 0; index < colors.length; index += 1) {
+      const blob = new THREE.Mesh(
+        new THREE.SphereGeometry(0.55 + (index % 2) * 0.2, 8, 6),
+        new THREE.MeshBasicMaterial({
+          color: colors[index],
+          transparent: true,
+          opacity: 0.88,
+        }),
+      );
+      blob.name = `TOY_PAINT_BLOB_${unit.id}_${index}`;
+      blob.position.set((index - 2) * 0.7, 0.65 + (index % 2) * 0.25, (index % 3) * 0.15);
+      group.add(blob);
+    }
+    wreckRoot.add(group);
+    entry = { group };
+    paintMeshes.set(unit.id, entry);
+    return entry;
+  }
+
+  function ensureMedic(unit) {
+    let entry = medicMeshes.get(unit.id);
+    if (entry) return entry;
+    const group = new THREE.Group();
+    group.name = `TOY_AMBULANCE_${unit.id}`;
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(2.4, 1.1, 4.2),
+      new THREE.MeshStandardMaterial({ color: paletteHex(TOY_PALETTE.ambulance), roughness: 0.45 }),
+    );
+    body.position.y = 0.85;
+    const cross = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 0.16, 0.16),
+      new THREE.MeshBasicMaterial({ color: paletteHex(TOY_PALETTE.ambulanceCross) }),
+    );
+    cross.position.set(0, 1.45, 0.4);
+    const light = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 8, 6),
+      new THREE.MeshBasicMaterial({ color: paletteHex(TOY_PALETTE.ambulanceCross) }),
+    );
+    light.name = `TOY_AMBULANCE_LIGHT_${unit.id}`;
+    light.position.set(0, 1.7, 0);
+    const stretcher = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 0.08, 1.8),
+      new THREE.MeshStandardMaterial({ color: 0xd8d2c4, roughness: 0.7 }),
+    );
+    stretcher.name = `TOY_STRETCHER_${unit.id}`;
+    stretcher.position.set(0.2, 0.7, 1.3);
+    const rubber = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+    for (const [x, z] of [[-0.9, 1.2], [0.9, 1.2], [-0.9, -1.2], [0.9, -1.2]]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.18, 8), rubber);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(x, 0.28, z);
+      group.add(wheel);
+    }
+    const march = new THREE.Group();
+    march.name = `TOY_REINFORCEMENTS_${unit.id}`;
+    const plastic = new THREE.MeshStandardMaterial({
+      color: paletteHex(TOY_PALETTE.armyGreen),
+      roughness: 0.5,
+    });
+    for (let index = 0; index < 3; index += 1) {
+      const man = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.9, 0.22), plastic);
+      man.position.set((index - 1) * 0.7, 0.5, -2.4 - index * 0.8);
+      march.add(man);
+    }
+    group.add(body, cross, light, stretcher, march);
+    effectRoot.add(group);
+    entry = { group, light, stretcher, march };
+    medicMeshes.set(unit.id, entry);
+    return entry;
+  }
+
   function ensureUnit(unit) {
     let entry = unitMeshes.get(unit.id);
     if (entry) return entry;
@@ -816,6 +960,7 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
     mesh.userData.faction = unit.faction;
     const cue = createFactionCue(THREE, unit);
     mesh.add(cue);
+    if (toyMode) addToyDress(mesh, groundTargetDress(unit.role, unit.faction, unit.id));
     unitRoot.add(mesh);
     entry = { mesh, mat, cue, role: unit.role };
     unitMeshes.set(unit.id, entry);
@@ -962,7 +1107,7 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
         0,
       ),
       new THREE.MeshBasicMaterial({
-        color: event.faction === "friendly" ? TRACER_FRIENDLY : TRACER_HOSTILE,
+        color: tracerPaint(event.faction),
         transparent: true,
         opacity: 0.82,
         depthTest: true,
@@ -1074,7 +1219,7 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
     );
     if (!geometry) return;
     const material = new THREE.MeshBasicMaterial({
-      color: event.faction === "friendly" ? TRACER_FRIENDLY : TRACER_HOSTILE,
+      color: tracerPaint(event.faction),
       transparent: true,
       opacity: COBRA_BATTLEFIELD_PRESENTATION_PROFILE.groundTracerGlowOpacity,
       side: THREE.DoubleSide,
@@ -1488,8 +1633,27 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
     }
   }
 
+  function dropMeshMap(map, root) {
+    for (const [id, entry] of [...map]) {
+      const node = entry.mesh || entry.wreck || entry.group;
+      root.remove(node);
+      disposeObject(node, new Set(
+        [...roleGeometryCache.values()].map((cached) => cached.geometry),
+      ));
+      map.delete(id);
+    }
+  }
+
   function sync(groundWar, selectedTargetId = null, battleDamage = null) {
     if (disposed) return;
+    const nextToy = readToyMode();
+    if (nextToy !== toyMode) {
+      toyMode = nextToy;
+      dropMeshMap(unitMeshes, unitRoot);
+      dropMeshMap(wreckMeshes, wreckRoot);
+      dropMeshMap(paintMeshes, wreckRoot);
+      dropMeshMap(medicMeshes, effectRoot);
+    }
     const now = nowMs();
     for (let index = transientEffects.length - 1; index >= 0; index -= 1) {
       const effect = transientEffects[index];
@@ -1565,6 +1729,7 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
       && (unit.faction === "friendly" || unit.faction === "hostile")
       && authorityPoint(unit));
     const seenUnits = new Set();
+    const seenMedics = new Set();
     for (const unit of validUnits) {
       seenUnits.add(unit.id);
       if (unit.alive === true) observedDestroyedUnitAtMs.delete(unit.id);
@@ -1572,7 +1737,8 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
       const position = authorityPoint(unit, "", 0.2);
       entry.mesh.position.set(position.x, position.y, position.z);
       entry.mesh.visible = true;
-      const paint = unitPaint(unit);
+      const dress = toyMode ? groundTargetDress(unit.role, unit.faction, unit.id) : null;
+      const paint = dress ? { color: dress.color, emissive: 0x102008 } : unitPaint(unit);
       entry.mat.color.setHex(paint.color);
       if (typeof entry.mat.emissive?.setHex === "function") {
         entry.mat.emissive.setHex(paint.emissive);
@@ -1596,6 +1762,43 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
         entry.mesh.rotation.y = 0;
         delete entry.mesh.userData.facingAuthorityTarget;
       }
+      entry.mesh.rotation.z = 0;
+      const friendlyDown = toyMode
+        && unit.faction === "friendly"
+        && unit.role === "infantry"
+        && unit.alive !== true
+        && observedDestroyedUnitAtMs.has(unit.id);
+      if (friendlyDown) {
+        const elapsed = (now - observedDestroyedUnitAtMs.get(unit.id)) / 1000;
+        const frame = friendlySplatFrame(elapsed);
+        entry.mesh.rotation.z = frame.fallen ? Math.PI / 2 : 0;
+        if (frame.healed) {
+          entry.mat.opacity = 1;
+          entry.mat.transparent = false;
+        }
+        if (!countedFriendlySplats.has(unit.id)) {
+          countedFriendlySplats.add(unit.id);
+          friendlySplatRecord = noteFriendlySplat(friendlySplatRecord);
+        }
+        if (frame.phase !== "good-as-new") {
+          seenMedics.add(unit.id);
+          const medic = ensureMedic(unit);
+          const homeZ = position.z + 14;
+          medic.group.visible = true;
+          medic.group.position.set(
+            position.x,
+            position.y,
+            homeZ + (position.z - homeZ) * frame.travel,
+          );
+          medic.group.rotation.z = frame.wobble ? Math.sin(now / 90) * 0.08 : 0;
+          medic.light.visible = frame.flash === true && Math.sin(now / 45) > 0;
+          medic.stretcher.visible = frame.stretcher === true;
+          medic.march.visible = frame.reinforcements === true;
+          for (const man of medic.march.children) {
+            man.position.y = 0.45 + Math.abs(Math.sin(now / 140 + man.position.x)) * 0.18;
+          }
+        }
+      }
     }
     for (const [id, entry] of unitMeshes) {
       if (seenUnits.has(id)) continue;
@@ -1610,7 +1813,20 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
     }
 
     const seenWrecks = new Set();
+    const seenPaint = new Set();
+    if (toyMode) {
+      for (const unit of validUnits) {
+        if (unit.alive === true || !observedDestroyedUnitAtMs.has(unit.id)) continue;
+        if (unit.faction === "friendly" && unit.role === "infantry") continue;
+        const position = authorityPoint(unit, "", 0.2);
+        const paintEntry = ensureToyPaint(unit);
+        paintEntry.group.position.set(position.x, position.y, position.z);
+        paintEntry.group.visible = true;
+        seenPaint.add(unit.id);
+      }
+    }
     for (const unit of validUnits) {
+      if (toyMode) continue;
       const destroyedAtMs = observedDestroyedUnitAtMs.get(unit.id);
       if (unit.alive === true
         || unit.role === "infantry"
@@ -1640,6 +1856,19 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
       disposeObject(entry.wreck);
       wreckMeshes.delete(id);
     }
+    for (const [id, entry] of paintMeshes) {
+      if (seenPaint.has(id)) continue;
+      wreckRoot.remove(entry.group);
+      disposeObject(entry.group);
+      paintMeshes.delete(id);
+    }
+    for (const [id, entry] of medicMeshes) {
+      if (seenMedics.has(id)) continue;
+      effectRoot.remove(entry.group);
+      disposeObject(entry.group);
+      medicMeshes.delete(id);
+    }
+    friendlySplatCaption = seenMedics.size > 0 ? FRIENDLY_SPLAT_CAPTION : null;
 
     const selected = selectedTargetId
       ? validUnits.find((unit) => unit.id === selectedTargetId && unit.alive === true)
@@ -1879,6 +2108,10 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
       disposeObject(entry.wreck, geometries, materials);
     }
     wreckMeshes.clear();
+    dropMeshMap(paintMeshes, wreckRoot);
+    dropMeshMap(medicMeshes, effectRoot);
+    paintMeshes.clear();
+    medicMeshes.clear();
     for (const effect of transientEffects) {
       effectRoot.remove(effect);
       disposeObject(effect, geometries, materials);
@@ -1893,5 +2126,12 @@ export function createCobraGroundWarPresentation(THREE, { nowMs = () => performa
     group.removeFromParent();
   }
 
-  return { group, sync, renderedBattleEvidence, dispose };
+  return {
+    group,
+    sync,
+    renderedBattleEvidence,
+    dispose,
+    get friendlySplats() { return friendlySplatRecord; },
+    get friendlySplatCaption() { return friendlySplatCaption; },
+  };
 }

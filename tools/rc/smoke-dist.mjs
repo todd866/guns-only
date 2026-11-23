@@ -19,6 +19,10 @@ try {
     ? {headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']}
     : {headless:true,channel:'chromium'});
   const ready = p => p.waitForFunction(() => { const s=window.__gunsOnlyRC?.snapshot(); return s?.assets === 'blender' && !s.paused && document.querySelector('#brief')?.hidden; }, null, { timeout: 90000 });
+  const closePage = async p => {
+    try { await p.evaluate(() => { const gl = document.querySelector('#view')?.getContext('webgl2'); gl?.getExtension('WEBGL_lose_context')?.loseContext(); }); } catch {}
+    await p.close();
+  };
   const drive = async (p, minimumTravel) => {
     await p.keyboard.down('KeyW');
     try {
@@ -41,7 +45,7 @@ try {
       await drive(p, .1);
       const moving = await p.evaluate(() => window.__gunsOnlyRC.snapshot());
       say(Number.isFinite(moving.speed) && moving.speed > 0.1 && moving.travel > 0.1, `Default hub moving: ${Number(moving.travel).toFixed(2)}m at ${Number(moving.speed).toFixed(2)}m/s`);
-    } catch (e) { say(false, `Default hub: ${e.message.split('\n')[0]}`); } finally { await p.close(); }
+    } catch (e) { say(false, `Default hub: ${e.message.split('\n')[0]}`); } finally { await closePage(p); }
   }
   for (const [label, query] of [['Base Housing', 'track=hub&event=district-housing&mode=drive'], ['The BX', 'track=hub&event=district-bx&mode=drive'], ['The School', 'track=hub&event=district-school&mode=drive'], ['Race', 'track=hub&event=district-housing&mode=race'], ['Furball', 'track=hub&event=district-housing&mode=furball']]) {
     const p = await browser.newPage({ viewport: { width: 1280, height: 800 } }), errors = [];
@@ -54,12 +58,12 @@ try {
       const gate = await p.locator('#gate').innerText();
       const moved = Number.isFinite(moving.speed) && moving.speed > 0.1 && moving.travel > 0.01;
       say(errors.length === 0 && gate.length > 0 && moved, `${label}: ${gate} (${Number(moving.travel).toFixed(2)}m, ${Number(moving.speed).toFixed(2)}m/s)${errors.length ? ' errors: ' + errors.join(' | ') : ''}`);
-    } catch (e) { say(false, `${label}: ${e.message.split('\n')[0]}`); } finally { await p.close(); }
+    } catch (e) { say(false, `${label}: ${e.message.split('\n')[0]}`); } finally { await closePage(p); }
   }
   for (const legacy of ['base', 'housing', 'bx', 'school']) {
     const p = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     try { await p.goto(`${base}/rc/?track=${legacy}&audioQa=silent&gfx=classic&telemetry=off`); await ready(p); const state = await p.evaluate(() => window.__gunsOnlyRC.snapshot()); say(Boolean(state.world), `Legacy ${legacy} retains world snapshot`); }
-    catch (e) { say(false, `Legacy ${legacy}: ${e.message.split('\n')[0]}`); } finally { await p.close(); }
+    catch (e) { say(false, `Legacy ${legacy}: ${e.message.split('\n')[0]}`); } finally { await closePage(p); }
   }
   for (const [w, h] of [[844, 390], [667, 375]]) {
     const p = await browser.newPage({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true });
@@ -67,7 +71,7 @@ try {
       await p.goto(`${base}/rc/?audioQa=silent&gfx=classic&telemetry=off`); await ready(p);
       const box = await p.locator('#pause').boundingBox();
       say(box && box.y >= 0 && box.y + box.height <= h, `phone ${w}x${h}: Pause control on screen`);
-    } catch (e) { say(false, `phone ${w}x${h}: ${e.message.split('\n')[0]}`); } finally { await p.close(); }
+    } catch (e) { say(false, `phone ${w}x${h}: ${e.message.split('\n')[0]}`); } finally { await closePage(p); }
   }
 } finally { await browser?.close(); srv?.close(); }
 console.log(failed ? `smoke-dist: ${failed} failed` : 'smoke-dist: all passed'); process.exit(failed ? 1 : 0);

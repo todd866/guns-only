@@ -47,9 +47,9 @@ for (const [name, width, height] of [['portrait', 390, 844], ['landscape', 844, 
       });
       const box = await page.locator('.ready-card').boundingBox();
       const clip = { x: box.x + 8, y: box.y + 8, width: box.width - 16, height: box.height - 16 };
-      const first = await page.screenshot({ clip });
+      const first = await page.screenshot({ clip, animations: "disabled", timeout: 60_000 });
       await page.evaluate(() => document.body.style.background = '#00ff00');
-      const second = await page.screenshot({ clip });
+      const second = await page.screenshot({ clip, animations: "disabled", timeout: 60_000 });
       assert.deepEqual(second, first, 'changing the HUD behind the card must not alter its pixels');
     } finally { await browser.close(); }
   });

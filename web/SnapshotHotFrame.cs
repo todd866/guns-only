@@ -2856,7 +2856,11 @@ internal static class SnapshotHotFrame {
         SortieLimit SortieLimit,
         bool ApproachGuidanceActive,
         string ApproachNextLabel,
-        ApproachExtensionKind ApproachExtension) {
+        ApproachExtensionKind ApproachExtension,
+        int F22CourseRevision,
+        bool F22CourseArmed,
+        bool F22CourseComplete,
+        bool F22CourseNextGateNeedsGear) {
 
         public static ColdFingerprint Capture(SimulationSession session,
             double worldOriginEastM, double worldOriginNorthM, bool worldOriginConfigured) {
@@ -3004,7 +3008,11 @@ internal static class SnapshotHotFrame {
                 session.SortiePlan.Limit,
                 session.ApproachGuidancePlan.GuidanceActive,
                 session.ApproachGuidancePlan.NextLabel,
-                session.ApproachGuidancePlan.Extension);
+                session.ApproachGuidancePlan.Extension,
+                session.F22Course.Revision,
+                session.F22Course.Armed,
+                session.F22Course.Complete,
+                session.F22Course.NextGateNeedsGear);
         }
 
         static string FormatMeshNavColdKey(MeshNavDirector mesh, RecoveryProcedureDirector recovery) {

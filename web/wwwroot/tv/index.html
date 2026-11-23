@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Games</title>
+<link rel="stylesheet" href="launcher.css">
+</head>
+<body>
+<div id="status">
+  <span class="sym" aria-hidden="true">🎮</span>
+  <b id="pad-count">0</b>
+  <span class="unit">pads</span>
+  <div id="pads"></div>
+  <span id="last"></span>
+  <span id="fly" title="A launches the gold game">A fly</span>
+  <span id="back" title="B leaves fullscreen" hidden>B back</span>
+</div>
+<div id="games" role="list">
+  <button class="tile" type="button" data-id="guns" aria-label="Guns Only, main game">
+    <svg class="art" viewBox="0 0 400 220" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <rect width="400" height="220" fill="#8ec8ef"/>
+      <ellipse cx="90" cy="44" rx="40" ry="15" fill="#f7fbff"/>
+      <ellipse cx="320" cy="60" rx="52" ry="18" fill="#f7fbff"/>
+      <rect y="170" width="400" height="50" fill="#1d3a52"/>
+      <polygon points="40,170 400,170 400,150 86,150" fill="#55606a"/>
+      <rect x="120" y="154" width="250" height="4" fill="#edbd6a"/>
+      <g transform="translate(120 70)">
+        <polygon points="8,44 128,34 170,48 158,72 12,76" fill="#aab6bf" stroke="#0e1c1e" stroke-width="3"/>
+        <polygon points="156,48 196,58 154,70" fill="#8d9aa4" stroke="#0e1c1e" stroke-width="3"/>
+        <polygon points="84,36 118,14 138,38" fill="#c7d3db" stroke="#0e1c1e" stroke-width="3"/>
+        <polygon points="12,48 -4,18 32,42" fill="#8d9aa4" stroke="#0e1c1e" stroke-width="3"/>
+        <polygon points="54,66 118,58 136,90 44,94" fill="#97a5af" stroke="#0e1c1e" stroke-width="3"/>
+      </g>
+    </svg>
+    <span class="cap"><span class="sym" aria-hidden="true">✈</span><span class="name">Guns Only</span><span class="datum">main</span></span>
+  </button>
+  <button class="tile" type="button" data-id="rc" aria-label="RC Odyssey, base">
+    <svg class="art" viewBox="0 0 400 220" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <rect width="400" height="220" fill="#1a3338"/>
+      <rect y="156" width="400" height="64" fill="#24362c"/>
+      <polygon points="176,220 224,220 210,156 190,156" fill="#3c463c"/>
+      <rect x="197" y="156" width="6" height="64" fill="#edbd6a"/>
+      <g transform="translate(78 70)">
+        <polygon points="18,46 168,36 210,52 198,78 22,82" fill="#e7eef0" stroke="#0e1c1e" stroke-width="3"/>
+        <polygon points="198,52 246,64 196,76" fill="#edbd6a" stroke="#0e1c1e" stroke-width="3"/>
+        <polygon points="118,38 154,16 176,40" fill="#8ec8ef" stroke="#0e1c1e" stroke-width="3"/>
+        <polygon points="22,50 4,16 40,42" fill="#edbd6a" stroke="#0e1c1e" stroke-width="3"/>
+        <polygon points="86,72 150,64 168,96 74,100" fill="#c5d0d4" stroke="#0e1c1e" stroke-width="3"/>
+        <circle cx="64" cy="90" r="12" fill="#142028" stroke="#edbd6a" stroke-width="3"/>
+        <circle cx="168" cy="86" r="12" fill="#142028" stroke="#edbd6a" stroke-width="3"/>
+      </g>
+    </svg>
+    <span class="cap"><span class="sym" aria-hidden="true">🚗</span><span class="name">RC Odyssey</span><span class="datum">base</span></span>
+  </button>
+  <button class="tile" type="button" data-id="fight" aria-label="Toy dogfight, two players">
+    <svg class="art" viewBox="0 0 400 220" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <rect width="200" height="220" fill="#1a3338"/>
+      <rect x="200" width="200" height="220" fill="#2a2418"/>
+      <rect x="197" width="6" height="220" fill="#edbd6a"/>
+      <ellipse cx="200" cy="188" rx="78" ry="22" fill="#3f8f4a"/>
+      <g transform="translate(16 72)">
+        <polygon points="8,40 118,30 156,44 146,66 12,70" fill="#7eb6ff" stroke="#071018" stroke-width="3"/>
+        <polygon points="144,44 176,54 142,64" fill="#f4f7f2" stroke="#071018" stroke-width="3"/>
+        <polygon points="78,32 108,12 126,34" fill="#d7ecff" stroke="#071018" stroke-width="3"/>
+        <polygon points="12,44 0,16 28,38" fill="#f4f7f2" stroke="#071018" stroke-width="3"/>
+        <polygon points="52,62 108,54 122,84 42,88" fill="#9ec8ff" stroke="#071018" stroke-width="3"/>
+      </g>
+      <g transform="translate(210 80)">
+        <polygon points="166,40 56,30 18,44 28,66 162,70" fill="#ffb36b" stroke="#071018" stroke-width="3"/>
+        <polygon points="30,44 0,54 32,64" fill="#f4f7f2" stroke="#071018" stroke-width="3"/>
+        <polygon points="96,32 66,12 48,34" fill="#ffe0c2" stroke="#071018" stroke-width="3"/>
+        <polygon points="162,44 174,16 146,38" fill="#f4f7f2" stroke="#071018" stroke-width="3"/>
+        <polygon points="122,62 66,54 52,84 132,88" fill="#ffc894" stroke="#071018" stroke-width="3"/>
+      </g>
+    </svg>
+    <span class="cap"><span class="sym" aria-hidden="true">⚔</span><span class="name">Toy dogfight</span><span class="datum">2P</span></span>
+  </button>
+</div>
+<script type="module" src="launcher.js"></script>
+</body>
+</html>

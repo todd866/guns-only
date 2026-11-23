@@ -16,6 +16,9 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
   const materials = new Map();
   const terrain = options.terrain;
   const heightAt = terrain?.heightAt ?? (() => 0);
+  // Owner, 18 Nov 2026: the Pixar (Toy Story) look. Sidewalks were flat untextured near-white slabs
+  // that glared at toy height; they get warm cast concrete. Turf loses its pixel-scale noise.
+  const pixar = options.look === 'pixar';
   let currentBaseY = null;
   const project = p => [p[0], p[1] + (currentBaseY == null ? heightAt(p[0], p[2]) : currentBaseY), p[2]];
   const colours = {
@@ -44,6 +47,27 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     court: '#d7965f',
     tree: '#5f874f'
   };
+  // A Toy Story street: painted siding in butter, mint, sky, salmon and cream, white trim, glass that
+  // reflects the sky, slate and terracotta roofs and front doors you would draw with a crayon.
+  // Every wall and roof shade rides in vertex colours, so the extra variants cost no draw calls.
+  if (pixar)
+    Object.assign(colours, {
+      trim: '#fbf5e6',
+      glass: '#6fa9cc',
+      stucco1: '#f4e1b0',
+      stucco2: '#cfe7d3',
+      stucco3: '#c3dbf0',
+      stucco4: '#f3c9b5',
+      stucco5: '#f7f0e0',
+      brick1: '#c96a4e',
+      brick2: '#bd8060',
+      roof1: '#4f6c8c',
+      roof2: '#a9533c',
+      roof3: '#5f6e5c',
+      roof4: '#7d4a3b',
+      door1: '#2c8073',
+      door2: '#cf4637'
+    });
   const brickMaps = () => {
     const size = 128,
       pixels = new Uint8Array(size * size * 4);
@@ -82,10 +106,12 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
         family = key.replace(/#v$/, '').replace(/\d+$/, '');
       const texture = ['asphalt', 'concrete', 'stucco', 'roof'].includes(family)
         ? createSurfaceMaps(family)
+        : pixar && key === 'sidewalk'
+          ? createSurfaceMaps('concrete')
         : family === 'brick'
           ? brickMaps()
           : key === 'grass'
-            ? residentialGrass()
+            ? residentialGrass({soft: pixar})
             : null;
       // A neutral material tile carries grain; the house palette carries paint.
       // Multiplying a warm coloured tile by another colour made every house brown.
@@ -105,11 +131,13 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
             ? '#ffffff'
             : /\d$/.test(key)
               ? colours[key]
-              : texture
-                ? '#ffffff'
+              : pixar && key === 'sidewalk'
+                ? '#fff1d8'
+                : texture
+                  ? '#ffffff'
                 : colours[key] || key,
           vertexColors: shared,
-          roughness: key === 'glass' ? 0.3 : 0.88,
+          roughness: key === 'glass' ? (pixar ? 0.12 : 0.3) : 0.88,
           // Ground layers are centimetres apart across a kilometre-scale view.
           // Bias paved overlays in depth, without lifting their wheel surfaces.
           polygonOffset: ['asphalt', 'sidewalk', 'concrete'].includes(key),
@@ -130,42 +158,86 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     }
     return materials.get(key);
   };
+  // Ground is one material across a kilometre. A single mesh has a bounds the camera sits
+  // inside, so the GPU shades every sidewalk and lawn even where the fog has already hidden
+  // them, and a shadow pass redraws any caster whose bounds merely overlap the sun. Each output
+  // triangle is filed by its own centroid: a long kerb must not drag a whole road into one block.
+  // Houses stay on 256 m blocks, the size their shadow bounds were built for. Ground is 512 m:
+  // smaller blocks multiplied draw calls faster than they cut triangles.
+  const chunkOf = key => (/^(stucco|brick|roof)/.test(key) ? 256 : 512);
+  const groundKey = key => /^(grass|sidewalk|asphalt|concrete|sand)/.test(key);
   const push = (key, a, b, c, conform = true) => {
     if (!a || !b || !c) return;
-    const chunked = /^(stucco|brick|roof|glass|trim|schoolDoor|door)[0-9]*$/.test(key);
-    const cx = (a[0] + b[0] + c[0]) / 3,
-      cz = (a[2] + b[2] + c[2]) / 3;
     const variant = /\d$/.test(key) && /^(stucco|brick|roof)/.test(key),
-      matKey = variant ? key.replace(/\d+$/, '') + '#v' : key;
-    const bucketKey = chunked ? `${matKey}:${Math.floor(cx / 256)}:${Math.floor(cz / 256)}` : matKey;
-    if (!buckets.has(bucketKey)) buckets.set(bucketKey, {positions: [], uv: [], colour: variant ? [] : null});
-    const bucket = buckets.get(bucketKey);
-    const before = bucket.positions.length;
-    const ab = b.map((v, i) => v - a[i]),
+      matKey = variant ? key.replace(/\d+$/, '') + '#v' : key,
+      ab = b.map((v, i) => v - a[i]),
       ac = c.map((v, i) => v - a[i]),
       nx = ab[1] * ac[2] - ab[2] * ac[1],
       nz = ab[0] * ac[1] - ab[1] * ac[0],
-      vertical = Math.abs(nx) + Math.abs(nz) > Math.abs(ab[2] * ac[0] - ab[0] * ac[2]);
-    const triangles =
-      conform && currentBaseY == null && terrain?.conformTriangle
-        ? terrain.conformTriangle(a, b, c)
-        : [[a, b, c]];
-    for (const triangle of triangles)
-      for (const p of triangle) {
-        const q = conform && currentBaseY == null && terrain?.conformTriangle ? p : project(p);
-        bucket.positions.push(...q);
-        if (vertical) {
-          const u = Math.abs(nx) > Math.abs(nz) ? p[2] : p[0];
-          bucket.uv.push(
-            u / (key.startsWith('brick') ? 1.76 : 2),
-            p[1] / (key.startsWith('brick') ? 0.6 : 2)
-          );
-        } else bucket.uv.push(p[0] * 0.5, p[2] * 0.5);
+      vertical = Math.abs(nx) + Math.abs(nz) > Math.abs(ab[2] * ac[0] - ab[0] * ac[2]),
+      useConform = conform && currentBaseY == null && terrain?.conformTriangle,
+      triangles = useConform ? terrain.conformTriangle(a, b, c) : [[a, b, c]],
+      colour = variant ? paint(key) : null,
+      span = chunkOf(key),
+      ground = groundKey(key);
+    // `far` is the same block with triangles that already lie within 12 cm of one plane
+    // collapsed. Twelve centimetres is about a pixel past 120 m; the block you are in
+    // keeps every kerb segment. Collision still uses the uncollapsed conform.
+    const file = (parts, far) => {
+      for (const triangle of parts) {
+        const pts = triangle.map(p => (useConform || far ? p : project(p))),
+          cx = (pts[0][0] + pts[1][0] + pts[2][0]) / 3,
+          cz = (pts[0][2] + pts[1][2] + pts[2][2]) / 3,
+          bucketKey = `${matKey}:${Math.floor(cx / span)}:${Math.floor(cz / span)}${far ? ':far' : ''}`;
+        let bucket = buckets.get(bucketKey);
+        if (!bucket) {
+          bucket = {positions: [], uv: [], colour: variant ? [] : null};
+          buckets.set(bucketKey, bucket);
+        }
+        triangle.forEach((p, i) => {
+          bucket.positions.push(...pts[i]);
+          if (vertical) {
+            const u = Math.abs(nx) > Math.abs(nz) ? p[2] : p[0];
+            bucket.uv.push(u / (key.startsWith('brick') ? 1.76 : 2), p[1] / (key.startsWith('brick') ? 0.6 : 2));
+          } else bucket.uv.push(p[0] * 0.5, p[2] * 0.5);
+          if (colour) bucket.colour.push(colour.r, colour.g, colour.b);
+        });
       }
-    if (bucket.colour) {
-      const c = paint(key);
-      for (let k = before; k < bucket.positions.length; k += 3) bucket.colour.push(c.r, c.g, c.b);
+    };
+    file(triangles, false);
+    if (!(ground && useConform && triangles.length > 1)) return;
+    const lift = p => [p[0], p[1] + heightAt(p[0], p[2]), p[2]],
+      p0 = lift(a),
+      p1 = lift(b),
+      p2 = lift(c),
+      ux = p1[0] - p0[0],
+      uy = p1[1] - p0[1],
+      uz = p1[2] - p0[2],
+      vx = p2[0] - p0[0],
+      vy = p2[1] - p0[1],
+      vz = p2[2] - p0[2],
+      nn = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx],
+      nl = Math.hypot(...nn) || 1;
+    let err = 0,
+      chunk = null,
+      oneChunk = true;
+    for (const triangle of triangles) {
+      const hx = (triangle[0][0] + triangle[1][0] + triangle[2][0]) / 3,
+        hz = (triangle[0][2] + triangle[1][2] + triangle[2][2]) / 3,
+        id = `${Math.floor(hx / span)}:${Math.floor(hz / span)}`;
+      if (chunk == null) chunk = id;
+      else if (chunk !== id) oneChunk = false;
+      for (const p of triangle) {
+        const d = Math.abs((p[0] - p0[0]) * nn[0] + (p[1] - p0[1]) * nn[1] + (p[2] - p0[2]) * nn[2]) / nl;
+        if (d > err) err = d;
+      }
     }
+    const cx = (p0[0] + p1[0] + p2[0]) / 3,
+      cz = (p0[2] + p1[2] + p2[2]) / 3,
+      sameChunk = chunk === `${Math.floor(cx / span)}:${Math.floor(cz / span)}`;
+    // A collapsed face has to stay in the same block as the triangles it replaces, or the
+    // far block would drop a kerb that the near block still owns.
+    file(oneChunk && sameChunk && err <= 0.12 ? [[p0, p1, p2]] : triangles, true);
   };
   const quad = (key, a, b, c, d) => {
     push(key, a, b, c);
@@ -302,14 +374,22 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
       holes.map(r => r.map(p => new T.Vector2(...p)))
     );
     const wallKey = house
-      ? index % 3 === 0
+      ? pixar
+        ? index % 4 === 0
+          ? 'brick' + ((index % 2) + 1)
+          : 'stucco' + ((index % 5) + 1)
+        : index % 3 === 0
         ? 'stucco' + ((index % 2) + 1)
         : 'brick' + ((index % 2) + 1)
       : kind === 'school'
-        ? 'brick'
-        : 'stucco';
+        ? pixar
+          ? 'brick1'
+          : 'brick'
+        : pixar
+          ? 'stucco' + ((index % 5) + 1)
+          : 'stucco';
     const doors = heroSchool ? doorSpans(rings) : null; // the high school's door openings (high-school.mjs)
-    const roofKey = house ? 'roof' + ((index % 3) + 1) : 'roof',
+    const roofKey = house ? 'roof' + ((index % (pixar ? 4 : 3)) + 1) : 'roof',
       profile = house ? roofProfile(outer, h, index) : null;
     let front = null;
     for (const [ringIndex, ring] of rings.entries()) {
@@ -430,8 +510,7 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     currentBaseY = null;
   }
 
-  // Batch every authored surface by material to keep the whole neighbourhood
-  // comfortably below the open-world draw budget.
+  // One material per block, not one mesh for the whole neighbourhood.
   for (const [bucketKey, values] of buckets) {
     if (!values.positions.length) continue;
     const key = bucketKey.split(':', 1)[0];
@@ -443,14 +522,32 @@ export function buildResidentialArt(scene, world, data = {}, options = {}) {
     geometry.computeBoundingSphere();
     const mesh = new T.Mesh(geometry, mat(key));
     mesh.name = `Residential_${bucketKey}`;
+    mesh.userData.detail = bucketKey.endsWith(':far') ? 'far' : buckets.has(`${bucketKey}:far`) ? 'near' : '';
     mesh.castShadow = /^(stucco|brick|roof)/.test(key);
     mesh.receiveShadow = true;
     root.add(mesh);
   }
   root.updateMatrixWorld(true);
   scene.add(root);
+  // Drop blocks the fog has already swallowed. The margin covers a block that still
+  // peeks through the last of the haze. Flight lengthens fog.far; follow that, or a
+  // high pass would erase the streets it can still see.
+  const update = (fogFar, eye) => {
+    const limit = (Number(fogFar) > 0 ? Number(fogFar) : 680) + 48,
+      ex = eye?.[0] ?? 0,
+      ez = eye?.[2] ?? 0;
+    for (const mesh of root.children) {
+      const s = mesh.geometry?.boundingSphere;
+      if (!s) continue;
+      const reach = Math.hypot(s.center.x - ex, s.center.z - ez) - s.radius,
+        detail = mesh.userData.detail;
+      // The far copy replaces a block only once the car is 140 m clear of it.
+      mesh.visible = reach < limit && (detail === 'far' ? reach >= 140 : detail === 'near' ? reach < 140 : true);
+    }
+  };
   return {
     root,
+    update,
     dispose() {
       root.removeFromParent();
       root.traverse(o => o.geometry?.dispose());
@@ -472,6 +569,7 @@ export function prepareResidential(world, data, options = {}) {
     attach(scene) {
       scene.add(built.root);
     },
+    update: built.update,
     dispose: built.dispose
   };
 }

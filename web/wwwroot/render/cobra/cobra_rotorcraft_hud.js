@@ -2,6 +2,7 @@ import { gunnerStatusText } from "./cobra_gunner_status.js";
 import { cobraObjectiveSiteId } from "./cobra_objective_site.js";
 import { cobraMissionCountdown, cobraObjectiveCopy } from "./cobra_objective_copy.js";
 import { fighterHudLayout } from "../hud/fighter_layout.js";
+import { presentHudModel } from "../toy/toy_pass.js";
 
 const MPS_TO_KT = 3600 / 1852;
 const MPS_TO_FPM = 196.850394;
@@ -657,7 +658,40 @@ function panel(ctx, x, y, width, height, border) {
   ctx.stroke();
 }
 
-function drawTacticalAwareness(ctx, model, { width, projectWorldPoint }) {
+function rectsOverlap(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function placeWorldLabel(placedRects, x, y, width, height, viewportHeight = 720) {
+  const minCenterY = 18;
+  const maxCenterY = Math.max(minCenterY, (Number(viewportHeight) || 720) - 18);
+  const w = Math.max(16, Number(width) || 40);
+  const h = Math.max(10, Number(height) || 12);
+  const offsets = [0, -14, 14, -28, 28, -42, 42, -56, 56];
+  let bestRect = null;
+  let bestY = Math.max(minCenterY, Math.min(maxCenterY, y));
+  for (const offset of offsets) {
+    const candidateY = Math.max(minCenterY, Math.min(maxCenterY, y + offset));
+    const rect = {
+      left: x - 2,
+      top: candidateY - h / 2 - 1,
+      right: x + w + 2,
+      bottom: candidateY + h / 2 + 1,
+    };
+    if (!placedRects.some((placed) => rectsOverlap(rect, placed))) {
+      placedRects.push(rect);
+      return candidateY;
+    }
+    if (!bestRect) {
+      bestRect = rect;
+      bestY = candidateY;
+    }
+  }
+  placedRects.push(bestRect);
+  return bestY;
+}
+
+function drawTacticalAwareness(ctx, model, { width, height, projectWorldPoint, placedWorldLabels = [] }) {
   const tactical = model.tactical;
   if (!tactical?.objective) return;
   const compassY = 148;
@@ -729,13 +763,23 @@ function drawTacticalAwareness(ctx, model, { width, projectWorldPoint }) {
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     const labelX = half + 5;
-    ctx.fillText(`${symbol.label} · ${formatAviationRange(symbol.rangeM, { style: "nav" })}`,
-      labelX, 0);
+    const labelText = `${symbol.label} · ${formatAviationRange(symbol.rangeM, { style: "nav" })}`;
+    const labelWidth = ctx.measureText(labelText).width;
+    const resolvedLabelY = placeWorldLabel(
+      placedWorldLabels,
+      point.x + labelX,
+      point.y,
+      labelWidth,
+      12,
+      height,
+    );
+    const localLabelY = resolvedLabelY - point.y;
+    ctx.fillText(labelText, labelX, localLabelY);
     const activeSite = model.tactical?.activeSite;
     if (!threat && activeSite
       && String(symbol.label ?? "").toUpperCase() === activeSite.label
       && activeSite.captureProgress !== null && activeSite.captureProgress > 0) {
-      drawMiniBar(ctx, labelX, half + 2, 42, 4, activeSite.captureProgress, {
+      drawMiniBar(ctx, labelX, localLabelY + half + 2, 42, 4, activeSite.captureProgress, {
         fill: activeSite.contested || activeSite.owner === "hostile" ? AMBER : GREEN,
       });
     }
@@ -755,7 +799,17 @@ function drawTacticalAwareness(ctx, model, { width, projectWorldPoint }) {
       ctx.stroke();
       ctx.font = `800 9px ${MONO}`;
       ctx.textAlign = "left";
-      ctx.fillText("EMBER 1 · LEAD", point.x + 17, point.y);
+      const leadText = "EMBER 1 · LEAD";
+      const leadX = point.x + 17;
+      const leadY = placeWorldLabel(
+        placedWorldLabels,
+        leadX,
+        point.y,
+        ctx.measureText(leadText).width,
+        12,
+        height,
+      );
+      ctx.fillText(leadText, leadX, leadY);
       ctx.restore();
     }
   }
@@ -773,8 +827,10 @@ export function drawCobraRotorcraftHud(ctx, model, {
   safeInsets = null,
   projectWorldPoint = null,
   colorScheme = "dark",
+  toyMode = false,
 } = {}) {
   if (!model || !ctx) return;
+  model = presentHudModel(model, toyMode === true);
   const layout = fighterHudLayout({ width, height, safeInsets: safeInsets ?? {} });
   const centerY = layout.instrumentCenterY;
   const tapeHalf = layout.tapeHeight / 2;
@@ -784,9 +840,10 @@ export function drawCobraRotorcraftHud(ctx, model, {
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   ctx.textBaseline = "middle";
 
+  const placedWorldLabels = [];
   // Mission geometry first: a bearing rail plus world-registered target/threat shapes. This is
   // the tactical picture the Build 335 recording lacked; it is not another prose instruction.
-  drawTacticalAwareness(ctx, model, { width, projectWorldPoint });
+  drawTacticalAwareness(ctx, model, { width, height, projectWorldPoint, placedWorldLabels });
 
   const radio = model.formation?.radio;
   if (radio?.text) {
@@ -883,7 +940,7 @@ export function drawCobraRotorcraftHud(ctx, model, {
       ctx.fillStyle = color;
       ctx.font = `800 10px ${MONO}`;
       const labelX = point.x + half + 5;
-      const labelY = point.y - half + 5;
+      const baseLabelY = point.y - half + 5;
       if (model.combat?.killFlash) {
         ctx.fillStyle = RED;
         ctx.font = `800 12px ${MONO}`;
@@ -891,6 +948,14 @@ export function drawCobraRotorcraftHud(ctx, model, {
       }
       ctx.fillStyle = color;
       ctx.font = `800 10px ${MONO}`;
+      const labelY = placeWorldLabel(
+        placedWorldLabels,
+        labelX,
+        baseLabelY,
+        ctx.measureText(model.designation.label).width,
+        12,
+        height,
+      );
       ctx.fillText(model.designation.label, labelX, labelY);
       if (model.combat?.healthFrac !== null && model.combat?.healthFrac !== undefined) {
         const barW = Math.max(half * 1.6, 36);

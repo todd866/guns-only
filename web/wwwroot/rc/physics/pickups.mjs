@@ -1,6 +1,7 @@
 // Pickups: cartoony, never violent. A hit wobbles or spins a car; nothing wrecks it.
 // Spawn crates sit at the course's PICKUP_* markers and respawn a few seconds after collection.
 import {add, sub, scale, len, rotate, dot} from './math.mjs';
+import {KID_BEHIND_WEIGHTS, KID_MISSILE_SCALE, softenKidHit} from './kid-racing.mjs';
 
 export const ITEMS = ['zoom', 'balloon', 'oil', 'bubble', 'foxtwo', 'pitbull', 'foxone', 'zuni'];
 // Foam-tipped toy missiles, named by brevity code. A hit spins the car (like a balloon), never wrecks it.
@@ -52,10 +53,12 @@ export function pickItem(pk, car, isPlayer = false) {
     n = pk.order?.length ?? 0;
   if (at < 0 || n < 2 || pool.length !== ITEMS.length) return pool[Math.floor(pk.rng() * pool.length)];
   const back = at / (n - 1);
-  if (at > 0 && back < 2 / 3) return pool[Math.floor(pk.rng() * pool.length)];
+  // Kid, behind the leader but not yet in the back third: better catch-up odds than a flat draw.
+  if (at > 0 && back < 2 / 3 && !(pk.kidOdds && isPlayer)) return pool[Math.floor(pk.rng() * pool.length)];
   if (back >= LASER.back && (isPlayer || pk.superFor === 'all') && pk.rng() < LASER.chance) return SUPER;
   const tier = at === 0 ? 0 : 1,
-    w = pool.map(item => PLACE_WEIGHTS[item][tier]);
+    table = pk.kidOdds && isPlayer && at > 0 ? KID_BEHIND_WEIGHTS : null,
+    w = pool.map(item => (table ? (table[item] ?? 0) : PLACE_WEIGHTS[item][tier]));
   let r = pk.rng() * w.reduce((a, b) => a + b),
     picked = pool.at(-1);
   for (let i = 0; i < pool.length; i++)
@@ -112,7 +115,7 @@ export function modifiers(pk, car) {
     canSteer = e.spin <= 0.5 + 1e-6;
   return {
     boost: e.zoom > 0 ? 1.6 : e.laser > 0 ? LASER.boost : 1,
-    gripScale: e.slick > 0 ? 0.35 : 1,
+    gripScale: e.slick > 0 ? (pk.kidGentle && car === pk.playerCar ? 0.75 : 0.35) : 1,
     spinning: e.spin > 0,
     canSteer,
     controllable: canSteer,
@@ -174,6 +177,11 @@ function hit(pk, car) {
   e.hitGrace = isPlayer ? pk.hitGrace : Math.min(pk.hitGrace, 1.1);
   e.spin = 0.9;
   if (isPlayer) e.recoverBoost = 0.8;
+  // Kid races: a wobble and a short speed dip. The usual hop and flat-spin yeets him off the asphalt.
+  if (pk.kidGentle && isPlayer) {
+    softenKidHit(car);
+    return true;
+  }
   car.vel = scale(car.vel, isPlayer ? 0.45 : 0.15);
   car.ang = add(car.ang, [0, 9, 0]);
   car.vel[1] += 1.2;
@@ -354,8 +362,11 @@ function stepMissiles(pk, cars, world, dt, isImmune, events, trailerHit) {
       }
     }
     // Fly low over whatever is below, check walls along the way.
-    const move = scale(m.dir, sp.v * dt),
-      wall = world.raycast(m.pos, m.dir, sp.v * dt + 0.1);
+    // Homing shots aimed at a kid are slower, so fewer of them arrive.
+    const v =
+      sp.v * (pk.kidGentle && pk.playerCar && m.target === pk.playerCar ? KID_MISSILE_SCALE : 1);
+    const move = scale(m.dir, v * dt),
+      wall = world.raycast(m.pos, m.dir, v * dt + 0.1);
     if (wall && Math.abs(wall.normal[1]) < 0.6) {
       if (m.kind === 'zuni' && m.bounces-- > 0) {
         const n = [wall.normal[0], 0, wall.normal[2]],

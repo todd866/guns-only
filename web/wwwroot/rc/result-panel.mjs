@@ -12,6 +12,19 @@ export const placeTitle = place => TITLES[place - 1] ?? 'Next sortie!';
  *   stats: [string, string][], again: string}} result
  * `order` lists callsigns by finishing place with the player as 'YOU'; `you` is the player's place.
  */
+function confetti() {
+  const colors = ['#edbd6a', '#f27d6e', '#7fd1c8', '#f3efdc', '#8ec5ff'];
+  let bits = '';
+  for (let i = 0; i < 26; i++) {
+    const left = (i * 37) % 100,
+      delay = ((i * 13) % 10) / 10,
+      dur = (0.9 + (i % 5) * 0.12).toFixed(2),
+      color = colors[i % colors.length];
+    bits += `<i style="left:${left}%;animation-delay:${delay}s;animation-duration:${dur}s;background:${color}"></i>`;
+  }
+  return `<div class="confetti" aria-hidden="true">${bits}</div>`;
+}
+
 export function resultPanel({
   badge,
   badgeTitle = 'Finishing place',
@@ -19,7 +32,8 @@ export function resultPanel({
   order = [],
   you = 0,
   stats,
-  again
+  again,
+  cheer = false
 }) {
   // Podium plus your place; the hidden middle stays in the list behind a "…" toggle.
   const keep = place => place <= 3 || place === you || (you <= 3 && place === 4);
@@ -40,7 +54,7 @@ export function resultPanel({
         .join('')}</ol>`
     : '';
   return (
-    `<div class="result-head">${badge ? `<span class="result-place" title="${escape(badgeTitle)}">${badge}</span>` : ''}<h1>${escape(title)}</h1></div>${standings}` +
+    `${cheer ? confetti() : ''}<div class="result-head">${badge ? `<span class="result-place" title="${escape(badgeTitle)}">${badge}</span>` : ''}<h1>${escape(title)}</h1></div>${standings}` +
     `<dl class="result-stats">${stats.map(([label, value]) => `<div><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`).join('')}</dl>` +
     `<div class="result-actions"><button id="again" class="primary">${again}</button><button id="explore">▶ Drive</button><button id="to-menu">⏸ Menu</button></div>`
   );

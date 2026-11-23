@@ -2,7 +2,7 @@ import * as T from '../../vendor/three.module.js';
 
 // Original irrigated turf, tiled over two physical metres. Tiny blade groups
 // remain legible from the RC chase camera and blend into colour at a distance.
-export function residentialGrass() {
+export function residentialGrass({soft = false} = {}) {
   const size = 256,
     pixels = new Uint8Array(size * size * 4),
     height = new Uint8Array(pixels.length);
@@ -16,8 +16,12 @@ export function residentialGrass() {
       const i = (y * size + x) * 4,
         grain = random(x, y),
         blade = random(Math.floor(x / 2) * 2, Math.floor(y / 5) * 5);
-      const value = (grain - 0.5) * 12 + (blade - 0.5) * 25;
-      pixels.set([78 + value, 108 + value, 39 + value * 0.6, 255], i);
+      // Soft (the Pixar look): a third of the per-texel noise, so the lawn reads as smooth toy turf
+      // under the tufts instead of a field of coloured pixels; a touch brighter and greener.
+      const value = ((grain - 0.5) * 12 + (blade - 0.5) * 25) * (soft ? 0.35 : 1);
+      soft
+        ? pixels.set([84 + value, 122 + value, 40 + value * 0.6, 255], i)
+        : pixels.set([78 + value, 108 + value, 39 + value * 0.6, 255], i);
       const h = 115 + blade * 36 + grain * 12;
       height.set([h, h, h, 255], i);
     }

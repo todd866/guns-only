@@ -3,7 +3,7 @@
 // name and it joins your herd. Say a name (Y) and that one comes running to be ridden. Each kind
 // has its own model, body and pace; T. rexes come in their own colour pairs, the other kinds wear
 // their own palettes. The quetzalcoatlus is won at its nest (NEST). Pure: saved state and matching.
-import {valleyPoint} from './spirit-mountain.mjs';
+import {valleyPoint, ROAD, toLocal} from './spirit-mountain.mjs';
 import {sounds, clean} from './typed.mjs';
 
 export const DINO_KINDS = Object.freeze({
@@ -36,7 +36,19 @@ const at = (along, across) => {
 // The quetzalcoatlus nest (owner, 31 Oct: "you have to climb to a quetzalcoatlus nest then you can go
 // for a ride"): on the shelf of the Spirit Mountain road's high east hairpin, 190 m up and facing the
 // lake valley, so it's seen from the Lake Town and reached by riding up the switchbacks (or the map).
-export const NEST = Object.freeze([2486.2, 189.5, -3038.3]);
+// The high east hairpin (local phi ~0.72, ~189 m up). Derived so a move of the mountain takes the nest with it.
+export const NEST = (() => {
+  let best = null;
+  for (const p of ROAD) {
+    const [lx, lz] = toLocal(p.x, p.z),
+      phi = Math.atan2(lx, lz);
+    if (phi < 0.55 || phi > 0.95 || p.y < 170 || p.y > 210) continue;
+    const score = Math.abs(p.y - 189.4) + Math.abs(phi - 0.72) * 40;
+    if (!best || score < best.score) best = {score, p};
+  }
+  if (!best) throw new Error('quetzal nest has no hairpin on the climb');
+  return Object.freeze([best.p.x, best.p.y, best.p.z]);
+})();
 export const NEST_WILD = Object.freeze({
   id: 'nest',
   kind: 'quetzal',

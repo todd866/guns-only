@@ -1,6 +1,7 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Recovery;
 using GunsOnly.Web;
+using System.Linq;
 using System.Text.Json;
 using Xunit;
 
@@ -61,17 +62,18 @@ public class ApproachGuidanceSessionTests {
         Assert.True(session.ConventionalRtbPatternGuidanceActive);
         Assert.True(guidance.ConventionalPattern);
         Assert.Equal(ApproachPatternLeg.PatternEntry, guidance.ActivePatternLeg);
-        Assert.Equal(ApproachGuidance.DefaultSpeedToleranceKtas,
+        Assert.Equal(F22OverheadCourse.SpeedToleranceKtas,
             guidance.TargetSpeedToleranceKtas);
         Assert.Equal(
             session.Player.AirspeedMps - guidance.NextTrueAirspeedMps,
             guidance.TrueAirspeedErrorMps,
             precision: 10);
         Assert.InRange(guidance.Gates.Count, 1, 8);
-        Assert.All(guidance.Gates, gate => {
-            Assert.Equal(ApproachPatternLeg.PatternEntry, gate.PatternLeg);
-            Assert.StartsWith("pattern_ingress_", gate.Id, StringComparison.Ordinal);
-        });
+        Assert.True(session.F22Course.Armed);
+        Assert.Equal(ApproachPatternLeg.PatternEntry, guidance.Gates[0].PatternLeg);
+        Assert.Equal(session.F22Course.NextGate.Id, guidance.Gates[0].Id);
+        Assert.All(guidance.Gates.Skip(1),
+            gate => Assert.StartsWith("highway_", gate.Id, StringComparison.Ordinal));
         Assert.False(session.ConventionalRtbRecoveryCompleted);
         Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
 
@@ -80,7 +82,7 @@ public class ApproachGuidanceSessionTests {
         JsonElement root = snapshot.RootElement;
         Assert.True(root.GetProperty("conventional_rtb_pattern_active").GetBoolean());
         Assert.Equal("PATTERN_ENTRY", root.GetProperty("approach_pattern_leg").GetString());
-        Assert.Equal(25.0,
+        Assert.Equal(F22OverheadCourse.SpeedToleranceKtas,
             root.GetProperty("approach_energy_tolerance_ktas").GetDouble());
         Assert.NotEqual("UNAVAILABLE",
             root.GetProperty("approach_energy_state").GetString());

@@ -438,6 +438,23 @@ export const GRADE = Object.freeze({
   cool: [-0.012, 0.0, 0.016],
   vignette: 0.24
 });
+// The Pixar look (owner, 18 Nov 2026: "Pixar"): richer colour, warmer highlights, bluer shadows.
+export const GRADE_PIXAR = Object.freeze({
+  saturation: 1.3,
+  contrast: 1.04,
+  warm: [0.035, 0.016, -0.02],
+  cool: [-0.016, 0.004, 0.032],
+  vignette: 0.16
+});
+// Open-world light for the Pixar look: a warm afternoon sun lower in the sky, a strong blue sky
+// fill and a green-gold ground bounce, so nothing sits in flat grey.
+export const PIXAR_WORLD = Object.freeze({
+  hemi: [0xb8d6ff, 0x93a35a, 1.35],
+  sun: [0xffd9a3, 3.3],
+  sunDir: [-0.95, 0.72, 0.7],
+  exposure: 1.0,
+  radiance: 0.22
+});
 export const gradeShader = (g = GRADE) => ({
   uniforms: {
     tDiffuse: {value: null},
@@ -458,12 +475,12 @@ export const gradeShader = (g = GRADE) => ({
       x=mix(x,vec3(dot(x,vec3(.393,.769,.189)),dot(x,vec3(.349,.686,.168)),dot(x,vec3(.272,.534,.131))),old);gl_FragColor=vec4(clamp(x,0.,1.),c.a);}`
 });
 
-export async function setupPolish({renderer, scene, camera, indoor, world = false}) {
+export async function setupPolish({renderer, scene, camera, indoor, world = false, look = null}) {
   const hdr = await new RGBELoader().setDataType(T.FloatType).loadAsync('./assets/env/goegap_1k.hdr');
   hdr.mapping = T.EquirectangularReflectionMapping;
   // Three r160 ignores Scene.environmentIntensity. Scale the source radiance
   // before convolution, so streamed meshes also receive the intended fill.
-  const radiance = environmentRadiance(hdr, world ? 0.06 : indoor ? 0.55 : 0.9);
+  const radiance = environmentRadiance(hdr, world ? (look === 'pixar' ? PIXAR_WORLD.radiance : 0.06) : indoor ? 0.55 : 0.9);
   const pmrem = new T.PMREMGenerator(renderer),
     env = pmrem.fromEquirectangular(radiance).texture;
   pmrem.dispose();
@@ -490,7 +507,7 @@ export async function setupPolish({renderer, scene, camera, indoor, world = fals
   }
   composer.addPass(new UnrealBloomPass(new T.Vector2(w, h), indoor ? 0.22 : 0.1, 0.35, indoor ? 0.92 : 1.6));
   composer.addPass(new OutputPass());
-  const grade = indoor ? null : new ShaderPass(gradeShader());
+  const grade = indoor ? null : new ShaderPass(gradeShader(look === 'pixar' ? GRADE_PIXAR : GRADE));
   if (grade) composer.addPass(grade);
   composer.addPass(new SMAAPass(w * renderer.getPixelRatio(), h * renderer.getPixelRatio()));
   return {

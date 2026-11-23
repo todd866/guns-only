@@ -830,7 +830,31 @@ export function createGuidancePath(THREE, options = {}) {
         // ingress or RTB chevron. Pattern overwrites this; every other style stays plain.
         tint.mark = 0;
         mesh.userData.guidanceEnergyMark = null;
-        if (conventionalPattern && gate.pattern === true) {
+        if (state?.overhead_course_active === true) {
+          const aglFt = Number.isFinite(Number(state?.py)) && Number.isFinite(Number(state?.runway_threshold_y))
+            ? (Number(state.py) - Number(state.runway_threshold_y)) * 3.280839895
+            : Number.POSITIVE_INFINITY;
+          const rwyDistNm = finiteNumber(state?.runway_distance_nm);
+          const nearFade = rwyDistNm !== null
+            ? Math.max(0, Math.min(1, (rwyDistNm - 0.45) / 0.75))
+            : 1;
+          const lowFade = Number.isFinite(aglFt)
+            ? Math.max(0, Math.min(1, (aglFt - 150) / 100))
+            : 1;
+          const restrainedOpacity = (gate.active ? 0.16 : 0.065) * nearFade * lowFade;
+          if (restrainedOpacity <= 0.004) {
+            mesh.visible = false;
+            continue;
+          }
+          mesh.material = procedureMaterial;
+          mesh.userData.guidanceStyle = "overhead-course-frame";
+          mesh.userData.guidanceLabel = gate.label || null;
+          mesh.userData.guidancePatternLeg = gate.patternLeg || null;
+          mesh.userData.guidanceEnergyStatus = null;
+          mesh.scale.setScalar(Math.min(visualHalf, gate.active ? 52 : 40));
+          tint.color = "#86efac";
+          tint.opacity = restrainedOpacity;
+        } else if (conventionalPattern && gate.pattern === true) {
           mesh.material = rtbMaterial;
           mesh.userData.guidanceStyle = "pattern-chevron";
           mesh.userData.guidanceLabel = gate.label || patternEnergy.label;

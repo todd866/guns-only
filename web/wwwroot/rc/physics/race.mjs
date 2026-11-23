@@ -8,6 +8,14 @@ import {add, sub, scale, dot, len, rotate} from './math.mjs';
 import {createPickups, stepPickups, modifiers, use, rivalWants, MISSILES, boostCar} from './pickups.mjs';
 import {padHit} from './features.mjs';
 import {createFurball, stepFurball, furballInput, mayFire} from './furball.mjs';
+import {
+  guideKid,
+  rubberRival,
+  catchUpBoost,
+  difficultyFrom,
+  readKidResults,
+  DIFFICULTY
+} from './kid-racing.mjs';
 
 export const SKILL = {cruise: 0.78, ace: 0.95};
 // Aggressor-squadron callsigns, one per rival paint scheme (ghost, desert, splinter, flanker, arctic).
@@ -85,8 +93,28 @@ export function createRace(
   };
   race.pickups.playerCar = player.car;
   race.pickups.superFor = mode === 'kid' ? 'player' : 'all';
+  // Track hold, the close rubber band and kinder items are kid races only. Roam and Furball
+  // keep today's rules, and Big Kid never grows a kidDifficulty.
+  const kidRace = mode === 'kid' && !roam && !furball;
+  race.pickups.kidGentle = kidRace;
+  race.pickups.kidOdds = kidRace;
+  race.kidDifficulty = kidRace ? difficultyFrom(readKidResults(browserStorage())) : null;
+  if (kidRace) {
+    race.kidFeed = [];
+    race.kidOff = 0;
+    race.kidArrow = null;
+    race.kidLap = 1;
+  }
   if (furball) race.furball = createFurball(race);
   return race;
+}
+
+function browserStorage() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // Racing line: AI nodes if authored, else the lap gates.
@@ -219,6 +247,16 @@ export function driveInput(race, rival) {
       vmax = Math.min(vmax, Math.max(2.5, race.pace) * 1.04);
     if (kidFinale(race) && raceDistance(s) > raceDistance(race.player))
       vmax = Math.min(vmax, Math.max(2.5, race.pace) * 0.93);
+    // Kid only: ease when ahead, a hard hold before a full lap, a little push when behind.
+    // Big Kid keeps the pack factor above and nothing else.
+    if (race.mode === 'kid' && !race.roam && !race.furball) {
+      if (race.courseLength == null) race.courseLength = oneLapMetres(race.course);
+      vmax *= rubberRival(
+        raceDistance(s) - raceDistance(race.player),
+        race.courseLength || 1,
+        race.kidDifficulty ?? DIFFICULTY.fresh
+      );
+    }
   }
   const steer = Math.max(-1, Math.min(1, err * 2.2));
   if (vmax < 0.5 || retreatActive(race)) return {throttle: 0, brake: true, steer};
@@ -258,6 +296,13 @@ export function raceDistance(s) {
     ? Math.max(0, Math.min(d, ((s.car.pos[0] - a[0]) * dx + (s.car.pos[2] - a[1]) * dz) / d))
     : 0;
   return (s.lap - 1) * length + before + along;
+}
+function oneLapMetres(course) {
+  const cps = course.checkpoints;
+  let length = 0;
+  for (let i = 1; i < cps.length; i++)
+    length += Math.hypot(cps[i][0] - cps[i - 1][0], cps[i][1] - cps[i - 1][1]);
+  return length;
 }
 // Keep the pack contestable in physical space as well as lap progress. A trailing rival may
 // spend a few seconds above its normal pace to rejoin; a leader still gets room to pull away.
@@ -361,6 +406,17 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
     race.drivingTime += dt;
     race.pace += (race.player.car.forwardSpeed - race.pace) * (1 - Math.exp(-dt / 6));
   }
+  const kidRace = race.mode === 'kid' && !race.roam && !race.furball && race.line.length > 1;
+  if (kidRace) {
+    playerInput = guideKid(race, playerInput, dt);
+    if (race.rivals.length && (playerInput.throttle || 0) > 0.15) {
+      let behind = 0;
+      const pd = raceDistance(race.player);
+      for (const rival of race.rivals) behind = Math.max(behind, raceDistance(rival.session) - pd);
+      const boost = catchUpBoost(behind, race.kidDifficulty ?? DIFFICULTY.fresh);
+      if (boost > 1) playerInput = {...playerInput, boost: (playerInput.boost ?? 1) * boost};
+    }
+  }
   if (playerInput.fire) use(pk, race.player.car);
   const rt = retreatActive(race);
   if (race.retreatCeremony) {
@@ -408,19 +464,42 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
       held !== 'bubble' &&
       (rivalWants(pk, rCar, [race.player.car, rCar]) || (held === 'pitbull' && pk.order?.[0] === race.player.car));
     const targets = open ? cars : cars.slice(1);
-    if ((!fb || mayFire(race, rival)) && rivalWants(pk, rCar, targets) && (open || !aimsAtPlayer)) {
+    // A rival driven by a second player (split screen) fires when that player presses fire.
+    if (!rival.human && (!fb || mayFire(race, rival)) && rivalWants(pk, rCar, targets) && (open || !aimsAtPlayer)) {
       if (!fb && race.mode === 'kid' && aimsAtPlayer) {
         race.playerShotAt = race.t;
         rival.shotPlayerAt = race.t;
       }
       use(pk, rCar);
     }
-    const input = rival.follow
+    const human = rival.human?.();
+    if (human?.fire) use(pk, rCar);
+    const input = human
+      ? human
+      : rival.follow
       ? followInput(rival.session, rival.follow)
       : fb
         ? furballInput(race, rival, () => driveInput(race, rival))
         : driveInput(race, rival);
     stepSession(rival.session, withEffects(race, rival.session.car, input), dt);
+    // The physical unstick (unstick.mjs) frees a car that wants to leave the wall. A bot whose
+    // line runs behind the wall it is pinned on steers straight back in: Alley Cat car 7 crept
+    // along the lane end at 0.1 m/s for 200 s (18 Nov 2026). Bots only, after 5 s of trying
+    // with under 2 m made: the same R a kid would press. The player is never moved.
+    if (!rival.human && !rival.session.finished && !rival.session.roam && !rival.session.flight.mode) {
+      const rc = rival.session.car,
+        a = (rival.progress ??= {pos: [...rc.pos], t: 0});
+      const trying = Math.abs(input?.throttle || 0) > 0.4;
+      a.t = trying ? a.t + dt : 0;
+      if (!trying || Math.hypot(rc.pos[0] - a.pos[0], rc.pos[2] - a.pos[2]) > 2) {
+        a.pos = [...rc.pos];
+        if (trying) a.t = 0;
+      } else if (a.t > 5) {
+        recover(rival.session);
+        a.pos = [...rc.pos];
+        a.t = 0;
+      }
+    }
     // A rival that clips a steerpoint (airborne over it, or wide) is credited once it is clearly on
     // its way to the next one; otherwise it races on beside you scored as gates behind and never
     // finishes. Rivals only: the player's gates stay strict.
@@ -452,6 +531,17 @@ export function stepRace(race, playerInput, dt = 1 / 120) {
   }
   for (const s of [race.player, ...race.rivals.map(r => r.session)])
     if (s.finished && !race.finishOrder.includes(s)) race.finishOrder.push(s);
+  if (kidRace) {
+    if (race.kidLap == null) race.kidLap = race.player.lap;
+    else if (race.player.lap !== race.kidLap) {
+      (race.kidFeed ??= []).push({
+        type: 'lap_place',
+        lap: race.kidLap,
+        place: placeOf(race, race.player)
+      });
+      race.kidLap = race.player.lap;
+    }
+  }
   // Boost pads: a short Afterburner for whoever crosses one (rivals too).
   if (race.features) for (const c of cars) if (padHit(race.features, c)) boostCar(pk, c, 0.9);
   bump(cars);

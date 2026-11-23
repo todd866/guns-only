@@ -267,4 +267,27 @@ public class CobraAiGunnerTests
                 0,
                 target: Target(sightErrorRad: double.NaN))));
     }
+
+    [Fact]
+    public void BriefLineOfSightBlinkDecaysTrackGraduallyInsteadOfZeroing()
+    {
+        CobraAiGunner gunner = Create(acquireSeconds: 1.0, reacquireSeconds: 0.5);
+        long tick = 0;
+        for (int i = 0; i < 96; i++)
+            gunner.Advance(Input(tick++, consent: false)); // 0.80 s accumulated
+
+        // 0.25 s (30 ticks) LOS blink decays at 2x rate: 0.80 - 0.50 = 0.30 s retained.
+        CobraAiGunnerDecision masked = default;
+        for (int i = 0; i < 30; i++)
+            masked = gunner.Advance(Input(tick++, consent: false, target: Target(lineOfSight: false)));
+
+        Assert.Equal(CobraAiGunnerState.Masked, masked.State);
+        Assert.InRange(masked.QualifiedTrackSeconds, 0.29, 0.31);
+
+        for (int i = 0; i < 84; i++)
+            gunner.Advance(Input(tick++, consent: true));
+        CobraAiGunnerDecision locked = gunner.Advance(Input(tick++, consent: true));
+        Assert.Equal(CobraAiGunnerState.Tracking, locked.State);
+        Assert.True(locked.FireAuthorized);
+    }
 }

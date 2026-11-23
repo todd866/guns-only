@@ -7,10 +7,13 @@
 // World-edge bury (terrain shader) still closes the streamed disc independently.
 export const UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE = 0.32;
 export const UKRAINE_SOFT_WORLD_HAZE_MIX = 0.72;
-export const UKRAINE_SOFT_WORLD_HAZE_RGB = Object.freeze([0.48, 0.59, 0.68]);
+// Aerial perspective is pale and cool (desaturated), never ochre dust.
+export const UKRAINE_SOFT_WORLD_HAZE_RGB = Object.freeze([0.804, 0.867, 0.898]);
 // Single source for the soft-world fog hex; fallback paths in scenery/mission features must
 // use this, never a literal — two hardcoded fallbacks forked the palette once already.
-export const UKRAINE_SOFT_WORLD_FOG_HEX = 0xa69d89;
+export const UKRAINE_SOFT_WORLD_FOG_HEX = 0xe2ecee;
+// Pale desaturated cool far field at altitude (reads as distance rather than sea).
+export const UKRAINE_SOFT_WORLD_FOG_HIGH_HEX = 0xc9deec;
 // Preserve the existing cool aerial tint through most of the disc, then bury its edge fully.
 // These fractions shape the wash; uFogDensity still follows the live streamed radius/weather.
 export const UKRAINE_SOFT_WORLD_EDGE_HIDE_START = 0.55;

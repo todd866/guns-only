@@ -2050,6 +2050,8 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
       await page.screenshot({
         path: join(captureDir, "medevac-ready.png"),
         fullPage: true,
+        animations: "disabled",
+        timeout: scaled(60000),
       });
     }
 
@@ -2232,6 +2234,8 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     if (captureDir) {
       await page.screenshot({
         path: join(captureDir, "medevac-flight.png"),
+        animations: "disabled",
+        timeout: scaled(60000),
       });
     }
     await page.setViewportSize({ width: 390, height: 844 });
@@ -2285,6 +2289,8 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     if (captureDir) {
       await page.screenshot({
         path: join(captureDir, "medevac-flight-narrow.png"),
+        animations: "disabled",
+        timeout: scaled(60000),
       });
     }
 
@@ -2511,6 +2517,8 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
       if (captureDir) {
         await touchPage.screenshot({
           path: join(captureDir, "medevac-flight-touch-portrait.png"),
+          animations: "disabled",
+          timeout: scaled(60000),
         });
       }
     } finally {

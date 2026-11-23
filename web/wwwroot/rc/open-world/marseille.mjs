@@ -33,21 +33,61 @@ export function marseilleHeight(x, z) {
     depth(7.2 - Math.hypot(x - 7, z + 6), 2.2),
     depth(-snakeDistance(x, z), 1.5)
   );
-  // Rounded channels connect the snake's ends to both bowls.
+  // Rounded channels connect the snake's ends to both bowls. The east channel's
+  // north lip was a quarter: the lap crested it pitched, and the re-entry
+  // bailed. That side is a 45° bank that meets the channel floor.
   for (const [cx, cz, r] of [
     [-19, 3, 4.5],
     [11, 3, 4.3]
-  ])
-    y = Math.min(y, -depth(r - Math.hypot(x - cx, z - cz), 1.5));
-  if (x > -11 && x < 5 && Math.abs(z + 6) < 3) {
+  ]) {
+    const dist = Math.hypot(x - cx, z - cz);
+    let h = depth(r - dist, 1.5);
+    // Only the far north lip. The channel itself stays a quarter so the round
+    // bowl's wall-to-wall line can still pump it. The lap crests this lip
+    // pitched, over the quarter, and the re-entry bails.
+    if (cx > 0 && z > cz + 3) {
+      const edge = r - dist;
+      if (edge > 0) h = Math.min(h, edge >= 1.5 ? 1.5 : edge);
+    }
+    // Where the snake meets this channel the hard min is a ridge. The lap catches
+    // that edge once, around (-15.8, 5.6). Round only that patch into the concrete.
+    const ridge =
+      cx < 0
+        ? 0.58 *
+          clamp(1 - Math.abs(x + 15.7) / 1.8, 0, 1) *
+          clamp(1 - Math.abs(z - 5.55) / 1.15, 0, 1)
+        : 0;
+    if (ridge > 0.05) y = smoothMin(y, -h, ridge);
+    else y = Math.min(y, -h);
+  }
+  if (x > -11 && x < 5 && Math.abs(z + 6) < 3.6) {
     const hip = x < -4.5 ? -2.4 + ((x + 11) / 6.5) * 2.05 : -0.35 - ((x + 4.5) / 9.5) * 1.85;
-    const w = clamp((3 - Math.abs(z + 6)) / 1.2, 0, 1);
+    // The old blend ended on a crease. A slow hull climbing out caught the flat
+    // deck's edge and counted it as a wall. The core stays, and the last metre
+    // eases out onto the deck.
+    const d = Math.abs(z + 6);
+    let w;
+    if (d <= 2.2) w = clamp((3 - d) / 1.2, 0, 1);
+    else {
+      const t = clamp((d - 2.2) / 1.4, 0, 1),
+        s = t * t * (3 - 2 * t);
+      w = 0.667 * (1 - s);
+    }
     y = y * (1 - w) + hip * w;
   }
-  // The snake's broad roller launches along the channel, without a vertical face.
+  // The snake's west face is a concrete kicker. A bowl surface would glue the
+  // car to the mound, so the held-throttle line never aired. The face stays
+  // under 50° and the crown is narrow, so (0, 10) keeps the channel depth.
   if (Math.abs(x) < 4) {
-    const w = clamp((3.3 - Math.abs(z - snakeZ(x))) / 1.3, 0, 1);
-    if (w > 0) y = Math.max(y, -1.5 + (1 - Math.abs(x) / 4) * 1.1 * w);
+    const dz = Math.abs(z - snakeZ(x));
+    const w = clamp((1.9 - dz) / 0.9, 0, 1);
+    // Long 20° approach, a short lip, then the channel. A bowl tag would glue
+    // the car over the crest; the mesh marks this strip concrete.
+    let rise = 0;
+    if (x < -1.2) rise = clamp((x + 4) / 2.8, 0, 1);
+    else if (x < -0.7) rise = 1;
+    else rise = clamp((0.8 - x) / 1.5, 0, 1);
+    if (w > 0) y = Math.max(y, -1.5 + 1.15 * rise * w);
   }
   // A drainage channel across the plaza is jumped from either bank.
   if (x > 19 && x < 27 && z > 17 && z < 20) y = -1;
@@ -93,10 +133,11 @@ export function buildMarseille() {
         return [x, marseilleHeight(x, z), z];
       });
       const cut = v.some(p => p[1] < -0.01),
-        hip = v.every(p => p[0] > -11 && p[0] < 5 && Math.abs(p[2] + 6) < 3);
+        hip = v.every(p => p[0] > -11 && p[0] < 5 && Math.abs(p[2] + 6) < 3),
+        kicker = v.every(p => Math.abs(p[0]) < 4.2 && Math.abs(p[2] - snakeZ(p[0])) < 1.7);
       const floor = v.every(p => p[1] < -1.4),
         mat = cut ? (floor ? 'floor' : 'wall') : 'deck';
-      quad(...v, hip ? 'hip' : cut ? 'bowl' : 'concrete', mat);
+      quad(...v, hip ? 'hip' : kicker ? 'concrete' : cut ? 'bowl' : 'concrete', mat);
     }
   const flat = (x0, z0, x1, z1, y = 0, mat = 'deck') =>
     quad([x0, y, z0], [x0, y, z1], [x1, y, z1], [x1, y, z0], 'concrete', mat);
@@ -179,7 +220,7 @@ const splitCoping = (id, pts) => {
   const rails = [];
   let line = [];
   for (const p of pts) {
-    if (marseilleHeight(p[0], p[1]) > -0.005) line.push(p);
+    if (marseilleHeight(p[0], p[1]) > -0.005 && p[0] > -30) line.push(p);
     else {
       if (line.length > 1) rails.push({id: `${id}-${rails.length}`, kind: 'coping', pts: line});
       line = [];
@@ -245,7 +286,7 @@ export const MARSEILLE_PARK = Object.freeze({
     {letter: 'T', at: [-6, 24, 1.8]},
     {letter: 'E', at: [23, 19, 1.5]}
   ],
-  tape: [-31, -9.1, 1.4],
+  tape: [-31, -9.1, -0.15],
   rails: [
     ...splitCoping('kidney', kidneyCoping),
     ...splitCoping('round', circleCoping),

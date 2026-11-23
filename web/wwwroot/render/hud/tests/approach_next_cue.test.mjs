@@ -90,3 +90,48 @@ test("a missing ownship pose keeps the row but draws no turn", () => {
   assert.equal(cue.turnDeg, null);
   assert.equal(cue.arrowDeg, null);
 });
+
+test("F-22 overhead recovery course drives compact RTB/NEXT gate telemetry and gear cue", () => {
+  const cue = approachNextCue({
+    overhead_course_active: true,
+    overhead_field_label: "SON 015",
+    overhead_next_gate_id: "PERCH",
+    overhead_next_gate_label: "PERCH",
+    overhead_next_gate_x: 1000,
+    overhead_next_gate_z: 0,
+    overhead_next_gate_alt_ft: 1520,
+    overhead_next_gate_kcas: 190,
+    overhead_autothrottle_active: true,
+    overhead_autothrottle_kcas: 185,
+    overhead_next_gate_dist_nm: 1.4,
+    overhead_next_gate_needs_gear: true,
+    overhead_gates_passed: 3,
+    overhead_gates_total: 7,
+    px: 0,
+    pz: 0,
+    alt_ft: 1950,
+    heading_deg: 0,
+    gear_handle: "UP",
+  });
+  assert.equal(cue.overhead, true);
+  assert.equal(cue.fieldLabel, "SON 015");
+  assert.equal(cue.progress, "3/7");
+  assert.equal(cue.label, "PERCH");
+  assert.equal(cue.distance, "1.4");
+  assert.equal(cue.arrowDeg, 90);
+  assert.equal(cue.targetFt, 1500);
+  assert.equal(cue.altMark, 1);
+  assert.equal(cue.targetKcas, 185);
+  assert.equal(cue.autoThrottle, true);
+  assert.equal(cue.gearCue, true);
+
+  const gearDownCue = approachNextCue({
+    overhead_course_active: true,
+    overhead_next_gate_label: "FINAL",
+    overhead_next_gate_dist_nm: 0.8,
+    overhead_next_gate_needs_gear: true,
+    gear_handle: "DOWN",
+  });
+  assert.equal(gearDownCue.gearCue, false);
+  assert.equal(gearDownCue.distance, ".8");
+});

@@ -59,9 +59,8 @@ export function vehicleParams(kind = 'buggy') {
   if (!PRESETS[kind]) throw new RangeError(`unknown vehicle kind: ${kind}`);
   return clone(Object.assign(clone(BUGGY), PRESETS[kind]));
 }
-export function golfVehicleUnlocked(state) {
-  const d = Array.isArray(state) ? state : state?.discovered;
-  return !!d?.includes('golf');
+export function golfVehicleUnlocked() {
+  return true;
 }
 
 // The Legend of Spirit Mountain's car ladder (owner, 30 Oct): you start in a small RC car that is

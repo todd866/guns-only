@@ -40,8 +40,8 @@ test('physics presets are immutable clones and stable on a flat course', () => {
   assert.equal(vehicleParams('golf').topSpeed, 8);
   assert.ok(vehicleParams('monster').wheelRadius > BUGGY.wheelRadius);
 });
-test('golf body unlock follows discovery state', () => {
-  assert.equal(golfVehicleUnlocked({discovered: ['gate']}), false);
+test('golf body is open from minute one', () => {
+  assert.equal(golfVehicleUnlocked({discovered: ['gate']}), true);
   assert.equal(golfVehicleUnlocked(['golf']), true);
 });
 

@@ -31,7 +31,7 @@ test('the all-time pumpkin count survives a save and reload', () => {
   assert.equal(p.pumpkins, 42);
   assert.equal(p.body, 'pumpkin');
   storage.setItem('guns-only.rc.world.v1', JSON.stringify({pumpkins: 5, body: 'pumpkin'}));
-  assert.equal(loadProgress(storage).body, 'jet', 'not earned yet');
+  assert.equal(loadProgress(storage).body, 'pumpkin', 'pumpkin body is open without prior grind');
   storage.setItem('guns-only.rc.world.v1', JSON.stringify({pumpkins: -3}));
   assert.equal(loadProgress(storage).pumpkins, 0);
 });

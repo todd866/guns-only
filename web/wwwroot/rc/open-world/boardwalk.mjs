@@ -228,10 +228,19 @@ export function buildBoardwalk() {
     [23.4, 1]
   ])
     for (let i = 0; i < 32; i++) {
-      const xa = toe + (dir * 2.4 * i) / 32,
-        xb = toe + (dir * 2.4 * (i + 1)) / 32,
-        ya = 1.64 + 2.4 * arc(i / 32),
-        yb = 1.64 + 2.4 * arc((i + 1) / 32);
+      // The held-throttle vert run noses through the true arc around mid-face.
+      // Ease the middle 2 cm toward the fill; toe and lip stay on the decks.
+      const ease = t => {
+        const x = toe + dir * 2.4 * t,
+          y = 1.64 + 2.4 * arc(t),
+          k = 0.02 * Math.sin(Math.PI * t),
+          ox = x - toe,
+          oy = y - 4.04,
+          len = Math.hypot(ox, oy) || 1;
+        return [x + (ox / len) * k, y + (oy / len) * k];
+      };
+      const [xa, ya] = ease(i / 32),
+        [xb, yb] = ease((i + 1) / 32);
       const a = [xa, ya, -18],
         b = [xa, ya, -7],
         c = [xb, yb, -7],

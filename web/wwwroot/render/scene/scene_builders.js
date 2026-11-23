@@ -1421,19 +1421,19 @@ export function createConventionalRunwayPresentation() {
   group.visible = false;
 
   const asphalt = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
-    color: 0x34383a,
-    roughness: 0.96,
+    color: 0x262b2d,
+    roughness: 0.94,
     metalness: 0,
   }));
   const shoulder = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
-    color: 0x6b6755,
+    color: 0x76715c,
     roughness: 1,
     metalness: 0,
   }));
   const paint = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
-    color: 0xe7e0c8,
-    emissive: 0x11100c,
-    roughness: 0.83,
+    color: 0xf7f2de,
+    emissive: 0x222018,
+    roughness: 0.80,
     metalness: 0,
     polygonOffset: true,
     polygonOffsetFactor: -2,
@@ -1592,28 +1592,55 @@ export function createConventionalRunwayPresentation() {
     "AIRBASE_RUNWAY_EDGE_LIGHTS",
     CONVENTIONAL_AIRBASE_VISUAL_PROFILE.maxEdgeLightCount,
     0xe8f6ff,
-    4.5,
+    5.5,
   );
   const approachLights = createRunwayPointField(
     "AIRBASE_APPROACH_LIGHTS",
     CONVENTIONAL_AIRBASE_VISUAL_PROFILE.approachLightCount,
     0xfff0c2,
-    5.5,
+    6.5,
   );
   const thresholdLights = createRunwayPointField(
     "AIRBASE_THRESHOLD_LIGHTS",
     CONVENTIONAL_AIRBASE_VISUAL_PROFILE.thresholdLightCount,
     0xaefdc1,
-    5.5,
+    6.5,
   );
   const runwayEndLights = createRunwayPointField(
     "AIRBASE_RUNWAY_END_LIGHTS",
     CONVENTIONAL_AIRBASE_VISUAL_PROFILE.thresholdLightCount,
     0xff665a,
-    5.5,
+    6.5,
   );
-  const towerBeacon = createRunwayPointField("AIRBASE_TOWER_BEACON", 1, 0xff4e42, 7);
+  const towerBeacon = createRunwayPointField("AIRBASE_TOWER_BEACON", 1, 0xff4e42, 7.5);
   group.add(edgeLights, approachLights, thresholdLights, runwayEndLights, towerBeacon);
+
+  // 4-light PAPI bar 15 m left of the runway abeam the touchdown aimpoint (outer-to-inner:
+  // 2.50 / 2.83 / 3.17 / 3.50 deg so on-glideslope 3.0 deg shows 2 white, 2 red).
+  const papiHousingMat = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
+    color: 0x161a1c,
+    roughness: 0.88,
+    metalness: 0.14,
+  }));
+  const papiHousings = [];
+  const papiLenses = [];
+  const papiUnits = [];
+  const papiAnglesDeg = [2.5, 2.833333, 3.166667, 3.5];
+  const papiHousingGeo = new THREE.BoxGeometry(3.6, 1.4, 1.6);
+  const papiLensGeo = new THREE.BoxGeometry(2.8, 0.96, 0.34);
+  for (let index = 0; index < papiAnglesDeg.length; index++) {
+    const housing = addScaledMesh(`AIRBASE_PAPI_HOUSING_${index + 1}`, papiHousingGeo, papiHousingMat);
+    const lensMat = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshBasicMaterial({
+      color: 0xff2b22,
+      transparent: true,
+      opacity: RUNWAY_LIGHT_OPACITY,
+      toneMapped: false,
+    }));
+    const lens = addScaledMesh(`AIRBASE_PAPI_LENS_${index + 1}`, papiLensGeo, lensMat);
+    papiHousings.push(housing);
+    papiLenses.push(lens);
+    papiUnits.push({ thresholdDeg: papiAnglesDeg[index], housing, lens, material: lensMat });
+  }
   const airbaseDetails = [
     clearedVerge,
     parallelTaxiway,
@@ -1660,7 +1687,11 @@ export function createConventionalRunwayPresentation() {
     thresholdLights,
     runwayEndLights,
     towerBeacon,
+    papiHousings,
+    papiLenses,
+    papiUnits,
     airbaseDetails,
+    papiAimAlongM: 300,
     layoutKey: "",
   };
 }
@@ -1737,6 +1768,41 @@ function applyRunwayLightOpacity(runway, opacity) {
     field.visible = opacity > 0.002 && !dressing;
     if (field.material) field.material.opacity = opacity;
   }
+  for (const unit of runway.papiUnits ?? []) {
+    unit.lens.visible = opacity > 0.002;
+    unit.material.opacity = opacity;
+  }
+}
+
+export function runwayPapiGlideAngleDeg(runway, state) {
+  const px = Number(state?.px);
+  const py = Number(state?.py);
+  const pz = Number(state?.pz);
+  const tx = Number(state?.runway_threshold_x);
+  const ty = Number(state?.runway_threshold_y);
+  const tz = Number(state?.runway_threshold_z);
+  const headingDeg = Number(state?.runway_heading_deg);
+  const aimAlongM = Number(runway?.papiAimAlongM ?? 300);
+  if (![px, py, pz, tx, ty, tz, headingDeg, aimAlongM].every(Number.isFinite)) return null;
+  const headingRad = headingDeg * Math.PI / 180;
+  const alongM = (px - tx) * Math.sin(headingRad) + (pz - tz) * Math.cos(headingRad);
+  const distToPapiM = aimAlongM - alongM;
+  if (!(distToPapiM > 15)) return null;
+  const dy = py - ty;
+  return Math.atan2(dy, distToPapiM) * 180 / Math.PI;
+}
+
+function updateRunwayPapiLamps(runway, state) {
+  const units = runway.papiUnits;
+  if (!units?.length) return;
+  const angleDeg = runwayPapiGlideAngleDeg(runway, state);
+  const validAngle = Number.isFinite(angleDeg);
+  for (let index = 0; index < units.length; index++) {
+    const unit = units[index];
+    const above = validAngle ? angleDeg >= unit.thresholdDeg : index < 2;
+    unit.material.color.setHex(above ? 0xffffff : 0xff2b22);
+    unit.lens.userData.papiWhite = above;
+  }
 }
 
 export function updateConventionalRunwayPresentation(runway, state, atmosphereUniforms = null) {
@@ -1764,7 +1830,6 @@ export function updateConventionalRunwayPresentation(runway, state, atmosphereUn
   runway.group.position.set(thresholdX, thresholdY + 0.055, -thresholdZ);
   // Simulation +Z is north and renderer Z is mirrored. Local +Z runs threshold-to-far-end.
   runway.group.rotation.set(0, Math.PI - headingRad, 0);
-  applyRunwayLightOpacity(runway, runwayLightOpacity(state));
 
   const layoutKey = [
     lengthM,
@@ -1775,8 +1840,8 @@ export function updateConventionalRunwayPresentation(runway, state, atmosphereUn
     state?.runway_touchdown_x,
     state?.runway_touchdown_z,
   ].join("|");
-  if (runway.layoutKey === layoutKey) return;
-  runway.layoutKey = layoutKey;
+  if (runway.layoutKey !== layoutKey) {
+    runway.layoutKey = layoutKey;
 
   runway.visualShoulder.position.set(0, -0.095, lengthM * 0.5);
   runway.visualShoulder.scale.set(widthM + 8, 1.25, lengthM + 12);
@@ -1849,6 +1914,13 @@ export function updateConventionalRunwayPresentation(runway, state, atmosphereUn
     bar.position.set(index === 0 ? -aimingHalfSeparationM : aimingHalfSeparationM,
       0.024, clampedAimAlongM);
     bar.scale.set(Math.min(3.2, widthM * 0.075), 1, Math.min(48, lengthM * 0.025));
+  }
+  runway.papiAimAlongM = clampedAimAlongM;
+  for (let index = 0; index < (runway.papiUnits?.length ?? 0); index++) {
+    const unit = runway.papiUnits[index];
+    const x = -(widthM * 0.5 + 15 + (runway.papiUnits.length - 1 - index) * 9);
+    unit.housing.position.set(x, 0.72, clampedAimAlongM);
+    unit.lens.position.set(x, 0.76, clampedAimAlongM - 0.72);
   }
 
   const profile = CONVENTIONAL_AIRBASE_VISUAL_PROFILE;
@@ -1952,7 +2024,9 @@ export function updateConventionalRunwayPresentation(runway, state, atmosphereUn
   const showFullAirbase = lengthM >= 1_200;
   runway.showFullAirbase = showFullAirbase;
   for (const object of runway.airbaseDetails) object.visible = showFullAirbase;
+  }
   applyRunwayLightOpacity(runway, runwayLightOpacity(state));
+  updateRunwayPapiLamps(runway, state);
 }
 
 export function createCarrierRuntimePresentation() {
@@ -2210,6 +2284,127 @@ export function createF14(context = {}) {
       articulatedWing: true,
     },
   });
+}
+
+/** Procedural twin-cant-tail F-22A surrogate silhouette for live chase & external views. */
+export function createF22(context = {}) {
+  const group = new THREE.Group();
+  const skin = makeMaterial(0x636e73, 0.44, 0.14, 0x020304,
+    { grain: 0.10, grainScale: 2.2, panels: 0.03, panelScale: 0.55, envMapIntensity: 1.05 });
+  const skinDark = makeMaterial(0x3f494f, 0.50, 0.10, 0x010202,
+    { grain: 0.09, grainScale: 2.5, envMapIntensity: 0.85 });
+  const underside = makeMaterial(0x323b40, 0.56, 0.08, 0x000101,
+    { grain: 0.10, grainScale: 2.1, envMapIntensity: 0.72 });
+  const edge = makeMaterial(0x20282c, 0.58, 0.08, 0x000000, { grain: 0.05 });
+  const intake = makeMaterial(0x090d10, 0.38, 0.14, 0x000000, { grain: 0.03, envMapIntensity: 0.3 });
+  const canopy = makeMaterial(0x3b361a, 0.09, 0.04, 0x161206,
+    { grain: 0, clearcoat: 1, clearcoatRoughness: 0.06, specularIntensity: 1, envMapIntensity: 1.45 });
+
+  // Blended delta-diamond wing with chined forward LEX.
+  const wingPoints = [
+    [0, -5.05], [-0.96, -4.10], [-1.72, -2.55], [-6.78, 0.92], [-6.58, 2.02],
+    [-2.18, 2.38], [-1.32, 4.32], [0, 4.78], [1.32, 4.32], [2.18, 2.38],
+    [6.58, 2.02], [6.78, 0.92], [1.72, -2.55], [0.96, -4.10],
+  ];
+  const wing = new THREE.Mesh(
+    createPlanformGeometry(wingPoints, 0.19, 0.055),
+    [skin, skinDark],
+  );
+  wing.position.y = 0.04;
+  group.add(wing);
+
+  // Horizontal stabilators nestled behind the trailing edge.
+  const tailPoints = [
+    [0, 3.62], [-1.38, 3.74], [-4.05, 5.38], [-3.82, 6.26], [-1.45, 5.66],
+    [0, 5.95], [1.45, 5.66], [3.82, 6.26], [4.05, 5.38], [1.38, 3.74],
+  ];
+  const tailplane = new THREE.Mesh(createPlanformGeometry(tailPoints, 0.14, 0.04), [skinDark, edge]);
+  tailplane.position.y = 0.08;
+  group.add(tailplane);
+
+  // Chined blended nose-to-tail fuselage loft.
+  const fuselage = new THREE.Mesh(createLoftGeometry([
+    { z: -8.95, rx: 0.03, ry: 0.025, y: -0.04 },
+    { z: -7.55, rx: 0.42, ry: 0.28, y: 0.01 },
+    { z: -5.45, rx: 0.84, ry: 0.56, y: 0.08 },
+    { z: -2.85, rx: 1.18, ry: 0.72, y: 0.12 },
+    { z: 0.45, rx: 1.32, ry: 0.78, y: 0.11 },
+    { z: 3.45, rx: 1.18, ry: 0.68, y: 0.09 },
+    { z: 5.55, rx: 0.92, ry: 0.46, y: 0.08 },
+    { z: 6.45, rx: 0.26, ry: 0.16, y: 0.06 },
+  ]), skin);
+  group.add(fuselage);
+
+  // Twin shoulder nacelles, caret intakes, and rectangular 2D thrust-vectoring nozzles.
+  for (const side of [-1, 1]) {
+    const intakeMask = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.62, 0.18), intake);
+    intakeMask.position.set(side * 1.16, -0.06, -3.55);
+    intakeMask.rotation.y = side * -0.18;
+    group.add(intakeMask);
+
+    const nozzleBox = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.46, 0.95), edge);
+    nozzleBox.position.set(side * 0.66, 0.06, 5.65);
+    group.add(nozzleBox);
+
+    const exhaustGlow = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.68, 0.28),
+      new THREE.MeshBasicMaterial({
+        color: 0xff8a30,
+        transparent: true,
+        opacity: 0.72,
+        depthWrite: false,
+      }),
+    );
+    exhaustGlow.position.set(side * 0.66, 0.06, 6.14);
+    exhaustGlow.userData.noShadow = true;
+    exhaustGlow.renderOrder = 1;
+    group.add(exhaustGlow);
+  }
+
+  const canopyMesh = new THREE.Mesh(new THREE.SphereGeometry(0.66, 22, 14), canopy);
+  canopyMesh.scale.set(0.86, 0.68, 2.55);
+  canopyMesh.position.set(0, 0.78, -3.55);
+  group.add(canopyMesh);
+
+  // Outward-canted twin vertical stabilizers (~28 deg cant).
+  const finGeometry = createFinGeometry([
+    [2.15, 0.0], [5.48, 0.0], [5.08, 2.75], [4.18, 3.05], [2.85, 0.25],
+  ]);
+  for (const side of [-1, 1]) {
+    const fin = new THREE.Mesh(finGeometry, [skinDark, edge]);
+    fin.position.set(side * 1.02, 0.22, 0);
+    fin.rotation.z = side * -0.48;
+    group.add(fin);
+  }
+
+  addFighterPanelLines(group, new THREE.LineBasicMaterial({
+    color: 0x1b2428, transparent: true, opacity: 0.44, depthWrite: false,
+  }));
+
+  const leftLight = new THREE.Mesh(
+    new THREE.SphereGeometry(0.09, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xff4b58, toneMapped: false }),
+  );
+  leftLight.userData.noShadow = true;
+  leftLight.position.set(-6.64, 0.14, 1.38);
+  const rightLight = leftLight.clone();
+  rightLight.material = new THREE.MeshBasicMaterial({ color: 0x62ffc0, toneMapped: false });
+  rightLight.userData.noShadow = true;
+  rightLight.position.set(6.64, 0.14, 1.38);
+  group.add(leftLight, rightLight);
+
+  group.userData.sockets = Object.freeze({
+    cockpitCamera: addSemanticSocket(group, "SOCKET_CAMERA_COCKPIT", 0, 0.96, -3.45),
+    muzzleLeft: addSemanticSocket(group, "SOCKET_MUZZLE_LEFT", -0.58, 0.16, -5.2),
+    muzzleRight: addSemanticSocket(group, "SOCKET_MUZZLE_RIGHT", 0.58, 0.16, -5.2),
+  });
+  group.traverse((object) => {
+    if (!object.isMesh) return;
+    object.castShadow = object.userData.noShadow !== true;
+    object.receiveShadow = true;
+  });
+  annotateProceduralFallback(group, context);
+  return group;
 }
 
 /// Shape-first production model for the fictional Rapier public-data surrogate. The embedded v2
@@ -2653,7 +2848,7 @@ export function createTracerChannel(lineColor, glowColor, headColor) {
     new THREE.LineBasicMaterial({
       color: glowColor,
       transparent: true,
-      opacity: 0.44,
+      opacity: 0.62,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     }),
@@ -2670,10 +2865,10 @@ export function createTracerChannel(lineColor, glowColor, headColor) {
     tracerHeadGeometry,
     new THREE.PointsMaterial({
       color: headColor,
-      size: 2.25,
+      size: 3.1,
       sizeAttenuation: false,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.96,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     }),
@@ -2725,8 +2920,8 @@ export function createGunEffects() {
   sparkGeometry.setAttribute("position",
     new THREE.BufferAttribute(sparkPositions, 3).setUsage(THREE.DynamicDrawUsage));
   const sparkMaterial = new THREE.PointsMaterial({
-    color: 0xffc34e,
-    size: 3.2,
+    color: 0xffd05c,
+    size: 4.4,
     sizeAttenuation: true,
     transparent: true,
     opacity: 0,
@@ -2737,7 +2932,7 @@ export function createGunEffects() {
   sparks.visible = false;
   sparks.frustumCulled = false;
   sparks.renderOrder = 21;
-  const hitLight = new THREE.PointLight(0xff8b27, 0, 42, 2);
+  const hitLight = new THREE.PointLight(0xff8b27, 0, 56, 2);
 
   const group = new THREE.Group();
   group.add(
@@ -2760,6 +2955,103 @@ export function createGunEffects() {
   group.userData.sparkDirections = sparkDirections;
   group.userData.hitLight = hitLight;
   return group;
+}
+
+/** Preallocated dual wingtip condensation vortex ribbons driven by high-G flight. */
+export function createWingtipVortexPair(halfSpanM = 6.75, aftZ = 1.4, pointCount = 24) {
+  const group = new THREE.Group();
+  const material = new THREE.LineBasicMaterial({
+    color: 0xf4f9ff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  const makeTrail = () => {
+    const positions = new Float32Array(pointCount * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position",
+      new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+    geometry.setDrawRange(0, 0);
+    const line = new THREE.Line(geometry, material);
+    line.frustumCulled = false;
+    line.renderOrder = 18;
+    group.add(line);
+    return { positions, geometry };
+  };
+  const left = makeTrail();
+  const right = makeTrail();
+  let sampleCount = 0;
+  let smoothedG = 1;
+  const tipL = new THREE.Vector3();
+  const tipR = new THREE.Vector3();
+  const prevForward = new THREE.Vector3(0, 0, -1);
+  let hasPrevForward = false;
+
+  const pushSample = (trail, p) => {
+    const arr = trail.positions;
+    if (sampleCount > 0) {
+      for (let i = Math.min(sampleCount, pointCount - 1); i > 0; i--) {
+        arr[i * 3] = arr[(i - 1) * 3];
+        arr[i * 3 + 1] = arr[(i - 1) * 3 + 1];
+        arr[i * 3 + 2] = arr[(i - 1) * 3 + 2];
+      }
+    }
+    arr[0] = p.x;
+    arr[1] = p.y;
+    arr[2] = p.z;
+    trail.geometry.attributes.position.needsUpdate = true;
+    trail.geometry.setDrawRange(0, Math.min(sampleCount + 1, pointCount));
+  };
+
+  return {
+    group,
+    clear() {
+      sampleCount = 0;
+      smoothedG = 1;
+      hasPrevForward = false;
+      material.opacity = 0;
+      group.visible = false;
+      left.geometry.setDrawRange(0, 0);
+      right.geometry.setDrawRange(0, 0);
+    },
+    update({ visible, position, quaternion, gLoad = null, forward = null, speedMps = 180, dt = 0.016 }) {
+      if (!visible || !position || !quaternion) {
+        this.clear();
+        return;
+      }
+      let instantG = Number(gLoad);
+      if (!Number.isFinite(instantG) && forward) {
+        if (hasPrevForward && dt > 0.001 && Number.isFinite(speedMps)) {
+          const dot = Math.max(-1, Math.min(1, prevForward.dot(forward)));
+          const omega = Math.acos(dot) / dt;
+          instantG = Math.hypot(9.81, speedMps * omega) / 9.81;
+        } else {
+          instantG = 1;
+        }
+        prevForward.copy(forward);
+        hasPrevForward = true;
+      }
+      if (!Number.isFinite(instantG)) instantG = 1;
+      smoothedG += (instantG - smoothedG) * Math.min(1, Math.max(0.05, dt * 8));
+      const strength = Math.max(0, Math.min(1, (smoothedG - 4.2) / 2.6));
+      if (strength <= 0.02 && sampleCount === 0) {
+        group.visible = false;
+        return;
+      }
+      tipL.set(-halfSpanM, 0.08, aftZ).applyQuaternion(quaternion).add(position);
+      tipR.set(halfSpanM, 0.08, aftZ).applyQuaternion(quaternion).add(position);
+      pushSample(left, tipL);
+      pushSample(right, tipR);
+      sampleCount = Math.min(pointCount, sampleCount + 1);
+      material.opacity = 0.56 * strength;
+      group.visible = material.opacity > 0.015;
+    },
+    dispose() {
+      left.geometry.dispose();
+      right.geometry.dispose();
+      material.dispose();
+    },
+  };
 }
 
 export function createGlider() {

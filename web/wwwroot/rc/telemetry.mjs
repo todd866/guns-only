@@ -3,6 +3,10 @@ import {createTelemetryOutbox, drainTelemetryOutbox} from '../render/telemetry/t
 
 export const RC_TELEMETRY_CONSENT_KEY = 'guns-only.telemetry-sharing.v1';
 export const RC_TELEMETRY_ENDPOINT = '/telemetry';
+// The native app's page is rcgame://local, which cannot use the site-relative path.
+// The Mac app posts this absolute URL itself (WKScriptMessageHandler rcTelemetry) so a
+// custom-scheme page is not blocked by CORS. Same anonymous rows, same opt-out.
+export const RC_TELEMETRY_PUBLIC_ENDPOINT = 'https://guns-only.com/telemetry';
 export const RC_TELEMETRY_FLUSH_INTERVAL_MS = 15_000;
 export const RC_TELEMETRY_BUFFER_LIMIT = 240;
 
@@ -24,6 +28,7 @@ const EVENT_CODES = new Set([
   'garage',
   'playmate',
   'boot',
+  'boot_frames',
   'error',
   'visit',
   'activity_start',
@@ -33,7 +38,12 @@ const EVENT_CODES = new Set([
   'heartbeat',
   'form',
   'flight',
-  'discover'
+  'discover',
+  'dream_enter',
+  'dream_exit',
+  'offtrack',
+  'respawn',
+  'lap_place'
 ]);
 const ERROR_LIMIT = 8;
 const short = (value, n = 40) => String(value ?? 'unknown').slice(0, n);
@@ -52,6 +62,18 @@ function readConsent(storage) {
 function canonicalHost(locationObject) {
   const hostname = String(locationObject?.hostname ?? globalThis.location?.hostname ?? '').toLowerCase();
   return hostname === 'guns-only.com' || hostname === 'www.guns-only.com';
+}
+
+function nativeOrigin(locationObject) {
+  const protocol = String(locationObject?.protocol ?? globalThis.location?.protocol ?? '')
+    .replace(/:$/, '')
+    .toLowerCase();
+  return protocol === 'rcgame';
+}
+
+function webkitTelemetryPost() {
+  const handler = globalThis.webkit?.messageHandlers?.rcTelemetry;
+  return typeof handler?.postMessage === 'function' ? body => handler.postMessage(body) : null;
 }
 
 function sessionId(randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto)) {
@@ -88,6 +110,7 @@ export function createRCTelemetry({
   locationObject = globalThis.location,
   navigatorObject = globalThis.navigator,
   endpoint = RC_TELEMETRY_ENDPOINT,
+  nativePost,
   fetchImpl = globalThis.fetch?.bind(globalThis),
   now = () => performance.now(),
   randomUUID,
@@ -107,12 +130,19 @@ export function createRCTelemetry({
   }
   const query = new URLSearchParams(locationObject?.search ?? '');
   const consent = () => readConsent(safeStorage) && query.get('telemetry') !== 'off';
-  const injectedTransport = arguments[0]?.fetchImpl !== undefined || arguments[0]?.outbox !== undefined;
+  const native = nativeOrigin(locationObject);
+  const resolvedEndpoint = native && endpoint === RC_TELEMETRY_ENDPOINT ? RC_TELEMETRY_PUBLIC_ENDPOINT : endpoint;
+  const bridge = () => (typeof nativePost === 'function' ? nativePost : webkitTelemetryPost());
+  const injectedTransport =
+    arguments[0]?.fetchImpl !== undefined || arguments[0]?.outbox !== undefined || arguments[0]?.nativePost !== undefined;
+  // ?telemetry=local: a home TV build served from the laptop posts to that laptop's own
+  // /telemetry sink (never the public endpoint), so play on the TV is still recorded.
+  const localSink = query.get('telemetry') === 'local' && /^(127\.0\.0\.1|localhost)$/.test(locationObject?.hostname ?? '');
   const uploadAllowed =
     consent() &&
     query.get('telemetry') !== 'off' &&
-    (injectedTransport || canonicalHost(locationObject)) &&
-    typeof fetchImpl === 'function';
+    (injectedTransport || localSink || canonicalHost(locationObject) || native) &&
+    (typeof fetchImpl === 'function' || typeof bridge() === 'function');
   if (indexedDB === undefined) {
     try {
       indexedDB = globalThis.indexedDB ?? null;
@@ -122,7 +152,8 @@ export function createRCTelemetry({
   }
   const durableOutbox =
     outbox ??
-    ((injectedTransport || canonicalHost(locationObject)) && typeof fetchImpl === 'function'
+    ((injectedTransport || localSink || canonicalHost(locationObject) || native) &&
+    (typeof fetchImpl === 'function' || typeof bridge() === 'function')
       ? createTelemetryOutbox({indexedDB, dbName: 'guns-rc-telemetry-outbox'})
       : null);
   const startedAt = now();
@@ -263,6 +294,19 @@ export function createRCTelemetry({
   function boot({assets, ms} = {}) {
     record('boot', {assets: short(assets, 16), ms: finite(ms) === null ? null : Math.round(finite(ms))});
   }
+  // ?trace=boot: one summary of the opening ten seconds. Empty traces record nothing.
+  function bootFrames({p50, p95, max, over50, count} = {}) {
+    const samples = Math.round(finite(count, 0));
+    if (!samples) return false;
+    const ms = value => Math.round(finite(value, 0) * 100) / 100;
+    return record('boot_frames', {
+      p50_ms: ms(p50),
+      p95_ms: ms(p95),
+      max_ms: ms(max),
+      over_50: Math.round(finite(over50, 0)),
+      samples
+    });
+  }
   let errors = 0;
   function error(kind, message) {
     if (++errors > ERROR_LIMIT) return;
@@ -294,6 +338,12 @@ export function createRCTelemetry({
       : {};
   function mapOpen(at) {
     record('map_open', {...where(at)});
+  }
+  function kidRace({type, offset, place, lap} = {}) {
+    if (type === 'offtrack' || type === 'respawn')
+      return record(type, {offset: finite(offset)});
+    if (type === 'lap_place') return record('lap_place', {lap: finite(lap), place: finite(place)});
+    return false;
   }
   function recover(how, at) {
     record('recover', {how: ['key', 'button', 'auto'].includes(how) ? how : 'unknown', ...where(at)});
@@ -345,6 +395,14 @@ export function createRCTelemetry({
   function mute(value) {
     record('mute', {muted: Boolean(value)});
   }
+  function dream(code, {name, ms, finished} = {}) {
+    if (code !== 'dream_enter' && code !== 'dream_exit') return false;
+    return record(code, {
+      name: short(name, 24),
+      ms: Math.max(0, Math.round(finite(ms, 0))),
+      finished: !!finished
+    });
+  }
   function observeFrame(deltaMs, activeFrame = true) {
     const eligible = activeFrame && previousActiveFrame;
     previousActiveFrame = activeFrame;
@@ -368,7 +426,14 @@ export function createRCTelemetry({
   }
   async function send(payload) {
     if (!allowed()) return 0;
-    const response = await fetchImpl(endpoint, {
+    if (native) {
+      const post = bridge();
+      if (post) {
+        const status = Number(await post(payload));
+        return Number.isFinite(status) && status > 0 ? status : 204;
+      }
+    }
+    const response = await fetchImpl(resolvedEndpoint, {
       method: 'POST',
       headers: {'content-type': 'application/json'},
       body: payload,
@@ -455,12 +520,14 @@ export function createRCTelemetry({
     skateStart,
     skateEnd,
     boot,
+    bootFrames,
     error,
     visit,
     discover,
     activityStart,
     activityEnd,
     mapOpen,
+    kidRace,
     recover,
     heartbeat,
     choice,
@@ -471,6 +538,7 @@ export function createRCTelemetry({
     playmate,
     form,
     flight,
+    dream,
     mute,
     observeFrame,
     flush,

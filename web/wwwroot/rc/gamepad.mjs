@@ -1,33 +1,307 @@
-const axis = v => {
-  v = Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
-  return Math.abs(v) < 0.12 ? 0 : (Math.sign(v) * (Math.abs(v) - 0.12)) / 0.88;
+// Standard layout for the 8BitDo Ultimate 2 (Xbox letters, Gamepad API "standard" indices):
+// A0 B1 X2 Y3 LB4 RB5 LT6 RT7 Select8 Start9 L3 10 R3 11, d-pad 12-15,
+// axes 0/1 left stick, 2/3 right stick.
+// The left stick is never both steering and throttle. Where RT is the throttle,
+// pushing the stick up does nothing to the speed.
+import {applyFeel} from './control-feel.mjs';
+import {FLIGHT_PAD, STICK_DEAD, leverAxis, pedalAxis, stickAxis} from './flight_layout.mjs';
+export {STICK_DEAD, stickAxis};
+
+const clampAxis = v => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
+
+// plane / gunship / chute share the arcade row: stick up climbs, shoulders yaw.
+// The chopper keeps the same rows but helicopter-correct: triggers are the vertical.
+export function normalizeForm(form) {
+  if (form === 'robot' || form === 'foot' || form === 'walk') return 'robot';
+  if (form === 'board' || form === 'skate') return 'board';
+  if (form === 'chopper') return 'chopper';
+  if (form === 'fly' || form === 'plane' || form === 'gunship' || form === 'chute') return 'fly';
+  return 'car';
+}
+
+const button = (p, i) => Math.max(0, Math.min(1, p?.buttons?.[i]?.value ?? 0));
+const down = (p, i) => button(p, i) > 0.5;
+
+/**
+ * One pad, one form. Sticks are analog (−1..1). Face buttons are held, not edges.
+ * Left stick Y is positive when the stick is pushed up (the API's axis 1 is the other way).
+ * Right stick Y is positive when the stick is pushed up: look up, no inversion.
+ * Flight pitch is positive for nose up. Stick up climbs; invert is applied later.
+ */
+export function mapPad(form, p, feel) {
+  const f = normalizeForm(form),
+    raw = {
+      lx: clampAxis(p?.axes?.[0]),
+      ly: clampAxis(-(p?.axes?.[1] ?? 0)),
+      rx: clampAxis(p?.axes?.[2]),
+      ry: clampAxis(-(p?.axes?.[3] ?? 0))
+    },
+    lx = stickAxis(raw.lx),
+    ly = stickAxis(raw.ly),
+    rx = stickAxis(raw.rx),
+    ry = stickAxis(raw.ry),
+    rt = button(p, 7),
+    lt = button(p, 6),
+    air = f === 'fly' || f === 'chopper',
+    out = {
+      form: f,
+      moveX: lx,
+      moveY: ly,
+      lookX: rx,
+      lookY: ry,
+      rt,
+      lt,
+      throttle: 0,
+      steer: 0,
+      brake: false,
+      drift: false,
+      fireHeld: false,
+      jumpHeld: false,
+      boostHeld: false,
+      morphHeld: down(p, 1),
+      punch: false,
+      aim: false,
+      sprint: false,
+      recentreHeld: down(p, 11),
+      pauseHeld: down(p, 9),
+      mapHeld: down(p, 8),
+      flyHeld: down(p, 4),
+      pitch: 0,
+      roll: 0,
+      yaw: 0,
+      power: 0,
+      strafe: 0,
+      climb: 0,
+      loopHeld: false,
+      flipHeld: false,
+      grabHeld: false,
+      grindHeld: false
+    };
+  if (f === 'robot') {
+    out.fireHeld = rt > 0.5;
+    out.aim = lt > 0.5;
+    out.jumpHeld = down(p, 0);
+    out.punch = down(p, 2);
+    out.boostHeld = down(p, 3);
+    out.sprint = down(p, 10);
+    return applyFeel(out, raw, feel);
+  }
+  if (f === 'chopper') {
+    // The helicopter flies the same rows, helicopter-correctly (owner, 6 Nov
+    // 2026): the left stick is the cyclic — pitch is AVIATION pull-positive
+    // here (pull back = nose up = slow; push = go), never a climb — RT/LT walk
+    // the collective (the vertical), LB/RB are the pedals. A flies up, B lands.
+    // No loop, and LB must stay a pedal: it cannot be the take-off/chute tap.
+    out.pitch = -ly + 0; // + 0 so a centred stick is 0, not -0
+    out.roll = lx;
+    out.yaw = pedalAxis(down(p, FLIGHT_PAD.LB), down(p, FLIGHT_PAD.RB));
+    out.power = leverAxis(rt, lt);
+    out.climb = out.power;
+    out.jumpHeld = down(p, 0);
+    out.boostHeld = down(p, 2);
+    out.flyHeld = false;
+    return applyFeel(out, raw, feel);
+  }
+  if (f === 'fly') {
+    // Stick up climbs. LB/RB are fine yaw, not roll and not take-off. A flies up, Y loops, B lands.
+    out.pitch = ly;
+    out.roll = lx;
+    out.yaw = pedalAxis(down(p, FLIGHT_PAD.LB), down(p, FLIGHT_PAD.RB));
+    out.power = leverAxis(rt, lt);
+    out.climb = ly;
+    out.jumpHeld = down(p, 0);
+    out.loopHeld = down(p, 3);
+    out.boostHeld = down(p, 2);
+    return applyFeel(out, raw, feel);
+  }
+  // Car and skateboard: left stick (or the d-pad) steers only. RT goes, LT brakes then reverses.
+  // The d-pad is THPS2's trick pad: it steers and gives every trick its direction.
+  const dx = Number(down(p, 15)) - Number(down(p, 14)),
+    dy = Number(down(p, 12)) - Number(down(p, 13));
+  out.steer = lx || dx;
+  out.throttle = rt > 0 ? rt : lt > 0 ? -lt : 0;
+  out.jumpHeld = !air && down(p, 0);
+  out.boostHeld = down(p, 2);
+  // One trick face for board and car, THPS2's PlayStation layout in Xbox letters (owner, 18 Nov
+  // 2026): A (✕) ollie, X (□) flip, B (○) grab, Y (△) grind. The caller picks flip versus boost,
+  // and grab versus morph, from the air state.
+  out.flipHeld = down(p, 2);
+  out.grabHeld = down(p, 1);
+  out.grindHeld = down(p, 3);
+  if (f === 'board') {
+    // THPS2's L1/R1 spin in the air; RB at touchdown is the revert (the old hop button).
+    out.spin = Number(down(p, 5)) - Number(down(p, 4));
+    out.drift = down(p, 4) || down(p, 5);
+  } else {
+    // The car keeps Y and RB as drift on the ground; Y near a rail is the grind.
+    out.drift = down(p, 3) || down(p, 5);
+  }
+  // applyFeel clears moveY on a car (the stick is not the throttle). Keep the trick direction.
+  const felt = applyFeel(out, raw, feel);
+  if (!lx && dx) felt.steer = dx; // applyFeel shapes the stick only; the d-pad is full lock
+  felt.trickX = lx || dx;
+  felt.trickY = ly || dy;
+  if (f === 'board') felt.spin = out.spin;
+  return felt;
+}
+
+/** Left stick into a world XZ move, relative to the camera's yaw (the way it is looking). */
+export function cameraMove(camYaw, lx, ly) {
+  const yaw = Number.isFinite(camYaw) ? camYaw : 0,
+    fwdX = Math.sin(yaw),
+    fwdZ = -Math.cos(yaw),
+    rightX = Math.cos(yaw),
+    rightZ = Math.sin(yaw);
+  return {x: lx * rightX + ly * fwdX, z: lx * rightZ + ly * fwdZ};
+}
+
+/**
+ * LB starts flight on the press while you're on the ground.
+ * In the air a short tap opens the chute; holding LB rolls (the mapping's roll) and does not land you.
+ */
+export function flyShoulder(state, {flying, down: held, now}) {
+  const prev = state ?? {down: false, at: 0, tookOff: false},
+    next = {down: !!held, at: prev.at, tookOff: prev.tookOff};
+  let takeoff = false,
+    chute = false;
+  if (held && !prev.down) {
+    next.at = now;
+    next.tookOff = !flying;
+    if (!flying) takeoff = true;
+  }
+  if (!held && prev.down) {
+    if (flying && !prev.tookOff && now - prev.at <= 220) chute = true;
+    next.tookOff = false;
+  }
+  return {state: next, takeoff, chute};
+}
+
+const stronger = (a, b) => (Math.abs(b) > Math.abs(a) ? b : a);
+const IDLE = {
+  throttle: 0,
+  steer: 0,
+  brake: false,
+  drift: false,
+  fire: false,
+  fireHeld: false,
+  start: false,
+  boost: false,
+  boostHeld: false,
+  jump: false,
+  jumpHeld: false,
+  morph: false,
+  morphHeld: false,
+  map: false,
+  recentre: false,
+  lookX: 0,
+  lookY: 0,
+  moveX: 0,
+  moveY: 0,
+  aim: false,
+  sprint: false,
+  punch: false,
+  flyHeld: false,
+  pitch: 0,
+  roll: 0,
+  yaw: 0,
+  power: 0,
+  strafe: 0,
+  climb: 0,
+  loopHeld: false,
+  flipHeld: false,
+  grabHeld: false,
+  grindHeld: false,
+  trickX: 0,
+  trickY: 0,
+  spin: 0,
+  joined: null
 };
+
+export function padGuide(id = '') {
+  return /sn30|snes|sf30|nes30|super ?famicom/i.test(id)
+    ? 'Green controller: left stick steers · right stick looks · R go · L brake · B jump · A morph · Y boost · X drift'
+    : /ultimate|xbox|xinput|x-?box/i.test(id)
+      ? 'Black controller: left stick steers · right stick looks · RT go · LT brake · A jump · B morph · X boost · Y drift'
+      : 'Controller: left stick steers · right stick looks · right trigger goes · left trigger brakes · bottom button jumps';
+}
+
+const busy = p => p.buttons?.some(b => (b?.value ?? 0) > 0.5) || p.axes?.some(a => Math.abs(a ?? 0) > 0.5);
+
 export function createGamepadInput() {
   let fire = false,
     start = false,
-    boost = false;
-  return pads => {
-    const p = Array.from(pads ?? []).find(p => p?.connected && p.mapping === 'standard'),
-      value = i => Math.max(0, Math.min(1, p?.buttons?.[i]?.value ?? 0));
-    if (!p) {
-      fire = start = boost = false;
-      return {throttle: 0, steer: 0, brake: false, drift: false, fire: false, start: false, boost: false};
+    boost = false,
+    jump = false,
+    morph = false,
+    map = false,
+    recentre = false;
+  const seen = new Set();
+  return (pads, form = 'car', feel) => {
+    const live = Array.from(pads ?? []).filter(p => p?.connected),
+      all = live.map(p => mapPad(form, p, feel)),
+      fresh = live.find(p => !seen.has(p.id) && busy(p));
+    if (fresh) seen.add(fresh.id);
+    if (!all.length) {
+      fire = start = boost = jump = morph = map = recentre = false;
+      return {...IDLE};
     }
-    const f = value(0) > 0.5,
-      s = value(9) > 0.5,
-      y = value(3) > 0.5,
-      out = {
-        throttle: value(7) > 0 ? value(7) : value(6) > 0 ? -value(6) : -axis(p.axes?.[1]),
-        steer: axis(p.axes?.[0]),
-        brake: value(1) > 0.5,
-        drift: value(5) > 0.5,
-        fire: f && !fire,
-        start: s && !start,
-        boost: y && !boost
+    const m = all.reduce((a, b) => {
+      const row = {
+        throttle: stronger(a.throttle, b.throttle),
+        steer: stronger(a.steer, b.steer),
+        brake: a.brake || b.brake,
+        drift: a.drift || b.drift,
+        fireHeld: a.fireHeld || b.fireHeld,
+        jumpHeld: a.jumpHeld || b.jumpHeld,
+        boostHeld: a.boostHeld || b.boostHeld,
+        morphHeld: a.morphHeld || b.morphHeld,
+        recentreHeld: a.recentreHeld || b.recentreHeld,
+        pauseHeld: a.pauseHeld || b.pauseHeld,
+        mapHeld: a.mapHeld || b.mapHeld,
+        flyHeld: a.flyHeld || b.flyHeld,
+        lookX: stronger(a.lookX, b.lookX),
+        lookY: stronger(a.lookY, b.lookY),
+        moveX: stronger(a.moveX, b.moveX),
+        moveY: stronger(a.moveY, b.moveY),
+        aim: a.aim || b.aim,
+        sprint: a.sprint || b.sprint,
+        punch: a.punch || b.punch,
+        pitch: stronger(a.pitch, b.pitch),
+        roll: stronger(a.roll, b.roll),
+        yaw: stronger(a.yaw, b.yaw),
+        power: stronger(a.power, b.power),
+        strafe: stronger(a.strafe, b.strafe),
+        climb: stronger(a.climb, b.climb),
+        loopHeld: a.loopHeld || b.loopHeld,
+        flipHeld: a.flipHeld || b.flipHeld,
+        grabHeld: a.grabHeld || b.grabHeld,
+        grindHeld: a.grindHeld || b.grindHeld,
+        trickX: stronger(a.trickX || 0, b.trickX || 0),
+        trickY: stronger(a.trickY || 0, b.trickY || 0),
+        spin: stronger(a.spin || 0, b.spin || 0)
       };
-    fire = f;
-    start = s;
-    boost = y;
+      const rate = a.steerRate ?? b.steerRate;
+      if (rate != null) row.steerRate = rate;
+      return row;
+    });
+    const out = {
+      ...m,
+      fire: m.fireHeld && !fire,
+      start: m.pauseHeld && !start,
+      boost: m.boostHeld && !boost,
+      jump: m.jumpHeld && !jump,
+      morph: m.morphHeld && !morph,
+      map: m.mapHeld && !map,
+      recentre: m.recentreHeld && !recentre,
+      joined: fresh?.id ?? null
+    };
+    fire = m.fireHeld;
+    start = m.pauseHeld;
+    boost = m.boostHeld;
+    jump = m.jumpHeld;
+    morph = m.morphHeld;
+    map = m.mapHeld;
+    recentre = m.recentreHeld;
     return out;
   };
 }

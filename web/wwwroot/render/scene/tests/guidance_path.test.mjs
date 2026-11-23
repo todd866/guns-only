@@ -879,3 +879,35 @@ test("a chevron seen from above lies nearly flat instead of going edge-on", () =
     }
   }
 });
+
+test("F-22 overhead course restrains guidance to subtle frames and fades inside 1.2 NM", () => {
+  const path = createGuidancePath(THREE);
+  const gates = [
+    { id: "PERCH", eastM: 0, upM: 450, northM: 3000, halfM: 120, active: true, pattern: true },
+    { id: "FINAL", eastM: 0, upM: 250, northM: 1500, halfM: 120, active: false, pattern: true },
+  ];
+  const baseState = {
+    overhead_course_active: true,
+    approach_guidance_active: true,
+    conventional_rtb_pattern_active: true,
+    approach_energy_state_code: 2,
+    approach_energy_target_ktas: 190,
+    approach_energy_tolerance_ktas: 15,
+    approach_gate_count: 2,
+    approach_gates: gates,
+    px: 0,
+    py: 500,
+    pz: 4500,
+    runway_threshold_y: 50,
+    runway_distance_nm: 3.0,
+  };
+  const drawn = path.update(baseState);
+  assert.equal(drawn, 3);
+  const firstMesh = path.object3d.children.find((m) => m.visible);
+  assert.equal(firstMesh.userData.guidanceStyle, "overhead-course-frame");
+
+  // Inside 0.4 NM / 150 ft AGL the highway fades out so runway & PAPI remain clear.
+  const closeDrawn = path.update({ ...baseState, runway_distance_nm: 0.4, py: 90 });
+  assert.equal(closeDrawn, 3);
+  assert.equal(path.object3d.children.some((m) => m.visible), false);
+});

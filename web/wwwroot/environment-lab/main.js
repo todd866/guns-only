@@ -1,7 +1,10 @@
 import * as THREE from "../vendor/three.module.js";
 import { OrbitControls } from "../vendor/three/addons/controls/OrbitControls.js";
 import { loadKoreaEnvironment } from "../render/environment/korea_environment.js";
-import { attachSoftWorldGroundHaze } from "../render/environment/soft_world_atmosphere.js";
+import {
+  attachSoftWorldGroundHaze,
+  UKRAINE_SOFT_WORLD_FOG_HEX,
+} from "../render/environment/soft_world_atmosphere.js";
 import { createDecisionSupportSky } from "../render/scene/scene_builders.js?v=__RELEASE_BUILD__";
 import { loadKoreaTerrain } from "../render/environment/korea_terrain.js";
 import { createTacticalCloudField } from "../render/environment/tactical_clouds.js?v=__RELEASE_BUILD__";
@@ -150,7 +153,7 @@ let visualProfile = null;
 let normalizedVisualProfile = null;
 let adaptiveResolution = null;
 let adaptiveResolutionStatus = null;
-const terrainFogColor = new THREE.Color(0xa8814b);
+const terrainFogColor = new THREE.Color(UKRAINE_SOFT_WORLD_FOG_HEX);
 let terrainFogDensity = 1 / 48_000;
 let elapsed = 0;
 let previous = null;
@@ -749,7 +752,7 @@ function animate(now) {
   if (tacticalClouds) {
     tacticalClouds.group.visible = tacticalCloudsVisible();
     const cloudFog = site.value === "ukraine"
-      ? new THREE.Color(0xa8814b)
+      ? new THREE.Color(UKRAINE_SOFT_WORLD_FOG_HEX)
       : new THREE.Color(0x7898a0);
     tacticalClouds.update(camera.position, elapsed, cloudFog,
       site.value === "ukraine" ? 0.000048 : 0.000055, sunDirection());

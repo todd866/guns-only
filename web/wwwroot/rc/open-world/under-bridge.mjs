@@ -18,8 +18,9 @@ export const bridgeWorld = ([x, y, z]) => [NY.center[0] + x, y, NY.center[2] + z
 export const bridgeLocal = ([x, y, z]) => [x - NY.center[0], y, z - NY.center[2]];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const arc = t => 1 - Math.sqrt(Math.max(0, 1 - t * t));
-export const brickHeight = (x, z) =>
-  0.04 + (2.4 + 0.35 * Math.cos((x * Math.PI) / 12)) * arc(clamp((-z - 9) / 5, 0, 1));
+// No lateral crown. The 0.35 m cosine walked the straight brick-air line off x = -18
+// into the second-set handrail.
+export const brickHeight = (x, z) => 0.04 + 2.4 * arc(clamp((-z - 9) / 5, 0, 1));
 const rails = [];
 const rail = (id, kind, pts) => rails.push({id, kind, pts});
 const rect = (id, kind, x0, x1, z0, z1, h) => {
@@ -163,7 +164,24 @@ export function buildUnderBridge() {
           quad([x, h(z), z], [x, h(v), v], [u, h(v), v], [u, h(z), z], mat);
         }
     } else quad([x0, y0, z0], [x0, y1, z1], [x1, y1, z1], [x1, y0, z0], mat);
-    quad([x0, 0.04, z1], [x0, y1, z1], [x0, y0, z0], [x0, 0.04, z0], 'skirt');
+    // The pillars return comes back down just west of this edge. A vertical skirt
+    // is a wall strike. The apron stays shallower than 60° and stays east of the
+    // x = 0 launch lane (a full-height flare would sit under that start).
+    if (mat === 'subway-bank') {
+      const outset = h => Math.max(0.28, (h - 0.04) * 0.95);
+      for (let z = z0; z < z1 - 1e-6; z += 0.25) {
+        const v = Math.min(z1, z + 0.25),
+          h0 = y0 + ((y1 - y0) * (z - z0)) / (z1 - z0),
+          h1 = y0 + ((y1 - y0) * (v - z0)) / (z1 - z0);
+        quad(
+          [x0, h0, z],
+          [x0 - outset(h0), 0.04, z],
+          [x0 - outset(h1), 0.04, v],
+          [x0, h1, v],
+          'skirt'
+        );
+      }
+    } else quad([x0, 0.04, z1], [x0, y1, z1], [x0, y0, z0], [x0, 0.04, z0], 'skirt');
     quad([x1, 0.04, z0], [x1, y0, z0], [x1, y1, z1], [x1, 0.04, z1], 'skirt');
   };
   flat(-40, 32, -7, 22, 0.015, 'sidewalk');

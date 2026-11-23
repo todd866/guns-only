@@ -293,3 +293,18 @@ test('the direction held as the board lands picks the THPS2 grind', async () => 
   assert.equal(r.s.skateRide.active?.name, 'Smith');
   assert.ok(r.events.some(e => e.name === 'Smith' && e.points === 200));
 });
+
+test('THPS2 grind button: Big Kid board snaps on only with Y held; kid mode stays automatic', () => {
+  const big = setup({mode: 'bigKid'});
+  big.launch([0.1, 0.8, -4], [0, -1, -4], 0);
+  big.drive(0.25, {throttle: 1, grindButton: true});
+  assert.equal(big.s.skateRide.active, null, 'no Y, no grind');
+  const held = setup({mode: 'bigKid'});
+  held.launch([0.1, 0.8, -4], [0, -1, -4], 0);
+  held.drive(0.25, {throttle: 1, grindButton: true, grind: true});
+  assert.ok(held.s.skateRide.active, 'Y held: on the rail');
+  const kid = setup();
+  kid.launch([0.1, 0.8, -4], [0, -1, -4], 0);
+  kid.drive(0.25, {throttle: 1});
+  assert.ok(kid.s.skateRide.active, 'kid mode: the rail still catches the board');
+});

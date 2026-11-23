@@ -176,12 +176,12 @@ public sealed class CobraAiGunner
                 CobraAiGunnerReason.TurretUnserviceable, false, false);
         }
         if (!target.HasLineOfSight) {
-            ResetTrack(true);
+            DecayTrack(2.0 * PlayerVehicleContract.FixedDeltaSeconds);
             return Decision(input.AuthorityTick, CobraAiGunnerState.Masked,
                 CobraAiGunnerReason.Masked, false, false);
         }
         if (!target.WithinTurretEnvelope) {
-            ResetTrack(true);
+            DecayTrack(2.0 * PlayerVehicleContract.FixedDeltaSeconds);
             return Decision(input.AuthorityTick, CobraAiGunnerState.OutOfLimits,
                 CobraAiGunnerReason.OutOfLimits, false, false);
         }
@@ -232,6 +232,18 @@ public sealed class CobraAiGunner
             trackRequested,
             fireAuthorized,
             _qualifiedTrackSeconds);
+
+    void DecayTrack(double seconds)
+    {
+        if (_qualifiedTrackSeconds <= 0.0) {
+            _qualifiedTrackSeconds = 0.0;
+            _requiresReacquisition |= _trackEverQualified;
+            return;
+        }
+        _qualifiedTrackSeconds = Math.Max(0.0, _qualifiedTrackSeconds - Math.Max(0.0, seconds));
+        if (_qualifiedTrackSeconds <= 0.0)
+            _requiresReacquisition |= _trackEverQualified;
+    }
 
     void ResetTrack(bool reacquire)
     {

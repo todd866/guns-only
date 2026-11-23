@@ -74,14 +74,68 @@ export function createF22CanopyGlass(THREE) {
   reflection.renderOrder = 2;
   reflection.visible = false;
 
-  group.add(shell, darkAxis, lightAxis, reflection);
+  // Low-profile peripheral canopy frame: sits outside the central +-28 deg HUD cone and below
+  // the pitch ladder so pilots get peripheral cockpit grounding with zero symbology occlusion.
+  const frameGroup = new THREE.Group();
+  frameGroup.name = "F22_CANOPY_FRAME";
+  frameGroup.visible = false;
+  frameGroup.renderOrder = 3;
+
+  const frameMat = new THREE.MeshBasicMaterial({
+    color: 0x1b222a,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: true,
+  });
+  const trimMat = new THREE.MeshBasicMaterial({
+    color: 0x33414e,
+    transparent: true,
+    opacity: 0.65,
+    depthWrite: false,
+  });
+
+  const coaming = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.055, 0.28), frameMat);
+  coaming.name = "F22_CANOPY_COAMING";
+  coaming.position.set(0, -0.59, -1.16);
+  coaming.rotation.x = 0.14;
+
+  const coamingLip = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.012, 0.03), trimMat);
+  coamingLip.name = "F22_CANOPY_COAMING_LIP";
+  coamingLip.position.set(0, -0.558, -1.03);
+
+  const railLeft = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.032, 1.42), frameMat);
+  railLeft.name = "F22_CANOPY_RAIL_LEFT";
+  railLeft.position.set(-0.66, -0.515, -0.48);
+  railLeft.rotation.set(-0.081, -0.286, 0.0);
+
+  const railRight = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.032, 1.42), frameMat);
+  railRight.name = "F22_CANOPY_RAIL_RIGHT";
+  railRight.position.set(0.66, -0.515, -0.48);
+  railRight.rotation.set(-0.081, 0.286, 0.0);
+
+  // Full semicircular arch placed along the wide bubble-canopy perimeter so it never crosses
+  // behind PWR SET · FIGHT or the heading tape while framing peripheral/padlock look-around.
+  const bowArch = new THREE.Mesh(
+    new THREE.TorusGeometry(0.96, 0.014, 8, 36, Math.PI),
+    trimMat,
+  );
+  bowArch.name = "F22_CANOPY_BOW_ARCH";
+  bowArch.scale.set(1.06, 1.05, 1.0);
+  bowArch.position.set(0, -0.34, -0.42);
+  bowArch.rotation.set(-0.18, 0, 0);
+
+  frameGroup.add(coaming, coamingLip, railLeft, railRight, bowArch);
+  group.add(shell, darkAxis, lightAxis, reflection, frameGroup);
   return {
     group,
+    frameGroup,
     reflection,
     lookForward: new THREE.Vector3(),
     inverseBodyQuaternion: new THREE.Quaternion(),
-    setVisible(visible) {
-      group.visible = visible === true;
+    setVisible(visible, frameVisible = false) {
+      const showFrame = frameVisible === true;
+      frameGroup.visible = showFrame;
+      group.visible = visible === true || showFrame;
     },
     dispose() {
       group.traverse((object) => {
@@ -98,11 +152,12 @@ export function updateF22CanopyGlass(glass, {
   quaternion,
   lookQuaternion,
   visible,
+  frameVisible = false,
 }) {
   if (!glass) return null;
   if (position) glass.group.position.copy(position);
   if (quaternion) glass.group.quaternion.copy(quaternion);
-  glass.setVisible(visible);
+  glass.setVisible(visible, frameVisible);
 
   if (quaternion && lookQuaternion) {
     glass.inverseBodyQuaternion.copy(quaternion).invert();

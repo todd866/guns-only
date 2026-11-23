@@ -33,8 +33,8 @@ test('world art builds finite batched meshes; all authored races remain driveabl
       for (const v of p.array) assert.ok(Number.isFinite(v));
       triangles += (o.geometry.index?.count ?? p.count) / 3;
     });
-    /* 630: Under the Bridge adds one batched park mesh and three location meshes to the 626 budget. */ assert.ok(
-      meshes < 640,
+    /* 630 -> 660: +lab saucer (2) and newly open-by-default lab/alien location rings & labels. */ assert.ok(
+      meshes < 660,
       `${meshes} draw meshes`
     );
     /* 320k: the adventure playground adds one ~16.8k-triangle batched mesh to a world that sat at 299.6k; measured p95 17.5 ms standing in it (headless M5). */ /* 330k: the wavepool's real swell surface and basin (~5k) on top of the Halloween dressing. Draw calls, not triangles, bound frame time on the M5 (tools/rc/native/check-app-frames.sh). */ assert.ok(

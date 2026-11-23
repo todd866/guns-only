@@ -52,10 +52,16 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source,
     /attachSoftWorldGroundHaze\(\s*this\.sky\?\.uniforms, terrain\.material\?\.uniforms\)/,
     "the sky must paint its below-horizon wash with the terrain's own haze uniforms");
-  assert.match(source, /this\.ambient\.color\.set\(0xe8d8b8\)/,
-    "Ukraine soft-world fill light must lean warm painterly");
-  assert.match(source, /this\.fogLow\.set\(0xa8814b\)/,
-    "Ukraine soft-world fog must lean warm dusty rather than cool Korea blue");
+  assert.match(source, /this\.sun\.color\.set\(0xffefd0\)/,
+    "Ukraine soft-world key light must stay warm");
+  assert.match(source, /this\.ambient\.color\.set\(0xcfe0f0\)/,
+    "Ukraine soft-world FILL must be cool against that warm key for sunlit separation");
+  assert.match(source, /this\.fogLow\.set\(UKRAINE_SOFT_WORLD_FOG_HEX\)/,
+    "Ukraine fog must come from the shared soft-world source, never a literal");
+  assert.match(source, /this\.fogHigh\.set\(UKRAINE_SOFT_WORLD_FOG_HIGH_HEX\)/,
+    "the altitude fog end must come from the same shared source");
+  assert.doesNotMatch(source, /this\.fogLow\.set\(0xa8814b\)/,
+    "the ochre far field is what made the soft world read as a dust storm");
   assert.match(source, /createDecisionSupportSea\(\)/);
   assert.match(source,
     /const environmentFactory = PRODUCTION_PACK_ENVIRONMENT_ENABLED && isKoreaPack/);
@@ -731,9 +737,7 @@ test("modern surrogate mission stays procedural without Korea asset fetches", as
     readBridgeContract(),
   ]);
   for (const [presentationId, factory] of [
-    ["presentation.vehicle.f22a.public-data-surrogate.v1", "createDrone"],
-    // The opponent is the dimensionally correct Su-27 silhouette; the unseen player keeps the
-    // abstract body.
+    ["presentation.vehicle.f22a.public-data-surrogate.v1", "createF22"],
     ["presentation.vehicle.su27s.public-data-surrogate.v1", "createSu27"],
   ]) {
     assert.match(appSource,
@@ -799,9 +803,12 @@ test("an Auto-GCAS fly-up never leaves the cockpit view", async () => {
   assert.doesNotMatch(source, /GCAS save cam/i,
     "the save camera must not survive as a concept in prose either");
   assert.match(source,
-    /this\.externalCameraActive = replayExternal && replayCamera !== "COCKPIT";/,
-    "historical replay is the only authority that may take the camera out of the cockpit");
+    /const liveChase = !replayExternal\s*\n\s*&& !isCasevacState\(state\)\s*\n\s*&& state\.auto_gcas_active !== true/,
+    "an Auto-GCAS fly-up must stay in cockpit view rather than switching to third-person chase");
   assert.match(source,
-    /this\.playerExteriorSlot\.root\.visible = replayExternal\s*\n\s*&& String\(state\.replay_camera \|\| "CHASE"\) !== "COCKPIT";/,
-    "the ownship exterior model is replay-only; a fly-up must never reveal it");
+    /this\.externalCameraActive = \(replayExternal && replayCamera !== "COCKPIT"\) \|\| liveChase;/,
+    "only historical replay or explicit F2/R3 live chase may take the camera outside");
+  assert.match(source,
+    /this\.playerExteriorSlot\.root\.visible = \(replayExternal\s*\n\s*&& String\(state\.replay_camera \|\| "CHASE"\) !== "COCKPIT"\)\s*\n\s*\|\| liveChase === true;/,
+    "ownship exterior stays hidden in cockpit views and during Auto-GCAS recovery");
 });

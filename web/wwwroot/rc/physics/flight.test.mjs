@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createWorld} from './world.mjs';
 import {createSession, stepSession} from './session.mjs';
 import {carForward, carYaw} from './car.mjs';
-import {toggleFlight, FLIGHT} from './flight.mjs';
+import {toggleFlight, takeoffFlight, landFlight, stickAttitude, FLIGHT} from './flight.mjs';
 import {rotate} from './math.mjs';
 
 function field() {
@@ -49,6 +49,40 @@ test('rolling into a bank turns the car, and the afterburner is faster than full
   const full = s.flight.speed;
   run(s, 3, {flight: {burner: true}});
   assert.ok(s.flight.speed > full + 3, `${full} -> ${s.flight.speed}`);
+});
+
+test('Pilot (Big Kid) flies the real aeroplane: same turn sense, held bank, a gentle stall', () => {
+  // Stick right turns the same way in the pilot model as in the jet integrator.
+  const j = roam(field());
+  toggleFlight(j.flight, j.car);
+  run(j, 1, {flight: {}});
+  const jYaw = carYaw(j.car);
+  run(j, 1.2, {flight: {roll: 0.7}});
+  const jTurn = Math.atan2(Math.sin(carYaw(j.car) - jYaw), Math.cos(carYaw(j.car) - jYaw));
+
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 1, {flight: {pilot: true, power: 1}});
+  const yaw0 = carYaw(s.car);
+  run(s, 0.8, {flight: {pilot: true, roll: 0.7}});
+  run(s, 0.8, {flight: {pilot: true}});
+  const turn = Math.atan2(Math.sin(carYaw(s.car) - yaw0), Math.cos(carYaw(s.car) - yaw0));
+  assert.ok(Math.abs(turn) > 0.25, `banked turn ${turn}`);
+  assert.equal(Math.sign(turn), Math.sign(jTurn), `pilot ${turn} turns like the jet ${jTurn}`);
+  // Hands off, a pilot's wings stay where they were put: the bank keeps turning it.
+  assert.ok(Math.abs(s.flight.bank) > 0.2, `bank holds hands-off (${s.flight.bank})`);
+
+  // Idle the power and hold the nose up: it slows through Vs, stalls, and sinks —
+  // then recovers flying speed once the nose comes down, without a crash.
+  let stalled = false;
+  let sank = 0;
+  for (let i = 0; i < 10 * 120 && s.flight.mode === 'fly'; i++) {
+    stepSession(s, {flight: {pilot: true, pitch: 0.4, power: -1}}, 1 / 120);
+    stalled = stalled || s.flight.stalled === true;
+    sank = Math.min(sank, s.car.vel[1]);
+  }
+  assert.ok(stalled, 'holding the nose up at idle stalls it');
+  assert.ok(sank < -1, `the stall sinks (${sank})`);
 });
 
 test('Enter again opens the parachute and the car floats down onto its wheels and drives off', () => {
@@ -218,4 +252,174 @@ test('a winged mount diving at the ground is saved late, through its bank, and n
   assert.ok(!hit, 'never touched the ground');
   assert.ok(assistedAt !== null && assistedAt < 25, `the save started low: ${assistedAt?.toFixed(1)} m`);
   assert.ok(low < 8, `it let you get close: lowest ${low.toFixed(1)} m`);
+});
+
+const arcade = (o = {}) => ({flight: {arcade: true, ...o}});
+const turned = (from, yaw) => Math.atan2(Math.sin(yaw - from), Math.cos(yaw - from));
+
+test('stick up climbs, and invert flight flips pitch only', () => {
+  assert.deepEqual(stickAttitude({x: 0.4, y: 1}), {pitch: 1, roll: 0.4});
+  assert.deepEqual(stickAttitude({x: 0.4, y: 1}, {invert: true}), {pitch: -1, roll: 0.4});
+  assert.equal(stickAttitude({y: -1}).pitch, -1, 'stick down dives');
+  assert.equal(stickAttitude({y: -1}, {invert: true}).pitch, 1, 'invert: stick down climbs');
+  const climb = roam(field());
+  takeoffFlight(climb.flight, climb.car);
+  run(climb, 2.2, arcade(stickAttitude({y: 1})));
+  const dive = roam(field());
+  takeoffFlight(dive.flight, dive.car);
+  run(dive, 2.2, arcade(stickAttitude({y: 1}, {invert: true})));
+  assert.ok(
+    climb.car.pos[1] > dive.car.pos[1] + 4,
+    `up climbs ${climb.car.pos[1].toFixed(1)}, invert holds ${dive.car.pos[1].toFixed(1)}`
+  );
+  assert.equal(climb.flight.mode, 'fly');
+  assert.equal(dive.flight.mode, 'fly');
+});
+
+test('arcade stick right banks and turns, then hands off levels and holds altitude', () => {
+  const s = roam(field());
+  takeoffFlight(s.flight, s.car);
+  run(s, 1.2, arcade({pitch: 1}));
+  const yaw = carYaw(s.car);
+  run(s, 1.4, arcade({roll: 1}));
+  const banked = Math.abs(s.flight.bank),
+    yawed = turned(yaw, carYaw(s.car));
+  assert.ok(banked > 0.4 && banked <= FLIGHT.arcade.bank + 1e-6, `bank ${banked}`);
+  assert.ok(yawed > 0.7, `turned right ${yawed}`);
+  run(s, 2.4, arcade());
+  assert.ok(Math.abs(s.flight.bank) < 0.08, `wings level ${s.flight.bank}`);
+  assert.ok(Math.abs(s.flight.pitch) < 0.08, `nose level ${s.flight.pitch}`);
+  const y = s.car.pos[1];
+  run(s, 2.5, arcade());
+  assert.ok(Math.abs(s.car.pos[1] - y) < 1.2, `altitude hold ${y.toFixed(2)} → ${s.car.pos[1].toFixed(2)}`);
+  assert.equal(s.flight.mode, 'fly');
+});
+
+test('arcade fine yaw turns without banking, and a dive is caught by the floor', () => {
+  const yawed = roam(field());
+  takeoffFlight(yawed.flight, yawed.car);
+  run(yawed, 1, arcade());
+  const yaw = carYaw(yawed.car);
+  run(yawed, 1.2, arcade({yaw: 1}));
+  assert.ok(turned(yaw, carYaw(yawed.car)) > 0.6, 'RB yaws');
+  assert.ok(Math.abs(yawed.flight.bank) < 0.08, `yaw did not bank ${yawed.flight.bank}`);
+  const s = roam(field());
+  takeoffFlight(s.flight, s.car);
+  run(s, 2, arcade({pitch: 1}));
+  let low = Infinity;
+  run(s, 6, () => {
+    low = Math.min(low, s.car.pos[1]);
+    return arcade({pitch: -1, power: -1});
+  });
+  assert.equal(s.flight.mode, 'fly');
+  assert.ok(low > 2.5, `floor caught the dive at ${low.toFixed(2)}`);
+  assert.ok(s.flight.speed >= FLIGHT.arcade.slow - 0.05, `no stall ${s.flight.speed}`);
+});
+
+test('arcade rising ground ahead lifts the flyer over it', () => {
+  const world = field();
+  world.addQuad([-20, 0, -30], [20, 0, -30], [20, 20, -110], [-20, 20, -110], 'rock');
+  world.addQuad([-20, 20, -110], [20, 20, -110], [20, 20, -300], [-20, 20, -300], 'rock');
+  const s = roam(world);
+  takeoffFlight(s.flight, s.car);
+  run(s, 12, arcade());
+  assert.equal(s.flight.mode, 'fly');
+  assert.ok(s.car.pos[2] < -120 && s.car.pos[1] > 21, `${s.car.pos}`);
+});
+
+test('take-off and land each do one thing, and the chute keeps the stick', () => {
+  const s = roam(field());
+  assert.equal(landFlight(s.flight, s.car), null, 'land on the ground stays put');
+  assert.equal(takeoffFlight(s.flight, s.car), 'fly');
+  assert.equal(takeoffFlight(s.flight, s.car), 'fly', 'take-off again flies up, it does not chute');
+  run(s, 1.5, arcade({pitch: 1, flyUp: true}));
+  assert.ok(s.car.pos[1] > 6, `flew up ${s.car.pos[1]}`);
+  assert.equal(landFlight(s.flight, s.car), 'chute');
+  assert.equal(landFlight(s.flight, s.car), 'chute', 'land again does not cancel');
+  const yaw = carYaw(s.car);
+  run(s, 1, arcade({roll: 1}));
+  assert.equal(s.flight.mode, 'chute', 'a stick in the chute does not resume flight');
+  assert.ok(Math.abs(turned(yaw, carYaw(s.car))) > 0.3, 'the chute still steers');
+  assert.equal(takeoffFlight(s.flight, s.car), 'fly', 'A flies up out of the chute');
+  assert.equal(landFlight(s.flight, s.car), 'chute');
+  for (let i = 0; i < 40 * 120 && s.flight.mode; i++) stepSession(s, arcade(), 1 / 120);
+  assert.equal(s.flight.mode, null, 'the landing reaches the wheels');
+  run(s, 0.4, {});
+  assert.ok(s.car.grounded, `${s.car.pos}`);
+});
+
+// The chopper (owner, 6 Nov 2026): same pad rows, helicopter-correct. The
+// ctl here is what main.js hands over for form 'chopper': aviation pitch
+// (pull = +1 = nose up = slow), collective on the triggers, pedals on yaw.
+const heli = (over = {}) => ({flight: {heli: true, assist: 'kid', ...over}});
+
+test('the chopper: the collective is the vertical and kid auto-hovers hands-off', () => {
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 3, heli());
+  const y = s.car.pos[1];
+  const at = [s.car.pos[0], s.car.pos[2]];
+  run(s, 2, heli());
+  assert.equal(s.flight.mode, 'fly', 'kid hands-off does not land');
+  assert.ok(Math.abs(s.car.pos[1] - y) < 0.8, `kid holds height (${y} -> ${s.car.pos[1]})`);
+  assert.ok(
+    Math.hypot(s.car.pos[0] - at[0], s.car.pos[2] - at[1]) < 2,
+    'kid auto-hover stops the drift'
+  );
+  run(s, 1.5, heli({collective: 1}));
+  assert.ok(s.car.pos[1] > y + 2, `collective up climbs (${y} -> ${s.car.pos[1]})`);
+  // Kid: full collective down cannot strike the ground — the floor defends itself.
+  run(s, 4, heli({collective: -1}));
+  assert.equal(s.flight.mode, 'fly', 'kid never strikes the ground');
+  assert.ok(s.car.pos[1] > 1.5, `kid floor held (${s.car.pos[1]})`);
+});
+
+test('the chopper: push the cyclic to go, pull to slow, pedals yaw, pilot lands on the lever', () => {
+  const s = roam(field());
+  toggleFlight(s.flight, s.car);
+  run(s, 2, heli());
+  const from = [s.car.pos[0], s.car.pos[2]];
+  run(s, 2, heli({pitch: -1})); // push forward: nose down, go
+  const went = Math.hypot(s.car.pos[0] - from[0], s.car.pos[2] - from[1]);
+  assert.ok(went > 10, `forward cyclic goes (${went.toFixed(1)} m)`);
+  run(s, 2.5, heli({pitch: 1})); // pull back: nose up, slow then back
+  assert.ok(s.flight.speed < 2, `aft cyclic slows (${s.flight.speed.toFixed(1)} m/s)`);
+  const yaw0 = carYaw(s.car);
+  run(s, 1, heli({yaw: 1}));
+  const right = turned(yaw0, carYaw(s.car));
+  assert.ok(Math.abs(right) > 0.5, `right pedal yaws (${right.toFixed(2)})`);
+  const yaw1 = carYaw(s.car);
+  run(s, 1, heli({yaw: -1}));
+  const left = turned(yaw1, carYaw(s.car));
+  assert.equal(Math.sign(left), -Math.sign(right), 'the pedals oppose');
+  // Pilot: the lever stays where it is left, and full down is a vertical landing.
+  const p = roam(field());
+  toggleFlight(p.flight, p.car);
+  run(p, 2, heli({assist: 'pilot', collective: 1}));
+  const lever = p.flight.lever;
+  assert.ok(lever > 0.9, `the lever walked up (${lever})`);
+  run(p, 1, heli({assist: 'pilot'}));
+  assert.ok(Math.abs(p.flight.lever - lever) < 1e-9, 'a pilot keeps the lever hands-off');
+  for (let i = 0; i < 20 * 120 && p.flight.mode; i++)
+    stepSession(p, heli({assist: 'pilot', collective: -1}), 1 / 120);
+  assert.equal(p.flight.mode, null, 'full collective down reaches the skids');
+});
+
+test('a barrel roll and a loop finish level and above the floor', () => {
+  for (const trick of ['roll', 'loop']) {
+    const s = roam(field());
+    takeoffFlight(s.flight, s.car);
+    run(s, 1.2, arcade());
+    let low = Infinity;
+    run(s, 0.05, arcade({trick, roll: trick === 'roll' ? 1 : 0}));
+    assert.ok(s.flight.trick, `${trick} started`);
+    run(s, 2, () => {
+      low = Math.min(low, s.car.pos[1]);
+      return arcade();
+    });
+    assert.equal(s.flight.trick, null, `${trick} finished`);
+    assert.equal(s.flight.mode, 'fly');
+    assert.ok(Math.abs(s.flight.bank) < 0.15, `${trick} bank ${s.flight.bank}`);
+    assert.ok(low > 2.5, `${trick} stayed up ${low.toFixed(2)}`);
+  }
 });

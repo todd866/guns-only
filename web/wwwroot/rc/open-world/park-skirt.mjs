@@ -5,7 +5,9 @@
 // surface gets a solid wall from the edge down `depth`, facing out, so you can drop off an edge but
 // never get under. An edge counts as outer when there is no park surface just beyond it (inner
 // edges, like a bowl's lip, have park below them and are left alone).
-export const SKIRT = Object.freeze({up: 0.3, depth: 1.5, probe: 0.08});
+// depth reaches a high deck edge (about 2 m) down past the residential dip beside the
+// park (about -2.5 m). 1.5 m left a gap under the western deck the car could enter.
+export const SKIRT = Object.freeze({up: 0.3, depth: 4, probe: 0.08});
 
 const key = p => p.map(v => Math.round(v * 1000)).join(',');
 

@@ -3,7 +3,7 @@
 // lake is gone and the town on its floor is alive; the car is a toy dinosaur you ride, the robot a toy cowboy.
 // Gates link two places rather than the same spot in the other time. Pure: the runtime resolves
 // ground heights, swaps the world and saves; this file only decides who goes where.
-import {SUMMIT, valleyPoint, inMountain, ROAD} from './spirit-mountain.mjs';
+import {SUMMIT, valleyPoint, inMountain, ROAD, mountainOffset} from './spirit-mountain.mjs';
 import {inCanyon, canyonPoint} from './canyon.mjs';
 import {NEST} from './herd.mjs';
 import {PLAZA} from './town-plaza.mjs';
@@ -12,8 +12,9 @@ import {PLAZA} from './town-plaza.mjs';
 const facing = (a, b) => Math.atan2(b[0] - a[0], -(b[1] - a[1]));
 const flat = p => [p[0], p[2]];
 // The summit gate stands at the end of the switchback road; you come out a few metres past it.
-const SUMMIT_GATE = [SUMMIT.at[0] + 9, SUMMIT.at[1] + 4];
-const SUMMIT_OUT = [SUMMIT.at[0] - 2, SUMMIT.at[1] - 1];
+const SUMMIT_GATE = mountainOffset(SUMMIT.at, 9, 4);
+const SUMMIT_OUT = mountainOffset(SUMMIT.at, -2, -1);
+const SUMMIT_LOOK = mountainOffset(SUMMIT_OUT, -10, 0);
 // The town gate stands on the plaza's open paving; the Lake Town's at the top of its main street.
 const TOWN_GATE = [PLAZA.center[0] + 6, PLAZA.center[2] + 1]; // open paving, clear of the ledges and stairs (mapped by ray)
 const TOWN_OUT = [PLAZA.center[0] - 2, PLAZA.center[2] + 7];
@@ -237,7 +238,7 @@ export const DARK_PLACES = Object.freeze([
     'Spirit Mountain summit, long ago',
     'Summit',
     [SUMMIT_OUT[0], 0, SUMMIT_OUT[1]],
-    [SUMMIT_OUT[0] - 10, 0, SUMMIT_OUT[1]],
+    [SUMMIT_LOOK[0], 0, SUMMIT_LOOK[1]],
     '#b89ae0'
   ),
   // The quetzalcoatlus nest: you arrive on the road beside it (the climb is the fun way up, never a wall).

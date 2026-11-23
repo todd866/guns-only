@@ -1,5 +1,5 @@
 // World places, never a gated event. Distances and heights are authored toy challenges.
-import {SUMMIT} from './spirit-mountain.mjs';
+import {SUMMIT, mountainOffset} from './spirit-mountain.mjs';
 import {FLIGHT} from '../physics/flight.mjs';
 import {placeCar} from '../physics/car.mjs';
 
@@ -10,9 +10,9 @@ export const SKY_JUMPS = Object.freeze([
     // Found by climbing, not listed in Places: Places sit on the flat base (see catalog's trailhead).
     place: false,
     pad: SUMMIT.at,
-    launch: [SUMMIT.at[0] + 250, SUMMIT.at[1]],
+    launch: mountainOffset(SUMMIT.at, 250, 0),
     height: 3,
-    target: [SUMMIT.at[0] + 294, SUMMIT.at[1]]
+    target: mountainOffset(SUMMIT.at, 294, 0)
   },
   {
     id: 'tower-jump',

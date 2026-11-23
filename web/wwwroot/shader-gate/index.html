@@ -1,0 +1,26 @@
+<!doctype html><html><body><canvas id="c" width="800" height="600"></canvas>
+<script type="module">
+import * as THREE from "../vendor/three.module.js";
+import { createTacticalCloudField } from "../render/environment/tactical_clouds.js";
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c") });
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, 800/600, 1, 100000);
+camera.position.set(0, 2500, 0);
+const out = { ok: true, paths: [] };
+for (const volumetric of [false, true]) {
+  try {
+    const field = createTacticalCloudField(THREE, { qualityTier: "desktop", volumetric,
+      sunDirection: new THREE.Vector3(0.5, 0.3, -0.8) });
+    scene.add(field.group);
+    field.update(camera.position, 1.0, new THREE.Color(0xe2ecee), 0.000048,
+      new THREE.Vector3(0.5, 0.3, -0.8));
+    renderer.render(scene, camera);
+    const programs = renderer.info.programs ?? [];
+    out.paths.push({ volumetric, programs: programs.length,
+      diagnostics: programs.map((p) => p.diagnostics).filter(Boolean) });
+    scene.remove(field.group); field.dispose();
+  } catch (e) { out.ok = false; out.paths.push({ volumetric, error: e.message }); }
+}
+globalThis.__shaderCheckResult = out;
+globalThis.__shaderCheckDone = true;
+</script></body></html>

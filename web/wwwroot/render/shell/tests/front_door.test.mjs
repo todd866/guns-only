@@ -14,10 +14,11 @@ import {
 import { DIRECTOR_STATE_STORAGE } from "../../progression/difficulty_ramp_persist.js";
 import { f22PersonalBestKey } from "../../debrief/f22_result_instrument.js";
 
-const [indexHtml, appJs, doorCss] = await Promise.all([
+const [indexHtml, appJs, doorCss, frontDoorJs] = await Promise.all([
   readFile(new URL("../../../index.html", import.meta.url), "utf8"),
   readFile(new URL("../../../app.js", import.meta.url), "utf8"),
   readFile(new URL("../front_door.css", import.meta.url), "utf8"),
+  readFile(new URL("../front_door.js", import.meta.url), "utf8"),
 ]);
 
 function createFakeRoot(initialClasses = ["run-paused"], initialAttrs = { lang: "en", "data-launch": "booting" }) {
@@ -131,4 +132,8 @@ test("front_door.css is linked from index.html and rules stay scoped to front-do
   for (const variant of FRONT_DOOR_VARIANTS) {
     assert.match(doorCss, new RegExp(`\\.front-door-${variant}\\b`), `missing .front-door-${variant} in CSS`);
   }
+  assert.match(frontDoorJs, /for\s*\(\s*let i = 0;\s*i < 3;\s*i \+= 1\)/,
+    "difficulty rung pips must match 'of 3'");
+  assert.doesNotMatch(doorCss, /\.front-door-a[\s\S]*data-aircraft="rc"[\s\S]*bottom:\s*clamp\(118px/,
+    "variant A RC pill must stay clear of bottom returning-player strip");
 });

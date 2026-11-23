@@ -10,7 +10,11 @@ cp .build/release/SaucerSprings "$stage/Contents/MacOS/"
 cp Sources/SaucerSprings/Shaders.metal Sources/SaucerSprings/rcsim.js "$stage/Contents/Resources/"
 # The game: the same packaged web build the website ships (tools/rc/package-rc.mjs), so the app and
 # guns-only.com/rc never drift apart.
-web=$(mktemp -d)/web; (cd $here/../.. && node tools/rc/package-rc.mjs --out "$web" >/dev/null) && cp -R "$web" "$stage/Contents/Resources/web"
+# `a && b` does not trip set -e: on 18 Nov a failed package installed an app with no game in it.
+web=$(mktemp -d)/web
+(cd $here/../.. && node tools/rc/package-rc.mjs --out "$web" >/dev/null) || { echo "make-app: package-rc failed; nothing installed" >&2; exit 1; }
+cp -R "$web" "$stage/Contents/Resources/web"
+[ -f "$stage/Contents/Resources/web/rc/index.html" ] && [ -f "$stage/Contents/Resources/web/rc/main.js" ] || { echo "make-app: the packaged game is missing; nothing installed" >&2; exit 1; }
 cp "$world" "$stage/Contents/Resources/world.rcworld"
 [ -d "${world%.rcworld}.tex" ] && cp -R "${world%.rcworld}.tex" "$stage/Contents/Resources/world.tex"
 for ext in car col; do [ -f "${world%.rcworld}.$ext" ] && cp "${world%.rcworld}.$ext" "$stage/Contents/Resources/world.$ext"; done

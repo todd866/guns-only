@@ -1,8 +1,9 @@
-// Free-drive flight (owner, 2026-10-30): F toggles the afterburner (owner: a toggle, not held); Enter lifts the car
-// off and flies it; Enter again pops a parachute that floats it back to the ground. Never in races.
-// Controls follow the guns-only jet: ↑ push (nose down), ↓ pull, ←/→ roll, A/D rudder, W/S power.
-// This is an arcade flyer, not an aerodynamic model: the car goes where its nose points, banking
-// turns it, and it cannot stall. Wheels are ignored while airborne; the world still stops it.
+// Free-drive flight. Never in races. Two layers:
+// - Arcade (owner, 6 Nov 2026), what the pad drives: stick up climbs (invert is a pause-menu
+//   option), stick left/right banks and turns together, hands off levels and holds altitude,
+//   and a floor pulls up before the ground. A takes off or flies up; B lands. No stall, no spin.
+// - The jet integrator (pitch/roll rates) stays for the older tests and scripted lessons.
+//   Positive pitch is nose up in both. Wheels are ignored while airborne; the world still stops it.
 import {
   add,
   sub,
@@ -17,6 +18,7 @@ import {
   quatNorm,
   yawOf
 } from './math.mjs';
+import {stepAirplane} from './airplane.mjs';
 
 export const FLIGHT = Object.freeze({
   // Owner, 31 Oct: "make it faster". Speeds roughly doubled; the world streams fine at burner.
@@ -70,8 +72,124 @@ export const FLIGHT = Object.freeze({
     takeoffPitch: 0.3,
     floor: 3,
     lookAhead: 0.7
+  }),
+  // The pad flyer. Bank is capped so a full stick cannot flip or spin the toy; speed never
+  // drops through `slow`, so it cannot stall. `floor` is the height the pull-up defends.
+  arcade: Object.freeze({
+    cruise: 24,
+    slow: 12,
+    boost: 42,
+    bank: 0.62,
+    bankRate: 5,
+    turn: 2.1,
+    yawRate: 0.85,
+    climb: 0.42,
+    pitchRate: 3.2,
+    levelRate: 4,
+    takeoffPitch: 0.38,
+    floor: 4,
+    lookAhead: 0.85,
+    hold: 2.4,
+    trickTime: 0.95
+  }),
+  // The helicopter (owner, 6 Nov 2026: one pad layout everywhere, mapped
+  // helicopter-correctly). RT/LT walk a held collective lever — the vertical.
+  // The cyclic (pull = nose up = slow then back; push = go) sets the speed;
+  // banking turns so one stick steers; LB/RB pedals yaw. Kid: hands off it
+  // auto-hovers and holds height, and a floor keeps it off the ground.
+  // Pilot: the lever and the drift are yours.
+  heli: Object.freeze({
+    hover: 0.5, // lever position that holds height
+    leverRate: 0.6, // full lever travel per second on the triggers
+    climbRate: 8, // m/s at full lever from the hover detent
+    cruise: 22, // m/s at full forward cyclic
+    back: 6, // m/s backwards at full aft cyclic
+    tilt: 0.3, // nose attitude at full cyclic, rad
+    tiltRate: 3.5,
+    bank: 0.5,
+    bankRate: 4,
+    turn: 1.6,
+    yawRate: 1.3, // pedals, rad/s
+    accel: 1.6,
+    hold: 2.4, // kid height hold gain
+    floor: 3, // kid: never closer to the ground than this
+    level: 3 // kid auto-hover: how fast released sticks level and stop
   })
 });
+
+// Big Kid flies the real aeroplane (owner, 6 Nov 2026: "it was very
+// not-like-an-airplane"): the shared model in airplane.mjs — bank to turn,
+// energy, a gentle stall. This is the RC jet's airframe, a param of that
+// shared model, so tuning it cannot drag the toy dogfight's planes along.
+export const RC_PLANE = Object.freeze({
+  g: 9.8,
+  vs: 10,
+  vmax: 34,
+  thrust: 10,
+  induced: 220,
+  rollRate: 2.8,
+  pitchRate: 1.6,
+  maxBank: 1.2,
+  maxPitch: 1.0,
+  align: 2.2,
+  rudderYaw: 0.7,
+  stallSag: 1.1,
+  kid: Object.freeze({level: 2.2, turnBoost: 1.3, vKeep: 1.2, floor: 4, look: 0.9})
+});
+const RC_BURNER = Object.freeze({...RC_PLANE, vmax: 46, thrust: 19});
+
+// Pilot: raw stick onto the shared aeroplane. The car's pose and velocity
+// follow the model; the common collision/touchdown path below still runs.
+function pilotFly(f, car, ctl, world, dt) {
+  void world;
+  const P = ctl.burner ? RC_BURNER : RC_PLANE;
+  if (!f.plane || f.heading == null) {
+    const nose = rotate(car.q, [0, 0, -1]);
+    f.plane = {
+      x: car.pos[0],
+      y: car.pos[1],
+      z: car.pos[2],
+      heading: Math.atan2(nose[0], nose[2]),
+      pitch: Math.asin(Math.max(-1, Math.min(1, nose[1]))),
+      bank: 0,
+      speed: Math.max(FLIGHT.minSpeed, f.speed || 0, car.forwardSpeed ?? 0),
+      vy: car.vel[1]
+    };
+    f.heading = f.plane.heading;
+  }
+  const a = f.plane;
+  a.x = car.pos[0];
+  a.y = car.pos[1];
+  a.z = car.pos[2];
+  // RT/LT walk the lever and it holds where you leave it, like the jet's power.
+  f.power = Math.max(0, Math.min(1, f.power + (ctl.power || 0) * FLIGHT.powerRate * dt));
+  f.climb = Math.max(0, (f.climb || 0) - dt);
+  const cmd = {
+    pitch: ctl.flyUp ? Math.max(ctl.pitch || 0, 1) : ctl.pitch,
+    roll: ctl.roll,
+    rudder: ctl.yaw,
+    lever: ctl.burner ? 1 : f.power,
+    assist: 'pilot'
+  };
+  if (f.climb > 0) cmd.pitch = Math.max(cmd.pitch || 0, 0.6); // the take-off hop
+  stepAirplane(a, cmd, dt, P);
+  f.speed = a.speed;
+  f.heading = a.heading;
+  f.pitch = a.pitch;
+  f.bank = a.bank;
+  f.stalled = a.stalled;
+  f.gLoad = a.gLoad;
+  // The model's yaw frame carries the nose at +[sin H, cos H]; the car's nose
+  // is −Z, which the same forward reaches at yaw H − π.
+  car.q = quatNorm(
+    quatMul(
+      quatMul(quatAxisAngle([0, 1, 0], a.heading - Math.PI), quatAxisAngle([1, 0, 0], a.pitch)),
+      quatAxisAngle([0, 0, 1], -a.bank)
+    )
+  );
+  const vy = f.climb > 0 ? Math.max(a.vy, (FLIGHT.takeoff * f.climb) / FLIGHT.climbFor) : a.vy;
+  car.vel = [a.vx, vy, a.vz];
+}
 
 export function createFlight() {
   return {mode: null, speed: 0, power: FLIGHT.startPower, climb: 0, flights: 0, chutes: 0, landings: 0};
@@ -85,6 +203,49 @@ const groundAt = (world, x, y, z) => {
   const h = world?.raycast?.([x, y + 60, z], [0, -1, 0], 320);
   return h ? y + 60 - h.dist : null;
 };
+
+/**
+ * Left stick to a climb/bank command. `y` is positive when the stick is pushed up.
+ * Default is non-inverted: up climbs (positive pitch). `invert` flips pitch only.
+ */
+export function stickAttitude(stick = {}, {invert = false} = {}) {
+  const x = Number.isFinite(stick.x) ? Math.max(-1, Math.min(1, stick.x)) : 0,
+    y = Number.isFinite(stick.y) ? Math.max(-1, Math.min(1, stick.y)) : 0;
+  return {pitch: invert ? -y : y, roll: x};
+}
+
+/**
+ * One-way take-off. From the ground or the chute this enters fly and climbs.
+ * Already flying, it just flies up (a climb pulse) and does not open the chute.
+ */
+export function takeoffFlight(f, car, {roam = true} = {}) {
+  if (!roam) return f.mode;
+  if (f.mode !== 'fly') {
+    if (!f.mode) f.flights = (f.flights ?? 0) + 1;
+    f.mode = 'fly';
+    f.speed = Math.max(f.speed || 0, FLIGHT.minSpeed + 2, car.forwardSpeed ?? 0);
+    f.heading = null;
+    f.trick = null;
+    f.retro = false;
+    f.holdY = null;
+    car.vel = add(car.vel, [0, FLIGHT.takeoff, 0]);
+  }
+  f.climb = Math.max(f.climb || 0, FLIGHT.climbFor);
+  car.ang = [0, 0, 0];
+  return 'fly';
+}
+
+/** One-way landing. Flying opens the chute; the chute stays in the landing until touchdown. */
+export function landFlight(f, car, {roam = true} = {}) {
+  void car;
+  if (!roam || f.mode !== 'fly') return f.mode;
+  f.mode = 'chute';
+  f.chutes = (f.chutes ?? 0) + 1;
+  f.climb = 0;
+  f.trick = null;
+  f.holdY = null;
+  return 'chute';
+}
 
 /** Enter: ground → flying → parachute. Only in free drive. Returns the new mode. */
 export function toggleFlight(f, car, {roam = true} = {}) {
@@ -113,16 +274,164 @@ function touchdown(f, car) {
   car.vel = [car.vel[0] * 0.7, Math.max(-1, car.vel[1]), car.vel[2] * 0.7];
 }
 
+// Arcade: heading, a capped bank and a capped pitch. Released sticks level the wings, zero
+// the pitch and hold height. The floor looks here and ahead and pulls up before the ground.
+// A barrel roll or a loop is a timed pose that ends level; it cannot be held inverted.
+function arcadeFly(f, car, ctl, world, dt) {
+  const A = FLIGHT.arcade;
+  if (f.heading == null) {
+    f.heading = -yawOf(car.q);
+    f.pitch = 0;
+    f.bank = 0;
+  }
+  const yawIn = Math.max(-1, Math.min(1, ctl.yaw || 0));
+  let pitchIn = Math.max(-1, Math.min(1, ctl.pitch || 0)),
+    rollIn = Math.max(-1, Math.min(1, ctl.roll || 0));
+  if (ctl.flyUp) pitchIn = Math.max(pitchIn, 1);
+  if (ctl.trick && !f.trick)
+    f.trick = {kind: ctl.trick === 'roll' ? 'roll' : 'loop', t: 0, dir: rollIn < -0.2 ? -1 : 1};
+  const throttle = Math.max(-1, Math.min(1, ctl.power || 0)),
+    target =
+      ctl.brake || throttle < -0.15
+        ? A.slow
+        : ctl.burner
+          ? A.boost
+          : throttle > 0.15
+            ? A.cruise + (A.boost - A.cruise) * Math.min(1, throttle)
+            : A.cruise;
+  f.speed += (target - f.speed) * FLIGHT.accel * dt;
+  f.speed = Math.max(A.slow, Math.min(A.boost, f.speed));
+  f.power = Math.max(0, Math.min(1, (f.speed - A.slow) / (A.boost - A.slow)));
+  if (f.trick) {
+    f.trick.t += dt;
+    const u = f.trick.t / A.trickTime;
+    if (u >= 1) {
+      f.trick = null;
+      f.bank = Math.atan2(Math.sin(f.bank), Math.cos(f.bank));
+      f.pitch = Math.atan2(Math.sin(f.pitch), Math.cos(f.pitch));
+    } else if (f.trick.kind === 'roll') f.bank = f.trick.dir * u * Math.PI * 2;
+    else f.pitch = Math.sin(u * Math.PI * 2) * 1.05;
+  } else {
+    const handsOff = Math.abs(pitchIn) < 0.08 && Math.abs(rollIn) < 0.08,
+      wantBank = rollIn * A.bank,
+      wantPitch = pitchIn * A.climb;
+    f.bank += (wantBank - f.bank) * Math.min(1, A.bankRate * dt);
+    f.pitch += (wantPitch - f.pitch) * Math.min(1, (handsOff ? A.levelRate : A.pitchRate) * dt);
+  }
+  f.heading -= yawIn * A.yawRate * dt;
+  f.heading -= Math.sin(f.bank) * A.turn * dt;
+  f.climb = Math.max(0, (f.climb || 0) - dt);
+  if (f.climb > 0) f.pitch = Math.max(f.pitch, A.takeoffPitch * Math.min(1, f.climb / FLIGHT.climbFor));
+  car.q = quatNorm(
+    quatMul(
+      quatMul(quatAxisAngle([0, 1, 0], f.heading), quatAxisAngle([1, 0, 0], f.pitch)),
+      quatAxisAngle([0, 0, 1], -f.bank)
+    )
+  );
+  const h = [-Math.sin(f.heading), -Math.cos(f.heading)],
+    across = Math.cos(Math.max(-1.2, Math.min(1.2, f.pitch))) * f.speed,
+    handsOff = !f.trick && Math.abs(pitchIn) < 0.08 && Math.abs(rollIn) < 0.08 && !(f.climb > 0);
+  let vy = Math.sin(Math.max(-1.2, Math.min(1.2, f.pitch))) * f.speed;
+  if (handsOff) {
+    if (f.holdY == null) f.holdY = car.pos[1];
+    vy += (f.holdY - car.pos[1]) * A.hold;
+  } else if (!f.trick) f.holdY = null;
+  const ahead = A.lookAhead * f.speed,
+    g = Math.max(
+      groundAt(world, car.pos[0], car.pos[1], car.pos[2]) ?? -1e9,
+      groundAt(world, car.pos[0] + h[0] * ahead, car.pos[1], car.pos[2] + h[1] * ahead) ?? -1e9
+    );
+  if (g > -1e9) {
+    const need = (g + A.floor - car.pos[1]) * A.hold;
+    if (need > 0) {
+      vy = Math.max(vy, Math.min(10, need));
+      if (!f.trick) f.pitch = Math.max(f.pitch, Math.min(A.climb, 0.3));
+      f.holdY = null;
+    }
+  }
+  vy = Math.max(-12, Math.min(12, vy));
+  car.vel = [h[0] * across, vy, h[1] * across];
+}
+
+// The helicopter. Same pad rows as the planes (rc/flight_layout.mjs), mapped
+// helicopter-correctly: `ctl.collective` (RT−LT) walks a held lever that is the
+// vertical, `ctl.pitch` is the AVIATION aft cyclic (pull = +1 = nose up = slow,
+// push = nose down = go), `ctl.roll` banks and turns, `ctl.yaw` (LB/RB) pedals.
+// `ctl.assist` is 'kid' or 'pilot' — the same two levels the planes fly.
+function heliFly(f, car, ctl, world, dt) {
+  const H = FLIGHT.heli;
+  if (f.heading == null) {
+    f.heading = -yawOf(car.q);
+    f.pitch = 0;
+    f.bank = 0;
+  }
+  if (!Number.isFinite(f.lever)) f.lever = H.hover;
+  const kid = ctl.assist !== 'pilot',
+    aft = Math.max(-1, Math.min(1, ctl.pitch || 0)),
+    rollIn = Math.max(-1, Math.min(1, ctl.roll || 0)),
+    yawIn = Math.max(-1, Math.min(1, ctl.yaw || 0));
+  let leverIn = Math.max(-1, Math.min(1, ctl.collective || 0));
+  if (ctl.flyUp) leverIn = Math.max(leverIn, 1); // A flies up, like the planes
+  const handsOff = Math.abs(aft) < 0.08 && Math.abs(rollIn) < 0.08 && Math.abs(leverIn) < 0.05;
+  // The collective is a lever that holds where you leave it, like the jet's power.
+  f.lever = Math.max(0, Math.min(1, f.lever + leverIn * H.leverRate * dt));
+  // Kid auto-hover: released sticks level the ship, stop the drift and ease the
+  // lever back to the hover detent so height holds. Pilot keeps what he set.
+  if (kid && handsOff) f.lever += (H.hover - f.lever) * Math.min(1, H.level * dt);
+  const wantPitch = kid && handsOff ? 0 : aft * H.tilt,
+    wantBank = kid && handsOff ? 0 : rollIn * H.bank;
+  f.pitch += (wantPitch - f.pitch) * Math.min(1, H.tiltRate * dt);
+  f.bank += (wantBank - f.bank) * Math.min(1, H.bankRate * dt);
+  f.heading -= yawIn * H.yawRate * dt;
+  f.heading -= Math.sin(f.bank) * H.turn * dt; // banking turns, so one stick steers
+  // Speed follows the nose: level hovers, nose down goes, nose up slows then backs.
+  const wantSpeed = (-f.pitch / H.tilt) * (f.pitch < 0 ? H.cruise : H.back);
+  f.speed += (wantSpeed - f.speed) * H.accel * dt;
+  f.power = f.lever; // the HUD lever shows the collective
+  f.climb = Math.max(0, (f.climb || 0) - dt);
+  let vy = ((f.lever - H.hover) / (1 - H.hover)) * H.climbRate;
+  if (f.climb > 0) vy = Math.max(vy, (FLIGHT.takeoff * f.climb) / FLIGHT.climbFor);
+  if (kid) {
+    if (handsOff) {
+      if (f.holdY == null) f.holdY = car.pos[1];
+      vy += (f.holdY - car.pos[1]) * H.hold;
+    } else f.holdY = null;
+    // No ground strikes: the floor defends itself whatever the lever says.
+    const g = groundAt(world, car.pos[0], car.pos[1], car.pos[2]);
+    if (g != null) {
+      const need = (g + H.floor - car.pos[1]) * H.hold;
+      if (need > 0) {
+        vy = Math.max(vy, Math.min(10, need));
+        f.holdY = null;
+      }
+    }
+  } else f.holdY = null;
+  vy = Math.max(-12, Math.min(12, vy));
+  car.q = quatNorm(
+    quatMul(
+      quatMul(quatAxisAngle([0, 1, 0], f.heading), quatAxisAngle([1, 0, 0], f.pitch)),
+      quatAxisAngle([0, 0, 1], -f.bank)
+    )
+  );
+  const h = [-Math.sin(f.heading), -Math.cos(f.heading)];
+  car.vel = [h[0] * f.speed, vy, h[1] * f.speed];
+}
+
 /**
  * Steps the car while it flies or floats. Returns false when the car is on its wheels, so the
  * caller runs the normal car step. `ctl` = { pitch, roll, yaw, power, burner } in -1..1; the easy
- * flyer takes { easy: true, steer, climb, burner } instead.
+ * flyer takes { easy: true, steer, climb, burner }; the pad flyer takes { arcade: true } plus the
+ * stickAttitude pitch/roll (positive pitch climbs); the chopper takes { heli: true, collective,
+ * assist } with aviation pull-positive pitch.
  */
 export function stepFlight(f, car, ctl = {}, world, dt = 1 / 120) {
   if (!f.mode) return false;
   const fwd = rotate(car.q, [0, 0, -1]),
     right = rotate(car.q, [1, 0, 0]);
-  if (f.mode === 'fly' && ctl.easy) {
+  if (f.mode === 'fly' && ctl.heli) heliFly(f, car, ctl, world, dt);
+  else if (f.mode === 'fly' && ctl.pilot) pilotFly(f, car, ctl, world, dt);
+  else if (f.mode === 'fly' && ctl.arcade) arcadeFly(f, car, ctl, world, dt);
+  else if (f.mode === 'fly' && ctl.easy) {
     const E = FLIGHT.easy;
     if (f.heading == null) {
       f.heading = -yawOf(car.q);

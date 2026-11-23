@@ -1,4 +1,5 @@
 import * as T from '../../vendor/three.module.js';
+import {mergeGeometries} from '../../vendor/three/addons/utils/BufferGeometryUtils.js';
 import {districtBounds} from './district-zones.mjs';
 import {bodyAt} from '../physics/water.mjs';
 
@@ -141,11 +142,90 @@ const pick = (list, n) => list[((n % list.length) + list.length) % list.length];
 const LEAF_COLOURS = ['#9a6a2c', '#b5832f', '#7d5a26', '#a24f22', '#8a8a33'].map(c => new T.Color(c));
 const PEBBLE_COLOURS = ['#8d877c', '#a39a8a', '#6f6a61', '#b8ab92'].map(c => new T.Color(c));
 const FLOWER_COLOURS = ['#f4f1e6', '#f1d64a', '#c98bd8'].map(c => new T.Color(c));
+const CHALK_COLOURS = ['#ff8fb1', '#7fd3ff', '#ffe066', '#9be37a', '#ffffff', '#c7a6ff'].map(c => new T.Color(c));
+const CAP_COLOURS = ['#d8342c', '#2f6fd6', '#f2c230', '#e8e8e8', '#2e9e4f'].map(c => new T.Color(c));
+const CRAYON_COLOURS = ['#e8322b', '#2a62e0', '#ffcf1f', '#28a745', '#ff7a1a', '#8e44d6'].map(c => new T.Color(c));
+export const CHALK_KINDS = ['chalkStar', 'chalkSun', 'chalkSmile', 'chalkHop'];
+
+// A chalk drawing: white strokes, each drawn a few times slightly offset at low alpha so the edge
+// is grainy like chalk on concrete; instance colour tints it.
+function chalkTexture(draw) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.lineCap = g.lineJoin = 'round';
+  for (let pass = 0; pass < 5; pass++) {
+    g.save();
+    g.translate(128 + (pass % 2 ? 2 : -2) * (pass % 3), 128 + (pass % 3) - 1);
+    g.strokeStyle = `rgba(255,255,255,${0.4 + pass * 0.08})`;
+    g.lineWidth = 12 - pass;
+    g.beginPath();
+    draw(g);
+    g.stroke();
+    g.restore();
+  }
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  return t;
+}
+const CHALK_DRAW = {
+  chalkStar: g => {
+    for (let k = 0; k <= 5; k++) {
+      const a = -Math.PI / 2 + (k * 4 * Math.PI) / 5;
+      k ? g.lineTo(Math.cos(a) * 100, Math.sin(a) * 100) : g.moveTo(Math.cos(a) * 100, Math.sin(a) * 100);
+    }
+  },
+  chalkSun: g => {
+    g.arc(0, 0, 48, 0, Math.PI * 2);
+    for (let k = 0; k < 9; k++) {
+      const a = (k / 9) * Math.PI * 2;
+      g.moveTo(Math.cos(a) * 66, Math.sin(a) * 66);
+      g.lineTo(Math.cos(a) * 108, Math.sin(a) * 108);
+    }
+  },
+  chalkSmile: g => {
+    g.arc(0, 0, 100, 0, Math.PI * 2);
+    g.moveTo(-30, -30);
+    g.arc(-36, -30, 6, 0, Math.PI * 2);
+    g.moveTo(42, -30);
+    g.arc(36, -30, 6, 0, Math.PI * 2);
+    g.moveTo(-55, 20);
+    g.quadraticCurveTo(0, 80, 55, 20);
+  },
+  chalkHop: g => {
+    // A short hopscotch run: three squares and a pair, with numbers left to the imagination.
+    g.rect(-30, 50, 60, 60);
+    g.rect(-30, -10, 60, 60);
+    g.rect(-60, -70, 60, 60);
+    g.rect(0, -70, 60, 60);
+    g.moveTo(0, -80);
+    g.arc(0, -100, 20, Math.PI / 2, Math.PI * 2.5);
+  }
+};
+
+function capGeometry() {
+  // A bottle cap a little over life size (5 cm across): a 1:10 car sees it as a manhole cover.
+  const g = new T.CylinderGeometry(0.025, 0.025, 0.012, 14, 1, false);
+  g.translate(0, 0.006, 0);
+  return g;
+}
+function crayonGeometry() {
+  // A fat crayon lying on its side, 14 cm long and 2 cm thick, with its sharpened tip.
+  const body = new T.CylinderGeometry(0.01, 0.01, 0.12, 8, 1, false),
+    tip = new T.ConeGeometry(0.01, 0.025, 8);
+  tip.translate(0, 0.0725, 0);
+  const g = mergeGeometries([body, tip], false);
+  body.dispose();
+  tip.dispose();
+  g.rotateZ(Math.PI / 2);
+  g.translate(0, 0.01, 0);
+  return g;
+}
 
 // What one 4 m cell holds. A 4x4 grid of probe rays (one per square metre) reads the ground;
 // detail is then scattered inside each probe's metre on the plane through its hit, so density costs
 // no extra rays. `density` is grass tufts per square metre for the cell's ring.
-export function planCell(cx, cz, raycast, {cell = NEAR_DETAIL.cell, density = NEAR_DETAIL.sparse} = {}) {
+export function planCell(cx, cz, raycast, {cell = NEAR_DETAIL.cell, density = NEAR_DETAIL.sparse, toy = false} = {}) {
   const items = [],
     x0 = cx * cell,
     z0 = cz * cell,
@@ -234,6 +314,29 @@ export function planCell(cx, cz, raycast, {cell = NEAR_DETAIL.cell, density = NE
           chance(0.035, 7, (x, y, z, r) =>
             items.push({kind: 'stain', x, y: y + 0.005, z, yaw: r * 6.283, scale: 0.4 + r * 0.6})
           );
+        // The Pixar look (owner, 18 Nov 2026): a kid's world seen from toy height. Things a child
+        // leaves on a park's paving, which at 1:10 are car-sized landmarks: chalk drawings, bottle
+        // caps, a dropped crayon. Pixar-sized, like Toy Story's hero props: big enough to read from the
+        // chase camera. All flat or below axle height, so nothing here needs collision.
+        if (toy && s !== 'asphalt') {
+          chance(0.04, 11, (x, y, z, r, k) =>
+            items.push({
+              kind: CHALK_KINDS[Math.floor(hash(cx * 4 + i, cz * 4 + j, 111) * CHALK_KINDS.length)],
+              x,
+              y: y + 0.004,
+              z,
+              yaw: r * 6.283,
+              scale: 0.7 + r * 0.6,
+              colour: pick(CHALK_COLOURS, cx * 3 + cz + sub + k)
+            })
+          );
+          chance(0.05, 12, (x, y, z, r) =>
+            items.push({kind: 'cap', x, y, z, yaw: r * 6.283, scale: 1, colour: pick(CAP_COLOURS, sub + cx * 7 + cz)})
+          );
+          chance(0.05, 13, (x, y, z, r) =>
+            items.push({kind: 'crayon', x, y, z, yaw: r * 6.283, scale: 1, colour: pick(CRAYON_COLOURS, sub + cz * 5 + cx)})
+          );
+        }
       } else if (LOOSE.has(s)) {
         scatter(2, 8, (x, y, z, r) =>
           items.push({
@@ -253,7 +356,11 @@ export function planCell(cx, cz, raycast, {cell = NEAR_DETAIL.cell, density = NE
 
 const densityAt = metres => NEAR_DETAIL.rings.find(([r]) => metres <= r)?.[1] ?? NEAR_DETAIL.sparse;
 
-export function createNearDetail(scene, world, {radius = NEAR_DETAIL.radius, cell = NEAR_DETAIL.cell} = {}) {
+export function createNearDetail(
+  scene,
+  world,
+  {radius = NEAR_DETAIL.radius, cell = NEAR_DETAIL.cell, toy = false} = {}
+) {
   const raycast = (o, d, l) => world.raycast(o, d, l);
   const kinds = {
     tuft: {
@@ -306,7 +413,42 @@ export function createNearDetail(scene, world, {radius = NEAR_DETAIL.radius, cel
       }),
       cap: 120,
       flat: true
-    }
+    },
+    ...(toy
+      ? {
+          ...Object.fromEntries(
+            CHALK_KINDS.map(name => [
+              name,
+              {
+                geometry: new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+                material: new T.MeshBasicMaterial({
+                  map: chalkTexture(CHALK_DRAW[name]),
+                  transparent: true,
+                  opacity: 0.92,
+                  depthWrite: false,
+                  polygonOffset: true,
+                  polygonOffsetFactor: -2,
+                  polygonOffsetUnits: -2
+                }),
+                cap: 90,
+                flat: true
+              }
+            ])
+          ),
+          cap: {
+            geometry: capGeometry(),
+            material: new T.MeshStandardMaterial({roughness: 0.35, metalness: 0.4}),
+            cap: 200,
+            flat: true
+          },
+          crayon: {
+            geometry: crayonGeometry(),
+            material: new T.MeshStandardMaterial({roughness: 0.55}),
+            cap: 200,
+            flat: true
+          }
+        }
+      : {})
   };
   const root = new T.Group();
   root.name = 'NearDetail';
@@ -385,7 +527,7 @@ export function createNearDetail(scene, world, {radius = NEAR_DETAIL.radius, cel
     }
     for (let n = 0; n < NEAR_DETAIL.cellsPerFrame && queue.length; n++) {
       const [x, z, , density] = queue.shift(),
-        plan = planCell(x, z, raycast, {cell, density});
+        plan = planCell(x, z, raycast, {cell, density, toy});
       // A tile that has not streamed in yet returns no ground: try that cell again later.
       if (plan.hits) {
         cells.set(`${x},${z}`, plan);

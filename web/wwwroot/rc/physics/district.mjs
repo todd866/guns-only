@@ -1,7 +1,7 @@
 // District GLB → playable course, without three.js, so Node tests and the browser share it.
 // Node-name contract (docs/area-51-build-plan.md): COL_<surface>_* collision meshes, GATE_NN,
 // START_N, AI_NNN, PICKUP_*, SPEC_*, CAM_* empties. Gate/AI scale.x is the half width.
-import {createWorld, SURFACES} from './world.mjs';
+import {createWorld, sealTransitionNormals, SURFACES} from './world.mjs';
 
 export function parseGlb(buffer) {
   const dv = new DataView(
@@ -167,6 +167,7 @@ export function courseFromGlb(buffer) {
   if (gates.length < 2) throw Error('District needs GATE_00 and at least one more gate');
   if (!starts.length) throw Error('District needs START_1');
   if (!colTris) throw Error('District has no COL_ collision meshes');
+  sealTransitionNormals(world);
   const yawOf = f => Math.atan2(f[0], -f[2]);
   // One lap: cross GATE_00 to start the clock, every gate in order, GATE_00 again to finish.
   const lap = [...gates, gates[0]];

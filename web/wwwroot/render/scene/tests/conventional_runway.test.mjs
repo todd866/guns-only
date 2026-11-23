@@ -299,3 +299,23 @@ test("runway light sprites fade out at fight range and return for any recovery",
   assert.equal(short.towerBeacon.visible, false);
   assert.equal(short.edgeLights.visible, true);
 });
+
+test("4-unit 3D PAPI bar transitions red/white cleanly around a 3.0 degree glideslope", () => {
+  const runway = createConventionalRunwayPresentation();
+  const base = runwayState();
+  // Aim point sits at 300 m past threshold_z (-55_300 -> -55_000). At 3000 m short (-58_000),
+  // 3.0 deg is ~157.2 m above threshold_y (52.5 + 157.2 = 209.7).
+  const onSlopeState = (deg) => {
+    const dy = Math.tan(deg * Math.PI / 180) * 3_000;
+    return { ...base, px: -55_000, pz: -58_000, py: base.runway_threshold_y + dy };
+  };
+  const whiteFlags = (deg) => {
+    updateConventionalRunwayPresentation(runway, onSlopeState(deg));
+    return runway.papiUnits.map((unit) => unit.lens.userData.papiWhite === true);
+  };
+  assert.deepEqual(whiteFlags(3.8), [true, true, true, true], ">3.5 deg: four white");
+  assert.deepEqual(whiteFlags(3.3), [true, true, true, false], "3.17-3.5 deg: three white, one red");
+  assert.deepEqual(whiteFlags(3.0), [true, true, false, false], "3.0 deg on slope: two white, two red");
+  assert.deepEqual(whiteFlags(2.65), [true, false, false, false], "2.5-2.83 deg: one white, three red");
+  assert.deepEqual(whiteFlags(2.2), [false, false, false, false], "<2.5 deg: four red");
+});

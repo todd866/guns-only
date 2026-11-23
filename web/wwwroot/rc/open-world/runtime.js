@@ -18,6 +18,7 @@ import {
   parkPoint
 } from './residential-frame.mjs';
 import {ARRIVAL_START} from './arrival-frame.mjs';
+import {labEntry} from './lab-accident.mjs';
 import {createPortalTransition} from './portal-transition.mjs';
 import {buildActivities} from './activities.js';
 import {elevationAt} from './elevation.mjs';
@@ -97,6 +98,7 @@ import {
   expedition
 } from './catalog.mjs';
 import {WORLD_LINKS, buildRoadGraph, roadRoute, recoveryPoint} from './navigation.mjs';
+import {APPROACH} from './spirit-mountain.mjs';
 export async function loadOpenWorld(search) {
   const q = new URLSearchParams(search),
     get = async name => {
@@ -147,7 +149,7 @@ export async function loadOpenWorld(search) {
   overview.bounds = [...BOUNDS];
   overview.residential = residentialData;
   overview.roads = residentialRoads(overview.roads, residentialData);
-  overview.roads.push(...WORLD_LINKS);
+  overview.roads.push(...WORLD_LINKS, APPROACH);
   let storage;
   try {
     storage = localStorage;
@@ -168,7 +170,8 @@ export async function loadOpenWorld(search) {
           : explicitEntry
             ? EVENTS[0]
             : defaultEvent)),
-    rawAt = locationById(q.get('from') ?? q.get('at')),
+    labIn = labEntry(search),
+    rawAt = locationById(labIn ? 'coldlab' : (q.get('from') ?? q.get('at'))),
     safeAt = rawAt && canVisit(progress, rawAt) ? rawAt : null,
     at =
       safeAt ??
@@ -223,12 +226,13 @@ export async function loadOpenWorld(search) {
     terrain: residentialTerrain
   });
   const residentialDetails = prepareResidentialDetails(stream.world, residentialData, {
-    terrain: residentialTerrain
+    terrain: residentialTerrain,
+    look: ['classic', 'pixel'].includes(q.get('look')) ? q.get('look') : 'pixar'
   });
   const residential = prepareResidential(
     stream.world,
     {...residentialData, roads: [...residentialData.roads, RESIDENTIAL_LINK]},
-    {terrain: residentialTerrain}
+    {terrain: residentialTerrain, look: ['classic', 'pixel'].includes(q.get('look')) ? q.get('look') : 'pixar'}
   );
   addMarseilleCollision(stream.world);
   // These independent startup jobs overlap network and parsing work. The stream remains the
@@ -341,6 +345,7 @@ export async function loadOpenWorld(search) {
     course.start = {pos: [...RESIDENTIAL_START.pos], yaw: RESIDENTIAL_START.yaw};
   if (!q.has('event') && at.game === 'canyon-run')
     course.start = canyonArrival((x, z) => elevationAt(elevation, x, z));
+  if (labIn) course.start = {pos: [...labIn.pos], yaw: labIn.yaw};
   // World challenge coins sit at landmarks, outside the rings. Discovery and coins are distinct.
   const eventBounds = course.outOfBounds;
   course.outOfBounds = pos => (pos[0] > 9000 && pos[1] < -3) || !!eventBounds?.(pos);
@@ -597,6 +602,7 @@ export async function loadOpenWorld(search) {
     selected,
     locked,
     at,
+    labShortcut: !!labIn,
     search,
     activity: () => golf,
     canRace,
@@ -674,14 +680,15 @@ export async function loadOpenWorld(search) {
     route: () => (deliveries?.state.active && !deliveries.state.paused ? deliveries.state.route : route),
     target: () =>
       deliveries?.state.active && !deliveries.state.paused ? deliveries.state.destination : target,
-    loadBackground() {
-      districts.loadRest().catch(error => console.warn('RC district unavailable:', error));
+    loadBackground(warm) {
+      districts.loadRest(warm).catch(error => console.warn('RC district unavailable:', error));
     },
     async attach(scene) {
       await heroesReady;
       terrain = createTerrain(scene, terrainData, BOUNDS);
       await districts.attach(scene);
       residential.attach(scene);
+      residential.update?.(680, at.pos);
       residentialPark.attach(scene);
       schoolyard.attach(scene);
       residentialYards.attach(scene);
@@ -711,6 +718,7 @@ export async function loadOpenWorld(search) {
       residentialSchool = buildResidentialSchool(scene, residentialData, {terrain: residentialTerrain});
       highSchool = buildHighSchool(scene, stream.world, residentialData, {terrain: residentialTerrain});
       await residentialDetails.attach(scene); // Authored venues as data (docs/rc-placements.md): the kit and a placement file, batched per prop. A missing or bad file never blocks the world.
+      residentialDetails.update?.(680, at.pos);
       try {
         const kit = await preparePlacementKit('kit/props.glb');
         const data = await loadPlacements(
@@ -915,6 +923,10 @@ export async function loadOpenWorld(search) {
       golfVisual?.update(golf?.kind === 'golf' ? golf : null);
       bowlingVisual?.update(golf, racing ? selected.id : null);
       bowlingAlley?.update(golf?.kind === 'bowling' ? golf : null, playerPos);
+      const eye = camera ? [camera.position.x, camera.position.y, camera.position.z] : pos,
+        fogFar = farmScene?.fog?.far ?? 680;
+      residential.update?.(fogFar, eye);
+      residentialDetails.update?.(fogFar, eye);
       const key = pos.map((v, i) => (i === 1 ? 0 : Math.floor(v / 64))).join(',');
       if (key !== lastTile || stream.errors.size) {
         lastTile = key;

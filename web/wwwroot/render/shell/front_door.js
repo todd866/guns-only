@@ -208,12 +208,13 @@ function removeFrontDoorChrome(doc) {
 
 function paintRungPips(container, rung) {
   const doc = container?.ownerDocument ?? globalThis.document;
+  const filledCount = Math.max(0, Math.min(3, Math.trunc(Number(rung) || 0)));
   container.replaceChildren();
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 3; i += 1) {
     const pip = doc.createElement("span");
     pip.className = "front-door-pip";
     pip.setAttribute("aria-hidden", "true");
-    if (i <= rung) pip.dataset.filled = "true";
+    if (i < filledCount) pip.dataset.filled = "true";
     container.append(pip);
   }
 }

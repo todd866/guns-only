@@ -44,7 +44,7 @@ test('all specimens can be collected with ordinary inputs, persist across reload
     progress = loadProgress(storage);
   }
   assert.ok(specimensComplete(progress));
-  assert.equal(dreamlandUnlocked(progress), false);
+  assert.equal(dreamlandUnlocked(progress), true);
   assert.equal(expedition(progress).complete, false);
   progress.raceWins = Object.fromEntries(
     [
@@ -58,6 +58,7 @@ test('all specimens can be collected with ordinary inputs, persist across reload
       'wing-walker'
     ].map(id => [id, 60])
   );
+  assert.equal(earlyCupsComplete(progress), true);
   assert.equal(dreamlandUnlocked(progress), true);
   recordFinish(progress, 'dreamland', 55);
   saveProgress(storage, progress);
@@ -77,22 +78,38 @@ test('invalid saved IDs, duplicates and invalid records cannot invent progress',
   assert.deepEqual(p.discovered, ['gate']);
   assert.deepEqual(p.specimens, ['gate']);
   assert.deepEqual(p.wins, {whoops: 50});
-  recordFinish(p, 'dreamland', 1);
+  recordFinish(p, 'dreamland', -1);
+  recordFinish(p, 'made-up-event', 42);
   assert.equal(p.wins.dreamland, undefined);
+  assert.equal(p.wins['made-up-event'], undefined);
   assert.equal(expedition(p).complete, false);
 });
 
-test('secret lab and alien terrain require staged progression, including discovery', () => {
+test('secret lab, dreamland, and alien terrain are accessible from a fresh save while trophy counts still track', () => {
   const state = loadProgress();
   const lab = locationById('lab'),
     alien = locationById('lunar-paddock');
-  assert.equal(canEnter(state, lab), false);
-  assert.equal(canEnter(state, alien), false);
-  assert.deepEqual(discover(state, lab.pos), []);
+  assert.equal(canEnter(state, lab), true);
+  assert.equal(canEnter(state, alien), true);
+  assert.deepEqual(discover(state, lab.pos), [lab]);
+  assert.equal(dreamlandUnlocked(state), true);
+  assert.equal(alienWorldUnlocked(state), true);
+  assert.equal(
+    canEnterEvent(
+      state,
+      EVENTS.find(e => e.id === 'lunar-paddock')
+    ),
+    true
+  );
+  assert.equal(
+    canEnterEvent(
+      state,
+      EVENTS.find(e => e.id === 'night-wave')
+    ),
+    true
+  );
   state.specimens = SPECIMENS.map(p => p.id);
   assert.equal(specimensComplete(state), true);
-  assert.equal(dreamlandUnlocked(state), false);
-  assert.equal(canEnter(state, lab), false);
   state.raceWins = Object.fromEntries(
     [
       'district-housing',
@@ -106,36 +123,11 @@ test('secret lab and alien terrain require staged progression, including discove
     ].map(id => [id, 60])
   );
   assert.equal(earlyCupsComplete(state), true);
-  assert.equal(dreamlandUnlocked(state), true);
-  assert.equal(canEnter(state, lab), true);
-  assert.equal(canEnter(state, alien), false);
-  assert.equal(
-    canEnterEvent(
-      state,
-      EVENTS.find(e => e.id === 'lunar-paddock')
-    ),
-    false
-  );
-  assert.equal(
-    canEnterEvent(
-      state,
-      EVENTS.find(e => e.id === 'night-wave')
-    ),
-    false
-  );
   recordFinish(state, 'dreamland', 55);
-  assert.equal(alienWorldUnlocked(state), true);
-  assert.equal(canEnter(state, alien), true);
-  assert.equal(
-    canEnterEvent(
-      state,
-      EVENTS.find(e => e.id === 'lunar-paddock')
-    ),
-    true
-  );
+  assert.equal(expedition(state).complete, true);
 });
 
-test('Dreamland deep links respect the same specimen lock as event entry', async () => {
+test('Dreamland deep links open immediately without requiring prior unlocks', async () => {
   const oldFetch = globalThis.fetch,
     oldStorage = globalThis.localStorage;
   let state = loadProgress();
@@ -151,9 +143,9 @@ test('Dreamland deep links respect the same specimen lock as event entry', async
     );
   try {
     let world = await loadOpenWorld('?event=dreamland&mode=race');
-    assert.equal(world.locked, true);
-    assert.equal(world.at.id, 'lab');
-    assert.notEqual(world.selected.id, 'dreamland');
+    assert.equal(world.locked, false);
+    assert.equal(world.selected.id, 'dreamland');
+    assert.equal(world.selected.night, true);
     world.dispose();
     state.specimens = SPECIMENS.map(p => p.id);
     state.raceWins = Object.fromEntries(
