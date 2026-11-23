@@ -34,7 +34,7 @@ test('undiscovered unlocked locations support repeated grounded jumps without gr
     w = await loadOpenWorld('');
     const before = structuredClone(w.progress);
     for (const p of [
-      ...LOCATIONS.filter(p => canVisit(w.progress, p)),
+      ...w.places(),
       LOCATIONS.find(p => p.id === 'skatepark')
     ]) {
       const trip = await w.travel(p.id);
@@ -49,8 +49,9 @@ test('undiscovered unlocked locations support repeated grounded jumps without gr
       assert.ok(s.car.contacts > 0, p.id + ' wheel contact');
     }
     assert.deepEqual(w.progress, before);
-    assert.equal(canEnterEvent(w.progress, eventById('dreamland')), false);
-    assert.equal(await w.travel('night-wave'), null);
+    assert.equal(canEnterEvent(w.progress, eventById('dreamland')), true);
+    assert.equal(canEnterEvent(w.progress, eventById('lunar-paddock')), true);
+    assert.equal(canVisit(w.progress, LOCATIONS.find(p => p.id === 'night-wave')), true);
     assert.equal(await w.travel('not-a-place'), null);
   } finally {
     w?.dispose();

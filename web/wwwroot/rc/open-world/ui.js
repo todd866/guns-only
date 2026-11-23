@@ -223,11 +223,7 @@ export function createWorldUI({
       b.setAttribute('aria-pressed', String(b.dataset.paint === progress.paint));
   };
   $('body').onchange = () => {
-    if (
-      !getState().roam ||
-      ($('body').value === 'golf' && !progress.discovered.includes('golf')) ||
-      ($('body').value === 'pumpkin' && (progress.pumpkins ?? 0) < PUMPKIN_CAR.pumpkins)
-    ) {
+    if (!getState().roam) {
       $('body').value = progress.body;
       return;
     }
@@ -799,7 +795,7 @@ export function createWorldUI({
     update(now) {
       const s = getState();
       $('body').disabled = !s.roam;
-      $('body').querySelector('[value="golf"]').disabled = !progress.discovered.includes('golf');
+      $('body').querySelector('[value="golf"]').disabled = false;
       $('shell-row').hidden = progress.body !== 'jet';
       $('vehicle-note').textContent = !s.roam
         ? 'Vehicle change in free drive'

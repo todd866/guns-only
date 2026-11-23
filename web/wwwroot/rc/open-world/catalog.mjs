@@ -716,17 +716,13 @@ export const earlyCupsComplete = state =>
     [state?.raceWins?.[id], state?.wins?.[id]].some(t => Number.isFinite(t) && t > 0)
   );
 // The lab follows the ordinary base cups and specimen hunt; the portal follows its finale.
-export const dreamlandUnlocked = state => specimensComplete(state) && earlyCupsComplete(state);
-export const secretLabUnlocked = dreamlandUnlocked;
-export const alienWorldUnlocked = state =>
-  secretLabUnlocked(state) &&
-  ['dreamland'].some(id => [state?.raceWins?.[id], state?.wins?.[id]].some(t => Number.isFinite(t) && t > 0));
-export const canEnter = (state, p) =>
-  p?.alien ? alienWorldUnlocked(state) : p?.id === 'lab' ? secretLabUnlocked(state) : true;
-// Ordinary base geography is visitable even when its challenge is locked.
-export const canVisit = (state, p) => !!p && (!p.alien || alienWorldUnlocked(state));
-export const canEnterEvent = (state, event) =>
-  event?.alien ? alienWorldUnlocked(state) : canEnter(state, locationById(event?.location));
+export const dreamlandUnlocked = () => true;
+export const secretLabUnlocked = () => true;
+export const alienWorldUnlocked = () => true;
+export const canEnter = (state, p) => Boolean(p);
+// Open world: every charted place and alternate world is accessible from minute one.
+export const canVisit = (state, p) => Boolean(p);
+export const canEnterEvent = (state, event) => Boolean(event);
 /** Nearest place the kid can go but has not found yet (roam ribbon target). */
 export function nearestUndiscoveredLocation(state, pos) {
   let best = null,
@@ -825,12 +821,9 @@ export function loadProgress(storage) {
     golfBest: Number.isInteger(v?.golfBest) && v.golfBest > 0 ? v.golfBest : null,
     wins,
     raceWins,
-    body:
-      ['buggy', 'monster', 'rally', 'pickup', 'golf', 'pumpkin'].includes(v?.body) &&
-      (v.body !== 'golf' || v?.discovered?.includes('golf')) &&
-      (v.body !== 'pumpkin' || v?.pumpkins >= 20)
-        ? v.body
-        : 'jet',
+    body: ['buggy', 'monster', 'rally', 'pickup', 'golf', 'pumpkin'].includes(v?.body)
+      ? v.body
+      : 'jet',
     shell: ['viper', 'eagle', 'hog', 'raptor', 'flanker'].includes(v?.shell) ? v.shell : 'viper',
     paint: PAINTS.some(p => p.color === v?.paint) ? v.paint : PAINTS[0].color,
     trim: TRIMS.some(p => p.color === v?.trim) ? v.trim : TRIMS[0].color,

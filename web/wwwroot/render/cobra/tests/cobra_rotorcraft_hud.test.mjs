@@ -614,3 +614,39 @@ test("Hold the Bridge mounts the production HUD with rotorcraft extras", async (
   assert.match(bridge, /governor_saturated/);
   assert.match(bridge, /true_airspeed_mps/);
 });
+
+test("co-located world-projected tactical, lead, and designation labels separate vertically", () => {
+  const authority = cobraHudBattleAuthority();
+  const model = cobraRotorcraftHudModel(authority);
+  const ctx = recordingHudContext();
+  // Keep translate offsets visible in recorded fillText y coordinates so vertical separation is verifiable directly.
+  let tx = 0;
+  let ty = 0;
+  const stack = [];
+  const origSave = ctx.save;
+  const origRestore = ctx.restore;
+  ctx.save = () => { stack.push([tx, ty]); origSave(); };
+  ctx.restore = () => { [tx, ty] = stack.pop() ?? [0, 0]; origRestore(); };
+  ctx.translate = (x, y) => { tx += x; ty += y; };
+  ctx.fillText = (text, x, y) => {
+    ctx.textCalls.push({ text, x: tx + x, y: ty + y, fillStyle: ctx.fillStyle });
+  };
+
+  drawCobraRotorcraftHud(ctx, model, {
+    width: 1280,
+    height: 720,
+    projectWorldPoint: () => ({ x: 640, y: 320, inFrame: true }),
+  });
+
+  const worldLabels = ctx.textCalls.filter((call) =>
+    call.x >= 650 && call.x <= 680 && call.y >= 240 && call.y <= 400
+  );
+  assert.ok(worldLabels.length >= 3, `expected tactical + lead + designation labels, got ${worldLabels.length}`);
+  const ys = worldLabels.map((c) => c.y).sort((a, b) => a - b);
+  for (let i = 1; i < ys.length; i += 1) {
+    assert.ok(
+      ys[i] - ys[i - 1] >= 12,
+      `expected >= 12px vertical separation between overlapping world labels, got ${ys.join(", ")}`,
+    );
+  }
+});
