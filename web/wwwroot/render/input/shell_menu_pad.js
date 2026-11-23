@@ -58,6 +58,7 @@ export function installShellMenuPad({
   });
   const menuPad = createMenuPad({
     doc,
+    requirePad: true,
     root: () => {
       const here = surface();
       if (here === "settings") return settingsScreen;
@@ -65,6 +66,22 @@ export function installShellMenuPad({
       return null;
     },
     back: pressEscape,
+    initial: () => {
+      const here = surface();
+      const usable = (el) => el && el.offsetParent !== null && !el.disabled && !el.hidden;
+      if (here === "settings") {
+        const close = settingsScreen?.querySelector("#settings-close");
+        if (usable(close)) return close;
+      } else if (here === "ready") {
+        const f22Again = readyScreen?.dataset?.f22Result
+          ? readyScreen.querySelector("#f22-again")
+          : null;
+        if (usable(f22Again)) return f22Again;
+        const start = readyScreen?.querySelector("#ready-start");
+        if (usable(start)) return start;
+      }
+      return null;
+    },
   });
   const started = new Map();
   const frame = (now) => {

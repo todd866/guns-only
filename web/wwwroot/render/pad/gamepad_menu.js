@@ -31,10 +31,11 @@ function direction(pads) {
   }
   return null;
 }
-// createMenuPad({root, back, initial}) → poll(pads, now) returns true when it used the input.
+// createMenuPad({root, back, initial, requirePad}) → poll(pads, now) returns true when it used the input.
 // root(): the open menu element or null. back(): close it / resume.
 // initial(): the control to highlight first. Omitted means the first control.
-export function createMenuPad({root, back, doc = globalThis.document, initial}) {
+// requirePad: when true, idle without connected pads (clears .pad-focus and never steals DOM focus).
+export function createMenuPad({root, back, doc = globalThis.document, initial, requirePad = false}) {
   let held = '',
     nextAt = 0,
     a = false,
@@ -56,7 +57,7 @@ export function createMenuPad({root, back, doc = globalThis.document, initial}) 
     };
   return (pads, now) => {
     const live = Array.from(pads ?? []).filter(p => p?.connected),
-      r = root(),
+      r = requirePad && live.length === 0 ? null : root(),
       aNow = live.some(p => pressed(p, MENU_CONFIRM)),
       bNow = live.some(p => pressed(p, MENU_BACK)),
       dir = direction(live);
