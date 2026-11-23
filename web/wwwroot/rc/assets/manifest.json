@@ -1148,8 +1148,8 @@
       "locked": false,
       "path": "placements/example-farmstead.json",
       "provenance": "placements/example-farmstead.provenance.json",
-      "sha256": "21ee2b6da46ea91a79bab6cb317be2a38bffe2b2df74fe40122e36bffa5aa1ab",
-      "sizeBytes": 7120
+      "sha256": "31fbb550e500640c5dcef8c2686eebf4d0a8c4c8bafcf0fbe2dbd0c099c6a59d",
+      "sizeBytes": 7152
     },
     {
       "id": "placements-example-picnic-area-json",

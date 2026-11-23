@@ -4,14 +4,8 @@
 // The left stick is never both steering and throttle. Where RT is the throttle,
 // pushing the stick up does nothing to the speed.
 import {applyFeel} from './control-feel.mjs';
-import {FLIGHT_PAD, leverAxis, pedalAxis} from './flight_layout.mjs';
-
-export const STICK_DEAD = 0.15;
-
-export function stickAxis(v) {
-  v = Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
-  return Math.abs(v) < STICK_DEAD ? 0 : (Math.sign(v) * (Math.abs(v) - STICK_DEAD)) / (1 - STICK_DEAD);
-}
+import {FLIGHT_PAD, STICK_DEAD, leverAxis, pedalAxis, stickAxis} from './flight_layout.mjs';
+export {STICK_DEAD, stickAxis};
 
 const clampAxis = v => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
 

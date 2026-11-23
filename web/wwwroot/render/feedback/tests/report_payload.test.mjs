@@ -78,7 +78,7 @@ test("Report key is unbound, reserved from rebinding, and appears in settings an
   const source = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
   const hud = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
   assert.match(source, /appendBindingKey\(reportCell, "F8"\)/);
-  assert.match(hud, /bracketizeLegendLine\(line\)/);
+  assert.match(hud, /bracketizeLegendLine\((?:this\.toyLine\()?line\)?\)/);
   assert.doesNotMatch(source, /event.code === "F8"/); // handled only by the report controller
   assert.match(source, /event.code === "Backquote"[\s\S]*?emitFlightTestSyncMarker/);
 });

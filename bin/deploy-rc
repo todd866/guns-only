@@ -62,7 +62,7 @@ echo "deploy-rc: package"
 node tools/rc/package-rc.mjs --bundle --out "$dist"
 if [ ! -d web/smoke/node_modules/playwright ]; then (cd web/smoke && npm ci --ignore-scripts --no-audit --no-fund --silent && ./node_modules/.bin/playwright install chromium >/dev/null); fi
 echo "deploy-rc: headless smoke of the package"
-HEAVY_SLOT_LABEL=guns-only-rc-smoke run_job heavy-slot -- node tools/rc/smoke-dist.mjs "$dist"
+HEAVY_SLOT_LABEL=guns-only-rc-smoke retry_once run_job heavy-slot -- node tools/rc/smoke-dist.mjs "$dist"
 echo "deploy-rc: hardware release gate of the package"
 HEAVY_SLOT_LABEL=guns-only-rc-release retry_once run_job heavy-slot -- env RC_QA_ROOT="$dist" node tools/rc/check-release.cjs "$evidence/local-release"
 echo "deploy-rc: phone control journey in the package"

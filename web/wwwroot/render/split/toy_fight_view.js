@@ -2,10 +2,10 @@
 // each. Pads come from the Gamepad API; menus reuse the RC pad helpers.
 
 import * as THREE from "../../vendor/three.module.js";
-import {createCoach} from "../../rc/coach.mjs";
-import {createMenuPad} from "../../rc/gamepad-menu.mjs";
-import {joinCardVisible, menuPlayersButton} from "../../rc/join.mjs";
-import {padKind, padSvg} from "../../rc/pad-art.mjs";
+import {createCoach} from "../pad/coach.js";
+import {createMenuPad} from "../pad/gamepad_menu.js";
+import {joinCardVisible, menuPlayersButton} from "../pad/join.js";
+import {padKind, padSvg} from "../pad/pad_art.js";
 import {attachHold, goHome} from "../../tv/return.mjs";
 import {downedToyPose} from "../toy/toy_pass.js";
 import {ARMY_COLOR} from "./toy_cast.mjs";

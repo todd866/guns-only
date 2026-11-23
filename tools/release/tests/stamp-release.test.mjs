@@ -96,6 +96,12 @@ test("stamp advances only the identity constant and the status candidate line", 
     237,
     238,
   ), "Next candidate: Build 238, not deployed — example.\n");
+  assert.equal(stampSource(
+    "docs/STATUS.md",
+    "Production: Build 237, revision abc.\nNext candidate: none queued.\n",
+    237,
+    238,
+  ), "Production: Build 237, revision abc.\nNext candidate: Build 238, not deployed.\n");
   const app = `import "./hud.js?v=${RELEASE_QUERY_TOKEN}";\n`;
   assert.equal(stampSource("web/wwwroot/app.js", app, 237, 238), app);
 });

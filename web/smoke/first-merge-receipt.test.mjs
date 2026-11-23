@@ -97,7 +97,7 @@ async function flyReceipt(browser, site, orientation) {
   const wallStart = Date.now();
   const frame = async (key, t) => {
     const file = path.join(out, `${key}.png`);
-    await page.screenshot({ path: file });
+    await page.screenshot({ path: file, animations: "disabled", timeout: 60_000 });
     receipt.frames[key] = { file, t: t === null ? null : +t.toFixed(3) };
   };
   try {

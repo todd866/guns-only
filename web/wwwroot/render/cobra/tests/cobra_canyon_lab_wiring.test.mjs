@@ -36,9 +36,9 @@ test("Cobra Canyon lab consumes the authored planner and bounded presentation", 
     main,
     /GROUND BATTLE LIVE|BATTLE LIVE ·|GROUND FIRE ACTIVE|EXCHANGES ACTIVE/,
   );
-  assert.match(main, /const caption = objectiveCaption/);
-  assert.match(main, /setText\(objectiveLine, copy\.line\)/);
-  assert.match(main, /setText\(objectiveDetail, copy\.detail\)/);
+  assert.match(main, /const caption = (?:presentCaption\()?objectiveCaption/);
+  assert.match(main, /setText\(objectiveLine, (?:toyLine\()?copy\.line\)?\)/);
+  assert.match(main, /setText\(objectiveDetail, (?:toyLine\()?copy\.detail\)?\)/);
   assert.doesNotMatch(main, /FRIENDLIES ENGAGED/,
     "combat_live alone must not overclaim which faction fired the current exchange");
   assert.match(main, /ground_war/,

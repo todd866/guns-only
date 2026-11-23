@@ -50,7 +50,7 @@ async function withHud(viewport, run) {
 async function screenshot(page, name) {
   if (!process.env.HUD_REVIEW_SHOTS) return;
   await mkdir(process.env.HUD_REVIEW_SHOTS, { recursive: true });
-  await page.screenshot({ path: `${process.env.HUD_REVIEW_SHOTS}/${name}.png` });
+  await page.screenshot({ path: `${process.env.HUD_REVIEW_SHOTS}/${name}.png`, animations: "disabled", timeout: 60_000 });
 }
 
 test("390px BVR/heat/G header preserves weapons and fuel and leaves contact data at its locator", async () => {

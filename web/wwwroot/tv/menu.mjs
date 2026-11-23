@@ -1,7 +1,7 @@
 // TV launcher menu: which games, where the gold highlight moves, which one
 // was launched last. Geometry matches rc/gamepad-menu.mjs so a stick step
 // here is the same step the pad will take on the tiles.
-import {nearest} from "../rc/gamepad-menu.mjs";
+import {nearest} from "../render/pad/gamepad_menu.js";
 
 export const MAX_ROWS = 2;
 export const LAST_KEY = "tv.lastGame";

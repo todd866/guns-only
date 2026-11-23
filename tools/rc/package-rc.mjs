@@ -15,6 +15,8 @@ const SHARED_DIRS = [
   { name: 'visual', dir: path.join(WWW, 'render/visual/shared'), any: true },
   // MacBook key caps, shared with the flight shell (14298e08); rc/key-hints.js re-exports them.
   { name: 'input', dir: path.join(WWW, 'render/input'), files: new Set(['key_hints.js']) },
+  // Shared controller layout, art, coach, join, menu navigation and toy-plane physics.
+  { name: 'pad', dir: path.join(WWW, 'render/pad'), any: true },
   // Hold Start to leave for the TV launcher (only live when the game was opened from it).
   { name: 'tv', dir: path.join(WWW, 'tv'), files: new Set(['return.mjs']) },
 ];

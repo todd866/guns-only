@@ -1,5 +1,5 @@
 import { advanceCobraCollectiveLever } from "./cobra_control_profile.js";
-import { FLIGHT_PAD, faceIndex, leverAxis, pedalAxis } from "../../rc/flight_layout.mjs";
+import { FLIGHT_PAD, faceIndex, leverAxis, pedalAxis } from "../pad/flight_layout.js";
 
 const DEFAULT_COLLECTIVE_FULL_TRAVEL_PER_SECOND = 0.40;
 const DEFAULT_CYCLIC_FULL_TRAVEL_PER_SECOND = 2.5;

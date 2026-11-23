@@ -6,10 +6,10 @@
 // split-screen 2P toy fight and seats player two (rc/join.mjs owns who counts
 // as the second pad). While the toy-fight overlay is open it reads its own
 // pads, so this module stands down entirely.
-import {createMenuPad} from "../../rc/gamepad-menu.mjs";
-import {joinPadIndex} from "../../rc/join.mjs";
+import {createMenuPad} from "../pad/gamepad_menu.js";
+import {joinPadIndex} from "../pad/join.js";
 import {applyMenu} from "../split/toy_session.mjs";
-import {FLIGHT_PAD} from "../../rc/flight_layout.mjs";
+import {FLIGHT_PAD} from "../pad/flight_layout.js";
 
 /** Which shell surface the pad should drive. Toy fight open means none. */
 export function shellMenuSurface({toyFightOpen, settingsOpen, readyOpen}) {

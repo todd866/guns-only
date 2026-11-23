@@ -3,8 +3,8 @@
 // Gamepad index is a different letter, so darts follow the printed A.
 // Deadzone is wider than a desk stick: a couch pad rests noisy.
 // The rows come from the one shared flight layout (rc/flight_layout.mjs).
-import {padKind} from "../../rc/pad-art.mjs";
-import {FLIGHT_PAD, faceIndex, leverAxis, pedalAxis} from "../../rc/flight_layout.mjs";
+import {padKind} from "../pad/pad_art.js";
+import {FLIGHT_PAD, faceIndex, leverAxis, pedalAxis} from "../pad/flight_layout.js";
 
 export {faceIndex};
 

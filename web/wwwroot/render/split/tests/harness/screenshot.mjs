@@ -2,12 +2,39 @@
 // Headless Chrome shots of the real toy-fight overlay, light and dark.
 // Chrome aborts (SIGABRT) inside this workspace sandbox; run it on the host.
 import { spawn } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serveStatic } from "../../../hud/tests/harness/static_server.mjs";
 
-const chrome = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+function defaultChromeBinary() {
+  if (process.env.CHROME) return process.env.CHROME;
+  const cache = join(homedir(), "Library/Caches/ms-playwright");
+  if (existsSync(cache)) {
+    const dirs = readdirSync(cache).sort().reverse();
+    for (const d of dirs) {
+      if (d.startsWith("chromium_headless_shell-")) {
+        for (const sub of ["chrome-headless-shell-mac-arm64", "chrome-headless-shell-mac-x64"]) {
+          const bin = join(cache, d, sub, "chrome-headless-shell");
+          if (existsSync(bin)) return bin;
+        }
+      }
+    }
+    for (const d of dirs) {
+      if (d.startsWith("chromium-")) {
+        for (const sub of ["chrome-mac-arm64", "chrome-mac-x64"]) {
+          const bin = join(cache, d, sub, "Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
+          if (existsSync(bin)) return bin;
+        }
+      }
+    }
+  }
+  return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+}
+
+const chrome = defaultChromeBinary();
 const WWWROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const OUT = resolve(process.env.TOY_FIGHT_SHOT_DIR ?? join(process.cwd(), "tmp/toy-fight-shots"));
 const profile = join(OUT, "chrome-profile");

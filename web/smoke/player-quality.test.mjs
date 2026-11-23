@@ -66,7 +66,7 @@ test("published practice owns staging, real input, pause, restart and the local 
     assert.ok(geometry.scroll <= geometry.width + 1);
     assert.ok(geometry.left >= 0 && geometry.right <= 391);
     const capture = process.env.SMOKE_ARTIFACT_DIR || process.env.MEDEVAC_QA_CAPTURE_DIR;
-    if (capture) { await mkdir(capture, { recursive: true }); await page.screenshot({ path: path.join(capture, "pilot-logbook-phone.png") }); }
+    if (capture) { await mkdir(capture, { recursive: true }); await page.screenshot({ path: path.join(capture, "pilot-logbook-phone.png"), animations: "disabled", timeout: 60_000 }); }
     await page.keyboard.press("Escape");
     assert.equal(await dialog.isVisible(), false);
     assert.deepEqual(errors, []);

@@ -1,7 +1,7 @@
 // TV game launcher. The pad moves a gold highlight; A launches; B leaves
 // fullscreen. The menu model (which game, last game) lives in menu.mjs.
-import {createMenuPad} from "../rc/gamepad-menu.mjs";
-import {padKind, padSvg} from "../rc/pad-art.mjs";
+import {createMenuPad} from "../render/pad/gamepad_menu.js";
+import {padKind, padSvg} from "../render/pad/pad_art.js";
 import {GAMES, columnsFor, storedId, writeLast} from "./menu.mjs";
 
 const theme = new URLSearchParams(location.search).get("theme");

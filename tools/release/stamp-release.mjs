@@ -60,10 +60,17 @@ export function stampSource(relativePath, source, currentBuild, nextBuild) {
   }
   if (relativePath === STATUS) {
     const current = candidateLine(currentBuild);
-    if (!source.includes(current)) {
-      throw new Error(`${STATUS} has no "${current}" line`);
+    if (source.includes(current)) {
+      return source.replaceAll(current, candidateLine(nextBuild));
     }
-    return source.replaceAll(current, candidateLine(nextBuild));
+    const shipped = new RegExp(`^Production: Build ${currentBuild},`, "m").test(source);
+    if (shipped && /^Next candidate: none queued\.?$/m.test(source)) {
+      return source.replace(
+        /^Next candidate: none queued(\.?)$/m,
+        (_, dot) => `${candidateLine(nextBuild)}${dot ? ", not deployed." : ""}`,
+      );
+    }
+    throw new Error(`${STATUS} has no "${current}" line`);
   }
   return source;
 }

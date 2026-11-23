@@ -1,7 +1,7 @@
 // Split-screen toy fight. Dogfight is two pads, first to 5. Co-op is both
 // pads against the cast. The second pad's Start joins; its stick replaces AI.
 
-import {joinPadIndex} from "../../rc/join.mjs";
+import {joinPadIndex} from "../pad/join.js";
 import {CAST, castAt, hitAccepted} from "./toy_cast.mjs";
 import {aiCommand} from "./toy_ai.mjs";
 import {assistDirection, craftRadius, gunsightLead, noseOf, stepCraft} from "./toy_flight.mjs";

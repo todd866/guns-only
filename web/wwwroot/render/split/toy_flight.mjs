@@ -9,7 +9,7 @@
 // craft.assist. Choppers keep helicopter behaviour. TOY_PLANE is this game's
 // airframe; it is a param, not a retune of the shared model.
 
-import {gunsightLead, stepAirplane} from "../../rc/physics/airplane.mjs";
+import {gunsightLead, stepAirplane} from "../pad/airplane.js";
 
 export const WORLD = Object.freeze({half: 42, floor: 0.8, ceiling: 26});
 
