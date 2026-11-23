@@ -1,0 +1,46 @@
+name: GunsOnlyiOS
+options:
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: U87MQBZKJ5
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "447"
+targets:
+  GunsOnlyiOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+      - path: Payload/wwwroot
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.iantodd.gunsonly
+        PRODUCT_NAME: GunsOnlyiOS
+        INFOPLIST_FILE: App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    scheme:
+      testTargets:
+        - GunsOnlyiOSTests
+  GunsOnlyiOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: GunsOnlyiOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"

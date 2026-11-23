@@ -1,0 +1,6 @@
+Payload/
+GunsOnlyiOS.xcodeproj/
+build/
+DerivedData/
+*.ipa
+App/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>GunsOnlySim</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <NativeLib Condition="'$(RuntimeIdentifier)' != 'ios-arm64'">Shared</NativeLib>
+    <NativeLib Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">Static</NativeLib>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../sim/GunsOnly.Sim.csproj" />
+  </ItemGroup>
+
+</Project>
