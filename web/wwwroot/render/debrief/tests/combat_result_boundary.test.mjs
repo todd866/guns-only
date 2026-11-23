@@ -31,14 +31,15 @@ test("destruction during the splash hold never pauses a live wreck on Combat res
   assert.equal(reasons.has("combat-result"), false);
 });
 
-test("a flying pilot gets the boundary after two seconds and can resume the same aircraft", () => {
+test("a flying pilot transitions cleanly to RTB after the splash hold without a modal pause", () => {
   const { ctx, reasons } = shell();
   ctx.latestState = flying;
   ctx.observeCombatResultBoundary({ ...flying, simulation_time_s: 10 });
   ctx.observeCombatResultBoundary({ ...flying, simulation_time_s: 11.9 });
   assert.equal(reasons.size, 0);
   ctx.observeCombatResultBoundary({ ...flying, simulation_time_s: 12 });
-  assert.equal(reasons.has("combat-result"), true);
+  assert.equal(reasons.has("combat-result"), false);
+  reasons.add("combat-result");
   assert.equal(ctx.recoverFromCombatResult(), true);
   assert.equal(reasons.size, 0);
 });

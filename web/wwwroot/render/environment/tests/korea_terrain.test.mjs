@@ -1844,8 +1844,12 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(ukraine.fragmentShader, /aerialOpen \* 0\.22/,
     "mid-distance haze may carry a slight blue tint, gone at full opacity");
   assert.equal(ukraine.uniforms.uAtmosphereDensityScale.value, 0.32);
-  assert.deepEqual(ukraine.uniforms.uAtmosphereHazeColor.value.toArray(),
-    [0.48, 0.59, 0.68]);
+  const [hazeR, hazeG, hazeB] = ukraine.uniforms.uAtmosphereHazeColor.value.toArray();
+  assert.ok(hazeB > hazeR,
+    `soft-world haze must stay cool toward the horizon, got r=${hazeR} b=${hazeB}`);
+  assert.ok(Math.max(hazeR, hazeG, hazeB) - Math.min(hazeR, hazeG, hazeB) < 0.2,
+    "haze must stay nearly desaturated so distance never reads as sea");
+  assert.ok(hazeG > 0.7, "the far field must be pale, not a mid-tone wash");
   assert.equal(ukraine.uniforms.uAtmosphereHazeMix.value, 0.72);
   assert.ok(ukraine.uniforms.uWorldEdgeM, "stream-edge bury uniform must exist");
   assert.equal(ukraine.uniforms.uSnowCover01.value, 0,

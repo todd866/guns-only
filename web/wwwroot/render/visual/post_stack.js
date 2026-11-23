@@ -2,11 +2,13 @@ import {
   ACESFilmicToneMapping,
   AgXToneMapping,
   CineonToneMapping,
+  HalfFloatType,
   LinearToneMapping,
   NoToneMapping,
   ReinhardToneMapping,
   SRGBColorSpace,
   Vector2,
+  WebGLRenderTarget,
 } from "../../vendor/three.module.js";
 import { EffectComposer } from "../../vendor/three/addons/postprocessing/EffectComposer.js";
 import { OutputPass } from "../../vendor/three/addons/postprocessing/OutputPass.js";
@@ -15,6 +17,54 @@ import { ShaderPass } from "../../vendor/three/addons/postprocessing/ShaderPass.
 import { SMAAPass } from "../../vendor/three/addons/postprocessing/SMAAPass.js";
 import { UnrealBloomPass } from "../../vendor/three/addons/postprocessing/UnrealBloomPass.js";
 import { FXAAShader } from "../../vendor/three/addons/shaders/FXAAShader.js";
+
+/** Painted-frame finish: split-tone plus uniform paper-grain tooth in display space after OutputPass. */
+export const PaintedFinishShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uGrain: { value: 0.016 },
+    uSplitTone: { value: 1.0 },
+    uVignette: { value: 0.16 },
+    uFrame: { value: 0 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform float uGrain;
+    uniform float uSplitTone;
+    uniform float uVignette;
+    uniform float uFrame;
+    varying vec2 vUv;
+
+    void main() {
+      vec4 texel = texture2D(tDiffuse, vUv);
+      vec3 color = texel.rgb;
+
+      float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+      vec3 toned = mix(
+        color * vec3(0.94, 0.97, 1.06),
+        color * vec3(1.04, 1.01, 0.95),
+        smoothstep(0.25, 0.85, luma)
+      );
+      color = mix(color, toned, uSplitTone);
+
+      vec2 seed = gl_FragCoord.xy + vec2(uFrame * 17.0, uFrame * 23.0);
+      float grain = fract(sin(dot(seed, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+      color += grain * uGrain;
+
+      vec2 offset = vUv - 0.5;
+      color *= 1.0 - dot(offset, offset) * uVignette;
+
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0), texel.a);
+    }
+  `,
+};
 
 const TONE_MAPPING = {
   none: NoToneMapping,
@@ -46,8 +96,14 @@ export function detectPostProcessingCapabilities(renderer, overrides = {}) {
     hasExtension("EXT_color_buffer_half_float") ||
     renderer.extensions === undefined
   );
+  const maxSamples = overrides.maxSamples ?? (() => {
+    const gl = renderer.getContext?.();
+    const limit = gl?.getParameter?.(gl.MAX_SAMPLES);
+    return Number.isFinite(limit) ? limit : 0;
+  })();
   return {
     halfFloatColorBuffer,
+    maxSamples,
     supportsSmaa: overrides.supportsSmaa ?? typeof globalThis.Image === "function",
     xr: overrides.xr ?? renderer.xr?.enabled === true,
   };
@@ -80,6 +136,7 @@ export function derivePostStackPlan(config, capabilities = {}) {
     ? "aces_filmic"
     : requestedToneMapping;
   passes.push(`output-${effectiveToneMapping.replace("_filmic", "")}-srgb`);
+  if (post.paintedFinish?.enabled) passes.push("paintedFinish");
   return { mode: "composer", passes, antialiasing, reason: null };
 }
 
@@ -119,9 +176,19 @@ export class ThreeR160PostStack {
       return false;
     }
 
-    this.composer = new EffectComposer(this.renderer);
+    // Multisampled half-float composer target so MSAA sharpens silhouettes, tracers, and wires.
+    const maxSamples = Math.max(0, Math.floor(Number(this.capabilities.maxSamples) || 0));
+    const requestedSamples = Math.max(0, Math.floor(Number(this.config.postProcessing?.samples ?? 4) || 0));
+    const msaaSamples = maxSamples > 0 ? Math.min(requestedSamples, maxSamples) : 0;
+    const target = new WebGLRenderTarget(
+      Math.max(1, Math.round(this.width * this.pixelRatio)),
+      Math.max(1, Math.round(this.height * this.pixelRatio)),
+      { type: HalfFloatType, samples: msaaSamples },
+    );
+    this.composer = new EffectComposer(this.renderer, target);
     this.composer.setPixelRatio(this.pixelRatio);
     this.composer.setSize(this.width, this.height);
+    this.msaaSamples = msaaSamples;
 
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
@@ -153,6 +220,16 @@ export class ThreeR160PostStack {
     this.outputPass = new OutputPass();
     this.composer.addPass(this.outputPass);
     this.passes.push(this.outputPass);
+
+    const finish = this.config.postProcessing?.paintedFinish;
+    if (finish?.enabled) {
+      this.finishPass = new ShaderPass(PaintedFinishShader);
+      this.finishPass.uniforms.uGrain.value = finish.grain;
+      this.finishPass.uniforms.uSplitTone.value = finish.splitTone;
+      this.finishPass.uniforms.uVignette.value = finish.vignette;
+      this.composer.addPass(this.finishPass);
+      this.passes.push(this.finishPass);
+    }
     return true;
   }
 
@@ -184,6 +261,9 @@ export class ThreeR160PostStack {
 
   render(deltaSeconds) {
     if (this.disposed) return false;
+    if (this.finishPass) {
+      this.finishPass.uniforms.uFrame.value = (this.finishPass.uniforms.uFrame.value + 1) % 1024;
+    }
     if (this.composer) this.composer.render(deltaSeconds);
     else this.renderer.render(this.scene, this.camera);
     return true;
@@ -192,6 +272,7 @@ export class ThreeR160PostStack {
   diagnostics() {
     return {
       ...this.plan,
+      msaaSamples: this.msaaSamples ?? 0,
       width: this.width,
       height: this.height,
       pixelRatio: this.pixelRatio,
@@ -210,6 +291,7 @@ export class ThreeR160PostStack {
     this.bloomPass = null;
     this.aaPass = null;
     this.outputPass = null;
+    this.finishPass = null;
   }
 
   dispose() {

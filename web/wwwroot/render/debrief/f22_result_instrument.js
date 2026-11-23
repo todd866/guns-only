@@ -9,7 +9,12 @@
 //   ▸      Close before firing  [Practise guns]        one correction, only when evidence gives one
 //   [Again] [Recover] [Logbook] [Aircraft] [Settings]
 
-import { isF22Sortie } from "./f22_sortie_result.js";
+import {
+  f22TouchdownSummary,
+  isF22Sortie,
+  landingCorrectionForDeviations,
+  parseOverheadGateRecords,
+} from "./f22_sortie_result.js";
 
 export const F22_UNTOUCHED_BONUS = 250;
 export const F22_LANDING_BONUS = 150;
@@ -267,6 +272,16 @@ export function f22ResultInstrument(state, {
     recoveryDetail.push(`fuel ${Math.round(fuel)} lb`);
   if (recovery === "recovered" && Number.isFinite(margin))
     recoveryDetail.push(`reserve ${margin < 0 ? "−" : "+"}${Math.round(Math.abs(margin))} lb`);
+  const touchdown = f22TouchdownSummary(state);
+  if (touchdown) recoveryDetail.push(touchdown.value);
+  const overheadGates = parseOverheadGateRecords(state);
+  const landingFix = !correction && state.runway_touchdown_contact === true
+    ? landingCorrectionForDeviations(state.runway_touchdown_deviations) : "";
+  const effectiveCorrection = correction || landingFix;
+  const effectivePracticeExercise = effectiveCorrection
+    ? (practiceExercise || (landingFix ? "recovery" : ""))
+    : practiceExercise;
+  const effectivePracticeLabel = practiceLabel || (landingFix ? "Practise landing" : "");
 
   const scoreValue = `${totalScore} · W${wave} ×${multiplierText} · 0-hit +${untouchedBonus} · land +${landingBonus}`;
   const scoreLabel = `Run score ${totalScore} · wave ${wave} (×${multiplierText}) ${score} + untouched ${untouchedBonus} + landing ${landingBonus}`;
@@ -353,13 +368,15 @@ export function f22ResultInstrument(state, {
       ? (bfmOutcome === "failed" && bfmCorrection
         ? Object.freeze({ text: bfmCorrection, practiceExercise: "", practiceLabel: "" })
         : null)
-      : correction || practiceExercise
+      : effectiveCorrection || effectivePracticeExercise
       ? Object.freeze({
-        text: correction || "",
-        practiceExercise: practiceExercise || "",
-        practiceLabel: practiceLabel || "Practice",
+        text: effectiveCorrection || "",
+        practiceExercise: effectivePracticeExercise || "",
+        practiceLabel: effectivePracticeLabel || "Practice",
       })
       : null,
+    touchdown,
+    overheadGates: Object.freeze(overheadGates),
     lesson: bfmActive ? Object.freeze({
       id: bfmLesson,
       next: bfmNextLesson,
@@ -482,6 +499,39 @@ export function paintF22ResultInstrument(root, model) {
   setText(opponent, model.opponent.value);
   setLabel(opponent, model.opponent.label);
   setText($("f22-opponent-detail"), model.opponent.label);
+  const tdRow = $("f22-row-touchdown");
+  if (tdRow) {
+    tdRow.hidden = !model.touchdown;
+    if (model.touchdown) {
+      setText($("f22-touchdown"), model.touchdown.value);
+      setLabel(tdRow, model.touchdown.label);
+    }
+  }
+  const gatesRow = $("f22-row-gates");
+  if (gatesRow) {
+    const gates = Array.isArray(model.overheadGates) ? model.overheadGates : [];
+    gatesRow.hidden = gates.length === 0;
+    const gatesContainer = $("f22-gates");
+    if (gatesContainer && typeof gatesContainer.replaceChildren === "function") {
+      gatesContainer.dataset ??= {};
+      const signature = gates.map((g) => `${g.tag}:${g.passed ? 1 : 0}:${g.title}`).join("|");
+      if (gatesContainer.dataset.signature !== signature) {
+        gatesContainer.dataset.signature = signature;
+        const doc = gatesContainer.ownerDocument ?? globalThis.document;
+        gatesContainer.replaceChildren(...gates.map((g) => {
+          const chip = doc.createElement("span");
+          chip.className = "f22-gate-chip";
+          chip.dataset.passed = g.passed ? "true" : "false";
+          chip.title = g.title;
+          chip.setAttribute("aria-label", g.title);
+          chip.textContent = `${g.tag} ${g.passed ? "✓" : "×"}`;
+          return chip;
+        }));
+      }
+      const passedCount = gates.filter((g) => g.passed).length;
+      setText($("f22-gates-summary"), `${passedCount}/${gates.length}`);
+    }
+  }
   const correctionRow = $("f22-row-correction");
   correctionRow.hidden = !model.correction;
   if (model.correction) {

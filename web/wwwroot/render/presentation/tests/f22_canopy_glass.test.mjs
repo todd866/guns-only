@@ -61,3 +61,22 @@ test("F-22 canopy glass follows the eye and body while reflection follows look a
   assert.notEqual(reflection.position.x, forwardReflectionX);
   assert.equal(glass.group.visible, false);
 });
+
+test("F-22 peripheral canopy frame clears central HUD cone and toggles via frameVisible", () => {
+  const glass = createF22CanopyGlass(THREE);
+  assert.equal(glass.frameGroup.visible, false);
+  const coaming = glass.group.getObjectByName("F22_CANOPY_COAMING");
+  const railLeft = glass.group.getObjectByName("F22_CANOPY_RAIL_LEFT");
+  const railRight = glass.group.getObjectByName("F22_CANOPY_RAIL_RIGHT");
+  const bow = glass.group.getObjectByName("F22_CANOPY_BOW_ARCH");
+  assert.ok(coaming && railLeft && railRight && bow);
+  assert.ok(coaming.position.y < -0.45 && coaming.position.z < -0.8, "coaming sits well below pitch ladder");
+  assert.ok(Math.abs(railLeft.position.x) > 0.6 && Math.abs(railRight.position.x) > 0.6);
+
+  updateF22CanopyGlass(glass, { visible: true, frameVisible: true });
+  assert.equal(glass.frameGroup.visible, true);
+  assert.equal(glass.group.visible, true);
+  updateF22CanopyGlass(glass, { visible: false, frameVisible: false });
+  assert.equal(glass.frameGroup.visible, false);
+  assert.equal(glass.group.visible, false);
+});

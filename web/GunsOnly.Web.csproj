@@ -57,6 +57,7 @@
     <Content Update="wwwroot/rc/**/*" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/effects-lab/**/*" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/environment-lab/**/*" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/shader-gate/**/*" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/present/rapier-design/**/*" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/lib/**" CopyToPublishDirectory="Never" />
   </ItemGroup>

@@ -274,6 +274,7 @@ const VOLUME_FRAGMENT = /* glsl */ `
   uniform float uOpticalScale;
   uniform vec3 uSunDirection;
   uniform vec3 uLightColor;
+  uniform vec3 uMidColor;
   uniform vec3 uShadowColor;
   uniform vec3 uFogColor;
   uniform float uFogDensity;
@@ -315,6 +316,14 @@ const VOLUME_FRAGMENT = /* glsl */ `
     return clamp(envelope * base * (0.42 + 0.95 * erosion) - 0.10, 0.0, 1.0);
   }
 
+  // Three flat painted masses (warm top, mid cream, violet-grey base) shared across both paths.
+  vec3 paintedCloudShade(float energy, vec3 shadeColor, vec3 midColor, vec3 lightColor) {
+    float band = smoothstep(0.30, 0.42, energy) * 0.5
+               + smoothstep(0.62, 0.74, energy) * 0.5;
+    vec3 shaded = mix(shadeColor, midColor, smoothstep(0.0, 0.5, band));
+    return mix(shaded, lightColor, smoothstep(0.5, 1.0, band));
+  }
+
   void main() {
     if (vInstanceOpacity <= 0.001) discard;
     vec3 rayDirection = normalize(vWorldSurface - cameraPosition);
@@ -351,8 +360,9 @@ const VOLUME_FRAGMENT = /* glsl */ `
           * cloudDensity(samplePoint + uSunDirection * 290.0);
         float lightTransmission = exp(-1.15 * sunOcclusion);
         float forward = pow(max(0.0, dot(rayDirection, uSunDirection)), 5.0);
-        vec3 lighting = mix(uShadowColor, uLightColor,
-          clamp(0.24 + 0.76 * lightTransmission + 0.18 * forward, 0.0, 1.0));
+        vec3 lighting = paintedCloudShade(
+          clamp(0.24 + 0.76 * lightTransmission + 0.18 * forward, 0.0, 1.0),
+          uShadowColor, uMidColor, uLightColor);
         float alpha = 1.0 - exp(-density * uOpticalScale * stepLength);
         scattered += transmittance * alpha * lighting;
         transmittance *= 1.0 - alpha;
@@ -435,6 +445,7 @@ const IMPOSTOR_FRAGMENT = /* glsl */ `
   uniform sampler2D uCloudArt;
   uniform float uCloudArtEnabled;
   uniform vec3 uLightColor;
+  uniform vec3 uMidColor;
   uniform vec3 uShadowColor;
   uniform vec3 uFogColor;
   uniform float uFogDensity;
@@ -458,6 +469,12 @@ const IMPOSTOR_FRAGMENT = /* glsl */ `
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash21(cell), hash21(cell + vec2(1,0)), f.x),
       mix(hash21(cell + vec2(0,1)), hash21(cell + vec2(1)), f.x), f.y);
+  }
+  vec3 paintedCloudShade(float energy, vec3 shadeColor, vec3 midColor, vec3 lightColor) {
+    float band = smoothstep(0.30, 0.42, energy) * 0.5
+               + smoothstep(0.62, 0.74, energy) * 0.5;
+    vec3 shaded = mix(shadeColor, midColor, smoothstep(0.0, 0.5, band));
+    return mix(shaded, lightColor, smoothstep(0.5, 1.0, band));
   }
   void main() {
     vec2 centred = vCloudUv * 2.0 - 1.0;
@@ -499,8 +516,9 @@ const IMPOSTOR_FRAGMENT = /* glsl */ `
     body = mix(body, max(body * 0.34, authoredBody), uCloudArtEnabled * 0.84);
     float lowerShade = smoothstep(0.95, 0.08, vCloudUv.y);
     float depthShade = authoredRear * (1.0 - authoredFront) * 0.24;
-    vec3 color = mix(uLightColor, uShadowColor,
-      clamp(lowerShade * (0.30 + broad * 0.30) + depthShade, 0.0, 0.78));
+    vec3 color = paintedCloudShade(
+      1.0 - clamp(lowerShade * (0.30 + broad * 0.30) * 1.45 + depthShade, 0.0, 0.92),
+      uShadowColor, uMidColor, uLightColor);
     float distanceToCamera = distance(cameraPosition, vWorldCenter);
     float fog = 1.0 - exp(-uFogDensity * uFogDensity
       * distanceToCamera * distanceToCamera);
@@ -774,8 +792,9 @@ export function createTacticalCloudField(THREE, options = {}) {
     uCloudArtEnabled: cloudArtEnabled,
     uOpticalScale: { value: tier === "desktop" ? 0.0018 : 0.00155 },
     uSunDirection: { value: new THREE.Vector3(0.50, 0.28, -0.82).normalize() },
-    uLightColor: { value: new THREE.Color(0xf8f3e8) },
-    uShadowColor: { value: new THREE.Color(0x71838e) },
+    uLightColor: { value: new THREE.Color(0xf8f3e7) },
+    uMidColor: { value: new THREE.Color(0xc4cbdb) },
+    uShadowColor: { value: new THREE.Color(0x6f7aa1) },
     uFogColor: { value: new THREE.Color(0x7898a0) },
     uFogDensity: { value: 0.000055 },
   };

@@ -394,3 +394,32 @@ test("Space and Enter trigger Again once on result screen without firing flight 
   assert.equal(againCount, 2);
   dispatchUp("Enter");
 });
+
+test("landed debrief surfaces physical touchdown telemetry, 7-gate overhead grades, and deviation coaching", async () => {
+  const base = await fixture("f22_recovered_victory.json");
+  const records = [
+    { id: "IP", label: "IP", passed: true, alt_err_ft: 20, speed_err_kt: -5, cross_err_m: 12 },
+    { id: "INITIAL", label: "3 NM INITIAL", passed: true, alt_err_ft: 0, speed_err_kt: 4, cross_err_m: 5 },
+    { id: "BREAK", label: "BREAK", passed: false, alt_err_ft: 260, speed_err_kt: 32, cross_err_m: 40 },
+    { id: "DOWNWIND", label: "DOWNWIND", passed: true, gear_required: true, gear_down: true },
+    { id: "PERCH", label: "PERCH", passed: true, gear_required: true, gear_down: true },
+    { id: "FINAL", label: "FINAL", passed: true, gear_required: true, gear_down: true },
+    { id: "TD", label: "TOUCHDOWN", passed: true, gear_required: true, gear_down: true },
+  ];
+  const landed = {
+    ...base,
+    runway_touchdown_sink_mps: 1.6,
+    runway_touchdown_airspeed_mps: 69.5,
+    runway_touchdown_along_m: 318.4,
+    runway_touchdown_cross_m: -2.1,
+    runway_touchdown_deviations: 2,
+    overhead_gate_records_json: JSON.stringify(records),
+  };
+  const model = f22ResultInstrument(landed, { phase: "final" });
+  assert.equal(model.touchdown.value, "315 fpm · 135 kt · RWY 318 m · CL -2 m");
+  assert.equal(model.overheadGates.length, 7);
+  assert.equal(model.overheadGates[2].tag, "BRK");
+  assert.equal(model.overheadGates[2].passed, false);
+  assert.equal(model.correction.text, "Reduce the descent rate before touchdown.");
+  assert.equal(model.correction.practiceExercise, "recovery");
+});

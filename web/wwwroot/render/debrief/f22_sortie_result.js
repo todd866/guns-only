@@ -19,6 +19,81 @@ const LANDING_CORRECTIONS = [
   [64, "Go around when the landing runs long."],
 ];
 
+const GATE_SHORT_LABELS = Object.freeze({
+  IP: "IP",
+  INITIAL: "INI",
+  BREAK: "BRK",
+  DOWNWIND: "DWN",
+  PERCH: "PCH",
+  FINAL: "FIN",
+  TD: "TD",
+});
+
+/** Single shared correction line for recorded touchdown deviation masks. */
+export function landingCorrectionForDeviations(deviationsValue) {
+  const deviations = number(deviationsValue);
+  if (deviations === null || deviations === 0) return "";
+  return LANDING_CORRECTIONS.find(([mask]) => (Math.trunc(deviations) & mask) !== 0)?.[1] || "";
+}
+
+/** Honest physical touchdown telemetry formatted from the runway recovery snapshot. */
+export function f22TouchdownSummary(state) {
+  if (state?.runway_touchdown_contact !== true) return null;
+  const sinkMps = number(state.runway_touchdown_sink_mps);
+  const speedMps = number(state.runway_touchdown_airspeed_mps)
+    ?? number(state.runway_touchdown_forward_mps);
+  const alongM = number(state.runway_touchdown_along_m);
+  const crossM = number(state.runway_touchdown_cross_m);
+  if (sinkMps === null && speedMps === null && alongM === null && crossM === null) return null;
+
+  const parts = [];
+  if (sinkMps !== null) parts.push(`${Math.round(Math.abs(sinkMps) * 196.850394)} fpm`);
+  if (speedMps !== null) parts.push(`${Math.round(Math.max(0, speedMps) * 1.943844)} kt`);
+  if (alongM !== null) parts.push(`RWY ${Math.round(alongM)} m`);
+  if (crossM !== null) {
+    const rounded = Math.round(crossM);
+    parts.push(`CL ${rounded > 0 ? `+${rounded}` : rounded} m`);
+  }
+  if (!parts.length) return null;
+  return Object.freeze({
+    value: parts.join(" · "),
+    label: `Touchdown telemetry: ${parts.join(", ")}`,
+  });
+}
+
+/** Parse per-gate F-22 overhead recovery records from the cold snapshot JSON. */
+export function parseOverheadGateRecords(state) {
+  const raw = state?.overhead_gate_records_json;
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry) => entry && typeof entry.id === "string" && entry.id.trim())
+      .map((entry) => {
+        const id = entry.id.trim().toUpperCase();
+        const tag = GATE_SHORT_LABELS[id] ?? id.slice(0, 3);
+        const passed = entry.passed === true;
+        const details = [entry.label || id, passed ? "passed" : "missed"];
+        const altErr = number(entry.alt_err_ft);
+        if (altErr !== null) details.push(`alt ${altErr > 0 ? "+" : ""}${Math.round(altErr)} ft`);
+        const spdErr = number(entry.speed_err_kt);
+        if (spdErr !== null) details.push(`spd ${spdErr > 0 ? "+" : ""}${Math.round(spdErr)} kt`);
+        const crossErr = number(entry.cross_err_m);
+        if (crossErr !== null) details.push(`CL ${crossErr > 0 ? "+" : ""}${Math.round(crossErr)} m`);
+        if (entry.gear_required === true) details.push(entry.gear_down === true ? "gear down" : "gear UP");
+        return Object.freeze({
+          id,
+          tag,
+          passed,
+          title: details.join(" · "),
+        });
+      });
+  } catch {
+    return [];
+  }
+}
+
 /** The live F-22 sortie (visual merge or Kestrel valley), never a practice exercise. */
 export function isF22Sortie(state) {
   const practice = String(state?.practice_exercise || "none").toLowerCase();

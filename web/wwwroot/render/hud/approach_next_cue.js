@@ -80,6 +80,59 @@ export function formatCueDistanceNm(distanceM) {
 }
 
 export function approachNextCue(state, gates = resolveGuidanceGates(state)) {
+  if (state?.overhead_course_active === true) {
+    const label = String(state?.overhead_next_gate_label || state?.overhead_next_gate_id || "RTB")
+      .trim().toUpperCase().replaceAll("_", " ");
+    const distNm = finite(state?.overhead_next_gate_dist_nm) ?? finite(state?.runway_distance_nm);
+    const distance = distNm !== null ? formatCueDistanceNm(distNm * M_PER_NM) : null;
+    if (!label || distance === null) return null;
+
+    const eastM = finite(state?.px);
+    const northM = finite(state?.pz);
+    const headingDeg = finite(state?.heading_deg);
+    const gateX = finite(state?.overhead_next_gate_x);
+    const gateZ = finite(state?.overhead_next_gate_z);
+    let turnDeg = null;
+    if (eastM !== null && northM !== null && headingDeg !== null
+        && gateX !== null && gateZ !== null) {
+      const bearingDeg = Math.atan2(gateX - eastM, gateZ - northM) * 180 / Math.PI;
+      turnDeg = wrap180(bearingDeg - headingDeg);
+    }
+
+    const rawAltFt = finite(state?.overhead_next_gate_alt_ft);
+    const targetFt = rawAltFt === null ? null : Math.round(rawAltFt / 50) * 50;
+    const altFt = finite(state?.alt_ft);
+    const altErrorFt = targetFt !== null && altFt !== null ? altFt - targetFt : null;
+    const altMark = altErrorFt === null || Math.abs(altErrorFt) <= APPROACH_CUE_ALT_TOLERANCE_FT
+      ? 0 : altErrorFt > 0 ? 1 : -1;
+
+    const rawKcas = finite(state?.overhead_autothrottle_kcas) ?? finite(state?.overhead_next_gate_kcas);
+    const targetKcas = rawKcas === null ? null : Math.round(rawKcas);
+    const passed = finite(state?.overhead_gates_passed);
+    const total = finite(state?.overhead_gates_total);
+    const progress = passed !== null && total !== null && total > 0
+      ? `${Math.trunc(passed)}/${Math.trunc(total)}`
+      : null;
+    const gearCue = state?.overhead_next_gate_needs_gear === true
+      && String(state?.gear_handle || "").toUpperCase() !== "DOWN";
+
+    return Object.freeze({
+      overhead: true,
+      fieldLabel: String(state?.overhead_field_label || "").trim(),
+      progress,
+      label,
+      distance,
+      turnDeg,
+      arrowDeg: quantiseTurnDeg(turnDeg),
+      targetFt,
+      altMark,
+      targetKcas,
+      autoThrottle: state?.overhead_autothrottle_active === true,
+      gearCue,
+      energy: null,
+    });
+  }
+
   if (state?.conventional_rtb_pattern_active !== true
       || state?.approach_guidance_active !== true
       || state?.approach_valid !== true) return null;

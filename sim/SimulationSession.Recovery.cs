@@ -215,6 +215,18 @@ public sealed partial class SimulationSession {
     /// </summary>
     public GunsOnly.Sim.Recovery.ApproachGuidanceState ApproachGuidancePlan => _approachGuidance;
 
+    /// <summary>
+    /// The Build 380 box-to-box overhead (docs/grok-overhaul/design/f22-recovery.md) flies only
+    /// the F-22 visual-merge combat sortie. Practice exercises and Kestrel keep the legacy pattern
+    /// director, whose schedule their tests pin.
+    /// </summary>
+    bool UsesF22OverheadCourse =>
+        Practice is null
+        && _beat.FirstRunValley is null
+        && IsVisualMergeSortie(_beat);
+
+    public GunsOnly.Sim.Recovery.F22OverheadCourse F22Course => _f22Course;
+
     /// <summary>Presentation authority for the F-22's named conventional traffic pattern.</summary>
     public bool ConventionalRtbPatternGuidanceActive =>
         PlayerRtbActive
@@ -414,11 +426,20 @@ public sealed partial class SimulationSession {
             && _beat.PlayerAircraft.Id == AircraftCapability.F22ASurrogate.Id
             && _conventionalRunwayRecovery?.Runway is not null;
 
+        bool f22Course = f22ConventionalRtb && UsesF22OverheadCourse;
         // Touchdown is a presentation boundary, not an eight-Hz guidance event. Clear the
         // airborne pattern before solve decimation can reuse stale gates as generic volumes or
         // briefly re-enable the generic approach-energy text during rollout.
         if (f22ConventionalRtb
             && ConventionalRunwayPhase != RunwayRecoveryPhase.Airborne) {
+            if (f22Course)
+                _f22Course.ObserveTouchdown(
+                    RunwayTouchdown,
+                    RunwayTouchdown.AirspeedMps > 0.0
+                        ? AirData.IndicatedAirspeedMps(RunwayTouchdown.AirspeedMps,
+                            Player.State.Position.Y, RecoveryAtmosphere)
+                        : _player.IndicatedAirspeedMps,
+                    PlayerSystems.AllGearDownAndLocked);
             _configurationTarget = FlightConfigurationTarget.Recovery;
             if (_conventionalCarrierRecovery.Active)
                 _conventionalCarrierRecovery.Reset();
@@ -445,6 +466,23 @@ public sealed partial class SimulationSession {
                     Player.State.Mass,
                     _beat.PlayerAir,
                     PlayerSystemsProfile);
+            if (f22Course) {
+                if (!_f22Course.Armed)
+                    _f22Course.Arm(conventionalRunway, approachCalibratedMps,
+                        _conventionalRunwayRecovery.ReferenceHeightM);
+                _approachGuidance = _f22Course.Step(
+                    Player.State,
+                    _player.IndicatedAirspeedMps,
+                    _player.AirspeedMps,
+                    PlayerSystems.AllGearDownAndLocked,
+                    RecoveryAtmosphere,
+                    _terrainSurface);
+                _configurationTarget = _approachGuidance.Gates.Count > 0
+                    && _approachGuidance.Gates[0].DirtyConfig
+                        ? FlightConfigurationTarget.Recovery
+                        : FlightConfigurationTarget.Combat;
+                return;
+            }
             // Ingress is flown clean. Use the more conservative of the clean level-flight polar
             // at ownship and at pattern entry, so a high-drag combat instant cannot make the
             // drawn energy route implausibly short. Once downwind, the authored gate schedule
@@ -1058,6 +1096,10 @@ public sealed partial class SimulationSession {
         _detents.AirspeedMps = _player.AirspeedMps;
         _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
         _detents.AerodynamicConfiguration = PlayerEffectiveAerodynamicConfiguration;
+        // Full-assist recovery: the autothrottle retards to idle at contact, as a real
+        // autothrottle does, so wheel braking is available without a throttle input.
+        _detents.RecoveryAutoThrottleTargetCasMps = double.NaN;
+        _detents.RecoveryAutoThrottleIdle = RecoveryAssistFull && _f22Course.Armed;
         _detents.Tick(
             _keys,
             _simTimeMs,
@@ -1160,6 +1202,10 @@ public sealed partial class SimulationSession {
         _detents.AirspeedMps = _player.AirspeedMps;
         _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
         _detents.AerodynamicConfiguration = PlayerEffectiveAerodynamicConfiguration;
+        // Full-assist recovery: the autothrottle retards to idle at contact, as a real
+        // autothrottle does, so wheel braking is available without a throttle input.
+        _detents.RecoveryAutoThrottleTargetCasMps = double.NaN;
+        _detents.RecoveryAutoThrottleIdle = RecoveryAssistFull && _f22Course.Armed;
         _detents.Tick(
             _keys,
             _simTimeMs,

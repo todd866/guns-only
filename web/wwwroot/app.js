@@ -90,7 +90,11 @@ import {
 } from "./render/environment/terrain_launch_owner.js";
 import { resolveTerrainPresentationRoute } from "./render/environment/terrain_presentation_route.js";
 import { loadKoreaTerrain } from "./render/environment/korea_terrain.js";
-import { attachSoftWorldGroundHaze } from "./render/environment/soft_world_atmosphere.js";
+import {
+  attachSoftWorldGroundHaze,
+  UKRAINE_SOFT_WORLD_FOG_HEX,
+  UKRAINE_SOFT_WORLD_FOG_HIGH_HEX,
+} from "./render/environment/soft_world_atmosphere.js";
 import { createWinterPrecipitation } from "./render/environment/winter_precipitation.js";
 import { createGuidancePath } from "./render/scene/guidance_path.js";
 import {
@@ -323,6 +327,7 @@ import {
   createDecisionSupportSky,
   createDrone,
   createF14,
+  createF22,
   createGlider,
   createGunEffects,
   createHiddenPresentation,
@@ -332,6 +337,7 @@ import {
   createRapierDispersedStrip,
   createRapierGunDrone,
   createTransport,
+  createWingtipVortexPair,
   updateConventionalRunwayPresentation,
 } from "./render/scene/scene_builders.js?v=__RELEASE_BUILD__";
 import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=__RELEASE_BUILD__";
@@ -5257,7 +5263,6 @@ function observeCombatResultBoundary(state) {
     engagements_won: Number(state.engagements_won) || 0,
     kills: Number(state.kill_count) || 0,
   });
-  setPauseReason("combat-result", true);
 }
 
 function recoverFromCombatResult() {
@@ -7124,7 +7129,7 @@ const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
   // The F-22 is never seen from its own first-person seat, so it keeps the abstract body. The
   // Su-27S opponent is a code-authored, dimensionally correct silhouette (21.9 m, 14.7 m span);
   // it is presentation only: hit and aim geometry remain the simulation's.
-  ["presentation.vehicle.f22a.public-data-surrogate.v1", createDrone],
+  ["presentation.vehicle.f22a.public-data-surrogate.v1", createF22],
   ["presentation.vehicle.su27s.public-data-surrogate.v1", createSu27],
   ["presentation.vehicle.f14a.public-data-surrogate.v1", createF14],
   ["presentation.vehicle.one-way-attack-drone.prototype.v1", createOneWayAttackDrone],
@@ -8165,7 +8170,7 @@ class PresentationAssetManager {
       : null;
   }
 
-  sync(state) {
+  sync(state, { liveChase = false } = {}) {
     this.lastState = state;
     this.requested.playerEntityId = projectedId(state.player_entity_id);
     this.requested.playerPresentationId = projectedId(state.player_presentation_id);
@@ -8231,11 +8236,13 @@ class PresentationAssetManager {
       this.requested.escortEntityId,
     );
     const replayExternal = state.replay_external === true;
+    const externalView = replayExternal || liveChase === true;
     this.cockpitSlot.root.visible = PRODUCTION_AUTHORED_COCKPIT_ENABLED
-      && !replayExternal
+      && !externalView
       && this.requested.cockpitPresentationId !== "";
-    this.playerExteriorSlot.root.visible = replayExternal
-      && String(state.replay_camera || "CHASE") !== "COCKPIT";
+    this.playerExteriorSlot.root.visible = (replayExternal
+      && String(state.replay_camera || "CHASE") !== "COCKPIT")
+      || liveChase === true;
     this.targetSlot.root.visible = opponentPresentationAllowed(state)
       && state.opponent_body_present !== false;
     // Admission gate for asset resolution, not merely a draw toggle: a 1v1 wave must not pay for
@@ -8743,12 +8750,16 @@ class FlightView {
       capacity: VISUAL_QUALITY.tier === "mobile" ? 32 : 56,
       pixelRatio: Math.min(window.devicePixelRatio || 1, VISUAL_QUALITY.pixelRatioCap),
     });
+    this.playerVortices = createWingtipVortexPair(6.75, 1.35);
+    this.banditVortices = createWingtipVortexPair(7.35, 1.85);
     this.scene.add(
       this.banditDestruction,
       this.gunEffects,
       this.aim9Presentation.group,
       this.playerDamageSmoke.points,
       this.banditDamageSmoke.points,
+      this.playerVortices.group,
+      this.banditVortices.group,
     );
 
     this.playerPosition = new THREE.Vector3();
@@ -8761,6 +8772,10 @@ class FlightView {
     this.opponentMuzzleRightPosition = new THREE.Vector3();
     this.playerQuaternion = new THREE.Quaternion();
     this.externalCameraActive = false;
+    this.liveChaseCamera = false;
+    this.casevacActive = false;
+    this.replayExternalActive = false;
+    this.chaseCameraUp = new THREE.Vector3(0, 1, 0);
     this.banditPosition = new THREE.Vector3();
     this.carrierPosition = new THREE.Vector3();
     this.carrierPadlockPosition = new THREE.Vector3();
@@ -8968,18 +8983,17 @@ class FlightView {
         this.sun.intensity = 2.45;
         this.renderer.toneMappingExposure = 1.04;
       } else {
-        this.fogLow.set(0xa8814b);
-        // Stay in the warm dusty family at altitude — cool fogHigh read as blue ocean past the
-        // streamed disc (ADR-0003 soft world, not Korea poster blue).
-        this.fogHigh.set(0x8a8470);
-        this.cloudFogColor.set(0xa8814b);
-        // Warm fill + golden key — painterly daylight; without this Ukraine stays flat/SNES.
-        this.ambient.color.set(0xe8d8b8);
-        this.ambient.groundColor.set(0x3a3428);
-        this.ambient.intensity = 0.9;
-        this.sun.color.set(0xffe2b4);
+        this.fogLow.set(UKRAINE_SOFT_WORLD_FOG_HEX);
+        // Pale desaturated cool at altitude — reads as atmospheric distance, not sea.
+        this.fogHigh.set(UKRAINE_SOFT_WORLD_FOG_HIGH_HEX);
+        this.cloudFogColor.set(UKRAINE_SOFT_WORLD_FOG_HEX);
+        // Warm key against cool fill gives sculptural separation between lit and shadow.
+        this.ambient.color.set(0xcfe0f0);
+        this.ambient.groundColor.set(0x46503a);
+        this.ambient.intensity = 0.88;
+        this.sun.color.set(0xffefd0);
         this.sun.intensity = 2.95;
-        this.renderer.toneMappingExposure = 1.1;
+        this.renderer.toneMappingExposure = 1.05;
       }
       if (this.sea?.mesh) this.sea.mesh.visible = false;
     } else {
@@ -9787,22 +9801,22 @@ class FlightView {
     }
     this.lastHitCount = hits;
     const sparkAge = nowSeconds - this.hitSparkTime;
-    const sparksActive = !packEffectsActive && sparkAge >= 0 && sparkAge < 0.34;
+    const sparksActive = !packEffectsActive && sparkAge >= 0 && sparkAge < 0.42;
     data.sparks.visible = sparksActive;
     if (sparksActive) {
       const sparkPositions = data.sparkPositions;
       const directions = data.sparkDirections;
       for (let i = 0; i < directions.length; i += 3) {
-        const velocity = 18 + (i / 3) * 1.15;
+        const velocity = 24 + (i / 3) * 1.5;
         sparkPositions[i] = this.banditPosition.x + directions[i] * sparkAge * velocity;
         sparkPositions[i + 1] = this.banditPosition.y + directions[i + 1] * sparkAge * velocity
           - 4.9 * sparkAge * sparkAge;
         sparkPositions[i + 2] = this.banditPosition.z + directions[i + 2] * sparkAge * velocity;
       }
       data.sparks.geometry.attributes.position.needsUpdate = true;
-      data.sparks.material.opacity = 1 - sparkAge / 0.34;
+      data.sparks.material.opacity = 1 - sparkAge / 0.42;
       data.hitLight.position.copy(this.banditPosition);
-      data.hitLight.intensity = 18 * (1 - sparkAge / 0.34);
+      data.hitLight.intensity = 24 * (1 - sparkAge / 0.42);
     } else {
       data.sparks.material.opacity = 0;
       data.hitLight.intensity = 0;
@@ -10238,8 +10252,14 @@ class FlightView {
 
     const replayExternal = state.replay_external === true;
     const replayCamera = String(state.replay_camera || "CHASE");
-    this.externalCameraActive = replayExternal && replayCamera !== "COCKPIT";
-    this.presentationAssets.sync(state);
+    const liveChase = !replayExternal
+      && !isCasevacState(state)
+      && state.auto_gcas_active !== true
+      && this.liveChaseCamera === true;
+    this.replayExternalActive = replayExternal;
+    this.casevacActive = isCasevacState(state);
+    this.externalCameraActive = (replayExternal && replayCamera !== "COCKPIT") || liveChase;
+    this.presentationAssets.sync(state, { liveChase });
     this.presentationAssets.playerExteriorSlot.object?.userData
       ?.setWingSweepDegrees?.(state.wing_sweep_deg);
     this.presentationAssets.targetSlot.object?.userData
@@ -10307,6 +10327,16 @@ class FlightView {
         this.camera.up.set(0, 1, 0);
         this.camera.lookAt(this.localTarget);
       }
+    } else if (liveChase) {
+      this.camera.position.copy(this.playerPosition)
+        .addScaledVector(this.playerForward, -22)
+        .addScaledVector(this.playerUp, 5.6);
+      this.localTarget.copy(this.playerPosition)
+        .addScaledVector(this.playerForward, 12)
+        .addScaledVector(this.playerUp, 1.2);
+      this.chaseCameraUp.set(0, 1, 0).lerp(this.playerUp, 0.35).normalize();
+      this.camera.up.copy(this.chaseCameraUp);
+      this.camera.lookAt(this.localTarget);
     } else {
       this.updateGimbal(dt);
       const cockpitCamera = cockpitRoot.visible
@@ -10372,7 +10402,7 @@ class FlightView {
     }
     // Padlock is an orientation aid, not a cinematic camera. Applying buffet/head-lag after the
     // target solve makes the contact and every view-relative cue wander by a degree or two.
-    if (casevac || replayExternal || padlock) this.cockpitHead.reset(state);
+    if (casevac || replayExternal || liveChase || padlock) this.cockpitHead.reset(state);
     else this.cockpitHead.update(this.camera, state, dt);
     this.camera.updateMatrixWorld(true);
     // Live frames carry no replay_camera; they are the cockpit view, so the default must
@@ -10385,7 +10415,10 @@ class FlightView {
       position: this.camera.position,
       quaternion: this.playerQuaternion,
       lookQuaternion: this.camera.quaternion,
-      visible: f22CanopyVisible,
+      visible: f22CanopyVisible && !liveChase,
+      frameVisible: f22CanopyVisible && !liveChase
+        && !this.hud.usesMobileTacticalProfile()
+        && playerSettings.canopyFrame !== false,
     });
     const gunsightPresentation = this.periodGunsight.update(this.camera, state, dt);
     if (casevac) this.periodGunsight.object3d.visible = false;
@@ -10723,6 +10756,22 @@ class FlightView {
       this.updateGunEffects(state, nowSeconds);
       this.updateDamageSmoke(state, nowSeconds, fogDensity);
     }
+    this.playerVortices.update({
+      visible: this.externalCameraActive && state.player_alive !== false
+        && state.runway_weight_on_wheels !== true && !this.casevacActive,
+      position: this.playerPosition,
+      quaternion: this.playerQuaternion,
+      gLoad: Number(state.g_actual),
+      dt,
+    });
+    this.banditVortices.update({
+      visible: opponentPresent && banditBodyPresent && banditAlive && targetRoot.visible,
+      position: this.banditPosition,
+      quaternion: this.banditQuaternion,
+      forward: this.banditFrame.forward,
+      speedMps: Number(state.opponent_speed_mps ?? state.speed_mps) || 180,
+      dt,
+    });
     this.remoteAircraft.update(dt, this.camera.position, { historicalReplay: replayExternal });
 
     this.sky.mesh.position.copy(this.camera.position);
@@ -10884,6 +10933,10 @@ class FlightView {
     this.winterPrecipitation.dispose();
     this.playerDamageSmoke.dispose();
     this.banditDamageSmoke.dispose();
+    this.playerVortices.group.removeFromParent();
+    this.playerVortices.dispose();
+    this.banditVortices.group.removeFromParent();
+    this.banditVortices.dispose();
     this.carrierRuntime.recovery.group.removeFromParent();
     this.carrierRuntime.water.group.removeFromParent();
     this.conventionalRunway.group.removeFromParent();
@@ -10904,6 +10957,18 @@ class FlightView {
     this.environmentTarget.dispose();
     this.renderer.dispose();
   }
+
+  toggleLiveChaseCamera() {
+    if (this.casevacActive || this.replayExternalActive) return false;
+    this.liveChaseCamera = !this.liveChaseCamera;
+    this.playerVortices?.clear?.();
+    if (viewStatus) {
+      viewStatus.textContent = this.liveChaseCamera
+        ? "Chase camera · F2 / R3"
+        : "Cockpit camera · F2 / R3";
+    }
+    return true;
+  }
 }
 
 function installGamepadInput(view) {
@@ -10913,6 +10978,7 @@ function installGamepadInput(view) {
   const held = new Map();
   let previous = {};
   let connectedIndex = null;
+  let gamepadYawActive = false;
 
   function setHeld(code, active, gkey, directThrottleIncrease = undefined) {
     if (held.get(code) === active) return;
@@ -10930,6 +10996,10 @@ function installGamepadInput(view) {
       if (active) releaseMappedKey(code, source);
     }
     held.clear();
+    if (gamepadYawActive) {
+      bridge?.SetAnalogYawControl?.(0);
+      gamepadYawActive = false;
+    }
     releaseDirectFlightAxes(source);
     gamepadLookActive = false;
     previous = {};
@@ -10939,7 +11009,12 @@ function installGamepadInput(view) {
     const raw = [...(navigator.getGamepads?.() ?? [])]
       .find((candidate) => candidate?.connected !== false
         && candidate?.mapping === "standard");
-    const state = standardGamepadState(raw, previous);
+    const gearHandleDown = String(latestState?.gear_handle || "").toUpperCase() === "DOWN"
+      || Number(latestState?.gear_nose) > 0.1;
+    const landingExpo = gearHandleDown
+      || latestState?.overhead_next_gate_needs_gear === true
+      || (latestState?.overhead_course_active === true && latestState?.overhead_next_gate_id === "FINAL");
+    const state = standardGamepadState(raw, previous, { expo: landingExpo ? 0.55 : 0.35 });
     if (!state.connected) {
       if (connectedIndex !== null) {
         recorder.event("mobile_control", "gamepad_disconnected", {
@@ -10967,11 +11042,31 @@ function installGamepadInput(view) {
     }
 
     setDirectFlightAxes(source, state.roll, state.pitch);
-    // Fleet flight layout (owner, 6 Nov 2026): A guns, RT/LT throttle, B padlock.
+    if (state.yaw !== 0 || gamepadYawActive) {
+      bridge?.SetAnalogYawControl?.(state.yaw);
+      gamepadYawActive = state.yaw !== 0;
+    }
+    const weightOnWheels = latestState?.runway_weight_on_wheels === true;
+    // Fleet flight layout (owner, 6 Nov 2026) + landing extension:
+    // A guns, B padlock, X limit override, Y wheel brakes (WoW), LB/RB rudder, RT/LT throttle,
+    // D-pad Up RTB / Down Gear / Left Flaps Up / Right Flaps Down, R3 Chase Cam.
     setHeld("Gamepad:A", state.fire, 8);
     setHeld("Gamepad:Limiter", state.limitOverride, 12);
-    setHeld("Gamepad:LT", state.throttleDown, 7, false);
+    setHeld("Gamepad:LT", state.throttleDown || (state.brakeHeld && weightOnWheels && !state.throttleUp), 7, false);
     setHeld("Gamepad:RT", state.throttleUp, 6, true);
+    setHeld("Gamepad:Gear", state.gear, 13);
+    setHeld("Gamepad:FlapsUp", state.flapsUp, 14);
+    setHeld("Gamepad:FlapsDown", state.flapsDown, 15);
+    if (state.rtbPressed
+        && latestState?.session_phase === "ACTIVE"
+        && latestState?.player_rtb_active !== true
+        && !isCasevacState()
+        && typeof bridge?.RequestReturnToBase === "function") {
+      bridge.RequestReturnToBase();
+    }
+    if (state.cameraTogglePressed && typeof view?.toggleLiveChaseCamera === "function") {
+      view.toggleLiveChaseCamera();
+    }
     if (state.padlockPressed) {
       togglePadlock();
       recorder.event("mobile_control", "gamepad_padlock", {
@@ -10992,7 +11087,15 @@ function installGamepadInput(view) {
     } else if (previous.lookActive) {
       gimbalReturnFast = true;
     }
-    previous = { padlock: state.padlock, lookActive: gamepadLookActive };
+    previous = {
+      padlock: state.padlock,
+      rtb: state.rtb,
+      gear: state.gear,
+      flapsUp: state.flapsUp,
+      flapsDown: state.flapsDown,
+      cameraToggle: state.cameraToggle,
+      lookActive: gamepadLookActive,
+    };
   };
 
   window.addEventListener("gamepaddisconnected", releaseGamepad);
@@ -12355,7 +12458,7 @@ function installInput(view) {
     const flightAxisOwnsKey = activeFlightAxisOwnsKey(event);
     if (nativeInteractiveOwnsKey(event) && !flightAxisOwnsKey) return;
     if (keyMap.has(event.code)
-      || ["BracketLeft", "BracketRight", "F1", "Enter", "NumpadEnter", "Escape",
+      || ["BracketLeft", "BracketRight", "F1", "F2", "Enter", "NumpadEnter", "Escape",
         "KeyT", "KeyP", "Backquote"].includes(event.code)) {
       event.preventDefault();
     }
@@ -12396,6 +12499,11 @@ function installInput(view) {
 
     if (event.code === "F1") {
       bridge.SetVariant(bridge.GetVariant() === 0 ? 1 : 0);
+      return;
+    }
+
+    if (event.code === "F2") {
+      view.toggleLiveChaseCamera();
       return;
     }
 

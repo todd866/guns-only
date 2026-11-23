@@ -122,6 +122,8 @@ import {
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
 const GREEN_FAINT = "rgba(77, 255, 136, 0.18)";
+const CYAN = "#67e8f9";
+const CYAN_DIM = "rgba(103, 232, 249, 0.72)";
 const AMBER = "#ffb020";
 const RED = "#ff465d";
 const GLASS = "rgba(2, 10, 16, 0.72)";
@@ -1430,6 +1432,260 @@ class CombatHud {
     ctx.restore();
   }
 
+  /** Conformal F-22 overhead approach symbology: AoA E-bracket, -3 deg GS bar, aimpoint, 7s dot-in-box. */
+  drawOverheadApproachCues(frame, noseAnchor, fpvAnchor) {
+    const state = frame?.state;
+    if (!state || frame.padlock || !frame.camera
+        || state.casevac_mission === true
+        || state.rapier_pattern_only === true
+        || state.carrier === true
+        || state.recovery_platform === true) return;
+    const overhead = state.overhead_course_active === true;
+    const gearDown = String(state.gear_handle || "").toUpperCase() === "DOWN";
+    const rwyDistNm = finiteHudNumber(state.runway_distance_nm);
+    const activeApproach = overhead
+      || (state.runway_available === true && (
+        state.approach_guidance_active === true
+        || state.player_rtb_active === true
+        || gearDown
+        || (rwyDistNm !== null && rwyDistNm <= 6)
+      ));
+    if (!activeApproach || state.runway_weight_on_wheels === true) return;
+
+    const projection = frame.camera.projectionMatrix?.elements;
+    const matrixScaleY = Number(projection?.[5]);
+    if (!Number.isFinite(matrixScaleY) || matrixScaleY <= 0) return;
+    const focalY = this.height * 0.5 * matrixScaleY;
+    const pxPerDeg = focalY * DEG;
+    const layout = this.getLayout();
+    const ctx = this.ctx;
+
+    // 1. Conformal AoA E-bracket beside FPV (8.5-10.5 deg centered on 9.5 deg).
+    const aoa = finiteHudNumber(state.aoa_deg);
+    if (aoa !== null && fpvAnchor && !fpvAnchor.behind
+        && Number.isFinite(fpvAnchor.x) && Number.isFinite(fpvAnchor.y)
+        && (overhead || gearDown || (rwyDistNm !== null && rwyDistNm <= 5))) {
+      const halfArm = clamp(1.0 * pxPerDeg, 10, 22);
+      const bx = clamp(fpvAnchor.x - 24, layout.tapeInset + 48, this.width - layout.tapeInset - 48);
+      const by = clamp(
+        fpvAnchor.y - (aoa - 9.5) * pxPerDeg,
+        layout.ladderSafe.top + halfArm + 2,
+        layout.ladderSafe.bottom - halfArm - 2,
+      );
+      const color = aoa > 13 ? RED : Math.abs(aoa - 9.5) <= 1.0 ? GREEN : AMBER;
+      ctx.save();
+      this.setLine(color, 1.7);
+      ctx.beginPath();
+      ctx.moveTo(bx + 7, by - halfArm);
+      ctx.lineTo(bx, by - halfArm);
+      ctx.lineTo(bx, by + halfArm);
+      ctx.lineTo(bx + 7, by + halfArm);
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + 5, by);
+      this.strokeLegible();
+      ctx.restore();
+    }
+
+    // 2. Runway aimpoint diamond + horizon-conformal -3 deg glideslope bar (within 6 NM).
+    const aimX = finiteHudNumber(state.runway_aimpoint_x) ?? finiteHudNumber(state.runway_touchdown_x);
+    const aimY = finiteHudNumber(state.runway_aimpoint_y) ?? finiteHudNumber(state.runway_touchdown_y);
+    const aimZ = finiteHudNumber(state.runway_aimpoint_z) ?? finiteHudNumber(state.runway_touchdown_z);
+    if (state.runway_available === true && aimX !== null && aimY !== null && aimZ !== null
+        && (rwyDistNm === null || rwyDistNm <= 10)) {
+      this.worldPoint.set(aimX, aimY, -aimZ);
+      const aimProj = this.project(this.worldPoint, frame.camera, this.projectionC);
+      if (!aimProj.behind && Number.isFinite(aimProj.x) && Number.isFinite(aimProj.y)) {
+        ctx.save();
+        this.setLine(CYAN, 1.45);
+        ctx.beginPath();
+        ctx.moveTo(aimProj.x, aimProj.y - 8);
+        ctx.lineTo(aimProj.x + 8, aimProj.y);
+        ctx.lineTo(aimProj.x, aimProj.y + 8);
+        ctx.lineTo(aimProj.x - 8, aimProj.y);
+        ctx.closePath();
+        this.strokeLegible();
+        ctx.restore();
+      }
+    }
+    const showGsBar = state.runway_available === true
+      && ((rwyDistNm !== null && rwyDistNm <= 6) || state.overhead_next_gate_id === "FINAL" || gearDown);
+    if (showGsBar) {
+      const camAtt = cameraPitchAnchor(frame.camera, this.width, this.height);
+      const cx = camAtt ? camAtt.centerX : noseAnchor?.x;
+      const cy = camAtt ? camAtt.centerY : noseAnchor?.y;
+      if (Number.isFinite(cx) && Number.isFinite(cy)) {
+        const pitchDeg = camAtt ? camAtt.pitchDeg : (Number(state.pitch_deg) || 0);
+        const bank = -(Number(state.bank_deg) || 0) * DEG;
+        const cosB = Math.cos(bank);
+        const sinB = Math.sin(bank);
+        const localY = Math.tan((pitchDeg + 3) * DEG) * focalY;
+        const gsY = cy + localY * cosB;
+        if (gsY > layout.ladderSafe.top + 8 && gsY < layout.ladderSafe.bottom - 8) {
+          const rot = (lx, ly) => ({
+            x: cx + lx * cosB - ly * sinB,
+            y: cy + lx * sinB + ly * cosB,
+          });
+          ctx.save();
+          ctx.strokeStyle = CYAN_DIM;
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([5, 4]);
+          for (const [x0, x1] of [[-74, -40], [40, 74]]) {
+            const p0 = rot(x0, localY);
+            const p1 = rot(x1, localY);
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y);
+            ctx.lineTo(p1.x, p1.y);
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+          const tag = rot(-82, localY);
+          ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          ctx.textAlign = "right";
+          ctx.textBaseline = "middle";
+          fillLegibleHudText(ctx, "-3°", tag.x, tag.y, { fillStyle: CYAN_DIM });
+          ctx.restore();
+        }
+      }
+    }
+
+    // 3. "Put the dot in the box": 7 s overhead carrot + 60 Hz predictor, fading 200->80 ft AGL.
+    if (!overhead) return;
+    const threshY = finiteHudNumber(state.runway_threshold_y);
+    const py = finiteHudNumber(state.py);
+    const aglFt = threshY !== null && py !== null ? (py - threshY) * 3.280839895 : 500;
+    const fade = aglFt >= 200 ? 1 : aglFt <= 80 ? 0 : (aglFt - 80) / 120;
+    if (fade <= 0.02) return;
+
+    const hotCarrot = Array.isArray(state.approach_gates) ? state.approach_gates[0] : null;
+    const cxWorld = hotCarrot && Number.isFinite(hotCarrot.eastM)
+      ? hotCarrot.eastM : finiteHudNumber(state.overhead_carrot_x);
+    const cyWorld = hotCarrot && Number.isFinite(hotCarrot.upM ?? hotCarrot.altM)
+      ? Number(hotCarrot.upM ?? hotCarrot.altM) : finiteHudNumber(state.overhead_carrot_y);
+    const czWorld = hotCarrot && Number.isFinite(hotCarrot.northM)
+      ? hotCarrot.northM : finiteHudNumber(state.overhead_carrot_z);
+    if (cxWorld === null || cyWorld === null || czWorld === null) return;
+
+    this.worldPoint.set(cxWorld, cyWorld, -czWorld);
+    const cProj = this.project(this.worldPoint, frame.camera, this.projectionC);
+
+    // 60 Hz predictor from live airframe state matching F22OverheadCourse.Predictor.
+    let predX = finiteHudNumber(state.overhead_predictor_x);
+    let predY = finiteHudNumber(state.overhead_predictor_y);
+    let predZ = finiteHudNumber(state.overhead_predictor_z);
+    const px = finiteHudNumber(state.px);
+    const pz = finiteHudNumber(state.pz);
+    const vx = finiteHudNumber(state.vx);
+    const vy = finiteHudNumber(state.vy);
+    const vz = finiteHudNumber(state.vz);
+    const leadS = clamp(finiteHudNumber(state.overhead_carrot_lead_s) ?? 7.0, 2, 10);
+    if (px !== null && py !== null && pz !== null && vx !== null && vy !== null && vz !== null) {
+      const speed = Math.max(Math.hypot(vx, vy, vz), 30);
+      const gamma = Math.asin(clamp(vy / speed, -1, 1));
+      const chi = Math.atan2(vx, vz);
+      const bank = clamp((Number(state.bank_deg) || 0) * DEG, -1.40, 1.40);
+      const omega = 9.80665 * Math.tan(bank) / speed;
+      const horiz = speed * Math.cos(gamma);
+      let dx = 0;
+      let dz = 0;
+      if (Math.abs(omega) < 1e-5) {
+        dx = horiz * leadS * Math.sin(chi);
+        dz = horiz * leadS * Math.cos(chi);
+      } else {
+        const radius = horiz / omega;
+        const chi1 = chi + omega * leadS;
+        dx = radius * (Math.cos(chi) - Math.cos(chi1));
+        dz = radius * (Math.sin(chi1) - Math.sin(chi));
+      }
+      predX = px + dx;
+      predY = py + speed * Math.sin(gamma) * leadS;
+      predZ = pz + dz;
+    }
+
+    let pProj = null;
+    if (predX !== null && predY !== null && predZ !== null) {
+      this.worldPoint.set(predX, predY, -predZ);
+      pProj = this.project(this.worldPoint, frame.camera, this.projectionA);
+    }
+
+    const marginX = 34;
+    const minY = Math.max(layout.heading.bottom + 30, 56);
+    const maxY = this.height - 34;
+    const boxOnScreen = !cProj.behind
+      && cProj.x >= marginX && cProj.x <= this.width - marginX
+      && cProj.y >= minY && cProj.y <= maxY;
+
+    ctx.save();
+    ctx.globalAlpha *= 0.88 * fade;
+    if (boxOnScreen) {
+      const r = 11;
+      const cLen = 5;
+      this.setLine(CYAN, 1.5);
+      ctx.beginPath();
+      ctx.moveTo(cProj.x - r, cProj.y - r + cLen);
+      ctx.lineTo(cProj.x - r, cProj.y - r);
+      ctx.lineTo(cProj.x - r + cLen, cProj.y - r);
+      ctx.moveTo(cProj.x + r - cLen, cProj.y - r);
+      ctx.lineTo(cProj.x + r, cProj.y - r);
+      ctx.lineTo(cProj.x + r, cProj.y - r + cLen);
+      ctx.moveTo(cProj.x + r, cProj.y + r - cLen);
+      ctx.lineTo(cProj.x + r, cProj.y + r);
+      ctx.lineTo(cProj.x + r - cLen, cProj.y + r);
+      ctx.moveTo(cProj.x - r + cLen, cProj.y + r);
+      ctx.lineTo(cProj.x - r, cProj.y + r);
+      ctx.lineTo(cProj.x - r, cProj.y + r - cLen);
+      ctx.stroke();
+
+      if (pProj && !pProj.behind && Number.isFinite(pProj.x) && Number.isFinite(pProj.y)) {
+        const clampedDotX = clamp(pProj.x, marginX, this.width - marginX);
+        const clampedDotY = clamp(pProj.y, minY, maxY);
+        ctx.save();
+        ctx.strokeStyle = CYAN_DIM;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(clampedDotX, clampedDotY);
+        ctx.lineTo(cProj.x, cProj.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        ctx.fillStyle = CYAN;
+        ctx.beginPath();
+        ctx.arc(clampedDotX, clampedDotY, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(clampedDotX, clampedDotY, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (Number.isFinite(cProj.x) && Number.isFinite(cProj.y)) {
+      const centerX = this.width * 0.5;
+      const centerY = layout.instrumentCenterY;
+      let dx = cProj.x - centerX;
+      let dy = cProj.y - centerY;
+      if (cProj.behind) {
+        dx = -dx;
+        dy = -dy;
+      }
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+      const ex = clamp(centerX + ux * (this.width * 0.36), marginX, this.width - marginX);
+      const ey = clamp(centerY + uy * (this.height * 0.34), minY, maxY);
+      const angle = Math.atan2(uy, ux);
+      ctx.translate(ex, ey);
+      ctx.rotate(angle);
+      this.setLine(CYAN, 1.8);
+      ctx.beginPath();
+      ctx.moveTo(8, 0);
+      ctx.lineTo(-4, -5);
+      ctx.moveTo(8, 0);
+      ctx.lineTo(-4, 5);
+      this.strokeLegible();
+    }
+    ctx.restore();
+  }
+
   /// The range/closure data line beside a contact's bracket. Factored so the primary designator
   /// and the formation-wingman marker render the identical instrument: the kernel's range_m and
   /// closure_kts follow the player's gun-target selection, so exactly one bracket — the selected
@@ -2479,10 +2735,15 @@ class CombatHud {
     const altText = cue.targetFt === null ? ""
       : `${cue.targetFt}${cue.altMark > 0 ? "▼" : cue.altMark < 0 ? "▲" : ""}`;
     const pieces = [
+      ...(cue.progress ? [{ text: cue.progress, font: `750 10px ${mono}`, color: CYAN_DIM, gap: 9 }] : []),
       { text: cue.distance, font: `800 15px ${mono}`, color: GREEN, gap: 3 },
       { text: "NM", font: `750 9px ${mono}`, color: GREEN_DIM, gap: 10 },
       { text: cue.label, font: `800 12px ${mono}`, color: GREEN, gap: 12 },
       ...(altText ? [{ text: altText, font: `800 12px ${mono}`, color: altAccent, gap: 12 }] : []),
+      ...(cue.targetKcas !== null
+        ? [{ text: `${cue.targetKcas}KT`, font: `800 11px ${mono}`, color: CYAN, gap: cue.gearCue ? 10 : 0 }]
+        : []),
+      ...(cue.gearCue ? [{ text: "GEAR", font: `800 11px ${mono}`, color: AMBER, gap: 0 }] : []),
       ...(cue.energy ? [{ text: cue.energy.word, font: `800 12px ${mono}`, color: energyAccent,
         gap: 0, mark: cue.energy.mark }] : []),
     ];
@@ -2559,6 +2820,15 @@ class CombatHud {
       ctx.font = piece.font;
       fillLegibleHudText(ctx, piece.text, x, y, { fillStyle: piece.color });
       x += piece.width + piece.gap;
+    }
+    if (cue.overhead && (cue.fieldLabel || cue.autoThrottle) && y + 24 < layout.ladderSafe.top) {
+      const sub = [
+        cue.fieldLabel ? `RTB ${cue.fieldLabel}` : "RTB",
+        cue.autoThrottle && cue.targetKcas !== null ? `A/T ${cue.targetKcas}` : "MAN THR",
+      ].join(" · ");
+      ctx.font = `700 9px ${mono}`;
+      ctx.textAlign = "center";
+      fillLegibleHudText(ctx, sub, this.width / 2, y + 14, { fillStyle: GREEN_DIM });
     }
     ctx.restore();
     if (this._debug) {
@@ -2818,6 +3088,8 @@ class CombatHud {
     trend = 0,
     lowSpeed = null,
     fixedMarkers = [],
+    targetBug = null,
+    targetBugColor = CYAN,
   }) {
     const ctx = this.ctx;
     const layout = this.getLayout();
@@ -2949,6 +3221,23 @@ class CombatHud {
       ctx.textAlign = "right";
       const direction = offscale ? (rawY < centerY ? "↑" : "↓") : "";
       ctx.fillText(`${marker.label}${direction}`, x + 20, markerY + 0.5);
+    }
+    if (Number.isFinite(targetBug) && valueValid) {
+      const bugY = clamp(centerY - (targetBug - value) * pxPerUnit, centerY - halfHeight + 6, centerY + halfHeight - 6);
+      ctx.strokeStyle = targetBugColor;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      if (rightSide) {
+        ctx.moveTo(x - 32, bugY);
+        ctx.lineTo(x - 24, bugY - 5);
+        ctx.lineTo(x - 24, bugY + 5);
+      } else {
+        ctx.moveTo(x + 32, bugY);
+        ctx.lineTo(x + 24, bugY - 5);
+        ctx.lineTo(x + 24, bugY + 5);
+      }
+      ctx.closePath();
+      ctx.stroke();
     }
     ctx.restore();
 
@@ -6367,6 +6656,7 @@ class CombatHud {
       this.drawBandit(frame);
       this.drawWingman(frame);
     }
+    this.drawOverheadApproachCues(frame, noseAnchor, symbolFpv);
     this.drawCivilianTarget(frame);
     this.drawFireBossHopper(frame);
     this.drawFireBossCue(frame);
@@ -6408,6 +6698,13 @@ class CombatHud {
           bottom: cy + half,
         }));
       }
+      const overheadSpeedBug = frame.state.overhead_course_active === true
+        ? (finiteHudNumber(frame.state.overhead_autothrottle_kcas)
+          ?? finiteHudNumber(frame.state.overhead_next_gate_kcas))
+        : null;
+      const overheadAltBug = frame.state.overhead_course_active === true
+        ? finiteHudNumber(frame.state.overhead_next_gate_alt_ft)
+        : null;
       this.drawVerticalTape({
         value: spd,
         displayValue: display.indicatedDigits,
@@ -6420,6 +6717,7 @@ class CombatHud {
         trend: speedTrend,
         lowSpeed: stallAwareness(frame.state),
         fixedMarkers: speedTapeMarkers(frame.state),
+        targetBug: overheadSpeedBug,
       });
       this.drawVerticalTape({
         value: display.altitudeFt,
@@ -6430,6 +6728,7 @@ class CombatHud {
         floor: 0,
         step: frame.state.alt_ft > 10000 ? 1000 : 500,
         decimals: 0,
+        targetBug: overheadAltBug,
       });
       // The phone gets the power rail too. It was desktop-only, which left the one control the
       // pilot holds for the entire sortie with no feedback at all. Where the fighter's throttle
@@ -6443,6 +6742,13 @@ class CombatHud {
     } else {
       if (this._debug) this._debug.desktopFlightChrome = true;
       const tapeInset = this.getLayout().tapeInset;
+      const overheadSpeedBug = frame.state.overhead_course_active === true
+        ? (finiteHudNumber(frame.state.overhead_autothrottle_kcas)
+          ?? finiteHudNumber(frame.state.overhead_next_gate_kcas))
+        : null;
+      const overheadAltBug = frame.state.overhead_course_active === true
+        ? finiteHudNumber(frame.state.overhead_next_gate_alt_ft)
+        : null;
       this.drawVerticalTape({
         value: spd,
         displayValue: display.indicatedDigits,
@@ -6453,6 +6759,7 @@ class CombatHud {
         trend: speedTrend,
         lowSpeed: stallAwareness(frame.state),
         fixedMarkers: speedTapeMarkers(frame.state),
+        targetBug: overheadSpeedBug,
       });
       this.drawAirdataLabels(frame.state, tapeInset, this.width - tapeInset, display);
       this.drawVerticalTape({
@@ -6462,6 +6769,7 @@ class CombatHud {
         floor: 0,
         step: frame.state.alt_ft > 10000 ? 1000 : 500,
         decimals: 0,
+        targetBug: overheadAltBug,
       });
       if (isFightHudActive(frame.state)) this.drawGTape(frame.state);
       // Sweep remains a live aircraft system after the merge and through RTB. Gating it on the

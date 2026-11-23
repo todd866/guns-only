@@ -17,6 +17,7 @@ import {
   UKRAINE_SOFT_WORLD_EDGE_HIDE_START,
   UKRAINE_SOFT_WORLD_EDGE_HIDE_END,
   UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE,
+  UKRAINE_SOFT_WORLD_FOG_HEX,
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "./soft_world_atmosphere.js";
@@ -1214,7 +1215,9 @@ export function createTerrainMaterial(THREE, options = {}) {
         value: (options.sunDirection ?? new THREE.Vector3(0.50, 0.28, -0.82)).clone().normalize(),
       },
       uFogColor: {
-        value: new THREE.Color(options.fogColor ?? (ukraine ? 0xa8814b : 0x6f8790)),
+        value: new THREE.Color(
+          options.fogColor ?? (ukraine ? UKRAINE_SOFT_WORLD_FOG_HEX : 0x6f8790),
+        ),
       },
       uFogDensity: { value: finite(options.fogDensity, ukraine ? 0.000052 : 0.000055) },
       uAtmosphereDensityScale: {

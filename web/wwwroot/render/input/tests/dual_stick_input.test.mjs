@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  expoCurve,
   gamepadLookDelta,
   radialStickAxes,
   standardGamepadState,
@@ -13,7 +14,7 @@ function gamepad({ axes = [0, 0, 0, 0], buttons = {} } = {}) {
     mapping: "standard",
     index: 2,
     axes,
-    buttons: Array.from({ length: 8 }, (_, index) => ({
+    buttons: Array.from({ length: 16 }, (_, index) => ({
       pressed: buttons[index] === true,
       value: Number(buttons[index]) || 0,
     })),
@@ -25,6 +26,15 @@ test("radial stick removes drift and preserves full circular authority", () => {
   const diagonal = radialStickAxes(1, 1);
   assert.ok(Math.abs(Math.hypot(diagonal.x, diagonal.y) - 1) < 1e-9);
   assert.ok(diagonal.x > 0 && diagonal.y > 0);
+});
+
+test("expoCurve softens small stick deflection while preserving endpoints", () => {
+  assert.equal(expoCurve(0, 0.55), 0);
+  assert.equal(expoCurve(1, 0.55), 1);
+  assert.equal(expoCurve(-1, 0.55), -1);
+  const midLinear = 0.5;
+  assert.ok(expoCurve(midLinear, 0.55) < expoCurve(midLinear, 0.35));
+  assert.ok(expoCurve(midLinear, 0.35) < midLinear);
 });
 
 test("standard gamepad follows the fleet flight layout: A guns, RT/LT throttle, B padlock", () => {
@@ -46,6 +56,33 @@ test("standard gamepad follows the fleet flight layout: A guns, RT/LT throttle, 
   assert.equal(standardGamepadState(gamepad({ buttons: { 1: true } }), {
     padlock: true,
   }).padlockPressed, false);
+});
+
+test("standard gamepad supports rudder bumpers, Y wheel brakes, D-pad landing edges, and expo", () => {
+  const linear = standardGamepadState(gamepad({ axes: [0.5, 0] }));
+  const landing = standardGamepadState(gamepad({
+    axes: [0.5, 0],
+    buttons: { 3: true, 4: true, 11: true, 12: true, 13: true, 14: true, 15: true },
+  }), {}, { expo: 0.55 });
+  assert.ok(landing.roll < linear.roll, "landing expo softens small roll deflections");
+  assert.equal(landing.yaw, -1, "LB commands left rudder");
+  assert.equal(standardGamepadState(gamepad({ buttons: { 5: true } })).yaw, 1, "RB commands right rudder");
+  assert.equal(standardGamepadState(gamepad({ buttons: { 4: true, 5: true } })).yaw, 0);
+  assert.equal(landing.brakeHeld, true, "Y holds wheel brakes");
+  assert.equal(landing.cameraTogglePressed, true, "R3 toggles camera on leading edge");
+  assert.equal(landing.rtbPressed, true, "D-pad Up requests RTB on leading edge");
+  assert.equal(landing.gearPressed, true, "D-pad Down toggles gear on leading edge");
+  assert.equal(landing.flapsUpPressed, true, "D-pad Left steps flaps up");
+  assert.equal(landing.flapsDownPressed, true, "D-pad Right steps flaps down");
+
+  const held = standardGamepadState(gamepad({
+    buttons: { 11: true, 12: true, 13: true, 14: true, 15: true },
+  }), landing);
+  assert.equal(held.cameraTogglePressed, false);
+  assert.equal(held.rtbPressed, false);
+  assert.equal(held.gearPressed, false);
+  assert.equal(held.flapsUpPressed, false);
+  assert.equal(held.flapsDownPressed, false);
 });
 
 test("gamepad look is a bounded frame-rate-independent rate command", () => {

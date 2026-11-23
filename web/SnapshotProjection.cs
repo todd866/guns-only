@@ -1155,7 +1155,124 @@ internal static class SnapshotProjection {
             + $"\"approach_power_01\":{Session.ApproachGuidancePlan.Power01:F3},"
             + $"\"approach_gate_count\":{Session.ApproachGuidancePlan.Gates.Count},"
             + ApproachGatesSampleArrayJson(Session.ApproachGuidancePlan)
+            + OverheadAndRunwayJson(Session.ConventionalRunwayRecovery?.Runway, simulationPosition)
             + $"\"approach_gates_json\":{SnapshotJson.JsonString(GunsOnly.Sim.Recovery.ApproachGuidance.GatesJson(Session.ApproachGuidancePlan))},";
+    }
+
+    static string OverheadAndRunwayJson(
+        ConventionalRunway? runway,
+        in Vec3D playerPosition) {
+        F22OverheadCourse course = Session.F22Course;
+        bool active = course.Armed && !course.Complete && Session.ConventionalRtbPatternGuidanceActive;
+        string fieldLabel = runway is null ? "" : F22OverheadCourse.FieldLabel(runway);
+        CourseGate nextGate = course.NextGate;
+        bool hasNext = active && !string.IsNullOrEmpty(nextGate.Id);
+        Vec3D carrot = course.Carrot.Position;
+        bool hasCarrot = active && carrot.IsFinite;
+        Vec3D predictor = active
+            ? F22OverheadCourse.Predictor(Session.Player.State, course.CarrotLeadSeconds_)
+            : Vec3D.Zero;
+        double? nextDistNm = null;
+        if (hasNext) {
+            double dx = nextGate.Position.X - playerPosition.X;
+            double dz = nextGate.Position.Z - playerPosition.Z;
+            nextDistNm = System.Math.Sqrt(dx * dx + dz * dz) / 1852.0;
+        } else if (active && runway is not null) {
+            double dx = runway.TouchdownAimPoint.X - playerPosition.X;
+            double dz = runway.TouchdownAimPoint.Z - playerPosition.Z;
+            nextDistNm = System.Math.Sqrt(dx * dx + dz * dz) / 1852.0;
+        }
+        int passed = 0;
+        foreach (CourseGateRecord record in course.Records) {
+            if (record.Grade == CourseGateGrade.Pass) passed++;
+        }
+        double? aimX = runway?.TouchdownAimPoint.X;
+        double? aimY = runway?.TouchdownAimPoint.Y;
+        double? aimZ = runway?.TouchdownAimPoint.Z;
+        double? glideslopeDeg = null;
+        double? distNm = null;
+        double? crossTrackM = null;
+        if (runway is not null) {
+            var frame = runway.Frame(playerPosition);
+            double horizToAim = runway.TouchdownAimAlongM - frame.along;
+            double vertAboveAim = playerPosition.Y - runway.TouchdownAimPoint.Y;
+            double slantH = System.Math.Sqrt(horizToAim * horizToAim + frame.cross * frame.cross);
+            glideslopeDeg = horizToAim > 1.0 && vertAboveAim >= -5.0
+                ? System.Math.Atan2(vertAboveAim, System.Math.Max(1.0, slantH)) * (180.0 / System.Math.PI)
+                : null;
+            double dx = runway.TouchdownAimPoint.X - playerPosition.X;
+            double dz = runway.TouchdownAimPoint.Z - playerPosition.Z;
+            distNm = System.Math.Sqrt(dx * dx + dz * dz) / 1852.0;
+            crossTrackM = frame.cross;
+        }
+        string nextId = hasNext ? nextGate.Id : (active ? "touchdown_aim" : "");
+        string nextLabel = hasNext ? nextGate.Label : (active ? "TOUCHDOWN" : "");
+        double? nextAltFt = hasNext
+            ? nextGate.Position.Y / F22OverheadCourse.FeetToM
+            : active && runway is not null ? runway.Threshold.Y / F22OverheadCourse.FeetToM : null;
+        double? nextKcas = active
+            ? (hasNext ? nextGate.TargetCalibratedMps : course.AutothrottleTargetCalibratedMps) * AirData.MpsToKnots
+            : null;
+        double? autoKcas = Session.RecoveryAutothrottleEngaged
+            ? course.AutothrottleTargetCalibratedMps * AirData.MpsToKnots
+            : null;
+        return $"\"overhead_course_active\":{(active ? "true" : "false")},"
+            + $"\"overhead_field_label\":{JsonString(fieldLabel)},"
+            + $"\"overhead_next_gate_id\":{JsonString(nextId)},"
+            + $"\"overhead_next_gate_label\":{JsonString(nextLabel)},"
+            + $"\"overhead_next_gate_x\":{NullableNumberJson(hasNext ? nextGate.Position.X : aimX)},"
+            + $"\"overhead_next_gate_y\":{NullableNumberJson(hasNext ? nextGate.Position.Y : aimY)},"
+            + $"\"overhead_next_gate_z\":{NullableNumberJson(hasNext ? nextGate.Position.Z : aimZ)},"
+            + $"\"overhead_next_gate_alt_ft\":{NullableNumberJson(nextAltFt)},"
+            + $"\"overhead_next_gate_kcas\":{NullableNumberJson(nextKcas)},"
+            + $"\"overhead_next_gate_dist_nm\":{NullableNumberJson(nextDistNm)},"
+            + $"\"overhead_next_gate_needs_gear\":{(course.NextGateNeedsGear ? "true" : "false")},"
+            + $"\"overhead_carrot_x\":{NullableNumberJson(hasCarrot ? carrot.X : null)},"
+            + $"\"overhead_carrot_y\":{NullableNumberJson(hasCarrot ? carrot.Y : null)},"
+            + $"\"overhead_carrot_z\":{NullableNumberJson(hasCarrot ? carrot.Z : null)},"
+            + $"\"overhead_carrot_lead_s\":{NullableNumberJson(active ? course.CarrotLeadSeconds_ : null)},"
+            + $"\"overhead_predictor_x\":{NullableNumberJson(active ? predictor.X : null)},"
+            + $"\"overhead_predictor_y\":{NullableNumberJson(active ? predictor.Y : null)},"
+            + $"\"overhead_predictor_z\":{NullableNumberJson(active ? predictor.Z : null)},"
+            + $"\"overhead_autothrottle_active\":{(Session.RecoveryAutothrottleEngaged ? "true" : "false")},"
+            + $"\"overhead_autothrottle_kcas\":{NullableNumberJson(autoKcas)},"
+            + $"\"overhead_gates_passed\":{passed},"
+            + $"\"overhead_gates_total\":{course.Records.Count},"
+            + $"\"overhead_gate_records_json\":{JsonString(SerializeCourseGateRecordsJson(course.Records))},"
+            + $"\"runway_aimpoint_x\":{NullableNumberJson(aimX)},"
+            + $"\"runway_aimpoint_y\":{NullableNumberJson(aimY)},"
+            + $"\"runway_aimpoint_z\":{NullableNumberJson(aimZ)},"
+            + $"\"runway_glideslope_deg\":{NullableNumberJson(glideslopeDeg)},"
+            + $"\"runway_distance_nm\":{NullableNumberJson(distNm)},"
+            + $"\"runway_cross_track_m\":{NullableNumberJson(crossTrackM)},";
+    }
+
+    static string SerializeCourseGateRecordsJson(IReadOnlyList<CourseGateRecord> records) {
+        if (records.Count == 0) return "[]";
+        var ic = System.Globalization.CultureInfo.InvariantCulture;
+        var sb = new System.Text.StringBuilder(256).Append('[');
+        for (int i = 0; i < records.Count; i++) {
+            if (i > 0) sb.Append(',');
+            CourseGateRecord r = records[i];
+            string grade = r.Grade switch {
+                CourseGateGrade.Pass => "pass",
+                CourseGateGrade.Fail => "fail",
+                _ => "pending",
+            };
+            sb.Append('{')
+                .Append("\"id\":").Append(JsonString(r.Id)).Append(',')
+                .Append("\"label\":").Append(JsonString(r.Label)).Append(',')
+                .Append("\"grade\":").Append(JsonString(grade)).Append(',')
+                .Append("\"alt_ft\":").Append(NullableNumberJson(double.IsFinite(r.AltitudeFt) ? r.AltitudeFt : null)).Append(',')
+                .Append("\"kcas\":").Append(NullableNumberJson(double.IsFinite(r.CalibratedKts) ? r.CalibratedKts : null)).Append(',')
+                .Append("\"gear_down\":").Append(r.GearDown ? "true" : "false").Append(',')
+                .Append("\"target_alt_ft\":").Append(r.TargetAltitudeFt.ToString("F0", ic)).Append(',')
+                .Append("\"target_kcas\":").Append(r.TargetCalibratedKts.ToString("F0", ic)).Append(',')
+                .Append("\"gear_required\":").Append(r.GearRequired ? "true" : "false").Append(',')
+                .Append("\"sink_mps\":").Append(NullableNumberJson(double.IsFinite(r.SinkRateMps) ? r.SinkRateMps : null))
+                .Append('}');
+        }
+        return sb.Append(']').ToString();
     }
 
     /// Fixed-length sample array matching SnapshotHotFrame.approach_gates (12 samples).
