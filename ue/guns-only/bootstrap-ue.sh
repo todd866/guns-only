@@ -13,6 +13,7 @@ EDITOR="$ENGINE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor
 mkdir -p \
   "$DEST/Config" \
   "$DEST/Content" \
+  "$DEST/Assets" \
   "$DEST/Source/GunsOnlyUE" \
   "$DEST/ThirdParty/GunsOnlySim/include" \
   "$DEST/Binaries/ThirdParty/GunsOnlySim/Mac"
@@ -20,12 +21,25 @@ mkdir -p \
 cp "$HERE/GunsOnlyUE.uproject" "$DEST/"
 cp "$HERE/Config/"*.ini "$DEST/Config/"
 cp -R "$HERE/Source/" "$DEST/Source/"
+if [ -d "$HERE/Assets" ]; then
+  cp -R "$HERE/Assets/" "$DEST/Assets/"
+fi
 cp "$REPO/sim-native/include/guns_only_sim.h" "$DEST/ThirdParty/GunsOnlySim/include/"
-cp "$REPO/sim-native/out/osx-arm64/libGunsOnlySim.dylib" "$DEST/Binaries/ThirdParty/GunsOnlySim/Mac/"
+cp "$REPO/sim-native/out/osx-arm64/libGunsOnlySim.dylib" "$DEST/Binaries/ThirdParty/GunsOnlySim/Mac/libGunsOnlySim.dylib.tmp"
+mv -f "$DEST/Binaries/ThirdParty/GunsOnlySim/Mac/libGunsOnlySim.dylib.tmp" "$DEST/Binaries/ThirdParty/GunsOnlySim/Mac/libGunsOnlySim.dylib"
 
 if [ -f "$REPO/sim-native/out/ios-arm64/libGunsOnlySim.a" ]; then
   mkdir -p "$DEST/ThirdParty/GunsOnlySim/lib/ios-arm64"
   cp "$REPO/sim-native/out/ios-arm64/libGunsOnlySim.a" "$DEST/ThirdParty/GunsOnlySim/lib/ios-arm64/"
+fi
+
+if [ "${1:-}" = "--import-assets" ]; then
+  if [ -f "$DEST/Assets/scripts/import_to_ue.py" ] && [ -x "$ENGINE/Engine/Binaries/Mac/UnrealEditor-Cmd" ]; then
+    echo "Importing/updating PBR assets into UE 5.8 Content/GunsOnly..."
+    "$ENGINE/Engine/Binaries/Mac/UnrealEditor-Cmd" "$DEST/GunsOnlyUE.uproject" \
+      -ExecutePythonScript="$DEST/Assets/scripts/import_to_ue.py" \
+      -unattended -nop4 -nosplash -NullRHI -NoSound || true
+  fi
 fi
 
 echo "project: $DEST/GunsOnlyUE.uproject"

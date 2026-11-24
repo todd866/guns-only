@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-#define GUNS_SIM_ABI_VERSION 1
+#define GUNS_SIM_ABI_VERSION 3
+#define GUNS_SIM_BEAT_F22_MERGE 7
+#define GUNS_SIM_BEAT_COBRA_CANYON 100
 
 #ifdef __cplusplus
 extern "C" {
@@ -117,6 +119,82 @@ typedef struct GunsSimRunway {
     int32_t reserved0;
 } GunsSimRunway;
 
+typedef struct GunsSimCourseState {
+    double carrot_east_m;
+    double carrot_up_m;
+    double carrot_north_m;
+    double carrot_target_kcas;
+    double predictor_east_m;
+    double predictor_up_m;
+    double predictor_north_m;
+    double next_gate_dist_nm;
+    double next_gate_alt_ft;
+    double next_gate_kcas;
+    double glideslope_deg;
+    double runway_dist_nm;
+    double cross_track_m;
+    int32_t armed;
+    int32_t complete;
+    int32_t carrot_valid;
+    int32_t next_gate_index;
+    int32_t next_gate_needs_gear;
+    int32_t autothrottle_active;
+    int32_t total_gates;
+    int32_t passed_gates;
+    int32_t gate_grades[7];
+    int32_t touchdown_contact;
+    int32_t touchdown_survivable;
+    int32_t kills;
+    int32_t sortie_hits;
+    int32_t combat_complete;
+} GunsSimCourseState;
+
+typedef struct GunsSimLeadCue {
+    double lead_east_m;
+    double lead_up_m;
+    double lead_north_m;
+    double lead_dir_east;
+    double lead_dir_up;
+    double lead_dir_north;
+    double lead_tof_s;
+    double range_m;
+    int32_t has_lead_solution;
+    int32_t gun_solution;
+    int32_t in_gun_window;
+    int32_t weapons_inhibited;
+} GunsSimLeadCue;
+
+typedef struct GunsSimCobraState {
+    double main_rotor_rpm;
+    double rotor_azimuth_rad;
+    double torque_fraction;
+    double agl_m;
+    double vertical_speed_mps;
+    double collective01;
+    double target_east_m;
+    double target_up_m;
+    double target_north_m;
+    double target_health01;
+    double fob_east_m;
+    double fob_up_m;
+    double fob_north_m;
+    double bridge_east_m;
+    double bridge_up_m;
+    double bridge_north_m;
+    int32_t active;
+    int32_t assisted_scas;
+    int32_t gunner_state;
+    int32_t gunner_fire_authorized;
+    int32_t rockets_remaining;
+    int32_t friendly_points;
+    int32_t hostile_points;
+    int32_t friendly_tickets;
+    int32_t hostile_tickets;
+    int32_t time_remaining_s;
+    int32_t mission_status;
+    int32_t has_target;
+} GunsSimCobraState;
+
 int32_t guns_sim_abi_version(void);
 int64_t guns_sim_create(int32_t beat_index, int32_t deck_config);
 void guns_sim_destroy(int64_t handle);
@@ -142,6 +220,20 @@ int32_t guns_sim_read_contacts(int64_t handle, GunsSimContact* out_contacts, int
 int32_t guns_sim_read_tracers(int64_t handle, GunsSimTracer* out_tracers, int32_t max_count);
 int32_t guns_sim_read_gates(int64_t handle, GunsSimApproachGate* out_gates, int32_t max_count);
 int32_t guns_sim_read_runway(int64_t handle, GunsSimRunway* out_runway);
+int32_t guns_sim_read_course(int64_t handle, GunsSimCourseState* out_course);
+int32_t guns_sim_read_lead_cue(int64_t handle, GunsSimLeadCue* out_lead);
+int32_t guns_sim_sample_terrain_m(int64_t handle, double east_m, double north_m, double* out_height_m);
+int32_t guns_sim_sample_terrain_grid(
+    int64_t handle,
+    double min_east_m,
+    double min_north_m,
+    double step_m,
+    int32_t count_east,
+    int32_t count_north,
+    float* out_heights_m);
+int32_t guns_sim_read_cobra_state(int64_t handle, GunsSimCobraState* out_cobra);
+int32_t guns_sim_cycle_target(int64_t handle);
+int32_t guns_sim_fire_rocket(int64_t handle);
 
 #ifdef __cplusplus
 }

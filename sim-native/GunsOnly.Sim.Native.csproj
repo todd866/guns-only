@@ -15,6 +15,14 @@
 
   <ItemGroup>
     <ProjectReference Include="../sim/GunsOnly.Sim.csproj" />
+    <Compile Include="../web/KoreaTerrainTruth.cs" Link="KoreaTerrainTruth.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../content/packs/ukraine-modern/environment/terrain-atlas/rapier-site.kernel.truth"
+                      LogicalName="GunsOnly.Web.Data.UkraineRapierSite.truth" />
+    <EmbeddedResource Include="../content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.kernel.truth"
+                      LogicalName="GunsOnly.Web.Data.UkraineRapierRange.truth" />
   </ItemGroup>
 
 </Project>

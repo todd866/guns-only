@@ -44,6 +44,13 @@ bool FGunsOnlySimBridge::InitializeLibrary()
 	PtrReadTracers = &::guns_sim_read_tracers;
 	PtrReadGates = &::guns_sim_read_gates;
 	PtrReadRunway = &::guns_sim_read_runway;
+	PtrReadCourse = &::guns_sim_read_course;
+	PtrReadLeadCue = &::guns_sim_read_lead_cue;
+	PtrReadCobraState = &::guns_sim_read_cobra_state;
+	PtrCycleTarget = &::guns_sim_cycle_target;
+	PtrFireRocket = &::guns_sim_fire_rocket;
+	PtrSampleTerrainM = &::guns_sim_sample_terrain_m;
+	PtrSampleTerrainGrid = &::guns_sim_sample_terrain_grid;
 	bLibraryReady = (PtrAbiVersion && PtrAbiVersion() == GUNS_SIM_ABI_VERSION);
 	return bLibraryReady;
 #else
@@ -91,7 +98,14 @@ bool FGunsOnlySimBridge::InitializeLibrary()
 		LoadSymbol(DllHandle, TEXT("guns_sim_read_contacts"), PtrReadContacts) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_read_tracers"), PtrReadTracers) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_read_gates"), PtrReadGates) &&
-		LoadSymbol(DllHandle, TEXT("guns_sim_read_runway"), PtrReadRunway);
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_runway"), PtrReadRunway) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_course"), PtrReadCourse) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_lead_cue"), PtrReadLeadCue) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_cobra_state"), PtrReadCobraState) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_cycle_target"), PtrCycleTarget) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_fire_rocket"), PtrFireRocket) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_sample_terrain_m"), PtrSampleTerrainM) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_sample_terrain_grid"), PtrSampleTerrainGrid);
 
 	if (!bLoaded || PtrAbiVersion() != GUNS_SIM_ABI_VERSION)
 	{
@@ -225,7 +239,7 @@ int32 FGunsOnlySimBridge::ReadContacts(TArray<GunsSimContact>& OutContacts) cons
 	{
 		return 0;
 	}
-	OutContacts.SetNumZeroed(16);
+	OutContacts.SetNumZeroed(128);
 	const int32 Written = PtrReadContacts(SessionHandle, OutContacts.GetData(), OutContacts.Num());
 	OutContacts.SetNum(FMath::Max(0, Written));
 	return Written;
@@ -237,7 +251,7 @@ int32 FGunsOnlySimBridge::ReadTracers(TArray<GunsSimTracer>& OutTracers) const
 	{
 		return 0;
 	}
-	OutTracers.SetNumZeroed(128);
+	OutTracers.SetNumZeroed(256);
 	const int32 Written = PtrReadTracers(SessionHandle, OutTracers.GetData(), OutTracers.Num());
 	OutTracers.SetNum(FMath::Max(0, Written));
 	return Written;
@@ -262,6 +276,78 @@ bool FGunsOnlySimBridge::ReadRunway(GunsSimRunway& OutRunway) const
 		return false;
 	}
 	return PtrReadRunway(SessionHandle, &OutRunway) != 0;
+}
+
+bool FGunsOnlySimBridge::ReadCourse(GunsSimCourseState& OutCourse) const
+{
+	if (SessionHandle <= 0 || PtrReadCourse == nullptr)
+	{
+		return false;
+	}
+	return PtrReadCourse(SessionHandle, &OutCourse) != 0;
+}
+
+bool FGunsOnlySimBridge::ReadLeadCue(GunsSimLeadCue& OutLead) const
+{
+	if (SessionHandle <= 0 || PtrReadLeadCue == nullptr)
+	{
+		return false;
+	}
+	return PtrReadLeadCue(SessionHandle, &OutLead) != 0;
+}
+
+bool FGunsOnlySimBridge::ReadCobraState(GunsSimCobraState& OutCobra) const
+{
+	if (SessionHandle <= 0 || PtrReadCobraState == nullptr)
+	{
+		FMemory::Memzero(&OutCobra, sizeof(OutCobra));
+		return false;
+	}
+	return PtrReadCobraState(SessionHandle, &OutCobra) != 0;
+}
+
+bool FGunsOnlySimBridge::CycleTarget()
+{
+	return (SessionHandle > 0 && PtrCycleTarget != nullptr) ? (PtrCycleTarget(SessionHandle) != 0) : false;
+}
+
+bool FGunsOnlySimBridge::FireRocket()
+{
+	return (SessionHandle > 0 && PtrFireRocket != nullptr) ? (PtrFireRocket(SessionHandle) != 0) : false;
+}
+
+bool FGunsOnlySimBridge::SampleTerrainMeters(double EastM, double NorthM, double& OutHeightM) const
+{
+	if (PtrSampleTerrainM == nullptr)
+	{
+		OutHeightM = 0.0;
+		return false;
+	}
+	return PtrSampleTerrainM(SessionHandle, EastM, NorthM, &OutHeightM) != 0;
+}
+
+int32 FGunsOnlySimBridge::SampleTerrainGrid(
+	double MinEastM,
+	double MinNorthM,
+	double StepM,
+	int32 CountEast,
+	int32 CountNorth,
+	TArray<float>& OutHeightsM) const
+{
+	if (PtrSampleTerrainGrid == nullptr || CountEast <= 0 || CountNorth <= 0 || StepM <= 0.0)
+	{
+		OutHeightsM.Reset();
+		return 0;
+	}
+	OutHeightsM.SetNumZeroed(CountEast * CountNorth);
+	const int32 Written = PtrSampleTerrainGrid(
+		SessionHandle, MinEastM, MinNorthM, StepM, CountEast, CountNorth, OutHeightsM.GetData());
+	if (Written <= 0)
+	{
+		OutHeightsM.Reset();
+		return 0;
+	}
+	return Written;
 }
 
 void FGunsOnlySimBridge::SetWorldOriginMeters(double InOriginEastM, double InOriginNorthM)

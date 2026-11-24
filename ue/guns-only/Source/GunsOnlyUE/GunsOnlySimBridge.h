@@ -36,6 +36,19 @@ public:
 	int32 ReadTracers(TArray<GunsSimTracer>& OutTracers) const;
 	int32 ReadGates(TArray<GunsSimApproachGate>& OutGates) const;
 	bool ReadRunway(GunsSimRunway& OutRunway) const;
+	bool ReadCourse(GunsSimCourseState& OutCourse) const;
+	bool ReadLeadCue(GunsSimLeadCue& OutLead) const;
+	bool ReadCobraState(GunsSimCobraState& OutCobra) const;
+	bool CycleTarget();
+	bool FireRocket();
+	bool SampleTerrainMeters(double EastM, double NorthM, double& OutHeightM) const;
+	int32 SampleTerrainGrid(
+		double MinEastM,
+		double MinNorthM,
+		double StepM,
+		int32 CountEast,
+		int32 CountNorth,
+		TArray<float>& OutHeightsM) const;
 
 	void SetWorldOriginMeters(double InOriginEastM, double InOriginNorthM);
 	double GetOriginEastMeters() const { return OriginEastM; }
@@ -72,6 +85,13 @@ private:
 	using FnReadTracers = int32 (*)(int64, GunsSimTracer*, int32);
 	using FnReadGates = int32 (*)(int64, GunsSimApproachGate*, int32);
 	using FnReadRunway = int32 (*)(int64, GunsSimRunway*);
+	using FnReadCourse = int32 (*)(int64, GunsSimCourseState*);
+	using FnReadLeadCue = int32 (*)(int64, GunsSimLeadCue*);
+	using FnReadCobraState = int32 (*)(int64, GunsSimCobraState*);
+	using FnCycleTarget = int32 (*)(int64);
+	using FnFireRocket = int32 (*)(int64);
+	using FnSampleTerrainM = int32 (*)(int64, double, double, double*);
+	using FnSampleTerrainGrid = int32 (*)(int64, double, double, double, int32, int32, float*);
 
 	FnAbiVersion PtrAbiVersion = nullptr;
 	FnCreate PtrCreate = nullptr;
@@ -91,4 +111,11 @@ private:
 	FnReadTracers PtrReadTracers = nullptr;
 	FnReadGates PtrReadGates = nullptr;
 	FnReadRunway PtrReadRunway = nullptr;
+	FnReadCourse PtrReadCourse = nullptr;
+	FnReadLeadCue PtrReadLeadCue = nullptr;
+	FnReadCobraState PtrReadCobraState = nullptr;
+	FnCycleTarget PtrCycleTarget = nullptr;
+	FnFireRocket PtrFireRocket = nullptr;
+	FnSampleTerrainM PtrSampleTerrainM = nullptr;
+	FnSampleTerrainGrid PtrSampleTerrainGrid = nullptr;
 };
