@@ -12,6 +12,7 @@
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/VolumetricCloudComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Materials/Material.h"
@@ -288,7 +289,51 @@ namespace
 			Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Actor->SetRootComponent(Comp);
 			Comp->RegisterComponent();
+			Actor->SetActorLocationAndRotation(WorldPos, WorldRot);
 			OutSpawned.Add(Actor);
+		}
+	}
+
+	uint32 HashStep(uint32& State)
+	{
+		State = State * 1664525u + 1013904223u;
+		return State;
+	}
+
+	double HashUnit01(uint32& State)
+	{
+		return static_cast<double>(HashStep(State) >> 8) / static_cast<double>(1u << 24);
+	}
+
+	void SpawnInstancedFoliage(
+		UWorld* World,
+		const TCHAR* MeshPath,
+		const TCHAR* CompName,
+		const TArray<FTransform>& Transforms,
+		TArray<TObjectPtr<AActor>>& OutSpawned)
+	{
+		if (World == nullptr || Transforms.IsEmpty())
+		{
+			return;
+		}
+		UStaticMesh* MeshAsset = FGunsOnlyWorldBuilder::LoadGunsStaticMesh(MeshPath);
+		if (MeshAsset == nullptr)
+		{
+			return;
+		}
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (AActor* FoliageActor = World->SpawnActor<AActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params))
+		{
+			UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(FoliageActor, CompName);
+			ISM->SetStaticMesh(MeshAsset);
+			ISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			ISM->SetCastShadow(true);
+			ISM->SetCullDistances(0, 2600000); // visible up to 26 km
+			FoliageActor->SetRootComponent(ISM);
+			ISM->RegisterComponent();
+			ISM->AddInstances(Transforms, false);
+			OutSpawned.Add(FoliageActor);
 		}
 	}
 
@@ -505,6 +550,48 @@ namespace
 				}
 			}
 		}
+
+		// Ukraine windbreak / shelterbelt tree rows along steppe fields outside Son airbase clearways
+		TArray<FTransform> TreeTransforms;
+		TreeTransforms.Reserve(520);
+		uint32 Rng = 0x51A9E123u;
+		for (int32 Attempt = 0; Attempt < 1400 && TreeTransforms.Num() < 480; ++Attempt)
+		{
+			const double LocalE = (HashUnit01(Rng) - 0.5) * 20000.0;
+			const double LocalN = (HashUnit01(Rng) - 0.5) * 20000.0;
+			const double WorldE = OriginE + LocalE;
+			const double WorldN = OriginN + LocalN;
+			if (Runway.present != 0)
+			{
+				const double FwdE = FMath::Sin(Runway.heading_rad);
+				const double FwdN = FMath::Cos(Runway.heading_rad);
+				const double RightE = FMath::Cos(Runway.heading_rad);
+				const double RightN = -FMath::Sin(Runway.heading_rad);
+				const double Along = (WorldE - Runway.threshold_east_m) * FwdE + (WorldN - Runway.threshold_north_m) * FwdN;
+				const double Cross = (WorldE - Runway.threshold_east_m) * RightE + (WorldN - Runway.threshold_north_m) * RightN;
+				if (Along > -1800.0 && Along < Runway.length_m + 1800.0 && Cross > -380.0 && Cross < 620.0)
+				{
+					continue;
+				}
+			}
+			double H = 0.0;
+			if (!Bridge.SampleTerrainMeters(WorldE, WorldN, H) || H < 8.0 || H > 180.0)
+			{
+				continue;
+			}
+			// Encourage linear hedgerows along 900 m stepped agricultural grid lines
+			const double ModE = FMath::Fmod(FMath::Abs(LocalE), 900.0);
+			const double ModN = FMath::Fmod(FMath::Abs(LocalN), 900.0);
+			if (ModE > 55.0 && ModN > 55.0)
+			{
+				continue;
+			}
+			const float Yaw = static_cast<float>(HashUnit01(Rng) * 360.0);
+			const float Scale = static_cast<float>(0.85 + HashUnit01(Rng) * 0.65);
+			TreeTransforms.Emplace(FRotator(0.0f, Yaw, 0.0f), Bridge.SimPosToUE(WorldE, H - 0.3, WorldN), FVector(Scale));
+		}
+		SpawnInstancedFoliage(World, TEXT("/Game/GunsOnly/Meshes/SM_Shelterbelt_Tree.SM_Shelterbelt_Tree"),
+			TEXT("UkraineShelterbelts"), TreeTransforms, OutSpawned);
 	}
 
 	void BuildCobraEnvironment(
@@ -667,6 +754,7 @@ namespace
 				Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				BridgeActor->SetRootComponent(Comp);
 				Comp->RegisterComponent();
+				BridgeActor->SetActorLocation(BridgeUE);
 				OutSpawned.Add(BridgeActor);
 			}
 		}
@@ -679,6 +767,7 @@ namespace
 			UProceduralMeshComponent* PadMesh = NewObject<UProceduralMeshComponent>(PadActor, TEXT("CampEmberPad"));
 			PadActor->SetRootComponent(PadMesh);
 			PadMesh->RegisterComponent();
+			PadActor->SetActorLocation(FobUE);
 			OutSpawned.Add(PadActor);
 
 			FMeshBuffers Slab;
@@ -700,6 +789,438 @@ namespace
 			TEXT("/Game/GunsOnly/Meshes/SM_Son_ControlTower.SM_Son_ControlTower"), TEXT("CampEmberTower"), OutSpawned);
 		SpawnStaticAirbaseActor(World, FobFrame, FVector(-1800.0, -3400.0, -20.0), FRotator(0.0f, 90.0f, 0.0f),
 			TEXT("/Game/GunsOnly/Meshes/SM_Son_Hangar.SM_Son_Hangar"), TEXT("CampEmberHangar"), OutSpawned);
+
+		// Dense tropical palm clusters & understory plants across the Vietnam canyon jungle slopes
+		TArray<FTransform> PalmTransforms;
+		TArray<FTransform> PlantTransforms;
+		PalmTransforms.Reserve(900);
+		PlantTransforms.Reserve(1100);
+		uint32 JungleRng = 0xC0B4A196u;
+		for (int32 Attempt = 0; Attempt < 6000 && PalmTransforms.Num() < 850; ++Attempt)
+		{
+			const double WorldE = (HashUnit01(JungleRng) - 0.5) * 11000.0;
+			const double WorldN = (HashUnit01(JungleRng) - 0.5) * 11000.0;
+			const double DistFob = FMath::Sqrt(
+				FMath::Square(WorldE - CobraState.fob_east_m) + FMath::Square(WorldN - CobraState.fob_north_m));
+			const double DistBridge = FMath::Sqrt(
+				FMath::Square(WorldE - CobraState.bridge_east_m) + FMath::Square(WorldN - CobraState.bridge_north_m));
+			if (DistFob < 85.0 || DistBridge < 75.0)
+			{
+				continue;
+			}
+			double H = 0.0;
+			if (!Bridge.SampleTerrainMeters(WorldE, WorldN, H) || H < 101.0 || H > 290.0)
+			{
+				continue;
+			}
+			const float Yaw = static_cast<float>(HashUnit01(JungleRng) * 360.0);
+			const float Scale = static_cast<float>(0.85 + HashUnit01(JungleRng) * 0.70);
+			PalmTransforms.Emplace(FRotator(0.0f, Yaw, 0.0f), Bridge.SimPosToUE(WorldE, H - 0.35, WorldN), FVector(Scale));
+		}
+		for (int32 Attempt = 0; Attempt < 5000 && PlantTransforms.Num() < 1000; ++Attempt)
+		{
+			const double WorldE = (HashUnit01(JungleRng) - 0.5) * 9000.0;
+			const double WorldN = (HashUnit01(JungleRng) - 0.5) * 9000.0;
+			const double DistFob = FMath::Sqrt(
+				FMath::Square(WorldE - CobraState.fob_east_m) + FMath::Square(WorldN - CobraState.fob_north_m));
+			if (DistFob < 70.0)
+			{
+				continue;
+			}
+			double H = 0.0;
+			if (!Bridge.SampleTerrainMeters(WorldE, WorldN, H) || H < 100.5 || H > 250.0)
+			{
+				continue;
+			}
+			const float Yaw = static_cast<float>(HashUnit01(JungleRng) * 360.0);
+			const float Scale = static_cast<float>(0.90 + HashUnit01(JungleRng) * 0.85);
+			PlantTransforms.Emplace(FRotator(0.0f, Yaw, 0.0f), Bridge.SimPosToUE(WorldE, H - 0.15, WorldN), FVector(Scale));
+		}
+		SpawnInstancedFoliage(World, TEXT("/Game/GunsOnly/Meshes/SM_Cobra_PalmCluster.SM_Cobra_PalmCluster"),
+			TEXT("CobraJunglePalms"), PalmTransforms, OutSpawned);
+		SpawnInstancedFoliage(World, TEXT("/Game/GunsOnly/Meshes/SM_Cobra_PlantClump.SM_Cobra_PlantClump"),
+			TEXT("CobraJunglePlants"), PlantTransforms, OutSpawned);
+	}
+
+	void BuildRunwayAndAirbase(
+		UWorld* World,
+		const FGunsOnlySimBridge& Bridge,
+		const GunsSimRunway& Runway,
+		bool bSpawnAirbaseStructures,
+		FGunsOnlyPapiRig& OutPapiRig,
+		TArray<TObjectPtr<AActor>>& OutSpawnedWorldActors)
+	{
+		if (World == nullptr || Runway.present == 0)
+		{
+			return;
+		}
+		const double LengthCm = Runway.length_m * 100.0;
+		const double WidthCm = Runway.width_m * 100.0;
+		const double AimAlongCm = Runway.touchdown_aim_along_m * 100.0;
+		const float HeadingDeg = static_cast<float>(FMath::RadiansToDegrees(Runway.heading_rad));
+
+		const FVector ThresholdUE = Bridge.SimPosToUE(
+			Runway.threshold_east_m,
+			Runway.threshold_up_m,
+			Runway.threshold_north_m);
+		const FTransform RunwayTransform(FRotator(0.0f, HeadingDeg, 0.0f), ThresholdUE);
+
+		FActorSpawnParameters RunwaySpawnParams;
+		RunwaySpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AActor* RunwayActor = World->SpawnActor<AActor>(ThresholdUE, FRotator(0.0f, HeadingDeg, 0.0f), RunwaySpawnParams);
+		if (RunwayActor != nullptr)
+		{
+			OutSpawnedWorldActors.Add(RunwayActor);
+			UProceduralMeshComponent* RunwayMesh = NewObject<UProceduralMeshComponent>(RunwayActor, TEXT("RunwaySlab"));
+			RunwayActor->SetRootComponent(RunwayMesh);
+			RunwayMesh->RegisterComponent();
+			RunwayActor->SetActorLocationAndRotation(ThresholdUE, FRotator(0.0f, HeadingDeg, 0.0f));
+
+			FMeshBuffers SlabBuf;
+			AppendBoxScaledUV(SlabBuf,
+				FVector(LengthCm * 0.5, 0.0, -35.0),
+				FVector(LengthCm * 0.5, WidthCm * 0.5, 35.0),
+				FColor(46, 50, 56, 255));
+			if (bSpawnAirbaseStructures)
+			{
+				AppendBoxScaledUV(SlabBuf,
+					FVector(LengthCm * 0.5, 18000.0, -35.0),
+					FVector(LengthCm * 0.5, 1200.0, 35.0),
+					FColor(46, 50, 56, 255));
+				AppendBoxScaledUV(SlabBuf, FVector(15000.0, 9000.0, -35.0), FVector(1200.0, 9000.0, 35.0), FColor(46, 50, 56, 255));
+				AppendBoxScaledUV(SlabBuf, FVector(AimAlongCm, 9000.0, -35.0), FVector(1200.0, 9000.0, 35.0), FColor(46, 50, 56, 255));
+				AppendBoxScaledUV(SlabBuf, FVector(LengthCm - 15000.0, 9000.0, -35.0), FVector(1200.0, 9000.0, 35.0), FColor(46, 50, 56, 255));
+				AppendBoxScaledUV(SlabBuf, FVector(92000.0, 22500.0, -35.0), FVector(32000.0, 4200.0, 35.0), FColor(46, 50, 56, 255));
+			}
+
+			CommitSection(RunwayMesh, 0, SlabBuf,
+				FGunsOnlyWorldBuilder::LoadGunsMaterial(TEXT("/Game/GunsOnly/Materials/M_Runway_Asphalt.M_Runway_Asphalt"),
+					RunwayActor, FLinearColor(0.10f, 0.11f, 0.13f)));
+
+			FMeshBuffers MarkBuf;
+			const int32 StripeCount = 8;
+			const double Span = WidthCm * 0.80;
+			for (int32 i = 0; i < StripeCount; ++i)
+			{
+				const double OffsetY = -Span * 0.5 + (Span / (StripeCount - 1)) * i;
+				AppendBox(MarkBuf, FVector(2200.0, OffsetY, 6.0), FVector(1600.0, 95.0, 6.0), FColor(238, 240, 236, 255));
+			}
+			for (double Along = 8000.0; Along < LengthCm - 6000.0; Along += 6000.0)
+			{
+				AppendBox(MarkBuf, FVector(Along, 0.0, 6.0), FVector(1800.0, 48.0, 6.0), FColor(238, 240, 236, 255));
+			}
+			AppendBox(MarkBuf, FVector(AimAlongCm, -WidthCm * 0.25, 6.0), FVector(1500.0, 150.0, 6.0), FColor(238, 240, 236, 255));
+			AppendBox(MarkBuf, FVector(AimAlongCm,  WidthCm * 0.25, 6.0), FVector(1500.0, 150.0, 6.0), FColor(238, 240, 236, 255));
+
+			CommitSection(RunwayMesh, 1, MarkBuf,
+				FGunsOnlyWorldBuilder::LoadGunsMaterial(TEXT("/Game/GunsOnly/Materials/M_Runway_Markings.M_Runway_Markings"),
+					RunwayActor, FLinearColor(0.92f, 0.92f, 0.90f)));
+
+			UMaterialInterface* PapiBase = LoadObject<UMaterialInterface>(
+				nullptr, TEXT("/Game/GunsOnly/Materials/M_Papi_Lamp.M_Papi_Lamp"));
+			for (int32 PapiIdx = 0; PapiIdx < 4; ++PapiIdx)
+			{
+				FMeshBuffers PapiBuf;
+				const double PapiY = -WidthCm * 0.5 - 900.0 - PapiIdx * 700.0;
+				AppendBox(PapiBuf, FVector(AimAlongCm, PapiY, 120.0), FVector(140.0, 220.0, 110.0), FColor::White);
+				UMaterialInstanceDynamic* PapiMat = PapiBase != nullptr
+					? UMaterialInstanceDynamic::Create(PapiBase, RunwayActor)
+					: Cast<UMaterialInstanceDynamic>(FGunsOnlyWorldBuilder::CreateColoredMaterial(RunwayActor, FLinearColor(1.0f, 0.96f, 0.85f)));
+				CommitSection(RunwayMesh, 2 + PapiIdx, PapiBuf, PapiMat);
+				OutPapiRig.LampMaterials.Add(PapiMat);
+			}
+			FGunsOnlyWorldBuilder::UpdatePapiRig(OutPapiRig, 3.0);
+
+			FMeshBuffers EdgeLightBuf;
+			for (double Along = 5000.0; Along <= LengthCm - 5000.0; Along += 15000.0)
+			{
+				AppendBox(EdgeLightBuf, FVector(Along, -WidthCm * 0.5 - 120.0, 22.0), FVector(55.0, 55.0, 32.0), FColor::White);
+				AppendBox(EdgeLightBuf, FVector(Along,  WidthCm * 0.5 + 120.0, 22.0), FVector(55.0, 55.0, 32.0), FColor::White);
+			}
+			UMaterialInterface* EdgeLightBase = PapiBase != nullptr ? PapiBase : FGunsOnlyWorldBuilder::CreateColoredMaterial(RunwayActor, FLinearColor(1.2f, 1.0f, 0.72f));
+			UMaterialInstanceDynamic* EdgeLightDyn = UMaterialInstanceDynamic::Create(EdgeLightBase, RunwayActor);
+			if (EdgeLightDyn != nullptr)
+			{
+				EdgeLightDyn->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.88f, 0.62f));
+			}
+			CommitSection(RunwayMesh, 6, EdgeLightBuf, EdgeLightDyn);
+		}
+
+		if (bSpawnAirbaseStructures)
+		{
+			SpawnStaticAirbaseActor(World, RunwayTransform, FVector(88000.0, 29500.0, -40.0), FRotator(0.0f, -90.0f, 0.0f),
+				TEXT("/Game/GunsOnly/Meshes/SM_Son_ControlTower.SM_Son_ControlTower"), TEXT("SonControlTower"), OutSpawnedWorldActors);
+			for (int32 h = 0; h < 4; ++h)
+			{
+				const double HangarAlong = 64000.0 + h * 15000.0;
+				SpawnStaticAirbaseActor(World, RunwayTransform, FVector(HangarAlong, 29500.0, -40.0), FRotator(0.0f, 90.0f, 0.0f),
+					TEXT("/Game/GunsOnly/Meshes/SM_Son_Hangar.SM_Son_Hangar"), TEXT("SonHAS"), OutSpawnedWorldActors);
+			}
+			SpawnStaticAirbaseActor(World, RunwayTransform, FVector(152000.0, 33000.0, -40.0), FRotator::ZeroRotator,
+				TEXT("/Game/GunsOnly/Meshes/SM_Son_RadarDome.SM_Son_RadarDome"), TEXT("SonRadarDome"), OutSpawnedWorldActors);
+		}
+	}
+
+	void BuildWaterSheetActor(
+		UWorld* World,
+		double HalfSpanCm,
+		double WaterZCm,
+		const TCHAR* MatPath,
+		const FLinearColor& FallbackCol,
+		const TCHAR* Name,
+		TArray<TObjectPtr<AActor>>& OutSpawned)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (AActor* WaterActor = World->SpawnActor<AActor>(FVector(0.0, 0.0, WaterZCm), FRotator::ZeroRotator, Params))
+		{
+			UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(WaterActor, Name);
+			WaterActor->SetRootComponent(Mesh);
+			Mesh->RegisterComponent();
+			WaterActor->SetActorLocation(FVector(0.0, 0.0, WaterZCm));
+			OutSpawned.Add(WaterActor);
+
+			constexpr int32 GridN = 48;
+			const double Step = (2.0 * HalfSpanCm) / GridN;
+			FMeshBuffers Buf;
+			for (int32 j = 0; j < GridN; ++j)
+			{
+				const double X0 = -HalfSpanCm + j * Step;
+				const double X1 = X0 + Step;
+				for (int32 i = 0; i < GridN; ++i)
+				{
+					const double Y0 = -HalfSpanCm + i * Step;
+					const double Y1 = Y0 + Step;
+					const int32 Base = Buf.Verts.Num();
+					Buf.Verts.Add(FVector(X0, Y0, 0.0));
+					Buf.Verts.Add(FVector(X1, Y0, 0.0));
+					Buf.Verts.Add(FVector(X1, Y1, 0.0));
+					Buf.Verts.Add(FVector(X0, Y1, 0.0));
+					for (int32 k = 0; k < 4; ++k)
+					{
+						Buf.Normals.Add(FVector::UpVector);
+						Buf.Colors.Add(FColor::White);
+						Buf.Tangents.Add(FProcMeshTangent());
+					}
+					Buf.UVs.Add(FVector2D(0.0f, 0.0f));
+					Buf.UVs.Add(FVector2D(1.0f, 0.0f));
+					Buf.UVs.Add(FVector2D(1.0f, 1.0f));
+					Buf.UVs.Add(FVector2D(0.0f, 1.0f));
+					Buf.Tris.Add(Base + 0); Buf.Tris.Add(Base + 2); Buf.Tris.Add(Base + 1);
+					Buf.Tris.Add(Base + 0); Buf.Tris.Add(Base + 3); Buf.Tris.Add(Base + 2);
+				}
+			}
+			CommitSection(Mesh, 0, Buf, FGunsOnlyWorldBuilder::LoadGunsMaterial(MatPath, WaterActor, FallbackCol));
+		}
+	}
+
+	void BuildMaritimeCarrierEnvironment(
+		UWorld* World,
+		const FGunsOnlySimBridge& Bridge,
+		const GunsSimCarrierState& CarrierState,
+		FGunsOnlyAtmosphereRig& InOutAtmoRig,
+		TArray<TObjectPtr<AActor>>& OutSpawned)
+	{
+		// 180 km x 180 km Pacific Ocean surface at Sea Level Z = 0
+		BuildWaterSheetActor(World, 9000000.0, 0.0,
+			TEXT("/Game/GunsOnly/Materials/M_Ocean_Water.M_Ocean_Water"),
+			FLinearColor(0.015f, 0.055f, 0.11f), TEXT("PacificOcean"), OutSpawned);
+
+		if (CarrierState.present != 0)
+		{
+			UStaticMesh* CarrierMesh = FGunsOnlyWorldBuilder::LoadGunsStaticMesh(
+				TEXT("/Game/GunsOnly/Meshes/SM_Carrier_Hull.SM_Carrier_Hull"));
+			const FVector CarrierPos = Bridge.SimPosToUE(
+				CarrierState.pos_east_m, CarrierState.pos_up_m, CarrierState.pos_north_m);
+			const float CarrierYaw = static_cast<float>(FMath::RadiansToDegrees(CarrierState.heading_rad));
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			if (AActor* Ship = World->SpawnActor<AActor>(CarrierPos, FRotator(0.0f, CarrierYaw, 0.0f), Params))
+			{
+				if (CarrierMesh != nullptr)
+				{
+					UStaticMeshComponent* Comp = NewObject<UStaticMeshComponent>(Ship, TEXT("CarrierHullMesh"));
+					Comp->SetStaticMesh(CarrierMesh);
+					Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					Ship->SetRootComponent(Comp);
+					Comp->RegisterComponent();
+				}
+				else
+				{
+					UProceduralMeshComponent* Fallback = NewObject<UProceduralMeshComponent>(Ship, TEXT("CarrierFallback"));
+					Ship->SetRootComponent(Fallback);
+					Fallback->RegisterComponent();
+					FGunsOnlyWorldBuilder::BuildBoxProceduralMesh(Fallback, Ship, FVector(16000.0, 3800.0, 1000.0), FLinearColor(0.18f, 0.20f, 0.22f));
+				}
+				Ship->SetActorLocationAndRotation(CarrierPos, FRotator(0.0f, CarrierYaw, 0.0f));
+				InOutAtmoRig.CarrierActor = Ship;
+				OutSpawned.Add(Ship);
+			}
+		}
+	}
+
+	void BuildOkanaganEnvironment(
+		UWorld* World,
+		const FGunsOnlySimBridge& Bridge,
+		const GunsSimRunway& Runway,
+		const GunsSimOkanaganState& OkanaganState,
+		FGunsOnlyPapiRig& OutPapiRig,
+		TArray<TObjectPtr<AActor>>& OutSpawned)
+	{
+		const double OriginE = Bridge.GetOriginEastMeters();
+		const double OriginN = Bridge.GetOriginNorthMeters();
+		constexpr int32 DimN = 201;
+		constexpr double StepM = 280.0;
+		const double HalfSpanM = 0.5 * (DimN - 1) * StepM; // 28,000 m (56x56 km)
+		const double MinE = OriginE - HalfSpanM;
+		const double MinN = OriginN - HalfSpanM;
+
+		TArray<float> HeightsM;
+		if (Bridge.SampleTerrainGrid(MinE, MinN, StepM, DimN, DimN, HeightsM) != DimN * DimN)
+		{
+			HeightsM.Init(static_cast<float>(OkanaganState.water_level_m + 35.0), DimN * DimN);
+		}
+
+		// Grade Kelowna airport apron level
+		if (Runway.present != 0)
+		{
+			const double FwdE = FMath::Sin(Runway.heading_rad);
+			const double FwdN = FMath::Cos(Runway.heading_rad);
+			const double RightE = FMath::Cos(Runway.heading_rad);
+			const double RightN = -FMath::Sin(Runway.heading_rad);
+			const double PadH = Runway.threshold_up_m - 0.55;
+			for (int32 j = 0; j < DimN; ++j)
+			{
+				const double NorthM = MinN + j * StepM;
+				for (int32 i = 0; i < DimN; ++i)
+				{
+					const double EastM = MinE + i * StepM;
+					const double RelE = EastM - Runway.threshold_east_m;
+					const double RelN = NorthM - Runway.threshold_north_m;
+					const double AlongM = RelE * FwdE + RelN * FwdN;
+					const double CrossM = RelE * RightE + RelN * RightN;
+					const double dA = AlongM < -200.0 ? (-200.0 - AlongM) : (AlongM > Runway.length_m + 200.0 ? AlongM - (Runway.length_m + 200.0) : 0.0);
+					const double dC = FMath::Max(0.0, FMath::Abs(CrossM) - 220.0);
+					const double D = FMath::Sqrt(dA * dA + dC * dC);
+					if (D < 480.0)
+					{
+						const int32 Idx = j * DimN + i;
+						HeightsM[Idx] = static_cast<float>(FMath::Lerp(PadH, static_cast<double>(HeightsM[Idx]), SmoothStep01(D / 480.0)));
+					}
+				}
+			}
+		}
+
+		// Sink lakebed vertices cleanly below the water sheet so OkanaganTerrain never z-fights with OkanaganLake.
+		const double LakeSurfaceM = OkanaganState.water_level_m > 10.0 ? OkanaganState.water_level_m : 342.0;
+		for (int32 Idx = 0; Idx < HeightsM.Num(); ++Idx)
+		{
+			if (HeightsM[Idx] <= static_cast<float>(LakeSurfaceM + 0.15))
+			{
+				HeightsM[Idx] = static_cast<float>(LakeSurfaceM - 6.0);
+			}
+		}
+
+		UMaterialInterface* OkMat = LoadObject<UMaterialInterface>(
+			nullptr, TEXT("/Game/GunsOnly/Materials/M_Okanagan_Terrain.M_Okanagan_Terrain"));
+		FMeshBuffers TerrainBuf;
+		TArray<FVector> Positions;
+		TArray<FVector> Normals;
+		Positions.SetNumUninitialized(DimN * DimN);
+		Normals.SetNumUninitialized(DimN * DimN);
+		for (int32 j = 0; j < DimN; ++j)
+		{
+			const double NorthM = MinN + j * StepM;
+			for (int32 i = 0; i < DimN; ++i)
+			{
+				const double EastM = MinE + i * StepM;
+				const int32 Idx = j * DimN + i;
+				Positions[Idx] = FVector((NorthM - OriginN) * 100.0, (EastM - OriginE) * 100.0, static_cast<double>(HeightsM[Idx]) * 100.0);
+			}
+		}
+		for (int32 j = 0; j < DimN; ++j)
+		{
+			const int32 Jm = FMath::Max(0, j - 1), Jp = FMath::Min(DimN - 1, j + 1);
+			const double SpanN = FMath::Max(1.0, static_cast<double>(Jp - Jm) * StepM);
+			for (int32 i = 0; i < DimN; ++i)
+			{
+				const int32 Im = FMath::Max(0, i - 1), Ip = FMath::Min(DimN - 1, i + 1);
+				const double SpanE = FMath::Max(1.0, static_cast<double>(Ip - Im) * StepM);
+				const double dHdN = (HeightsM[Jp * DimN + i] - HeightsM[Jm * DimN + i]) / SpanN;
+				const double dHdE = (HeightsM[j * DimN + Ip] - HeightsM[j * DimN + Im]) / SpanE;
+				Normals[j * DimN + i] = FVector(-dHdN, -dHdE, 1.0).GetSafeNormal();
+			}
+		}
+		for (int32 j = 0; j < DimN - 1; ++j)
+		{
+			for (int32 i = 0; i < DimN - 1; ++i)
+			{
+				const int32 Corners[4] = { j * DimN + i, j * DimN + i + 1, (j + 1) * DimN + i + 1, (j + 1) * DimN + i };
+				const FVector2D UVs[4] = { {0,0}, {1,0}, {1,1}, {0,1} };
+				const int32 Base = TerrainBuf.Verts.Num();
+				for (int32 k = 0; k < 4; ++k)
+				{
+					TerrainBuf.Verts.Add(Positions[Corners[k]]);
+					TerrainBuf.Normals.Add(Normals[Corners[k]]);
+					TerrainBuf.UVs.Add(UVs[k]);
+					TerrainBuf.Colors.Add(FColor::White);
+					TerrainBuf.Tangents.Add(FProcMeshTangent());
+				}
+				TerrainBuf.Tris.Add(Base + 0); TerrainBuf.Tris.Add(Base + 1); TerrainBuf.Tris.Add(Base + 3);
+				TerrainBuf.Tris.Add(Base + 1); TerrainBuf.Tris.Add(Base + 2); TerrainBuf.Tris.Add(Base + 3);
+			}
+		}
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (AActor* OkActor = World->SpawnActor<AActor>(FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams))
+		{
+			UProceduralMeshComponent* OkMesh = NewObject<UProceduralMeshComponent>(OkActor, TEXT("OkanaganTerrain"));
+			OkActor->SetRootComponent(OkMesh);
+			OkMesh->RegisterComponent();
+			OutSpawned.Add(OkActor);
+			CommitSection(OkMesh, 0, TerrainBuf, OkMat != nullptr
+				? OkMat : FGunsOnlyWorldBuilder::CreateColoredMaterial(OkActor, FLinearColor(0.14f, 0.24f, 0.13f)));
+		}
+
+		// Reflective Okanagan Lake sheet above sunken lakebed + Kelowna airport strip
+		const double LakeWaterM = OkanaganState.water_level_m > 10.0 ? OkanaganState.water_level_m : 342.0;
+		const double LakeCm = (LakeWaterM + 0.35) * 100.0;
+		BuildWaterSheetActor(World, 2600000.0, LakeCm,
+			TEXT("/Game/GunsOnly/Materials/M_Okanagan_Lake.M_Okanagan_Lake"),
+			FLinearColor(0.02f, 0.09f, 0.14f), TEXT("OkanaganLake"), OutSpawned);
+
+		BuildRunwayAndAirbase(World, Bridge, Runway, false, OutPapiRig, OutSpawned);
+
+		// BC Pine Conifer forest scattered across Okanagan valley slopes
+		TArray<FTransform> PineTransforms;
+		PineTransforms.Reserve(950);
+		uint32 PineRng = 0x0CA4A9A4u;
+		const double WaterH = OkanaganState.water_level_m > 10.0 ? OkanaganState.water_level_m : 342.0;
+		for (int32 Attempt = 0; Attempt < 6000 && PineTransforms.Num() < 900; ++Attempt)
+		{
+			const double WorldE = OriginE + (HashUnit01(PineRng) - 0.5) * 26000.0;
+			const double WorldN = OriginN + (HashUnit01(PineRng) - 0.5) * 26000.0;
+			double H = 0.0;
+			if (!Bridge.SampleTerrainMeters(WorldE, WorldN, H) || H < WaterH + 7.5 || H > 1400.0)
+			{
+				continue;
+			}
+			if (Runway.present != 0)
+			{
+				const double DistRwy = FMath::Sqrt(
+					FMath::Square(WorldE - Runway.threshold_east_m) + FMath::Square(WorldN - Runway.threshold_north_m));
+				if (DistRwy < 3200.0 && H < Runway.threshold_up_m + 40.0)
+				{
+					continue;
+				}
+			}
+			const float Yaw = static_cast<float>(HashUnit01(PineRng) * 360.0);
+			const float Scale = static_cast<float>(0.85 + HashUnit01(PineRng) * 0.75);
+			PineTransforms.Emplace(FRotator(0.0f, Yaw, 0.0f), Bridge.SimPosToUE(WorldE, H - 0.4, WorldN), FVector(Scale));
+		}
+		SpawnInstancedFoliage(World, TEXT("/Game/GunsOnly/Meshes/SM_Pine_Tree.SM_Pine_Tree"),
+			TEXT("OkanaganPines"), PineTransforms, OutSpawned);
 	}
 }
 
@@ -754,13 +1275,18 @@ void FGunsOnlyWorldBuilder::ClearSpawnedWorldActors(TArray<TObjectPtr<AActor>>& 
 
 void FGunsOnlyWorldBuilder::EnsureEnvironmentAndRunway(
 	UWorld* World,
+	int32 BeatIndex,
 	const FGunsOnlySimBridge& Bridge,
 	const GunsSimRunway& Runway,
 	const GunsSimCobraState& CobraState,
+	const GunsSimCarrierState& CarrierState,
+	const GunsSimOkanaganState& OkanaganState,
 	FGunsOnlyPapiRig& OutPapiRig,
+	FGunsOnlyAtmosphereRig& InOutAtmoRig,
 	TArray<TObjectPtr<AActor>>& OutSpawnedWorldActors)
 {
 	ClearSpawnedWorldActors(OutSpawnedWorldActors);
+	InOutAtmoRig.CarrierActor = nullptr;
 	OutPapiRig.LampMaterials.Reset();
 	OutPapiRig.LastWhiteCount = -1;
 	if (World == nullptr)
@@ -768,62 +1294,117 @@ void FGunsOnlyWorldBuilder::EnsureEnvironmentAndRunway(
 		return;
 	}
 
-	TActorIterator<ASkyAtmosphere> AtmoIt(World);
-	const bool bHasAtmosphere = static_cast<bool>(AtmoIt);
+	auto FindFirstActor = [World](auto* DummyType) -> decltype(DummyType)
+	{
+		using ActorT = typename TRemovePointer<decltype(DummyType)>::Type;
+		for (TActorIterator<ActorT> It(World); It; ++It)
+		{
+			return *It;
+		}
+		return nullptr;
+	};
 
-	if (!bHasAtmosphere)
+	if (!InOutAtmoRig.SkyAtmosphere.IsValid())
 	{
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-		if (ADirectionalLight* Sun = World->SpawnActor<ADirectionalLight>(
-			FVector::ZeroVector, FRotator(-22.0f, 132.0f, 0.0f), Params))
+		ADirectionalLight* Sun = FindFirstActor(static_cast<ADirectionalLight*>(nullptr));
+		if (Sun == nullptr)
 		{
+			Sun = World->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(-22.0f, 132.0f, 0.0f), Params);
+		}
+		if (Sun != nullptr)
+		{
+			InOutAtmoRig.SunLight = Sun;
 			if (UDirectionalLightComponent* LightComp = Cast<UDirectionalLightComponent>(Sun->GetLightComponent()))
 			{
+				LightComp->SetMobility(EComponentMobility::Movable);
 				LightComp->SetAtmosphereSunLight(true);
-				LightComp->SetIntensity(10.0f);
+				LightComp->SetIntensity(10.5f);
 				LightComp->SetLightColor(FLinearColor(1.0f, 0.95f, 0.86f));
 			}
 		}
 
-		World->SpawnActor<ASkyAtmosphere>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
-
-		if (ASkyLight* Sky = World->SpawnActor<ASkyLight>(FVector::ZeroVector, FRotator::ZeroRotator, Params))
+		ASkyAtmosphere* Atmo = FindFirstActor(static_cast<ASkyAtmosphere*>(nullptr));
+		if (Atmo == nullptr)
 		{
+			Atmo = World->SpawnActor<ASkyAtmosphere>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+		}
+		InOutAtmoRig.SkyAtmosphere = Atmo;
+		if (Atmo != nullptr)
+		{
+			if (USkyAtmosphereComponent* AtmoComp = Atmo->GetComponent())
+			{
+				AtmoComp->SetGroundAlbedo(FColor(45, 72, 102));
+			}
+		}
+
+		ASkyLight* Sky = FindFirstActor(static_cast<ASkyLight*>(nullptr));
+		if (Sky == nullptr)
+		{
+			Sky = World->SpawnActor<ASkyLight>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+		}
+		if (Sky != nullptr)
+		{
+			InOutAtmoRig.SkyLight = Sky;
 			if (USkyLightComponent* SkyComp = Sky->GetLightComponent())
 			{
+				SkyComp->SetMobility(EComponentMobility::Movable);
 				SkyComp->bRealTimeCapture = true;
 			}
 		}
 
-		if (AVolumetricCloud* Clouds = World->SpawnActor<AVolumetricCloud>(FVector::ZeroVector, FRotator::ZeroRotator, Params))
+		AVolumetricCloud* Clouds = FindFirstActor(static_cast<AVolumetricCloud*>(nullptr));
+		if (Clouds == nullptr)
 		{
+			Clouds = World->SpawnActor<AVolumetricCloud>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+		}
+		if (Clouds != nullptr)
+		{
+			InOutAtmoRig.VolumetricCloud = Clouds;
 			if (UVolumetricCloudComponent* CloudComp = Clouds->FindComponentByClass<UVolumetricCloudComponent>())
 			{
-				CloudComp->SetLayerBottomAltitude(2.8f);
-				CloudComp->SetLayerHeight(3.2f);
+				CloudComp->SetLayerBottomAltitude(1.6f);
+				CloudComp->SetLayerHeight(2.6f);
 				CloudComp->SetTracingStartMaxDistance(350.0f);
-				if (UMaterialInterface* CloudMat = LoadObject<UMaterialInterface>(
-					nullptr, TEXT("/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst.m_SimpleVolumetricCloud_Inst")))
+				CloudComp->SetGroundAlbedo(FColor(76, 106, 140));
+				UMaterialInterface* CloudMat = LoadObject<UMaterialInterface>(
+					nullptr, TEXT("/Game/GunsOnly/Materials/M_Volumetric_Clouds.M_Volumetric_Clouds"));
+				if (CloudMat != nullptr)
 				{
-					CloudComp->SetMaterial(CloudMat);
+					UMaterialInstanceDynamic* CloudMID = UMaterialInstanceDynamic::Create(CloudMat, Clouds);
+					CloudComp->SetMaterial(CloudMID);
+					InOutAtmoRig.CloudMID = CloudMID;
 				}
 			}
 		}
 
-		if (AExponentialHeightFog* Fog = World->SpawnActor<AExponentialHeightFog>(
-			FVector::ZeroVector, FRotator::ZeroRotator, Params))
+		AExponentialHeightFog* Fog = FindFirstActor(static_cast<AExponentialHeightFog*>(nullptr));
+		if (Fog == nullptr)
 		{
+			Fog = World->SpawnActor<AExponentialHeightFog>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+		}
+		if (Fog != nullptr)
+		{
+			InOutAtmoRig.HeightFog = Fog;
 			if (UExponentialHeightFogComponent* FogComp = Fog->GetComponent())
 			{
-				FogComp->SetFogDensity(0.0014f);
+				FogComp->SetFogDensity(0.00022f);
+				FogComp->SetFogHeightFalloff(0.08f);
+				FogComp->SetFogMaxOpacity(0.55f);
 				FogComp->SetFogInscatteringColor(FLinearColor(0.58f, 0.74f, 0.92f));
 			}
 		}
 
-		if (APostProcessVolume* PPV = World->SpawnActor<APostProcessVolume>(FVector::ZeroVector, FRotator::ZeroRotator, Params))
+		APostProcessVolume* PPV = FindFirstActor(static_cast<APostProcessVolume*>(nullptr));
+		if (PPV == nullptr)
 		{
+			PPV = World->SpawnActor<APostProcessVolume>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+		}
+		if (PPV != nullptr)
+		{
+			InOutAtmoRig.PostProcessVolume = PPV;
 			PPV->bUnbound = true;
 			PPV->Settings.bOverride_BloomIntensity = true;
 			PPV->Settings.BloomIntensity = 0.45f;
@@ -838,130 +1419,177 @@ void FGunsOnlyWorldBuilder::EnsureEnvironmentAndRunway(
 		}
 	}
 
-	if (CobraState.active != 0)
+	if (CobraState.active != 0 || BeatIndex == GUNS_SIM_BEAT_COBRA_CANYON)
 	{
 		BuildCobraEnvironment(World, Bridge, CobraState, OutSpawnedWorldActors);
 		return;
 	}
+	if (OkanaganState.active != 0 || BeatIndex == GUNS_SIM_BEAT_OKANAGAN_FIREBOSS)
+	{
+		BuildOkanaganEnvironment(World, Bridge, Runway, OkanaganState, OutPapiRig, OutSpawnedWorldActors);
+		return;
+	}
+	if (BeatIndex == GUNS_SIM_BEAT_TOPGUN_F14 || (CarrierState.present != 0 && Runway.present == 0))
+	{
+		BuildMaritimeCarrierEnvironment(World, Bridge, CarrierState, InOutAtmoRig, OutSpawnedWorldActors);
+		return;
+	}
 
 	BuildUkraineTerrainActor(World, Bridge, Runway, OutSpawnedWorldActors);
+	BuildRunwayAndAirbase(World, Bridge, Runway, BeatIndex != GUNS_SIM_BEAT_RAPIER_INTERCEPT, OutPapiRig, OutSpawnedWorldActors);
+}
 
-	if (Runway.present != 0)
+void FGunsOnlyWorldBuilder::ApplyTheatreWeather(
+	FGunsOnlyAtmosphereRig& Rig,
+	int32 BeatIndex,
+	const GunsSimWeatherState& Weather,
+	const GunsSimFrame& Frame,
+	double SimTimeSec,
+	bool bTheatreChanged)
+{
+	if (bTheatreChanged || Rig.LastBeatIndex != BeatIndex)
 	{
-		const double LengthCm = Runway.length_m * 100.0;
-		const double WidthCm = Runway.width_m * 100.0;
-		const double AimAlongCm = Runway.touchdown_aim_along_m * 100.0;
-		const float HeadingDeg = static_cast<float>(FMath::RadiansToDegrees(Runway.heading_rad));
-
-		const FVector ThresholdUE = Bridge.SimPosToUE(
-			Runway.threshold_east_m,
-			Runway.threshold_up_m,
-			Runway.threshold_north_m);
-		const FTransform RunwayTransform(FRotator(0.0f, HeadingDeg, 0.0f), ThresholdUE);
-
-		FActorSpawnParameters RunwaySpawnParams;
-		RunwaySpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		AActor* RunwayActor = World->SpawnActor<AActor>(ThresholdUE, FRotator(0.0f, HeadingDeg, 0.0f), RunwaySpawnParams);
-		if (RunwayActor != nullptr)
+		Rig.LastBeatIndex = BeatIndex;
+		FRotator SunRot(-38.0f, 135.0f, 0.0f);
+		float SunIntensity = 11.5f;
+		FLinearColor SunColor(1.0f, 0.98f, 0.95f);
+		if (BeatIndex == GUNS_SIM_BEAT_COBRA_CANYON)
 		{
-			OutSpawnedWorldActors.Add(RunwayActor);
-			UProceduralMeshComponent* RunwayMesh = NewObject<UProceduralMeshComponent>(RunwayActor, TEXT("SonRunway"));
-			RunwayActor->SetRootComponent(RunwayMesh);
-			RunwayMesh->RegisterComponent();
-
-			FMeshBuffers SlabBuf;
-			// Main runway concrete slab + parallel eastern taxiway + 3 connectors + HAS apron
-			AppendBoxScaledUV(SlabBuf,
-				FVector(LengthCm * 0.5, 0.0, -35.0),
-				FVector(LengthCm * 0.5, WidthCm * 0.5, 35.0),
-				FColor(46, 50, 56, 255));
-			AppendBoxScaledUV(SlabBuf,
-				FVector(LengthCm * 0.5, 18000.0, -35.0),
-				FVector(LengthCm * 0.5, 1200.0, 35.0),
-				FColor(46, 50, 56, 255));
-			AppendBoxScaledUV(SlabBuf, FVector(15000.0, 9000.0, -35.0), FVector(1200.0, 9000.0, 35.0), FColor(46, 50, 56, 255));
-			AppendBoxScaledUV(SlabBuf, FVector(AimAlongCm, 9000.0, -35.0), FVector(1200.0, 9000.0, 35.0), FColor(46, 50, 56, 255));
-			AppendBoxScaledUV(SlabBuf, FVector(LengthCm - 15000.0, 9000.0, -35.0), FVector(1200.0, 9000.0, 35.0), FColor(46, 50, 56, 255));
-			AppendBoxScaledUV(SlabBuf, FVector(92000.0, 22500.0, -35.0), FVector(32000.0, 4200.0, 35.0), FColor(46, 50, 56, 255));
-
-			CommitSection(RunwayMesh, 0, SlabBuf,
-				LoadGunsMaterial(TEXT("/Game/GunsOnly/Materials/M_Runway_Asphalt.M_Runway_Asphalt"),
-					RunwayActor, FLinearColor(0.10f, 0.11f, 0.13f)));
-
-			FMeshBuffers MarkBuf;
-			const int32 StripeCount = 8;
-			const double Span = WidthCm * 0.80;
-			for (int32 i = 0; i < StripeCount; ++i)
-			{
-				const double OffsetY = -Span * 0.5 + (Span / (StripeCount - 1)) * i;
-				AppendBox(MarkBuf,
-					FVector(2200.0, OffsetY, 6.0),
-					FVector(1600.0, 95.0, 6.0),
-					FColor(238, 240, 236, 255));
-			}
-
-			for (double Along = 8000.0; Along < LengthCm - 6000.0; Along += 6000.0)
-			{
-				AppendBox(MarkBuf,
-					FVector(Along, 0.0, 6.0),
-					FVector(1800.0, 48.0, 6.0),
-					FColor(238, 240, 236, 255));
-			}
-
-			AppendBox(MarkBuf, FVector(AimAlongCm, -WidthCm * 0.25, 6.0), FVector(1500.0, 150.0, 6.0), FColor(238, 240, 236, 255));
-			AppendBox(MarkBuf, FVector(AimAlongCm,  WidthCm * 0.25, 6.0), FVector(1500.0, 150.0, 6.0), FColor(238, 240, 236, 255));
-
-			CommitSection(RunwayMesh, 1, MarkBuf,
-				LoadGunsMaterial(TEXT("/Game/GunsOnly/Materials/M_Runway_Markings.M_Runway_Markings"),
-					RunwayActor, FLinearColor(0.92f, 0.92f, 0.90f)));
-
-			// 4-light 3D PAPI array left of touchdown point (sections 2..5)
-			UMaterialInterface* PapiBase = LoadObject<UMaterialInterface>(
-				nullptr, TEXT("/Game/GunsOnly/Materials/M_Papi_Lamp.M_Papi_Lamp"));
-			for (int32 PapiIdx = 0; PapiIdx < 4; ++PapiIdx)
-			{
-				FMeshBuffers PapiBuf;
-				const double PapiY = -WidthCm * 0.5 - 900.0 - PapiIdx * 700.0;
-				AppendBox(PapiBuf,
-					FVector(AimAlongCm, PapiY, 120.0),
-					FVector(140.0, 220.0, 110.0),
-					FColor::White);
-				UMaterialInstanceDynamic* PapiMat = PapiBase != nullptr
-					? UMaterialInstanceDynamic::Create(PapiBase, RunwayActor)
-					: Cast<UMaterialInstanceDynamic>(CreateColoredMaterial(RunwayActor, FLinearColor(1.0f, 0.96f, 0.85f)));
-				CommitSection(RunwayMesh, 2 + PapiIdx, PapiBuf, PapiMat);
-				OutPapiRig.LampMaterials.Add(PapiMat);
-			}
-			UpdatePapiRig(OutPapiRig, 3.0);
-
-			// Blooming runway edge & threshold perimeter lights (section 6)
-			FMeshBuffers EdgeLightBuf;
-			for (double Along = 5000.0; Along <= LengthCm - 5000.0; Along += 15000.0)
-			{
-				AppendBox(EdgeLightBuf, FVector(Along, -WidthCm * 0.5 - 120.0, 22.0), FVector(55.0, 55.0, 32.0), FColor::White);
-				AppendBox(EdgeLightBuf, FVector(Along,  WidthCm * 0.5 + 120.0, 22.0), FVector(55.0, 55.0, 32.0), FColor::White);
-			}
-			UMaterialInterface* EdgeLightBase = PapiBase != nullptr ? PapiBase : CreateColoredMaterial(RunwayActor, FLinearColor(1.2f, 1.0f, 0.72f));
-			UMaterialInstanceDynamic* EdgeLightDyn = UMaterialInstanceDynamic::Create(EdgeLightBase, RunwayActor);
-			if (EdgeLightDyn != nullptr)
-			{
-				EdgeLightDyn->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.88f, 0.62f));
-			}
-			CommitSection(RunwayMesh, 6, EdgeLightBuf, EdgeLightDyn);
+			SunRot = FRotator(-40.0f, 148.0f, 0.0f);
+			SunIntensity = 11.5f;
+			SunColor = FLinearColor(1.0f, 0.95f, 0.86f);
+			Rig.BaselineFogDensity = 0.00045f;
+			Rig.BaselineFogColor = FLinearColor(0.68f, 0.74f, 0.68f);
+		}
+		else if (BeatIndex == GUNS_SIM_BEAT_TOPGUN_F14)
+		{
+			SunRot = FRotator(-38.0f, 52.0f, 0.0f);
+			SunIntensity = 12.0f;
+			SunColor = FLinearColor(1.0f, 0.98f, 0.94f);
+			Rig.BaselineFogDensity = 0.00018f;
+			Rig.BaselineFogColor = FLinearColor(0.54f, 0.74f, 0.96f);
+		}
+		else if (BeatIndex == GUNS_SIM_BEAT_RAPIER_INTERCEPT)
+		{
+			SunRot = FRotator(-36.0f, 120.0f, 0.0f);
+			SunIntensity = 13.0f;
+			SunColor = FLinearColor(0.97f, 0.99f, 1.0f);
+			Rig.BaselineFogDensity = 0.00010f;
+			Rig.BaselineFogColor = FLinearColor(0.46f, 0.66f, 0.96f);
+		}
+		else if (BeatIndex == GUNS_SIM_BEAT_OKANAGAN_FIREBOSS)
+		{
+			SunRot = FRotator(-40.0f, 45.0f, 0.0f);
+			SunIntensity = 11.5f;
+			SunColor = FLinearColor(1.0f, 0.97f, 0.91f);
+			Rig.BaselineFogDensity = 0.00024f;
+			Rig.BaselineFogColor = FLinearColor(0.56f, 0.74f, 0.92f);
+		}
+		else
+		{
+			Rig.BaselineFogDensity = 0.00022f;
+			Rig.BaselineFogColor = FLinearColor(0.58f, 0.74f, 0.92f);
 		}
 
-		// Spawn real Son Airbase structures along the eastern apron & perimeter
-		SpawnStaticAirbaseActor(World, RunwayTransform, FVector(88000.0, 29500.0, -40.0), FRotator(0.0f, -90.0f, 0.0f),
-			TEXT("/Game/GunsOnly/Meshes/SM_Son_ControlTower.SM_Son_ControlTower"), TEXT("SonControlTower"), OutSpawnedWorldActors);
-		for (int32 h = 0; h < 4; ++h)
+		if (ADirectionalLight* Sun = Rig.SunLight.Get())
 		{
-			const double HangarAlong = 64000.0 + h * 15000.0;
-			SpawnStaticAirbaseActor(World, RunwayTransform, FVector(HangarAlong, 29500.0, -40.0), FRotator(0.0f, 90.0f, 0.0f),
-				TEXT("/Game/GunsOnly/Meshes/SM_Son_Hangar.SM_Son_Hangar"), TEXT("SonHAS"), OutSpawnedWorldActors);
+			Sun->SetActorRotation(SunRot);
+			if (UDirectionalLightComponent* LC = Cast<UDirectionalLightComponent>(Sun->GetLightComponent()))
+			{
+				LC->SetIntensity(SunIntensity);
+				LC->SetLightColor(SunColor);
+			}
 		}
-		SpawnStaticAirbaseActor(World, RunwayTransform, FVector(152000.0, 33000.0, -40.0), FRotator::ZeroRotator,
-			TEXT("/Game/GunsOnly/Meshes/SM_Son_RadarDome.SM_Son_RadarDome"), TEXT("SonRadarDome"), OutSpawnedWorldActors);
+		if (ASkyLight* Sky = Rig.SkyLight.Get())
+		{
+			if (USkyLightComponent* SC = Sky->GetLightComponent())
+			{
+				SC->RecaptureSky();
+			}
+		}
 	}
+
+	double Base1M = (Weather.layer_count >= 1 && Weather.layer_top_alt_m[0] > Weather.layer_base_alt_m[0])
+		? Weather.layer_base_alt_m[0]
+		: (BeatIndex == GUNS_SIM_BEAT_COBRA_CANYON ? 1250.0 : (BeatIndex == GUNS_SIM_BEAT_OKANAGAN_FIREBOSS ? 2100.0 : 1650.0));
+	double Top1M = (Weather.layer_count >= 1 && Weather.layer_top_alt_m[0] > Base1M + 50.0)
+		? Weather.layer_top_alt_m[0] : (Base1M + 2200.0);
+	double Cov1 = (Weather.layer_count >= 1 && Weather.layer_coverage01[0] > 0.02)
+		? FMath::Clamp(Weather.layer_coverage01[0], 0.15, 0.82)
+		: (BeatIndex == GUNS_SIM_BEAT_RAPIER_INTERCEPT ? 0.42 : 0.50);
+	double Scale1M = (Weather.layer_count >= 1 && Weather.layer_scale_m[0] > 200.0) ? Weather.layer_scale_m[0] : 4600.0;
+
+	double Base2M = (Weather.layer_count >= 2 && Weather.layer_top_alt_m[1] > Weather.layer_base_alt_m[1])
+		? Weather.layer_base_alt_m[1] : 6200.0;
+	double Top2M = (Weather.layer_count >= 2 && Weather.layer_top_alt_m[1] > Base2M + 50.0)
+		? Weather.layer_top_alt_m[1] : (Base2M + 1600.0);
+	double Cov2 = (Weather.layer_count >= 2) ? FMath::Clamp(Weather.layer_coverage01[1], 0.0, 0.55) : 0.24;
+	double Scale2M = (Weather.layer_count >= 2 && Weather.layer_scale_m[1] > 200.0) ? Weather.layer_scale_m[1] : 8200.0;
+
+	if (BeatIndex == GUNS_SIM_BEAT_TOPGUN_F14)
+	{
+		Top1M = FMath::Min(Top1M, Base1M + 400.0);
+		Cov1 = FMath::Min(Cov1, 0.22);
+		if (Weather.layer_count < 2)
+		{
+			Base2M = 6400.0;
+			Top2M = 7800.0;
+			Cov2 = 0.24;
+			Scale2M = 8200.0;
+		}
+	}
+
+	if (AVolumetricCloud* Clouds = Rig.VolumetricCloud.Get())
+	{
+		if (UVolumetricCloudComponent* CC = Clouds->FindComponentByClass<UVolumetricCloudComponent>())
+		{
+			const double MinKm = FMath::Max(0.4, Base1M * 0.001);
+			const double MaxKm = FMath::Max(MinKm + 2.5, (Cov2 > 0.05 ? FMath::Max(Top1M, Top2M) : Top1M) * 0.001);
+			const float MinKmF = static_cast<float>(MinKm);
+			const float HeightKmF = static_cast<float>(MaxKm - MinKm);
+			if (bTheatreChanged || FMath::Abs(MinKmF - Rig.LastCloudMinKm) > 0.05f || FMath::Abs(HeightKmF - Rig.LastCloudHeightKm) > 0.05f)
+			{
+				CC->SetLayerBottomAltitude(MinKmF);
+				CC->SetLayerHeight(HeightKmF);
+				Rig.LastCloudMinKm = MinKmF;
+				Rig.LastCloudHeightKm = HeightKmF;
+			}
+		}
+	}
+	if (UMaterialInstanceDynamic* MID = Rig.CloudMID.Get())
+	{
+		MID->SetScalarParameterValue(TEXT("Coverage"), static_cast<float>(Cov1));
+		MID->SetScalarParameterValue(TEXT("BaseAltCm"), static_cast<float>(Base1M * 100.0));
+		MID->SetScalarParameterValue(TEXT("ThicknessCm"), static_cast<float>((Top1M - Base1M) * 100.0));
+		MID->SetScalarParameterValue(TEXT("MacroScaleCm"), static_cast<float>(Scale1M * 100.0));
+		MID->SetScalarParameterValue(TEXT("Coverage2"), static_cast<float>(Cov2));
+		MID->SetScalarParameterValue(TEXT("BaseAlt2Cm"), static_cast<float>(Base2M * 100.0));
+		MID->SetScalarParameterValue(TEXT("Thickness2Cm"), static_cast<float>((Top2M - Base2M) * 100.0));
+		MID->SetScalarParameterValue(TEXT("MacroScale2Cm"), static_cast<float>(Scale2M * 100.0));
+		MID->SetScalarParameterValue(TEXT("DensityScale"), BeatIndex == GUNS_SIM_BEAT_COBRA_CANYON ? 0.018f : 0.022f);
+		const double AdvN = (Weather.layer_count >= 1 ? Weather.layer_adv_north_mps[0] : 8.0) * SimTimeSec * 100.0;
+		const double AdvE = (Weather.layer_count >= 1 ? Weather.layer_adv_east_mps[0] : 12.0) * SimTimeSec * 100.0;
+		MID->SetVectorParameterValue(TEXT("WindOffsetCm"), FLinearColor(static_cast<float>(AdvN), static_cast<float>(AdvE), 0.0f, 0.0f));
+	}
+	if (AExponentialHeightFog* Fog = Rig.HeightFog.Get())
+	{
+		if (UExponentialHeightFogComponent* FC = Fog->GetComponent())
+		{
+			const float CloudDimBoost = FMath::Clamp(
+				static_cast<float>(Weather.local_cloud_fraction01 * 0.0025 + Weather.local_cloud_extinction_per_m * 0.12),
+				0.0f, 0.0045f);
+			const float NewDensity = Rig.BaselineFogDensity + CloudDimBoost;
+			if (bTheatreChanged || FMath::Abs(NewDensity - Rig.LastFogDensity) > 1e-4f)
+			{
+				FC->SetFogDensity(NewDensity);
+				const FLinearColor CloudWhite(0.84f, 0.88f, 0.93f);
+				const float Blend = FMath::Clamp(static_cast<float>(Weather.local_cloud_fraction01), 0.0f, 1.0f);
+				FC->SetFogInscatteringColor(FMath::Lerp(Rig.BaselineFogColor, CloudWhite, Blend * 0.75f));
+				Rig.LastFogDensity = NewDensity;
+			}
+		}
+	}
+	(void)Frame;
 }
 
 void FGunsOnlyWorldBuilder::UpdatePapiRig(FGunsOnlyPapiRig& PapiRig, double GlideslopeDeg)

@@ -20,10 +20,14 @@ PROJECT_DIR = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_di
 ASSETS_DIR = os.path.join(PROJECT_DIR, "Assets")
 TEX_SRC_DIR = os.path.join(ASSETS_DIR, "Textures")
 MESH_SRC_DIR = os.path.join(ASSETS_DIR, "Meshes")
+AUDIO_SRC_DIR = os.path.join(ASSETS_DIR, "Audio")
+UI_SRC_DIR = os.path.join(ASSETS_DIR, "UI")
 
 PKG_TEX = "/Game/GunsOnly/Textures"
 PKG_MAT = "/Game/GunsOnly/Materials"
 PKG_MESH = "/Game/GunsOnly/Meshes"
+PKG_AUDIO = "/Game/GunsOnly/Audio"
+PKG_UI = "/Game/GunsOnly/UI"
 
 
 def ensure_dir(pkg_dir: str) -> None:
@@ -236,8 +240,11 @@ def build_solid_pbr(
     two_sided: bool = False,
     fresnel_exp: float = 0.0,
     opacity: float = 1.0,
+    instanced: bool = False,
 ) -> unreal.Material:
     mat = new_or_reset_material(mat_name)
+    if instanced:
+        mat.set_editor_property("used_with_instanced_static_meshes", True)
     if blend_mode is not None:
         mat.set_editor_property("blend_mode", blend_mode)
     if unlit:
@@ -281,9 +288,17 @@ def build_ukraine_terrain_material(textures: dict) -> unreal.Material:
     wp_xy = mask_components(mat, wp, r=True, g=True, x=-1150, y=-100)
     wp_z = mask_components(mat, wp, b=True, x=-1150, y=340)
 
-    # Dual-scale world UVs (macro 1,250 m + detail 240 m rotated slightly)
-    uv_macro = div_expr(mat, wp_xy, const1(mat, 125000.0, -1150, -240), -900, -180)
-    uv_detail = div_expr(mat, wp_xy, const1(mat, 24000.0, -1150, -340), -900, -40)
+    # Dual-scale world UVs (macro 4,200 m + detail 680 m rotated ~37 deg to avoid square grid tiling)
+    uv_macro = div_expr(mat, wp_xy, const1(mat, 420000.0, -1150, -240), -900, -180)
+    uv_rot = expr(mat, unreal.MaterialExpressionCustom, -900, -40)
+    uv_rot.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT2)
+    uv_rot.set_editor_property("description", "RotateUkraineDetailUV")
+    ci_xy = unreal.CustomInput()
+    ci_xy.set_editor_property("input_name", "WPXY")
+    uv_rot.set_editor_property("inputs", [ci_xy])
+    uv_rot.set_editor_property("code", "float2 p = WPXY; return float2(p.x * 0.8 + p.y * 0.6, -p.x * 0.6 + p.y * 0.8) / 68000.0;")
+    MEL.connect_material_expressions(wp_xy, "", uv_rot, "WPXY")
+    uv_detail = uv_rot
 
     st_alb_m = tex_sample(mat, textures["T_Ukraine_Steppe_Albedo"], unreal.MaterialSamplerType.SAMPLERTYPE_COLOR, uv_macro, -620, -480)
     st_alb_d = tex_sample(mat, textures["T_Ukraine_Steppe_Albedo"], unreal.MaterialSamplerType.SAMPLERTYPE_COLOR, uv_detail, -620, -240)
@@ -449,6 +464,315 @@ def import_all_meshes() -> None:
             raise RuntimeError(f"Unexpected SM_AH1G_MainRotor cm bounds: {ext}")
 
 
+def import_all_audio() -> None:
+    if not os.path.isdir(AUDIO_SRC_DIR):
+        return
+    ensure_dir(PKG_AUDIO)
+    loop_names = {
+        "SW_F22_Idle", "SW_F22_Mil", "SW_F22_Grit",
+        "SW_Rapier_Idle", "SW_Rapier_Mil", "SW_Rapier_Grit",
+        "SW_F14_Engine", "SW_Cobra_Rotor", "SW_FireBoss_Prop",
+        "SW_Vulcan_Loop", "SW_Minigun_Loop",
+        "SW_AIM9_Growl", "SW_AIM9_Lock",
+    }
+    for wav_name in sorted(f for f in os.listdir(AUDIO_SRC_DIR) if f.endswith(".wav")):
+        asset_name = os.path.splitext(wav_name)[0]
+        src_path = os.path.join(AUDIO_SRC_DIR, wav_name)
+        task = unreal.AssetImportTask()
+        task.set_editor_property("filename", src_path)
+        task.set_editor_property("destination_path", PKG_AUDIO)
+        task.set_editor_property("destination_name", asset_name)
+        task.set_editor_property("replace_existing", True)
+        task.set_editor_property("automated", True)
+        task.set_editor_property("save", True)
+        AT.import_asset_tasks([task])
+
+        sw = EAL.load_asset(f"{PKG_AUDIO}/{asset_name}")
+        if sw is None:
+            raise RuntimeError(f"Failed importing sound {asset_name}")
+        if asset_name in loop_names:
+            sw.set_editor_property("looping", True)
+        EAL.save_loaded_asset(sw, only_if_is_dirty=False)
+        print(f"Imported audio: {asset_name} (loop={asset_name in loop_names})")
+
+
+def import_all_ui_cards() -> None:
+    if not os.path.isdir(UI_SRC_DIR):
+        return
+    ensure_dir(PKG_UI)
+    for png_name in sorted(f for f in os.listdir(UI_SRC_DIR) if f.endswith(".png")):
+        asset_name = os.path.splitext(png_name)[0]
+        src_path = os.path.join(UI_SRC_DIR, png_name)
+        task = unreal.AssetImportTask()
+        task.set_editor_property("filename", src_path)
+        task.set_editor_property("destination_path", PKG_UI)
+        task.set_editor_property("destination_name", asset_name)
+        task.set_editor_property("replace_existing", True)
+        task.set_editor_property("automated", True)
+        task.set_editor_property("save", True)
+        AT.import_asset_tasks([task])
+
+        tex = EAL.load_asset(f"{PKG_UI}/{asset_name}")
+        if tex is None:
+            raise RuntimeError(f"Failed importing UI card {asset_name}")
+        tex.set_editor_property("srgb", True)
+        tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_DEFAULT)
+        tex.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_UI)
+        tex.set_editor_property("never_stream", True)
+        EAL.save_loaded_asset(tex, only_if_is_dirty=False)
+        print(f"Imported UI card: {asset_name}")
+
+
+def build_masked_texture_mat(
+    mat_name: str,
+    tex_alb: unreal.Texture2D,
+    roughness: float = 0.62,
+    metallic: float = 0.0,
+    two_sided: bool = True,
+    alpha_masked: bool = True,
+    instanced: bool = False,
+) -> unreal.Material:
+    mat = new_or_reset_material(mat_name)
+    if instanced:
+        mat.set_editor_property("used_with_instanced_static_meshes", True)
+    mat.set_editor_property("two_sided", two_sided)
+    if alpha_masked:
+        mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+        mat.set_editor_property("opacity_mask_clip_value", 0.35)
+    uv = tex_coord(mat, 1.0, 1.0, -600, 0)
+    s_alb = tex_sample(mat, tex_alb, unreal.MaterialSamplerType.SAMPLERTYPE_COLOR, uv, -320, 0)
+    MEL.connect_material_property(s_alb, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(const1(mat, metallic, -320, 220), "", unreal.MaterialProperty.MP_METALLIC)
+    MEL.connect_material_property(const1(mat, roughness, -320, 320), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    if alpha_masked:
+        MEL.connect_material_property(s_alb, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+    return finalize_mat(mat)
+
+
+def build_water_material(
+    mat_name: str,
+    base_rgb: tuple,
+    roughness: float = 0.055,
+    wave_scale_cm: float = 2400.0,
+) -> unreal.Material:
+    """Self-contained procedural ocean / mountain lake surface with specular wave micro-normals."""
+    mat = new_or_reset_material(mat_name)
+    col = vector_param(mat, "WaterColor", (*base_rgb, 1.0), -520, -240)
+    MEL.connect_material_property(col, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(const1(mat, 0.05, -520, -60), "", unreal.MaterialProperty.MP_METALLIC)
+    MEL.connect_material_property(const1(mat, 0.35, -520, 20), "", unreal.MaterialProperty.MP_SPECULAR)
+    MEL.connect_material_property(const1(mat, roughness, -520, 100), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MEL.connect_material_property(
+        mul_expr(mat, col, const1(mat, 0.14, -520, 180), -300, 180),
+        "",
+        unreal.MaterialProperty.MP_EMISSIVE_COLOR,
+    )
+
+    wp = expr(mat, unreal.MaterialExpressionWorldPosition, -760, 260)
+    tm = expr(mat, unreal.MaterialExpressionTime, -760, 420)
+    ws = scalar_param(mat, "WaveScaleCm", wave_scale_cm, -760, 540)
+
+    custom = expr(mat, unreal.MaterialExpressionCustom, -420, 300)
+    custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    custom.set_editor_property("description", "ProceduralWaterNormal")
+    c_inputs = []
+    for nm in ("WorldPos", "TimeSec", "ScaleCm"):
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", nm)
+        c_inputs.append(ci)
+    custom.set_editor_property("inputs", c_inputs)
+    custom.set_editor_property(
+        "code",
+        "\n".join([
+            "float2 p = WorldPos.xy / max(ScaleCm, 100.0);",
+            "float t = TimeSec * 0.65;",
+            "float dx = 0.032 * cos(p.x * 2.1 + t) + 0.018 * cos(dot(p, float2(1.7, 1.3)) * 4.3 - t * 1.4);",
+            "float dy = 0.032 * sin(p.y * 2.3 - t * 0.8) + 0.018 * sin(dot(p, float2(-1.4, 1.8)) * 4.7 + t * 1.2);",
+            "return normalize(float3(dx, dy, 1.0));",
+        ]),
+    )
+    MEL.connect_material_expressions(wp, "", custom, "WorldPos")
+    MEL.connect_material_expressions(tm, "", custom, "TimeSec")
+    MEL.connect_material_expressions(ws, "", custom, "ScaleCm")
+    MEL.connect_material_property(custom, "", unreal.MaterialProperty.MP_NORMAL)
+    return finalize_mat(mat)
+
+
+def build_okanagan_terrain_material(textures: dict) -> unreal.Material:
+    """BC pine valley -> rocky alpine slopes -> sandy Okanagan Lake shoreline at ~342 m MSL."""
+    mat = new_or_reset_material("M_Okanagan_Terrain")
+    wp = expr(mat, unreal.MaterialExpressionWorldPosition, -1400, 0)
+    wp_xy = mask_components(mat, wp, r=True, g=True, x=-1150, y=-100)
+    wp_z = mask_components(mat, wp, b=True, x=-1150, y=340)
+
+    uv_macro = div_expr(mat, wp_xy, const1(mat, 80000.0, -1150, -240), -900, -180)
+    uv_detail = div_expr(mat, wp_xy, const1(mat, 16000.0, -1150, -340), -900, -40)
+
+    for_alb = mul_expr(
+        mat,
+        tex_sample(mat, textures["T_Cobra_Jungle_Albedo"], unreal.MaterialSamplerType.SAMPLERTYPE_COLOR, uv_macro, -620, -420),
+        const3(mat, 0.56, 0.68, 0.52, -620, -200),
+        -380,
+        -320,
+    )
+    rock_alb = mul_expr(
+        mat,
+        tex_sample(mat, textures["T_Ukraine_Highland_Albedo"], unreal.MaterialSamplerType.SAMPLERTYPE_COLOR, uv_detail, -620, 40),
+        const3(mat, 0.88, 0.84, 0.78, -620, 220),
+        -380,
+        120,
+    )
+    for_nrm = tex_sample(mat, textures["T_Cobra_Jungle_Normal"], unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL, uv_detail, -620, 400)
+    rock_nrm = tex_sample(mat, textures["T_Ukraine_Highland_Normal"], unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL, uv_detail, -620, 640)
+
+    alt_t = clamp01(
+        mat,
+        div_expr(mat, sub_expr(mat, wp_z, const1(mat, 78000.0, -950, 380), -820, 340), const1(mat, 35000.0, -950, 480), -700, 340),
+        -560,
+        340,
+    )
+    wn = expr(mat, unreal.MaterialExpressionVertexNormalWS, -950, 620)
+    wn_z = mask_components(mat, wn, b=True, x=-800, y=620)
+    slope_t = clamp01(
+        mat,
+        mul_expr(mat, sub_expr(mat, const1(mat, 1.0, -800, 720), wn_z, -680, 660), const1(mat, 4.8, -680, 760), -560, 660),
+        -440,
+        660,
+    )
+    rock_alpha = clamp01(mat, add_expr(mat, alt_t, slope_t, -340, 480), -220, 480)
+
+    land_alb = lerp_expr(mat, for_alb, rock_alb, rock_alpha, -120, -140)
+    land_nrm = lerp_expr(mat, for_nrm, rock_nrm, rock_alpha, -120, 460)
+    shore_mask = sub_expr(
+        mat,
+        const1(mat, 1.0, -340, 220),
+        clamp01(mat, div_expr(mat, sub_expr(mat, wp_z, const1(mat, 34200.0, -580, 240), -480, 220), const1(mat, 350.0, -480, 300), -380, 220), -260, 220),
+        -120,
+        220,
+    )
+    final_alb = lerp_expr(mat, land_alb, const3(mat, 0.34, 0.30, 0.24, -120, 80), shore_mask, 120, -120)
+    MEL.connect_material_property(final_alb, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(land_nrm, "", unreal.MaterialProperty.MP_NORMAL)
+    MEL.connect_material_property(const1(mat, 0.78, -120, 860), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    return finalize_mat(mat)
+
+
+def build_volumetric_cloud_material() -> unreal.Material:
+    """
+    Cooked self-contained 2-deck 3D volumetric cumulus/stratus cloud raymarching material
+    driven at runtime from GunsSimWeatherState / LayeredCloudField. Zero external engine deps.
+    """
+    mat = new_or_reset_material("M_Volumetric_Clouds")
+    mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_VOLUME)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    mat.set_editor_property("used_with_volumetric_cloud", True)
+
+    cloud_tint = vector_param(mat, "CloudTint", (0.98, 0.99, 1.0, 1.0), -520, -320)
+    MEL.connect_material_property(cloud_tint, "", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    wp = expr(mat, unreal.MaterialExpressionWorldPosition, -900, 0)
+    p_cov1 = scalar_param(mat, "Coverage", 0.50, -900, 120)
+    p_base1 = scalar_param(mat, "BaseAltCm", 160000.0, -900, 200)
+    p_thk1 = scalar_param(mat, "ThicknessCm", 240000.0, -900, 280)
+    p_scl1 = scalar_param(mat, "MacroScaleCm", 480000.0, -900, 360)
+    p_cov2 = scalar_param(mat, "Coverage2", 0.26, -900, 440)
+    p_base2 = scalar_param(mat, "BaseAlt2Cm", 640000.0, -900, 520)
+    p_thk2 = scalar_param(mat, "Thickness2Cm", 160000.0, -900, 600)
+    p_scl2 = scalar_param(mat, "MacroScale2Cm", 850000.0, -900, 680)
+    p_dens = scalar_param(mat, "DensityScale", 0.022, -900, 760)
+    p_wind = vector_param(mat, "WindOffsetCm", (0.0, 0.0, 0.0, 0.0), -900, 840)
+
+    custom = expr(mat, unreal.MaterialExpressionCustom, -380, 260)
+    custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+    custom.set_editor_property("description", "GunsOnlyVolumetricClouds2Deck")
+    names = [
+        "WorldPos", "Coverage", "BaseAltCm", "ThicknessCm", "MacroScaleCm",
+        "Coverage2", "BaseAlt2Cm", "Thickness2Cm", "MacroScale2Cm", "DensityScale", "WindOffsetCm",
+    ]
+    c_inputs = []
+    for nm in names:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", nm)
+        c_inputs.append(ci)
+    custom.set_editor_property("inputs", c_inputs)
+
+    hlsl = "\n".join([
+        "float3 wp = WorldPos;",
+        "float3 wind = WindOffsetCm.xyz;",
+        "float outD = 0.0;",
+        "for (int deck = 0; deck < 2; deck++) {",
+        "    float baseCm = (deck == 0) ? BaseAltCm : BaseAlt2Cm;",
+        "    float thkCm = (deck == 0) ? ThicknessCm : Thickness2Cm;",
+        "    float cov = (deck == 0) ? Coverage : Coverage2;",
+        "    float scaleCm = (deck == 0) ? MacroScaleCm : MacroScale2Cm;",
+        "    float deckGain = (deck == 0) ? 1.0 : 0.85;",
+        "    float h = (wp.z - baseCm) / max(thkCm, 5000.0);",
+        "    if (cov > 0.01 && h > 0.0 && h < 1.0) {",
+        "        float prof = smoothstep(0.0, 0.16, h) * smoothstep(1.0, 0.28, h);",
+        "        float3 u = (wp + wind * ((deck == 0) ? 1.0 : 1.45)) / max(scaleCm, 20000.0) * float3(2.8, 2.8, 3.2) + float3(0.4, 9.2, 0.0);",
+        "        float v = 0.0;",
+        "        float amp = 0.50;",
+        "        float3 qp = u;",
+        "        for (int oct = 0; oct < 4; oct++) {",
+        "            float3 gi = floor(qp);",
+        "            float3 gf = frac(qp);",
+        "            gf = gf * gf * (3.0 - 2.0 * gf);",
+        "            float3 c000 = frac((gi + float3(0,0,0)) * float3(0.1031, 0.1030, 0.0973)); c000 += dot(c000, c000.yxz + 33.33);",
+        "            float3 c100 = frac((gi + float3(1,0,0)) * float3(0.1031, 0.1030, 0.0973)); c100 += dot(c100, c100.yxz + 33.33);",
+        "            float3 c010 = frac((gi + float3(0,1,0)) * float3(0.1031, 0.1030, 0.0973)); c010 += dot(c010, c010.yxz + 33.33);",
+        "            float3 c110 = frac((gi + float3(1,1,0)) * float3(0.1031, 0.1030, 0.0973)); c110 += dot(c110, c110.yxz + 33.33);",
+        "            float3 c001 = frac((gi + float3(0,0,1)) * float3(0.1031, 0.1030, 0.0973)); c001 += dot(c001, c001.yxz + 33.33);",
+        "            float3 c101 = frac((gi + float3(1,0,1)) * float3(0.1031, 0.1030, 0.0973)); c101 += dot(c101, c101.yxz + 33.33);",
+        "            float3 c011 = frac((gi + float3(0,1,1)) * float3(0.1031, 0.1030, 0.0973)); c011 += dot(c011, c011.yxz + 33.33);",
+        "            float3 c111 = frac((gi + float3(1,1,1)) * float3(0.1031, 0.1030, 0.0973)); c111 += dot(c111, c111.yxz + 33.33);",
+        "            float n000 = frac((c000.x + c000.y) * c000.z);",
+        "            float n100 = frac((c100.x + c100.y) * c100.z);",
+        "            float n010 = frac((c010.x + c010.y) * c010.z);",
+        "            float n110 = frac((c110.x + c110.y) * c110.z);",
+        "            float n001 = frac((c001.x + c001.y) * c001.z);",
+        "            float n101 = frac((c101.x + c101.y) * c101.z);",
+        "            float n011 = frac((c011.x + c011.y) * c011.z);",
+        "            float n111 = frac((c111.x + c111.y) * c111.z);",
+        "            float nxy0 = lerp(lerp(n000, n100, gf.x), lerp(n010, n110, gf.x), gf.y);",
+        "            float nxy1 = lerp(lerp(n001, n101, gf.x), lerp(n011, n111, gf.x), gf.y);",
+        "            float nval = lerp(nxy0, nxy1, gf.z);",
+        "            v += amp * nval;",
+        "            qp = qp * 2.05 + float3(17.1, 31.7, 11.3);",
+        "            amp *= 0.5;",
+        "        }",
+        "        float norm = saturate((v - 0.28) / 0.38);",
+        "        float thresh = 0.86 - 0.54 * saturate(cov);",
+        "        float baseD = saturate((norm * prof - thresh) / 0.26);",
+        "        outD = max(outD, baseD * deckGain);",
+        "    }",
+        "}",
+        "return outD * DensityScale;",
+    ])
+    custom.set_editor_property("code", hlsl)
+
+    for nm, node in [
+        ("WorldPos", wp), ("Coverage", p_cov1), ("BaseAltCm", p_base1), ("ThicknessCm", p_thk1),
+        ("MacroScaleCm", p_scl1), ("Coverage2", p_cov2), ("BaseAlt2Cm", p_base2), ("Thickness2Cm", p_thk2),
+        ("MacroScale2Cm", p_scl2), ("DensityScale", p_dens), ("WindOffsetCm", p_wind),
+    ]:
+        MEL.connect_material_expressions(node, "", custom, nm)
+
+    ext_prop = getattr(unreal.MaterialProperty, "MP_EXTINCTION", unreal.MaterialProperty.MP_SUBSURFACE_COLOR)
+    MEL.connect_material_property(custom, "", ext_prop)
+
+    if hasattr(unreal, "MaterialExpressionVolumetricAdvancedOutput"):
+        vao = expr(mat, unreal.MaterialExpressionVolumetricAdvancedOutput, -140, 560)
+        vao.set_editor_property("phase_g", 0.68)
+        vao.set_editor_property("phase_g2", -0.25)
+        vao.set_editor_property("phase_blend", 0.30)
+        vao.set_editor_property("multi_scattering_contribution", 0.85)
+        vao.set_editor_property("multi_scattering_occlusion", 0.18)
+        vao.set_editor_property("multi_scattering_eccentricity", 0.65)
+        MEL.connect_material_expressions(const1(mat, 1.0, -340, 560), "", vao, "ConservativeDensity")
+
+    return finalize_mat(mat)
+
+
 def main() -> None:
     ensure_dir("/Game/GunsOnly")
     ensure_dir(PKG_TEX)
@@ -465,14 +789,26 @@ def main() -> None:
         textures[base] = import_texture(png_name, kind)
 
     # 2. Build compiled UE 5.8 PBR Material library
+    build_volumetric_cloud_material()
     build_ukraine_terrain_material(textures)
     build_cobra_jungle_terrain_material(textures)
+    build_okanagan_terrain_material(textures)
+    build_water_material("M_Ocean_Water", (0.018, 0.145, 0.310), roughness=0.18, wave_scale_cm=2600.0)
+    build_water_material("M_Okanagan_Lake", (0.025, 0.210, 0.295), roughness=0.16, wave_scale_cm=1500.0)
     build_standard_pbr(
         "M_Runway_Asphalt",
         textures["T_Runway_Asphalt_Albedo"],
         textures["T_Runway_Asphalt_Normal"],
         textures["T_Runway_Asphalt_Roughness"],
         tile=6.0,
+    )
+    build_standard_pbr(
+        "M_Carrier_Deck",
+        textures["T_Runway_Asphalt_Albedo"],
+        textures["T_Runway_Asphalt_Normal"],
+        textures["T_Runway_Asphalt_Roughness"],
+        tile=3.5,
+        tint=(0.56, 0.58, 0.62),
     )
     build_standard_pbr(
         "M_F22_RAM_Body",
@@ -482,6 +818,16 @@ def main() -> None:
         tile=2.5,
         metallic=0.45,
         rough_scale=0.95,
+    )
+    build_standard_pbr(
+        "M_F14_NavyGray",
+        textures["T_F22_RAM_Albedo"],
+        textures["T_F22_RAM_Normal"],
+        textures["T_F22_RAM_Roughness"],
+        tile=2.5,
+        metallic=0.32,
+        tint=(0.94, 0.96, 1.0),
+        rough_scale=1.05,
     )
     build_standard_pbr(
         "M_Su27_Splinter",
@@ -499,6 +845,22 @@ def main() -> None:
         tile=2.0,
         metallic=0.18,
     )
+
+    if "T_PalmTree_Trunk" in textures:
+        build_masked_texture_mat("M_Palm_Trunk", textures["T_PalmTree_Trunk"], roughness=0.85, two_sided=False, alpha_masked=False, instanced=True)
+    if "T_PalmTree_Leaves" in textures:
+        build_masked_texture_mat("M_Palm_Leaves", textures["T_PalmTree_Leaves"], roughness=0.62, two_sided=True, alpha_masked=True, instanced=True)
+    if "T_Cobra_Plants" in textures:
+        build_masked_texture_mat("M_Cobra_Plants", textures["T_Cobra_Plants"], roughness=0.65, two_sided=True, alpha_masked=True, instanced=True)
+    if "T_Cobra_Foliage_Atlas" in textures:
+        build_masked_texture_mat("M_Cobra_Foliage", textures["T_Cobra_Foliage_Atlas"], roughness=0.62, two_sided=True, alpha_masked=True, instanced=True)
+
+    build_solid_pbr("M_MiG28_Black", (0.035, 0.038, 0.044, 1.0), metallic=0.28, roughness=0.18)
+    build_solid_pbr("M_Rapier_Titanium", (0.24, 0.25, 0.29, 1.0), metallic=0.86, roughness=0.26)
+    build_solid_pbr("M_FireBoss_Yellow", (0.95, 0.72, 0.04, 1.0), metallic=0.12, roughness=0.28)
+    build_solid_pbr("M_Balloon_White", (0.94, 0.96, 1.0, 1.0), metallic=0.0, roughness=0.22)
+    build_solid_pbr("M_Tree_Foliage", (0.11, 0.22, 0.09, 1.0), metallic=0.0, roughness=0.78, two_sided=True, instanced=True)
+    build_solid_pbr("M_Tree_Trunk", (0.18, 0.13, 0.09, 1.0), metallic=0.0, roughness=0.90, instanced=True)
 
     build_solid_pbr("M_Runway_Markings", (0.88, 0.88, 0.86, 1.0), metallic=0.0, roughness=0.72)
     build_solid_pbr("M_F22_DarkMetal", (0.11, 0.12, 0.14, 1.0), metallic=0.88, roughness=0.28)
@@ -559,13 +921,47 @@ def main() -> None:
         "M_Vapor_Trail", (0.94, 0.96, 1.0, 1.0), emissive=(0.82, 0.88, 0.96, 1.0), emissive_boost=1.4,
         blend_mode=unreal.BlendMode.BLEND_TRANSLUCENT, unlit=True, two_sided=True, fresnel_exp=0.0, opacity=0.38,
     )
+    build_solid_pbr(
+        "M_Explosion_Fire", (1.0, 0.48, 0.08, 1.0), emissive=(1.0, 0.45, 0.08, 1.0), emissive_boost=18.0,
+        blend_mode=unreal.BlendMode.BLEND_ADDITIVE, unlit=True, two_sided=True, fresnel_exp=0.0, opacity=0.90,
+    )
+    build_solid_pbr(
+        "M_Smoke_Plume", (0.09, 0.09, 0.10, 1.0), metallic=0.0, roughness=0.95,
+        blend_mode=unreal.BlendMode.BLEND_TRANSLUCENT, unlit=False, two_sided=True, fresnel_exp=0.0, opacity=0.58,
+    )
+    build_solid_pbr(
+        "M_Water_Curtain", (0.85, 0.95, 1.0, 1.0), emissive=(0.45, 0.65, 0.78, 1.0), emissive_boost=0.85,
+        blend_mode=unreal.BlendMode.BLEND_TRANSLUCENT, unlit=False, two_sided=True, fresnel_exp=0.0, opacity=0.60,
+    )
 
-    # 3. Import FBXs & link material slots
+    # 3. Import Audio & UI Cards
+    import_all_audio()
+    import_all_ui_cards()
+
+    # 4. Import FBXs & link material slots
     import_all_meshes()
 
-    # 4. Persist all created UE5 assets cleanly
+    # 5. Ensure dedicated startup map exists for standalone packaging (-pak / -cook)
+    ensure_startup_map()
+
+    # 6. Persist all created UE5 assets cleanly
     EAL.save_directory("/Game/GunsOnly", only_if_is_dirty=False, recursive=True)
-    print("import_to_ue.py: SUCCESS - saved all textures, PBR materials, and StaticMeshes.")
+    print("import_to_ue.py: SUCCESS - saved all audio, UI cards, textures, PBR/cloud materials, StaticMeshes, and startup map.")
+
+
+def ensure_startup_map() -> None:
+    map_pkg = "/Game/GunsOnly/Maps"
+    map_asset = f"{map_pkg}/GunsOnlyMain"
+    ensure_dir(map_pkg)
+    if not EAL.does_asset_exist(map_asset):
+        les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+        if not les.new_level(map_asset, False):
+            raise RuntimeError(f"Failed creating level {map_asset}")
+        if not les.save_current_level():
+            raise RuntimeError(f"Failed saving level {map_asset}")
+        print(f"Created startup map {map_asset}")
+    if not EAL.does_asset_exist(map_asset):
+        raise RuntimeError(f"Missing startup map {map_asset} after save")
 
 
 if __name__ == "__main__":

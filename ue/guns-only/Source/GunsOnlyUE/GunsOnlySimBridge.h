@@ -15,6 +15,7 @@ public:
 	bool InitializeLibrary();
 	void ShutdownLibrary();
 	bool IsLibraryLoaded() const { return bLibraryReady; }
+	int32 GetLoadedAbiVersion() const { return PtrAbiVersion ? PtrAbiVersion() : 0; }
 
 	bool CreateSession(int32 BeatIndex = 7, int32 DeckConfig = 1);
 	void DestroySession();
@@ -29,6 +30,7 @@ public:
 	void FeedKey(int32 GKeyCode, bool bPressed);
 	void SetAssistedFlight(bool bEnabled);
 	void SetAutoGcas(bool bEnabled);
+	void SetPadlockRollAssist(bool bEnabled);
 	int32 Advance(double DeltaSeconds, int32 MaxCompression = 1);
 
 	bool ReadFrame(GunsSimFrame& OutFrame) const;
@@ -39,8 +41,18 @@ public:
 	bool ReadCourse(GunsSimCourseState& OutCourse) const;
 	bool ReadLeadCue(GunsSimLeadCue& OutLead) const;
 	bool ReadCobraState(GunsSimCobraState& OutCobra) const;
+	bool ReadGunFunnel(GunsSimGunFunnel& OutFunnel) const;
+	bool ReadPilotState(GunsSimPilotState& OutPilot) const;
+	bool ReadCombatDirector(GunsSimCombatDirector& OutDirector) const;
+	bool ReadWeather(GunsSimWeatherState& OutWeather) const;
+	bool ReadCarrier(GunsSimCarrierState& OutCarrier) const;
+	bool ReadOkanagan(GunsSimOkanaganState& OutOkanagan) const;
+	int32 ReadFireCells(TArray<GunsSimFireCell>& OutCells) const;
 	bool CycleTarget();
 	bool FireRocket();
+	bool FireSecondary();
+	bool SetDirectorRung(int32 Rung);
+	int32 GetDirectorRung() const;
 	bool SampleTerrainMeters(double EastM, double NorthM, double& OutHeightM) const;
 	int32 SampleTerrainGrid(
 		double MinEastM,
@@ -88,8 +100,17 @@ private:
 	using FnReadCourse = int32 (*)(int64, GunsSimCourseState*);
 	using FnReadLeadCue = int32 (*)(int64, GunsSimLeadCue*);
 	using FnReadCobraState = int32 (*)(int64, GunsSimCobraState*);
+	using FnReadGunFunnel = int32 (*)(int64, GunsSimGunFunnel*);
+	using FnReadPilotState = int32 (*)(int64, GunsSimPilotState*);
+	using FnReadCombatDirector = int32 (*)(int64, GunsSimCombatDirector*);
+	using FnReadWeather = int32 (*)(int64, GunsSimWeatherState*);
+	using FnReadCarrier = int32 (*)(int64, GunsSimCarrierState*);
+	using FnReadOkanagan = int32 (*)(int64, GunsSimOkanaganState*);
+	using FnReadFireCells = int32 (*)(int64, GunsSimFireCell*, int32);
 	using FnCycleTarget = int32 (*)(int64);
 	using FnFireRocket = int32 (*)(int64);
+	using FnSetInt = int32 (*)(int64, int32);
+	using FnGetInt = int32 (*)(int64);
 	using FnSampleTerrainM = int32 (*)(int64, double, double, double*);
 	using FnSampleTerrainGrid = int32 (*)(int64, double, double, double, int32, int32, float*);
 
@@ -105,6 +126,7 @@ private:
 	FnFeedKey PtrFeedKey = nullptr;
 	FnSetBool PtrSetAssistedFlight = nullptr;
 	FnSetBool PtrSetAutoGcas = nullptr;
+	FnSetBool PtrSetPadlockRollAssist = nullptr;
 	FnAdvance PtrAdvance = nullptr;
 	FnReadFrame PtrReadFrame = nullptr;
 	FnReadContacts PtrReadContacts = nullptr;
@@ -114,8 +136,18 @@ private:
 	FnReadCourse PtrReadCourse = nullptr;
 	FnReadLeadCue PtrReadLeadCue = nullptr;
 	FnReadCobraState PtrReadCobraState = nullptr;
+	FnReadGunFunnel PtrReadGunFunnel = nullptr;
+	FnReadPilotState PtrReadPilotState = nullptr;
+	FnReadCombatDirector PtrReadCombatDirector = nullptr;
+	FnReadWeather PtrReadWeather = nullptr;
+	FnReadCarrier PtrReadCarrier = nullptr;
+	FnReadOkanagan PtrReadOkanagan = nullptr;
+	FnReadFireCells PtrReadFireCells = nullptr;
 	FnCycleTarget PtrCycleTarget = nullptr;
 	FnFireRocket PtrFireRocket = nullptr;
+	FnFireRocket PtrFireSecondary = nullptr;
+	FnSetInt PtrSetDirectorRung = nullptr;
+	FnGetInt PtrGetDirectorRung = nullptr;
 	FnSampleTerrainM PtrSampleTerrainM = nullptr;
 	FnSampleTerrainGrid PtrSampleTerrainGrid = nullptr;
 };

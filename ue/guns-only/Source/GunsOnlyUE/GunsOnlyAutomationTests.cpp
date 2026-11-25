@@ -14,6 +14,7 @@ bool FGunsOnlyNativeBridgeTest::RunTest(const FString& Parameters)
 {
 	FGunsOnlySimBridge Bridge;
 	TestTrue(TEXT("NativeAOT library initializes cleanly"), Bridge.InitializeLibrary());
+	TestEqual(TEXT("NativeAOT ABI version matches header v4"), Bridge.GetLoadedAbiVersion(), GUNS_SIM_ABI_VERSION);
 	TestTrue(TEXT("Beat 7 session creates cleanly"), Bridge.CreateSession(7, 1));
 
 	GunsSimRunway Runway {};
@@ -113,7 +114,18 @@ bool FGunsOnlyNativeBridgeTest::RunTest(const FString& Parameters)
 		TEXT("/Game/GunsOnly/Meshes/SM_AH1G_MainRotor.SM_AH1G_MainRotor"),
 		TEXT("/Game/GunsOnly/Meshes/SM_AH1G_Cockpit.SM_AH1G_Cockpit"),
 		TEXT("/Game/GunsOnly/Meshes/SM_Cobra_Bunker.SM_Cobra_Bunker"),
-		TEXT("/Game/GunsOnly/Meshes/SM_Cobra_Bridge.SM_Cobra_Bridge")
+		TEXT("/Game/GunsOnly/Meshes/SM_Cobra_Bridge.SM_Cobra_Bridge"),
+		TEXT("/Game/GunsOnly/Meshes/SM_F14_Tomcat.SM_F14_Tomcat"),
+		TEXT("/Game/GunsOnly/Meshes/SM_F14_Cockpit.SM_F14_Cockpit"),
+		TEXT("/Game/GunsOnly/Meshes/SM_MiG28_Adversary.SM_MiG28_Adversary"),
+		TEXT("/Game/GunsOnly/Meshes/SM_Rapier_Interceptor.SM_Rapier_Interceptor"),
+		TEXT("/Game/GunsOnly/Meshes/SM_AT802F_FireBoss.SM_AT802F_FireBoss"),
+		TEXT("/Game/GunsOnly/Meshes/SM_AT802F_Prop.SM_AT802F_Prop"),
+		TEXT("/Game/GunsOnly/Meshes/SM_Carrier_Hull.SM_Carrier_Hull"),
+		TEXT("/Game/GunsOnly/Meshes/SM_Balloon_Mine.SM_Balloon_Mine"),
+		TEXT("/Game/GunsOnly/Meshes/SM_Cobra_PalmCluster.SM_Cobra_PalmCluster"),
+		TEXT("/Game/GunsOnly/Meshes/SM_Cobra_PlantClump.SM_Cobra_PlantClump"),
+		TEXT("/Game/GunsOnly/Meshes/SM_Pine_Tree.SM_Pine_Tree")
 	};
 	for (const TCHAR* MeshPath : RequiredMeshes)
 	{
@@ -122,9 +134,16 @@ bool FGunsOnlyNativeBridgeTest::RunTest(const FString& Parameters)
 	}
 
 	static const TCHAR* RequiredMaterials[] = {
+		TEXT("/Game/GunsOnly/Materials/M_Volumetric_Clouds.M_Volumetric_Clouds"),
 		TEXT("/Game/GunsOnly/Materials/M_Ukraine_Terrain.M_Ukraine_Terrain"),
 		TEXT("/Game/GunsOnly/Materials/M_Cobra_Jungle_Terrain.M_Cobra_Jungle_Terrain"),
+		TEXT("/Game/GunsOnly/Materials/M_Okanagan_Terrain.M_Okanagan_Terrain"),
+		TEXT("/Game/GunsOnly/Materials/M_Ocean_Water.M_Ocean_Water"),
+		TEXT("/Game/GunsOnly/Materials/M_Okanagan_Lake.M_Okanagan_Lake"),
+		TEXT("/Game/GunsOnly/Materials/M_Palm_Leaves.M_Palm_Leaves"),
+		TEXT("/Game/GunsOnly/Materials/M_Cobra_Plants.M_Cobra_Plants"),
 		TEXT("/Game/GunsOnly/Materials/M_F22_RAM_Body.M_F22_RAM_Body"),
+		TEXT("/Game/GunsOnly/Materials/M_F14_NavyGray.M_F14_NavyGray"),
 		TEXT("/Game/GunsOnly/Materials/M_Su27_Splinter.M_Su27_Splinter"),
 		TEXT("/Game/GunsOnly/Materials/M_AH1G_OliveDrab.M_AH1G_OliveDrab"),
 		TEXT("/Game/GunsOnly/Materials/M_Papi_Lamp.M_Papi_Lamp"),
@@ -184,6 +203,44 @@ bool FGunsOnlyNativeBridgeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Cobra GroundWar exposes >= 4 ground units"), Bridge.ReadContacts(CobraContacts) >= 4);
 
 	Bridge.DestroySession();
+
+	// Beat 200 (Top Gun F-14 Carrier), Beat 12 (Rapier), Beat 300 (Okanagan Fire Boss), Beat 105 (First Run)
+	{
+		TestTrue(TEXT("Beat 200 Top Gun creates"), Bridge.CreateSession(GUNS_SIM_BEAT_TOPGUN_F14, 1));
+		Bridge.Begin();
+		Bridge.Advance(1.0 / 60.0, 2);
+		GunsSimCarrierState Carrier {};
+		TestTrue(TEXT("Top Gun exposes maritime carrier"), Bridge.ReadCarrier(Carrier) && Carrier.present == 1);
+		GunsSimWeatherState Weather {};
+		TestTrue(TEXT("Weather state valid"), Bridge.ReadWeather(Weather) && FMath::IsFinite(Weather.local_visibility_m));
+		GunsSimGunFunnel Funnel {};
+		TestTrue(TEXT("Gun funnel returns 9 samples"), Bridge.ReadGunFunnel(Funnel) && Funnel.valid == 1 && Funnel.sample_count == 9);
+		Bridge.DestroySession();
+	}
+	{
+		TestTrue(TEXT("Beat 12 Rapier creates"), Bridge.CreateSession(GUNS_SIM_BEAT_RAPIER_INTERCEPT, 1));
+		Bridge.Begin();
+		Bridge.Advance(1.0 / 60.0, 2);
+		GunsSimFrame RF {};
+		TestTrue(TEXT("Rapier frame readable and alive"), Bridge.ReadFrame(RF) && RF.player_alive == 1);
+		GunsSimRunway RapierStrip {};
+		TestTrue(TEXT("Rapier exposes 3km dispersed arresting strip"),
+			Bridge.ReadRunway(RapierStrip) && RapierStrip.present == 1 && RapierStrip.length_m >= 3000.0);
+		GunsSimWeatherState RW {};
+		TestTrue(TEXT("Rapier weather exposes cloud layers"), Bridge.ReadWeather(RW) && RW.layer_count >= 1);
+		Bridge.DestroySession();
+	}
+	{
+		TestTrue(TEXT("Beat 300 Okanagan Fire Boss creates"), Bridge.CreateSession(GUNS_SIM_BEAT_OKANAGAN_FIREBOSS, 1));
+		Bridge.Begin();
+		Bridge.Advance(1.0 / 60.0, 2);
+		GunsSimOkanaganState Ok {};
+		TestTrue(TEXT("Okanagan active with water capacity and fire cells"),
+			Bridge.ReadOkanagan(Ok) && Ok.active == 1 && Ok.water_capacity_kg > 1000.0 && Ok.fire_cell_count > 0);
+		TArray<GunsSimFireCell> Cells;
+		TestTrue(TEXT("Okanagan fire cells readable"), Bridge.ReadFireCells(Cells) > 0);
+		Bridge.DestroySession();
+	}
 	return true;
 }
 

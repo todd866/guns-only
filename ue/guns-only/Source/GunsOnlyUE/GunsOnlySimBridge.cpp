@@ -38,6 +38,7 @@ bool FGunsOnlySimBridge::InitializeLibrary()
 	PtrFeedKey = &::guns_sim_feed_key;
 	PtrSetAssistedFlight = &::guns_sim_set_assisted_flight;
 	PtrSetAutoGcas = &::guns_sim_set_auto_gcas;
+	PtrSetPadlockRollAssist = &::guns_sim_set_padlock_roll_assist;
 	PtrAdvance = &::guns_sim_advance;
 	PtrReadFrame = &::guns_sim_read_frame;
 	PtrReadContacts = &::guns_sim_read_contacts;
@@ -47,8 +48,18 @@ bool FGunsOnlySimBridge::InitializeLibrary()
 	PtrReadCourse = &::guns_sim_read_course;
 	PtrReadLeadCue = &::guns_sim_read_lead_cue;
 	PtrReadCobraState = &::guns_sim_read_cobra_state;
+	PtrReadGunFunnel = &::guns_sim_read_gun_funnel;
+	PtrReadPilotState = &::guns_sim_read_pilot_state;
+	PtrReadCombatDirector = &::guns_sim_read_combat_director;
+	PtrReadWeather = &::guns_sim_read_weather;
+	PtrReadCarrier = &::guns_sim_read_carrier;
+	PtrReadOkanagan = &::guns_sim_read_okanagan;
+	PtrReadFireCells = &::guns_sim_read_fire_cells;
 	PtrCycleTarget = &::guns_sim_cycle_target;
 	PtrFireRocket = &::guns_sim_fire_rocket;
+	PtrFireSecondary = &::guns_sim_fire_secondary;
+	PtrSetDirectorRung = &::guns_sim_set_director_rung;
+	PtrGetDirectorRung = &::guns_sim_get_director_rung;
 	PtrSampleTerrainM = &::guns_sim_sample_terrain_m;
 	PtrSampleTerrainGrid = &::guns_sim_sample_terrain_grid;
 	bLibraryReady = (PtrAbiVersion && PtrAbiVersion() == GUNS_SIM_ABI_VERSION);
@@ -93,6 +104,7 @@ bool FGunsOnlySimBridge::InitializeLibrary()
 		LoadSymbol(DllHandle, TEXT("guns_sim_feed_key"), PtrFeedKey) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_set_assisted_flight"), PtrSetAssistedFlight) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_set_auto_gcas"), PtrSetAutoGcas) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_set_padlock_roll_assist"), PtrSetPadlockRollAssist) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_advance"), PtrAdvance) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_read_frame"), PtrReadFrame) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_read_contacts"), PtrReadContacts) &&
@@ -102,8 +114,18 @@ bool FGunsOnlySimBridge::InitializeLibrary()
 		LoadSymbol(DllHandle, TEXT("guns_sim_read_course"), PtrReadCourse) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_read_lead_cue"), PtrReadLeadCue) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_read_cobra_state"), PtrReadCobraState) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_gun_funnel"), PtrReadGunFunnel) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_pilot_state"), PtrReadPilotState) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_combat_director"), PtrReadCombatDirector) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_weather"), PtrReadWeather) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_carrier"), PtrReadCarrier) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_okanagan"), PtrReadOkanagan) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_read_fire_cells"), PtrReadFireCells) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_cycle_target"), PtrCycleTarget) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_fire_rocket"), PtrFireRocket) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_fire_secondary"), PtrFireSecondary) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_set_director_rung"), PtrSetDirectorRung) &&
+		LoadSymbol(DllHandle, TEXT("guns_sim_get_director_rung"), PtrGetDirectorRung) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_sample_terrain_m"), PtrSampleTerrainM) &&
 		LoadSymbol(DllHandle, TEXT("guns_sim_sample_terrain_grid"), PtrSampleTerrainGrid);
 
@@ -215,6 +237,14 @@ void FGunsOnlySimBridge::SetAutoGcas(bool bEnabled)
 	}
 }
 
+void FGunsOnlySimBridge::SetPadlockRollAssist(bool bEnabled)
+{
+	if (SessionHandle > 0 && PtrSetPadlockRollAssist != nullptr)
+	{
+		PtrSetPadlockRollAssist(SessionHandle, bEnabled ? 1 : 0);
+	}
+}
+
 int32 FGunsOnlySimBridge::Advance(double DeltaSeconds, int32 MaxCompression)
 {
 	if (SessionHandle > 0 && PtrAdvance != nullptr)
@@ -306,6 +336,79 @@ bool FGunsOnlySimBridge::ReadCobraState(GunsSimCobraState& OutCobra) const
 	return PtrReadCobraState(SessionHandle, &OutCobra) != 0;
 }
 
+bool FGunsOnlySimBridge::ReadGunFunnel(GunsSimGunFunnel& OutFunnel) const
+{
+	if (SessionHandle <= 0 || PtrReadGunFunnel == nullptr)
+	{
+		FMemory::Memzero(&OutFunnel, sizeof(OutFunnel));
+		return false;
+	}
+	return PtrReadGunFunnel(SessionHandle, &OutFunnel) != 0;
+}
+
+bool FGunsOnlySimBridge::ReadPilotState(GunsSimPilotState& OutPilot) const
+{
+	if (SessionHandle <= 0 || PtrReadPilotState == nullptr)
+	{
+		FMemory::Memzero(&OutPilot, sizeof(OutPilot));
+		return false;
+	}
+	return PtrReadPilotState(SessionHandle, &OutPilot) != 0;
+}
+
+bool FGunsOnlySimBridge::ReadCombatDirector(GunsSimCombatDirector& OutDirector) const
+{
+	if (SessionHandle <= 0 || PtrReadCombatDirector == nullptr)
+	{
+		FMemory::Memzero(&OutDirector, sizeof(OutDirector));
+		return false;
+	}
+	return PtrReadCombatDirector(SessionHandle, &OutDirector) != 0;
+}
+
+bool FGunsOnlySimBridge::ReadWeather(GunsSimWeatherState& OutWeather) const
+{
+	if (SessionHandle <= 0 || PtrReadWeather == nullptr)
+	{
+		FMemory::Memzero(&OutWeather, sizeof(OutWeather));
+		return false;
+	}
+	return PtrReadWeather(SessionHandle, &OutWeather) != 0;
+}
+
+bool FGunsOnlySimBridge::ReadCarrier(GunsSimCarrierState& OutCarrier) const
+{
+	if (SessionHandle <= 0 || PtrReadCarrier == nullptr)
+	{
+		FMemory::Memzero(&OutCarrier, sizeof(OutCarrier));
+		return false;
+	}
+	return PtrReadCarrier(SessionHandle, &OutCarrier) != 0;
+}
+
+bool FGunsOnlySimBridge::ReadOkanagan(GunsSimOkanaganState& OutOkanagan) const
+{
+	if (SessionHandle <= 0 || PtrReadOkanagan == nullptr)
+	{
+		FMemory::Memzero(&OutOkanagan, sizeof(OutOkanagan));
+		return false;
+	}
+	return PtrReadOkanagan(SessionHandle, &OutOkanagan) != 0;
+}
+
+int32 FGunsOnlySimBridge::ReadFireCells(TArray<GunsSimFireCell>& OutCells) const
+{
+	if (SessionHandle <= 0 || PtrReadFireCells == nullptr)
+	{
+		OutCells.Reset();
+		return 0;
+	}
+	OutCells.SetNumZeroed(128);
+	const int32 Written = PtrReadFireCells(SessionHandle, OutCells.GetData(), OutCells.Num());
+	OutCells.SetNum(FMath::Max(0, Written));
+	return Written;
+}
+
 bool FGunsOnlySimBridge::CycleTarget()
 {
 	return (SessionHandle > 0 && PtrCycleTarget != nullptr) ? (PtrCycleTarget(SessionHandle) != 0) : false;
@@ -314,6 +417,21 @@ bool FGunsOnlySimBridge::CycleTarget()
 bool FGunsOnlySimBridge::FireRocket()
 {
 	return (SessionHandle > 0 && PtrFireRocket != nullptr) ? (PtrFireRocket(SessionHandle) != 0) : false;
+}
+
+bool FGunsOnlySimBridge::FireSecondary()
+{
+	return (SessionHandle > 0 && PtrFireSecondary != nullptr) ? (PtrFireSecondary(SessionHandle) != 0) : false;
+}
+
+bool FGunsOnlySimBridge::SetDirectorRung(int32 Rung)
+{
+	return (SessionHandle > 0 && PtrSetDirectorRung != nullptr) ? (PtrSetDirectorRung(SessionHandle, Rung) != 0) : false;
+}
+
+int32 FGunsOnlySimBridge::GetDirectorRung() const
+{
+	return (SessionHandle > 0 && PtrGetDirectorRung != nullptr) ? PtrGetDirectorRung(SessionHandle) : 0;
 }
 
 bool FGunsOnlySimBridge::SampleTerrainMeters(double EastM, double NorthM, double& OutHeightM) const

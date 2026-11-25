@@ -844,8 +844,609 @@ def build_approach_gate_portal() -> None:
     finalize_and_uv_export(obj, mesh, bm, "SM_ApproachGate_Portal.fbx", apply_bevel=True)
 
 
+def build_f14_tomcat() -> bpy.types.Object:
+    """Sculpted Grumman F-14A Tomcat (~19.1 m long, ~19.5 m spread wing, twin tails, wide nacelles)."""
+    m_gray = ensure_mat("M_F14_NavyGray", (0.56, 0.59, 0.63, 1.0), metallic=0.32, roughness=0.38)
+    m_dark = ensure_mat("M_F22_DarkMetal", (0.11, 0.12, 0.14, 1.0), metallic=0.88, roughness=0.28)
+    m_can = ensure_mat("M_Su27_Canopy", (0.64, 0.84, 0.96, 1.0), metallic=0.25, roughness=0.05)
+    m_nav = ensure_mat("M_NavLights", (1.0, 0.25, 0.18, 1.0), emission=(1.0, 0.25, 0.18, 1.0))
+
+    obj, mesh, bm = create_mesh_object("SM_F14_Tomcat", [m_gray, m_dark, m_can, m_nav])
+
+    # Forward fuselage + pancake tunnel (~19.1 m overall)
+    fuse_specs = [
+        ( 9.55, -0.10, 0.03, 0.03, 0.03, 0.80),
+        ( 8.60, -0.04, 0.34, 0.28, 0.26, 0.82),
+        ( 7.00,  0.04, 0.62, 0.46, 0.38, 0.85),
+        ( 4.60,  0.10, 0.86, 0.56, 0.44, 0.90),
+        ( 2.20,  0.04, 1.56, 0.52, 0.42, 0.95),
+        (-1.60,  0.00, 1.66, 0.46, 0.38, 0.95),
+        (-5.80, -0.02, 1.48, 0.40, 0.32, 0.92),
+        (-8.60,  0.00, 0.54, 0.22, 0.18, 0.85),
+    ]
+    add_loft_rings(bm, [make_f22_ring(*s) for s in fuse_specs], 0)
+
+    for side in (-1.0, 1.0):
+        # Wide-spaced underslung TF30 engine nacelles & boxy F-14 variable ramps
+        nac = [
+            ( 3.20, -0.12, 0.52, 0.36, 0.40, 0.88),
+            (-0.80, -0.10, 0.58, 0.44, 0.44, 0.88),
+            (-5.40, -0.06, 0.56, 0.42, 0.42, 0.88),
+            (-8.35, -0.04, 0.48, 0.40, 0.38, 0.86),
+        ]
+        rings = [[(x, y + side * 1.32, z) for (x, y, z) in make_f22_ring(*s)] for s in nac]
+        add_loft_rings(bm, rings, 0)
+        add_box(bm, (3.25, side * 1.32, -0.14), (0.35, 0.78, 0.56), 1)
+        add_cylinder(bm, (-8.80, side * 1.32, -0.04), 0.47, 0.38, 0.92, 16, 1, (0.0, math.radians(90.0), 0.0))
+
+        # Fixed triangular wing glove
+        add_airfoil_wing(
+            bm,
+            Vector(( 3.40, side * 0.92, 0.10)),
+            Vector((-0.20, side * 0.92, 0.04)),
+            Vector(( 1.25, side * 3.15, 0.04)),
+            Vector((-1.35, side * 3.15, 0.00)),
+            root_thick=0.28, tip_thick=0.22, mat_idx=0, span_segments=2,
+        )
+
+        # Iconic variable-sweep main wing (28 deg dogfight sweep, 19.5 m total span)
+        add_airfoil_wing(
+            bm,
+            Vector(( 1.45, side * 2.55, 0.04)),
+            Vector((-1.65, side * 2.55, 0.00)),
+            Vector((-2.60, side * 9.75, 0.12)),
+            Vector((-4.15, side * 9.75, 0.10)),
+            root_thick=0.24, tip_thick=0.07, mat_idx=0, span_segments=4,
+        )
+        add_box(bm, (-3.35, side * 9.78, 0.11), (0.24, 0.06, 0.06), 3)
+
+        # All-moving tailerons
+        add_airfoil_wing(
+            bm,
+            Vector((-5.20, side * 1.65, -0.04)),
+            Vector((-8.75, side * 1.65, -0.04)),
+            Vector((-7.45, side * 5.05, -0.12)),
+            Vector((-9.15, side * 5.05, -0.12)),
+            root_thick=0.18, tip_thick=0.05, mat_idx=0, dihedral_camber=0.0, span_segments=2,
+        )
+
+        # Twin outward-canted F-14 vertical stabilizers + ventral strakes
+        cant_s = math.sin(math.radians(5.0))
+        cant_c = math.cos(math.radians(5.0))
+        fin_h = 2.85
+        top_y = side * (1.42 + fin_h * cant_s)
+        top_z = 0.36 + fin_h * cant_c
+        add_airfoil_wing(
+            bm,
+            Vector((-4.85, side * 1.42, 0.36)),
+            Vector((-8.45, side * 1.42, 0.32)),
+            Vector((-6.85, top_y, top_z)),
+            Vector((-8.75, top_y, top_z - 0.06)),
+            root_thick=0.18, tip_thick=0.06, mat_idx=0, dihedral_camber=0.0, span_segments=2,
+        )
+        add_airfoil_wing(
+            bm,
+            Vector((-5.60, side * 1.38, -0.42)),
+            Vector((-7.90, side * 1.38, -0.38)),
+            Vector((-6.50, side * 1.44, -1.06)),
+            Vector((-7.95, side * 1.44, -1.02)),
+            root_thick=0.09, tip_thick=0.03, mat_idx=1, dihedral_camber=0.0, span_segments=1,
+        )
+
+    # Tandem bubble canopy (pilot + RIO)
+    canopy_rings = []
+    for k in range(12):
+        u = k / 11.0
+        cx = 6.20 - u * 4.85
+        arch = math.sin(math.pi * u) ** 0.70
+        cw = 0.06 + 0.46 * arch
+        ch = 0.05 + 0.68 * arch
+        cz = 0.56
+        ring = [(cx, math.cos(math.pi * (a_i / 9.0)) * cw, cz + math.sin(math.pi * (a_i / 9.0)) * ch) for a_i in range(10)]
+        ring.extend([(cx, -cw * 0.85, cz - 0.04), (cx, cw * 0.85, cz - 0.04)])
+        canopy_rings.append(ring)
+    add_loft_rings(bm, canopy_rings, 2)
+
+    # Twin underbelly AIM-54/AIM-9 rails & A-frame tailhook
+    add_cylinder(bm, (-7.65, 0.0, -0.45), 0.05, 0.04, 2.30, 8, 1, (0.0, math.radians(96.0), 0.0))
+
+    finalize_and_uv_export(obj, mesh, bm, "SM_F14_Tomcat.fbx", apply_bevel=True)
+    return obj
+
+
+def build_f14_cockpit() -> bpy.types.Object:
+    """1st-person F-14A windscreen bow & TID/VDI instrument deck around eye (2.40, 0, 1.15) m."""
+    m_carb = ensure_mat("M_Cockpit_Carbon", (0.06, 0.065, 0.075, 1.0), metallic=0.22, roughness=0.58)
+    m_mfd = ensure_mat("M_Cockpit_MFD", (0.08, 0.88, 0.45, 1.0), emission=(0.15, 1.0, 0.55, 1.0))
+    m_hud = ensure_mat("M_HUD_Glass", (0.12, 0.85, 0.45, 0.25), roughness=0.04)
+    m_metal = ensure_mat("M_F22_DarkMetal", (0.16, 0.18, 0.20, 1.0), metallic=0.85, roughness=0.30)
+
+    obj, mesh, bm = create_mesh_object("SM_F14_Cockpit", [m_carb, m_mfd, m_hud, m_metal])
+    add_box(bm, (2.98, 0.00, 0.86), (0.36, 0.80, 0.04), 0, (0.0, 0.14, 0.0))
+    add_box(bm, (2.95, 0.00, 0.72), (0.30, 0.82, 0.30), 0, (0.0, 0.22, 0.0))
+    for side in (-1.0, 1.0):
+        add_box(bm, (2.56, side * 0.40, 0.76), (0.68, 0.16, 0.22), 0)
+        add_box(bm, (2.78, side * 0.45, 0.96), (0.64, 0.045, 0.05), 0)
+        add_box(bm, (2.92, side * 0.32, 1.19), (0.040, 0.040, 0.44), 3, (side * 0.24, -0.34, 0.0))
+        add_box(bm, (2.82, side * 0.16, 1.38), (0.05, 0.22, 0.035), 3)
+    add_box(bm, (2.88, -0.15, 1.04), (0.025, 0.018, 0.18), 3, (0.0, -0.18, 0.0))
+    add_box(bm, (2.88,  0.15, 1.04), (0.025, 0.018, 0.18), 3, (0.0, -0.18, 0.0))
+    add_box(bm, (2.88,  0.00, 1.06), (0.004, 0.28, 0.17), 2, (0.0, -0.58, 0.0))
+
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(mesh)
+    bm.free()
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(66.0), island_margin=0.01)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    bm2 = bmesh.new()
+    bm2.from_mesh(mesh)
+    uv_layer = bm2.loops.layers.uv.verify()
+    for cy, cz, hw, hh in [(-0.20, 0.77, 0.14, 0.14), (0.00, 0.74, 0.18, 0.17), (0.20, 0.77, 0.14, 0.14)]:
+        cx = 2.86
+        tilt = math.radians(-22.0)
+        v_bl = bm2.verts.new(Vector((cx + hh * math.sin(tilt), cy - hw * 0.5, cz - hh * math.cos(tilt) * 0.5)))
+        v_br = bm2.verts.new(Vector((cx + hh * math.sin(tilt), cy + hw * 0.5, cz - hh * math.cos(tilt) * 0.5)))
+        v_tr = bm2.verts.new(Vector((cx - hh * math.sin(tilt), cy + hw * 0.5, cz + hh * math.cos(tilt) * 0.5)))
+        v_tl = bm2.verts.new(Vector((cx - hh * math.sin(tilt), cy - hw * 0.5, cz + hh * math.cos(tilt) * 0.5)))
+        face = bm2.faces.new((v_tl, v_bl, v_br, v_tr))
+        face.material_index = 1
+        for loop, uv in zip(face.loops, [(0.0, 1.0), (0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]):
+            loop[uv_layer].uv = uv
+    bm2.to_mesh(mesh)
+    bm2.free()
+
+    out_path = os.path.join(MESH_OUT_DIR, "SM_F14_Cockpit.fbx")
+    bpy.ops.export_scene.fbx(
+        filepath=out_path, use_selection=True, apply_scale_options="FBX_SCALE_UNITS",
+        global_scale=1.0, axis_forward="-Y", axis_up="Z", use_mesh_modifiers=True, mesh_smooth_type="FACE",
+    )
+    obj.select_set(False)
+    print("Exported SM_F14_Cockpit.fbx")
+    return obj
+
+
+def build_mig28_adversary() -> bpy.types.Object:
+    """Gloss-black F-5E / MiG-28 Adversary (~14.5 m long, ~8.1 m span, tip rails, single tall fin)."""
+    m_blk = ensure_mat("M_MiG28_Black", (0.035, 0.038, 0.044, 1.0), metallic=0.25, roughness=0.18)
+    m_dark = ensure_mat("M_F22_DarkMetal", (0.14, 0.15, 0.17, 1.0), metallic=0.88, roughness=0.26)
+    m_can = ensure_mat("M_Su27_Canopy", (0.62, 0.80, 0.94, 1.0), metallic=0.25, roughness=0.06)
+    m_nav = ensure_mat("M_NavLights", (1.0, 0.16, 0.12, 1.0), emission=(1.0, 0.16, 0.12, 1.0))
+
+    obj, mesh, bm = create_mesh_object("SM_MiG28_Adversary", [m_blk, m_dark, m_can, m_nav])
+    fuse_specs = [
+        ( 7.35, -0.06, 0.02, 0.02, 0.02, 0.78),
+        ( 6.40, -0.02, 0.24, 0.22, 0.20, 0.80),
+        ( 4.80,  0.04, 0.44, 0.38, 0.34, 0.82),
+        ( 2.40,  0.02, 0.56, 0.42, 0.40, 0.82),
+        (-1.20,  0.00, 0.64, 0.44, 0.40, 0.82),
+        (-4.60,  0.00, 0.60, 0.40, 0.36, 0.80),
+        (-7.05,  0.00, 0.48, 0.30, 0.28, 0.78),
+    ]
+    add_loft_rings(bm, [make_f22_ring(*s) for s in fuse_specs], 0)
+    add_cylinder(bm, (7.75, 0.0, -0.07), 0.014, 0.004, 0.80, 8, 1, (0.0, math.radians(91.0), 0.0))
+
+    for side in (-1.0, 1.0):
+        add_box(bm, (1.60, side * 0.66, 0.02), (1.10, 0.24, 0.32), 0)
+        add_box(bm, (2.16, side * 0.66, 0.02), (0.08, 0.22, 0.28), 1)
+        add_cylinder(bm, (-7.20, side * 0.28, 0.00), 0.24, 0.20, 0.55, 12, 1, (0.0, math.radians(90.0), 0.0))
+        add_airfoil_wing(
+            bm,
+            Vector(( 0.85, side * 0.56, -0.14)),
+            Vector((-2.60, side * 0.56, -0.14)),
+            Vector((-1.50, side * 4.05, -0.16)),
+            Vector((-2.85, side * 4.05, -0.16)),
+            root_thick=0.14, tip_thick=0.05, mat_idx=0, span_segments=3,
+        )
+        add_cylinder(bm, (-2.15, side * 4.09, -0.16), 0.06, 0.05, 1.95, 8, 1, (0.0, math.radians(90.0), 0.0))
+        add_box(bm, (-1.20, side * 4.12, -0.16), (0.16, 0.05, 0.05), 3)
+        add_airfoil_wing(
+            bm,
+            Vector((-4.60, side * 0.48, -0.12)),
+            Vector((-6.80, side * 0.48, -0.12)),
+            Vector((-5.95, side * 2.55, -0.16)),
+            Vector((-6.95, side * 2.55, -0.16)),
+            root_thick=0.10, tip_thick=0.04, mat_idx=0, dihedral_camber=0.0, span_segments=2,
+        )
+
+    # Single tall swept vertical fin
+    add_airfoil_wing(
+        bm,
+        Vector((-3.80, 0.00, 0.34)),
+        Vector((-6.85, 0.00, 0.28)),
+        Vector((-5.95, 0.00, 2.38)),
+        Vector((-7.15, 0.00, 2.34)),
+        root_thick=0.14, tip_thick=0.05, mat_idx=0, dihedral_camber=0.0, span_segments=2,
+    )
+
+    canopy_rings = []
+    for k in range(10):
+        u = k / 9.0
+        cx = 4.45 - u * 3.15
+        arch = math.sin(math.pi * u) ** 0.72
+        cw = 0.04 + 0.34 * arch
+        ch = 0.04 + 0.48 * arch
+        cz = 0.42
+        ring = [(cx, math.cos(math.pi * (a_i / 9.0)) * cw, cz + math.sin(math.pi * (a_i / 9.0)) * ch) for a_i in range(10)]
+        ring.extend([(cx, -cw * 0.85, cz - 0.04), (cx, cw * 0.85, cz - 0.04)])
+        canopy_rings.append(ring)
+    add_loft_rings(bm, canopy_rings, 2)
+
+    finalize_and_uv_export(obj, mesh, bm, "SM_MiG28_Adversary.fbx", apply_bevel=True)
+    return obj
+
+
+def build_rapier_interceptor() -> bpy.types.Object:
+    """Mach 3+ hypersonic cranked-delta Rapier interceptor (~22 m long, ~10.6 m span)."""
+    m_ti = ensure_mat("M_Rapier_Titanium", (0.24, 0.25, 0.29, 1.0), metallic=0.86, roughness=0.26)
+    m_dark = ensure_mat("M_F22_DarkMetal", (0.09, 0.10, 0.12, 1.0), metallic=0.90, roughness=0.24)
+    m_can = ensure_mat("M_F22_GoldCanopy", (0.88, 0.68, 0.22, 1.0), metallic=0.92, roughness=0.06)
+    m_nav = ensure_mat("M_NavLights", (0.25, 0.90, 1.0, 1.0), emission=(0.25, 0.90, 1.0, 1.0))
+
+    obj, mesh, bm = create_mesh_object("SM_Rapier_Interceptor", [m_ti, m_dark, m_can, m_nav])
+    fuse_specs = [
+        ( 11.20,  0.00, 0.02, 0.02, 0.02, 0.96),
+        (  9.40,  0.02, 0.44, 0.18, 0.16, 0.98),
+        (  6.20,  0.04, 0.88, 0.42, 0.30, 0.98),
+        (  2.50,  0.02, 1.24, 0.56, 0.36, 0.96),
+        ( -2.80,  0.00, 1.38, 0.52, 0.34, 0.96),
+        ( -7.40,  0.00, 1.24, 0.42, 0.30, 0.94),
+        (-10.40,  0.00, 0.92, 0.32, 0.24, 0.90),
+    ]
+    add_loft_rings(bm, [make_f22_ring(*s) for s in fuse_specs], 0)
+
+    for side in (-1.0, 1.0):
+        # Cranked-delta hypersonic wing + tip sails
+        add_airfoil_wing(
+            bm,
+            Vector(( 4.80, side * 0.95, -0.02)),
+            Vector((-8.80, side * 0.95, -0.04)),
+            Vector((-3.20, side * 5.25, -0.08)),
+            Vector((-8.60, side * 5.25, -0.08)),
+            root_thick=0.22, tip_thick=0.06, mat_idx=0, span_segments=4,
+        )
+        # Inward-canted twin tails on blended nacelles
+        cant_s = -math.sin(math.radians(16.0))
+        cant_c = math.cos(math.radians(16.0))
+        fin_h = 2.35
+        top_y = side * (1.05 + fin_h * cant_s)
+        top_z = 0.32 + fin_h * cant_c
+        add_airfoil_wing(
+            bm,
+            Vector((-6.20, side * 1.05, 0.32)),
+            Vector((-9.90, side * 1.05, 0.28)),
+            Vector((-8.40, top_y, top_z)),
+            Vector((-10.20, top_y, top_z - 0.05)),
+            root_thick=0.14, tip_thick=0.05, mat_idx=0, dihedral_camber=0.0, span_segments=2,
+        )
+        add_cylinder(bm, (-10.65, side * 0.52, 0.00), 0.38, 0.32, 0.70, 14, 1, (0.0, math.radians(90.0), 0.0))
+        add_box(bm, (-8.40, side * 5.28, -0.08), (0.28, 0.05, 0.05), 3)
+
+    canopy_rings = []
+    for k in range(10):
+        u = k / 9.0
+        cx = 7.40 - u * 4.40
+        arch = math.sin(math.pi * u) ** 0.72
+        cw = 0.05 + 0.40 * arch
+        ch = 0.04 + 0.44 * arch
+        cz = 0.42
+        ring = [(cx, math.cos(math.pi * (a_i / 9.0)) * cw, cz + math.sin(math.pi * (a_i / 9.0)) * ch) for a_i in range(10)]
+        ring.extend([(cx, -cw * 0.85, cz - 0.03), (cx, cw * 0.85, cz - 0.03)])
+        canopy_rings.append(ring)
+    add_loft_rings(bm, canopy_rings, 2)
+
+    finalize_and_uv_export(obj, mesh, bm, "SM_Rapier_Interceptor.fbx", apply_bevel=True)
+    return obj
+
+
+def build_at802f_fireboss() -> bpy.types.Object:
+    """Air Tractor AT-802F Fire Boss (~11.0 m long, ~18.0 m wingspan, twin Wipline amphibious floats)."""
+    m_yel = ensure_mat("M_FireBoss_Yellow", (0.95, 0.72, 0.04, 1.0), metallic=0.12, roughness=0.28)
+    m_dark = ensure_mat("M_F22_DarkMetal", (0.12, 0.13, 0.15, 1.0), metallic=0.85, roughness=0.32)
+    m_can = ensure_mat("M_Su27_Canopy", (0.65, 0.85, 0.96, 1.0), metallic=0.20, roughness=0.05)
+    m_stripe = ensure_mat("M_Runway_Markings", (0.85, 0.14, 0.12, 1.0), roughness=0.35)
+    m_nav = ensure_mat("M_NavLights", (1.0, 0.25, 0.18, 1.0), emission=(1.0, 0.25, 0.18, 1.0))
+
+    obj, mesh, bm = create_mesh_object("SM_AT802F_FireBoss", [m_yel, m_dark, m_can, m_stripe, m_nav])
+
+    # Long PT6A turboprop nose + huge water hopper + aft raised greenhouse fuselage
+    fuse_specs = [
+        ( 5.55,  0.08, 0.18, 0.20, 0.20, 0.72),
+        ( 4.10,  0.14, 0.34, 0.34, 0.34, 0.75),
+        ( 1.90,  0.22, 0.62, 0.56, 0.56, 0.78),
+        ( 0.00,  0.24, 0.64, 0.62, 0.60, 0.78),
+        (-1.60,  0.18, 0.54, 0.52, 0.50, 0.76),
+        (-3.60,  0.10, 0.34, 0.36, 0.34, 0.74),
+        (-5.40,  0.06, 0.14, 0.22, 0.20, 0.70),
+    ]
+    add_loft_rings(bm, [make_f22_ring(*s) for s in fuse_specs], 0)
+    # Propeller spinner + exhaust stubs
+    add_cylinder(bm, (5.82, 0.0, 0.08), 0.22, 0.04, 0.55, 14, 1, (0.0, math.radians(90.0), 0.0))
+
+    # High greenhouse cockpit above rear hopper
+    canopy_rings = []
+    for k in range(8):
+        u = k / 7.0
+        cx = 0.30 - u * 2.15
+        arch = math.sin(math.pi * u) ** 0.55
+        cw = 0.08 + 0.38 * arch
+        ch = 0.06 + 0.54 * arch
+        cz = 0.78
+        ring = [(cx, math.cos(math.pi * (a_i / 9.0)) * cw, cz + math.sin(math.pi * (a_i / 9.0)) * ch) for a_i in range(10)]
+        ring.extend([(cx, -cw * 0.85, cz - 0.04), (cx, cw * 0.85, cz - 0.04)])
+        canopy_rings.append(ring)
+    add_loft_rings(bm, canopy_rings, 2)
+
+    for side in (-1.0, 1.0):
+        # High-aspect 18.0 m Fire Boss wings with upward dihedral + wingtip plates
+        add_airfoil_wing(
+            bm,
+            Vector(( 1.55, side * 0.58, -0.18)),
+            Vector((-0.90, side * 0.58, -0.20)),
+            Vector(( 1.15, side * 8.95,  0.22)),
+            Vector((-0.65, side * 8.95,  0.20)),
+            root_thick=0.32, tip_thick=0.14, mat_idx=0, span_segments=4,
+        )
+        # Red wingtip conspicuity fence
+        add_box(bm, (0.25, side * 9.00, 0.24), (1.85, 0.05, 0.38), 3)
+        add_box(bm, (0.95, side * 9.05, 0.24), (0.18, 0.06, 0.06), 4)
+
+        # Horizontal tailplane
+        add_airfoil_wing(
+            bm,
+            Vector((-4.30, side * 0.14, 0.14)),
+            Vector((-5.35, side * 0.14, 0.14)),
+            Vector((-4.55, side * 2.85, 0.16)),
+            Vector((-5.38, side * 2.85, 0.16)),
+            root_thick=0.12, tip_thick=0.05, mat_idx=0, dihedral_camber=0.0, span_segments=2,
+        )
+
+        # Twin Wipline 10000 amphibious floats (~8.4 m long) + splayed struts
+        flt = [
+            ( 4.65, -1.62, 0.05, 0.06, 0.05, 0.72),
+            ( 3.20, -1.72, 0.38, 0.34, 0.30, 0.76),
+            ( 0.20, -1.74, 0.44, 0.38, 0.34, 0.78),
+            (-2.60, -1.70, 0.32, 0.28, 0.24, 0.76),
+            (-4.25, -1.62, 0.10, 0.12, 0.10, 0.72),
+        ]
+        rings = [[(x, y + side * 1.65, z) for (x, y, z) in make_f22_ring(*s)] for s in flt]
+        add_loft_rings(bm, rings, 1)
+        # Struts connecting fuselage -> floats
+        add_box(bm, (1.60, side * 1.05, -0.95), (0.10, 1.55, 0.08), 1, (side * 0.72, 0.0, 0.0))
+        add_box(bm, (-0.40, side * 1.05, -0.95), (0.10, 1.55, 0.08), 1, (side * 0.72, 0.0, 0.0))
+
+    # Tall swept vertical fin (yellow + red cap)
+    add_airfoil_wing(
+        bm,
+        Vector((-4.00, 0.00, 0.22)),
+        Vector((-5.45, 0.00, 0.18)),
+        Vector((-4.75, 0.00, 2.38)),
+        Vector((-5.55, 0.00, 2.34)),
+        root_thick=0.16, tip_thick=0.07, mat_idx=0, dihedral_camber=0.0, span_segments=2,
+    )
+    add_box(bm, (-5.12, 0.0, 2.36), (0.85, 0.08, 0.24), 3)
+
+    finalize_and_uv_export(obj, mesh, bm, "SM_AT802F_FireBoss.fbx", apply_bevel=True)
+    return obj
+
+
+def build_at802f_prop() -> bpy.types.Object:
+    """5-blade PT6A Hartzell propeller centered at origin (spun around +X at nose)."""
+    m_dark = ensure_mat("M_F22_DarkMetal", (0.11, 0.12, 0.13, 1.0), metallic=0.88, roughness=0.28)
+    m_tip = ensure_mat("M_Runway_Markings", (0.96, 0.86, 0.15, 1.0), roughness=0.40)
+    obj, mesh, bm = create_mesh_object("SM_AT802F_Prop", [m_dark, m_tip])
+    add_cylinder(bm, (0.0, 0.0, 0.0), 0.18, 0.14, 0.24, 12, 0, (0.0, math.radians(90.0), 0.0))
+    for i in range(5):
+        ang = 2.0 * math.pi * i / 5.0
+        dy = math.cos(ang)
+        dz = math.sin(ang)
+        add_box(bm, (0.02, dy * 0.78, dz * 0.78), (0.04, 1.45, 0.18), 0, (ang, 0.0, 0.0))
+        add_box(bm, (0.02, dy * 1.42, dz * 1.42), (0.044, 0.20, 0.17), 1, (ang, 0.0, 0.0))
+    finalize_and_uv_export(obj, mesh, bm, "SM_AT802F_Prop.fbx", apply_bevel=False)
+    return obj
+
+
+def build_carrier_hull() -> bpy.types.Object:
+    """Nimitz/Enterprise angled-deck carrier: 320m x 76m, deck surface at Z=0, hull down to -22m, starboard island."""
+    m_deck = ensure_mat("M_Carrier_Deck", (0.14, 0.15, 0.16, 1.0), roughness=0.82)
+    m_hull = ensure_mat("M_Base_Concrete", (0.36, 0.39, 0.42, 1.0), metallic=0.35, roughness=0.72)
+    m_dark = ensure_mat("M_F22_DarkMetal", (0.12, 0.13, 0.15, 1.0), metallic=0.82, roughness=0.36)
+    m_mark = ensure_mat("M_Runway_Markings", (0.94, 0.90, 0.72, 1.0), roughness=0.60)
+    m_nav = ensure_mat("M_NavLights", (1.0, 0.70, 0.18, 1.0), emission=(1.0, 0.70, 0.18, 1.0))
+
+    obj, mesh, bm = create_mesh_object("SM_Carrier_Hull", [m_deck, m_hull, m_dark, m_mark, m_nav])
+
+    # Lower steel hull (-22 m waterline/keel up to -1.8 m under flight deck)
+    hull_specs = [
+        ( 158.0, -11.9,  3.5, 10.1, 10.1, 0.72),
+        ( 125.0, -11.9, 15.0, 10.1, 10.1, 0.78),
+        (  60.0, -11.9, 22.0, 10.1, 10.1, 0.82),
+        ( -70.0, -11.9, 22.0, 10.1, 10.1, 0.82),
+        (-135.0, -11.9, 17.5, 10.1, 10.1, 0.78),
+        (-156.0, -11.9, 14.0, 10.1, 10.1, 0.74),
+    ]
+    add_loft_rings(bm, [make_f22_ring(*s) for s in hull_specs], 1)
+
+    # Wide cantilevered flight deck slab: top surface sits right at Z = 0.0 (DeckLength=320, Width=76)
+    add_box(bm, (-2.0, 0.0, -0.90), (308.0, 56.0, 1.80), 0)
+    add_box(bm, ( 98.0, 0.0, -0.98), (112.0, 40.0, 1.80), 0)
+    # Angled waist sponson extending port (-Y) to 76m total width (stepped slightly down to eliminate z-fighting)
+    add_box(bm, (-24.0, -24.0, -0.96), (210.0, 28.0, 1.80), 0, (0.0, 0.0, math.radians(-9.0)))
+
+    # Angled landing deck white centerline + edge markings + 4 arresting wires (Z = +0.06 m)
+    ang = math.radians(-9.0)
+    cos_a, sin_a = math.cos(ang), math.sin(ang)
+    # Landing origin is aft-port (~(-20, -11)), strip angled -9 deg
+    for seg in range(10):
+        along = -125.0 + seg * 20.0
+        cx = along * cos_a - (-10.0) * sin_a
+        cy = along * sin_a + (-10.0) * cos_a
+        add_box(bm, (cx, cy, 0.05), (9.5, 0.85, 0.10), 3, (0.0, 0.0, ang))
+    # 4 arresting wires near touchdown (-64 m along = -0.2 * 320)
+    for w_i in range(4):
+        along = -64.0 + (w_i - 2) * 5.2
+        cx = along * cos_a - (-10.0) * sin_a
+        cy = along * sin_a + (-10.0) * cos_a
+        add_box(bm, (cx, cy, 0.06), (0.28, 30.0, 0.12), 2, (0.0, 0.0, ang))
+    # Bow catapult tracks & optical landing lens meatball box
+    add_box(bm, (96.0, -6.5, 0.05), (92.0, 0.55, 0.10), 3)
+    add_box(bm, (96.0,  9.5, 0.05), (92.0, 0.55, 0.10), 3)
+    add_box(bm, (-78.0, -34.0, 1.6), (2.4, 2.2, 2.8), 4)
+
+    # Starboard island superstructure (match Carrier.cs +along 8..48m, starboard edge Y=+24..33m, +29m tall)
+    add_box(bm, (28.0, 26.5,  7.5), (42.0, 9.0, 15.0), 1)
+    add_box(bm, (26.0, 26.5, 17.5), (26.0, 8.2,  6.5), 1)
+    add_box(bm, (32.0, 26.5, 22.8), (12.0, 6.2,  4.2), 2)
+    add_cylinder(bm, (16.0, 26.5, 26.0), 0.7, 0.4, 11.0, 8, 2)
+    add_box(bm, (16.0, 26.5, 31.2), (0.6, 5.4, 1.4), 3)
+    add_box(bm, (16.0, 26.5, 32.4), (0.5, 0.5, 0.6), 4)
+
+    finalize_and_uv_export(obj, mesh, bm, "SM_Carrier_Hull.fbx", apply_bevel=False)
+    return obj
+
+
+def build_balloon_mine() -> bpy.types.Object:
+    """High-altitude white weather balloon (~16 m sphere) + suspended steel payload frame."""
+    m_bal = ensure_mat("M_Balloon_White", (0.94, 0.96, 1.0, 1.0), roughness=0.22)
+    m_dark = ensure_mat("M_F22_DarkMetal", (0.14, 0.16, 0.18, 1.0), metallic=0.85, roughness=0.32)
+    obj, mesh, bm = create_mesh_object("SM_Balloon_Mine", [m_bal, m_dark])
+    bmesh.ops.create_icosphere(bm, subdivisions=3, radius=7.5, matrix=Matrix.Translation((0.0, 0.0, 6.5)))
+    for f in bm.faces:
+        f.material_index = 0
+        f.smooth = True
+    add_box(bm, (0.0, 0.0, -4.5), (1.8, 1.8, 1.4), 1)
+    add_box(bm, (0.0, 0.0, -4.5), (0.25, 14.0, 0.25), 1)
+    add_cylinder(bm, (0.0, 0.0, -2.0), 0.06, 0.06, 4.5, 8, 1)
+    finalize_and_uv_export(obj, mesh, bm, "SM_Balloon_Mine.fbx", apply_bevel=False)
+    return obj
+
+
+def build_effects_and_trees() -> None:
+    """3D Fireball core, billowing smoke puff, Ukraine windbreak tree, and Okanagan pine conifer."""
+    m_fire = ensure_mat("M_Explosion_Fire", (1.0, 0.45, 0.08, 1.0), emission=(1.0, 0.48, 0.10, 1.0))
+    obj, mesh, bm = create_mesh_object("SM_Explosion_Core", [m_fire])
+    bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.0)
+    for f in bm.faces:
+        f.material_index = 0
+        f.smooth = True
+    finalize_and_uv_export(obj, mesh, bm, "SM_Explosion_Core.fbx", apply_bevel=False)
+
+    m_smk = ensure_mat("M_Smoke_Plume", (0.10, 0.10, 0.11, 1.0), roughness=0.95)
+    obj, mesh, bm = create_mesh_object("SM_Smoke_Puff", [m_smk])
+    for ox, oy, oz, rad in [(0.0, 0.0, 0.0, 1.0), (0.55, 0.35, 0.25, 0.72), (-0.45, -0.35, 0.35, 0.68)]:
+        res = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=rad, matrix=Matrix.Translation((ox, oy, oz)))
+        vset = set(res["verts"])
+        for f in bm.faces:
+            if all(v in vset for v in f.verts):
+                f.material_index = 0
+                f.smooth = True
+    finalize_and_uv_export(obj, mesh, bm, "SM_Smoke_Puff.fbx", apply_bevel=False)
+
+    m_trunk = ensure_mat("M_Tree_Trunk", (0.18, 0.13, 0.09, 1.0), roughness=0.90)
+    m_leaf = ensure_mat("M_Tree_Foliage", (0.11, 0.22, 0.09, 1.0), roughness=0.78)
+
+    # Ukraine Shelterbelt Deciduous Tree (~14 m tall, base at Z=0)
+    obj, mesh, bm = create_mesh_object("SM_Shelterbelt_Tree", [m_trunk, m_leaf])
+    add_cylinder(bm, (0.0, 0.0, 2.8), 0.36, 0.18, 5.6, 8, 0)
+    for cx, cy, cz, r in [(0.0, 0.0, 8.2, 3.6), (1.8, 1.1, 7.2, 2.6), (-1.7, 0.9, 7.5, 2.7), (0.2, -1.8, 7.0, 2.5), (0.0, 0.0, 10.8, 2.6)]:
+        res = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=r, matrix=Matrix.Translation((cx, cy, cz)))
+        vset = set(res["verts"])
+        for f in bm.faces:
+            if all(v in vset for v in f.verts):
+                f.material_index = 1
+                f.smooth = True
+    finalize_and_uv_export(obj, mesh, bm, "SM_Shelterbelt_Tree.fbx", apply_bevel=False)
+
+    # Okanagan Douglas-Fir / Pine Conifer (~22 m tall, base at Z=0)
+    obj, mesh, bm = create_mesh_object("SM_Pine_Tree", [m_trunk, m_leaf])
+    add_cylinder(bm, (0.0, 0.0, 4.0), 0.42, 0.16, 8.0, 8, 0)
+    for zc, rad, h in [(6.8, 3.8, 5.2), (10.2, 3.2, 5.0), (13.6, 2.5, 4.6), (16.8, 1.8, 4.2), (19.6, 1.1, 3.6)]:
+        add_cylinder(bm, (0.0, 0.0, zc), rad, 0.15, h, 9, 1, smooth=True)
+    finalize_and_uv_export(obj, mesh, bm, "SM_Pine_Tree.fbx", apply_bevel=False)
+
+
+def convert_cobra_glbs() -> None:
+    """Import real Cobra Vietnam vegetation GLBs, re-center cleanly at (0,0,0) base, map material slots, export FBX."""
+    veg_dir = "/Users/iantodd/Projects/guns-only-rc-cache-release/.worktrees/ue5-native/content/packs/cobra-vietnam/assets/vegetation"
+    configs = [
+        ("palm-cluster.glb", "SM_Cobra_PalmCluster", 10.5, 0.35, {"PalmTree_Trunk": "M_Palm_Trunk", "PalmTree_Leaves": "M_Palm_Leaves"}),
+        ("plant-clumps.glb", "SM_Cobra_PlantClump", 2.4, 0.45, {"Flowers": "M_Cobra_Plants"}),
+    ]
+    for glb_file, out_name, target_height_m, spread_scale, slot_map in configs:
+        glb_path = os.path.join(veg_dir, glb_file)
+        if not os.path.exists(glb_path):
+            print(f"Skipping missing GLB: {glb_path}")
+            continue
+
+        bpy.ops.object.select_all(action="DESELECT")
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.gltf(filepath=glb_path)
+        imported = [o for o in (set(bpy.data.objects) - before) if o.type == "MESH"]
+        if not imported:
+            raise RuntimeError(f"No meshes imported from {glb_path}")
+
+        # Apply rotation/scale locally per node so vertex coords become upright meters, then center cluster at origin
+        bpy.ops.object.select_all(action="DESELECT")
+        locs = []
+        for o in imported:
+            o.parent = None
+            bpy.context.view_layer.objects.active = o
+            o.select_set(True)
+            bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+            locs.append(o.location.copy())
+            o.select_set(False)
+
+        mean_xy = Vector((sum(p.x for p in locs) / len(locs), sum(p.y for p in locs) / len(locs), 0.0))
+        for idx, o in enumerate(imported):
+            rel = o.location - mean_xy
+            o.location = Vector((rel.x * spread_scale, rel.y * spread_scale, 0.0))
+
+        bpy.ops.object.select_all(action="DESELECT")
+        for o in imported:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = imported[0]
+        bpy.ops.object.join()
+        merged = bpy.context.view_layer.objects.active
+        merged.name = out_name
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+        # Normalize vertical base Z=0 and scale to target_height_m
+        zs = [v.co.z for v in merged.data.vertices]
+        min_z, max_z = min(zs), max(zs)
+        cur_h = max(0.05, max_z - min_z)
+        scl = target_height_m / cur_h
+        for v in merged.data.vertices:
+            v.co.x *= scl
+            v.co.y *= scl
+            v.co.z = (v.co.z - min_z) * scl
+        merged.data.update()
+
+        # Rename materials to match /Game/GunsOnly/Materials/<SlotName>
+        for slot in merged.material_slots:
+            if slot.material is None:
+                continue
+            orig = slot.material.name.split(".")[0]
+            target_mat = slot_map.get(orig)
+            if target_mat:
+                slot.material.name = target_mat
+
+        out_path = os.path.join(MESH_OUT_DIR, f"{out_name}.fbx")
+        bpy.ops.export_scene.fbx(
+            filepath=out_path, use_selection=True, apply_scale_options="FBX_SCALE_UNITS",
+            global_scale=1.0, axis_forward="-Y", axis_up="Z", use_mesh_modifiers=True, mesh_smooth_type="FACE",
+        )
+        dims_cm = (merged.dimensions.x * 100.0, merged.dimensions.y * 100.0, merged.dimensions.z * 100.0)
+        print(f"Converted {glb_file} -> {out_name}.fbx: bounds = {dims_cm[0]:.0f} x {dims_cm[1]:.0f} x {dims_cm[2]:.0f} cm, slots={[s.material.name for s in merged.material_slots if s.material]}")
+        merged.select_set(False)
+
+
 def render_previews() -> None:
-    """Render 3 fast studio verification PNGs using Blender Workbench/EEVEE to scratch/."""
+    """Render fast studio verification PNGs using Blender Workbench to scratch/."""
     os.makedirs(SCRATCH_DIR, exist_ok=True)
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_WORKBENCH"
@@ -872,7 +1473,6 @@ def render_previews() -> None:
             if o.type == "MESH":
                 o.hide_render = True
 
-    # 1. F-22 + Afterburner Plume hero 3/4 view
     hide_all()
     bpy.data.objects["SM_F22_Raptor"].hide_render = False
     ab = bpy.data.objects["SM_Afterburner_Plume"]
@@ -882,29 +1482,25 @@ def render_previews() -> None:
     scene.render.filepath = os.path.join(SCRATCH_DIR, "preview_f22.png")
     bpy.ops.render.render(write_still=True)
 
-    # 2. Su-27S Flanker hero 3/4 view
     hide_all()
-    bpy.data.objects["SM_Su27_Flanker"].hide_render = False
-    point_cam((13.0, 14.5, 5.2), (0.0, 0.0, 0.2), 42.0)
-    scene.render.filepath = os.path.join(SCRATCH_DIR, "preview_su27.png")
+    bpy.data.objects["SM_F14_Tomcat"].hide_render = False
+    point_cam((14.0, -16.5, 5.8), (-1.0, 0.0, 0.2), 44.0)
+    scene.render.filepath = os.path.join(SCRATCH_DIR, "preview_f14.png")
     bpy.ops.render.render(write_still=True)
 
-    # 3. F-22 CockpitCamera exact FOV 72 view
     hide_all()
-    bpy.data.objects["SM_F22_Cockpit"].hide_render = False
-    point_cam((2.40, 0.0, 1.15), (10.0, 0.0, 1.10), 72.0)
-    scene.render.filepath = os.path.join(SCRATCH_DIR, "preview_cockpit.png")
+    bpy.data.objects["SM_AT802F_FireBoss"].hide_render = False
+    pr = bpy.data.objects["SM_AT802F_Prop"]
+    pr.hide_render = False
+    pr.location = Vector((5.60, 0.0, 0.08))
+    point_cam((11.0, -13.5, 4.5), (0.0, 0.0, 0.2), 42.0)
+    scene.render.filepath = os.path.join(SCRATCH_DIR, "preview_fireboss.png")
     bpy.ops.render.render(write_still=True)
 
-    # 4. AH-1G Cobra + spinning rotor assembly hero 3/4 view
     hide_all()
-    bpy.data.objects["SM_AH1G_Cobra"].hide_render = False
-    mr = bpy.data.objects["SM_AH1G_MainRotor"]
-    mr.hide_render = False
-    mr.location = Vector((0.0, 0.0, 1.50))
-    mr.rotation_euler = Euler((0.0, 0.0, math.radians(28.0)), "XYZ")
-    point_cam((10.5, -11.2, 4.2), (-0.8, 0.0, 0.4), 44.0)
-    scene.render.filepath = os.path.join(SCRATCH_DIR, "preview_cobra.png")
+    bpy.data.objects["SM_Carrier_Hull"].hide_render = False
+    point_cam((-220.0, -145.0, 75.0), (10.0, 0.0, 5.0), 48.0)
+    scene.render.filepath = os.path.join(SCRATCH_DIR, "preview_carrier.png")
     bpy.ops.render.render(write_still=True)
 
 
@@ -921,6 +1517,16 @@ def main() -> None:
     build_ah1g_cockpit()
     build_cobra_structures()
     build_approach_gate_portal()
+    build_f14_tomcat()
+    build_f14_cockpit()
+    build_mig28_adversary()
+    build_rapier_interceptor()
+    build_at802f_fireboss()
+    build_at802f_prop()
+    build_carrier_hull()
+    build_balloon_mine()
+    build_effects_and_trees()
+    convert_cobra_glbs()
     render_previews()
     print("Blender sculpt + export + studio preview complete.")
 

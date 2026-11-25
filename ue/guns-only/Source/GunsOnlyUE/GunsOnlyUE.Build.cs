@@ -16,7 +16,12 @@ public class GunsOnlyUE : ModuleRules
 			"ProceduralMeshComponent",
 			"UMG",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"ImageWrapper",
+			"Json",
+			"JsonUtilities",
+			"RenderCore",
+			"RHI"
 		});
 
 		string ProjectDir = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", ".."));
